@@ -14,7 +14,8 @@ Install it with aterm's package manager, which verifies every signed binary:
 aterm pkg install clean
 ```
 
-Every release is listed under [Releases](https://github.com/alabsystems/clean/releases).
+Every release is listed under [Releases](https://github.com/alabsystems/clean/releases),
+and its notes are in `release-notes/`.
 
 ## Security
 

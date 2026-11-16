@@ -1494,14 +1494,14 @@ WORKSPACE_GATES = [
         "package": "__workspace__",
         "kind": "gate",
         "argv": ["scripts/kstar_recheck.sh", "--check-record",
-                 "reports/self-proof-q4-residuals-2026-11-14/replay/replay.json"],
+                 "reports/self-proof-q4-residuals-2026-11-15/replay/replay.json"],
         "_extra_paths": ["scripts/kstar_recheck.sh", "scripts/kstar_recheck.py",
                          "scripts/kstar_selftest.py", "scripts/kstar_subjects.py",
                          "scripts/kstar_subjects_selftest.py",
                          "scripts/lean4lean_recheck.py", "scripts/lean4lean_selftest.py",
                          "scripts/nanoda_recheck.py", "scripts/lean_export_replay",
                          "data/lean4lean_q4_pin.json", "data/lean4lean_q4_arena_reasons.json",
-                         "theories/cic_l", "reports/self-proof-q4-residuals-2026-11-14/replay/replay.json"],
+                         "theories/cic_l", "reports/self-proof-q4-residuals-2026-11-15/replay/replay.json"],
     },
     {
         "id": "gate::fence",
@@ -2193,6 +2193,21 @@ TARGET_EXTRA_PATHS: dict[str, list[str]] = {
         "theories/kcheck_labelled/axiom_closures.json",
         "theories/kcheck_labelled/expected_output.txt",
         "theories/kcheck_labelled/statement_pins.json",
+        "theories/kcheck_soundness",
+    ],
+    "clean-olean::test::cic_l_base_bridge": [
+        "lean-toolchain",
+        "theories/cic_l",
+        "theories/cic_l_model",
+        "theories/kcheck_spec",
+        "theories/cic_l_base_bridge",
+    ],
+    "clean-olean::test::cic_l_nat_model": [
+        "lean-toolchain",
+        "theories/cic_l",
+        "theories/cic_l_model",
+        "theories/kcheck_spec",
+        "theories/cic_l_nat_model",
     ],
     # Bounded compiled-byte qualification of `theories/binding_not_review` across
     # pinned Lean, fenced Clean, and the hash-qualified stock ck0 binary.
@@ -2205,6 +2220,19 @@ TARGET_EXTRA_PATHS: dict[str, list[str]] = {
         "reports/self-proof-ck0-shared-2026-11-14/stock-build-inputs.json",
         "theories/binding_not_review",
     ],
+    # `structure_projection_tests.rs` (`clean-olean::lib`) and `ndjson_export_writer` (Q1)
+    # compile `theories/cic_l` through `cic_l_level/ORDER`; VF4/VF5 compile `theories/chk_lia`.
+    "clean-olean::lib": ["lean-toolchain", "theories/cic_l/CICL", "theories/cic_l/ORDER"],
+    "clean-olean::test::ndjson_export_writer": [
+        "lean-toolchain", "scripts/lean_export_mint.sh", "scripts/lean_export_replay",
+        "scripts/lean_export_replay.sh", "theories/cic_l/CICL", "theories/cic_l/ORDER",
+    ],
+    "clean-olean::test::vf4_chk_lia": ["lean-toolchain", "theories/chk_lia"],
+    "clean-olean::test::vf4_chk_lia_f1": [
+        "lean-toolchain", "reports/2026-10-26-vf4-f1-corpus", "theories/chk_lia",
+    ],
+    "clean-olean::test::vf4_chk_lia_quorum": ["lean-toolchain", "theories/chk_lia"],
+    "clean-olean::test::vf5_f1_reference": ["lean-toolchain", "theories/chk_lia"],
     # Parser-only test inputs outside the crate. These are not library inputs:
     # parse_world.rs reads the pin/table under cfg(test), and the grammar tests
     # read the source/corpora. Keep them on the test rows, not PACKAGE_EXTRA_PATHS.
@@ -2702,6 +2730,8 @@ def _blank_rust_comments(src: str) -> str:
 # against files outside every crate directory, and this guard was structurally
 # unable to see any of them -- it iterated a literal one-tuple whose regex only
 # matched `data/crystal_*.json`. Four source families cover those ten targets.
+RESOLVE_RELATIVE = "@resolve-relative"
+
 _EXTRA_PATH_SOURCES: tuple[tuple[str, tuple[str, ...], str], ...] = (
     (
         "clean-verify::test::crystal_a1_lineage",
@@ -2790,10 +2820,25 @@ _EXTRA_PATH_SOURCES: tuple[tuple[str, tuple[str, ...], str], ...] = (
         r"(?:\.\./)+(theories/[A-Za-z0-9_./-]+|lean-toolchain)",
     ),
     (
+        "clean-olean::test::cic_l_base_bridge",
+        ("@reach:crates/clean-olean/tests/cic_l_base_bridge.rs",),
+        r"(?:\.\./)+(theories/[A-Za-z0-9_./-]+|lean-toolchain)",
+    ),
+    (
+        "clean-olean::test::cic_l_nat_model",
+        ("@reach:crates/clean-olean/tests/cic_l_nat_model.rs",),
+        r"(?:\.\./)+(theories/[A-Za-z0-9_./-]+|lean-toolchain)",
+    ),
+    (
         "clean-olean::test::binding_not_review",
         ("@reach:crates/clean-olean/tests/binding_not_review.rs",),
         r'repo\.join\(\s*"([A-Za-z0-9_./-]+)"',
     ),
+    ("clean-olean::test::ndjson_export_writer", ("@reach:crates/clean-olean/tests/ndjson_export_writer.rs",), r'repo_root\(\)\.join\(\s*"([A-Za-z0-9_./-]+)"'),
+    ("clean-olean::test::vf4_chk_lia", ("@reach:crates/clean-olean/tests/vf4_chk_lia.rs",), RESOLVE_RELATIVE),
+    ("clean-olean::test::vf4_chk_lia_f1", ("@reach:crates/clean-olean/tests/vf4_chk_lia_f1.rs",), RESOLVE_RELATIVE),
+    ("clean-olean::test::vf4_chk_lia_quorum", ("@reach:crates/clean-olean/tests/vf4_chk_lia_quorum.rs",), RESOLVE_RELATIVE),
+    ("clean-olean::test::vf5_f1_reference", ("@reach:crates/clean-olean/tests/vf5_f1_reference.rs",), RESOLVE_RELATIVE),
 )
 
 
@@ -2862,7 +2907,6 @@ def _rust_modules() -> Any:
 # git can see it (tracked, or untracked and not ignored) -- exactly the files
 # the digest itself hashes, so an output directory such as `metrics/` is never
 # demanded on the box that happens to hold one.
-RESOLVE_RELATIVE = "@resolve-relative"
 _RELATIVE_LITERAL_RE = re.compile(r'"((?:\.\./)+[A-Za-z0-9_][A-Za-z0-9_./-]*)')
 
 

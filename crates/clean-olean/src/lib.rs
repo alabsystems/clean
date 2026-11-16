@@ -46,6 +46,9 @@ pub mod header;
 pub mod import;
 pub mod import_reverification_metric;
 pub mod semr_bool_body;
+mod semr_model;
+pub use semr_model::SemrModelRefusal;
+pub mod semr_native_execution;
 pub mod semr_scalar;
 // The compiled-IR decoder: `clean olean ir-census` (`cli`) and `.olean`
 // import's late-binding judgement read it.

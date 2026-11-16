@@ -186,6 +186,41 @@ impl ProofState {
         self.goal_fvar_base(goal).max(scope_floor)
     }
 
+    /// Allocate the FVar for a NEW tactic binder placed directly over `goal`.
+    ///
+    /// This is the allocator every tactic must use when it assembles a proof
+    /// of the shape `<binder> … (?new_meta_expr.abstract_fvar(f))` and hands
+    /// it to `close_goal`. `close_fvars` — and the `close_goal` scope guard
+    /// that mirrors it — identify the binder that binds a tactic FVar `n`
+    /// purely from `n - binder_base` versus the current binder *nesting*
+    /// depth, so a binder sitting directly over `goal` is bindable only when
+    /// its id is exactly [`goal_binder_base`](Self::goal_binder_base)`(goal)`.
+    ///
+    /// It is a thin wrapper over that single authority — the same
+    /// `base; next_fvar = max(next_fvar, base + 1); FVarId::new(base)` pattern
+    /// tactics also write inline — so both spellings express ONE mechanism and
+    /// inherit its capture safety for goals narrowed by `clear`.
+    ///
+    /// `fresh_fvar` is the wrong allocator for that job: it draws from the
+    /// monotonic global counter, which other machinery (rewriting, `simp`,
+    /// discharge subgoals) may have advanced arbitrarily far past the goal's
+    /// own base, leaving an id with no reachable binder slot (#2533).
+    ///
+    /// The global counter is still advanced past this allocation so unrelated
+    /// `fresh_fvar` calls cannot collide with it and so `closed_proof`'s
+    /// `close_fvars_validated(.., limit = next_fvar)` scan still covers the id.
+    ///
+    /// ENSURES: `returned.as_u64() == self.goal_binder_base(goal)`
+    /// ENSURES: `returned.as_u64() >= self.fvar_base`
+    /// ENSURES: `returned.as_u64()` is distinct from every FVar in
+    ///   `goal.local_ctx` and every live tactic FVar in `goal`'s meta scope
+    /// ENSURES: `self.next_fvar > returned.as_u64()`
+    pub(crate) fn fresh_goal_binder_fvar(&mut self, goal: &Goal) -> FVarId {
+        let base = self.goal_binder_base(goal);
+        self.next_fvar = self.next_fvar.max(base.saturating_add(1));
+        FVarId::new(base)
+    }
+
     /// Create a fresh universe METAVARIABLE level.
     ///
     /// Generates a new name in the reserved

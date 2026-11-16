@@ -460,6 +460,12 @@ pub(super) const FORGED_ROWS: &[(&str, &str, &str)] = &[
     ("ListSupportCases", "length_preserved", "wrongLength"),
     // E6: a control offered at a statement the judgment derives.
     ("NegativeControls", "sort_control", "wrongSortControl"),
+    // Constant-safety boundary: forged claim that an unsafe definition is admitted.
+    (
+        "SafetyBoundary",
+        "empty_admitted",
+        "wrongUnsafeDefinitionAdmitted",
+    ),
 ];
 
 /// C1's computational controls: `(soundness theorem, relation, accepted pair,

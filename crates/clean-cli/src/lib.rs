@@ -77,6 +77,8 @@ mod cmd_sat_verify;
 mod cmd_solver;
 mod cmd_sorry_census;
 mod cmd_sorry_trace;
+mod cmd_tla_sem;
+mod cmd_tlaps;
 mod cmd_vendor;
 pub(crate) mod doc_render;
 mod extract_rust;
@@ -223,6 +225,7 @@ fn dispatch_sync(command: Commands) -> anyhow::Result<()> {
         }
         Commands::Verify { command } => match command {
             VerifyCommands::Rust(args) => cmd_rust_sem::handle_rust_verify_command(args)?,
+            VerifyCommands::Tla(args) => cmd_tla_sem::handle_tla_verify_command(args)?,
             #[cfg(feature = "sat-verify")]
             VerifyCommands::Proof(args) => cmd_sat_verify::handle_verify_proof_command(args)?,
             // `VerifyCommands` is `#[non_exhaustive]` so future sibling verbs
@@ -271,6 +274,7 @@ fn dispatch_sync(command: Commands) -> anyhow::Result<()> {
         Commands::Artifacts { command } => cmd_artifacts::handle_artifacts_command(command)?,
         Commands::Audit { command } => cmd_audit::handle_audit_command(command)?,
         Commands::Discover(args) => cmd_discover::handle_discover_command(args)?,
+        Commands::Tlaps(args) => cmd_tlaps::handle_tlaps_command(args)?,
         Commands::Features {
             category,
             stability,
@@ -647,6 +651,11 @@ pub mod __test_support {
             allowed_roots: &["auto"],
         },
         FeatureSource {
+            name: "clean_tla::cli::FEATURES",
+            slice: clean_tla::cli::FEATURES,
+            allowed_roots: &["verify"],
+        },
+        FeatureSource {
             name: "clean_server::cli::FEATURES",
             slice: clean_server::cli::FEATURES,
             allowed_roots: &["server"],
@@ -826,6 +835,11 @@ pub mod __test_support {
             name: "clean_discovery::cli::FEATURES",
             slice: clean_discovery::cli::FEATURES,
             allowed_roots: &["discover"],
+        },
+        FeatureSource {
+            name: "clean_tla::bench::cli::FEATURES",
+            slice: clean_tla::bench::cli::FEATURES,
+            allowed_roots: &["tlaps"],
         },
         FeatureSource {
             name: "clean_mathverse::cli::FEATURES",

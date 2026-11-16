@@ -97,16 +97,112 @@ fn head_summary(e: &Expr) -> String {
 /// `Eq` operand mismatch shows up as `Pi[n]->head`, distinguishing it from an
 /// atomic-operand mismatch.
 fn type_shape(e: &Expr) -> String {
+    let (depth, cur) = strip_pis(e);
+    if depth == 0 {
+        head_summary(e)
+    } else {
+        format!("Pi[{depth}]->{}", head_summary(cur))
+    }
+}
+
+/// Strip leading `Pi` binders, returning the arity and the ultimate codomain.
+fn strip_pis(e: &Expr) -> (u32, &Expr) {
     let mut depth = 0u32;
     let mut cur = e;
     while let ExprKind::Pi(_, _, cod) = cur.kind() {
         depth += 1;
         cur = cod;
     }
-    if depth == 0 {
-        head_summary(e)
-    } else {
-        format!("Pi[{depth}]->{}", head_summary(cur))
+    (depth, cur)
+}
+
+/// Heads of an application's ARGUMENTS, bounded — the tie-breaker for when two
+/// types share a shape.
+///
+/// [`head_summary`] reports only `get_app_fn()`, so `Eq α` and `Eq β` both
+/// render `Eq` and a real mismatch between them prints as
+/// `mismatch expected=Eq got=Eq`: a row that names nothing that differs and
+/// cannot be acted on. 474 of the 2026-08-01 v32 kernel-rejects were exactly
+/// that shape (`Eq`/`Eq`, `Pi[1]->Sort`/`Pi[1]->Sort`,
+/// `Pi[2]->FVar`/`Pi[2]->FVar`), 39% of the run's kernel-rejects — the single
+/// largest PRIMARY failure class, whose dependents cascade roughly 9.6:1 into
+/// `unresolved-dep`.
+///
+/// Operand heads come from a small vocabulary, so this separates the buckets
+/// without the cardinality blow-up that printing whole types would cause. Only
+/// emitted when the shapes actually collide; every other signature is
+/// byte-identical to before, so existing frequency rankings still line up.
+fn arg_heads(e: &Expr, limit: usize) -> String {
+    let args = e.get_app_args();
+    if args.is_empty() {
+        return String::new();
+    }
+    let mut heads: Vec<String> = args.iter().take(limit).map(|a| head_summary(a)).collect();
+    if args.len() > limit {
+        heads.push("..".to_string());
+    }
+    format!("<{}>", heads.join(","))
+}
+
+#[cfg(test)]
+mod signature_tests {
+    use super::{type_error_signature, Expr};
+    use clean_kernel::name::Name;
+    use clean_kernel::tc::TypeError;
+
+    fn cst(n: &str) -> Expr {
+        Expr::const_(Name::from_string(n), vec![])
+    }
+
+    fn mismatch(expected: Expr, inferred: Expr) -> TypeError {
+        TypeError::TypeMismatch {
+            expected: Box::new(expected),
+            inferred: Box::new(inferred),
+            location: None,
+        }
+    }
+
+    /// Two types that SHARE a head must not both render as the bare head.
+    ///
+    /// `Eq Nat` vs `Eq Int` differ, but `head_summary` reports only
+    /// `get_app_fn()`, so both printed `Eq` and the reject read
+    /// `mismatch expected=Eq got=Eq` — 474 of the v32 run's kernel-rejects said
+    /// exactly that and named nothing actionable.
+    #[test]
+    fn test_signature_distinguishes_operands_when_heads_collide() {
+        let sig = type_error_signature(&mismatch(
+            Expr::app(cst("Eq"), cst("Nat")),
+            Expr::app(cst("Eq"), cst("Int")),
+        ));
+        assert!(
+            sig.contains("Nat") && sig.contains("Int"),
+            "operand heads must appear when the shapes collide, got: {sig}"
+        );
+        assert_ne!(
+            sig, "mismatch expected=Eq got=Eq",
+            "the uninformative form must be gone"
+        );
+    }
+
+    /// Genuinely different shapes keep their EXACT previous signature, so
+    /// existing frequency rankings and any saved baselines still line up.
+    #[test]
+    fn test_signature_unchanged_when_shapes_already_differ() {
+        assert_eq!(
+            type_error_signature(&mismatch(cst("Eq"), Expr::prop())),
+            "mismatch expected=Eq got=Sort"
+        );
+    }
+
+    /// Same shape and no operands at all: say so, rather than printing two
+    /// identical sides and implying they looked different.
+    #[test]
+    fn test_signature_flags_shape_identical_with_no_operands() {
+        let sig = type_error_signature(&mismatch(cst("Eq"), cst("Eq")));
+        assert!(
+            sig.contains("shape-identical"),
+            "an opaque collision must be labelled, got: {sig}"
+        );
     }
 }
 
@@ -139,11 +235,25 @@ fn type_error_signature(err: &TypeError) -> String {
         TypeError::TypeMismatch {
             expected, inferred, ..
         } => {
-            format!(
-                "mismatch expected={} got={}",
-                type_shape(expected),
-                type_shape(inferred)
-            )
+            let (se, si) = (type_shape(expected), type_shape(inferred));
+            if se != si {
+                return format!("mismatch expected={se} got={si}");
+            }
+            // SHAPES COLLIDE — the difference is in the operands, which
+            // `type_shape` discards. Without the operand heads this row reads
+            // `expected=Eq got=Eq` and tells you nothing. Take the heads from
+            // the same node the shape came from (the codomain after stripping
+            // Pi binders), so `Pi[2]->Sort` reports the codomain's operands and
+            // not the binder's.
+            let (_, ce) = strip_pis(expected);
+            let (_, ci) = strip_pis(inferred);
+            let (ae, ai) = (arg_heads(ce, 3), arg_heads(ci, 3));
+            if ae.is_empty() && ai.is_empty() {
+                // Nothing further to say: same shape, no operands. Flag it as
+                // opaque rather than implying the two sides looked different.
+                return format!("mismatch expected={se} got={si} (shape-identical, no operands)");
+            }
+            format!("mismatch expected={se}{ae} got={si}{ai}")
         }
         TypeError::NotAFunction { ty, .. } => {
             format!("not-a-function ty={}", type_shape(ty))

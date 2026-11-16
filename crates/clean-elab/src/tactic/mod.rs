@@ -212,6 +212,7 @@ pub(crate) mod noconfusion_app;
 pub(crate) mod injection;
 pub(crate) mod instance;
 pub(crate) mod interval_cases;
+pub(crate) mod interval_cases_proof;
 pub(crate) mod library_search;
 // Unwired roadmap prototype (2026-08-04): compiled only with its unit tests until the live
 // pipeline owns it. Mirrors the pattern already used for pattern_match_ext / error_recovery*.
@@ -233,6 +234,8 @@ mod mathverse_ext_tests;
 pub(crate) mod mathverse_use;
 #[cfg(test)]
 mod mathverse_use_tests;
+#[cfg(test)]
+mod mathverse_value_substitution_tests;
 pub(crate) mod monad_pres;
 pub(crate) mod nat_expr_eval;
 pub(crate) mod nat_le_bridge;
@@ -525,7 +528,9 @@ pub use norm_num_kernel::{
 // The pure checked context-key projection has no corpus dependency.
 pub use mathverse_use::mathverse_context_names;
 #[cfg(feature = "mathverse-library")]
-pub use mathverse_use::{clear_mathverse_library, run_strict_mathverse_use, set_mathverse_library};
+pub use mathverse_use::{
+    clear_mathverse_library, run_mathverse_apply, run_strict_mathverse_use, set_mathverse_library,
+};
 
 pub use oracle::{build_oracle_request, oracle_suggest};
 

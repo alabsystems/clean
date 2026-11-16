@@ -125,13 +125,51 @@ fn zero_add() -> Name {
     name("K1Lib.zero_add'")
 }
 
+/// The Lean world `clean lake build` selects for a module of a project under
+/// the system temporary directory, where every project here is written: no
+/// `lean-toolchain` above it, so the checkout's pin.
+fn builder_world() -> clean_olean::SourceWorldDecision {
+    clean_olean::source_world_for_file(&std::env::temp_dir().join("Builder.lean"), None)
+        .expect("the builder's Lean world")
+}
+
+/// The environment `clean lake build` starts a module without `prelude` from
+/// (genuine Init of its Lean world, as Lean's implicit `import Init`), and
+/// the citation base it re-admits the module's cited closure over: the
+/// world's reference-admitted foundations, never a post-Init snapshot.
+fn builder_base() -> (Environment, ImportedConeGate) {
+    static BASE: std::sync::OnceLock<(Environment, ImportedConeGate)> = std::sync::OnceLock::new();
+    BASE.get_or_init(|| {
+        use clean_elab::module_driver::{
+            foundation_import_base, EnvironmentSetup, SourceModuleSetup,
+        };
+        let decision = builder_world();
+        let mut setup = SourceModuleSetup::new(EnvironmentSetup::default(), &decision)
+            .expect("the builder's backbone");
+        let env = setup
+            .initial_environment(&clean_parser::FileHeader::default())
+            .expect("genuine Init");
+        let gate = foundation_import_base(&decision).expect("the builder's citation base");
+        (env, gate)
+    })
+    .clone()
+}
+
+/// Where `dir`'s artifacts' imports resolve: its build directory, then the
+/// builder's world library, which holds the `Init` every artifact records.
+fn load_paths(dir: &Path) -> Vec<PathBuf> {
+    let mut paths = vec![lib_dir(dir)];
+    paths.extend(clean_olean::search_paths_in_world(
+        builder_world().imports().expect("an admitted world"),
+    ));
+    paths
+}
+
 /// The environment `clean lake build` builds before any import, the gate over
 /// it, and then `module` loaded from `dir`'s build directory.
 fn load(dir: &Path, module: &str) -> (Environment, ImportedConeGate) {
-    let mut env = Environment::with_prelude();
-    env.init_io_ops().expect("io ops");
-    let gate = ImportedConeGate::new(&env);
-    clean_olean::load_module_with_deps(&mut env, module, &[lib_dir(dir)]).expect("load artifact");
+    let (mut env, gate) = builder_base();
+    clean_olean::load_module_with_deps(&mut env, module, &load_paths(dir)).expect("load artifact");
     (env, gate)
 }
 
@@ -140,14 +178,10 @@ fn gate(dir: &Path, module: &str, root: &Name) -> ImportedConeVerdict {
     gate.check(&env, &BTreeSet::from([root.clone()]))
 }
 
-/// A proof term elaborated from source against the prelude (used to obtain a
-/// genuine `sorry` term, which the fixed builder refuses to export).
+/// A proof term elaborated from source against the builder's base (used to
+/// obtain a genuine `sorry` term, which the fixed builder refuses to export).
 fn elaborated_proof(source: &str) -> Expr {
-    let env = {
-        let mut env = Environment::with_prelude();
-        env.init_io_ops().expect("io ops");
-        env
-    };
+    let env = builder_base().0;
     let surface = clean_parser::parse_file(source).expect("parse");
     for decl in &surface {
         let result = clean_elab::ElabCtx::new(&env)
@@ -529,14 +563,13 @@ theorem K1Lib.four : K1Lib.double 2 = 4 := rfl
     // Control: the same artifact over the builder's own base re-admits.
     assert!(gate(&dir, "K1Lib", &four).passed(false));
 
-    let mut env = Environment::with_prelude();
-    env.init_io_ops().expect("io ops");
+    let (mut env, _) = builder_base();
     env.register_native_reducer(double.clone(), triple);
     // The premise is real: this base's reducer says `K1Lib.double 2 = 6`.
     let reducer = env.get_native_reducer(&double).expect("registered");
     assert_eq!(reducer(&[&Expr::nat_lit(2)]), Some(Expr::nat_lit(6)));
     let mut gate = ImportedConeGate::new(&env);
-    clean_olean::load_module_with_deps(&mut env, "K1Lib", &[lib_dir(&dir)]).expect("load");
+    clean_olean::load_module_with_deps(&mut env, "K1Lib", &load_paths(&dir)).expect("load");
     // A citation that holds only under the reducer's meaning, as a forged
     // artifact would carry it: `K1Lib.six : K1Lib.double 2 = 6 := rfl`.
     let nat = Expr::const_(name("Nat"), vec![]);
@@ -765,13 +798,30 @@ fn an_imported_axiom_carrying_a_foundational_name_is_refused() {
                 && result.failed.iter().any(|(m, _)| m == "FaUse"),
             "{ax}: a dependent proving 0 = 1 from a counterfeit {ax} must not build: {result:?}"
         );
-        // Why it cannot: the builder's base already holds the kernel's own
-        // declaration, so the importer keeps it and drops the artifact's
-        // record (`filter_payload_dups`: base declarations are not artifacts).
-        // The counterfeit never enters the environment, the citation resolves
-        // to the canonical statement, and the gate over the name is given the
-        // base's declaration — never the artifact's.
-        let (env, mut g) = load(&dir, "FaLib");
+        // Why it cannot: the builder's base holds the kernel's own
+        // declaration, and the counterfeit never enters the environment, in
+        // one of two ways.
+        // - A name genuine Init declares conflicts with Init's record, and the
+        //   import is refused, as Lean refuses it.
+        // - A name the base holds outside Init is kept, and the artifact's
+        //   record is dropped (`filter_payload_dups`: base declarations are
+        //   not artifacts). The citation then resolves to the canonical
+        //   statement, and the gate over the name is given the base's
+        //   declaration, never the artifact's.
+        let (mut env, mut g) = builder_base();
+        match clean_olean::load_module_with_deps(&mut env, "FaLib", &load_paths(&dir)) {
+            Err(clean_olean::ImportError::ConflictingDeclaration { name: n, first }) => {
+                assert_eq!(n, *ax, "{ax}: the conflict names the counterfeit");
+                assert!(
+                    first == "Init" || first.starts_with("Init."),
+                    "{ax}: the first declaration is genuine Init's: {first}"
+                );
+                refused_on_import.push(*ax);
+                continue;
+            }
+            Err(e) => panic!("{ax}: refused for another reason: {e}"),
+            Ok(_) => {}
+        }
         assert!(
             env.is_canonical_foundational_axiom(&name(ax)),
             "{ax}: after loading the rewritten artifact the name must still denote the \

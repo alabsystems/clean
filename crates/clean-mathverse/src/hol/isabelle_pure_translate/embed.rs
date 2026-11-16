@@ -14,6 +14,14 @@ use clean_kernel::Expr;
 use super::super::isabelle_pure::IsaType;
 use super::*;
 
+/// `ISA_STRICT_CONST_MAP` — refuse to abstract an unmapped overloaded HOL
+/// constant into a quantified parameter, rejecting the line instead. Read from
+/// the run's installed [`VerifyConfig`](crate::hol::isabelle_verify_config::VerifyConfig)
+/// (one policy per run), else the env fallback.
+fn strict_const_map() -> bool {
+    crate::hol::isabelle_verify_config::active_strict_const_map()
+}
+
 impl Ctx {
     /// Embed a HOL type, registering any free object type as a `Type` parameter.
     pub(crate) fn embed_type(&mut self, ty: &IsaType) -> Result<Expr, TranslateError> {
@@ -201,6 +209,29 @@ impl Ctx {
     pub(crate) fn const_param(&mut self, n: &str, ty: Expr) -> Expr {
         let key = const_param_key(n, &ty);
         self.term_param(&key, ty)
+    }
+
+    /// Fail-closed [`Self::const_param`]: abstract only when the importer is
+    /// permitted to, otherwise reject the line.
+    ///
+    /// Abstracting an unmapped constant into a universally quantified parameter
+    /// is what manufactures FALSE statements out of true Isabelle theorems —
+    /// `a + 0 = a` becomes `∀ f z, f a z = a` because `+` is ad-hoc overloaded
+    /// and unmapped. See [`TranslateError::UnmappedConst`] for the measured
+    /// scale (~44.7% of the trusted ledger).
+    ///
+    /// Gated by `ISA_STRICT_CONST_MAP=1` and **OFF by default**, so every
+    /// existing run — including a grand already in flight — stays byte-identical
+    /// until the cost of turning it on has been measured.
+    pub(crate) fn const_param_checked(
+        &mut self,
+        n: &str,
+        ty: Expr,
+    ) -> Result<Expr, super::TranslateError> {
+        if strict_const_map() {
+            return Err(super::TranslateError::UnmappedConst(n.to_string()));
+        }
+        Ok(self.const_param(n, ty))
     }
 
     /// Register (idempotently) a free term variable as a quantified parameter.

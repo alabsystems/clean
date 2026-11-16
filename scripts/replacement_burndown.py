@@ -86,6 +86,8 @@ def main():
          'Latest kernel/pattern/CLI intake refresh (final checks/publication pending)'),
         ('reports/false-accept-refresh-2026-11-12/compiler-eligibility-main-7f7b-historical.json',
          'Current compiler eligibility replay after export-writer intake'),
+        ('reports/final-corrected-cli-7d48-2026-11-15/compiler-eligibility-final-corrected-cli-historical.json',
+         'Captured CLI7d48/cecb6e13 (build3, historical20 and public4; source scope only)'),
     ]:
         if not (ROOT / cohort_path).exists():
             continue
@@ -117,6 +119,7 @@ def main():
         ('compiler-eligibility-2026-11-13', 'source-d844'),
         ('compiler-eligibility-2026-11-13', 'fixed-f5de'),
         ('compiler-eligibility-2026-11-13', 'main-b7c4'),
+        ('compiler-eligibility-2026-11-13', 'final-corrected-7d48'),
     ):
         current_classification = ROOT / f'reports/{directory}/{prefix}-root-causes.json'
         current_measurement = current_classification.parent / f'{prefix}-checkpoint.json'
@@ -128,6 +131,19 @@ def main():
                 raise ValueError('classification does not identify its qualified measurement')
             if hashlib.sha256(artifact.read_bytes()).hexdigest() != checkpoint['historical_report_sha256']:
                 raise ValueError('qualified cohort measurement changed')
+            if 'qualification_checkpoint' in checkpoint:
+                qualification = ROOT / checkpoint['qualification_checkpoint']
+                if hashlib.sha256(qualification.read_bytes()).hexdigest() != checkpoint['qualification_checkpoint_sha256']:
+                    raise ValueError('original qualification checkpoint changed')
+                qualified = json.loads(qualification.read_text())
+                measured = json.loads(artifact.read_text())
+                if (qualified['source'] != checkpoint['source']
+                        or qualified['binary_sha256'] != checkpoint['binary_sha256']
+                        or qualified['binary_sha256'] != measured['clean_sha256']
+                        or qualified['post_terminal'] != 0
+                        or qualified['historical20']['sha256'] != checkpoint['historical_report_sha256']
+                        or qualified['historical20']['counts'] != measured['counts']):
+                    raise ValueError('archive does not match its original completed qualification')
             classification_path = current_classification
     if classification_path.exists():
         classification = json.loads(classification_path.read_text())
@@ -140,8 +156,10 @@ def main():
         print('\nRemaining cases in the selected source measurement; broad rejection parity remains open.')
         print('\n| Case | Root cause | State |')
         print('|---|---|---|')
+        fixture_root = (ROOT / classification['fixture_root'] if 'fixture_root' in classification
+                        else measurement_path.parent / 'fixtures')
         for row in cases:
-            source = measurement_path.parent / 'fixtures' / row['path']
+            source = fixture_root / row['path']
             if hashlib.sha256(source.read_bytes()).hexdigest() != row['source_sha256']:
                 raise ValueError('classified source changed: ' + row['path'])
             print(f"| `{row['path']}` | {row['root_cause']} | {row['state']} |")

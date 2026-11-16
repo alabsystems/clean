@@ -2,7 +2,7 @@
  "prefix": "ir_pv",
  "body": "env::types::SimpPriority::value",
  "core_digest": "4df18fc3f10c896b04350f31a8b842c2edef761923a76a27b04bd83f3071dbe8",
- "defs_digest": "d47496c3dbabf9b622657fac4d534cb1dd2b5e3f29f72c59910448cc29117797",
+ "defs_digest": "dad7b2afff6af794b9fc5005c22da50943c77c798dd724991c2b9d43d468c210",
  "def_count": 7,
  "artifact_core_digest": "a92f873584d4878ea10be6d1c47d28f4ea3fafec3a297f0a96d2afe5c8c8c3b5",
  "artifact_core_digest_note": "Reader A's OWN digest of the projection, printed by scripts/crystal_a2_project and taken over the domain-separated `clean.ir_mint.core.v1` prefix. `core_digest` above is ir_mint::digest of the same text under this crate's domain, which is a different constant; the two are recorded side by side rather than reconciled, because a reader that could not disagree with itself is not a second reader.",

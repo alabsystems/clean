@@ -9,13 +9,11 @@
 //! [`UnboundBoolMathematicsContext::check_model_source`]. No Rust-source theorem,
 //! producer grade, body license, physical ABI or emission permission is created.
 
-use clean_kernel::{
-    BinderInfo, EnvDigest, Environment, Expr, Level, Name, ReferenceKernel, ReferenceRefusal,
-};
-use std::collections::BTreeSet;
-use std::sync::{Arc, OnceLock};
+use clean_kernel::{BinderInfo, EnvDigest, Environment, Expr, Level, Name, ReferenceRefusal};
+use std::sync::Arc;
 
-use crate::{reference_base_closed, ClosedRecheckOptions, ReferenceBase};
+use crate::semr_model::{c, list, SemrModelContext, SemrModelRefusal};
+use crate::ReferenceBase;
 
 /// Shared ordinary input data. Quotation is built once per actual module, not
 /// once per function. Private fields keep the byte slice and its quotation paired.
@@ -80,15 +78,7 @@ pub enum BoolBodyRefusal {
 /// Generic mathematical context only. There is no canonical-model constructor,
 /// arbitrary model/goal namespace selector, or mutable-kernel accessor.
 pub struct UnboundBoolMathematicsContext {
-    kernel: ReferenceKernel,
-    source_reference: OnceLock<CheckedSourceReference>,
-}
-
-// This completion and its immutable input identity are private. A hash is only
-// a cache key AFTER a genuine full source replay and exact model comparison.
-struct CheckedSourceReference {
-    input: Vec<[u8; 32]>,
-    _kernel: ReferenceKernel,
+    model: SemrModelContext,
 }
 
 /// A checked equation in the retained, explicitly unbound model environment.
@@ -128,25 +118,6 @@ const MODEL_ROOTS: [&str; 7] = [
     "Eq",
     "List",
 ];
-
-fn c(name: &str) -> Expr {
-    Expr::const_(Name::from_string(name), vec![])
-}
-
-fn list(ty: Expr, values: Vec<Expr>) -> Expr {
-    values.into_iter().rev().fold(
-        Expr::app(
-            Expr::const_(Name::from_string("List.nil"), vec![Level::zero()]),
-            ty.clone(),
-        ),
-        |tail, value| {
-            Expr::apps(
-                Expr::const_(Name::from_string("List.cons"), vec![Level::zero()]),
-                [ty.clone(), value, tail],
-            )
-        },
-    )
-}
 
 fn expected_conjunction(subject: &BoolSubject) -> Expr {
     let a = Expr::bvar(2);
@@ -210,28 +181,16 @@ fn expected_conjunction(subject: &BoolSubject) -> Expr {
 
 impl UnboundBoolMathematicsContext {
     pub fn from_reference_base(base: ReferenceBase) -> Result<Self, BoolBodyRefusal> {
-        let kernel = base
-            .into_kernel()
-            .map_err(|_| BoolBodyRefusal::IncompleteContext)?;
-        for root in MODEL_ROOTS {
-            kernel
-                .environment()
-                .dependency_closure(&Name::from_string(root))
-                .map_err(|_| BoolBodyRefusal::MissingDeclaration(root.into()))?;
-        }
-        let helper = "SemR.BoolBody.checked_blob";
-        kernel
-            .environment()
-            .dependency_closure(&Name::from_string(helper))
-            .map_err(|_| BoolBodyRefusal::MissingDeclaration(helper.into()))?;
-        Ok(Self {
-            kernel,
-            source_reference: OnceLock::new(),
-        })
+        let model = SemrModelContext::from_reference_base(
+            base,
+            &MODEL_ROOTS,
+            &["SemR.BoolBody.checked_blob"],
+        )?;
+        Ok(Self { model })
     }
 
     pub fn digest(&self) -> EnvDigest {
-        self.kernel.env_digest()
+        self.model.kernel().env_digest()
     }
 
     /// Independently FULL-replay the fixed source model under the unchanged
@@ -243,69 +202,7 @@ impl UnboundBoolMathematicsContext {
     /// after a genuine completion and exact comparison, not model authority.
     /// The Trust owner must still authenticate the fixed original source bytes.
     pub fn check_model_source(&self, original: &Environment) -> Result<(), BoolBodyRefusal> {
-        let input = source_input(original)?;
-        if let Some(cached) = self.source_reference.get() {
-            return if cached.input == input {
-                Ok(())
-            } else {
-                Err(BoolBodyRefusal::ModelSourceMismatch(
-                    "fixed source batch changed".into(),
-                ))
-            };
-        }
-        let roots: BTreeSet<Name> = MODEL_ROOTS.into_iter().map(Name::from_string).collect();
-        let base = reference_base_closed(original, &roots, &ClosedRecheckOptions::default())
-            .map_err(|e| BoolBodyRefusal::ModelSourceClosure(e.to_string()))?;
-        let source_kernel = base
-            .into_kernel()
-            .map_err(|report| BoolBodyRefusal::ModelSourceClosure(report.verdict_sentence()))?;
-        let checked = self.kernel.environment();
-        let source = source_kernel.environment();
-        for root in MODEL_ROOTS {
-            let name = Name::from_string(root);
-            let left = checked
-                .dependency_closure(&name)
-                .map_err(|e| BoolBodyRefusal::ModelSourceClosure(e.to_string()))?;
-            let right = source
-                .dependency_closure(&name)
-                .map_err(|e| BoolBodyRefusal::ModelSourceClosure(e.to_string()))?;
-            if left != right {
-                return Err(BoolBodyRefusal::ModelSourceMismatch(root.into()));
-            }
-            for member in left {
-                if checked.get_const(&member) != source.get_const(&member)
-                    || checked.get_inductive(&member) != source.get_inductive(&member)
-                    || checked.get_constructor(&member) != source.get_constructor(&member)
-                    || checked.get_recursor(&member) != source.get_recursor(&member)
-                    || checked.get_quot(&member) != source.get_quot(&member)
-                {
-                    return Err(BoolBodyRefusal::ModelSourceMismatch(member.to_string()));
-                }
-            }
-        }
-        if source_input(original)? != input {
-            return Err(BoolBodyRefusal::ModelSourceMismatch(
-                "source changed during replay".into(),
-            ));
-        }
-        let binding = CheckedSourceReference {
-            input,
-            _kernel: source_kernel,
-        };
-        match self.source_reference.set(binding) {
-            Ok(()) => Ok(()),
-            Err(binding)
-                if self
-                    .source_reference
-                    .get()
-                    .is_some_and(|source| source.input == binding.input) =>
-            {
-                Ok(())
-            }
-            Err(_) => Err(BoolBodyRefusal::ModelSourceMismatch(
-                "fixed source batch changed".into(),
-            )),
-        }
+        self.model.check_model_source(original).map_err(Into::into)
     }
 
     /// Read-only kernel check of the exact universally quantified execution
@@ -323,7 +220,8 @@ impl UnboundBoolMathematicsContext {
             return Err(BoolBodyRefusal::SubjectMismatch);
         }
         let claim = expected_conjunction(expected);
-        self.kernel
+        self.model
+            .kernel()
             .check_closed_term(&claim, &packet.returned)
             .map_err(BoolBodyRefusal::Proof)?;
         Ok(CheckedUnboundBoolMathematics {
@@ -335,20 +233,22 @@ impl UnboundBoolMathematicsContext {
     }
 }
 
-fn source_input(original: &Environment) -> Result<Vec<[u8; 32]>, BoolBodyRefusal> {
-    MODEL_ROOTS
-        .into_iter()
-        .map(|root| {
-            original
-                .closure_digest(&Name::from_string(root))
-                .map_err(|e| BoolBodyRefusal::ModelSourceClosure(e.to_string()))
-        })
-        .collect()
+impl From<SemrModelRefusal> for BoolBodyRefusal {
+    fn from(value: SemrModelRefusal) -> Self {
+        match value {
+            SemrModelRefusal::IncompleteContext => Self::IncompleteContext,
+            SemrModelRefusal::MissingDeclaration(name) => Self::MissingDeclaration(name),
+            SemrModelRefusal::ModelSourceMismatch(name) => Self::ModelSourceMismatch(name),
+            SemrModelRefusal::ModelSourceClosure(reason) => Self::ModelSourceClosure(reason),
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{reference_base_closed, ClosedRecheckOptions};
+    use std::collections::BTreeSet;
 
     #[test]
     fn edited_replay_diagnostics_cannot_create_a_model_context() {

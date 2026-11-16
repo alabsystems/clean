@@ -29,10 +29,12 @@ fn csimp_body_snapshots_survive_real_lake_artifacts() {
         env.is_csimp(&name("globalRule")),
         "imported attribute query"
     );
+    // Init's own compiler rules are visible too, as the implicit `import
+    // Init` makes them: the subject is the rule replacing `slow`.
+    let replacing_slow =
+        |rules: Vec<csimp::Rule>| rules.into_iter().find(|r| r.from == name("slow"));
     assert_eq!(
-        csimp::rules_for(&env, None)
-            .first()
-            .map(|r| r.theorem.clone()),
+        replacing_slow(csimp::rules_for(&env, None)).map(|r| r.theorem),
         Some(name("globalRule")),
         "programmatic loaded environment"
     );
@@ -44,31 +46,32 @@ fn csimp_body_snapshots_survive_real_lake_artifacts() {
         ("fromB", None),
         ("payloadRoot", Some("fast")),
     ] {
-        let rules = csimp::rules_for(&env, Some(&name(owner)));
-        assert_eq!(
-            rules.first().map(|r| r.to.clone()),
-            target.map(name),
-            "{owner}"
-        );
+        let rule = replacing_slow(csimp::rules_for(&env, Some(&name(owner))));
+        assert_eq!(rule.map(|r| r.to), target.map(name), "{owner}");
     }
     csimp::begin_source_module(&mut env, name("User"), vec![name("CsMain")]);
-    assert_eq!(csimp::rules_for(&env, None)[0].theorem, name("globalRule"));
+    assert_eq!(
+        replacing_slow(csimp::rules_for(&env, None)).map(|r| r.theorem),
+        Some(name("globalRule"))
+    );
     let tokens =
         csimp::activate_namespace(&mut env, &name("N")).expect("imported scoped definition");
     assert_eq!(tokens.len(), 1);
     assert_eq!(
-        csimp::rules_for(&env, None)[0].theorem,
-        name("N.scopedRule")
+        replacing_slow(csimp::rules_for(&env, None)).map(|r| r.theorem),
+        Some(name("N.scopedRule"))
     );
     for token in tokens {
         csimp::retire_local(&mut env, token);
     }
-    assert_eq!(csimp::rules_for(&env, None)[0].theorem, name("globalRule"));
-    let mut source_env = Environment::with_prelude();
-    source_env.init_io_ops().expect("source IO");
+    assert_eq!(
+        replacing_slow(csimp::rules_for(&env, None)).map(|r| r.theorem),
+        Some(name("globalRule"))
+    );
+    let (mut source_env, _) = builder_base();
     let mut context = clean_elab::FileContext::new();
     context.set_main_module(name("SourceUser"));
-    context.set_import_search_paths(vec![lib_dir(dir)]);
+    context.set_import_search_paths(load_paths(dir));
     let parsed = clean_parser::parse_file_with_diagnostics(
         "import CsMain\ndef importedCaller : Nat := slow",
     )
@@ -86,8 +89,9 @@ fn csimp_body_snapshots_survive_real_lake_artifacts() {
     }
     assert!(!csimp::has_invalid_metadata(&source_env));
     assert_eq!(
-        csimp::rules_for(&source_env, Some(&name("importedCaller")))[0].theorem,
-        name("globalRule")
+        replacing_slow(csimp::rules_for(&source_env, Some(&name("importedCaller"))))
+            .map(|r| r.theorem),
+        Some(name("globalRule"))
     );
     tamper(dir, "CsA", |payload| {
         payload.csimp[0].data = clean_kernel::env::EnvExtensionEntryData::Object(vec![1, 2, 3]);

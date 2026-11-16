@@ -33,6 +33,7 @@ use crate::types::ImportConfidence;
 mod batch;
 mod bridge_witness;
 mod dump;
+mod emit_defs;
 mod parallel_streaming;
 mod register;
 mod retry;
@@ -365,19 +366,39 @@ pub fn elide_proofs_enabled() -> bool {
 /// - `unsupported-shape: <static str>` — the exact (bounded) shape string.
 /// - `unmapped-axiom: <axiom name>` — the exact base-axiom name.
 /// - `hole: <static str>` — the exact (bounded) hole reason.
-/// - `unresolved-dep: serial <serial>` — the serial digits are normalized to the
-///   literal `<serial>` so all unresolved-dep misses collapse to one pattern
-///   (the serial is per-theorem noise, not a distinguishing shape).
+/// - `unresolved-dep: serial <n>` — the BLOCKING theorem's serial, kept.
+///
+/// The unresolved-dep serial was previously normalized to the literal
+/// `<serial>`, on the grounds that it was "per-theorem noise, not a
+/// distinguishing shape". That is right for the theorem being rejected and
+/// wrong for the one doing the blocking, which is what this payload actually
+/// holds: `UnresolvedThm(id)` names the dependency that was MISSING. Collapsing
+/// it turned the single largest rejection bucket into one unactionable row —
+/// 130,151 misses on the 2026-08-01 v32 grand run, 97% of all rejections, with
+/// nothing to say about which theorems caused them.
+///
+/// Rejections cascade: one unresolvable base blocks every dependent, so the
+/// misses concentrate on far fewer roots than there are victims, and fixing a
+/// root unblocks its whole subtree. Keying by the blocking serial ranks those
+/// roots by how much they block — the same reason `UnmappedConst` below is
+/// keyed by constant name rather than collapsed. High cardinality is expected
+/// and handled: the reporter prints `top N of M distinct` and is opt-in behind
+/// `ISA_REJECT_SPECIFICS`.
 fn normalize_specific(err: &TranslateError) -> String {
     match err {
         TranslateError::Hole(s) => format!("hole: {s}"),
         TranslateError::UnmappedAxiom(name) => format!("unmapped-axiom: {name}"),
-        TranslateError::UnresolvedThm(_) => "unresolved-dep: serial <serial>".to_string(),
+        TranslateError::UnresolvedThm(id) => format!("unresolved-dep: serial {id}"),
         TranslateError::Unsupported(s) => format!("unsupported-shape: {s}"),
         TranslateError::BudgetExceeded(_) => "translate-budget: node budget exceeded".to_string(),
         TranslateError::PremiseBudgetExceeded(_) => {
             "premise-budget-cut: search step budget exceeded".to_string()
         }
+        // Keyed by the CONSTANT NAME, deliberately: the whole point of this
+        // reject is to rank which unmapped overloaded constants are driving the
+        // loss, so the alignment work can target the head of the distribution
+        // instead of guessing.
+        TranslateError::UnmappedConst(name) => format!("unmapped-const: {name}"),
     }
 }
 
@@ -389,6 +410,7 @@ fn translate_error_tag(e: &TranslateError) -> &'static str {
         TranslateError::Unsupported(_) => "unsupported-shape",
         TranslateError::BudgetExceeded(_) => "translate-budget",
         TranslateError::PremiseBudgetExceeded(_) => "premise-budget-cut",
+        TranslateError::UnmappedConst(_) => "unmapped-const",
     }
 }
 
@@ -426,6 +448,28 @@ mod tests {
     // Unverifiable: an oracle hole — must be rejected, never KernelVerified.
     const HOLE: &str = r#"{"name":"Demo.bad","serial":102,"prop":{"k":"App","f":{"k":"Const","n":"HOL.Trueprop","t":{"k":"Type","n":"fun","a":[]}},"a":{"k":"Free","n":"p","t":{"k":"Type","n":"HOL.bool","a":[]}}},"proof":{"k":"min"}}"#;
 
+    /// The BLOCKING serial must survive normalization, or the largest
+    /// rejection bucket cannot be ranked at all.
+    ///
+    /// Distinct missing dependencies have to land in DISTINCT buckets: that is
+    /// the entire mechanism by which a root blocking thousands of dependents
+    /// becomes visible above one blocking a handful. Collapsing them is what
+    /// made 130,151 unresolved-dep misses report as a single unactionable row.
+    #[test]
+    fn test_normalize_specific_keeps_the_blocking_serial_distinct() {
+        let a = normalize_specific(&TranslateError::UnresolvedThm(7_284_712));
+        let b = normalize_specific(&TranslateError::UnresolvedThm(311_396));
+        assert_eq!(a, "unresolved-dep: serial 7284712");
+        assert_ne!(a, b, "distinct blockers must not collapse into one bucket");
+
+        // The coarse TAG stays coarse: only the specifics key gained
+        // resolution, so `rejection_reasons` totals are unchanged.
+        assert_eq!(
+            translate_error_tag(&TranslateError::UnresolvedThm(7_284_712)),
+            "unresolved-dep"
+        );
+    }
+
     #[test]
     fn imports_proven_theorems_as_kernel_verified() {
         let aeqa = crate::hol::isabelle_pure::parse_proven_theorem(AEQA).unwrap();
@@ -443,7 +487,24 @@ mod tests {
         let mut buf = Vec::new();
         writer.write(&mut buf).expect("shard write");
         let reader = ShardReader::from_bytes(&buf).expect("shard read");
-        assert_eq!(reader.header.constant_count, 2);
+
+        // The shard carries MORE than one header per verified theorem: each
+        // theorem is written under its kernel (serial) identity plus a
+        // human-name alias, and the translator-synthesized definitional
+        // constants every theorem's type/value references are written too.
+        // Without them the dependency loader could not resolve a citation.
+        // The invariant is one header per RECORDED WRITE, which is also what
+        // the publish step stamps provenance against.
+        assert_eq!(
+            reader.header.constant_count as usize,
+            result.written_constants.len(),
+            "every shard header must have a recorded write"
+        );
+        assert!(
+            reader.header.constant_count > 2,
+            "synthesized def-consts and aliases are written alongside the theorems"
+        );
+
         for name in &result.names {
             let (_, hdr) = reader.lookup_name(name).expect("verified name present");
             assert_eq!(
@@ -452,6 +513,32 @@ mod tests {
             );
             assert_ne!(hdr.value_idx, u32::MAX, "proof value stored, not NO_VALUE");
         }
+
+        // The kernel (serial) identity — what a dependent's proof term actually
+        // references — must resolve too.
+        for serial in ["isabelle.s100", "isabelle.s101"] {
+            let (_, hdr) = reader
+                .lookup_name(serial)
+                .expect("serial identity present in shard");
+            assert_eq!(
+                hdr.import_confidence,
+                ImportConfidence::KernelVerified as u8
+            );
+            assert_ne!(hdr.value_idx, u32::MAX);
+        }
+
+        // A synthesized def-const is present, value-bearing, and KernelVerified
+        // — earned by `Environment::add_decl` type-checking its value during
+        // replay, never asserted from registry metadata.
+        let (_, def_hdr) = reader
+            .lookup_name("isabelle.def.HOL.True")
+            .expect("synthesized def-const emitted");
+        assert_eq!(
+            def_hdr.import_confidence,
+            ImportConfidence::KernelVerified as u8
+        );
+        assert_ne!(def_hdr.value_idx, u32::MAX, "def-const carries its value");
+        assert_eq!(def_hdr.decl_kind, crate::types::DeclKind::Definition as u8);
     }
 
     /// REAL Isabelle export: `Int.power_int_def`, a **polymorphic instance-operation**
@@ -507,11 +594,17 @@ mod tests {
         assert_eq!(result.rejection_reasons.get("hole"), Some(&1));
         assert_eq!(result.kernel_verified, result.names.len());
 
-        // The shard round-trips with both theorems stamped KernelVerified.
+        // The shard round-trips with both theorems stamped KernelVerified,
+        // alongside their serial identities and the synthesized def-consts (see
+        // the batch test for why the header count exceeds the theorem count).
         let mut buf = Vec::new();
         writer.write(&mut buf).expect("shard write");
         let reader = ShardReader::from_bytes(&buf).expect("shard read");
-        assert_eq!(reader.header.constant_count, 2);
+        assert_eq!(
+            reader.header.constant_count as usize,
+            result.written_constants.len(),
+            "every shard header must have a recorded write"
+        );
         for name in &result.names {
             let (_, hdr) = reader.lookup_name(name).expect("verified name present");
             assert_eq!(
@@ -519,5 +612,13 @@ mod tests {
                 ImportConfidence::KernelVerified as u8
             );
         }
+        for serial in ["isabelle.s100", "isabelle.s101"] {
+            reader
+                .lookup_name(serial)
+                .expect("serial identity present in shard");
+        }
+        reader
+            .lookup_name("isabelle.def.HOL.True")
+            .expect("synthesized def-const emitted by the streaming driver too");
     }
 }

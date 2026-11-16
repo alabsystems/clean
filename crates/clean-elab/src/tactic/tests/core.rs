@@ -2110,6 +2110,40 @@ fn test_first_tactic_last_branch_error_propagates() {
     );
 }
 
+/// `first` backtracks over a branch that FAILED TO CLOSE THE GOAL.
+///
+/// A `TypeCheckFailed` is such a failure — `rfl` or `exact h` against a goal it
+/// does not fit — so Lean 4's `first | t₁ | t₂` moves on to `t₂`. This test
+/// previously asserted the opposite (that a `TypeCheckFailed` was fatal and
+/// stopped the chain), which is what `first | rfl | exact h` propagating `rfl`'s
+/// error instead of falling through looked like from the outside; `38bf256f7`
+/// fixed the classifier and this contract followed it.
+#[test]
+fn test_first_tactic_backtracks_on_type_check_failure() {
+    let env = setup_env();
+    let target = Expr::const_(Name::from_string("A"), vec![]);
+    let a_expr = Expr::const_(Name::from_string("a"), vec![]);
+    let mut state = ProofState::new(env, target);
+
+    let tactics: Vec<Tactic> = vec![
+        Box::new(|_| Err(TacticError::TypeCheckFailed("branch did not fit".into()))),
+        Box::new(move |s| exact(s, a_expr.clone())),
+    ];
+
+    first_tactic(&mut state, tactics).expect("first should fall through to the `exact` branch");
+    assert!(
+        state.is_complete(),
+        "the second branch must run and close the goal"
+    );
+}
+
+/// …but a STRUCTURAL error is still fatal.
+///
+/// `ParseFailed` (like `NoGoals` / `UnknownTactic` / `UserThrowError`) does not
+/// mean "this branch did not fit the goal" — it means the script itself is
+/// wrong. Lean does not swallow those, so neither does `first`: it stops at the
+/// failing branch with that error, leaves the goal untouched, and never runs a
+/// later alternative that could mask the mistake.
 #[test]
 fn test_first_tactic_stops_on_fatal_error() {
     let env = setup_env();
@@ -2557,7 +2591,10 @@ fn test_specialize_reduces_pi_type() {
     let b_ty = Expr::const_(Name::from_string("B"), vec![]);
     let arrow_ty = Expr::arrow(a_ty.clone(), b_ty.clone());
 
-    // Goal is just B, we'll specialize a hypothesis
+    // Goal is just B with hypothesis h : A → B already in scope. The
+    // hypothesis must be supplied at construction so the root metavariable is
+    // minted with it — pushing onto `goals[0]` afterwards widens the goal past
+    // its metavariable's creation scope, which `close_goal` refuses.
     let mut state = ProofState::with_context(
         env,
         b_ty.clone(),
@@ -2765,7 +2802,8 @@ fn test_revert_moves_hyp_to_goal() {
     let a_ty = Expr::const_(Name::from_string("A"), vec![]);
     let b_ty = Expr::const_(Name::from_string("B"), vec![]);
 
-    // Start with goal B and hypothesis h : A
+    // Start with goal B and hypothesis h : A — supplied at construction so the
+    // root metavariable's creation scope actually contains `h`.
     let mut state = ProofState::with_context(
         env,
         b_ty.clone(),

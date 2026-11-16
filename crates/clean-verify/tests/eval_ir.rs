@@ -94,6 +94,11 @@ mod lzd_census;
 #[path = "eval_ir/trust_ir_parity.rs"]
 mod trust_ir_parity;
 
+// Ordinary source intake uses the maintained production initializer. The
+// separate legacy Crystal fixture tests above remain present and unchanged.
+#[path = "eval_ir/production_source_intake.rs"]
+mod production_source_intake;
+
 // Crystal E5 (decision memo §23): the wide-pointer kinds, typed metadata, the vtable image and
 // the refused wide `icmp`, held to trust-ir's reference interpreter on real m0off slices.
 #[path = "eval_ir/e5_fat_images.rs"]

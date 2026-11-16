@@ -188,12 +188,36 @@ fn lower_kernel_const(
     writer: &mut ShardWriter,
 ) -> u32 {
     let name_idx = writer.add_string(&name.to_string());
-    // Lower all universe levels into the pool. Store u32::MAX as
-    // levels_list_idx since the shard format lacks a level_lists table.
-    for lvl in levels.iter() {
-        let _level_idx = lower_kernel_level(lvl, writer);
-    }
-    let flat = FlatExpr::const_ref(name_idx, u32::MAX);
+    // Lower the universe levels into the pool AND link them through the shard's
+    // `level_lists` table, so universe-polymorphic references round-trip as
+    // `Const(name, [u, v, …])`.
+    //
+    // This previously lowered each level and then DISCARDED the indices, writing
+    // `u32::MAX`, on the premise that "the shard format lacks a level_lists
+    // table". That premise is false — `ShardWriter::add_level_list` exists and the
+    // reader resolves it — and it is the same stale claim that was already fixed
+    // on the Lean/olean path (`lean4/env_import.rs:248-270`), which documents the
+    // identical failure. Dropping the list collapses every `Const(T, [u])` to
+    // `Const(T, [])`, so the kernel rejects the declaration with
+    // "Level count mismatch for T: declared N level params, got 0" on any
+    // reference to a universe-polymorphic constant.
+    //
+    // Measured before this fix, citing from the v3.2 Isabelle grand shard:
+    //   checked registration for `List.equal_list_inst.equal_list` failed:
+    //   Level count mismatch for Eq: declared 1 level params, got 0
+    //
+    // NOTE: existing Isabelle shards were written with `level_lists_count == 0`
+    // and must be REGENERATED to benefit; this fix corrects the writer only.
+    let levels_list_idx = if levels.is_empty() {
+        u32::MAX
+    } else {
+        let level_idxs: Vec<u32> = levels
+            .iter()
+            .map(|lvl| lower_kernel_level(lvl, writer))
+            .collect();
+        writer.add_level_list(&level_idxs)
+    };
+    let flat = FlatExpr::const_ref(name_idx, levels_list_idx);
     writer.add_expr(flat)
 }
 

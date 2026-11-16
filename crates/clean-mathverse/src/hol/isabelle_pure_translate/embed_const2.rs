@@ -44,7 +44,7 @@ impl Ctx {
                 // Defensive fall-through (unreachable given the guard): keep the
                 // theorem closed and honestly typed.
                 let ty = self.embed_type(t)?;
-                Ok(self.const_param(n, ty))
+                self.const_param_checked(n, ty)
             }
             // A **registered plain polymorphic list function** (`List.append`,
             // `List.rev`, `List.map`, …) — embed to its def-const applied to the
@@ -66,7 +66,7 @@ impl Ctx {
                 // does not match the registered function type (defensive — keeps the
                 // theorem closed and honestly typed; the kernel still re-checks).
                 let ty = self.embed_type(t)?;
-                Ok(self.const_param(n, ty))
+                self.const_param_checked(n, ty)
             }
             // A **registered polymorphic instance operation** (`Int.power_int`, …) —
             // embed to its def-const applied to the use-site object type and each class
@@ -123,7 +123,7 @@ impl Ctx {
                     return Ok(e);
                 }
                 let ty = self.embed_type(t)?;
-                Ok(self.const_param(n, ty))
+                self.const_param_checked(n, ty)
             }
             // **G4:** a registered **method-at-constructor instance definition**
             // (`Enum.enum_class.enum @ (α⇒β) list`, `Orderings.ord_class.less_eq @
@@ -153,7 +153,7 @@ impl Ctx {
                     return Ok(e);
                 }
                 let ty = self.embed_type(t)?;
-                Ok(self.const_param(n, ty))
+                self.const_param_checked(n, ty)
             }
             // HOL's if-then-else `HOL.If : bool ⇒ 'a ⇒ 'a ⇒ 'a` — embed to its
             // registered polymorphic def-const at the use-site element type
@@ -174,7 +174,7 @@ impl Ctx {
                 // not the expected `bool ⇒ T ⇒ T ⇒ T` shape (e.g. a `dummy`-typed
                 // `_def_raw` occurrence); the kernel still re-checks the result.
                 let ty = self.embed_type(t)?;
-                Ok(self.const_param(n, ty))
+                self.const_param_checked(n, ty)
             }
             // HOL's function composition `Fun.comp : ('b⇒'c)⇒('a⇒'b)⇒'a⇒'c` — embed
             // to its registered polymorphic def-const at the use-site's three solved
@@ -190,7 +190,7 @@ impl Ctx {
                     return Ok(e);
                 }
                 let ty = self.embed_type(t)?;
-                Ok(self.const_param(n, ty))
+                self.const_param_checked(n, ty)
             }
             // HOL's identity `Fun.id : 'a⇒'a` — embed to its registered polymorphic
             // def-const at the use-site element type (`isabelle.def.Fun.id T`, which
@@ -201,7 +201,7 @@ impl Ctx {
                     return Ok(e);
                 }
                 let ty = self.embed_type(t)?;
-                Ok(self.const_param(n, ty))
+                self.const_param_checked(n, ty)
             }
             // A **`Fun.*` combinator constant** (`fcomp`/`inj_on`/`bij_betw`/
             // `fun_upd`/`monotone_on`) — embed to its registered polymorphic
@@ -218,7 +218,7 @@ impl Ctx {
                     return Ok(e);
                 }
                 let ty = self.embed_type(t)?;
-                Ok(self.const_param(n, ty))
+                self.const_param_checked(n, ty)
             }
             // A **BNF combinator constant** (`convol`/`rel_fun`/`rel_set`/`eq_onp`/
             // `vimage2p`/`Grp`/`Gr`/`csquare`/`id_bnf`) — embed to its registered
@@ -235,7 +235,7 @@ impl Ctx {
                     return Ok(e);
                 }
                 let ty = self.embed_type(t)?;
-                Ok(self.const_param(n, ty))
+                self.const_param_checked(n, ty)
             }
             // An **opaque-arg BNF combinator constant** (`cinfinite`/`cfinite`/
             // `csum`/`cprod`/`cexp`/`Csum`/`pick_middlep`/`fstOp`/`sndOp`) — embed to
@@ -255,7 +255,7 @@ impl Ctx {
                     return Ok(e);
                 }
                 let ty = self.embed_type(t)?;
-                Ok(self.const_param(n, ty))
+                self.const_param_checked(n, ty)
             }
             // A **`wo_rel` `The`-threaded constant** (`minim`/`supr`/`suc`) — embed to
             // its registered def-const ([`Ctx::embed_wo_the_const`]) applied to the
@@ -273,7 +273,7 @@ impl Ctx {
                     return Ok(e);
                 }
                 let ty = self.embed_type(t)?;
-                Ok(self.const_param(n, ty))
+                self.const_param_checked(n, ty)
             }
             // A **`The`-defined order extremum** (`Orderings.ord.Least` /
             // `Orderings.order.Greatest`) — embed to its registered def-const applied
@@ -291,7 +291,7 @@ impl Ctx {
                     return Ok(e);
                 }
                 let ty = self.embed_type(t)?;
-                Ok(self.const_param(n, ty))
+                self.const_param_checked(n, ty)
             }
             // A **point-free HOL logical constant** (`HOL.Uniq`/`Ex1`/`Let`/
             // `induct_forall`/`induct_equal`/`NO_MATCH`) — embed to its registered
@@ -310,7 +310,7 @@ impl Ctx {
                     return Ok(e);
                 }
                 let ty = self.embed_type(t)?;
-                Ok(self.const_param(n, ty))
+                self.const_param_checked(n, ty)
             }
             // A **registered overloaded class method** (`c_class.method`) — embed to
             // its dictionary def-const application `method_def α impl op₁ … opₙ`
@@ -332,7 +332,7 @@ impl Ctx {
                 // does not match the registered method type (defensive — keeps the
                 // theorem closed and honestly typed; the kernel still re-checks).
                 let ty = self.embed_type(t)?;
-                Ok(self.const_param(n, ty))
+                self.const_param_checked(n, ty)
             }
             // A RAW **bool-instance** implementation constant
             // `<M>.<c>_bool_inst.<c>_bool` (`Boolean_Algebras.sup_bool_inst.sup_bool`,
@@ -365,7 +365,7 @@ impl Ctx {
                     return self.embed_element_op(class_op, t);
                 }
                 let ty = self.embed_type(t)?;
-                Ok(self.const_param(n, ty))
+                self.const_param_checked(n, ty)
             }
             // A RAW **ground/type-constructor instance** implementation constant
             // (`Nat.inf_nat_inst.inf_nat`, `Nat.zero_nat_inst.zero_nat`,
@@ -395,7 +395,7 @@ impl Ctx {
                     return self.embed_element_op(class_op, t);
                 }
                 let ty = self.embed_type(t)?;
-                Ok(self.const_param(n, ty))
+                self.const_param_checked(n, ty)
             }
             // An overloaded lattice/order **class operation at a FUNCTION instance**
             // (`sup`/`inf`/`minus`/`uminus`/`bot`/`top`/`less_eq` on `'a ⇒ 'b`) —
@@ -418,7 +418,7 @@ impl Ctx {
                     return Ok(e);
                 }
                 let ty = self.embed_type(t)?;
-                Ok(self.const_param(n, ty))
+                self.const_param_checked(n, ty)
             }
             IsaTerm::Const { n, t } => {
                 // Bare (un-applied) HOL set / complete-lattice **operations** under
@@ -436,7 +436,7 @@ impl Ctx {
                 // Otherwise abstract the constant as a term parameter keyed by name
                 // so the theorem stays closed and honestly typed.
                 let ty = self.embed_type(t)?;
-                Ok(self.const_param(n, ty))
+                self.const_param_checked(n, ty)
             }
             // Defensive: only `Const`-headed terms reach here (via
             // `embed_const_term`); other shapes are handled in `embed_term`.

@@ -25,16 +25,23 @@
 //!     (Nat.lt_or_eq_of_le n v h_le)
 //! ```
 //!
-//! NOTE on the `interval_cases` machinery (interval_cases.rs:30): its
-//! `build_or_elim_chain` proof links sub-goal METAS whose per-value equality
-//! hypothesis is an out-of-band FVar (`ctx.len() + 1000`,
-//! interval_cases.rs:119) with no matching binder in the assembled term (the
-//! true-branch lambda is anonymous, finite_cases_proof.rs:190-194, and the
-//! LAST branch has no binder at all, finite_cases_proof.rs:176-177). A
-//! sub-proof that USES the equality witness — which this family requires —
-//! therefore cannot survive the final FVar→BVar close. Hence the closed-term
-//! descent here, which follows the same Or-elimination proof pattern with
-//! real binders.
+//! HISTORICAL NOTE. This lane was written as a closed-term descent because the
+//! only in-repo case-split machinery at the time — `build_or_elim_chain`
+//! (finite_cases_proof.rs) — linked sub-goal METAS whose per-value equality
+//! hypothesis was an out-of-band FVar (`ctx.len() + 1000`) with no matching
+//! binder in the assembled term: the true-branch lambda was anonymous and the
+//! LAST branch had no binder at all. A sub-proof that USES the equality
+//! witness — which this family requires — could not survive the final
+//! FVar→BVar close.
+//!
+//! `interval_cases` has since been retargeted onto the same descent shape
+//! (`interval_cases_proof.rs`), where every branch's equality IS bound and can
+//! be consumed. `build_or_elim_chain` now binds its non-final equalities but
+//! still has no binder (and no equality) for the LAST branch; only `fin_cases`
+//! reaches it now. The two `descend` implementations are the same
+//! algorithm at different termination rungs (`0` here, `lo` there) and should
+//! be unified — deliberately NOT in the commit that landed the interval fix,
+//! so this green lane stays byte-identical while that one is validated.
 
 use clean_kernel::name::Name;
 use clean_kernel::{BinderInfo, Expr, ExprKind, FVarId, Level};

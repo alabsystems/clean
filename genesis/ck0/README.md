@@ -11,11 +11,11 @@ and the production/independent-compiler follow-up.
 The paired measurement and archive-custody qualification
 retains the later fixed observer and exact unverified replay images.
 The shared-term source re-capture and lexical Cargo-path controls
-supersede its current-source selector with208 committed inputs, while preserving
-every historical packet. The standing command selects that explicit receipt.
+supersede its earlier source selector with208 committed inputs, while preserving
+every historical packet. Archive custody selects that explicit receipt.
 The prior current-source record
 and initial record is historical.
-`CANDIDATE.json` pins the measured current source, explicitly **without promoting
+`CANDIDATE.json` retains the measured historical source, explicitly **without promoting
 it to the genesis seed**. Stock rustc and Trust have shared rustc ancestry. Their
 test agreement is differential qualification, not evidence of two independent
 compiler implementations or classical diverse double compilation of a compiler.
@@ -30,33 +30,45 @@ inputs; it does not assert that arbitrary future Rust/build-script code has no
 other file or environment dependencies. Compiler overrides in the environment
 and Cargo configuration are refused; applicable configuration files are pinned.
 
-Run the evidence consistency gate (Python 3.11+; this machine uses `python3.14`):
+Current candidate captures use `clean.ck0-candidate-source/v2`: the exact named
+Git commit and209 declared inputs include the source-loaded resource transport
+helper. Current capture rejects legacy source schemas. Archive custody alone
+accepts historical v1 against its fixed original inventory; it cannot turn
+that evidence into a new compilation. The candidate follow-through packet
+records actual Git, cache and descriptor controls and the unavailable native
+frontdoor. Transport controls do not authenticate native resource authority.
+
+Run the source controls (Python 3.11+; this machine uses `python3.14`):
 
 ```sh
-just ck0-lineage
 python3.14 scripts/check_ck0_lineage.py --selftest
+python3.14 scripts/check_ck0_replay_custody.py --selftest
 ```
 
-It checks the current source against the candidate's committed revision and
-checks recorded logs, coverage and receipts. It does not recompile by default.
+`just ck0-lineage` also requires a current candidate/cohort and remains red:
+the retained `CANDIDATE.json` is v1 and no new v2 native cohort is established.
+Do not repin that file or its sealed receipt from an inventory-only capture.
+The candidate receiver checks current source against its committed revision
+and recorded logs, coverage and receipts. It does not recompile by default.
 `--local` additionally checks retained compiler/sysroot/dependency/output files;
 those absolute paths are local replay inputs. The latest receipt also retains
 exact compressed unverified replay images, without promoting them to seeds.
 The strict v2 gate checks before/after-phase endpoint equality; this is not
 continuous or hermetic read confinement. Historical v1 has no such claim.
-The standing command also checks archive replay custody and refusal of the
-retired genesis entry points. These are untrusted consistency checks, not
+Archive replay custody and refusal of the retired genesis entry points are
+untrusted consistency checks, not
 compiler independence or seed eligibility. Production provenance is a dated
-source snapshot. To authenticate it again,
-provide Git repositories containing its pinned objects:
+source snapshot. Check its retained archive without executing the images:
 
 ```sh
-python3.14 scripts/check_ck0_lineage.py \
-  --require-stability --runs reports/self-proof-q6-recapture-2026-11-14/captures \
-  --production reports/self-proof-q6-recapture-2026-11-14/captures/production.json \
-  --authenticate-production --trust-repo /path/to/trust.git \
-  --ty-repo /path/to/ty.git
+python3.14 scripts/check_ck0_replay_custody.py \
+  --runs reports/self-proof-q6-recapture-2026-11-14/captures \
+  --source reports/self-proof-q6-recapture-2026-11-14/captures/source.json
 ```
+
+Archive consistency does not authenticate production Git provenance. The
+follow-through packet separately replays the production APIs over the exact
+Trust/Clean/ty Git objects and compares the complete record byte for byte.
 
 Trust's `trust-spec-temporal` links `tla-check` with `clean-cic` and patches
 ck0 to its own Clean gitlink. It also replaces num-bigint, num-integer and

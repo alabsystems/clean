@@ -759,11 +759,11 @@ fn named_tactic_role(name: &str) -> Option<NamedTacticRole> {
         | "bv_decide" | "abel" | "and_intros" | "auto_cascade" | "blast" | "cc"
         | "cert_mathverse" | "cert_simp" | "classical" | "continuity" | "contrapose" | "delta"
         | "discriminate" | "fin_cases" | "gcongr" | "group" | "interval_cases" | "itauto"
-        | "lhs" | "library_search" | "lift" | "mathverse_suggest" | "mathverse_use"
-        | "measurability" | "mono" | "monad_pres" | "nontriviality" | "peel" | "polyrith"
-        | "qify" | "reduce" | "reduce_eq" | "rhs" | "rotate_left" | "rotate_right" | "rw?"
-        | "solve_by_elim" | "split_ifs" | "subst_eqs" | "trace_state" | "trans" | "whnf"
-        | "zify" | "inhabit" | "convert" | "rcases" => NamedTacticRole::Terms,
+        | "lhs" | "library_search" | "lift" | "mathverse_apply" | "mathverse_suggest"
+        | "mathverse_use" | "measurability" | "mono" | "monad_pres" | "nontriviality" | "peel"
+        | "polyrith" | "qify" | "reduce" | "reduce_eq" | "rhs" | "rotate_left" | "rotate_right"
+        | "rw?" | "solve_by_elim" | "split_ifs" | "subst_eqs" | "trace_state" | "trans"
+        | "whnf" | "zify" | "inhabit" | "convert" | "rcases" => NamedTacticRole::Terms,
         _ => return None,
     })
 }

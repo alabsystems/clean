@@ -9,6 +9,10 @@ use crate::level::Level;
 use crate::name::Name;
 use std::collections::{BTreeMap, HashSet};
 
+/// Untrusted producer for the adopted checker, separate from diagnostic journals.
+#[path = "core_advice.rs"]
+pub mod advice;
+
 /// A tracing refusal is separate from the reference kernel's verdict.
 #[derive(Clone, Debug, thiserror::Error)]
 pub enum Refusal {

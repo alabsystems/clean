@@ -25,6 +25,40 @@ pub(crate) fn write_file(path: &Path, content: &str) {
     fs::write(path, content).expect("write fixture file");
 }
 
+/// The Lean world `clean lake build` selects for a fixture project, all of
+/// which live under the system temporary directory with no `lean-toolchain`
+/// above them: the checkout's pin.
+fn builder_world() -> clean_olean::SourceWorldDecision {
+    clean_olean::source_world_for_file(&std::env::temp_dir().join("Builder.lean"), None)
+        .expect("the builder's Lean world")
+}
+
+/// A fresh copy of the environment `clean lake build` starts a module
+/// without `prelude` from: genuine Init of the builder's world, as Lean's
+/// implicit `import Init`.
+pub(crate) fn genuine_init_env() -> clean_kernel::Environment {
+    static INIT: std::sync::OnceLock<clean_kernel::Environment> = std::sync::OnceLock::new();
+    INIT.get_or_init(|| {
+        use clean_elab::module_driver::{EnvironmentSetup, SourceModuleSetup};
+        SourceModuleSetup::new(EnvironmentSetup::default(), &builder_world())
+            .expect("the builder's backbone")
+            .initial_environment(&clean_parser::FileHeader::default())
+            .expect("genuine Init")
+    })
+    .clone()
+}
+
+/// Where a built artifact's imports resolve: the build directory, then the
+/// builder's world library, which holds the `Init` every artifact records,
+/// as for an artifact Lean wrote.
+pub(crate) fn artifact_load_paths(lib_dir: &Path) -> Vec<std::path::PathBuf> {
+    let mut paths = vec![lib_dir.to_path_buf()];
+    paths.extend(clean_olean::search_paths_in_world(
+        builder_world().imports().expect("an admitted world"),
+    ));
+    paths
+}
+
 /// Load the workspace at `root` and run a full build with `options`.
 pub(crate) fn build_all_with(root: &Path, options: BuildOptions) -> BuildResult {
     let ws = Workspace::load(root).expect("workspace should load");

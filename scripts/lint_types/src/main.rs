@@ -3347,6 +3347,19 @@ impl Callbacks for Driver {
 }
 
 fn main() -> ExitCode {
+    // FIRST native-main operation, as the installed Trust SDK's own drivers
+    // (trustdoc, tippy-driver, miri) do: capture the inherited compiler
+    // scheduler before anything opens a descriptor. Cargo runs this driver as
+    // the workspace wrapper with its jobserver advertised in CARGO_MAKEFLAGS,
+    // and the SDK's `rustc_data_structures::jobserver` refuses a compiler
+    // reached without this capture ("inherited compiler scheduler requires
+    // capture at native process entry"); its refusals stay the SDK's.
+    // SAFETY: nothing has run in this native main before this call -- no
+    // argument read, logging, descriptor operation or callback.
+    if let Err(error) = unsafe { rustc_data_structures::jobserver::capture_early() } {
+        eprintln!("error: inherited compiler resource custody unavailable: {error}");
+        return ExitCode::from(75);
+    }
     let mut args: Vec<String> = std::env::args().collect();
     // Cargo runs a workspace wrapper as `<wrapper> <rustc> <args>`: this
     // process is the compiler, so the rustc it names is dropped.

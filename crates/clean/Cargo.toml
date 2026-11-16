@@ -17,6 +17,8 @@ carcara-verify = ["clean-cli/carcara-verify"]
 # Forwards to `clean-cli/math-overlays`, enabling the in-process
 # `clean kernel verify-gamma-crown` handler (#3446, Epic #3436 Phase 3).
 math-overlays = ["clean-cli/math-overlays"]
+# Forwards to `clean-cli/trust-ir-backend`, exposing `clean compile --emit trustir`.
+trust-ir-backend = ["clean-cli/trust-ir-backend"]
 # Enable the ay SMT solver for enhanced decision tactics in the absorbed
 # check pipeline (ex clean-lib; rearch stage 9 facade consolidation).
 ay-smt = ["clean-elab/ay-smt"]
@@ -73,3 +75,11 @@ harness = false
 name = "e2e_bench"
 harness = false
 
+# LX0(a): the native execution battery through the experimental
+# `clean run --backend trust-cg` lane (needs the trust-ir-backend feature and
+# an explicitly selected trust-cg). A measurement against its committed report,
+# reports/lx0-trustcg-native-battery-2026-09-30.json.
+[[test]]
+name = "native_exec_battery_trustcg"
+path = "tests/native_exec_battery_trustcg.rs"
+required-features = ["trust-ir-backend"]

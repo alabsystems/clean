@@ -3,11 +3,16 @@
 # SPDX-License-Identifier: Apache-2.0
 """Self-test of the WS6.5 trust-ir pin transaction: leg table, coherence, driver.
 
-Run by scripts/check_script_selftests.sh (the scripts/test_* glob). Every arm
-is a fixture on disk: a synthetic Git repository with the exact leg shape of
+Run by scripts/check_script_selftests.sh (the scripts/test_* glob). Fixture arms
+use synthetic Git repositories with the exact leg shape of
 this tree (nine trust-ir declarations in six manifests, three trust-cg
 declarations, two lockfiles), mutated one leg at a time. Nothing here
-resolves, fetches or compiles.
+compiles. The live-tree coherence arm also runs the actual locked all-features
+dependency metadata guard for declared dev-only IR aliases. Prepare its exact
+source cache through the maintained owner paths, and run with an explicit
+owned CARGO_HOME and CARGO_NET_OFFLINE=true when transport must stay offline.
+Fixture-only arms do not resolve or fetch dependencies. Metadata and fixture
+success do not establish compiler, kernel, native, or proof qualification.
 
 The arms are the increment's Tests field:
 

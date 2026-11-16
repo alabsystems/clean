@@ -17,6 +17,8 @@
 //!
 //! ## Proof & SMT
 //! - `prove`: Attempt automatic proof via SMT
+//! - `proveTLA`: Prove TLAPS obligations (TLA+ temporal logic)
+//! - `batchProveTLA`: Batch TLA+ proof verification
 //!
 //! ## Premise Selection
 //! - `getPremises`: Select relevant premises for a goal (MePo/MaSh/Hybrid)
@@ -953,7 +955,8 @@ pub use handlers::{
     ArchiveCertParams, ArchiveCertResult, ArchiveCertWithDictParams, ArchiveCertWithDictResult,
     BatchCheckItemResult, BatchCheckParams, BatchCheckResult, BatchGetPremisesItem,
     BatchGetPremisesItemResult, BatchGetPremisesParams, BatchGetPremisesResult,
-    BatchGetPremisesStats, BatchStats, BatchVerifyCertItem,
+    BatchGetPremisesStats, BatchProveTlaItem, BatchProveTlaItemResult, BatchProveTlaParams,
+    BatchProveTlaResult, BatchProveTlaStats, BatchStats, BatchVerifyCertItem,
     BatchVerifyCertItemResult, BatchVerifyCertParams, BatchVerifyCertResult, BatchVerifyCertStats,
     CheckError, CheckParams, CheckResult, CompressCertParams, CompressCertResult,
     CompressCertStats, DecompressCertParams, DecompressCertResult, ExtractedTheorem,
@@ -961,7 +964,7 @@ pub use handlers::{
     GetEnvironmentResult, GetMetricsResult, GetPremisesParams, GetPremisesResult, GetTypeParams,
     GetTypeResult, ImportModuleParams, ImportModuleResult, LoadEnvironmentParams,
     LoadEnvironmentResult, MethodCounts, PremiseInfo, PremiseSelectionStats, ProveParams,
-    ProveResult, ProveStatus, SaveEnvironmentParams,
+    ProveResult, ProveStatus, ProveTlaParams, ProveTlaResult, SaveEnvironmentParams,
     SaveEnvironmentResult, SearchProofParams, SearchProofResult, SearchStats, SearchStrategy,
     ServerInfo, ServerMetrics, SorryLocation, StrategyTiming, TimingStats, TrainDictParams,
     TrainDictResult, TypeCacheMetrics, UnarchiveCertParams, UnarchiveCertResult,
@@ -1310,6 +1313,328 @@ mod tests {
             "Response: {response}"
         );
         assert!(response.contains("\"total\":1"), "Response: {response}");
+
+        handle.shutdown();
+    }
+
+    #[tokio::test]
+    async fn test_server_prove_tla_always_true() {
+        use clean_tla::{TlaFormula, TlaObligation};
+
+        let config = test_config().with_addr("127.0.0.1:0".parse().unwrap());
+        let handle = serve(config).await.unwrap();
+        let addr = handle.local_addr();
+
+        // Create a simple TLA+ obligation: prove □TRUE
+        let obligation = TlaObligation {
+            module: "TestModule".to_string(),
+            line: Some(1),
+            declares: vec![],
+            hypotheses: vec![],
+            goal: TlaFormula::Always(Box::new(TlaFormula::True)),
+            tactic_hint: None,
+        };
+
+        let params = ProveTlaParams {
+            obligation,
+            timeout_ms: Some(5000),
+        };
+        let params_json = serde_json::to_string(&params).unwrap();
+        let request = format!(
+            r#"{{"jsonrpc": "2.0", "method": "proveTLA", "params": {params_json}, "id": 1}}"#
+        );
+
+        let response = send_request(addr, &request).await;
+
+        assert!(response.contains("\"result\""), "Response: {response}");
+        assert!(
+            response.contains("\"proved\":true"),
+            "Expected proved:true in response: {response}"
+        );
+        assert!(
+            response.contains("\"tactics_tried\""),
+            "Response: {response}"
+        );
+
+        handle.shutdown();
+    }
+
+    #[tokio::test]
+    async fn test_server_prove_tla_eventually_true() {
+        use clean_tla::{TlaFormula, TlaObligation};
+
+        let config = test_config().with_addr("127.0.0.1:0".parse().unwrap());
+        let handle = serve(config).await.unwrap();
+        let addr = handle.local_addr();
+
+        // Create a simple TLA+ obligation: prove ◇TRUE
+        let obligation = TlaObligation {
+            module: "TestModule".to_string(),
+            line: Some(2),
+            declares: vec![],
+            hypotheses: vec![],
+            goal: TlaFormula::Eventually(Box::new(TlaFormula::True)),
+            tactic_hint: None,
+        };
+
+        let params = ProveTlaParams {
+            obligation,
+            timeout_ms: Some(5000),
+        };
+        let params_json = serde_json::to_string(&params).unwrap();
+        let request = format!(
+            r#"{{"jsonrpc": "2.0", "method": "proveTLA", "params": {params_json}, "id": 1}}"#
+        );
+
+        let response = send_request(addr, &request).await;
+
+        assert!(response.contains("\"result\""), "Response: {response}");
+        assert!(
+            response.contains("\"proved\":true"),
+            "Expected proved:true in response: {response}"
+        );
+
+        handle.shutdown();
+    }
+
+    #[tokio::test]
+    async fn test_server_info_includes_prove_tla() {
+        let config = test_config().with_addr("127.0.0.1:0".parse().unwrap());
+        let handle = serve(config).await.unwrap();
+        let addr = handle.local_addr();
+
+        let request = r#"{"jsonrpc": "2.0", "method": "serverInfo", "id": 1}"#;
+        let response = send_request(addr, request).await;
+
+        assert!(
+            response.contains("\"proveTLA\""),
+            "serverInfo should include proveTLA method: {response}"
+        );
+
+        handle.shutdown();
+    }
+
+    #[tokio::test]
+    async fn test_server_prove_tla_with_hypotheses() {
+        use clean_tla::{TlaFormula, TlaHypothesis, TlaObligation};
+
+        let config = test_config().with_addr("127.0.0.1:0".parse().unwrap());
+        let handle = serve(config).await.unwrap();
+        let addr = handle.local_addr();
+
+        // Create an obligation with hypotheses: h1: P → prove P (trivially via hypothesis)
+        // Actually: h1: TRUE → □TRUE (hypotheses should help but goal is independently provable)
+        let obligation = TlaObligation {
+            module: "TestModule".to_string(),
+            line: Some(10),
+            declares: vec![],
+            hypotheses: vec![TlaHypothesis {
+                name: "h1".to_string(),
+                formula: TlaFormula::True,
+            }],
+            goal: TlaFormula::Always(Box::new(TlaFormula::True)),
+            tactic_hint: None,
+        };
+
+        let params = ProveTlaParams {
+            obligation,
+            timeout_ms: Some(5000),
+        };
+        let params_json = serde_json::to_string(&params).unwrap();
+        let request = format!(
+            r#"{{"jsonrpc": "2.0", "method": "proveTLA", "params": {params_json}, "id": 1}}"#
+        );
+
+        let response = send_request(addr, &request).await;
+
+        assert!(response.contains("\"result\""), "Response: {response}");
+        assert!(
+            response.contains("\"proved\":true"),
+            "Expected proved:true with hypotheses: {response}"
+        );
+
+        handle.shutdown();
+    }
+
+    #[tokio::test]
+    async fn test_server_prove_tla_with_declarations() {
+        use clean_tla::{TlaDeclare, TlaFormula, TlaObligation};
+
+        let config = test_config().with_addr("127.0.0.1:0".parse().unwrap());
+        let handle = serve(config).await.unwrap();
+        let addr = handle.local_addr();
+
+        // Create an obligation with CONSTANT declarations
+        let obligation = TlaObligation {
+            module: "TestModule".to_string(),
+            line: Some(20),
+            declares: vec![
+                TlaDeclare::Constant {
+                    name: "N".to_string(),
+                    arity: 0,
+                },
+                TlaDeclare::Variable {
+                    name: "x".to_string(),
+                },
+            ],
+            hypotheses: vec![],
+            goal: TlaFormula::Eventually(Box::new(TlaFormula::True)),
+            tactic_hint: None,
+        };
+
+        let params = ProveTlaParams {
+            obligation,
+            timeout_ms: Some(5000),
+        };
+        let params_json = serde_json::to_string(&params).unwrap();
+        let request = format!(
+            r#"{{"jsonrpc": "2.0", "method": "proveTLA", "params": {params_json}, "id": 1}}"#
+        );
+
+        let response = send_request(addr, &request).await;
+
+        assert!(response.contains("\"result\""), "Response: {response}");
+        assert!(
+            response.contains("\"proved\":true"),
+            "Expected proved:true with declarations: {response}"
+        );
+
+        handle.shutdown();
+    }
+
+    #[tokio::test]
+    async fn test_server_prove_tla_complex_sequent() {
+        use clean_tla::{TlaDeclare, TlaFormula, TlaHypothesis, TlaObligation};
+
+        let config = test_config().with_addr("127.0.0.1:0".parse().unwrap());
+        let handle = serve(config).await.unwrap();
+        let addr = handle.local_addr();
+
+        // Full sequent with temporal goal: CONSTANT N; VARIABLE x; h1: □TRUE ├── □TRUE
+        // This tests complex obligations with declarations and hypotheses where goal is provable
+        let obligation = TlaObligation {
+            module: "ComplexModule".to_string(),
+            line: Some(42),
+            declares: vec![
+                TlaDeclare::Constant {
+                    name: "N".to_string(),
+                    arity: 0,
+                },
+                TlaDeclare::Variable {
+                    name: "x".to_string(),
+                },
+            ],
+            hypotheses: vec![TlaHypothesis {
+                name: "h1".to_string(),
+                formula: TlaFormula::Always(Box::new(TlaFormula::True)),
+            }],
+            goal: TlaFormula::Always(Box::new(TlaFormula::True)),
+            tactic_hint: None,
+        };
+
+        let params = ProveTlaParams {
+            obligation,
+            timeout_ms: Some(5000),
+        };
+        let params_json = serde_json::to_string(&params).unwrap();
+        let request = format!(
+            r#"{{"jsonrpc": "2.0", "method": "proveTLA", "params": {params_json}, "id": 1}}"#
+        );
+
+        let response = send_request(addr, &request).await;
+
+        assert!(response.contains("\"result\""), "Response: {response}");
+        // □TRUE is provable by the temporal tactic engine
+        assert!(
+            response.contains("\"proved\":true"),
+            "Expected proved:true for complex sequent: {response}"
+        );
+
+        handle.shutdown();
+    }
+
+    #[tokio::test]
+    async fn test_server_batch_prove_tla() {
+        use clean_tla::{TlaFormula, TlaObligation};
+
+        let config = test_config().with_addr("127.0.0.1:0".parse().unwrap());
+        let handle = serve(config).await.unwrap();
+        let addr = handle.local_addr();
+
+        // Create batch of 3 obligations
+        let items = vec![
+            BatchProveTlaItem {
+                id: "ob1".to_string(),
+                obligation: TlaObligation {
+                    module: "Batch1".to_string(),
+                    line: Some(1),
+                    declares: vec![],
+                    hypotheses: vec![],
+                    goal: TlaFormula::Always(Box::new(TlaFormula::True)),
+                    tactic_hint: None,
+                },
+            },
+            BatchProveTlaItem {
+                id: "ob2".to_string(),
+                obligation: TlaObligation {
+                    module: "Batch2".to_string(),
+                    line: Some(2),
+                    declares: vec![],
+                    hypotheses: vec![],
+                    goal: TlaFormula::Eventually(Box::new(TlaFormula::True)),
+                    tactic_hint: None,
+                },
+            },
+            BatchProveTlaItem {
+                id: "ob3".to_string(),
+                obligation: TlaObligation {
+                    module: "Batch3".to_string(),
+                    line: Some(3),
+                    declares: vec![],
+                    hypotheses: vec![],
+                    // Another temporal goal that's provable: □TRUE
+                    goal: TlaFormula::Always(Box::new(TlaFormula::True)),
+                    tactic_hint: None,
+                },
+            },
+        ];
+
+        let params = BatchProveTlaParams {
+            items,
+            threads: 0,
+            timeout_ms: Some(10000),
+        };
+        let params_json = serde_json::to_string(&params).unwrap();
+        let request = format!(
+            r#"{{"jsonrpc": "2.0", "method": "batchProveTLA", "params": {params_json}, "id": 1}}"#
+        );
+
+        let response = send_request(addr, &request).await;
+
+        assert!(response.contains("\"result\""), "Response: {response}");
+        assert!(response.contains("\"total\":3"), "Response: {response}");
+        // All three obligations should be proved
+        assert!(
+            response.contains("\"all_proved\":true"),
+            "Expected all_proved:true: {response}"
+        );
+
+        handle.shutdown();
+    }
+
+    #[tokio::test]
+    async fn test_server_info_includes_batch_prove_tla() {
+        let config = test_config().with_addr("127.0.0.1:0".parse().unwrap());
+        let handle = serve(config).await.unwrap();
+        let addr = handle.local_addr();
+
+        let request = r#"{"jsonrpc": "2.0", "method": "serverInfo", "id": 1}"#;
+        let response = send_request(addr, request).await;
+
+        assert!(
+            response.contains("\"batchProveTLA\""),
+            "serverInfo should include batchProveTLA method: {response}"
+        );
 
         handle.shutdown();
     }

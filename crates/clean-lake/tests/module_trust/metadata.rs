@@ -116,9 +116,8 @@ fn a_reversed_structure_field_table_is_refused_at_import() {
     let tmp = tempfile::tempdir().expect("tmp");
     let dir = built_lib(tmp.path(), "lib", STRUCT_LIB);
     tamper(&dir, "K1Lib", reverse_table);
-    let mut env = Environment::with_prelude();
-    env.init_io_ops().expect("io ops");
-    let err = clean_olean::load_module_with_deps(&mut env, "K1Lib", &[lib_dir(&dir)])
+    let mut env = builder_base().0;
+    let err = clean_olean::load_module_with_deps(&mut env, "K1Lib", &load_paths(&dir))
         .expect_err("a table contradicting the artifact's own projections must refuse the import");
     assert!(
         matches!(
@@ -146,9 +145,8 @@ fn a_projection_rewritten_under_an_honest_table_is_refused_at_import() {
     let tmp = tempfile::tempdir().expect("tmp");
     let dir = built_lib(tmp.path(), "lib", STRUCT_LIB);
     tamper(&dir, "K1Lib", swap_projection_x);
-    let mut env = Environment::with_prelude();
-    env.init_io_ops().expect("io ops");
-    let err = clean_olean::load_module_with_deps(&mut env, "K1Lib", &[lib_dir(&dir)])
+    let mut env = builder_base().0;
+    let err = clean_olean::load_module_with_deps(&mut env, "K1Lib", &load_paths(&dir))
         .expect_err("a projection contradicting the table must refuse the import");
     assert!(
         matches!(
@@ -210,9 +208,8 @@ fn reverse_table_without_projections(p: &mut CleanPayload) {
 }
 
 fn assert_inconsistent_at_import(dir: &Path) {
-    let mut env = Environment::with_prelude();
-    env.init_io_ops().expect("io ops");
-    let err = clean_olean::load_module_with_deps(&mut env, "K1Lib", &[lib_dir(dir)])
+    let mut env = builder_base().0;
+    let err = clean_olean::load_module_with_deps(&mut env, "K1Lib", &load_paths(dir))
         .expect_err("an artifact that contradicts itself must refuse the import");
     assert!(err.is_inconsistent_artifact(), "{err}");
 }
@@ -227,9 +224,8 @@ fn recursor_bodied_projections_cannot_carry_a_reversed_table() {
         reverse_table_over_recursor_projections(p);
         reverse_table(p); // back to [x, y]
     });
-    let mut env = Environment::with_prelude();
-    env.init_io_ops().expect("io ops");
-    clean_olean::load_module_with_deps(&mut env, "K1Lib", &[lib_dir(&honest)])
+    let mut env = builder_base().0;
+    clean_olean::load_module_with_deps(&mut env, "K1Lib", &load_paths(&honest))
         .expect("recursor-bodied projections under the honest table load");
     assert!(struct_table_is(&env, &["x", "y"]));
 
@@ -347,10 +343,9 @@ theorem K1Lib.t : 1 = 1 := Eq.refl 1
         );
         assert!(build(&dir).failed.is_empty(), "{tag}: fixture builds");
         tamper(&dir, "Z", move |p| p.constants.push(carried));
-        let mut env = Environment::with_prelude();
-        env.init_io_ops().expect("io ops");
-        clean_olean::load_module_with_deps(&mut env, "Z", &[lib_dir(&dir)]).expect("Z loads");
-        let second = clean_olean::load_module_with_deps(&mut env, "K1Lib", &[lib_dir(&dir)]);
+        let mut env = builder_base().0;
+        clean_olean::load_module_with_deps(&mut env, "Z", &load_paths(&dir)).expect("Z loads");
+        let second = clean_olean::load_module_with_deps(&mut env, "K1Lib", &load_paths(&dir));
         if refused {
             let err = second.expect_err("a second declaration must refuse the import");
             assert!(
@@ -389,17 +384,15 @@ fn a_definition_that_depends_on_itself_is_refused_at_import() {
     tamper(&control, "K1Lib", |p| {
         set_v(p, pid(succ(Expr::const_(name("Nat.zero"), vec![]))))
     });
-    let mut env = Environment::with_prelude();
-    env.init_io_ops().expect("io ops");
-    clean_olean::load_module_with_deps(&mut env, "K1Lib", &[lib_dir(&control)])
+    let mut env = builder_base().0;
+    clean_olean::load_module_with_deps(&mut env, "K1Lib", &load_paths(&control))
         .expect("an acyclic rewrite is not refused at import");
 
     for (tag, value) in [("direct", succ(v())), ("through-pid", pid(succ(v())))] {
         let dir = built_lib(tmp.path(), tag, lib);
         tamper(&dir, "K1Lib", |p| set_v(p, value));
-        let mut env = Environment::with_prelude();
-        env.init_io_ops().expect("io ops");
-        let err = clean_olean::load_module_with_deps(&mut env, "K1Lib", &[lib_dir(&dir)])
+        let mut env = builder_base().0;
+        let err = clean_olean::load_module_with_deps(&mut env, "K1Lib", &load_paths(&dir))
             .expect_err("a definition that depends on itself must refuse the import");
         assert!(
             matches!(err, clean_olean::ImportError::DefinitionalCycle { .. }),
@@ -436,9 +429,7 @@ fn load_lean_built(env: &mut Environment, module: &str, part: &Path) -> Result<(
 }
 
 fn fresh_env() -> Environment {
-    let mut env = Environment::with_prelude();
-    env.init_io_ops().expect("io ops");
-    env
+    builder_base().0
 }
 
 #[test]
@@ -563,7 +554,7 @@ fn a_clean_built_declaration_then_a_lean_built_one_refuse_the_import() {
         write_project(&dir, &["Z"], &[("Z", source)]);
         assert!(build(&dir).failed.is_empty(), "{tag}: Z builds");
         let mut env = fresh_env();
-        clean_olean::load_module_with_deps(&mut env, "Z", &[lib_dir(&dir)]).expect("Z loads");
+        clean_olean::load_module_with_deps(&mut env, "Z", &load_paths(&dir)).expect("Z loads");
         let second = load_lean_built(&mut env, "D", &lean_built("honest"));
         if refused {
             let err = second.expect_err("D.v declared by Z and by D must refuse the import");
@@ -644,9 +635,8 @@ fn a_mark_on_a_declaration_the_artifact_does_not_carry_is_refused() {
     let tmp = tempfile::tempdir().expect("tmp");
     let dir = built_lib(tmp.path(), "lib", MARKS_LIB);
     tamper(&dir, "K1Lib", |p| p.protected_decls.push(name("Nat.add")));
-    let mut env = Environment::with_prelude();
-    env.init_io_ops().expect("io ops");
-    let err = clean_olean::load_module_with_deps(&mut env, "K1Lib", &[lib_dir(&dir)])
+    let mut env = builder_base().0;
+    let err = clean_olean::load_module_with_deps(&mut env, "K1Lib", &load_paths(&dir))
         .expect_err("a foreign mark must refuse the import");
     assert!(
         matches!(

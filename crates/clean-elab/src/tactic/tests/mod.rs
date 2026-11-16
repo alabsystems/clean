@@ -647,6 +647,8 @@ mod grind_no_progress_goal;
 mod have_let;
 mod infer_instance;
 mod instance_registration;
+mod interval_cases_descent;
+mod interval_cases_descent_scope;
 mod let_bindings;
 mod library_search;
 mod linarith_contradiction_closeout;

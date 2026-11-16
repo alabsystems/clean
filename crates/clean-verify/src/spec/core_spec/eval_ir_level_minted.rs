@@ -98,7 +98,7 @@ fn run(heap: &str, na: &str) -> String {
 /// A witness proved by `Eq.refl`: the kernel runs the machine and compares.
 fn witness(name: &str, binder: &str, heap: &str, na: &str, outcome: &str) -> String {
     format!(
-        "def {name} {binder}: Eq IROutcome {} {outcome} := Eq.refl IROutcome {outcome}",
+        "def {name} {binder}: Eq IROutcome {} {outcome} := @Eq.refl IROutcome {outcome}",
         run(heap, na)
     )
 }
@@ -113,7 +113,7 @@ const A4_OVER_MINTED: &str = "forall (mem : IRList IRMemSlot) (fuel : Nat) (na :
 
 /// The representation derivation the model's A2 relation gives the
 /// `Max(Zero, Zero)` heap — every premise an `Eq.refl` on a concrete lookup.
-const SRC_MAXZZ_REF: &str = "def encodes_live_ref_maxzz_witness : EncodesLiveLevelRef (ir_cell ir_d0 (ir_var ir_d2 (ir_sp2 (IRScalar.ptr_ ir_d1) (IRScalar.ptr_ ir_d2))) (ir_cell ir_d1 (ir_var ir_d0 ir_sp0) (ir_cell ir_d2 (ir_var ir_d0 ir_sp0) ir_mem0))) (IRScalar.ptr_ ir_d0) (Level.max Level.zero Level.zero) := EncodesLiveLevelRef.mk (ir_cell ir_d0 (ir_var ir_d2 (ir_sp2 (IRScalar.ptr_ ir_d1) (IRScalar.ptr_ ir_d2))) (ir_cell ir_d1 (ir_var ir_d0 ir_sp0) (ir_cell ir_d2 (ir_var ir_d0 ir_sp0) ir_mem0))) ir_d0 (Level.max Level.zero Level.zero) (EncodesLevelArc.max (ir_cell ir_d0 (ir_var ir_d2 (ir_sp2 (IRScalar.ptr_ ir_d1) (IRScalar.ptr_ ir_d2))) (ir_cell ir_d1 (ir_var ir_d0 ir_sp0) (ir_cell ir_d2 (ir_var ir_d0 ir_sp0) ir_mem0))) ir_d0 ir_d1 ir_d2 Level.zero Level.zero (Eq.refl (IROption IRMemSlot) (IROption.some IRMemSlot (IRMemSlot.mk ir_d0 (ir_var ir_d2 (ir_sp2 (IRScalar.ptr_ ir_d1) (IRScalar.ptr_ ir_d2))) Bool.true))) (EncodesLevelArc.zero (ir_cell ir_d0 (ir_var ir_d2 (ir_sp2 (IRScalar.ptr_ ir_d1) (IRScalar.ptr_ ir_d2))) (ir_cell ir_d1 (ir_var ir_d0 ir_sp0) (ir_cell ir_d2 (ir_var ir_d0 ir_sp0) ir_mem0))) ir_d1 (Eq.refl (IROption IRMemSlot) (IROption.some IRMemSlot (IRMemSlot.mk ir_d1 (ir_var ir_d0 ir_sp0) Bool.true)))) (EncodesLevelArc.zero (ir_cell ir_d0 (ir_var ir_d2 (ir_sp2 (IRScalar.ptr_ ir_d1) (IRScalar.ptr_ ir_d2))) (ir_cell ir_d1 (ir_var ir_d0 ir_sp0) (ir_cell ir_d2 (ir_var ir_d0 ir_sp0) ir_mem0))) ir_d2 (Eq.refl (IROption IRMemSlot) (IROption.some IRMemSlot (IRMemSlot.mk ir_d2 (ir_var ir_d0 ir_sp0) Bool.true)))))";
+const SRC_MAXZZ_REF: &str = "def encodes_live_ref_maxzz_witness : EncodesLiveLevelRef (ir_cell ir_d0 (ir_var ir_d2 (ir_sp2 (IRScalar.ptr_ ir_d1) (IRScalar.ptr_ ir_d2))) (ir_cell ir_d1 (ir_var ir_d0 ir_sp0) (ir_cell ir_d2 (ir_var ir_d0 ir_sp0) ir_mem0))) (IRScalar.ptr_ ir_d0) (Level.max Level.zero Level.zero) := EncodesLiveLevelRef.mk (ir_cell ir_d0 (ir_var ir_d2 (ir_sp2 (IRScalar.ptr_ ir_d1) (IRScalar.ptr_ ir_d2))) (ir_cell ir_d1 (ir_var ir_d0 ir_sp0) (ir_cell ir_d2 (ir_var ir_d0 ir_sp0) ir_mem0))) ir_d0 (Level.max Level.zero Level.zero) (EncodesLevelArc.max (ir_cell ir_d0 (ir_var ir_d2 (ir_sp2 (IRScalar.ptr_ ir_d1) (IRScalar.ptr_ ir_d2))) (ir_cell ir_d1 (ir_var ir_d0 ir_sp0) (ir_cell ir_d2 (ir_var ir_d0 ir_sp0) ir_mem0))) ir_d0 ir_d1 ir_d2 Level.zero Level.zero (@Eq.refl (IROption IRMemSlot) (@IROption.some IRMemSlot (IRMemSlot.mk ir_d0 (ir_var ir_d2 (ir_sp2 (IRScalar.ptr_ ir_d1) (IRScalar.ptr_ ir_d2))) Bool.true))) (EncodesLevelArc.zero (ir_cell ir_d0 (ir_var ir_d2 (ir_sp2 (IRScalar.ptr_ ir_d1) (IRScalar.ptr_ ir_d2))) (ir_cell ir_d1 (ir_var ir_d0 ir_sp0) (ir_cell ir_d2 (ir_var ir_d0 ir_sp0) ir_mem0))) ir_d1 (@Eq.refl (IROption IRMemSlot) (@IROption.some IRMemSlot (IRMemSlot.mk ir_d1 (ir_var ir_d0 ir_sp0) Bool.true)))) (EncodesLevelArc.zero (ir_cell ir_d0 (ir_var ir_d2 (ir_sp2 (IRScalar.ptr_ ir_d1) (IRScalar.ptr_ ir_d2))) (ir_cell ir_d1 (ir_var ir_d0 ir_sp0) (ir_cell ir_d2 (ir_var ir_d0 ir_sp0) ir_mem0))) ir_d2 (@Eq.refl (IROption IRMemSlot) (@IROption.some IRMemSlot (IRMemSlot.mk ir_d2 (ir_var ir_d0 ir_sp0) Bool.true)))))";
 
 impl Specification {
     /// The minted module and its five computed witnesses. Needs only the IR
@@ -148,13 +148,13 @@ impl Specification {
     /// `level_is_zero`, `EncodesLiveLevelRef`, `ir_lzm_cost` and
     /// `ir_outcome_is_ret`, so it is staged after `add_eval_ir_correct`.
     pub(super) fn add_eval_ir_level_minted_refutation(&mut self) -> Result<(), SpecError> {
-        self.add_recursive_def(SRC_MAXZZ_REF, "encodes_live_ref_maxzz_witness: the model's A2 relation ACCEPTS the three-cell Max(Zero, Zero) heap at address 0 -- EncodesLevelArc.max over two EncodesLevelArc.zero leaves, every lookup premise an Eq.refl on the concrete heap. This is the heap ir_lz_minted_refutes_a4_on_max instantiates A4 at, so the refutation is at a represented input, not at junk. DerivedProved, zero axiom_deps.")?;
+        self.add_recursive_def(SRC_MAXZZ_REF, "encodes_live_ref_maxzz_witness: the model's A2 relation ACCEPTS the three-cell Max(Zero, Zero) heap at address 0 -- EncodesLevelArc.max over two EncodesLevelArc.zero leaves, every lookup premise an @Eq.refl on the concrete heap. This is the heap ir_lz_minted_refutes_a4_on_max instantiates A4 at, so the refutation is at a represented input, not at junk. DerivedProved, zero axiom_deps.")?;
         let run_maxzz = "(ir_eval (ir_lzm_cost (Level.max Level.zero Level.zero)) ir_lz_module ir_d0 (ir_vl1 (IRScalar.ptr_ ir_d0)) (ir_cell ir_d0 (ir_var ir_d2 (ir_sp2 (IRScalar.ptr_ ir_d1) (IRScalar.ptr_ ir_d2))) (ir_cell ir_d1 (ir_var ir_d0 ir_sp0) (ir_cell ir_d2 (ir_var ir_d0 ir_sp0) ir_mem0))) ir_d3)";
         let ret_a4 = "(IROutcome.ret (ir_vl1 (IRScalar.bool_ (level_is_zero (Level.max Level.zero Level.zero)))))";
         let src = format!(
             "def ir_lz_minted_refutes_a4_on_max (C : Type) (a4 : {A4_OVER_MINTED}) : C := \
              bool_true_ne_false C (Eq.cong IROutcome Bool ir_outcome_is_ret {ret_a4} {run_maxzz} \
-             (Eq.symm IROutcome {run_maxzz} {ret_a4} \
+             (@Eq.symm IROutcome {run_maxzz} {ret_a4} \
              (a4 (ir_cell ir_d0 (ir_var ir_d2 (ir_sp2 (IRScalar.ptr_ ir_d1) (IRScalar.ptr_ ir_d2))) (ir_cell ir_d1 (ir_var ir_d0 ir_sp0) (ir_cell ir_d2 (ir_var ir_d0 ir_sp0) ir_mem0))) \
              (ir_lzm_cost (Level.max Level.zero Level.zero)) ir_d3 (IRScalar.ptr_ ir_d0) (Level.max Level.zero Level.zero) \
              encodes_live_ref_maxzz_witness (Le.refl (ir_lzm_cost (Level.max Level.zero Level.zero))))))"

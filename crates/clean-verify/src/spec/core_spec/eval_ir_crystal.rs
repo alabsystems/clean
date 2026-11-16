@@ -20,7 +20,7 @@
 //! | `ir_is_zero_on_imax_param_zero` | `Level::IMax(Param n, 0)`, ∀ n | `ret [bool true]` |
 //! | `ir_is_zero_dead_arc_panics` | `Level::Max(<dead arc>, _)` | `ub assert_failed` |
 //!
-//! Each is a `def … : Eq IROutcome (ir_eval …) (…) := Eq.refl …`, so it is
+//! Each is a `def … : Eq IROutcome (ir_eval …) (…) := @Eq.refl …`, so it is
 //! **kernel-checked by computation** — the kernel actually runs the machine and
 //! compares. Nothing is asserted.
 //!
@@ -277,7 +277,7 @@ impl Specification {
         )?;
 
         self.add_recursive_def(
-            "def ir_lzm_module : IRModule := IRModule.mk (IRList.cons IRFunc ir_lzm_func (IRList.nil IRFunc)) (IRList.nil IRGlobal)",
+            "def ir_lzm_module : IRModule := IRModule.mk (@IRList.cons IRFunc ir_lzm_func (@IRList.nil IRFunc)) (@IRList.nil IRGlobal)",
             "ir_lzm_module -- the m is for MODEL: the hand-authored single-function SEMANTIC MODEL \
              of Level::is_zero with the deref inlined, which ir_lzm_correct (A4) and \
              ir_lzm_machine_sound (A5) quantify over. NOT the emitted body: measured 2026-08-22 \
@@ -292,7 +292,7 @@ impl Specification {
     /// The seven kernel-checked executions.
     fn add_eval_ir_witnesses(&mut self) -> Result<(), SpecError> {
         // Every witness runs `ir_eval ir_fuel ir_lzm_module 0 [ptr 0] heap
-        // next_addr` and is proved by Eq.refl — the kernel executes the machine
+        // next_addr` and is proved by @Eq.refl — the kernel executes the machine
         // and compares the outcome. Aggregates are inline values, so a heap cell
         // holds the enum value itself; there is no arena argument and no handle
         // counter to supply. If any arm of the semantics were wrong for these
@@ -303,7 +303,7 @@ impl Specification {
                 "(ir_eval ir_fuel ir_lzm_module ir_d0 (ir_vl1 (IRScalar.ptr_ ir_d0)) ",
                 "(ir_cell ir_d0 (ir_var ir_d0 ir_sp0) ir_mem0) ir_d1) ",
                 "(IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.true))) := ",
-                "Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.true)))",
+                "@Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.true)))",
             ),
             "GATE WITNESS 1: Level::Zero is definitely zero. The heap holds one live cell at \
              address 0 containing the payload-free enum value with tag 0. Proved by Eq.refl: the \
@@ -316,7 +316,7 @@ impl Specification {
                 "(ir_eval ir_fuel ir_lzm_module ir_d0 (ir_vl1 (IRScalar.ptr_ ir_d0)) ",
                 "(ir_cell ir_d0 (ir_var ir_d4 (ir_sp1 (IRScalar.int_ n))) ir_mem0) ir_d1) ",
                 "(IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.false))) := ",
-                "Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.false)))",
+                "@Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.false)))",
             ),
             "GATE WITNESS 2: Level::Param n is NOT definitely zero, for EVERY n — the parameter \
              is universally quantified, so this is not a spot check. This is also the arm whose \
@@ -331,7 +331,7 @@ impl Specification {
                 "(ir_cell ir_d0 (ir_var ir_d1 (ir_sp1 (IRScalar.ptr_ ir_d1))) ",
                 "(ir_cell ir_d1 (ir_var ir_d0 ir_sp0) ir_mem0)) ir_d2) ",
                 "(IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.false))) := ",
-                "Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.false)))",
+                "@Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.false)))",
             ),
             "Succ(Zero) is not zero, and the recursive edge is NOT followed to decide it: succ is \
              a leaf arm. The inner Zero is present in the heap precisely so that a semantics which \
@@ -347,7 +347,7 @@ impl Specification {
                 "(ir_cell ir_d1 (ir_var ir_d0 ir_sp0) ",
                 "(ir_cell ir_d2 (ir_var ir_d0 ir_sp0) ir_mem0))) ir_d3) ",
                 "(IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.true))) := ",
-                "Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.true)))",
+                "@Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.true)))",
             ),
             "Max(Zero, Zero) is zero. THE INTERESTING ONE: two nested recursive calls, two frame \
              pushes and pops, two LevelArc null checks that pass, and a CondBr that takes the \
@@ -363,7 +363,7 @@ impl Specification {
                 "(ir_cell ir_d1 (ir_var ir_d0 ir_sp0) ",
                 "(ir_cell ir_d2 (ir_var ir_d4 (ir_sp1 (IRScalar.int_ n))) ir_mem0))) ir_d3) ",
                 "(IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.false))) := ",
-                "Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.false)))",
+                "@Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.false)))",
             ),
             "Max(Zero, Param n) is not zero, for every n: the left side is zero so the CondBr \
              takes the then-edge into the right operand, and the right side decides. Together with \
@@ -379,7 +379,7 @@ impl Specification {
                 "(ir_cell ir_d1 (ir_var ir_d4 (ir_sp1 (IRScalar.int_ n))) ",
                 "(ir_cell ir_d2 (ir_var ir_d0 ir_sp0) ir_mem0))) ir_d3) ",
                 "(IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.true))) := ",
-                "Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.true)))",
+                "@Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.true)))",
             ),
             "IMax(Param n, Zero) IS zero — the impredicative collapse. The first operand is a \
              Param, which is not definitely zero, so a semantics that read it (as Max does) would \
@@ -393,7 +393,7 @@ impl Specification {
                 "(ir_cell ir_d0 ",
                 "(ir_var ir_d2 (ir_sp2 IRScalar.nullptr_ IRScalar.nullptr_)) ir_mem0) ir_d1) ",
                 "(IROutcome.ub IRFault.assert_failed) := ",
-                "Eq.refl IROutcome (IROutcome.ub IRFault.assert_failed)",
+                "@Eq.refl IROutcome (IROutcome.ub IRFault.assert_failed)",
             ),
             "THE PANIC ARM, REACHED. A Max whose LevelArc edges are dead (None, niche-encoded as a \
              null pointer) makes LevelArc::Deref's expect() fire. The machine does NOT return a \
@@ -417,16 +417,16 @@ impl Specification {
     /// pinned here by `Eq.refl`, so a mis-ordered recursor minor cannot pass.
     fn add_eval_ir_const_witnesses(&mut self) -> Result<(), SpecError> {
         self.add_recursive_def(
-            "def ir_const_value_int_unchanged (n : Nat) : Eq IRScalar (ir_const_value (IRConst.int_ n)) (IRScalar.int_ n) := Eq.refl IRScalar (IRScalar.int_ n)",
+            "def ir_const_value_int_unchanged (n : Nat) : Eq IRScalar (ir_const_value (IRConst.int_ n)) (IRScalar.int_ n) := @Eq.refl IRScalar (IRScalar.int_ n)",
             "REGRESSION PIN: the int_ arm of ir_const_value, for every n. DerivedProved, zero \
              axiom_deps.",
         )?;
         self.add_recursive_def(
-            "def ir_const_value_bool_unchanged (b : Bool) : Eq IRScalar (ir_const_value (IRConst.bool_ b)) (IRScalar.bool_ b) := Eq.refl IRScalar (IRScalar.bool_ b)",
+            "def ir_const_value_bool_unchanged (b : Bool) : Eq IRScalar (ir_const_value (IRConst.bool_ b)) (IRScalar.bool_ b) := @Eq.refl IRScalar (IRScalar.bool_ b)",
             "REGRESSION PIN: the bool_ arm, for every b.",
         )?;
         self.add_recursive_def(
-            "def ir_const_value_phantomdata_is_unit : Eq IRScalar (ir_const_value IRConst.phantomdata) IRScalar.unit_ := Eq.refl IRScalar IRScalar.unit_",
+            "def ir_const_value_phantomdata_is_unit : Eq IRScalar (ir_const_value IRConst.phantomdata) IRScalar.unit_ := @Eq.refl IRScalar IRScalar.unit_",
             "THE ELEVENTH MINOR, pinned like the other ten: `phantomdata` evaluates to the unit \
              value. Added 2026-09-16 with the constructor itself. It matters that this is a \
              SEPARATE pin from ir_const_value_unit_unchanged rather than the same one reused: the \
@@ -436,48 +436,48 @@ impl Specification {
              DerivedProved, zero axiom_deps.",
         )?;
         self.add_recursive_def(
-            "def ir_const_eval_phantomdata_is_unit (t : IRTy) : Eq IRStepResult (ir_const_eval t IRConst.phantomdata) (IRStepResult.value IRScalar.unit_) := Eq.refl IRStepResult (IRStepResult.value IRScalar.unit_)",
+            "def ir_const_eval_phantomdata_is_unit (t : IRTy) : Eq IRStepResult (ir_const_eval t IRConst.phantomdata) (IRStepResult.value IRScalar.unit_) := @Eq.refl IRStepResult (IRStepResult.value IRScalar.unit_)",
             "And the TYPED evaluator's arm, at EVERY declared type. `phantomdata` ignores `t` \
              exactly as `unit_` does -- a zero-sized marker carries no bits to canonicalize -- \
              and pinning it for all t is what says so. DerivedProved, zero axiom_deps.",
         )?;
         self.add_recursive_def(
-            "def ir_const_value_unit_unchanged : Eq IRScalar (ir_const_value IRConst.unit_) IRScalar.unit_ := Eq.refl IRScalar IRScalar.unit_",
+            "def ir_const_value_unit_unchanged : Eq IRScalar (ir_const_value IRConst.unit_) IRScalar.unit_ := @Eq.refl IRScalar IRScalar.unit_",
             "REGRESSION PIN: the unit_ arm.",
         )?;
         self.add_recursive_def(
-            "def ir_const_value_null_unchanged : Eq IRScalar (ir_const_value IRConst.null_) IRScalar.nullptr_ := Eq.refl IRScalar IRScalar.nullptr_",
+            "def ir_const_value_null_unchanged : Eq IRScalar (ir_const_value IRConst.null_) IRScalar.nullptr_ := @Eq.refl IRScalar IRScalar.nullptr_",
             "REGRESSION PIN: the null_ arm — note the constructor names differ on the two sides \
              (IRConst.null_ vs IRScalar.nullptr_), which is exactly the pairing a mis-ordered \
              recursor would break.",
         )?;
         self.add_recursive_def(
-            "def ir_const_value_undef_unchanged : Eq IRScalar (ir_const_value IRConst.undef_) IRScalar.undef_ := Eq.refl IRScalar IRScalar.undef_",
+            "def ir_const_value_undef_unchanged : Eq IRScalar (ir_const_value IRConst.undef_) IRScalar.undef_ := @Eq.refl IRScalar IRScalar.undef_",
             "REGRESSION PIN: the undef_ arm.",
         )?;
         self.add_recursive_def(
-            "def ir_const_value_float_unchanged (n : Nat) : Eq IRScalar (ir_const_value (IRConst.float_ n)) (IRScalar.float_ n) := Eq.refl IRScalar (IRScalar.float_ n)",
+            "def ir_const_value_float_unchanged (n : Nat) : Eq IRScalar (ir_const_value (IRConst.float_ n)) (IRScalar.float_ n) := @Eq.refl IRScalar (IRScalar.float_ n)",
             "REGRESSION PIN: the float_ arm, for every bit pattern.",
         )?;
         self.add_recursive_def(
-            "def ir_const_value_func_unchanged (f : Nat) : Eq IRScalar (ir_const_value (IRConst.func_ f)) (IRScalar.fnptr_ f) := Eq.refl IRScalar (IRScalar.fnptr_ f)",
+            "def ir_const_value_func_unchanged (f : Nat) : Eq IRScalar (ir_const_value (IRConst.func_ f)) (IRScalar.fnptr_ f) := @Eq.refl IRScalar (IRScalar.fnptr_ f)",
             "REGRESSION PIN: the func_ arm, for every function id.",
         )?;
         self.add_recursive_def(
-            "def ir_const_eval_int_still_wraps : Eq IRStepResult (ir_const_eval ir_u2 (IRConst.int_ 7)) (IRStepResult.value (IRScalar.int_ 3)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ 3))",
+            "def ir_const_eval_int_still_wraps : Eq IRStepResult (ir_const_eval ir_u2 (IRConst.int_ 7)) (IRStepResult.value (IRScalar.int_ 3)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ 3))",
             "REGRESSION PIN, the typed lane: an integer constant is still canonicalized modulo \
              2^w — 7 at width 2 is 3. This is the arm the kind_ord chain's answers travel \
              through, kept exact across the aggregate extension.",
         )?;
         self.add_recursive_def(
-            "def ir_const_eval_int_rejects_agg_ty : Eq IRStepResult (ir_const_eval (IRTy.enum_ ir_d13) (IRConst.int_ ir_d1)) (IRStepResult.fault (IROutcome.type_error IRFault.not_int)) := Eq.refl IRStepResult (IRStepResult.fault (IROutcome.type_error IRFault.not_int))",
+            "def ir_const_eval_int_rejects_agg_ty : Eq IRStepResult (ir_const_eval (IRTy.enum_ ir_d13) (IRConst.int_ ir_d1)) (IRStepResult.fault (IROutcome.type_error IRFault.not_int)) := @Eq.refl IRStepResult (IRStepResult.fault (IROutcome.type_error IRFault.not_int))",
             "REGRESSION PIN, the other direction: a SCALAR constant at an aggregate type is still \
              type_error not_int. The two typed lanes reject each other's types, so neither the \
              new form nor the old one can be smuggled through the wrong one.",
         )?;
 
         self.add_recursive_def(
-            "def ir_const_value_agg_is_ir_var (k : Nat) : Eq IRScalar (ir_const_value (ir_cvar k)) (ir_var k ir_sp0) := Eq.refl IRScalar (ir_var k ir_sp0)",
+            "def ir_const_value_agg_is_ir_var (k : Nat) : Eq IRScalar (ir_const_value (ir_cvar k)) (ir_var k ir_sp0) := @Eq.refl IRScalar (ir_var k ir_sp0)",
             "THE AGGREGATE MATERIALIZATION, for every tag: `const enum.N { k }` denotes exactly \
              the value a LOADED fieldless enum with discriminant k denotes. That is what makes \
              the new constant form interoperate with the tag-at-slot-0 convention rather than \
@@ -485,53 +485,53 @@ impl Specification {
              one value shape. DerivedProved, zero axiom_deps.",
         )?;
         self.add_recursive_def(
-            "def ir_const_eval_agg_at_enum (k : Nat) : Eq IRStepResult (ir_const_eval (IRTy.enum_ ir_d13) (ir_cvar k)) (IRStepResult.value (ir_var k ir_sp0)) := Eq.refl IRStepResult (IRStepResult.value (ir_var k ir_sp0))",
+            "def ir_const_eval_agg_at_enum (k : Nat) : Eq IRStepResult (ir_const_eval (IRTy.enum_ ir_d13) (ir_cvar k)) (IRStepResult.value (ir_var k ir_sp0)) := @Eq.refl IRStepResult (IRStepResult.value (ir_var k ir_sp0))",
             "THE NEW EVALUATION CASE, executed: at an enum type an aggregate constant evaluates \
              to the aggregate value, for every tag. Not a stub and not a fallthrough — the \
              kernel computes it.",
         )?;
         self.add_recursive_def(
-            "def ir_const_eval_agg_at_struct : Eq IRStepResult (ir_const_eval (IRTy.struct_ ir_d2) (ir_cvar ir_d1)) (IRStepResult.value (ir_var ir_d1 ir_sp0)) := Eq.refl IRStepResult (IRStepResult.value (ir_var ir_d1 ir_sp0))",
+            "def ir_const_eval_agg_at_struct : Eq IRStepResult (ir_const_eval (IRTy.struct_ ir_d2) (ir_cvar ir_d1)) (IRStepResult.value (ir_var ir_d1 ir_sp0)) := @Eq.refl IRStepResult (IRStepResult.value (ir_var ir_d1 ir_sp0))",
             "The aggregate lane is not enum-only: struct, tuple and array types accept an \
              aggregate constant too, which is what ir_ty_is_agg says.",
         )?;
         self.add_recursive_def(
-            "def ir_const_eval_agg_at_scalar_fails_closed : Eq IRStepResult (ir_const_eval ir_tU8 (ir_cvar ir_d1)) (IRStepResult.fault (IROutcome.type_error IRFault.not_agg)) := Eq.refl IRStepResult (IRStepResult.fault (IROutcome.type_error IRFault.not_agg))",
+            "def ir_const_eval_agg_at_scalar_fails_closed : Eq IRStepResult (ir_const_eval ir_tU8 (ir_cvar ir_d1)) (IRStepResult.fault (IROutcome.type_error IRFault.not_agg)) := @Eq.refl IRStepResult (IRStepResult.fault (IROutcome.type_error IRFault.not_agg))",
             "FAIL-CLOSED: an aggregate constant at a scalar type is a type error, not a silently \
              accepted value. The IRTy on Inst::Const is semantic input here exactly as it is for \
              integer constants.",
         )?;
         self.add_recursive_def(
-            "def ir_const_eval_bare_spine_fails_closed : Eq IRStepResult (ir_const_eval (IRTy.enum_ ir_d13) IRConst.vnil) (IRStepResult.fault (IROutcome.type_error IRFault.not_agg)) := Eq.refl IRStepResult (IRStepResult.fault (IROutcome.type_error IRFault.not_agg))",
+            "def ir_const_eval_bare_spine_fails_closed : Eq IRStepResult (ir_const_eval (IRTy.enum_ ir_d13) IRConst.vnil) (IRStepResult.fault (IROutcome.type_error IRFault.not_agg)) := @Eq.refl IRStepResult (IRStepResult.fault (IROutcome.type_error IRFault.not_agg))",
             "FAIL-CLOSED on the inline spine's junk inhabitants: a BARE vnil is an element-list \
              node, not a constant of any type. The price of the inline spine, paid explicitly \
              rather than left representable and unexamined.",
         )?;
         self.add_recursive_def(
-            "def ir_const_eval_bare_cons_fails_closed : Eq IRStepResult (ir_const_eval (IRTy.enum_ ir_d13) (ir_cs1 (IRConst.int_ ir_d1))) (IRStepResult.fault (IROutcome.type_error IRFault.not_agg)) := Eq.refl IRStepResult (IRStepResult.fault (IROutcome.type_error IRFault.not_agg))",
+            "def ir_const_eval_bare_cons_fails_closed : Eq IRStepResult (ir_const_eval (IRTy.enum_ ir_d13) (ir_cs1 (IRConst.int_ ir_d1))) (IRStepResult.fault (IROutcome.type_error IRFault.not_agg)) := @Eq.refl IRStepResult (IRStepResult.fault (IROutcome.type_error IRFault.not_agg))",
             "FAIL-CLOSED: the same for a bare vcons node.",
         )?;
         self.add_recursive_def(
-            "def ir_const_agg_nonspine_has_no_fields : Eq IRStepResult (ir_ef_at (ir_const_value (IRConst.aggv (IRConst.int_ ir_d3))) ir_d0) (IRStepResult.fault (IROutcome.type_error IRFault.bad_field)) := Eq.refl IRStepResult (IRStepResult.fault (IROutcome.type_error IRFault.bad_field))",
+            "def ir_const_agg_nonspine_has_no_fields : Eq IRStepResult (ir_ef_at (ir_const_value (IRConst.aggv (IRConst.int_ ir_d3))) ir_d0) (IRStepResult.fault (IROutcome.type_error IRFault.bad_field)) := @Eq.refl IRStepResult (IRStepResult.fault (IROutcome.type_error IRFault.bad_field))",
             "The remaining junk inhabitant, run: an aggregate whose element list is not a spine \
              (`aggv (int_ 3)`) materializes to a value with zero fields, so ExtractField on it \
              is bad_field. Same fail-closed reading IRScalar's module doc records for its own \
              non-spine payloads, now reachable from the CONSTANT side too.",
         )?;
         self.add_recursive_def(
-            "def ir_const_agg_empty : Eq IRScalar (ir_const_value (IRConst.aggv ir_cs0)) (IRScalar.aggv IRScalar.vnil) := Eq.refl IRScalar (IRScalar.aggv IRScalar.vnil)",
+            "def ir_const_agg_empty : Eq IRScalar (ir_const_value (IRConst.aggv ir_cs0)) (IRScalar.aggv IRScalar.vnil) := @Eq.refl IRScalar (IRScalar.aggv IRScalar.vnil)",
             "`Constant::Aggregate(vec![])` — the zero-element aggregate — materializes to the \
              empty aggregate value.",
         )?;
         self.add_recursive_def(
-            "def ir_const_agg_two_elements : Eq IRScalar (ir_const_value (IRConst.aggv (ir_cs2 (IRConst.int_ ir_d7) (IRConst.bool_ Bool.true)))) (IRScalar.aggv (ir_sp2 (IRScalar.int_ ir_d7) (IRScalar.bool_ Bool.true))) := Eq.refl IRScalar (IRScalar.aggv (ir_sp2 (IRScalar.int_ ir_d7) (IRScalar.bool_ Bool.true)))",
+            "def ir_const_agg_two_elements : Eq IRScalar (ir_const_value (IRConst.aggv (ir_cs2 (IRConst.int_ ir_d7) (IRConst.bool_ Bool.true)))) (IRScalar.aggv (ir_sp2 (IRScalar.int_ ir_d7) (IRScalar.bool_ Bool.true))) := @Eq.refl IRScalar (IRScalar.aggv (ir_sp2 (IRScalar.int_ ir_d7) (IRScalar.bool_ Bool.true)))",
             "The spine is materialized RECURSIVELY and heterogeneously: a two-element aggregate \
              with an integer and a boolean element becomes the corresponding two-element value \
              spine. The emitted fragment only ever needs arity one, so this is the case that \
              shows the recursion is real rather than a one-element special case.",
         )?;
         self.add_recursive_def(
-            "def ir_const_agg_nested : Eq IRScalar (ir_const_value (IRConst.aggv (ir_cs1 (IRConst.aggv (ir_cs1 (IRConst.int_ ir_d2)))))) (IRScalar.aggv (ir_sp1 (IRScalar.aggv (ir_sp1 (IRScalar.int_ ir_d2))))) := Eq.refl IRScalar (IRScalar.aggv (ir_sp1 (IRScalar.aggv (ir_sp1 (IRScalar.int_ ir_d2)))))",
+            "def ir_const_agg_nested : Eq IRScalar (ir_const_value (IRConst.aggv (ir_cs1 (IRConst.aggv (ir_cs1 (IRConst.int_ ir_d2)))))) (IRScalar.aggv (ir_sp1 (IRScalar.aggv (ir_sp1 (IRScalar.int_ ir_d2))))) := @Eq.refl IRScalar (IRScalar.aggv (ir_sp1 (IRScalar.aggv (ir_sp1 (IRScalar.int_ ir_d2)))))",
             "NESTING DEPTH TWO. Measured, no body in clean-kernel's flippable set emits a nested \
              aggregate constant — depth is one everywhere — so this witness is deliberately \
              beyond the emitted fragment: the semantics is defined by structural recursion, not \

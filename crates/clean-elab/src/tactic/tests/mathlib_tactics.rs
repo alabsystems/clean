@@ -36,6 +36,9 @@ fn test_simpa_no_goals() {
 fn test_simpa_with_hypothesis() {
     let env = setup_env();
     let target = Expr::const_(Name::from_string("A"), vec![]);
+    // Hypothesis h : A, in scope from the start so the root metavariable is
+    // minted with it (a post-hoc `local_ctx.push` widens the goal past its
+    // metavariable's creation scope and `close_goal` refuses it).
     let mut state = ProofState::with_context(
         env,
         target,
@@ -57,6 +60,7 @@ fn test_simpa_with_hypothesis() {
 fn test_simpa_only_empty() {
     let env = setup_env();
     let target = Expr::const_(Name::from_string("A"), vec![]);
+    // h : A in scope from the start — see `test_simpa_with_hypothesis`.
     let mut state = ProofState::with_context(
         env,
         target,

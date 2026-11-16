@@ -410,6 +410,40 @@ pub enum ElabError {
     /// Environment registration failed after elaboration produced a declaration.
     #[error("Kernel registration failed during {operation}: {detail}")]
     KernelRegistrationFailed { operation: String, detail: String },
+    /// An `import Mathverse.…` declaration could not install a library constant.
+    ///
+    /// Deliberately its own variant rather than a reused `UnknownIdent`. When
+    /// the library HAS the name but the trust gate refuses it, the user must
+    /// see the trust reason — stub substitution, resident type disagreement, a
+    /// non-foundational axiom in the closure, a dependency-budget overrun —
+    /// carried verbatim in `detail`. Collapsing that into "unknown identifier"
+    /// would turn a soundness refusal into a spelling complaint.
+    #[error("`import Mathverse` failed for `{name}`: {detail}")]
+    MathverseImportFailed { name: String, detail: String },
+    /// A REQUEST, not a diagnosis: the name is absent from the environment but
+    /// the installed Mathverse Library offers it, and a corpus was armed by a
+    /// corpus-level `import Mathverse.<Corpus>`.
+    ///
+    /// Minted only on an already-failing elaboration path (see
+    /// `unknown_ident_error` and the `elab_proj` failure wrapper), and only
+    /// while armed. `ElabCtx` holds `env: &'a Environment` immutably for its
+    /// whole lifetime, so term elaboration cannot install anything; it can only
+    /// ask. The decl driver (`elaborate_general_and_register` →
+    /// `mathverse_lazy_retry`) catches this, runs the ONE gated loader, and
+    /// re-elaborates the declaration.
+    ///
+    /// Reaching a user means the driver could not honour the request — the
+    /// budget ran out, or the error escaped through a tactic combinator that
+    /// swallowed it. The message therefore names the fix.
+    #[error(
+        "`{name}` is in the installed Mathverse Library but was not installed: \
+         lazy resolution did not run for it (write `import Mathverse.<Corpus>.{name}` \
+         to install it explicitly)"
+    )]
+    MathverseNameAvailable {
+        /// Fully-qualified library name the elaborator asked for.
+        name: String,
+    },
     /// Feature is recognized but not yet implemented.
     #[error("Not implemented: {0}")]
     NotImplemented(String),

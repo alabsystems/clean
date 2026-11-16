@@ -1,0 +1,80 @@
+{
+  "version": 1,
+  "recorded": "2026-11-15",
+  "distributions": [
+    {
+      "id": "Isabelle2025",
+      "file": "Isabelle2025_macos.tar.gz",
+      "url": "https://isabelle.in.tum.de/website-Isabelle2025/dist/Isabelle2025_macos.tar.gz",
+      "bytes": 1411408470,
+      "sha256": "ea5754c228857f5d9d3ae254ec9814797f2453ea290df20b2f6dcb2ef0e2e7f8",
+      "isabelle_id": "4b875a4c83b0",
+      "used_by": "The AFP half of the YXML statement export behind the v1.3.0 Isabelle shard (395 AFP sessions, 606,327 declarations): the AFP heaps were built and exported under this release, unmodified, with the AFP pin below. Its veriT needed Rosetta 2 on Apple silicon. Size and sha256 were measured on the archive the import downloaded on 2026-06-20; a HEAD request on 2026-11-15 returned the same Content-Length."
+    },
+    {
+      "id": "Isabelle2025-2",
+      "file": "Isabelle2025-2_macos.tar.gz",
+      "url": "https://isabelle.in.tum.de/website-Isabelle2025-2/dist/Isabelle2025-2_macos.tar.gz",
+      "bytes": 1730395791,
+      "sha256": "8f187496e295f169952e944745af9e4ae00c9c1cd2ed4cadbcf7d898e444913e",
+      "isabelle_id": "89701cf1768e",
+      "used_by": "Every zproof capture (zproof_main4_v2, zproof_library_v3, zproof_afp_v4, so corpora main_v2, main_v3 and main_v32, every snapshot, slice and flip gate, and the KernelVerified shard), run on a copy with the capture-hook edit listed under not_fetched; and the stdlib half of the YXML export (476,204 declarations), run on an unmodified copy. Size and sha256 were measured on the archive in ~/isabelle-work; a HEAD request on 2026-11-15 returned the same Content-Length."
+    }
+  ],
+  "afp": {
+    "id": "afp",
+    "repo": "https://github.com/isabelle-prover/mirror-afp-2025.git",
+    "rev": "400ee45cf836394b0b35dde6d20ab5ecd2012ee3",
+    "dir": "afp",
+    "depth": 1,
+    "commit_date": "2025-12-18",
+    "used_by": "The AFP half of the YXML export (with Isabelle2025, the release this AFP mirror was made for) and AFP Wave A of the zproof capture (with Isabelle2025-2, a version skew that caused the failures listed in scripts/isabelle/afp_wave_a_skip.txt). The import's checkout was a depth-1 clone of this mirror's master, which was still at this commit on 2026-11-15.",
+    "matching_release_not_used": {
+      "repo": "https://github.com/isabelle-prover/mirror-afp-2025-2.git",
+      "rev": "fa30b560ab754bfbb7a721ee45a921d4b3c04358",
+      "note": "Information only: this is the AFP release made for Isabelle2025-2 (its master on 2026-11-15). The import did NOT use it, and this command does not fetch it. docs/ISABELLE_REIMPORT_RUNBOOK.md section 3.6 names switching to it as the proper fix for the Wave A skew; a capture made with it would not reproduce zproof_afp_v4."
+    }
+  },
+  "not_fetched": [
+    {
+      "what": "The unpacked Isabelle2025.app and Isabelle2025-2.app bundles.",
+      "why": "This command downloads and checks the archives but does not unpack them. Both bundles inside ~/isabelle-work were unmodified unpacks: every path and size equals the archive listing, and no entry changed after extraction.",
+      "how_to_get_it": "In the work folder run `tar -xzf Isabelle2025_macos.tar.gz` and `tar -xzf Isabelle2025-2_macos.tar.gz`. The copy the zproof captures ran on also needs the capture-hook edit (next entry)."
+    },
+    {
+      "what": "The capture-hook edit to the Isabelle2025-2 distribution: one added line in src/Pure/ROOT.ML, `ML_file \"<path>/zproof_capture_hook.ML\";`, after `ML_file \"Tools/generated_files.ML\";`.",
+      "why": "Not public. It was made by hand on 2026-07-02 in ~/Isabelle2025-2.app (outside ~/isabelle-work), the copy every zproof capture ran on, and it loaded the hook from ~/isabelle-work by absolute path. The archive carries the pristine file (sha256 7b8a7e39b87a6ebff319a4fdd3de4be4dd5c4748691b311a4616eca867ef9d79; the edited file is 6ed6d4cc4bdf33f3497234229251dd4fa2532282e0430c3e4b76f40551f4ce7b).",
+      "how_to_get_it": "Unpack Isabelle2025-2_macos.tar.gz and run scripts/isabelle/install_capture_hook.sh on the unpacked app; the recorded diff is scripts/isabelle/patches/Isabelle2025-2-Pure-ROOT.ML.patch and the hook source is scripts/isabelle/zproof_capture_hook.ML. The hook bytes become part of Pure's sources, so any change to them means rebuilding Pure and ZP-Main (about 16 h, docs/ISABELLE_REIMPORT_RUNBOOK.md section 3.2)."
+    },
+    {
+      "what": "The ZP-* capture heaps in ~/.isabelle/Isabelle2025-2/heaps (ZP-Main, ZP-Lib1, ZP-Lib2, ZP-Lib3a to ZP-Lib3e, and some ZP-AFP-*).",
+      "why": "Build products of `isabelle build` on the patched app on this Mac (polyml-5.9.2, arm64_32-darwin). They are never published, and the four ISA_ZPROOF_* capture settings are frozen into them at the Pure build.",
+      "how_to_get_it": "Rebuild. ZP-Main: copy scripts/isabelle/zp_main4_ROOT to <work>/zp_main4/ROOT, set ISA_ZPROOF_OUT=<work>/zproof_main4_v2, ISA_ZPROOF_TIMEOUT_THYS=Code_Numeral, ISA_ZPROOF_SLOW_BOX=30 and ISA_ZPROOF_BOX_TIMEOUT=60, then `isabelle build -b -d <work>/zp_main4 ZP-Main` on the patched app (runbook sections 3.2-3.3); it took 14 h 58 m and saved an 883 MB heap (docs/HANDOFF_ISABELLE_ZPROOF_2026-07-03.md). Library chain: scripts/isabelle/zp_library_v3_split_launch.sh, then zp_library_v3_lib3split_launch.sh, then zp_lib3_split2_launch.sh, or `clean mathverse isabelle-capture-chain --spec scripts/isabelle/lib3_backfill_chain.spec.json`; the successful sessions took about 29 h, and the whole run with out-of-store retries about 64 h (2026-07-14 to 07-17)."
+    },
+    {
+      "what": "The raw per-theory zproof captures: zproof_main4_v2 (65.8 GiB, 216 .jsonl), zproof_library_v3 (27.3 GiB, 113 .jsonl), zproof_afp_v4 (144.1 GiB, 330 .jsonl, a partial AFP Wave A: 51 of 162 sessions finished) and the symlink union zproof_v31_raw.",
+      "why": "Written by the capture hook while the heaps above were built; never published.",
+      "how_to_get_it": "They come out of the heap builds in the previous entry: ZP-Main writes zproof_main4_v2, and the Library launchers move HOL-Library.* captures to zproof_library_v3 with --collect. AFP Wave A: `clean mathverse isabelle-sessions --mode afp --entries scripts/isabelle/afp_wave_a.txt --parent ZP-Lib3e --afp-thys <work>/afp/thys --out <work>/zp_afp_wave_a --cap 12`, then `scripts/isabelle/zp_afp_launch.sh --wave <work>/zp_afp_wave_a --parent ZP-Lib3e` (runbook section 3.6 estimates about 55 h at -j 1; the 2026-07-17 run took about 9 days to its 07-26 stall and wrote 144 GiB for 51 sessions). zproof_v31_raw: scripts/isabelle/zp_v32_finalize.sh rebuilds the union."
+    },
+    {
+      "what": "The assembled corpora and everything derived from them: corpora/main_v2.jsonl, main_v3.jsonl and main_v32.jsonl with their .idx sidecars, the .snap/.ckpt replay snapshots, slices, flip-gate slices, and shards/isabelle-v32.mathverse.",
+      "why": "Derived by clean from the raw captures; regenerated, not downloaded.",
+      "how_to_get_it": "Corpus: `clean mathverse isabelle-import --raw-dir <work>/zproof_v31_raw --corpus <work>/corpora/main_v32.jsonl --assemble-only`, then `clean mathverse isabelle-index --corpus <work>/corpora/main_v32.jsonl` (runbook section 4; pure I/O, 55.4 GB assembled in 3 min plus a 1.4 min index), or scripts/isabelle/zp_v32_finalize.sh for both. Snapshot and shard: scripts/isabelle/v32_grand2.sh, which runs `clean mathverse isabelle-import --corpus corpora/main_v32.jsonl --snapshot-out corpora/main_v32.snap --translate-budget 8000000 --workers 0 --shard-out shards/isabelle-v32.mathverse` (the last run took about 39.5 h, 2026-07-31 to 08-01, and wrote about 1-2 GB). Slices: `clean mathverse isabelle-slice`. Flip-gate slices: `clean mathverse isabelle-flip-gate --add` (pinned in data/isabelle_flip_gates.json)."
+    },
+    {
+      "what": "The YXML statement export in yxml/ (12.8 GiB: 5,093 + 4,275 + 120 files) behind the 1,082,531-declaration v1.3.0 Isabelle shard.",
+      "why": "Produced on this Mac by Isabelle exports; not published upstream.",
+      "how_to_get_it": "Stdlib half (Isabelle2025-2, 476,204 declarations): scripts/isabelle/export_distribution_sessions.sh over scripts/isabelle/yxml_distribution_sessions.txt with scripts/isabelle/export_mathverse.ML. AFP half (Isabelle2025 with the AFP pin, 395 sessions, 606,327 declarations): build the AFP heaps under Isabelle2025 (never scripted; data/mathverse-library/isabelle/manifest.json records -j3 with --maxheap 8G), then scripts/isabelle/export_afp_sessions.sh and scripts/isabelle/export_afp_sessions_incr.sh; scripts/isabelle/yxml_afp_exported_sessions.txt lists the 395 sessions. The whole lane ran in about 8 h wall on 2026-06-20, of which the AFP heap pass took 3 h 07 m."
+    },
+    {
+      "what": "The preserved binaries in binaries/ (4 files, 323,755,920 bytes): clean-1ac3d93a0, clean-23a7fa2e9-v32grand, clean-cb419768c-align and isabelle_scale_run-8747bc90-release-grand.",
+      "why": "Build artifacts paired with replay snapshots (a snapshot only loads under a binary whose ENV-LAYOUT matches the one that wrote it). Never published; a rebuild is not byte-identical, and no record names the commit that built the isabelle_scale_run test binary.",
+      "how_to_get_it": "Rebuild approximately from the commit in each name (`git checkout <sha>` then `targo --unverified build --locked --release`), or mint a fresh snapshot with a new grand instead of resuming an old one; `clean mathverse isabelle-snapshot-preserve` records the next pairing."
+    },
+    {
+      "what": "Records that exist only in ~/isabelle-work: the 81 build and export logs (*.log; zp_main4_v2_build.log names the Isabelle install and platform the captures used, zp_afp_build.log is the only record of AFP Wave A's 51 finished and 23 failed sessions), the grand result logs and KV/reject dumps under corpora/ (*.result.txt, *_kv*.txt, krej_*.txt; the only record of the headline numbers), and hand-made lists such as afp_built.txt, corpora/align_seed.txt and slices/sample120.txt.",
+      "why": "Records of past runs and one-off experiment inputs: nothing upstream has them, and a rerun produces new records, not these bytes.",
+      "how_to_get_it": "Not recoverable once deleted. The code and inputs worth keeping were copied into scripts/isabelle/, scripts/isabelle/archive/ and data/isabelle/; docs/ISABELLE_WORK_INVENTORY_2026-11-15.md gives the decision for every entry. Copy any log or dump you still want as evidence before deleting the folder."
+    }
+  ]
+}

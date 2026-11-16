@@ -2,7 +2,7 @@
  "prefix": "ir_ep",
  "body": "<tc::expr_location::ExprPathStep as std::clone::Clone>::clone",
  "core_digest": "8bff6fe47374b235f1d89fecb077b68cc596ce3bd67ac1a9616cb071a1efae32",
- "defs_digest": "956bea73a8c83a9ef7c8c7995571d3b014dec8471aae2bbe93d6cf3efd581362",
+ "defs_digest": "b3edf468257ddbcb643899747e8e5fcb4742850eb4c89f5046e9daf70e88d1c8",
  "def_count": 16,
  "artifact_core_digest": "8666bb95821fb7ca037e79f98b328b41771b34cf05eede801d3bb4ecb8a09a94",
  "artifact_core_digest_note": "Reader A's OWN digest of the projection, printed by scripts/crystal_a2_project and taken over the domain-separated `clean.ir_mint.core.v1` prefix. `core_digest` above is ir_mint::digest of the same text under this crate's domain, which is a different constant; the two are recorded side by side rather than reconciled, because a reader that could not disagree with itself is not a second reader. This value equals every column of the expr_path_step_clone row in generated/ir_mint.producer_ab.json AND the fresh 2026-08-21 projection below -- four dumps, one core text.",

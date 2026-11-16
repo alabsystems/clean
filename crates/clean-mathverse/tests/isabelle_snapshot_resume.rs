@@ -273,15 +273,110 @@ fn snapshot_resume_matches_full_replay_and_refuses_tampered_prefix() {
     clean_mathverse::process_env::remove_persistent("ISA_VERIFY_LOCK_PATH");
     assert!(!verify_lock.exists(), "the verb released its verify lock");
     assert!(verb_snap.exists(), "verb must save the snapshot");
-    // The published shard must read back with one KernelVerified header per
-    // verified theorem, every header provenance-linked.
+    // The published shard must hold one KERNEL-IDENTITY constant per verified
+    // theorem, be citable by every non-anonymous Isabelle name, and contain
+    // nothing unaccounted-for. (The old form asserted
+    // `constants.len() == kernel_verified`, i.e. that the shard held the theorems
+    // and NOTHING ELSE — a shard carrying none of the `isabelle.def.*` constants
+    // its theorems' types and proof values reference is precisely the shard whose
+    // KV theorems the consumer's dependency loader rejects, so that identity is
+    // now false BY DESIGN. The per-theorem identity it stood for survives below,
+    // unweakened.)
     let reader =
         clean_mathverse::shard::ShardReader::from_file(&verb_shard).expect("open published shard");
+    let hdr_name = |c: &clean_mathverse::types::MathverseConstantHeader| -> String {
+        reader
+            .strings
+            .get(c.name_idx as usize)
+            .cloned()
+            .unwrap_or_default()
+    };
+    let is_kernel_identity = |n: &str| {
+        n.strip_prefix("isabelle.s")
+            .is_some_and(|r| !r.is_empty() && r.bytes().all(|b| b.is_ascii_digit()))
+            || n.starts_with("isabelle.anon.")
+    };
     assert_eq!(
-        reader.constants.len(),
+        reader
+            .constants
+            .iter()
+            .filter(|c| is_kernel_identity(&hdr_name(c)))
+            .count(),
         full.kernel_verified,
-        "shard must hold one constant per KernelVerified theorem"
+        "shard must hold exactly one kernel-identity constant per KernelVerified theorem"
     );
+    // Every NAMED KernelVerified theorem stays citable by its Isabelle name
+    // (anonymous proof-term nodes have no name to cite).
+    for name in full.names.iter().filter(|n| !n.is_empty()) {
+        let (_, h) = reader
+            .lookup_name(name)
+            .unwrap_or_else(|| panic!("KernelVerified theorem `{name}` missing from the shard"));
+        assert_eq!(
+            h.import_confidence,
+            clean_mathverse::types::ImportConfidence::KernelVerified as u8,
+            "`{name}` must stay KernelVerified in the published shard"
+        );
+    }
+    // Nothing unaccounted-for: every header is a kernel identity, a cited Isabelle
+    // name, a synthesized `isabelle.*` definitional constant, or a member of an
+    // inductive FAMILY the shard itself declares.
+    //
+    // The family category is the datatype skeleton the lane installs through the
+    // kernel's checked `add_inductive` (currently `Num`) and now emits so the
+    // consumer's `replay_inductive_family_checked` has something to rebuild.
+    // Those members are deliberately NOT `isabelle.*`-namespaced — they carry
+    // the datatype's own Isabelle spelling — so they need their own clause.
+    // Recognized STRUCTURALLY rather than by hardcoding `Num`: a value-less
+    // Inductive/Constructor/Recursor header, or the value-bearing auxiliary
+    // eliminator (`.casesOn` / `.recOn`) of an inductive this shard declares.
+    // An unexplained header of any other shape still fails, so the
+    // completeness property this assertion exists for is preserved.
+    let family_roots: std::collections::HashSet<String> = reader
+        .constants
+        .iter()
+        .filter(|c| c.decl_kind == clean_mathverse::types::DeclKind::Inductive as u8)
+        .map(|c| hdr_name(c))
+        .collect();
+    let is_family_member = |n: &str, c: &clean_mathverse::types::MathverseConstantHeader| -> bool {
+        matches!(
+            clean_mathverse::types::DeclKind::try_from(c.decl_kind),
+            Ok(clean_mathverse::types::DeclKind::Inductive)
+                | Ok(clean_mathverse::types::DeclKind::Constructor)
+                | Ok(clean_mathverse::types::DeclKind::Recursor)
+        ) || n.rsplit_once('.').is_some_and(|(root, suffix)| {
+            matches!(suffix, "casesOn" | "recOn") && family_roots.contains(root)
+        })
+    };
+    let kv_names: std::collections::HashSet<&str> = full.names.iter().map(String::as_str).collect();
+    for c in reader.constants.iter() {
+        let n = hdr_name(c);
+        assert!(
+            is_kernel_identity(&n)
+                || kv_names.contains(n.as_str())
+                || n.starts_with("isabelle.")
+                || is_family_member(&n, c),
+            "unexpected constant `{n}` in the published shard"
+        );
+    }
+    // The family skeleton must never be stamped `KernelVerified`: an inductive
+    // type former, a constructor and a recursor have no value, so nothing can
+    // type-check their value and the stamp would be fabricated.
+    for c in reader.constants.iter() {
+        if matches!(
+            clean_mathverse::types::DeclKind::try_from(c.decl_kind),
+            Ok(clean_mathverse::types::DeclKind::Inductive)
+                | Ok(clean_mathverse::types::DeclKind::Constructor)
+                | Ok(clean_mathverse::types::DeclKind::Recursor)
+        ) {
+            assert_ne!(
+                c.import_confidence,
+                clean_mathverse::types::ImportConfidence::KernelVerified as u8,
+                "value-less family member `{}` must not carry a fabricated \
+                 KernelVerified stamp",
+                hdr_name(c)
+            );
+        }
+    }
     assert!(
         reader.constants.iter().all(|c| c.sidecar_digest != 0),
         "every shard constant must be provenance-linked"

@@ -181,12 +181,12 @@ use crate::spec::Specification;
 /// module doc: `<Arc<T> as Deref>::deref` returns the address of the Arc's
 /// DATA, past the strong/weak header, and a model that returned the loaded
 /// field word unchanged was describing a different function.
-const SRC_DEREF_B0: &str = "def ir_lzb_deref_b0 : IRBlock := IRBlock.mk ir_d0 ir_nl0 (IRList.cons IRNode (ir_nd1 (IRInst.load IRTy.ptr_ ir_d0 Bool.false) ir_d1) (IRList.cons IRNode (ir_nd1 (IRInst.const_ IRTy.ptr_ IRConst.null_) ir_d2) (IRList.cons IRNode (ir_nd1 (IRInst.icmp IRICmpOp.ne_ IRTy.ptr_ ir_d1 ir_d2) ir_d3) (IRList.cons IRNode (ir_nd (IRInst.assert ir_d3)) (ir_bd3 (ir_nd1 (IRInst.const_ (IRTy.int_ 64) (IRConst.int_ ir_d16)) ir_d4) (ir_nd1 (IRInst.gep (IRTy.int_ ir_d8) ir_d1 (ir_nl1 ir_d4) Bool.true) ir_d5) (ir_nd (IRInst.ret (ir_nl1 ir_d5))))))))";
+const SRC_DEREF_B0: &str = "def ir_lzb_deref_b0 : IRBlock := IRBlock.mk ir_d0 ir_nl0 (@IRList.cons IRNode (ir_nd1 (IRInst.load IRTy.ptr_ ir_d0 Bool.false) ir_d1) (@IRList.cons IRNode (ir_nd1 (IRInst.const_ IRTy.ptr_ IRConst.null_) ir_d2) (@IRList.cons IRNode (ir_nd1 (IRInst.icmp IRICmpOp.ne_ IRTy.ptr_ ir_d1 ir_d2) ir_d3) (@IRList.cons IRNode (ir_nd (IRInst.assert ir_d3)) (ir_bd3 (ir_nd1 (IRInst.const_ (IRTy.int_ 64) (IRConst.int_ ir_d16)) ir_d4) (ir_nd1 (IRInst.gep (IRTy.int_ ir_d8) ir_d1 (ir_nl1 ir_d4) Bool.true) ir_d5) (ir_nd (IRInst.ret (ir_nl1 ir_d5))))))))";
 
 const SRC_DEREF: &str = "def ir_lzb_deref : IRFunc := IRFunc.mk ir_d1 (ir_nl1 ir_d0) ir_d0 (ir_blk ir_lzb_deref_b0 ir_blk0)";
 
 /// Function 0 is `ir_lz_func` BY NAME. There is no transcription here.
-const SRC_MODULE: &str = "def ir_lzb_module : IRModule := IRModule.mk (IRList.cons IRFunc ir_lz_func (IRList.cons IRFunc ir_lzb_deref (IRList.nil IRFunc))) (IRList.nil IRGlobal)";
+const SRC_MODULE: &str = "def ir_lzb_module : IRModule := IRModule.mk (@IRList.cons IRFunc ir_lz_func (@IRList.cons IRFunc ir_lzb_deref (@IRList.nil IRFunc))) (@IRList.nil IRGlobal)";
 
 const ARGS0: &str = "(ir_vl1 (IRScalar.ptr_ ir_d0))";
 
@@ -227,7 +227,7 @@ fn witness(
     out: &str,
 ) -> String {
     format!(
-        "def {name} {binder}: Eq IROutcome {} {out} := Eq.refl IROutcome {out}",
+        "def {name} {binder}: Eq IROutcome {} {out} := @Eq.refl IROutcome {out}",
         run(fid, args, heap, na)
     )
 }
@@ -236,7 +236,7 @@ fn witness(
 fn halts(name: &str, binder: &str, heap: &str, na: &str, steps: u32, ans: &str) -> String {
     let tgt = format!("(IRConfig.halted (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.{ans}))))");
     format!(
-        "def {name} {binder}: Eq IRConfig (ir_steps ir_d{steps} ir_lzb_module {}) {tgt} := Eq.refl IRConfig {tgt}",
+        "def {name} {binder}: Eq IRConfig (ir_steps ir_d{steps} ir_lzb_module {}) {tgt} := @Eq.refl IRConfig {tgt}",
         init(heap, na)
     )
 }
@@ -251,7 +251,7 @@ impl Specification {
     /// Returns `SpecError` if any declaration fails to elaborate or
     /// kernel-check. A wrong step count in `halts` fails HERE, by computation.
     pub(super) fn add_eval_ir_lzb_module(&mut self) -> Result<(), SpecError> {
-        self.add_recursive_def(SRC_DEREF_B0, "ir_lzb_deref_b0: *** AN ASSUMPTION, LABELLED. *** The authored model of <LevelArc as Deref>::deref -- Option::as_deref followed by Option::expect on a LevelArc(Option<Arc<Level>>). Seven nodes: load the pointer out of the FIELD ADDRESS it was given, compare it against null, assert non-null, then gep it by the Arc header (const i64 16) and return THAT -- the Arc's DATA address, which is what <Arc<T> as Deref>::deref yields and what the recursive call is then entered at. This is a STATED MODEL of two core functions the artifact carries as declarations ONLY -- re-measured 2026-08-26 from the trust-ir text artifact itself: Option::as_deref and Option::expect both appear there by name, among 309 std/core/alloc-named entries, and all 309 are EMPTY (a name, a `; #producer` line, 0 instructions between them). Three walls were long conflated here and only one is a floor: (1) rustc has no cross-crate THIR (thir_body takes a LocalDefId, no thir_of_instance) and (2) every body-producing path keys on is_local() -- both real, both BUILD ITEMS; (3) expect's closure ends at a declaration with no body ANYWHERE (expect -> expect_failed -> panic_display -> panic_fmt -> panic_impl, and panic_impl is `unsafe extern \"Rust\"` in core/src/panicking.rs:67-70, supplied at link time from std/src/panicking.rs:611) -- that one is the FLOOR, and no lowering fixes it. Note what this model is NOT: splitting it into separate as_deref and expect models would not shrink the assumption, it would turn one clearly-stated semantic assumption into three (two unavailable callee models plus the niche layout), so the collapse here is deliberate. What it assumes is exactly: Option<Arc<Level>>'s None is the null niche, and as_deref().expect() is load + null-check + assert + the Arc data offset. The THIRD clause audit r16 M16-6 measured -- that the stored field word IS the child's address, which was FALSE by 16 bytes -- is discharged rather than stated: the gep is in the body above, EncodesLevelArcF places each child at stored+16 to match, and the two Eq.refl cost equations moved 37 -> 41 and 20 -> 22. No gate in this repository can promote it to a derivation and none is claimed to; it is the residual of the whole chain. The assert is load-bearing, not decoration: ir_lzb_deref_refuses_none computes ub assert_failed on a null field. DerivedProved, zero axiom_deps.")?;
+        self.add_recursive_def(SRC_DEREF_B0, "ir_lzb_deref_b0: *** AN ASSUMPTION, LABELLED. *** The authored model of <LevelArc as Deref>::deref -- Option::as_deref followed by Option::expect on a LevelArc(Option<Arc<Level>>). Seven nodes: load the pointer out of the FIELD ADDRESS it was given, compare it against null, assert non-null, then gep it by the Arc header (const i64 16) and return THAT -- the Arc's DATA address, which is what <Arc<T> as Deref>::deref yields and what the recursive call is then entered at. This is a STATED MODEL of two core functions the artifact carries as declarations ONLY -- re-measured 2026-08-26 from the trust-ir text artifact itself: Option::as_deref and Option::expect both appear there by name, among 309 std/core/alloc-named entries, and all 309 are EMPTY (a name, a `; #producer` line, 0 instructions between them). Three walls were long conflated here and only one is a floor: (1) rustc has no cross-crate THIR (thir_body takes a LocalDefId, no thir_of_instance) and (2) every body-producing path keys on is_local() -- both real, both BUILD ITEMS; (3) expect's closure ends at a declaration with no body ANYWHERE (expect -> expect_failed -> panic_display -> panic_fmt -> panic_impl, and panic_impl is `unsafe extern \"Rust\"` in core/src/panicking.rs:67-70, supplied at link time from std/src/panicking.rs:611) -- that one is the FLOOR, and no lowering fixes it. Note what this model is NOT: splitting it into separate as_deref and expect models would not shrink the assumption, it would turn one clearly-stated semantic assumption into three (two unavailable callee models plus the niche layout), so the collapse here is deliberate. What it assumes is exactly: Option<Arc<Level>>'s None is the null niche, and as_deref().expect() is load + null-check + assert + the Arc data offset. The THIRD clause audit r16 M16-6 measured -- that the stored field word IS the child's address, which was FALSE by 16 bytes -- is discharged rather than stated: the gep is in the body above, EncodesLevelArcF places each child at stored+16 to match, and the two @Eq.refl cost equations moved 37 -> 41 and 20 -> 22. No gate in this repository can promote it to a derivation and none is claimed to; it is the residual of the whole chain. The assert is load-bearing, not decoration: ir_lzb_deref_refuses_none computes ub assert_failed on a null field. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_DEREF, "ir_lzb_deref: the deref model as a function at canonical id 1 -- the id the minted body's three `call 1` sites name, pinned to <level::LevelArc as std::ops::Deref>::deref (crate id 3894) by the committed tag table's funcs lane and by tests/crystal_a2_mint/callee_identity.rs. One ptr parameter, one block, entry b0. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_MODULE, "ir_lzb_module: the designated target's minted body WITH a deref model beside it -- Option B's module. Function 0 is ir_lz_func, the MINTED term, by name: there is no second transcription of the emitted body anywhere in this file, and ir_lzb_func0_is_minted is the kernel-checked equation that says so. Function 1 is the authored assumption. \
 \
@@ -261,9 +261,9 @@ It is a THIRD module and not an edit of ir_lz_module because FOUR gates refuse a
             ("ir_lzb_func0_is_minted", "ir_d0", "ir_lz_func"),
             ("ir_lzb_func1_is_the_deref_model", "ir_d1", "ir_lzb_deref"),
         ] {
-            let tgt = format!("(IROption.some IRFunc {f})");
+            let tgt = format!("(@IROption.some IRFunc {f})");
             self.add_recursive_def(
-                &format!("def {name} : Eq (IROption IRFunc) (ir_func_find (ir_mod_funcs ir_lzb_module) {idx}) {tgt} := Eq.refl (IROption IRFunc) {tgt}"),
+                &format!("def {name} : Eq (IROption IRFunc) (ir_func_find (ir_mod_funcs ir_lzb_module) {idx}) {tgt} := @Eq.refl (IROption IRFunc) {tgt}"),
                 if idx == "ir_d0" {
                     "ir_lzb_func0_is_minted: *** THE DERIVED HALF CANNOT DRIFT INTO THE ASSUMED HALF. *** ir_func_find resolves id 0 of this module to ir_lz_func itself -- the term replayed line for line from generated/ir_lz.defs.txt and checked by three independent readers. Eq.refl, so the kernel walks the function list and compares the whole body. Anything that edited the emitted half while adding the assumed half would fail here. DerivedProved, zero axiom_deps."
                 } else {
@@ -309,7 +309,7 @@ It is a THIRD module and not an edit of ir_lz_module because FOUR gates refuse a
     /// kernel-check. A wrong step count fails HERE, by computation.
     pub(super) fn add_eval_ir_lzb_steps(&mut self) -> Result<(), SpecError> {
         for (name, binder, heap, na, steps, ans, doc) in [
-            ("ir_lzb_cost_halts_zero", "", HEAP_ZERO, "ir_d1", 6u32, "true", "ir_lzb_cost_halts_zero: SIX steps exactly -- b0's load, extractfield and switch, b1's const and br, and b6's ret. The hand model's leaf cost was five, because it returned from the arm instead of branching to a join. Eq.refl on a CONFIGURATION, so the count is pinned, not bounded. DerivedProved, zero axiom_deps."),
+            ("ir_lzb_cost_halts_zero", "", HEAP_ZERO, "ir_d1", 6u32, "true", "ir_lzb_cost_halts_zero: SIX steps exactly -- b0's load, extractfield and switch, b1's const and br, and b6's ret. The hand model's leaf cost was five, because it returned from the arm instead of branching to a join. @Eq.refl on a CONFIGURATION, so the count is pinned, not bounded. DerivedProved, zero axiom_deps."),
             ("ir_lzb_cost_halts_succ", "", HEAP_SUCC, "ir_d9", 6, "false", "ir_lzb_cost_halts_succ: six, through b2. DerivedProved, zero axiom_deps."),
             ("ir_lzb_cost_halts_param", "(n : Nat) ", HEAP_PARAM, "ir_d1", 6, "false", "ir_lzb_cost_halts_param: six for every n, through b3 -- which the emitted body does not share with b2, so the equal count is a coincidence of length and not of path. DerivedProved, zero axiom_deps."),
             ("ir_lzb_cost_halts_max", "", HEAP_MAXZZ, "ir_d17", 41, "true", "ir_lzb_cost_halts_max: *** FORTY-ONE STEPS. *** The interesting count. Four frame pushes and pops (two deref, two self), two field geps, two null checks, two ARC-HEADER geps inside the deref frames, a CondBr taking its then-edge, and two joins. 16 before the first self activation, 6 for it, 13 after including the second deref and self pair at 8 + 6. It read 37 while the deref model returned the stored word unchanged; the two extra nodes that make it return the Arc DATA address cost two steps per deref frame, and there are two. This is the arithmetic ir_lzb_cost must reproduce, VALIDATED BY THE KERNEL before the cost function is written -- an off-by-one is a build failure here rather than a wrong theorem in the activation induction later. DerivedProved, zero axiom_deps."),

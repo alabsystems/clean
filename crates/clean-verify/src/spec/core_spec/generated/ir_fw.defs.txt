@@ -1,4 +1,4 @@
 def ir_fw_tflags : IRTy := IRTy.struct_ 815
 def ir_fw_b0 : IRBlock := IRBlock.mk ir_d0 ir_nl0 (ir_bd6 (ir_nd1 (IRInst.extractfield (IRTy.uint_ ir_d8) ir_d0 ir_d0) ir_d2) (ir_nd1 (IRInst.extractfield (IRTy.uint_ ir_d8) ir_d1 ir_d0) ir_d3) (ir_nd1 (IRInst.binop IRBinOp.or_ (IRTy.uint_ ir_d8) ir_d2 ir_d3) ir_d4) (ir_nd1 (IRInst.const_ ir_fw_tflags (IRConst.aggv (IRConst.vcons (IRConst.int_ ir_d0) IRConst.vnil))) ir_d5) (ir_nd1 (IRInst.insertfield ir_fw_tflags ir_d5 ir_d0 ir_d4) ir_d6) (ir_nd (IRInst.ret (ir_nl1 ir_d6))))
 def ir_fw_func : IRFunc := IRFunc.mk ir_d0 (ir_nl2 ir_d0 ir_d1) ir_d0 (ir_blk ir_fw_b0 ir_blk0)
-def ir_fw_module : IRModule := IRModule.mk (IRList.cons IRFunc ir_fw_func (IRList.nil IRFunc)) (IRList.nil IRGlobal)
+def ir_fw_module : IRModule := IRModule.mk (@IRList.cons IRFunc ir_fw_func (@IRList.nil IRFunc)) (@IRList.nil IRGlobal)

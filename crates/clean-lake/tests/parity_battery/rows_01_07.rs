@@ -36,9 +36,11 @@ fn row01_toml_lib_build_emits_olean_triple_and_round_trips() {
 
     // The exported .olean is semantic, not name-only: reloading it into a
     // fresh environment restores both the definition and the theorem.
+    // The artifact records Lean's implicit `Init`, which the toolchain
+    // library resolves.
     let mut env = clean_kernel::Environment::new();
     let lib_dir = ctx.workspace().lib_dir();
-    clean_olean::load_module_with_deps(&mut env, "Acme", &[lib_dir])
+    clean_olean::load_module_with_deps(&mut env, "Acme", &artifact_load_paths(&lib_dir))
         .expect("built .olean should reload");
     for name in ["acmeVal", "acme_eq"] {
         let n = clean_kernel::name::Name::from_string(name);

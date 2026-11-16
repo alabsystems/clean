@@ -16,9 +16,15 @@ import stat
 import subprocess
 import sys
 import tempfile
+import types
 import zlib
 
-import check_ck0_lineage as lineage
+# Execute the exact producer source pinned below, never an ignored import cache.
+_lineage_path = Path(__file__).resolve().with_name('check_ck0_lineage.py')
+lineage = types.ModuleType('ck0_custody_lineage')
+lineage.__file__ = str(_lineage_path)
+exec(compile(_lineage_path.read_bytes(), str(_lineage_path), 'exec',
+             dont_inherit=True), lineage.__dict__)
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_RUNS = ROOT / 'reports/self-proof-q6-capture-2026-11-14'
@@ -284,7 +290,7 @@ def committed_source(source):
     """Authenticate recorded Git blobs, not today's mutable source inventory."""
     need(isinstance(source, dict) and set(source) ==
          {'schema', 'kind', 'revision', 'files', 'proof_claim', 'genesis_promoted'} and
-         source['schema'] == lineage.SCHEMA and source['kind'] == 'candidate-source' and
+         source['schema'] in (lineage.SCHEMA, lineage.SOURCE_SCHEMA) and source['kind'] == 'candidate-source' and
          source['proof_claim'] is False and source['genesis_promoted'] is False,
          'archived source record shape/claim')
     revision = source['revision']
@@ -302,8 +308,12 @@ def committed_source(source):
         os.environ.update(settings)
         need(lineage.git(lineage.ROOT, 'cat-file', '-t', revision).strip() == 'commit',
              'archived source must name a commit')
+        # The schema selects a fixed validator-owned scope, never the caller's
+        # files map. Historical records retain their exact original inventory;
+        # current records must include the committed transport helper.
+        base = lineage.LEGACY_BASE if source['schema'] == lineage.SCHEMA else lineage.BASE
         actual = lineage.git_files(lineage.ROOT, revision,
-                                   [*lineage.BASE, lineage.CRATE, '.cargo'])
+                                   [*base, lineage.CRATE, '.cargo'])
     finally:
         for key, value in previous.items():
             if value is None:
@@ -435,6 +445,11 @@ def validate(runs, source_path, expected_namespace=None):
 
 def selftest(runs, source):
     """Isolated candidate copies only; never mutate the sealed report or execute images."""
+    loader = subprocess.run([sys.executable, '-B', str(ROOT / 'scripts/test_ck0_custody_loader.py')],
+                            capture_output=True, text=True,
+                            pass_fds=lineage._resource_fds(os.environ))
+    need(loader.returncode == 0, 'custody source-loader controls failed: ' + loader.stderr[-2000:])
+    print(loader.stdout + loader.stderr, end='')
     outcomes, legacy = [], []
     namespace = capture_namespace(runs)
     with tempfile.TemporaryDirectory(prefix='q6-replay-custody-') as temporary:
@@ -939,7 +954,8 @@ def main():
     runs = args.runs or DEFAULT_RUNS
     source = args.source or ROOT / 'genesis/ck0/CANDIDATE.json'
     if args.pinned_inputs:
-        print('\n'.join(sorted({'scripts/check_ck0_lineage.py', *lineage.PRODUCER_FILES})))
+        print('\n'.join(sorted({'scripts/check_ck0_lineage.py', *lineage.PRODUCER_FILES,
+                                lineage.RESOURCE_HELPER, 'scripts/test_ck0_custody_loader.py'})))
     elif args.selftest:
         selftest(DEFAULT_RUNS, DEFAULT_RUNS / 'source.json')
     else:

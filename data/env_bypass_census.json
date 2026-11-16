@@ -260,7 +260,7 @@
       ],
       "classification": "P",
       "disposition_job": "R1-DISCH",
-      "guard_notes": "Removal-only with a re-add contract (trusted_ext.rs:65-72, env/mod.rs): drops a value-free Axiom carrier so the genuine imported inductive of the same name can register. Disposition: prove the contract. 2026-11-14 source-authority correction: remove the three unrestricted ordinary-source calls in register.rs. The single closed bootstrap loop authenticates only slots created by its own successful init_fact invocation (exact kind, no value, universe parameters and definitionally equal type), performs all checks before the first removal and completes the genuine checked class in a private cloned environment before publishing. Existing initializer no-ops grant no authority; foreign or partial slots refuse without mutation. The separate .olean import call is unchanged. This is a reviewed caller relocation and restriction, not proof of R1-DISCH; classification/disposition and the existing cap of four are unchanged.",
+      "guard_notes": "Removal-only with a re-add contract (trusted_ext.rs:65-72, env/mod.rs): drops a value-free Axiom carrier so the genuine imported inductive of the same name can register. Disposition: prove the contract. 2026-11-14 source-authority correction: remove the three unrestricted ordinary-source calls in register.rs. The single closed bootstrap loop authenticates only slots created by its own successful init_fact invocation (exact kind, no value, universe parameters and definitionally equal type), performs all checks before the first removal and completes the genuine checked class in a private cloned environment before publishing. Existing initializer no-ops grant no authority; foreign or partial slots refuse without mutation. The separate .olean import call is unchanged. This is a reviewed caller relocation and restriction, not proof of R1-DISCH; classification/disposition and the existing cap of four are unchanged. 2026-11-15: the Mathverse citation path (crates/clean-elab/src/tactic/mathverse_use.rs) is a third holder, accounted as a site after it was made to authenticate each carrier against the replacing shard row (universe arity and definitionally equal type) before removal; decision recorded in docs/DECISIONS.md. Cap of four unchanged.",
       "sites": [
         {
           "file": "crates/clean-elab/src/source_family_authority.rs",
@@ -271,6 +271,11 @@
           "file": "crates/clean-olean/src/import/load_register.rs",
           "lines_hint": "203",
           "note": ".olean import stub discharge"
+        },
+        {
+          "file": "crates/clean-elab/src/tactic/mathverse_use.rs",
+          "lines_hint": "476",
+          "note": "Mathverse citation path (Strict/RelaxedFoundational gates only), landed with the mathverse/lazy-resolution-2026-08-01 merge on 2026-11-15. Not ordinary source: it removes only a value-free, non-shape-backed Axiom carrier whose name is a row of the installed shard and whose universe arity and type are definitionally equal to that row's (authenticated before the first removal, TypeAgreementMode::DefEqOnly); the replacement arrives only through checked add_inductive (scratch-clone replay, byte-matched against the shard) or checked add_decl, and restore_unreplaced_stubs re-adds every carrier that was not replaced through checked add_decl, refusing the citation if one was in its closure."
         }
       ],
       "max_occurrences": 4

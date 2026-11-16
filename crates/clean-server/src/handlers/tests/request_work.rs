@@ -490,6 +490,33 @@ async fn batch_check_reports_no_verdict_its_deadline_cut_short() {
     assert!(wrong.is_empty(), "wrong per-item verdicts: {wrong:?}");
 }
 
+/// `proveTLA` built its engine under the request's deadline, and a deadline
+/// that had passed refused the engine's fixed theories and failed their
+/// `expect`s: a panic in the work at every timeout tried, which a release
+/// build (`panic = "abort"`) turned into a killed server. The engine's seeding
+/// runs with the deadline suspended now.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn prove_tla_work_never_panics_at_a_short_deadline() {
+    let state = prelude_state_with(None);
+    for timeout_ms in [0u64, 1, 2, 3, 5, 8, 13, 21] {
+        let params = ProveTlaParams {
+            obligation: clean_tla::TlaObligation::new(clean_tla::encoding::TlaFormula::True),
+            timeout_ms: Some(timeout_ms),
+        };
+        let response = handle_prove_tla(&state, RequestId::Number(1), params).await;
+        wait_until_idle(&state).await;
+        assert_eq!(
+            state.work.panics(),
+            0,
+            "proveTLA at timeout_ms {timeout_ms}: its work panicked (answer {:?})",
+            response.error
+        );
+        if let Some(error) = response.error {
+            assert_eq!(error.code, TIMEOUT, "{error:?}");
+        }
+    }
+}
+
 /// The class `proveTLA` belonged to: every pool request at deadlines that land
 /// at different points of its work. A caught panic is a release server
 /// aborted, so the pool's count must stay zero.
@@ -820,6 +847,37 @@ async fn no_request_work_panics_at_a_short_deadline() {
                         .into(),
                     fail_unknown: false,
                     include_details: false,
+                    timeout_ms: Some(t),
+                },
+                None,
+            )
+        );
+        probe!(
+            "proveTLA",
+            handle_prove_tla(
+                &state,
+                RequestId::Number(1),
+                ProveTlaParams {
+                    obligation: clean_tla::TlaObligation::new(
+                        clean_tla::encoding::TlaFormula::True
+                    ),
+                    timeout_ms: Some(t),
+                },
+            )
+        );
+        probe!(
+            "batchProveTLA",
+            handle_batch_prove_tla(
+                &state,
+                RequestId::Number(1),
+                BatchProveTlaParams {
+                    items: vec![BatchProveTlaItem {
+                        id: "a".into(),
+                        obligation: clean_tla::TlaObligation::new(
+                            clean_tla::encoding::TlaFormula::True
+                        ),
+                    }],
+                    threads: 1,
                     timeout_ms: Some(t),
                 },
                 None,

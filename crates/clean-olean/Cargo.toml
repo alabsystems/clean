@@ -110,3 +110,15 @@ clean-olean = { path = ".", features = ["test-support"] }
 [[bin]]
 name = "kcheck_trace_experiment"
 required-features = ["kcheck-trace"]
+
+[[test]]
+name = "kcheck_advice_producer"
+required-features = ["kcheck-trace"]
+
+[[test]]
+name = "kcheck_advice_generation"
+required-features = ["kcheck-trace"]
+
+[[test]]
+name = "kcheck_advice_extensional"
+required-features = ["kcheck-trace"]

@@ -13,6 +13,8 @@ workspace = true
 
 [features]
 default = []
+# The experimental trust-ir -> trust-cg lane (LX0) and `--emit obj`/`trustir`.
+trust-ir-backend = ["clean-compiler/trust-ir-backend"]
 
 [dependencies]
 anyhow.workspace = true

@@ -127,6 +127,32 @@ tokio = { workspace = true, features = ["full"] }
 num-rational.workspace = true
 tempfile.workspace = true
 ay-lean-bridge.workspace = true
+# HEADLINE-CRITERION (criterion-2) unified-join test edge — DEV-DEPENDENCY ONLY.
+# `tests_criterion2_join` runs the REAL trust-cg overflow lowering, extracts the
+# obligation's emitted BV identity formula, and drives the live clean C1 path so
+# the kernel re-checks a CleanCic term to trust_count == 0. This mirrors the ck0
+# ingest-bridge dev-dep edge (untrusted test glue): clean-auto/src does NOT
+# depend on trust-cg-lower/trust-ir. Exact Git identities ensure the lowering's
+# `ProofFormula` is the SAME crate instance clean's converter consumes (genuine
+# unification, not two fragments) without relying on mutable sibling paths.
+# Keep the direct TrustIR edge at the same revision this TrustCG pin itself
+# selects; the workspace lock-source gate enforces that identity.
+#
+# Why (measured 2026-09-14): a trust-cg pin whose own manifest names a
+# different trust-ir puts a SECOND trust-ir graph in this lock — a 0.14.0
+# `Module` handed to a 0.11.0 lowering — and trips the one-TrustIR-lock-source
+# gate. So the two move together, in one transaction, through
+# scripts/bump-trust-ir-pin.sh. The `rev` fields below are the pin; a comment
+# that restates one is refused by that gate (`trust_ir_pin_legs.restated_pins`).
+trust-cg-lower = { git = "https://github.com/alabsystems/trust-cg.git", rev = "be463238a2c9888d5204c3ecf730d3a3fa2ff66d" }
+trust-cg-ir = { git = "https://github.com/alabsystems/trust-cg.git", rev = "be463238a2c9888d5204c3ecf730d3a3fa2ff66d" }
+# `tests_criterion2_gvn_lowering` RUNS the real trust-cg GlobalValueNumbering pass
+# (commutative-operand canonicalization) and extracts the structurally-distinct
+# machine-form-vs-ir-op identity it relies on, then routes it through the clean
+# NON-REFLEXIVE lowering bridge. Dev-dep only; clean-auto/src never depends on it.
+trust-cg-opt = { git = "https://github.com/alabsystems/trust-cg.git", rev = "be463238a2c9888d5204c3ecf730d3a3fa2ff66d" }
+trust-ir = { git = "https://github.com/alabsystems/trust-ir.git", rev = "a98dfbbe7f0b7ee8c60f2ee7c2cfd641ba850b87", features = ["serde"] }
+
 [[bench]]
 name = "smt_fast_path"
 harness = false

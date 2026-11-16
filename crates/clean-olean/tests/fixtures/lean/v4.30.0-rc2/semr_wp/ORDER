@@ -19,3 +19,4 @@ SemRBooleanClaimText
 SemRScalarClaimAudit
 SemRNativeExecutionClaim
 SemRNativeExecutionClaimAudit
+SemRNativeExecutionCapture

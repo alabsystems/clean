@@ -267,10 +267,13 @@ fn split_ite(state: &mut ProofState, goal: &Goal) -> TacticResult {
     // `Decidable.casesOn`, both at binder depth 1 — so, exactly as in
     // `by_cases`, they can share ONE fvar id numbered from the goal's tactic
     // base without violating `close_fvars`' `(n - base) < depth` invariant.
-    // `goal_binder_base`: identical to `goal_fvar_base` unless the goal's
-    // context was narrowed by `clear`, in which case the context alone would
-    // hand back an id still bound by a live `lambda` (capture).
-    let h_fvar = FVarId::new(state.goal_binder_base(goal));
+    // `goal_binder_base` (via `fresh_goal_binder_fvar`): identical to
+    // `goal_fvar_base` unless the goal's context was narrowed by `clear`, in
+    // which case the context alone would hand back an id still bound by a live
+    // `lambda` (capture). The wrapper also advances the global counter past
+    // the id, so no later `fresh_fvar` can reuse it and the scope checks'
+    // `id < next_fvar` window still covers it.
+    let h_fvar = state.fresh_goal_binder_fvar(goal);
 
     // `¬c`, with the `Not` head: Lean's `split` gives `h✝ : ¬c` (pinned
     // Lean 4.8.0, v4.30.0-rc2 and v4.36.0-rc2, 2026-11-13). `Not c` unfolds

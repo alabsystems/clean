@@ -81,11 +81,14 @@ fn row16_named_module_build_kernel_verifies_and_spawns_no_toolchain() {
     // (b) Kernel-verify the artifact: reload it, then re-check every
     // declaration it carries through the live kernel in a fresh environment.
     let lib_dir = ctx.workspace().lib_dir();
-    let mut reloaded = clean_kernel::Environment::with_prelude();
-    clean_olean::load_module_with_deps(&mut reloaded, "Native", &[lib_dir])
+    // The module was built over genuine Init (Lean's implicit `import
+    // Init`), and its artifact records that import: it reloads over, and is
+    // re-checked in, a fresh copy of that Init.
+    let mut reloaded = genuine_init_env();
+    clean_olean::load_module_with_deps(&mut reloaded, "Native", &artifact_load_paths(&lib_dir))
         .expect("built .olean should reload");
 
-    let mut recheck = clean_kernel::Environment::with_prelude();
+    let mut recheck = genuine_init_env();
     // Dependency order: the theorem's proof reduces through the definition.
     for name in ["nativeVal", "native_eq"] {
         let n = Name::from_string(name);

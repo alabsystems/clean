@@ -156,6 +156,21 @@ fn build_punit_caseson(
 /// The innermost branch uses the last meta directly (without Or.rec),
 /// relying on the finite type's exhaustiveness.
 ///
+/// # `fin_cases` ONLY
+///
+/// `interval_cases` no longer routes here: it builds an interval DESCENT
+/// (`interval_cases_proof.rs`) in which every branch's equality, the last
+/// included, is bound by a real binder over a real proof.
+///
+/// KNOWN GAP (#2533 follow-up): the base case below still hands the LAST branch
+/// a binder-less meta. `fin_cases`' Or.rec fallback therefore gives each
+/// NON-final branch its equality local at the goal-derived id `base + k` — the
+/// id the k-th true-branch lambda binds — and WITHHOLDS the last branch's,
+/// because this chain has no proof of it (`finite_cases.rs`, the
+/// `case_idx + 1 < inhabitants.len()` guard). That is sound, but the last
+/// `fin_cases` branch cannot cite its case equality; retargeting this to the
+/// descent is tracked separately.
+///
 /// # Contract
 ///
 /// REQUIRES: `idx < new_goals.len()` and `values.len() >= new_goals.len()`

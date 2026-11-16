@@ -747,6 +747,184 @@ criterion_group!(
     bench_verify_cert_vs_batch_single,
 );
 
+// ============================================================================
+// Batch TLA Proof Benchmarks
+// ============================================================================
+
+/// Generate TLA obligation items for batch proving
+fn generate_tla_items(count: usize) -> Vec<clean_server::handlers::BatchProveTlaItem> {
+    use clean_tla::encoding::TlaFormula;
+    use clean_tla::obligation::TlaObligation;
+
+    let formulas = [
+        TlaFormula::Always(Box::new(TlaFormula::True)),
+        TlaFormula::Eventually(Box::new(TlaFormula::True)),
+        TlaFormula::LeadsTo(Box::new(TlaFormula::True), Box::new(TlaFormula::True)),
+        TlaFormula::True,
+    ];
+
+    (0..count)
+        .map(|i| clean_server::handlers::BatchProveTlaItem {
+            id: format!("tla_{i}"),
+            obligation: TlaObligation::new(formulas[i % formulas.len()].clone()),
+        })
+        .collect()
+}
+
+fn bench_batch_prove_tla_scaling(c: &mut Criterion) {
+    let rt = Runtime::new().unwrap();
+    let state = ServerState::new();
+
+    let mut group = c.benchmark_group("server/batchProveTLA/scaling");
+    group.warm_up_time(Duration::from_millis(500));
+
+    for count in [1, 10, 100, 500] {
+        let items = generate_tla_items(count);
+        let params = clean_server::handlers::BatchProveTlaParams {
+            items,
+            threads: 0, // auto
+            timeout_ms: None,
+        };
+
+        group.throughput(Throughput::Elements(count as u64));
+        group.bench_with_input(BenchmarkId::from_parameter(count), &params, |b, params| {
+            b.iter(|| {
+                rt.block_on(async {
+                    clean_server::handlers::handle_batch_prove_tla(
+                        &state,
+                        RequestId::Number(1),
+                        black_box(params.clone()),
+                        None,
+                    )
+                    .await
+                })
+            });
+        });
+    }
+    group.finish();
+}
+
+fn bench_batch_prove_tla_parallelism(c: &mut Criterion) {
+    let rt = Runtime::new().unwrap();
+    let state = ServerState::new();
+
+    let mut group = c.benchmark_group("server/batchProveTLA/parallelism");
+    group.warm_up_time(Duration::from_millis(500));
+    group.measurement_time(Duration::from_secs(10));
+
+    let count = 100;
+    let items = generate_tla_items(count);
+
+    // Test with different thread counts
+    for threads in [1, 2, 4, 0] {
+        // 0 = auto (rayon default)
+        let thread_label = if threads == 0 {
+            "auto".to_string()
+        } else {
+            format!("{threads}")
+        };
+        let params = clean_server::handlers::BatchProveTlaParams {
+            items: items.clone(),
+            threads,
+            timeout_ms: None,
+        };
+
+        group.throughput(Throughput::Elements(count as u64));
+        group.bench_with_input(
+            BenchmarkId::new("threads", &thread_label),
+            &params,
+            |b, params| {
+                b.iter(|| {
+                    rt.block_on(async {
+                        clean_server::handlers::handle_batch_prove_tla(
+                            &state,
+                            RequestId::Number(1),
+                            black_box(params.clone()),
+                            None,
+                        )
+                        .await
+                    })
+                });
+            },
+        );
+    }
+    group.finish();
+}
+
+fn bench_batch_prove_tla_with_progress(c: &mut Criterion) {
+    let rt = Runtime::new().unwrap();
+    let state = ServerState::new();
+
+    let mut group = c.benchmark_group("server/batchProveTLA/progress_overhead");
+    group.warm_up_time(Duration::from_millis(500));
+
+    for count in [10, 100] {
+        let items = generate_tla_items(count);
+        let params = clean_server::handlers::BatchProveTlaParams {
+            items,
+            threads: 0,
+            timeout_ms: None,
+        };
+
+        group.throughput(Throughput::Elements(count as u64));
+
+        // Without progress
+        group.bench_with_input(
+            BenchmarkId::new("no_progress", count),
+            &params,
+            |b, params| {
+                b.iter(|| {
+                    rt.block_on(async {
+                        clean_server::handlers::handle_batch_prove_tla(
+                            &state,
+                            RequestId::Number(1),
+                            black_box(params.clone()),
+                            None,
+                        )
+                        .await
+                    })
+                });
+            },
+        );
+
+        // With progress
+        group.bench_with_input(
+            BenchmarkId::new("with_progress", count),
+            &params,
+            |b, params| {
+                b.iter(|| {
+                    rt.block_on(async {
+                        let (tx, mut rx) = mpsc::channel(count + 10);
+                        let progress = ProgressSender::new(RequestId::Number(1), tx);
+
+                        let drain_task =
+                            tokio::spawn(async move { while rx.recv().await.is_some() {} });
+
+                        let result = clean_server::handlers::handle_batch_prove_tla(
+                            &state,
+                            RequestId::Number(1),
+                            black_box(params.clone()),
+                            Some(progress),
+                        )
+                        .await;
+
+                        drop(result);
+                        let _ = drain_task.await;
+                    });
+                });
+            },
+        );
+    }
+    group.finish();
+}
+
+criterion_group!(
+    tla_benches,
+    bench_batch_prove_tla_scaling,
+    bench_batch_prove_tla_parallelism,
+    bench_batch_prove_tla_with_progress,
+);
+
 criterion_main!(
     check_benches,
     type_benches,
@@ -755,5 +933,6 @@ criterion_main!(
     info_benches,
     serialization_benches,
     e2e_benches,
-    cert_benches
+    cert_benches,
+    tla_benches
 );

@@ -690,6 +690,36 @@ pub fn export_compilation_snapshot(env: &Environment) -> Vec<EnvExtensionEntry> 
         .map(PersistentExtState::export_entries)
         .unwrap_or_default()
 }
+
+/// [`export_compilation_snapshot`] less every record `base` already holds,
+/// for a module elaborated over `base`, an imported closure every importer
+/// loads itself (genuine Init, which the artifact records as an import).
+/// The importer rebuilds those records from its own load of `base`'s
+/// modules. Repeating them in every artifact only adds bytes: Init's module
+/// views alone were about 6 MB per module. Any record that differs from
+/// `base`'s, and every record `base` lacks, is kept, so an importer whose
+/// `base` disagrees still meets the conflict at import.
+pub fn export_compilation_snapshot_over(
+    env: &Environment,
+    base: &Environment,
+) -> Vec<EnvExtensionEntry> {
+    let Some(state) = env.get_ext_state::<State>(index()) else {
+        return Vec::new();
+    };
+    let mut snapshot = state.snapshot();
+    if let Some(base) = base.get_ext_state::<State>(index()) {
+        let base = base.snapshot();
+        snapshot.globals.retain(|r| !base.globals.contains(r));
+        snapshot.scoped.retain(|r| !base.scoped.contains(r));
+        snapshot
+            .bodies
+            .retain(|name, rules| base.bodies.get(name) != Some(rules));
+        snapshot
+            .modules
+            .retain(|name, visible| base.modules.get(name) != Some(visible));
+    }
+    vec![Entry::Portable(snapshot).to_env_entry()]
+}
 /// Split the portable snapshot into independently accumulating semantic records.
 /// A whole-session blob cannot be compared as one module contribution: sibling
 /// modules legitimately add other bodies and module views. Ordered rule vectors

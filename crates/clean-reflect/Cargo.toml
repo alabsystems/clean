@@ -1,0 +1,34 @@
+[package]
+name = "clean-reflect"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "SemanticReflection map: trust-ir IR -> clean_kernel::Expr (Fragment-1 soundness-backed)"
+readme.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# Internal: produces the Expr output type.
+clean-kernel = { workspace = true }
+# External input IR. The exact Git identity unifies with the other TrustIR
+# consumers and is reproducible without a sibling checkout. `serde` mirrors
+# clean-auto / spec Section 1.1.
+trust-ir = { git = "https://github.com/alabsystems/trust-ir.git", rev = "a98dfbbe7f0b7ee8c60f2ee7c2cfd641ba850b87", default-features = false, features = ["serde"] }
+
+serde = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+# src/dispatch_exhaustive_tests.rs PARSES this crate's sources to find every
+# `trust_ir::Inst` dispatch and refuse a catch-all arm in it.
+syn = { workspace = true, features = ["full", "visit"] }
+# The fused intrinsic-obligation example (tests/fused_overflow.rs) discharges the
+# object's OWN obligation with the Clean kernel under `Environment::with_prelude()`
+# only — no external `.lean` is opened, so no clean-elab / clean-parser loader is
+# needed. The retired antipattern (parsing overflow_trust_boundary.lean per
+# obligation and is_def_eq'ing a synthesized Expr against it) is what previously
+# pulled clean-elab + clean-parser in as dev-deps; both are gone with it.

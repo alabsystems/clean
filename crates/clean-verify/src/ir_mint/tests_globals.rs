@@ -46,8 +46,8 @@ fn one_global_tags() -> tags::Tags {
 /// INDEX is structural (`ir_d0`), its initializer bytes are data (`ir_d8` for
 /// 8, the literal `108` for 108), the `IRGlobal` line lands after the aliases
 /// and before the first block, and the module line carries the cons list.
-/// The same module without a global keeps the literal `(IRList.nil IRGlobal)`
-/// and no `_g` line — the byte-identity every existing chain's M3 asserts.
+/// The same module without a global keeps the literal `(@IRList.nil IRGlobal)`
+/// and no `_g` line. M3 judges this explicit spelling and its decoded module.
 #[test]
 fn mint_a_module_with_one_global_states_the_numeral_policy() {
     let core = one_global_core(true, "(global 0 (agg (int 8) (int 108)))");
@@ -64,8 +64,8 @@ fn mint_a_module_with_one_global_states_the_numeral_policy() {
             "def ir_gx_func : IRFunc := IRFunc.mk ir_d0 (ir_nl1 ir_d0) ir_d0 (ir_blk ir_gx_b0 \
              ir_blk0)"
                 .to_string(),
-            "def ir_gx_module : IRModule := IRModule.mk (IRList.cons IRFunc ir_gx_func \
-             (IRList.nil IRFunc)) (IRList.cons IRGlobal ir_gx_g0 (IRList.nil IRGlobal))"
+            "def ir_gx_module : IRModule := IRModule.mk (@IRList.cons IRFunc ir_gx_func \
+             (@IRList.nil IRFunc)) (@IRList.cons IRGlobal ir_gx_g0 (@IRList.nil IRGlobal))"
                 .to_string(),
         ]
     );
@@ -76,8 +76,8 @@ fn mint_a_module_with_one_global_states_the_numeral_policy() {
     assert_eq!(bare.lines.len(), 3, "no IRGlobal line:\n{}", bare.text());
     assert!(bare.lines.iter().all(|l| !l.contains("IRGlobal.mk")));
     assert!(
-        bare.lines[2].ends_with(" (IRList.nil IRGlobal)"),
-        "the empty list is the literal every earlier chain minted:\n{}",
+        bare.lines[2].ends_with(" (@IRList.nil IRGlobal)"),
+        "the empty global list must retain its explicit type argument:\n{}",
         bare.lines[2]
     );
     assert_eq!(
@@ -265,9 +265,9 @@ fn the_lzc_core_mints_under_its_tag_table() {
     assert_eq!(
         minted.lines.last().map(String::as_str),
         Some(
-            "def ir_lzc_module : IRModule := IRModule.mk (IRList.cons IRFunc ir_lzc_func \
-             (IRList.cons IRFunc ir_lad_func (IRList.nil IRFunc))) (IRList.cons IRGlobal \
-             ir_lzc_g0 (IRList.nil IRGlobal))"
+            "def ir_lzc_module : IRModule := IRModule.mk (@IRList.cons IRFunc ir_lzc_func \
+             (@IRList.cons IRFunc ir_lad_func (@IRList.nil IRFunc))) (@IRList.cons IRGlobal \
+             ir_lzc_g0 (@IRList.nil IRGlobal))"
         )
     );
 }

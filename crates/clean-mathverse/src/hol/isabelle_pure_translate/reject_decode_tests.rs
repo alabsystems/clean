@@ -1144,6 +1144,14 @@ fn closure_seed_reject_sig(closure: &str, serial: i64) -> String {
 /// see `docs/analysis/zproof-f1-equalelim-lever.md`). This test pins that the
 /// leak is closed on BOTH hubs. It is NOT a full flip to `KernelVerified` — DO
 /// NOT `flip-gate --add` these serials until the residual tower wall lands.
+///
+/// **What the operand heads now expose.** With the mismatch signature carrying
+/// operands, the wall reads `expected=Eq<Pi,FVar,FVar> got=Eq<FVar,FVar,FVar>`:
+/// the two sides agree on the second and third operands and differ in the
+/// FIRST, where a `Pi` (function type) is expected and a bare `FVar` arrived.
+/// That is a concrete lead on r10 Root A/B/C — the tower is failing on an
+/// operand that should still be pi-wrapped — and was invisible while both sides
+/// rendered as the bare head `Eq`.
 #[test]
 fn f1_equalelim_leak_closed_on_both_hubs() {
     for (serial, closure) in [(280734i64, S280734_CLOSURE), (280892i64, S280892_CLOSURE)] {
@@ -1152,8 +1160,17 @@ fn f1_equalelim_leak_closed_on_both_hubs() {
             !sig.contains("contains-free-var"),
             "s{serial}: the interior-equal_elim free-var leak must be CLOSED; got: {sig}"
         );
+        // Matched on HEADS, not on the whole rendering. The signature used to
+        // read literally `expected=Eq got=Eq`; it now carries the operand heads
+        // (`expected=Eq<Pi,FVar,FVar> got=Eq<FVar,FVar,FVar>`) because that form
+        // named nothing that differed. The invariant this test pins — residual
+        // is the Eq/Eq congruence-tower wall under `Pure.equal_elim` — is
+        // unchanged; only the diagnostic got sharper, so assert head-wise and
+        // stay agnostic to how much detail follows.
         assert!(
-            sig.contains("expected=Eq got=Eq") && sig.contains("Pure.equal_elim"),
+            sig.contains("expected=Eq")
+                && sig.contains("got=Eq")
+                && sig.contains("Pure.equal_elim"),
             "s{serial}: residual is the Eq-got-Eq congruence-tower wall; got: {sig}"
         );
     }

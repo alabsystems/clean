@@ -89,8 +89,12 @@ pub fn intro_with_cert(
             // Generate certificate for the domain type
             let (_domain_type, domain_cert) = state.infer_type_with_cert(&goal, domain)?;
 
-            // Create a new free variable for the introduced hypothesis
-            let fvar = state.fresh_fvar();
+            // Create a new free variable for the introduced hypothesis.
+            // Same allocator as plain `intro` (#2533): this binder sits
+            // directly over the goal, so its id must be the goal's base —
+            // `infer_type_with_cert` above has already advanced the global
+            // counter, which is exactly when `fresh_fvar` goes wrong here.
+            let fvar = state.fresh_goal_binder_fvar(&goal);
 
             // Create the new local declaration
             let local_decl = LocalDecl {

@@ -187,6 +187,26 @@ pub fn reference_base_closed(
     })
 }
 
+/// Untrusted ordinary advice emitted by the actual observing replay caller.
+/// Neither variant is a checker acceptance or changes the reference verdict.
+#[cfg(feature = "kcheck-trace")]
+#[derive(Debug, serde::Serialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum AdviceCandidateObservation {
+    /// Candidate bytes still require replay against the original declaration.
+    Candidate {
+        /// Untrusted supplied checker depth, independent of the model bound N.
+        depth: u64,
+        /// A single declaration's token bytes, without an outer frame prefix.
+        bytes: Vec<u8>,
+    },
+    /// No partial candidate is exported on search exhaustion or coverage failure.
+    Refused {
+        /// Actual candidate-search refusal, distinct from diagnostic tracing.
+        reason: String,
+    },
+}
+
 /// One C4 observation, in the reference entry's actual replay order.
 #[cfg(feature = "kcheck-trace")]
 #[derive(Debug, serde::Serialize)]
@@ -203,6 +223,9 @@ pub struct TraceObservation {
     pub trace_refusal: Option<String>,
     /// Independent reference entry verdict.
     pub reference_accepted: bool,
+    /// Ordinary candidate/refusal from this caller; None for atomic blocks.
+    /// This is never the diagnostic journal and never an admission verdict.
+    pub advice_candidate: Option<AdviceCandidateObservation>,
     /// Successful-path token count (a partial prefix when tracing refused).
     pub partial_tokens: usize,
     /// Alternative charge with a REFL certificate per identity-walk argument.
@@ -298,6 +321,7 @@ fn observe(
         core_complete: refusal.is_none() && tracer.reannotated_dependencies.is_empty(),
         trace_refusal: refusal,
         reference_accepted: false,
+        advice_candidate: None,
         partial_tokens: tracer.journal.tokens().len(),
         uncompressed_spine_tokens: tracer.journal.tokens().len() as u64
             + tracer
@@ -435,8 +459,27 @@ impl ReplayTarget for TracingTarget<'_> {
             annotation.as_ref().err().map(ToString::to_string),
         );
         drop(tracer);
+        // Keep candidate search separate from the diagnostic journal and from
+        // admission. Its conservative supplied depth is an untrusted proposal,
+        // not an interpretation/model bound or a completeness measurement.
+        let candidate = clean_kernel::kcheck_trace::core::advice::produce_ordinary(
+            self.entry.env(),
+            &decl,
+            self.operations,
+            self.operations,
+        );
+        let advice_candidate = match candidate {
+            Ok(candidate) => AdviceCandidateObservation::Candidate {
+                depth: self.operations,
+                bytes: candidate.bytes,
+            },
+            Err(error) => AdviceCandidateObservation::Refused {
+                reason: error.to_string(),
+            },
+        };
         let result = self.entry.admit_decl(decl);
         let mut row = row;
+        row.advice_candidate = Some(advice_candidate);
         row.reference_accepted = result.is_ok();
         if row.core_complete && row.reference_accepted {
             if let Ok(annotation) = annotation {

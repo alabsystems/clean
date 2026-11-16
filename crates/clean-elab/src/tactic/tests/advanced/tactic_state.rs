@@ -366,6 +366,11 @@ fn test_fin_cases_bool_creates_two_subgoals() {
     let bool_ty = Expr::const_(Name::from_string("Bool"), vec![]);
 
     // Goal: P(h) where h : Bool, P : Bool → Prop
+    // Build the real obligation up front. Constructing with `Expr::prop()` and
+    // then overwriting `goals[0].target`/`local_ctx` leaves the root
+    // metavariable holding the ORIGINAL obligation (`⊢ Prop`, empty scope)
+    // while the goal claims a different one; `close_goal` rightly refuses to
+    // let that mutable bookkeeping become proof authority.
     let p_const = Expr::const_(Name::from_string("P"), vec![]);
     let fvar = FVarId::new(0);
     let target = Expr::app(p_const.clone(), Expr::fvar(fvar));
@@ -420,6 +425,7 @@ fn test_fin_cases_unit_creates_one_subgoal() {
     let unit_ty = Expr::const_(Name::from_string("PUnit"), vec![Level::zero()]);
 
     // Goal: Q(h) where h : PUnit.{0}, Q : PUnit.{0} → Prop
+    // Real obligation up front — see `test_fin_cases_bool_creates_two_subgoals`.
     let q_const = Expr::const_(Name::from_string("Q"), vec![]);
     let fvar = FVarId::new(0);
     let target = Expr::app(q_const, Expr::fvar(fvar));

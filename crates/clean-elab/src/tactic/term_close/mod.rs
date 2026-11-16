@@ -491,8 +491,9 @@ pub fn assert_(state: &mut ProofState, name: &SurfaceName, prop: Expr) -> Tactic
     // Create metavariable for the proof of prop
     let proof_meta = state.fresh_meta(prop.clone());
 
-    // Create new local decl for the hypothesis
-    let hyp_fvar = state.fresh_fvar();
+    // Create new local decl for the hypothesis (a depth-1 binder over the
+    // continuation goal, so it takes the goal's base — #2533).
+    let hyp_fvar = state.fresh_goal_binder_fvar(&goal);
     let mut new_local_ctx = goal.local_ctx.clone();
     new_local_ctx.push(LocalDecl {
         binder_info: Default::default(),

@@ -705,7 +705,7 @@ impl Ctx {
         // coincides with the consumer's hypotheses — restoring the instantiation-
         // independence the name-only keying gave for FREE. The kernel re-checks the
         // assembled term, so a wrong fill is rejected — never miscounted.
-        Ok(self.const_param(name, dom))
+        self.const_param_checked(name, dom)
     }
 
     /// A clean `Type` that is in scope in the proof currently being built — the

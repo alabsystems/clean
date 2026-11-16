@@ -89,10 +89,58 @@ impl<'a> ElabCtx<'a> {
         result
     }
 
+    /// Elaborate `base.field`, then — ONLY if that failed — offer the collected
+    /// dotted name to lazy Mathverse resolution.
+    ///
+    /// The parser produces `Proj` for dotted terms (`clean-parser/src/lexer.rs`
+    /// does not treat `.` as an identifier character), so `Nat.succ_le_of_lt`
+    /// never reaches `elab_ident` as one name: it arrives as nested `Proj` and
+    /// is resolved here. That is not a corner: 96.6% of the shipped corpus's
+    /// kernel-verified Lean4 constants are dotted, so a probe in `elab_ident`
+    /// alone would reach 3.4% of the library.
+    ///
+    /// Wrapping the FAILURE only is what makes this safe. Every dotted shape
+    /// dead-ends somewhere different — an unresolved namespace prefix at the
+    /// qualified-name fallback, a type-valued receiver (`Nat.foo`) at the
+    /// namespace lookup, a class-materialised receiver at `get_type_name` —
+    /// and one wrapper catches all of them without any of them having to be
+    /// enumerated. Nothing that resolves today reaches this code, so library
+    /// content can never shadow a working program: resolution PRIORITY is
+    /// untouched. It runs inside [`Self::elab_proj`]'s dot-eliminator frame,
+    /// which is restored on every exit either way.
     fn elab_proj_framed(
         &mut self,
         expr: &SurfaceExpr,
         proj: &Projection,
+    ) -> Result<Expr, ElabError> {
+        let outcome = self.elab_proj_resolved(expr, proj);
+        let Err(error) = outcome else {
+            return outcome;
+        };
+        // Disarmed files leave here having done one hash probe and allocated
+        // nothing: the dotted name below is not even reassembled.
+        if !self.mathverse_armed() {
+            return Err(error);
+        }
+        // Prefer the LONGEST chain: for `A.B.y` the inner `A.B` elaboration
+        // already ran this wrapper and may have requested `A.B`. Overriding it
+        // with `A.B.y` when the library has that resolves the citation in one
+        // round instead of two; when it does not, the inner request stands.
+        if let Some(dotted) =
+            Self::try_collect_qualified_name(Self::unwrap_surface_parens(expr), proj)
+        {
+            let dotted = dotted.qualify_under(&SurfaceName::default());
+            if let Some(request) = self.mathverse_lazy_request(dotted.name()) {
+                return Err(request);
+            }
+        }
+        Err(error)
+    }
+
+    fn elab_proj_resolved(
+        &mut self,
+        expr: &SurfaceExpr,
+        proj: &clean_parser::Projection,
     ) -> Result<Expr, ElabError> {
         // Projection/qualified-name disambiguation (#497, #501):
         // The parser produces Proj for all dotted terms like `x.y`.
@@ -319,6 +367,12 @@ impl<'a> ElabCtx<'a> {
                 SurfaceExpr::Ident(_, base_name) => {
                     match self.elaborate(expr) {
                         Ok(val) => Ok(ReceiverAttempt::Receiver(val)),
+                        // `MathverseNameAvailable` joins the unknown-ident
+                        // fallback class here so a base segment that merely
+                        // HAPPENS to name a library constant still reaches the
+                        // qualified fallback below — `Foo.bar` must keep
+                        // resolving to a resident `Foo.bar` even when the
+                        // library also has a `Foo`.
                         Err(
                             // The recursion- and batch-aware variants are
                             // minted only after identifier resolution has
@@ -330,7 +384,8 @@ impl<'a> ElabCtx<'a> {
                             | ElabError::UnknownIdentWithSuggestions { .. }
                             | ElabError::UnknownIdentDeferred { .. }
                             | ElabError::RecursionOutsideFragment { .. }
-                            | ElabError::SameBatchHeaderUnavailable { .. }),
+                            | ElabError::SameBatchHeaderUnavailable { .. }
+                            | ElabError::MathverseNameAvailable { .. }),
                         ) => {
                             // Base identifier not found - try qualified name fallback
                             if let Projection::Named(field) = proj {
@@ -384,6 +439,30 @@ impl<'a> ElabCtx<'a> {
                                     // error — exactly the choice made here
                                     // before the scan was deferred.
                                     return Err(match qualified_err {
+                                        // A base segment the ARMED library
+                                        // offers is a REQUEST, not a diagnosis
+                                        // (`crate::mathverse_lazy`). When the
+                                        // full dotted name carries no signal of
+                                        // its own, the request stands: the decl
+                                        // driver installs `Foo` and
+                                        // re-elaborates, so `Foo.bar` is retried
+                                        // as field notation on a now-resident
+                                        // constant. Burying it in the deferred
+                                        // error's report-time fallback would
+                                        // hide it from the driver, which never
+                                        // materializes that fallback. A request
+                                        // for the full name (`Foo.bar` offered
+                                        // by the library) is not deferred and
+                                        // wins below.
+                                        ElabError::UnknownIdentDeferred {
+                                            fallback: None, ..
+                                        } if matches!(
+                                            err,
+                                            ElabError::MathverseNameAvailable { .. }
+                                        ) =>
+                                        {
+                                            err
+                                        }
                                         ElabError::UnknownIdentDeferred {
                                             name,
                                             namespace_prefix,
@@ -411,6 +490,8 @@ impl<'a> ElabCtx<'a> {
                 SurfaceExpr::Proj(_, inner_base, inner_proj) => {
                     match self.elaborate(expr) {
                         Ok(val) => Ok(ReceiverAttempt::Receiver(val)),
+                        // See the `Ident` arm above: a library-named inner
+                        // segment must not cost the qualified fallback.
                         Err(
                             // Same fallback class as the Ident-base arm: a
                             // rich diagnostic for an inner prefix must not
@@ -419,7 +500,8 @@ impl<'a> ElabCtx<'a> {
                             | ElabError::UnknownIdentWithSuggestions { .. }
                             | ElabError::UnknownIdentDeferred { .. }
                             | ElabError::RecursionOutsideFragment { .. }
-                            | ElabError::SameBatchHeaderUnavailable { .. }),
+                            | ElabError::SameBatchHeaderUnavailable { .. }
+                            | ElabError::MathverseNameAvailable { .. }),
                         ) => {
                             // Try to collect full qualified name from nested projections
                             if let Projection::Named(field) = proj {

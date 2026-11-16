@@ -1,0 +1,12 @@
+{
+  "schema": "ty.cert/v1",
+  "verdict": "inductive-safety-safe",
+  "spec_src": "---- MODULE EdgeGate ----\nEXTENDS Naturals\nCONSTANT Buggy\nVARIABLES granted, decision\nInit == granted = 0 /\\ decision = 0\nGrant == granted <= 0 /\\ granted' = 1 /\\ decision' = (IF 1 + Buggy > 0 THEN 1 ELSE 0)\nRevoke == granted > 0 /\\ granted' = 0 /\\ decision' = (IF 0 + Buggy > 0 THEN 1 ELSE 0)\nNext == Grant \\/ Revoke\nFailClosed == decision <= granted\n====\n",
+  "init": "Init",
+  "next": "Next",
+  "invariants": ["FailClosed"],
+  "invariant_j_tla": "TRUE",
+  "var_sorts": [["granted", "Int"], ["decision", "Int"]],
+  "constants": [["Buggy", 0]],
+  "ay_proof_obligations": []
+}

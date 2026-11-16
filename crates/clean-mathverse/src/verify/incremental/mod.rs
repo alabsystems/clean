@@ -4034,6 +4034,128 @@ pub fn verify_corpus_incremental(
     run_incremental_over_reader(&merged, initial_env, InductiveReplayPolicy::default()).1
 }
 
+/// Wrap a [`MathverseLibrary`]'s merged arenas as a reusable [`ShardReader`].
+///
+/// [`MathverseLibrary::as_merged_reader`] CLONES all five arenas, which is fine
+/// for a one-shot whole-corpus pass but ruinous per-citation (a 196,981-constant
+/// / 3.1M-expr corpus clones gigabytes). Interactive consumers — the
+/// `mathverse_use` tactic — build this ONCE when the library is installed and
+/// reuse it across citations.
+///
+/// Exposed because `as_merged_reader` is `pub(crate)` and `ShardReader` is the
+/// unit the tested inductive-family replay operates on; re-implementing that
+/// replay against a different arena view is precisely how the two would drift.
+#[must_use]
+pub fn merged_reader_for(library: &MathverseLibrary) -> ShardReader {
+    library.as_merged_reader()
+}
+
+/// Replay a shard-resident INDUCTIVE FAMILY into `env` through the kernel's
+/// **checked** `add_inductive`.
+///
+/// This is the public entry point for consumers outside this crate (the
+/// `mathverse_use` tactic) that need a Mathlib/Isabelle structure — `Unique`,
+/// `Fact`, `CommMonoid` — present before a citing theorem can be registered.
+///
+/// # Why this is sound, and why it is STRONGER than the alternative
+///
+/// Every attempt runs against a FRESH SCRATCH CLONE of `env`
+/// ([`run_family_replay_attempt`]): the family is rebuilt from shard metadata,
+/// installed through checked `add_inductive` (which validates), and the
+/// regenerated members are byte-matched against the shard's own stored copies.
+/// Only a fully accepted, byte-matching family is committed to the real `env`.
+/// A malformed or hostile family is rejected by the kernel at replay time, so
+/// nothing here rests on trusting the shard's encoding.
+///
+/// Contrast the `.olean` import lane, which registers families via
+/// `extend_{inductives,constructors,recursors}_unchecked`
+/// (`clean-olean/src/import/load_register.rs`) — no positivity check, no
+/// universe check, and the ELIMINATOR taken verbatim from the file
+/// (`crates/clean-kernel/src/env/registration.rs` performs no validation in
+/// those bodies). Replaying through this path is therefore strictly stronger
+/// than the lane Mathlib citation currently depends on, not a relaxation of it.
+///
+/// # Returns
+///
+/// `Ok(true)` when the family was replayed and committed, `Ok(false)` when the
+/// shard lacks coherent metadata or the kernel/byte-match rejected it (the
+/// caller must fail closed — a `false` here means the family is NOT in `env`),
+/// and `Err` only for an internal reconstruction fault.
+///
+/// `policy` selects the registration shape: [`InductiveReplayPolicy::LeanFaithful`]
+/// for `.olean`-sourced corpora, [`InductiveReplayPolicy::Generate`] otherwise.
+pub fn replay_inductive_family_checked(
+    env: &mut Environment,
+    reader: &ShardReader,
+    constant_idx: u32,
+    policy: InductiveReplayPolicy,
+) -> Result<bool, String> {
+    // WHY THIS TRACE EXISTS. Every `Ok(false)` below used to be silent, and the
+    // caller's only signal was the trust gate later reporting "below Strict" —
+    // which points at the gate, i.e. the WRONG LAYER. That misdirection has
+    // already cost a diagnosis once (see the note on this function's contract),
+    // and it recurred on `LawfulBEq`: `CLEAN_WS16_DEBUG` printed nothing because
+    // replay bailed at one of the EARLY returns, before any attempt ran, so the
+    // channel that was supposed to explain it never opened. Name the bail-out
+    // stage here, on the same channel, so the reason is attributable.
+    let bail = |stage: &str| {
+        if let Ok(filter) = std::env::var("CLEAN_WS16_DEBUG") {
+            let name = reader
+                .constants
+                .get(constant_idx as usize)
+                .and_then(|c| reader.strings.get(c.name_idx as usize))
+                .cloned()
+                .unwrap_or_else(|| format!("<idx {constant_idx}>"));
+            if filter.trim().is_empty() || filter.split(',').any(|w| w.trim() == name.as_str()) {
+                eprintln!("WS16 replay_inductive_family_checked[{name}]: NOT installed: {stage}");
+            }
+        }
+    };
+
+    let Some(constant) = reader.constants.get(constant_idx as usize).copied() else {
+        return Err(format!(
+            "inductive replay: constant index {constant_idx} out of bounds \
+             ({} constants)",
+            reader.constants.len()
+        ));
+    };
+    if constant.decl_kind() != Ok(crate::types::DeclKind::Inductive) {
+        // Constructors and recursors are installed BY the family replay, never
+        // individually — asking for one directly is a caller error, not a
+        // failure to replay.
+        bail("constant is not DeclKind::Inductive (constructors/recursors are installed by the family, not individually)");
+        return Ok(false);
+    }
+    let Some(name) = reader.strings.get(constant.name_idx as usize) else {
+        return Err(format!(
+            "inductive replay: name index {} out of bounds",
+            constant.name_idx
+        ));
+    };
+    let name = name.clone();
+    let reconstructed = match crate::inductive_replay::reconstruct_constant(
+        &name, reader, &constant,
+    ) {
+        Ok(r) => r,
+        // Reconstruction failure is NOT an internal fault: a shard can
+        // legitimately lack the sibling rows a family needs. Fail closed.
+        Err(e) => {
+            bail(&format!(
+                    "shard reconstruction failed (the shard likely lacks the family's sibling rows): {}",
+                    truncate_diagnostic(&e)
+                ));
+            return Ok(false);
+        }
+    };
+    match try_add_inductive_family_checked(env, reader, &constant, &reconstructed, policy)? {
+        FamilyReplayOutcome::Replayed => Ok(true),
+        FamilyReplayOutcome::Failed(f) => {
+            bail(&f.describe());
+            Ok(false)
+        }
+    }
+}
+
 /// Like [`verify_corpus_incremental`], but also returns the populated
 /// [`Environment`] after the dependency-ordered replay.
 ///

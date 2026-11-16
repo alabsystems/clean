@@ -219,7 +219,7 @@
       "id": "constant-safety",
       "kind": "rule",
       "title": "A safe declaration uses no unsafe or partial constant",
-      "status": "partial",
+      "status": "specified",
       "cic_l": [
         {
           "item": "CICL.DefinitionSafety",
@@ -235,9 +235,29 @@
           "item": "CICL.ConstantAdmission",
           "kind": "structure",
           "file": "CICL/Signature.lean"
+        },
+        {
+          "item": "CICL.SafetyBoundary.wfSignature_constant_safe",
+          "kind": "theorem",
+          "file": "CICL/SafetyBoundary.lean"
+        },
+        {
+          "item": "CICL.SafetyBoundary.wfSignature_refuses_unsafe_definition",
+          "kind": "theorem",
+          "file": "CICL/SafetyBoundary.lean"
+        },
+        {
+          "item": "CICL.SafetyBoundary.wfSignature_refuses_partial_definition",
+          "kind": "theorem",
+          "file": "CICL/SafetyBoundary.lean"
+        },
+        {
+          "item": "CICL.SafetyBoundary.negation_fixpoint_inconsistent",
+          "kind": "theorem",
+          "file": "CICL/SafetyBoundary.lean"
         }
       ],
-      "missing": "The specification admits only safe constants (ConstantAdmission.safe), so in a well-formed signature the check holds by exclusion. It states no rule for the declarations the kernel does accept under definition_safety::unsafe or as partial definitions. A recorded decision that those are outside the proved theory closes this row.",
+      "note": "Declarations under definition_safety::unsafe or as partial definitions are permanently outside the proved CIC_L theory (docs/DECISIONS.md, 2026-11-15): WfSignature admits exclusively ConstantDecl.Safe constants (wfSignature_constant_safe) and refuses every unsafe or partial payload variant.",
       "anchors": [
         {
           "file": "src/kernel/type_checker.cpp",

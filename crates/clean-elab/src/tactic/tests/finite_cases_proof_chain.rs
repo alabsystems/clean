@@ -9,25 +9,30 @@
 //! - `interval_cases` bound extraction and error paths
 //! - `fin_cases` on `Fin n` (Or.rec fallback path)
 //!
-//! Regression coverage for #2480: the Or.rec fallback path must preserve
-//! dependent targets in sub-goals instead of eagerly substituting the split
-//! value. Bool/PUnit use proper dependent recursors and continue to specialize
-//! targets directly.
+//! The `interval_cases` dependent-target (#2480) and branch-equality (#2533)
+//! regressions live in `interval_cases_descent.rs`, since `interval_cases`
+//! no longer routes through `build_or_elim_chain`: every branch's `n_eq` must
+//! be BOUND by a real binder over a real proof, at an FVar id inside the
+//! goal's tactic-binder window. The load-bearing test there is
+//! `test_interval_cases_branches_consume_n_eq_and_close_proof`, which actually
+//! USES each equality and then demands a fully closed proof term — a "fix"
+//! that merely silenced the goal-scope guard cannot pass it.
 
 use super::super::finite_cases_proof::build_or_elim_chain;
 use super::*;
 use clean_kernel::env::Declaration;
 use clean_kernel::expr::ExprKind;
 
-/// Build `@LT.lt.{0} Nat instLTNat lhs rhs`.
-/// Mirrors `make_nat_le_tc` but for strict inequality.
-fn make_nat_lt_tc(lhs: Expr, rhs: Expr) -> Expr {
-    tc_app::nat_lt_tc(lhs, rhs)
-}
-
 /// Environment with Classical.em + Or + Or.rec + Eq + Nat, suitable for
-/// testing `build_or_elim_chain` and `interval_cases`.
-fn setup_env_for_interval_cases() -> Environment {
+/// testing `build_or_elim_chain` and `interval_cases`' pre-proof error paths.
+///
+/// Deliberately thin: its transitive closure is `init_nat` (which only pulls in
+/// `init_bool`) plus `init_classical`, so it contains NO `LE`, `LT`, `Nat.le`,
+/// and no Nat order lemma whatsoever. `interval_cases`' bound detection is
+/// syntactic (`match_le`/`match_lt` head-name matching), so a `≤` hypothesis
+/// still parses here — which is exactly what
+/// `test_interval_cases_disengages_without_order_lemmas` pins.
+pub(super) fn setup_env_for_interval_cases() -> Environment {
     let mut env = Environment::new();
     env.init_nat().unwrap();
     env.init_classical().unwrap();
@@ -194,184 +199,6 @@ fn test_build_or_elim_chain_three_values_nested() {
         depth, 2,
         "3-value chain should have Or.rec depth 2 (outer + inner), got {depth}"
     );
-}
-
-// =========================================================================
-// #2480 regression coverage: dependent targets on the Or.rec fallback path
-// =========================================================================
-
-/// Regression for #2480: dependent interval goals now keep their original
-/// target and rely on the generated equality hypothesis for case refinement.
-#[test]
-fn test_interval_cases_dependent_target_succeeds() {
-    let env = setup_env_for_interval_cases();
-    let nat_ty = Expr::const_(Name::from_string("Nat"), vec![]);
-    let r_const = Expr::const_(Name::from_string("R"), vec![]);
-
-    // Goal: R(n) where n : Nat, with 2 ≤ n and n ≤ 4 in context
-    let n_fvar = FVarId::new(0);
-    let target = Expr::app(r_const.clone(), Expr::fvar(n_fvar));
-    let mut state = ProofState::with_context(
-        env,
-        target.clone(),
-        vec![
-            LocalDecl {
-                binder_info: Default::default(),
-                fvar: n_fvar,
-                name: clean_parser::SurfaceName::generated_path("n"),
-                ty: nat_ty.clone(),
-                value: None,
-            },
-            LocalDecl {
-                binder_info: Default::default(),
-                fvar: FVarId::new(1),
-                name: clean_parser::SurfaceName::generated_path("h_lower"),
-                ty: make_nat_le_tc(make_nat_literal(2), Expr::fvar(n_fvar)),
-                value: None,
-            },
-            LocalDecl {
-                binder_info: Default::default(),
-                fvar: FVarId::new(2),
-                name: clean_parser::SurfaceName::generated_path("h_upper"),
-                ty: make_nat_le_tc(Expr::fvar(n_fvar), make_nat_literal(4)),
-                value: None,
-            },
-        ],
-    );
-
-    let result = interval_cases(&mut state, &clean_parser::SurfaceName::generated_path("n"));
-    assert!(
-        result.is_ok(),
-        "interval_cases with dependent target should succeed, got: {result:?}"
-    );
-    assert_eq!(
-        state.goals.len(),
-        3,
-        "interval_cases should create 3 sub-goals"
-    );
-    let goal_count = state.goals.len();
-    for (idx, goal) in state.goals.iter().enumerate() {
-        assert_eq!(
-            goal.target, target,
-            "dependent interval sub-goals should preserve the original target"
-        );
-        assert_eq!(
-            goal.local_ctx
-                .iter()
-                .any(|decl| decl.name == clean_parser::SurfaceName::generated_path("n_eq")),
-            idx + 1 < goal_count,
-            "only branches backed by an equality lambda may carry n_eq"
-        );
-    }
-}
-
-/// Same regression for LT bounds: 1 < n < 5 with dependent target R(n).
-#[test]
-fn test_interval_cases_lt_dependent_target_succeeds() {
-    let env = setup_env_for_interval_cases();
-    let nat_ty = Expr::const_(Name::from_string("Nat"), vec![]);
-    let r_const = Expr::const_(Name::from_string("R"), vec![]);
-
-    let n_fvar = FVarId::new(0);
-    let target = Expr::app(r_const, Expr::fvar(n_fvar));
-    let mut state = ProofState::with_context(
-        env,
-        target.clone(),
-        vec![
-            LocalDecl {
-                binder_info: Default::default(),
-                fvar: n_fvar,
-                name: clean_parser::SurfaceName::generated_path("n"),
-                ty: nat_ty.clone(),
-                value: None,
-            },
-            LocalDecl {
-                binder_info: Default::default(),
-                fvar: FVarId::new(1),
-                name: clean_parser::SurfaceName::generated_path("h_lower"),
-                ty: make_nat_lt_tc(make_nat_literal(1), Expr::fvar(n_fvar)),
-                value: None,
-            },
-            LocalDecl {
-                binder_info: Default::default(),
-                fvar: FVarId::new(2),
-                name: clean_parser::SurfaceName::generated_path("h_upper"),
-                ty: make_nat_lt_tc(Expr::fvar(n_fvar), make_nat_literal(5)),
-                value: None,
-            },
-        ],
-    );
-
-    let result = interval_cases(&mut state, &clean_parser::SurfaceName::generated_path("n"));
-    assert!(
-        result.is_ok(),
-        "interval_cases LT with dependent target should succeed, got: {result:?}"
-    );
-    assert_eq!(
-        state.goals.len(),
-        3,
-        "strict interval should create 3 sub-goals"
-    );
-    let goal_count = state.goals.len();
-    for (idx, goal) in state.goals.iter().enumerate() {
-        assert_eq!(goal.target, target);
-        assert_eq!(
-            goal.local_ctx
-                .iter()
-                .any(|decl| decl.name == clean_parser::SurfaceName::generated_path("n_eq")),
-            idx + 1 < goal_count
-        );
-    }
-}
-
-/// Single-value intervals also stay type-correct for dependent targets.
-#[test]
-fn test_interval_cases_single_value_dependent_target_succeeds() {
-    let env = setup_env_for_interval_cases();
-    let nat_ty = Expr::const_(Name::from_string("Nat"), vec![]);
-    let r_const = Expr::const_(Name::from_string("R"), vec![]);
-
-    let n_fvar = FVarId::new(0);
-    let target = Expr::app(r_const, Expr::fvar(n_fvar));
-    let mut state = ProofState::with_context(
-        env,
-        target.clone(),
-        vec![
-            LocalDecl {
-                binder_info: Default::default(),
-                fvar: n_fvar,
-                name: clean_parser::SurfaceName::generated_path("n"),
-                ty: nat_ty.clone(),
-                value: None,
-            },
-            LocalDecl {
-                binder_info: Default::default(),
-                fvar: FVarId::new(1),
-                name: clean_parser::SurfaceName::generated_path("h_lower"),
-                ty: make_nat_le_tc(make_nat_literal(3), Expr::fvar(n_fvar)),
-                value: None,
-            },
-            LocalDecl {
-                binder_info: Default::default(),
-                fvar: FVarId::new(2),
-                name: clean_parser::SurfaceName::generated_path("h_upper"),
-                ty: make_nat_le_tc(Expr::fvar(n_fvar), make_nat_literal(3)),
-                value: None,
-            },
-        ],
-    );
-
-    let result = interval_cases(&mut state, &clean_parser::SurfaceName::generated_path("n"));
-    assert!(
-        result.is_ok(),
-        "single-value interval_cases with dependent target should succeed, got: {result:?}"
-    );
-    assert_eq!(state.goals.len(), 1);
-    assert_eq!(state.goals[0].target, target);
-    assert!(!state.goals[0]
-        .local_ctx
-        .iter()
-        .any(|decl| decl.name == clean_parser::SurfaceName::generated_path("n_eq")));
 }
 
 // =========================================================================

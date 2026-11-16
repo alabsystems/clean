@@ -4442,6 +4442,11 @@ class CheckerQualificationInputs(unittest.TestCase):
     CORE = "clean-olean::test::kcheck_core"
     SPEC = "clean-olean::test::kcheck_spec"
     BINDING_NOT = "clean-olean::test::binding_not_review"
+    CHK_LIA = "clean-olean::test::vf4_chk_lia"
+    CHK_LIA_F1 = "clean-olean::test::vf4_chk_lia_f1"
+    CHK_LIA_QUORUM = "clean-olean::test::vf4_chk_lia_quorum"
+    VF5_F1 = "clean-olean::test::vf5_f1_reference"
+    NDJSON_WRITER = "clean-olean::test::ndjson_export_writer"
 
     def test_compiled_package_closures_are_declared(self):
         core = set(vr.TARGET_EXTRA_PATHS.get(self.CORE, ()))
@@ -4452,6 +4457,11 @@ class CheckerQualificationInputs(unittest.TestCase):
                          "theories/kcheck_spec"} <= spec)
         self.assertTrue({"crates/clean-ck0", "lean-toolchain", "theories/binding_not_review",
                          "reports/2026-11-14-extension-binding-not-review"} <= binding_not)
+        for target in (self.CHK_LIA, self.CHK_LIA_F1, self.CHK_LIA_QUORUM, self.VF5_F1):
+            self.assertTrue({"lean-toolchain", "theories/chk_lia"}
+                            <= set(vr.TARGET_EXTRA_PATHS.get(target, ())), target)
+        self.assertIn("reports/2026-10-26-vf4-f1-corpus",
+                      set(vr.TARGET_EXTRA_PATHS.get(self.CHK_LIA_F1, ())))
 
     def test_binding_not_review_repo_join_paths_are_scanned(self):
         found = vr._crystal_extra_paths_owed()
@@ -4459,18 +4469,43 @@ class CheckerQualificationInputs(unittest.TestCase):
         self.assertIn("theories/binding_not_review", owed)
         self.assertIn("reports/self-proof-ck0-shared-2026-11-14/stock-build-inputs.json", owed)
         self.assertTrue(owed <= set(vr.TARGET_EXTRA_PATHS.get(self.BINDING_NOT, ())))
+        writer_owed = found.get(self.NDJSON_WRITER, set())
+        self.assertIn("theories/cic_l/ORDER", writer_owed)
+        self.assertIn("scripts/lean_export_replay.sh", writer_owed)
+        self.assertTrue(writer_owed <= set(vr.TARGET_EXTRA_PATHS.get(self.NDJSON_WRITER, ())))
 
     def test_fixture_order_theory_packages_are_covered(self):
         pin = (vr.REPO_ROOT / "lean-toolchain").read_text().strip().split(":")[-1]
         fixtures = vr.REPO_ROOT / "crates/clean-olean/tests/fixtures/lean" / pin
-        for target, family in [(self.CORE, "kcheck_core"), (self.SPEC, "kcheck_spec")]:
-            lines = (fixtures / family / "ORDER").read_text().splitlines()
+        family_targets = {
+            "binding_not_review": (self.BINDING_NOT,),
+            "chk_lia": (self.CHK_LIA,),
+            "chk_lia_f1": (self.CHK_LIA_F1, self.CHK_LIA_QUORUM),
+            "cic_l_base_bridge": ("clean-olean::test::cic_l_base_bridge",),
+            "cic_l_level": ("clean-olean::lib", "clean-olean::test::cic_l_level", self.NDJSON_WRITER),
+            "cic_l_model": ("clean-olean::test::cic_l_model",),
+            "cic_l_nat_model": ("clean-olean::test::cic_l_nat_model",),
+            "kcheck_core": (self.CORE,),
+            "kcheck_labelled": ("clean-olean::test::kcheck_labelled",),
+            "kcheck_sort_bounds": ("clean-olean::test::kcheck_sort_bounds",),
+            "kcheck_soundness": ("clean-olean::test::kcheck_labelled",),
+            "kcheck_spec": (self.SPEC,),
+            "vf5_f1": (self.VF5_F1,),
+        }
+        for order in sorted(fixtures.glob("*/ORDER")):
+            family = order.parent.name
+            lines = order.read_text().splitlines()
             theories = [parts[1] for line in lines
                         if (parts := line.partition("#")[0].split()) and parts[0] == "theory"]
-            self.assertTrue(theories, family)
-            declared = set(vr.TARGET_EXTRA_PATHS.get(target, ()))
-            for theory in theories:
-                self.assertIn(f"theories/{theory}", declared, (family, theory))
+            if not theories:
+                continue
+            self.assertIn(family, family_targets, family)
+            for target in family_targets[family]:
+                declared = set(vr.TARGET_EXTRA_PATHS.get(target, ()))
+                for theory in theories:
+                    whole = f"theories/{theory}" in declared
+                    cic_l_split = (theory == "cic_l" and {"theories/cic_l/CICL", "theories/cic_l/ORDER"} <= declared)
+                    self.assertTrue(whole or cic_l_split, (family, target, theory, declared))
 
     def test_direct_statement_and_closure_pins_are_scanned(self):
         found = vr._crystal_extra_paths_owed()

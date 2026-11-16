@@ -21,6 +21,10 @@ math-overlays = ["clean-kernel/math-overlays"]
 # (DRAT/LRAT/Alethe/VeriPB parsers, Ay integration, certificate emission) is
 # feature-gated so it does not link by default.
 sat-verify = ["clean-verify/sat-verify"]
+# Exposes `clean compile --emit trustir`, lowering through the experimental,
+# unverified, non-TCB trust-ir backend. Off by default; pulls in the
+# exact `trust-ir` / `trust-ir-build` Git dependencies only when enabled.
+trust-ir-backend = ["clean-compiler/trust-ir-backend", "clean-native/trust-ir-backend"]
 # Track B1: forward the mimalloc global-allocator / per-module purge feature down
 # to clean-mathverse (where the PARAGON worker loop lives). The `clean` binary
 # enables this; the allocator itself is installed in that binary's entrypoint.
@@ -49,11 +53,20 @@ clean-kernel = { workspace = true, features = ["geometry-tools", "cli", "test-ut
 clean-discovery.workspace = true
 clean-olean = { workspace = true, features = ["cli", "math-overlays"] }
 clean-parser.workspace = true
-clean-elab = { workspace = true, features = ["cli"] }
+# `mathverse-library` must be enabled on the REAL dependency, not only under
+# [dev-dependencies]: it gates the `mathverse_use` / `mathverse_suggest` tactics
+# (crates/clean-elab/src/tactic/mathverse_use.rs), which are the ONLY path from a
+# `.mathverse` shard into a proof `Environment`. With it enabled only for dev,
+# the shipped `clean` binary compiled the stub arm and every `mathverse_use`
+# returned "mathverse-library feature not enabled" — i.e. the entire Mathverse
+# library was unreachable from a Clean proof. No cycle: clean-mathverse is
+# already a normal dependency below and does not depend on clean-elab.
+clean-elab = { workspace = true, features = ["cli", "mathverse-library"] }
 clean-server.workspace = true
 clean-c-sem.workspace = true
 clean-rust-sem = { workspace = true, features = ["cli"] }
 clean-auto = { workspace = true, features = ["cli"] }
+clean-tla = { workspace = true, features = ["cli"] }
 clean-compiler = { workspace = true, features = ["cli"] }
 clean-runtime.workspace = true
 clean-native.workspace = true

@@ -93,6 +93,13 @@ pub struct VerifyConfig {
     /// `Opaque`/`Unfold` guard is unchanged); ON is the gated, to-be-flip-gate-
     /// validated additive. See §12 of the analysis doc for the flag lifecycle.
     pub class_operand_align: bool,
+    /// **Fail-closed constant map** (`ISA_STRICT_CONST_MAP`; **default OFF**).
+    /// When ON, an unmapped overloaded HOL constant is a translation REJECT
+    /// (`TranslateError::UnmappedConst`) instead of being abstracted into a
+    /// quantified parameter (`Ctx::const_param_checked`,
+    /// `isabelle_pure_translate/embed.rs`). Default OFF keeps every run
+    /// byte-identical to the historical lane until its cost is measured.
+    pub strict_const_map: bool,
 }
 
 impl Default for VerifyConfig {
@@ -106,6 +113,7 @@ impl Default for VerifyConfig {
             reject_specifics: false,
             premise_step_budget: Some(PREMISE_STEP_BUDGET_DEFAULT),
             class_operand_align: false,
+            strict_const_map: false,
         }
     }
 }
@@ -124,6 +132,7 @@ impl VerifyConfig {
             reject_specifics: env_reject_specifics(),
             premise_step_budget: env_premise_step_budget(),
             class_operand_align: env_class_operand_align(),
+            strict_const_map: env_strict_const_map(),
         }
     }
 
@@ -230,6 +239,17 @@ pub(crate) fn active_class_operand_align() -> bool {
     }
 }
 
+/// The active fail-closed constant-map flag — this thread's installed config,
+/// else the env `OnceLock` fallback (default OFF). Consulted by
+/// `Ctx::const_param_checked` (`isabelle_pure_translate/embed.rs`).
+#[must_use]
+pub(crate) fn active_strict_const_map() -> bool {
+    match ACTIVE.with(Cell::get) {
+        Some(c) => c.strict_const_map,
+        None => env_strict_const_map_cached(),
+    }
+}
+
 // --- The env-parsing rules (shared by `from_env` and the fallbacks). Each
 // reproduces the EXACT historical parse so behaviour is byte-identical. ---
 
@@ -291,6 +311,15 @@ fn env_class_operand_align() -> bool {
     }
 }
 
+/// `ISA_STRICT_CONST_MAP`: `"1"`, `"true"` or `"yes"` → true; anything else or
+/// unset → false (the rule the translator's own first-wins reader used).
+fn env_strict_const_map() -> bool {
+    matches!(
+        std::env::var("ISA_STRICT_CONST_MAP").ok().as_deref(),
+        Some("1" | "true" | "yes")
+    )
+}
+
 // The per-key `OnceLock` fallbacks: identical first-read-caches to the pre-
 // refactor statics, so an un-installed caller behaves EXACTLY as before.
 
@@ -318,6 +347,10 @@ fn env_class_operand_align_cached() -> bool {
     static C: OnceLock<bool> = OnceLock::new();
     *C.get_or_init(env_class_operand_align)
 }
+fn env_strict_const_map_cached() -> bool {
+    static C: OnceLock<bool> = OnceLock::new();
+    *C.get_or_init(env_strict_const_map)
+}
 
 #[cfg(test)]
 mod tests {
@@ -333,6 +366,7 @@ mod tests {
             reject_specifics: true,
             premise_step_budget: Some(456),
             class_operand_align: true,
+            strict_const_map: true,
         };
         {
             let _g = cfg.install();
@@ -342,6 +376,7 @@ mod tests {
             assert!(active_reject_specifics_enabled());
             assert_eq!(active_premise_step_budget(), Some(456));
             assert!(active_class_operand_align());
+            assert!(active_strict_const_map());
         }
         // Guard drop restores the previous (un-installed) view.
         assert_eq!(active_translate_node_budget(), base);

@@ -169,6 +169,28 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
             item_field: None,
         },
     },
+    MethodInfo {
+        name: "proveTLA",
+        supports_progress: false,
+        batch_safe: true,
+        destructive: false,
+        aliases: &[],
+        outcome_contract: OutcomeContract {
+            top_level_field: Some("proved"),
+            item_field: None,
+        },
+    },
+    MethodInfo {
+        name: "batchProveTLA",
+        supports_progress: true,
+        batch_safe: true,
+        destructive: false,
+        aliases: &[],
+        outcome_contract: OutcomeContract {
+            top_level_field: None,
+            item_field: Some("proved"),
+        },
+    },
     // Premise Selection
     MethodInfo {
         name: "getPremises",
@@ -868,6 +890,7 @@ mod tests {
         "batchApplyTactic",
         "batchCheck",
         "batchGetPremises",
+        "batchProveTLA",
         "batchVerifyCert",
         "batchVerifyCertArchive",
         "check",
@@ -896,6 +919,7 @@ mod tests {
         "proofState.searchTactics",
         "proofState.searchTheorems",
         "prove",
+        "proveTLA",
         "saveEnvironment",
         "searchProof",
         "serverInfo",

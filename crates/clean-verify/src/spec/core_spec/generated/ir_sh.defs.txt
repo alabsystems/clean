@@ -1,4 +1,4 @@
 def ir_sh_topt : IRTy := IRTy.enum_ 33
 def ir_sh_b0 : IRBlock := IRBlock.mk ir_d0 ir_nl0 (ir_bd6 (ir_nd1 (IRInst.const_ (IRTy.uint_ 64) (IRConst.int_ ir_d0)) ir_d1) (ir_nd1 (IRInst.undef ir_sh_topt) ir_d2) (ir_nd1 (IRInst.undef (IRTy.tuple_ ir_d2)) ir_d3) (ir_nd1 (IRInst.insertfield (IRTy.tuple_ ir_d2) ir_d3 ir_d0 ir_d1) ir_d4) (ir_nd1 (IRInst.insertfield (IRTy.tuple_ ir_d2) ir_d4 ir_d1 ir_d2) ir_d5) (ir_nd (IRInst.ret (ir_nl1 ir_d5))))
 def ir_sh_func : IRFunc := IRFunc.mk ir_d0 (ir_nl1 ir_d0) ir_d0 (ir_blk ir_sh_b0 ir_blk0)
-def ir_sh_module : IRModule := IRModule.mk (IRList.cons IRFunc ir_sh_func (IRList.nil IRFunc)) (IRList.nil IRGlobal)
+def ir_sh_module : IRModule := IRModule.mk (@IRList.cons IRFunc ir_sh_func (@IRList.nil IRFunc)) (@IRList.nil IRGlobal)

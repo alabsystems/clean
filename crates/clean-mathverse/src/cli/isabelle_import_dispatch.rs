@@ -229,12 +229,18 @@ pub(super) fn cmd_isabelle_import(args: IsabelleImportArgs) -> Result<(), Mathve
         let fingerprint = crate::hol::isabelle_pure_verify::snapshot::current_fingerprint();
         let corpus_str = args.corpus.display().to_string();
         let mut sidecar = ProvenanceSidecar::new();
-        // On a **ledger run** the shard also carries tier-2 / ledger constants,
-        // so `written_constants` (populated only under `ISA_TRUSTED_LEDGER`)
-        // gives the FULL shard-write-order list with each constant's exact shard
-        // index, confidence, and note. Off the ledger path it is empty and we
-        // stamp the historical `names`-only loop (byte-identical), where KV
-        // constant `i` is at shard index `i`.
+        // `written_constants` is the writer's own record of what it wrote and at
+        // which shard index — theorems, their human-name aliases, the
+        // synthesized definitional constants, and (on a ledger run) the tier-2 /
+        // ledger constants. It is now populated on every run, so this is the
+        // normal path.
+        //
+        // The `names`-only fallback below assumes "KV constant `i` is at shard
+        // index `i`". That positional identity held only while the shard
+        // contained exactly one header per verified theorem name; it is FALSE
+        // for any shard carrying def-consts or aliases. It is kept solely for
+        // a writer that produced no records at all (an empty run), where the
+        // equality gate is what actually fires.
         if result.written_constants.is_empty() {
             if n != result.names.len() {
                 return Err(err(format!(

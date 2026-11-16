@@ -523,6 +523,22 @@ pub(crate) fn pure_meta_definition_decls() -> Vec<Declaration> {
     }
 }
 
+/// The inductive-family ROOTS this lane installs into the replay environment
+/// beyond clean's prelude.
+///
+/// Single source of truth, shared by two sides that must never drift:
+///
+/// * [`register_datatype_inductives`] — installs them through the kernel's
+///   checked `Environment::add_inductive`.
+/// * `isabelle_pure_verify::emit_defs::emit_inductive_families` — writes them
+///   (type former + constructors + `rec`) into the `.mathverse` shard so the
+///   consumer's `replay_inductive_family_checked` has a family to rebuild.
+///
+/// Adding a datatype below without adding it here would reproduce exactly the
+/// writer-side omission that made every `Num`-dependent KernelVerified theorem
+/// uncitable: registered into the replay env, never declared in the shard.
+pub(crate) const DATATYPE_INDUCTIVE_ROOTS: &[&str] = &["Num"];
+
 /// Register the faithful clean inductive types for the HOL datatypes that clean's
 /// prelude does not already provide, into the verifier's accumulating environment.
 ///
@@ -537,7 +553,10 @@ pub(crate) fn pure_meta_definition_decls() -> Vec<Declaration> {
 pub(crate) fn register_datatype_inductives(env: &mut Environment) {
     use clean_kernel::inductive::{Constructor, InductiveDecl, InductiveType};
 
-    if env.get_inductive(&Name::from_string("Num")).is_some() {
+    if DATATYPE_INDUCTIVE_ROOTS
+        .iter()
+        .all(|root| env.get_inductive(&Name::from_string(root)).is_some())
+    {
         return;
     }
     let num = Expr::const_str("Num");

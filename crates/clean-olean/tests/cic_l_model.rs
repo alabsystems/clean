@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! The set model (plan units M1 to M5 and E6): groundwork, one semantic lemma per
-//! core rule, `sound_N` with its witnesses, the interpreted primitive signature,
-//! quotation, and congruence negative controls, each re-entered at a pinned contract.
+//! core rule, interpreted primitives, quotation and negative controls, each
+//! re-entered at a pinned contract.
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 use std::io::Write;
@@ -11,10 +11,13 @@ use std::path::Path;
 use std::process::{Command, Stdio};
 
 use clean_kernel::env::{Declaration, Environment};
-use clean_kernel::{Expr, KernelEnvError, KernelTypeError, Name, ReferenceRefusal};
+use clean_kernel::{ConstantKind, Expr, KernelEnvError, KernelTypeError, Name, ReferenceRefusal};
 use clean_olean::recheck_closed::ClosedRecheckOptions;
 use clean_olean::test_support::compiled_fixture_dir;
-use clean_olean::{load_module_with_deps, reference_base_closed, require_pinned_lean_lib_path};
+use clean_olean::{
+    load_module_with_deps, read_artifact, reference_base_closed, require_pinned_lean_lib_path,
+    ArtifactDepth,
+};
 
 /// One semantic lemma per constructor of `CICL.CoreJudgmentIn` (plan unit M2):
 /// `CICL.Model.CoreRules.<rule>` re-entered at `CICL.Model.Contracts.<contract>`.
@@ -164,9 +167,15 @@ const CORE_MODEL_CONTRACTS: [(&str, &str); 70] = [
         "CICL.Model.BaseWitness.consistency_needs_axiom_refusal",
         "baseConsistencyNeedsAxiomRefusal",
     ),
-    ("KCheckSpec.Base.eqRecDen_apply", "baseEqComputation"),
-    ("KCheckSpec.Base.punitRecDen_apply", "basePUnitComputation"),
-    ("KCheckSpec.Base.natRecDen_apply", "baseNatComputation"),
+    ("CICL.Model.BaseMath.Eq.recursor_apply", "baseEqComputation"),
+    (
+        "CICL.Model.BaseMath.PUnit.recursor_apply",
+        "basePUnitComputation",
+    ),
+    (
+        "CICL.Model.BaseMath.Nat.natRecDen_apply",
+        "baseNatComputation",
+    ),
     (
         "CICL.Model.CongruenceControls.beta_without_argument_typing_refuted",
         "betaWithoutArgumentTypingRefuted",
@@ -280,7 +289,7 @@ fn model_axiom_census_with_exceptions(
     let info = env
         .get_const(subject)
         .ok_or_else(|| format!("missing model declaration: {subject}"))?;
-    let axiom_root = info.kind == clean_kernel::env::ConstantKind::Axiom;
+    let axiom_root = info.kind == ConstantKind::Axiom;
     // Dependency closure omits the subject itself: an unused axiom must not
     // disappear, even when no declaration refers to it.
     if axiom_root && !env.is_canonical_foundational_axiom(subject) {
@@ -398,17 +407,15 @@ fn model_declaration_inventory(
     let mut inventory = std::collections::BTreeMap::new();
     for subject in targets {
         let constant = loaded.get_const(subject).expect("model census declaration");
-        let level_params: Vec<String> = constant
-            .level_params
-            .iter()
-            .map(Name::to_unambiguous_string)
-            .collect();
-        let bytes = bincode::serde::encode_to_vec(
-            (&level_params, &constant.type_),
-            bincode::config::standard(),
-        )
-        .expect("model type and level_params bytes");
+        let bytes = bincode::serde::encode_to_vec(&constant.type_, bincode::config::standard())
+            .expect("model type bytes");
         let digest: String = Sha256::digest(&bytes)
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect();
+        let name_bytes = bincode::serde::encode_to_vec(subject, bincode::config::standard())
+            .expect("model name bytes");
+        let name_digest: String = Sha256::digest(&name_bytes)
             .iter()
             .map(|byte| format!("{byte:02x}"))
             .collect();
@@ -417,58 +424,116 @@ fn model_declaration_inventory(
             .and_then(|origin| origin.module_name())
             .expect("model module origin");
         let mut row = serde_json::json!({
-            "module": module, "kind": format!("{:?}", constant.kind), "type_sha256": digest
+            "module": module,
+            "kind": format!("{:?}", constant.kind), "type_sha256": digest,
+            "name_sha256": name_digest,
+            "level_params": constant.level_params.iter().map(Name::to_unambiguous_string).collect::<Vec<_>>()
         });
-        // Pin every non-theorem declaration across the entire model package by full
-        // kernel meaning (body, reducibility, and any inductive/constructor/recursor
-        // table entry), and continue pinning theorem proof bodies in the foundational
-        // base, quotation, and control modules.
-        if constant.kind != clean_kernel::ConstantKind::Theorem {
-            let meaning_payload = (
-                constant.is_reducible,
-                &constant.value,
-                loaded.get_inductive(subject),
-                loaded.get_constructor(subject),
-                loaded.get_recursor(subject),
-            );
-            let bytes = bincode::serde::encode_to_vec(meaning_payload, bincode::config::standard())
-                .expect("model non-theorem meaning bytes");
-            row["value_sha256"] = serde_json::json!(Sha256::digest(&bytes)
-                .iter()
-                .map(|byte| format!("{byte:02x}"))
-                .collect::<String>());
-        } else if matches!(
-            module,
-            "CICLModel.Quotation"
-                | "CICLModel.QuotationSemantics"
-                | "CICLModel.BaseRaw"
-                | "CICLModel.BaseModel"
-                | "CICLModel.BaseComputation"
-                | "CICLModel.BaseTower"
-                | "CICLModel.BaseSignature"
-                | "CICLModel.BaseInterpretation"
-                | "CICLModel.BaseWitness"
-                | "CICLModel.CongruenceControls"
-        ) {
-            let bytes = bincode::serde::encode_to_vec(&constant.value, bincode::config::standard())
-                .expect("model theorem body bytes");
-            row["value_sha256"] = serde_json::json!(Sha256::digest(&bytes)
-                .iter()
-                .map(|byte| format!("{byte:02x}"))
-                .collect::<String>());
-        }
-        let previous = inventory.insert(subject.to_unambiguous_string(), row);
+        // Bind every optional value, including theorem proofs, to this exact
+        // declaration inventory. Statement and axiom checks alone permit a
+        // different proof of the same statement; source lineage must detect it.
+        let bytes = bincode::serde::encode_to_vec(&constant.value, bincode::config::standard())
+            .expect("model optional value bytes");
+        let digest: String = Sha256::digest(bytes)
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect();
+        row["value_sha256"] = serde_json::json!(digest);
+        // Pin the full kernel meaning while retaining every theorem body hash.
+        let meaning_payload = (
+            constant,
+            loaded.get_inductive(subject),
+            loaded.get_constructor(subject),
+            loaded.get_recursor(subject),
+        );
+        let bytes = bincode::serde::encode_to_vec(meaning_payload, bincode::config::standard())
+            .expect("model full meaning bytes");
+        row["meaning_sha256"] = serde_json::json!(Sha256::digest(&bytes)
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>());
+
         assert!(
-            previous.is_none(),
-            "duplicate structural model inventory identity"
+            inventory
+                .insert(subject.to_unambiguous_string(), row)
+                .is_none(),
+            "distinct model declarations must have distinct inventory keys"
         );
     }
     assert_eq!(
         inventory.len(),
         targets.len(),
-        "every structural target must have exactly one inventory row"
+        "every actual model name must be inventoried"
     );
     inventory
+}
+
+#[test]
+fn model_artifact_headers_have_unique_owners() {
+    let compiled = compiled_fixture_dir("cic_l_model");
+    let mut owners = std::collections::BTreeMap::new();
+    let mut counts = std::collections::BTreeMap::new();
+    for module in include_str!("../../../theories/cic_l_model/ORDER")
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+        .map(|line| line.replace('/', "."))
+    {
+        let artifact = read_artifact(
+            &module,
+            &compiled.join(format!("{}.olean", module.replace('.', "/"))),
+            ArtifactDepth::Names,
+        )
+        .expect("model artifact header");
+        let mut local = BTreeSet::new();
+        for subject in artifact.names {
+            assert!(
+                local.insert(subject.clone()),
+                "repeated local artifact name: {module}: {}",
+                subject.to_unambiguous_string()
+            );
+            if let Some(previous) = owners.insert(subject.clone(), module.clone()) {
+                panic!(
+                    "duplicate model artifact owner: {} first={previous} second={module}",
+                    subject.to_unambiguous_string()
+                );
+            }
+        }
+        assert!(counts.insert(module, local.len()).is_none());
+    }
+    eprintln!(
+        "model-raw-artifact-counts {}",
+        serde_json::to_string(&counts).expect("artifact counts JSON")
+    );
+    let unsafe_rec_candidates: BTreeSet<_> = owners
+        .keys()
+        .filter(|name| name.to_string().ends_with("._unsafe_rec"))
+        .map(Name::to_unambiguous_string)
+        .collect();
+    eprintln!(
+        "model-raw-unsafe-rec-candidates {}",
+        serde_json::to_string(&unsafe_rec_candidates).expect("raw candidate names JSON")
+    );
+    let canonical_equation = Name::from_string("CICL.BaseFamilies.Nat.term.eq_1");
+    assert!(
+        !owners.contains_key(&canonical_equation),
+        "the Nat equation must be owned by its defining CICL module"
+    );
+    let defining_artifact = read_artifact(
+        "CICL.BaseFamilies",
+        &compiled.join("CICL/BaseFamilies.olean"),
+        ArtifactDepth::Names,
+    )
+    .expect("canonical base-family artifact");
+    assert_eq!(
+        defining_artifact
+            .names
+            .iter()
+            .filter(|name| **name == canonical_equation)
+            .count(),
+        1,
+        "the canonical equation must remain present exactly once"
+    );
 }
 
 #[test]
@@ -539,6 +604,59 @@ fn model_contracts_recheck_with_named_axiom_exceptions() {
         }
         eprintln!("package-import {module} accepted={accepted}: {output}");
     }
+    // Pin the primitive syntax to the actual sealed Lean declarations, including
+    // binder annotations/names, block records, bounds and recursor rules.
+    let mut pin_probe = Command::new(bin.join("lake"))
+        .args(["env", "lean", "--stdin"])
+        .current_dir(&root)
+        .env("PATH", &binary_path)
+        .env_remove("LEAN_PATH")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("canonical base-family pin probe");
+    pin_probe
+        .stdin
+        .take()
+        .expect("pin probe stdin")
+        .write_all(include_str!("support/canonical_base_pins.lean").as_bytes())
+        .expect("write canonical pin source");
+    let pin_probe = pin_probe.wait_with_output().expect("canonical pin result");
+    let pin_output = format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&pin_probe.stdout),
+        String::from_utf8_lossy(&pin_probe.stderr)
+    );
+    assert!(
+        pin_probe.status.success(),
+        "canonical base-family pin mismatch: {pin_output}"
+    );
+    for marker in [
+        "CANONICAL_EQ_PIN Eq exact-type-and-payload=ok",
+        "CANONICAL_EQ_PIN Eq.refl exact-type-and-payload=ok",
+        "CANONICAL_EQ_PIN Eq.rec exact-type-and-payload=ok",
+        "CANONICAL_EQ_FAMILY record-and-block=ok",
+        "CANONICAL_EQ_COMPARATOR alpha-equal-binder-mutations-refused=ok",
+        "CANONICAL_PUNIT_PIN PUnit exact-type-and-payload=ok",
+        "CANONICAL_PUNIT_PIN PUnit.unit exact-type-and-payload=ok",
+        "CANONICAL_PUNIT_PIN PUnit.rec exact-type-and-payload=ok",
+        "CANONICAL_PUNIT_FAMILY record-and-block=ok",
+        "CANONICAL_NAT_PIN Nat exact-type-and-payload=ok",
+        "CANONICAL_NAT_PIN Nat.zero exact-type-and-payload=ok",
+        "CANONICAL_NAT_PIN Nat.succ exact-type-and-payload=ok",
+        "CANONICAL_NAT_PIN Nat.rec exact-type-and-payload=ok",
+        "CANONICAL_NAT_FAMILY record-and-block=ok",
+        "CANONICAL_NAT_COMPARATOR alpha-equal-binder-mutations-refused=ok",
+        "CANONICAL_BASE_FAMILY_CENSUS count=3",
+    ] {
+        assert_eq!(
+            pin_output.matches(marker).count(),
+            1,
+            "missing or duplicate canonical pin result: {pin_output}"
+        );
+    }
+    eprintln!("canonical-base-pins {pin_output}");
     let independent = Command::new(bin.join("leanchecker"))
         .args(["--fresh", "CICLModel.Contracts"])
         .current_dir(&compiled)
@@ -556,8 +674,9 @@ fn model_contracts_recheck_with_named_axiom_exceptions() {
         String::from_utf8_lossy(&independent.stderr)
     );
     let mut loaded = Environment::for_lean_replay();
-    let summaries = load_module_with_deps(&mut loaded, "CICLModel.Contracts", &[compiled, lib])
-        .expect("load compiled model");
+    let summaries =
+        load_module_with_deps(&mut loaded, "CICLModel.Contracts", &[compiled.clone(), lib])
+            .expect("load compiled model");
     let order: Vec<_> = include_str!("../../../theories/cic_l_model/ORDER")
         .lines()
         .map(str::trim)
@@ -582,6 +701,63 @@ fn model_contracts_recheck_with_named_axiom_exceptions() {
         modules, loaded_modules,
         "every model ORDER module must be loaded"
     );
+    let skipped: BTreeSet<&str> = summaries
+        .iter()
+        .flat_map(|summary| summary.skipped_not_replayable.iter().map(String::as_str))
+        .collect();
+    let mut observed_copies = BTreeSet::new();
+    let mut artifact_targets = BTreeSet::new();
+    for module in &modules {
+        let artifact = read_artifact(
+            module,
+            &compiled.join(format!("{}.olean", module.replace('.', "/"))),
+            ArtifactDepth::Names,
+        )
+        .expect("model artifact name census");
+        for subject in artifact.names {
+            if loaded.get_const(&subject).is_none() {
+                let display = subject.to_string();
+                assert!(
+                    display.ends_with("._unsafe_rec") && skipped.contains(display.as_str()),
+                    "missing model declaration {subject}"
+                );
+                assert!(observed_copies.insert(subject.to_unambiguous_string()));
+            } else {
+                assert!(
+                    artifact_targets.insert(subject),
+                    "duplicate model artifact owner"
+                );
+            }
+        }
+    }
+    let expected_copies: Vec<String> = serde_json::from_str(include_str!(
+        "../../../theories/cic_l_model/compiler_copies.json"
+    ))
+    .expect("reviewed model compiler-copy roster");
+    let expected_copy_set: BTreeSet<_> = expected_copies.iter().cloned().collect();
+    assert_eq!(
+        expected_copies.len(),
+        expected_copy_set.len(),
+        "duplicate expected compiler copy"
+    );
+    assert_eq!(
+        observed_copies, expected_copy_set,
+        "review unexpected model compiler-copy population"
+    );
+    for copy in &expected_copies {
+        let definition = copy
+            .strip_suffix("._unsafe_rec")
+            .expect("compiler-copy suffix");
+        let source = Name::from_string(definition);
+        assert!(
+            loaded.get_const(&source).is_some(),
+            "compiler copy lacks source {copy}"
+        );
+        assert!(
+            !loaded.is_unsafe(&source) && !loaded.is_partial(&source),
+            "compiler copy must have a safe total source definition: {copy}"
+        );
+    }
     // Module provenance selects public and private declarations, irrespective of namespace.
     let targets: BTreeSet<Name> = loaded
         .constants()
@@ -593,6 +769,10 @@ fn model_contracts_recheck_with_named_axiom_exceptions() {
         })
         .map(|constant| constant.name.clone())
         .collect();
+    assert_eq!(
+        targets, artifact_targets,
+        "model module-origin and raw artifact name censuses must agree"
+    );
     let added_targets: BTreeSet<Name> = summaries
         .iter()
         .filter(|summary| {
@@ -646,12 +826,62 @@ fn model_contracts_recheck_with_named_axiom_exceptions() {
             "../../../theories/cic_l_model/declaration_inventory.json"
         ))
         .expect("committed model declaration inventory");
+    assert!(!targets.is_empty());
+    let contract_replays: Vec<[String; 2]> = serde_json::from_str(include_str!(
+        "../../../theories/cic_l_model/contract_replays.json"
+    ))
+    .expect("reviewed model replay catalog");
+    let mutant_replays: Vec<[String; 2]> = serde_json::from_str(include_str!(
+        "../../../theories/cic_l_model/mutant_replays.json"
+    ))
+    .expect("reviewed model replay catalog");
+    // Print all observed schema identities before expensive dependency replay.
+    // These are diagnostics: the independent comparisons below remain required.
+    let mut observed_pins = std::collections::BTreeMap::new();
+    for [_, contract] in contract_replays.iter().chain(&mutant_replays) {
+        let declaration = loaded
+            .get_const(&Name::from_string(&format!(
+                "CICL.Model.Contracts.{contract}"
+            )))
+            .expect("compiled independent contract");
+        let statement = declaration
+            .value
+            .as_ref()
+            .expect("contract proposition definition");
+        let bytes = bincode::serde::encode_to_vec(statement, bincode::config::standard())
+            .expect("serialize observed contract");
+        let digest: String = Sha256::digest(&bytes)
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect();
+        assert!(
+            observed_pins.insert(contract.clone(), digest).is_none(),
+            "duplicate observed contract: {contract}"
+        );
+    }
+    eprintln!(
+        "model-observed-statement-pins {}",
+        serde_json::to_string(&observed_pins).expect("observed statement pins JSON")
+    );
     assert!(
         inventory == expected_inventory,
-        "model declaration/type inventory changed; a new or altered declaration requires a reviewed pin decision"
+        "model declaration/type/value inventory changed; a new or altered declaration requires a reviewed pin decision"
     );
-    assert!(!targets.is_empty());
-    let checked = reference_base_closed(&loaded, &targets, &ClosedRecheckOptions::default())
+    // A selected specification proof may have private proof helpers outside
+    // model-origin targets. Replay its real dependency closure as well.
+    let proof_roots: BTreeSet<Name> = contract_replays
+        .iter()
+        .chain(&mutant_replays)
+        .map(|[proof, _]| {
+            if proof.starts_with("CICL.") || proof.starts_with("KCheckSpec.") {
+                Name::from_string(proof)
+            } else {
+                Name::from_string(&format!("CICL.Model.SetValue.{proof}"))
+            }
+        })
+        .collect();
+    let replay_roots: BTreeSet<Name> = targets.union(&proof_roots).cloned().collect();
+    let checked = reference_base_closed(&loaded, &replay_roots, &ClosedRecheckOptions::default())
         .expect("dependency-closed model replay");
     assert!(
         checked.report.passed() && checked.entry_refusals.is_empty(),
@@ -668,7 +898,7 @@ fn model_contracts_recheck_with_named_axiom_exceptions() {
         .expect("unique actual model names for choice exceptions");
     let mut observed_choice = BTreeSet::new();
     let choice = Name::from_string("Classical.choice");
-    for subject in &targets {
+    for subject in &replay_roots {
         let closure =
             model_axiom_census_with_exceptions(kernel.environment(), subject, &expected_choice)
                 .unwrap_or_else(|failure| panic!("{failure}"));
@@ -692,7 +922,7 @@ fn model_contracts_recheck_with_named_axiom_exceptions() {
         "../../../theories/cic_l_model/model_statement_pins.json"
     ))
     .expect("committed model statement pins");
-    assert_eq!(pins.len(), 277, "exact contract denominator");
+    assert_eq!(pins.len(), 600, "exact contract denominator");
     // Every constructor of the core judgment has exactly one semantic lemma
     // in the paired table below; a missing lemma fails at its lookup.
     let constructors: BTreeSet<Name> = kernel
@@ -711,6 +941,23 @@ fn model_contracts_recheck_with_named_axiom_exceptions() {
         constructors, ruled,
         "each core rule needs exactly one semantic lemma with a pinned contract"
     );
+    for (rule, contract) in CORE_RULE_CONTRACTS {
+        let proof = format!("CICL.Model.CoreRules.{rule}");
+        assert!(
+            contract_replays
+                .iter()
+                .any(|row| row[0] == proof && row[1] == contract),
+            "missing core rule replay: {proof} at {contract}"
+        );
+    }
+    for (proof, contract) in CORE_MODEL_CONTRACTS {
+        assert!(
+            contract_replays
+                .iter()
+                .any(|row| row[0] == proof && row[1] == contract),
+            "missing core model replay: {proof} at {contract}"
+        );
+    }
     // Complete E6 / M3 negative-control census across CICL + CICLModel:
     // every constructor of `CICL.CoreJudgmentIn` must have a unique ground
     // `CICL.NegativeControls.Refutes` theorem admitted by the fenced kernel,
@@ -823,382 +1070,15 @@ fn model_contracts_recheck_with_named_axiom_exceptions() {
     let mut consumed = BTreeSet::new();
     let mut paired_count = 0;
     let mut mutation_count = 0;
-    let groundwork = [
-        ("ext", "extensionality"),
-        ("no_self_member", "foundation"),
-        ("member_union", "unions"),
-        ("member_power", "powersets"),
-        ("member_select", "separation"),
-        ("orderedPair_injective", "orderedPairs"),
-        ("member_product", "products"),
-        ("member_functionSpace", "functions"),
-        ("applyGraph_eq", "application"),
-        ("maps_apply", "applicationTyping"),
-        ("lambdaGraph_maps", "lambdas"),
-        ("applyGraph_lambda", "beta"),
-        ("lambdaGraph_apply", "eta"),
-        ("maps_ext", "functionExt"),
-        ("member_dependentFunctionSpace", "dependentProducts"),
-        ("lambdaGraph_dependent", "dependentLambdas"),
-        ("lift_injective", "liftEquality"),
-        ("member_lift", "liftMembership"),
-        ("member_lift_image", "liftImage"),
-        ("member_smallUniverse", "universeMembers"),
-        ("smallUniverse_transitive", "universeTransitive"),
-        ("lift_power", "powerLift"),
-        ("smallUniverse_power", "universePower"),
-        ("smallUniverse_subset", "universeSubset"),
-        ("smallUniverse_empty", "universeEmpty"),
-        ("smallUniverse_pair", "universePair"),
-        ("smallUniverse_union", "universeUnion"),
-        ("subset_lift_image", "subsetLiftImage"),
-        ("smallUniverse_select", "universeSeparation"),
-        ("smallUniverse_product", "universeProducts"),
-        ("smallUniverse_functionSpace", "universeFunctions"),
-        (
-            "smallUniverse_dependentFunctionSpace",
-            "universeDependentProducts",
-        ),
-        ("lift_zero", "liftIdentity"),
-        ("lift_lift", "liftComposition"),
-        ("member_realizedRange", "realizedRanges"),
-        ("member_realizedBound", "realizedBounds"),
-        ("familyRealizer_subset", "familyBounds"),
-        ("familyRealizer_small_bound", "smallFamilyBound"),
-        ("realizedDependentProduct_small", "realizedProductSmall"),
-        ("realizedDependentProduct_lambda", "realizedLambda"),
-        ("smallUniverse_isUniverse", "universeClosure"),
-        ("IsUniverse.lift", "liftedUniverseClosure"),
-        (
-            "IsUniverse.dependentFunctionSpace_mem",
-            "dependentUniverseClosure",
-        ),
-        ("UniverseTower.extend_old", "towerOld"),
-        ("UniverseTower.extend_top", "towerTop"),
-        ("UniverseTower.level_ne", "towerStrict"),
-        ("UniverseTower.level_subset", "towerCumulative"),
-        ("UniverseTower.extend_closed", "towerClosure"),
-        ("UniverseTower.extend_ascending", "towerAscending"),
-        ("member_truth", "truthMembership"),
-        ("truth_false_uninhabited", "falseUninhabited"),
-        ("truth_in_propositions", "truthProposition"),
-        ("proposition_proof_irrelevance", "proofIrrelevance"),
-        ("proposition_as_truth", "propositionTruth"),
-        ("propositions_in_universe", "propositionUniverse"),
-        ("forallProposition_in_propositions", "impredicativity"),
-        ("member_forallProposition", "universalProof"),
-        ("forallProposition_elim", "universalElimination"),
-        ("sortValue_member_succ", "sortSuccessor"),
-        ("sortValue_not_self", "sortNotSelf"),
-        ("sortValue_ne_succ", "sortStrict"),
-        ("levelSort_member_succ", "levelSortSuccessor"),
-        ("levelSort_semEq", "levelSortEquality"),
-        ("levelSort_subst", "levelSortSubstitution"),
-        ("member_traceLambda", "traceMembership"),
-        ("trace_beta", "traceBeta"),
-        ("trace_eta", "traceEta"),
-        ("traceApply_empty", "traceEmptyApplication"),
-        ("traceLambda_empty", "traceEmptyLambda"),
-        ("member_tracePi", "traceProductMembership"),
-        ("trace_lambda_typed", "traceLambdaTyping"),
-        ("tracePi_proof_empty", "traceProofEmpty"),
-        ("tracePi_impredicative", "traceImpredicativity"),
-        ("tracePi_propositions", "tracePropositions"),
-        ("IsUniverse.tracePi_mem", "traceUniverseClosure"),
-        ("traceApply_not_applyGraph", "traceDistinctApplication"),
-        ("ofRaw_orderedPair", "rawOrderedPair"),
-        ("ofRaw_product", "rawProduct"),
-        ("ofRaw_traceApply", "rawApplication"),
-        ("ofRaw_outputBound", "rawBound"),
-        ("ofRaw_traceLambda", "rawLambda"),
-        ("ofRaw_tracePi", "rawPi"),
-        ("member_raw_children", "rawChildren"),
-        ("CICL.Model.RawEvaluation.eval_rename", "evaluationRenaming"),
-        (
-            "CICL.Model.RawEvaluation.eval_substitute",
-            "evaluationSubstitution",
-        ),
-        (
-            "CICL.Model.RawEvaluation.eval_instantiate",
-            "evaluationInstantiation",
-        ),
-        ("CICL.Model.RawEvaluation.eval_zeta", "evaluationZeta"),
-        (
-            "CICL.Model.RawEvaluation.eval_metadata",
-            "evaluationMetadata",
-        ),
-        ("CICL.Model.TowerRealizer.sorts_correct", "realizedSorts"),
-        (
-            "CICL.Model.RawEvaluation.Assignment.eval_sort_withTower",
-            "evaluationSort",
-        ),
-        (
-            "CICL.Model.RawEvaluation.lookupType_sound",
-            "contextTypeLookup",
-        ),
-        (
-            "CICL.Model.RawEvaluation.lookupValue_sound",
-            "contextValueLookup",
-        ),
-        (
-            "CICL.Model.RawSet.outputBound_related",
-            "rawBoundCongruence",
-        ),
-        ("quotientFunction_congr", "quotientFunctionCongruence"),
-        (
-            "CICL.Model.RawSet.traceApply_related",
-            "rawApplicationCongruence",
-        ),
-        (
-            "CICL.Model.RawSet.traceLambda_related",
-            "rawLambdaCongruence",
-        ),
-        ("CICL.Model.RawSet.tracePi_related", "rawPiCongruence"),
-        ("raw_trace_beta", "rawBeta"),
-        (
-            "CICL.Model.RawEvaluation.eval_related",
-            "evaluationExtensionality",
-        ),
-        (
-            "CICL.Model.RawEvaluation.denote_ofEnvironment",
-            "quotientEvaluation",
-        ),
-        (
-            "CICL.Model.RawEvaluation.Assignment.eraseForeign_compatible",
-            "foreignCompatibility",
-        ),
-        ("CICL.Model.RawEvaluation.bvar_meaning", "variableMeaning"),
-        (
-            "CICL.Model.RawEvaluation.local_definition_meaning",
-            "localDefinitionMeaning",
-        ),
-        (
-            "CICL.Model.RawEvaluation.metadata_meaning",
-            "metadataMeaning",
-        ),
-        ("CICL.Model.RawEvaluation.zeta_meaning", "zetaMeaning"),
-        ("CICL.Model.RawEvaluation.sort_meaning", "sortMeaning"),
-        ("CICL.Model.RawEvaluation.beta_meaning", "betaMeaning"),
-        (
-            "CICL.Model.RawEvaluation.empty_context_has_valuation",
-            "closedContextInhabited",
-        ),
-        (
-            "CICL.Model.RawEvaluation.eval_mapLevels",
-            "evaluationLevels",
-        ),
-        (
-            "CICL.Model.RawEvaluation.eval_levelSubstitution",
-            "argumentLevels",
-        ),
-        (
-            "CICL.Model.RawEvaluation.eval_instantiateLevels",
-            "instantiatedSchema",
-        ),
-        (
-            "CICL.Model.RawEvaluation.eval_scope_congr",
-            "scopedEvaluation",
-        ),
-        ("CICL.Model.RawEvaluation.eval_closed", "closedEvaluation"),
-        ("CICL.Model.judgment_constantNames", "judgmentDependencies"),
-        ("CICL.Model.typed_avoids_fresh", "freshDependency"),
-        (
-            "CICL.Model.admitted_type_avoids_fresh",
-            "admittedTypeDependencies",
-        ),
-        (
-            "CICL.Model.admitted_value_avoids_fresh",
-            "admittedValueDependencies",
-        ),
-        (
-            "CICL.Model.RawEvaluation.Assignment.withLevels_replaceConstant",
-            "replacedConstantLevels",
-        ),
-        (
-            "CICL.Model.RawEvaluation.eval_replaceConstant",
-            "replacementEvaluation",
-        ),
-        (
-            "CICL.Model.RawEvaluation.definedConstant_unfold",
-            "definitionUnfolding",
-        ),
-        (
-            "CICL.Model.RawEvaluation.admitted_definition_unfold",
-            "admittedUnfolding",
-        ),
-        (
-            "CICL.Model.RawEvaluation.admitted_type_preserved",
-            "admittedTypePreservation",
-        ),
-        (
-            "CICL.Model.RawEvaluation.definition_typing_step",
-            "definitionTypingStep",
-        ),
-        (
-            "CICL.Model.RawEvaluation.pushValuation_ofRaw",
-            "semanticPush",
-        ),
-        (
-            "CICL.Model.RawEvaluation.denote_instantiate",
-            "semanticInstantiation",
-        ),
-        ("CICL.Model.RawEvaluation.denote_pi", "semanticPi"),
-        ("CICL.Model.RawEvaluation.denote_lambda", "semanticLambda"),
-        ("CICL.Model.RawEvaluation.denote_app", "semanticApplication"),
-        (
-            "CICL.Model.RawEvaluation.familyBound_contains",
-            "computedFamilyBound",
-        ),
-        (
-            "CICL.Model.RawEvaluation.valid_assumption",
-            "semanticAssumptionContext",
-        ),
-        (
-            "CICL.Model.RawEvaluation.valid_definition",
-            "semanticDefinitionContext",
-        ),
-        ("traceLambda_bound_congr", "traceBoundIndependence"),
-        (
-            "CICL.Model.RawEvaluation.application_meaning",
-            "applicationMeaning",
-        ),
-        ("CICL.Model.RawEvaluation.lambda_meaning", "lambdaMeaning"),
-        ("CICL.Model.RawEvaluation.let_meaning", "letMeaning"),
-        (
-            "CICL.Model.RawEvaluation.denote_zero_sort",
-            "zeroSortMeaning",
-        ),
-        (
-            "CICL.Model.RawEvaluation.pi_proposition_meaning",
-            "impredicativePiMeaning",
-        ),
-        ("smallUniverse_raw_image", "smallRawPreimage"),
-        (
-            "IsUniverse.indexedUnion_mem_smallUniverse",
-            "indexedUnionSmallness",
-        ),
-        ("smallUniverse_indexedUnionClosed", "indexedClosureConcrete"),
-        ("IndexedUnionClosed.lift", "indexedClosureLift"),
-        (
-            "UniverseTower.indexedUnionClosed_extend",
-            "indexedClosureExtension",
-        ),
-        (
-            "UniverseTower.indexedUnionClosed_empty",
-            "indexedClosureEmpty",
-        ),
-        ("UniverseTower.indexedUnionClosed_two", "indexedClosureTwo"),
-        (
-            "UniverseTower.indexedUnionClosed_three",
-            "indexedClosureThree",
-        ),
-        (
-            "indexedUnion_requires_small_values",
-            "indexedUnionPremiseNecessary",
-        ),
-        (
-            "CICL.Model.RawEvaluation.familyBound_subset",
-            "computedBoundLeast",
-        ),
-        (
-            "CICL.Model.RawEvaluation.familyBound_small",
-            "computedBoundSmall",
-        ),
-        (
-            "CICL.Model.RawEvaluation.familyBound_smallUniverse",
-            "computedBoundConcreteSmall",
-        ),
-        (
-            "CICL.Model.RawEvaluation.pi_smallUniverse_meaning",
-            "piConcreteSmallness",
-        ),
-        ("sortValue_subset_of_le", "sortCumulative"),
-        ("sortValue_isUniverse", "dataSortUniverse"),
-        ("sortValue_indexedUnionClosed", "dataSortIndexed"),
-        ("sortValue_not_reverse_subset", "sortAntiCumulative"),
-        ("sortValue_reverse_counterexample", "sortReverseWitness"),
-        (
-            "CICL.Model.RawEvaluation.denote_bounded_sort",
-            "boundedSortDenotation",
-        ),
-        ("CICL.Model.RawEvaluation.pi_data_meaning", "dataPiMeaning"),
-        ("CICL.Model.RawEvaluation.pi_meaning", "boundedPiMeaning"),
-        // M4: the `Prop` half of the container lemma (off the route since D4) and its
-        // large-elimination control. The direct base-family interpretation and
-        // computation equations are paired in CORE_MODEL_CONTRACTS.
-        ("CICL.Model.PropFamilies.family_intro", "propFamilyIntro"),
-        (
-            "CICL.Model.PropFamilies.family_proof_irrelevance",
-            "propFamilyProofIrrelevance",
-        ),
-        (
-            "CICL.Model.PropFamilies.family_induction",
-            "propFamilyInduction",
-        ),
-        (
-            "CICL.Model.PropFamilies.recursor_typed",
-            "propFamilyEliminationTyped",
-        ),
-        (
-            "CICL.Model.PropFamilies.recursor_computes",
-            "propFamilyEliminationComputes",
-        ),
-        (
-            "CICL.Model.PropFamilies.two_shapes_refute_elimination",
-            "propFamilyTwoShapesRefuted",
-        ),
-        (
-            "CICL.Model.PropFamilies.recursor_needs_subsingleton",
-            "propFamilyEliminationNeedsSubsingleton",
-        ),
-        (
-            "CICL.Model.PropFamilies.equality_family",
-            "equalityContainerFamily",
-        ),
-        (
-            "CICL.Model.PropFamilies.equality_recursor",
-            "equalityContainerRecursor",
-        ),
-    ];
-    let paired: Vec<_> = groundwork
-        .iter()
-        .map(|(proof, contract)| ((*proof).to_owned(), *contract))
-        .chain(
-            CORE_RULE_CONTRACTS
-                .iter()
-                .map(|(rule, contract)| (format!("CICL.Model.CoreRules.{rule}"), *contract)),
-        )
-        .chain(
-            CORE_MODEL_CONTRACTS
-                .iter()
-                .map(|(proof, contract)| ((*proof).to_owned(), *contract)),
-        )
-        .collect();
-    // Print the complete paired-contract observation before comparing pins,
-    // as kcheck_spec does, so a deliberate extension needs one census run.
-    for (_, contract) in &paired {
-        let pin = loaded
-            .get_const(&Name::from_string(&format!(
-                "CICL.Model.Contracts.{contract}"
-            )))
-            .expect("independent contract");
-        let bytes = bincode::serde::encode_to_vec(
-            pin.value.as_ref().expect("contract proposition"),
-            bincode::config::standard(),
-        )
-        .expect("contract bytes");
-        eprintln!(
-            "observed-statement-pin {contract} {}",
-            Sha256::digest(&bytes)
-                .iter()
-                .map(|byte| format!("{byte:02x}"))
-                .collect::<String>()
+    for [proof, contract] in &contract_replays {
+        let proof = proof.as_str();
+        let contract = contract.as_str();
+        assert!(
+            consumed.insert(contract.to_owned()),
+            "duplicate contract: {contract}"
         );
-    }
-    for (proof, contract) in paired {
-        assert!(consumed.insert(contract), "duplicate contract: {contract}");
         let source = if proof.starts_with("CICL.") || proof.starts_with("KCheckSpec.") {
-            Name::from_string(&proof)
+            Name::from_string(proof)
         } else {
             Name::from_string(&format!("CICL.Model.SetValue.{proof}"))
         };
@@ -1251,54 +1131,13 @@ fn model_contracts_recheck_with_named_axiom_exceptions() {
         );
         paired_count += 1;
     }
-    for (proof, mutation) in [
-        ("sortValue_member_succ", "typeInType"),
-        ("sortValue_subset_of_le", "sortCumulativeReversed"),
-        ("trace_beta", "traceWrongApplication"),
-        (
-            "IsUniverse.indexedUnion_mem_smallUniverse",
-            "indexedUnionUnboundedValues",
-        ),
-        (
-            "CICL.Model.RawEvaluation.eval_substitute",
-            "evaluationWrongSubstitution",
-        ),
-        (
-            "CICL.Model.RawEvaluation.eval_mapLevels",
-            "evaluationWrongLevels",
-        ),
-        (
-            "CICL.Model.RawEvaluation.definedConstant_unfold",
-            "definitionWrongArguments",
-        ),
-        (
-            "CICL.Model.RawEvaluation.denote_instantiate",
-            "semanticWrongBinder",
-        ),
-        (
-            "CICL.Model.RawEvaluation.application_meaning",
-            "applicationWrongCodomain",
-        ),
-        ("CICL.Model.CoreRules.sort", "sortBoundOffByOne"),
-        (
-            "CICL.Model.PropFamilies.recursor_computes",
-            "propFamilyEliminationWithoutSubsingleton",
-        ),
-        (
-            "CICL.Model.BaseWitness.base_signature_wf",
-            "baseUnderstatedBoundWellFormed",
-        ),
-        ("CICL.Model.CoreRules.beta", "betaWithoutArgumentTyping"),
-        (
-            "CICL.Model.QuotationSemantics.addFn_meaning",
-            "quotationAddWrongStep",
-        ),
-        (
-            "CICL.Model.QuotationSemantics.quote_correct",
-            "quotationCorrectWithoutHeight",
-        ),
-    ] {
-        assert!(consumed.insert(mutation), "duplicate mutation: {mutation}");
+    for [proof, mutation] in &mutant_replays {
+        let proof = proof.as_str();
+        let mutation = mutation.as_str();
+        assert!(
+            consumed.insert(mutation.to_owned()),
+            "duplicate mutation: {mutation}"
+        );
         let proof_name = if proof.starts_with("CICL.") || proof.starts_with("KCheckSpec.") {
             proof.to_owned()
         } else {
@@ -1347,7 +1186,7 @@ fn model_contracts_recheck_with_named_axiom_exceptions() {
     }
     assert_eq!(
         consumed,
-        pins.keys().map(String::as_str).collect(),
+        pins.keys().cloned().collect(),
         "every pinned statement must be checked exactly once"
     );
     eprintln!(
@@ -1644,7 +1483,10 @@ fn model_inventory_accepts_checked_canonical_declaration() {
     assert_eq!(row["kind"], "Definition");
     assert_eq!(row["type_sha256"].as_str().expect("type hash").len(), 64);
     assert_eq!(
-        row["value_sha256"].as_str().expect("meaning hash").len(),
+        row["meaning_sha256"]
+            .as_str()
+            .expect("full meaning hash")
+            .len(),
         64
     );
 }
@@ -1695,8 +1537,18 @@ fn model_inventory_refuses_mutated_definition_body_and_level_params() {
         inv_a["Alias.value"]["value_sha256"], inv_b["Alias.value"]["value_sha256"],
         "changing a non-theorem body anywhere in the model must change value_sha256"
     );
+    // Preserve the expression-only type hash; bind universe names explicitly
+    // and in the full kernel meaning hash.
+    assert_eq!(
+        inv_a["Alias.value"]["type_sha256"],
+        inv_c["Alias.value"]["type_sha256"]
+    );
     assert_ne!(
-        inv_a["Alias.value"]["type_sha256"], inv_c["Alias.value"]["type_sha256"],
-        "renaming level_params must change type_sha256"
+        inv_a["Alias.value"]["level_params"],
+        inv_c["Alias.value"]["level_params"]
+    );
+    assert_ne!(
+        inv_a["Alias.value"]["meaning_sha256"], inv_c["Alias.value"]["meaning_sha256"],
+        "renaming level_params must change the pinned full meaning"
     );
 }

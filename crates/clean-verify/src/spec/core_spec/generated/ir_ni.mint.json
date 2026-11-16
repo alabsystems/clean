@@ -2,7 +2,7 @@
  "prefix": "ir_ni",
  "body": "cert::builder::state::NodeId::index",
  "core_digest": "e5753c09f51c522dcca64506d7d8f924e77c4eb7145aaf25977600dd67b0e4fa",
- "defs_digest": "bbc3c7abb9d3126cbab806f614c2bb4ceaafb379d352c73ab96db7b0bfc1d19c",
+ "defs_digest": "7f603c5fdcd6deb9349880fc1a6e11a1ddda1f7625e8bc7c064d23a9c07ed635",
  "def_count": 4,
  "artifact_core_digest": "daa4038fce90d6764d339acf52b76fc1b9ef80da7a8b56f97d9e1410be8f7a87",
  "artifact_core_digest_note": "Reader A's OWN digest of the projection, printed by scripts/crystal_a2_project and taken over the domain-separated `clean.ir_mint.core.v1` prefix. `core_digest` above is ir_mint::digest of the same text under this crate's domain, which is a different constant; the two are recorded side by side rather than reconciled, because a reader that could not disagree with itself is not a second reader. This chain is NOT in the producer A/B record — it was a named REFUSAL (no Clean IRTy image for trust_ir::Ty::Usize) until 2026-08-22 — so ONE reader-A dump is recorded, not three, and this note says so.",

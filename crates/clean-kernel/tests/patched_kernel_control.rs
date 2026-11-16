@@ -15,9 +15,22 @@
 //! Trust's `trust-certify` makes before it registers a `ReferenceCertificate`,
 //! and `kernel.audit_certification` is the audit it runs first. Trust's own
 //! build is not exercised here: the record lists it as not exercised.
+//!
+//! `elab.module_driver.*` hand the pair to `clean check`'s per-declaration
+//! loop as SOURCE (`clean_elab::module_driver::elaborate_decls` with the Lean
+//! front door on, as `clean check` runs it, on the builtin prelude):
+//! `theorem p3_planted_src : False := Nat.zero`, which the elaborator's
+//! `is_def_eq` gate refuses before the kernel is asked, and the same pair
+//! inside a term-level `let rec` (`theorem p3_letrec_src : False := let rec
+//! go : False := Nat.zero; go`), whose lifted helper `p3_letrec_src.go :
+//! False := Nat.zero` reaches `add_decl`, and so `check_type`, with no
+//! elaborator check of its annotated value. The honest `let rec` source is
+//! the non-vacuity control.
 
 #[path = "support/patched_kernel_control.rs"]
 mod control;
+#[path = "support/p3_module_driver.rs"]
+mod module_driver;
 
 use clean_ck0::{
     add_inductive, Budget, Constructor, InductiveDecl, InferError, MinimalEnv, RawExpr, RawLevel,
@@ -86,6 +99,18 @@ const PINS: &[Pin] = &[
         mints: "Ok(()) from clean_ck0::check, the independent member of the quorum (no clean-kernel code)",
         unmodified: Outcome::refused(by::CLEAN_CK0, "InferError::TypeMismatch"),
         mutant: Outcome::refused(by::CLEAN_CK0, "InferError::TypeMismatch"),
+    },
+    Pin {
+        site: "elab.module_driver.source",
+        mints: "a Passed verdict and a resident theorem from clean check's per-declaration loop on the planted source",
+        unmodified: Outcome::refused(by::SAME_KERNEL_OTHER_ENTRY, module_driver::PLANTED_SOURCE_REFUSAL),
+        mutant: Outcome::refused(by::SAME_KERNEL_OTHER_ENTRY, module_driver::PLANTED_SOURCE_REFUSAL),
+    },
+    Pin {
+        site: "elab.module_driver.let_rec_source",
+        mints: "a Passed verdict and the resident theorem and helper from clean check's per-declaration loop on the planted pair inside a let rec",
+        unmodified: Outcome::refused(by::CLEAN_KERNEL, module_driver::LET_REC_REFUSAL),
+        mutant: Outcome::minted(module_driver::LET_REC_RESIDENT),
     },
 ];
 
@@ -371,6 +396,8 @@ fn patched_kernel_control() {
         added,
         probe_try_verify_proof(&env, mutation_live),
         probe_ck0(),
+        module_driver::probe_module_driver_source(),
+        module_driver::probe_module_driver_let_rec(),
     ];
     control::judge(PACKAGE, PINS, &observed);
 }

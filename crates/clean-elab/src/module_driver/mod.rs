@@ -81,7 +81,7 @@ mod prelude_census_tests;
 
 pub use drive::{elaborate_decls, ModuleObserver};
 pub use setup::{
-    elaborate_prelude_header, module_elaboration_lock, module_environment,
+    elaborate_prelude_header, foundation_import_base, module_elaboration_lock, module_environment,
     module_environment_for_header_in_world, module_environment_in_world,
     module_environment_with_import_base_in_world, module_file_context,
     module_file_context_in_world, parse_module, parse_module_in_world, DeclBudgetScope,

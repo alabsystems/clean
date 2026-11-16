@@ -342,12 +342,13 @@
       "wired_by": [
         "Justfile",
         "scripts/check_authority_sites.py",
+        "scripts/check_ck0_lineage.py",
         "scripts/deny_sorry_gate.sh",
         "scripts/githooks/pre-push",
         "scripts/local_gate.sh",
         "scripts/release_readiness_smoke.sh",
-        "scripts/check_ck0_lineage.py",
-        "scripts/rust_modules.py"
+        "scripts/rust_modules.py",
+        "scripts/test_ck0_custody_loader.py"
       ],
       "demonstrated": {
         "kind": "selftest-inline",
@@ -4929,7 +4930,8 @@
       "kind": "tool",
       "claims": "quality",
       "wired_by": [
-        "scripts/check_ck0_lineage.py"
+        "scripts/check_ck0_lineage.py",
+        "scripts/test_ck0_custody_loader.py"
       ],
       "demonstrated": null,
       "waiver": null,
@@ -5455,12 +5457,13 @@
       "claims": "evidence",
       "wired_by": [
         "scripts/kstar_recheck.py",
-        "scripts/lean_export_replay.sh"
+        "scripts/lean_export_replay.sh",
+        "scripts/verify_runner.py"
       ],
       "demonstrated": null,
       "waiver": null,
       "tool_reason": "A MINTER, run by hand under scripts/heavy_gate.sh (it reserves its own build and mint slots and honours HEAVY_GATE_HELD): it writes a lean4export NDJSON export of named modules or declarations with a pinned Lean toolchain, plus `<out>.sidecar.json` (toolchain and its pinned githash, exporter repo/tag/commit and binary sha256, command, the environment and gate it ran under, the export's sha256, the meta line). It asserts no invariant about this tree, so nothing wires it: its refusals (a toolchain that is not installed, is another Lean, or whose githash is not its tag's pinned lean4 commit; a lean4export tag with no pinned commit, one the remote has moved, a checkout at another commit or edited before or after its build or whose lean-toolchain names another Lean; an exporter binary whose hash fails or is not a sha256, or a build stamp whose binary_sha256 is not one; an --out or sidecar path that is a directory, or one already there, checked again under the `<out>.lock` held to the end of the run, at the publish, which under --force sets the old pair aside first and places each file by one link(2) with SIGINT, SIGTERM and SIGHUP ignored, and is undone by inode when it fails or dies; an `<out>.lock` another run holds past the wait; an exporter that exits nonzero or dies by a signal, a write, fsync or close of the export that fails, an export cut short inside a line or whose last record is not a declaration, holding a line the front door's dispatch cannot read, missing a requested --decl, or whose meta line's Lean version, format, exporter or githash is not the toolchain's; a reservation heavy_gate refused or failed before the job started, or one under the GB its weight answers settled just before it; a mint class with a non-core root and no completed run filed under it, with no --gate-gb; a --gate-gb with a leading 0; it removes a stale lock only when /bin/ps says its owner is gone) keep a minted fixture honest, and the front-door tests that read the fixtures are the gates (plan item checkers-export-minting-lane; arm (d) of crates/clean-olean/tests/ndjson_front_door.rs, R120; the reviews' choices, R182).",
-      "note": "Landed 2026-10-28 with its self-test scripts/test_lean_export_mint.sh, which scripts/check_script_selftests.sh runs with every scripts/test_*.sh. After two adversarial reviews and three re-reviews of their fixes (2026-10-28) it has 321 arms and no network, no real build and no Lean: fake toolchains with a fake lake, a file:// lean4export fixture repo behind LEAN_EXPORT_MINT_EXPORTER_REPO, a fake gate (which can refuse, fail, answer any weight, or limit the job's file size), a gate that answers with the real heavy_gate.sh weight and heavy_gate_weights.sh resolver over a scratch peak log (the second re-review's probe B3 among its logs), shims that plant a build, a directory or a file just before each publish, the python half run with os.link and os.rename wrapped (another run's export arriving between this run's two placements; a SIGTERM, a SIGKILL, or a SIGKILL of the shell with it, right after the export's placement, and a SIGKILL inside the set-aside of the old export; another run's publish to the same --out), an immutable old sidecar --force cannot set aside, a failing ps and a failing hash, and the vendored arena's real Init.Prelude export; it passed 10 runs in a row. A mutation driver (a session tool, not in the tree) removed each of the script's 89 refusal and usage-error sites one at a time (a slug used at two sites counts twice) and broke each of 163 other rules (environment, gate and its start marker, the mint class and its reservation (asked again just before the mint, and checked by the job against what heavy_gate reserved), sidecar fields, pins, the exporter's hash, ordering of the --out and reservation checks before any fetch, the locks and their owner check, the --out lock and the signal mask, each publish's system call, the --force set-aside and the undo by inode, every EXIT-trap rule, the writer, the python half's exit status), each in a temp copy: 252 mutations, and the self-test failed on every one, two of them (the unknown-argument error and a lock wait that never refuses) by hanging until the driver's 900 s timeout (2026-11-01). Not covered there: the writer's fsync and close checks (no local filesystem fails them once the writes succeeded, so the driver leaves them out), a real fetch from github.com and a real lake build (the file:// fixture and the fake lake stand in), and the lock's wait loop beyond a zero wait. This row carries no demonstration yet (R182): R4 accepts kind selftest-file for a tool row, but R7 refuses a demonstration with no freshness pin, and `--repin` writes the pin only after it runs the self-test under heavy_gate (auto:gate-demo-lean_export_mint:12), which this lane did not take. To record it: set demonstrated to {kind: selftest-file, ref: scripts/test_lean_export_mint.sh, date, note} and run `python3 scripts/check_gate_registry.py --repin lean_export_mint` in the same change."
+      "note": "Landed 2026-10-28 with its self-test scripts/test_lean_export_mint.sh, which scripts/check_script_selftests.sh runs with every scripts/test_*.sh. After two adversarial reviews and three re-reviews of their fixes (2026-10-28) it has 321 arms and no network, no real build and no Lean: fake toolchains with a fake lake, a file:// lean4export fixture repo behind LEAN_EXPORT_MINT_EXPORTER_REPO, a fake gate (which can refuse, fail, answer any weight, or limit the job's file size), a gate that answers with the real heavy_gate.sh weight and heavy_gate_weights.sh resolver over a scratch peak log (the second re-review's probe B3 among its logs), shims that plant a build, a directory or a file just before each publish, the python half run with os.link and os.rename wrapped (another run's export arriving between this run's two placements; a SIGTERM, a SIGKILL, or a SIGKILL of the shell with it, right after the export's placement, and a SIGKILL inside the set-aside of the old export; another run's publish to the same --out), an immutable old sidecar --force cannot set aside, a failing ps and a failing hash, and the vendored arena's real Init.Prelude export; it passed 10 runs in a row. A mutation driver (a session tool, not in the tree) removed each of the script's 89 refusal and usage-error sites one at a time (a slug used at two sites counts twice) and broke each of 163 other rules (environment, gate and its start marker, the mint class and its reservation (asked again just before the mint, and checked by the job against what heavy_gate reserved), sidecar fields, pins, the exporter's hash, ordering of the --out and reservation checks before any fetch, the locks and their owner check, the --out lock and the signal mask, each publish's system call, the --force set-aside and the undo by inode, every EXIT-trap rule, the writer, the python half's exit status), each in a temp copy: 252 mutations, and the self-test failed on every one, two of them (the unknown-argument error and a lock wait that never refuses) by hanging until the driver's 900 s timeout (2026-11-01). Not covered there: the writer's fsync and close checks (no local filesystem fails them once the writes succeeded, so the driver leaves them out), a real fetch from github.com and a real lake build (the file:// fixture and the fake lake stand in), and the lock's wait loop beyond a zero wait. This row carries no demonstration yet (R182): R4 accepts kind selftest-file for a tool row, but R7 refuses a demonstration with no freshness pin, and `--repin` writes the pin only after it runs the self-test under heavy_gate (auto:gate-demo-lean_export_mint:12), which this lane did not take. To record it: set demonstrated to {kind: selftest-file, ref: scripts/test_lean_export_mint.sh, date, note} and run `python3 scripts/check_gate_registry.py --repin lean_export_mint` in the same change. verify_runner.py was recorded in wired_by on 2026-11-15: since bf7dcf8d6 it names this script among the declared inputs of the `clean-olean::test::ndjson_export_writer` suite row, so a change to the minter re-runs the export-writer test there. It does not run the minter; R3 counts a path in a .py data list as an edge, and `wired_by` means \"mentions\" until step 3 of docs/issues/2026-08-27-gate-registry-wiring-scan-counts-data-strings.md lands."
     },
     {
       "id": "replay_reachability_census_py",
@@ -5814,7 +5817,7 @@
         }
       },
       "waiver": null,
-      "note": "Q4 member runner (pinned Lean4Lean bce34481 by binary digest, data/lean4lean_q4_pin.json). Its arena qualification and its subject verdicts feed scripts/kstar_recheck.py's record; a vote needs that replay, never this self-test. Row added 2026-11-13 (Q4 residuals)."
+      "note": "Q4 member runner (pinned Lean4Lean bce34481 by binary digest, data/lean4lean_q4_pin.json; bce34481 is a commit of digama0/lean4lean, which that pin names in full, and resolves to no commit in this repository, ../trust or ../trust-ir). Its arena qualification and its subject verdicts feed scripts/kstar_recheck.py's record; a vote needs that replay, never this self-test. Row added 2026-11-13 (Q4 residuals)."
     },
     {
       "id": "kstar_subjects",
@@ -5861,20 +5864,26 @@
         "flag": "--self-test",
         "ref": "python3 scripts/check_lean_axiom_census.py --self-test",
         "replayable": false,
-        "date": "2026-11-14",
-        "script_sha256": "47ac1647b590a66dfc7493bf31ed9cfe9fe579b7c14900b7f3c5bd65f052c333",
+        "date": "2026-11-15",
+        "script_sha256": "690e7c372c34338cf9340679aac204e88a746f72713bc86845c17b5de4330c39",
         "note": "Real pinned-Lean fixture: private/module selection, planted axiom and sorry, dropped/added declaration, closure growth (also under mint), stale source, missing output row, failed build and absent pin. Also package-qualified keys: adding a package requires mint, dropping it refuses, and new-package forbidden axioms refuse even under mint.",
         "replayed": {
-          "script_sha256": "47ac1647b590a66dfc7493bf31ed9cfe9fe579b7c14900b7f3c5bd65f052c333",
-          "inputs_sha256": "6522db16d1cc9816150cad32041856148babbabf0c2361211ec8e9a0227cabf4",
+          "script_sha256": "690e7c372c34338cf9340679aac204e88a746f72713bc86845c17b5de4330c39",
+          "inputs_sha256": "1971e992abcaf7cb4897bbaad50767815c896be70db579d730b848af5c58dfc7",
           "by": "`python3 scripts/check_lean_axiom_census.py --self-test` exited 0"
         },
         "inputs": {
           "scripts/lean_axiom_census.lean": "e6ff153c56b515613260fd6307479ef300185a03b5cacab9d6bde511f860ea82",
+          "theories/binding_not_review/lean-toolchain": "ce4c4e3d87434b9663f46de25ce34b48a0cf0d392e0a320a0787b4674a2d7b61",
+          "theories/chk_lia/lean-toolchain": "ce4c4e3d87434b9663f46de25ce34b48a0cf0d392e0a320a0787b4674a2d7b61",
           "theories/cic_l/lean-toolchain": "ce4c4e3d87434b9663f46de25ce34b48a0cf0d392e0a320a0787b4674a2d7b61",
+          "theories/cic_l_base_bridge/lean-toolchain": "ce4c4e3d87434b9663f46de25ce34b48a0cf0d392e0a320a0787b4674a2d7b61",
           "theories/cic_l_model/lean-toolchain": "ce4c4e3d87434b9663f46de25ce34b48a0cf0d392e0a320a0787b4674a2d7b61",
+          "theories/cic_l_nat_model/lean-toolchain": "ce4c4e3d87434b9663f46de25ce34b48a0cf0d392e0a320a0787b4674a2d7b61",
           "theories/kcheck/lean-toolchain": "ce4c4e3d87434b9663f46de25ce34b48a0cf0d392e0a320a0787b4674a2d7b61",
           "theories/kcheck_labelled/lean-toolchain": "ce4c4e3d87434b9663f46de25ce34b48a0cf0d392e0a320a0787b4674a2d7b61",
+          "theories/kcheck_sort_bounds/lean-toolchain": "ce4c4e3d87434b9663f46de25ce34b48a0cf0d392e0a320a0787b4674a2d7b61",
+          "theories/kcheck_soundness/lean-toolchain": "ce4c4e3d87434b9663f46de25ce34b48a0cf0d392e0a320a0787b4674a2d7b61",
           "theories/kcheck_spec/lean-toolchain": "ce4c4e3d87434b9663f46de25ce34b48a0cf0d392e0a320a0787b4674a2d7b61"
         }
       },
@@ -6188,24 +6197,33 @@
       },
       "wired_by": [
         "Justfile",
-        "scripts/check_ck0_replay_custody.py"
+        "scripts/check_ck0_replay_custody.py",
+        "scripts/test_ck0_custody_loader.py",
+        "scripts/test_ck0_source_profiles.py",
+        "scripts/test_ck0_transport.py"
       ],
       "demonstrated": {
         "kind": "selftest-inline",
         "flag": "--selftest",
         "ref": "python3 scripts/check_ck0_lineage.py --selftest",
-        "date": "2026-11-14",
-        "script_sha256": "68382fbf10f6283651dc153cab8553433d1817bb7561701657a6f71cde8447b9",
+        "date": "2026-11-15",
+        "script_sha256": "53e44908bc72d2aced84e4251cedc2046428207267990e3f11fbcddcd4e0e471",
         "note": "Candidate bookkeeping only. Input additions/removals/digest drift; production route and claim flags; incomplete runs, log/count/name/artifact drift. The Q6 completion command deliberately refuses the remaining independent-compiler and production-closure obligations.",
         "replayed": {
-          "script_sha256": "68382fbf10f6283651dc153cab8553433d1817bb7561701657a6f71cde8447b9",
-          "inputs_sha256": "657a3145690cc947819f06b65363a4d6649f56401564a35be67561868685a28e",
+          "script_sha256": "53e44908bc72d2aced84e4251cedc2046428207267990e3f11fbcddcd4e0e471",
+          "inputs_sha256": "ecf167789117993710dbcbf790f67d61ae60d9309d017c57bfdae1e74b7e32ab",
           "by": "`python3 scripts/check_ck0_lineage.py --selftest` exited 0"
         },
         "inputs": {
           "scripts/check_add_decl_ratchet.py": "f351dba014ae9521c8d6051c2671e1c97162d143dfa00a2b4e738d7e783cde13",
+          "scripts/check_ck0_replay_custody.py": "85cc374a4be0ba7331af9b0cc1e28ddbd6f9c4f4f325ca99847baccf9f519389",
           "scripts/ck0_input_stability.py": "ef3c9c8fe365e0ed3fd47a6f61f119066cd011db9cce1175fbee86b972fb8669",
-          "scripts/rust_modules.py": "e6c2fc187098019afbbe3b10b5c60a00770291c0b00658040c296b7a57d810e8"
+          "scripts/resource_transport.py": "34047bff585717c1a5f548512fc46290f5486c6c44af6ada1712856bcb8f9ee4",
+          "scripts/rust_modules.py": "e6c2fc187098019afbbe3b10b5c60a00770291c0b00658040c296b7a57d810e8",
+          "scripts/test_ck0_candidate_context.py": "9d0eaace69ad83be2a4404f1ad16512ad897455eb4667e163276cbe97fd94eae",
+          "scripts/test_ck0_production_batch.py": "e2d8560c70ed5d503fa4c31e90d1706322e90ac7c439ba74e2854d74f91190f9",
+          "scripts/test_ck0_source_profiles.py": "6f55d8a1699933dcfc58f2b5b37f9763353bbeed9ea1edc37cfc1930d78e43c9",
+          "scripts/test_ck0_transport.py": "7769614fc4581ca553dab8a06a94fd1e5ac93d9c3f87fbab66ce7324c1212fc5"
         }
       },
       "waiver": null
@@ -6216,11 +6234,32 @@
       "kind": "tool",
       "claims": "evidence",
       "wired_by": [
-        "scripts/check_ck0_lineage.py"
+        "scripts/check_ck0_lineage.py",
+        "scripts/test_ck0_custody_loader.py"
       ],
       "demonstrated": null,
       "waiver": null,
       "tool_reason": "Imported Q6 endpoint-capture bookkeeping helper: hashes source, dependency, configuration and tool bytes and compares declared physical snapshots. It does not text-match Rust or decide proof validity. Its selftest() physical-drift controls are called by check_ck0_lineage.py --selftest; the parent gate's normal derived-input R7 replay pins this helper's actual bytes. There is no separate standalone gate or unmeasured proof claim."
+    },
+    {
+      "id": "isabelle_shard_falsity_census",
+      "path": "scripts/isabelle/shard_falsity_census.py",
+      "kind": "tool",
+      "claims": "evidence",
+      "wired_by": [],
+      "demonstrated": null,
+      "waiver": null,
+      "tool_reason": "Reporting instrument, run by hand over one .mathverse shard: counts, as a deliberate lower bound, the tier-2/ledger statements that `const_param` abstraction made FALSE (a Pi-binder of function type over Nat/Int/Num that reaches the conclusion and is constrained by no other binder). It prints counts and exits 0 with findings; it refuses nothing and nothing runs it, so it is a tool, not a gate. Landed with mathverse/lazy-resolution-2026-08-01 (2026-11-15)."
+    },
+    {
+      "id": "isabelle_shard_triviality_census",
+      "path": "scripts/isabelle/shard_triviality_census.py",
+      "kind": "tool",
+      "claims": "evidence",
+      "wired_by": [],
+      "demonstrated": null,
+      "waiver": null,
+      "tool_reason": "Reporting instrument, run by hand over one .mathverse shard: counts, as lower bounds, the KernelVerified statements whose translation collapsed to a tautology (conclusion `True`, `t = t` on one arena node, or a conclusion equal to one of its own hypotheses), the number its docstring says must accompany a headline KV count. It prints counts and exits 0 with findings; it refuses nothing and nothing runs it, so it is a tool, not a gate. Landed with mathverse/lazy-resolution-2026-08-01 (2026-11-15)."
     },
     {
       "id": "ck0_replay_custody",
@@ -6228,24 +6267,29 @@
       "kind": "gate",
       "claims": "evidence",
       "wired_by": [
-        "Justfile"
+        "Justfile",
+        "scripts/check_ck0_lineage.py",
+        "scripts/test_ck0_custody_loader.py",
+        "scripts/test_ck0_source_profiles.py"
       ],
       "demonstrated": {
         "kind": "selftest-inline",
         "flag": "--selftest",
         "ref": "python3 scripts/check_ck0_replay_custody.py --selftest",
-        "date": "2026-11-14",
+        "date": "2026-11-15",
         "note": "Untrusted archived metadata consistency only. Isolated resealed image/lane/fixture/output/exit/namespace/source-object and mode-conflict mutations refuse; genuine retained observations remain accepted. Does not execute images, authenticate historical OS exits, prove compiler/checker correctness, bind installed production images, complete independent DDC or promote genesis.",
         "inputs": {
           "scripts/check_add_decl_ratchet.py": "f351dba014ae9521c8d6051c2671e1c97162d143dfa00a2b4e738d7e783cde13",
-          "scripts/check_ck0_lineage.py": "68382fbf10f6283651dc153cab8553433d1817bb7561701657a6f71cde8447b9",
+          "scripts/check_ck0_lineage.py": "53e44908bc72d2aced84e4251cedc2046428207267990e3f11fbcddcd4e0e471",
           "scripts/ck0_input_stability.py": "ef3c9c8fe365e0ed3fd47a6f61f119066cd011db9cce1175fbee86b972fb8669",
-          "scripts/rust_modules.py": "e6c2fc187098019afbbe3b10b5c60a00770291c0b00658040c296b7a57d810e8"
+          "scripts/resource_transport.py": "34047bff585717c1a5f548512fc46290f5486c6c44af6ada1712856bcb8f9ee4",
+          "scripts/rust_modules.py": "e6c2fc187098019afbbe3b10b5c60a00770291c0b00658040c296b7a57d810e8",
+          "scripts/test_ck0_custody_loader.py": "736596829aa5307c13424cb237abc3d05182c948c5244992fd2d184f5cef726c"
         },
-        "script_sha256": "126fa33b47dc38efc6f63b23de60e140c5f26eedf43e4858fc2f6d507d0c7203",
+        "script_sha256": "85cc374a4be0ba7331af9b0cc1e28ddbd6f9c4f4f325ca99847baccf9f519389",
         "replayed": {
-          "script_sha256": "126fa33b47dc38efc6f63b23de60e140c5f26eedf43e4858fc2f6d507d0c7203",
-          "inputs_sha256": "54ce1080b7e363604149559f9d6c79d852fd3915b7e59c324175df12acbf8b8c",
+          "script_sha256": "85cc374a4be0ba7331af9b0cc1e28ddbd6f9c4f4f325ca99847baccf9f519389",
+          "inputs_sha256": "5f4d9b2169bc84044488d9a78a71a85d9045b655971d475828d745460e1ca141",
           "by": "`python3 scripts/check_ck0_replay_custody.py --selftest` exited 0"
         }
       },
@@ -6257,23 +6301,28 @@
       "kind": "gate",
       "claims": "evidence",
       "wired_by": [
-        "Justfile"
+        "Justfile",
+        "scripts/test_ck0_genesis_lifecycle.py",
+        "scripts/test_ck0_genesis_retention.py"
       ],
       "demonstrated": {
         "kind": "selftest-inline",
         "flag": "--selftest",
         "ref": "python3 scripts/check_ck0_genesis_history.py --selftest",
-        "date": "2026-11-14",
-        "note": "Untrusted archival consistency only: genuine24 refusal invocations and26 isolated mutants; immutable historical manifest, literal-path known tool sentinels, typed endpoint fixture state and lstat absence of monitored output. No compiler, Rust suite, seed eligibility, sandbox/continuous monitoring or proof claim.",
+        "date": "2026-11-15",
+        "note": "Untrusted archival consistency only: real24 direct refusals and26 isolated mutants, plus actual same-group holder/partial-output timeout and injected census-error/actual-SIGINT sticky-retention controls. Root identity is held until its original group is signalled, cleanup is bounded and uncertain paths retained; OS orphan reaping and escaped descendants are not established. Exact public scripts/historical manifest unchanged. No compiler, Rust, installed-image, independent-DDC, current compiled genesis, full diagnostic, sandbox or proof claim.",
         "inputs": {
           "genesis/ck0/MANIFEST.txt": "12552fdf6250c74d0a3115cfd304d9724c93b438202c78367b8065e72c220c81",
           "genesis/ck0/generate_manifest.sh": "9fff443a890496105c879ee03971cc98e8c7850ca6516992b9a896a47a0e0070",
-          "genesis/ck0/verify.sh": "6667fe5222cce2ab6f894dfdb13bd73b3f1d81f8408d61f629ff33e51d4a2b5f"
+          "genesis/ck0/verify.sh": "6667fe5222cce2ab6f894dfdb13bd73b3f1d81f8408d61f629ff33e51d4a2b5f",
+          "scripts/resource_transport.py": "34047bff585717c1a5f548512fc46290f5486c6c44af6ada1712856bcb8f9ee4",
+          "scripts/test_ck0_genesis_lifecycle.py": "b7a886394a45bab80930aab16d1aac38dc5c0f40c36d5664c99f3849fe26ebcb",
+          "scripts/test_ck0_genesis_retention.py": "6c377abbf4d4f92d173281d073752e90f870d2d53868349b02d5fcd5a58bcdec"
         },
-        "script_sha256": "6aeb275e9e64a89d34f0fb6dffd1c2802fd08e50e8760bb74f54d58835c8e539",
+        "script_sha256": "47c4049310a9098103c805fb26a1f139767518ec84ad8407a9b26dcc3547320a",
         "replayed": {
-          "script_sha256": "6aeb275e9e64a89d34f0fb6dffd1c2802fd08e50e8760bb74f54d58835c8e539",
-          "inputs_sha256": "a0c30a8350766cfa3cd9f7df2849a05c935e9dcef110520099498a0e89063b06",
+          "script_sha256": "47c4049310a9098103c805fb26a1f139767518ec84ad8407a9b26dcc3547320a",
+          "inputs_sha256": "1f17309346045eea34295b72f853c983ac353b60fe2ecdfa78feeca047bf2b90",
           "by": "`python3 scripts/check_ck0_genesis_history.py --selftest` exited 0"
         }
       },

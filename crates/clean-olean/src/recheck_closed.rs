@@ -758,6 +758,23 @@ impl<'a> ConePlanner<'a> {
                 }
             }
         }
+        // String conversion consults the canonical literal-expansion heads
+        // even though an expression's Const-only walk cannot see them. A
+        // freshly replayed Name/String comparison must not depend on an
+        // unrelated later target happening to admit those definitions.
+        // The String family itself bootstraps the representation; its
+        // constructor types do not require literal expansion. The helpers
+        // enter through the same checked, binding-pinned replay as every
+        // other dependency, never through a structural/native shortcut.
+        let string = Name::from_string("String");
+        if refs.contains(&string) && !members.contains(&string) {
+            for label in ["Char.ofNat", "String.ofList"] {
+                let support = Name::from_string(label);
+                if self.env.get_const(&support).is_some() {
+                    refs.insert(support);
+                }
+            }
+        }
         let own: HashSet<&Name> = members.iter().collect();
         let deps = refs
             .into_iter()

@@ -2,7 +2,7 @@
  "prefix": "ir_mt",
  "body": "tc::local_context::LocalContext::push_low_local::META_TAG::{const-init}",
  "core_digest": "724cf5fc6108322cb7b427dbc86e47a22fc5a03e9955d6d778e9cabc7c2baaab",
- "defs_digest": "3d15de3a1d4473a6fc123b3d5ccc97da5685fcedba6ad404c117bdecdc77706c",
+ "defs_digest": "811c4aa2bb0ab5b68f5932217540676adf8ad73205905b18438e9a358d812df7",
  "def_count": 3,
  "artifact_core_digest": "1fea11273666057bb523785d4a854a5b21c10ec6dc9c19c078ea96844a196a8f",
  "artifact_core_digest_note": "Reader A's OWN digest of the projection, printed by scripts/crystal_a2_project and taken over the domain-separated `clean.ir_mint.core.v1` prefix. `core_digest` above is ir_mint::digest of the same text under this crate's domain, which is a different constant; the two are recorded side by side rather than reconciled, because a reader that could not disagree with itself is not a second reader. This value equals every column of the meta_tag_shl row in generated/ir_mint.producer_ab.json AND the fresh 2026-08-21 projection below -- four dumps, one core text.",

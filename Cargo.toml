@@ -10,10 +10,11 @@ resolver = "2"
 # third-party/carcara is vendored third-party source with its own workspace
 # (see third-party/carcara/DOWNSTREAM.md); clean-auto reaches it as a path
 # dependency, so it must be excluded here or Cargo would claim it as a member.
-exclude = ["fuzz", "scripts/isa_harness", "third-party/carcara", "vendor"]
+exclude = ["fuzz", "scripts/isa_harness", "third-party/carcara"]
 members = [
     "crates/clean",
     "crates/clean-auto",
+    "crates/clean-autoform",
     "crates/clean-c-sem",
     "crates/clean-cake",
     "crates/clean-ck0",
@@ -32,10 +33,12 @@ members = [
     "crates/clean-mathverse",
     "crates/clean-native",
     "crates/clean-parser",
+    "crates/clean-reflect",
     "crates/clean-runtime",
     "crates/clean-rust-sem",
     "crates/clean-server",
     "crates/clean-sys",
+    "crates/clean-tla",
     "crates/clean-verify",
 ]
 # Keep default `cargo check/build/test` focused on the publish smoke surface.
@@ -51,10 +54,15 @@ default-members = [
     "crates/clean-parser",
     "crates/clean-runtime",
     "crates/clean-sys",
+    # clean-tla consumes tla-core through an exact-revision Git authority — the
+    # sibling-Ty `[patch]` redirect was removed on 2026-08-12 (93550c617) — so it
+    # remains part of the publish smoke surface. The tlaps-bench runner was
+    # absorbed as its `bench` module in rearch stage 9.
+    "crates/clean-tla",
 ]
 
 [workspace.package]
-version = "0.9.1"
+version = "0.9.2"
 edition = "2021"
 # Minimum Supported Rust Version. The codebase uses if-let chains (1.87),
 # the `[lints]` workspace inheritance (1.74), and various clippy lints
@@ -197,6 +205,8 @@ tempfile = "3.14"
 walkdir = "2.5"
 serial_test = "3.2"
 ntest = "0.9"
+# Directory scanning for clean-tla's absorbed TLAPS bench runner.
+glob = "0.3"
 
 # Parallelism
 rayon = "1.10"
@@ -245,7 +255,7 @@ clean-cake = { path = "crates/clean-cake" }
 # advancing only this edge splits TrustIR's nominal Rust types when Clean's
 # all-features tests pass TrustCG values back into Clean. TrustIR's successor
 # advances to this Clean revision after it is published.
-trust-ir-contract = { path = "vendor/trust-ir/crates/trust-ir-contract" }
+trust-ir-contract = { git = "https://github.com/alabsystems/trust-ir.git", rev = "a98dfbbe7f0b7ee8c60f2ee7c2cfd641ba850b87" }
 clean-lsp = { path = "crates/clean-lsp" }
 clean-macro = { path = "crates/clean-macro" }
 clean-math-project = { path = "crates/clean-math-project" }
@@ -254,6 +264,7 @@ clean-parser = { path = "crates/clean-parser" }
 clean-runtime = { path = "crates/clean-runtime" }
 clean-rust-sem = { path = "crates/clean-rust-sem" }
 clean-server = { path = "crates/clean-server" }
+clean-tla = { path = "crates/clean-tla" }
 clean-verify = { path = "crates/clean-verify" }
 
 # Arkworks cryptography (for polynomial commitments and folding)
@@ -285,6 +296,16 @@ memmap2 = "0.9"
 # Stack management
 stacker = "0.1"
 
+# TLA+ shared AST. Keep the dependency on an immutable internal Ty authority.
+# It pins a Ty source revision that is already published: Clean(new) ->
+# Ty(old), then Ty(new) may advance to Clean(new), keeping the authority
+# history acyclic. Final-mode publication maps this exact revision through the
+# release ledger (publish/transform.py `map_ty`), so it moves only to a Ty
+# revision the ledger maps to a public release. Local cross-repository
+# development can provide an uncommitted Cargo override, but this publishable
+# manifest must resolve exactly the same graph under `--locked` in every clone.
+tla-core = { git = "https://github.com/alabsystems/ty.git", rev = "aa96570ae592394a8c50102aa5782683543bd2c9" }
+
 # The SMT solver sibling repo was renamed z4 -> ay (alabsystems/ay). Keep
 # every AY crate on one immutable Git revision so Clean remains consumable as a
 # plain Cargo Git dependency: a `../ay` path escapes Cargo's Git checkout and
@@ -302,13 +323,13 @@ stacker = "0.1"
 # pure-Rust num_rational overflow fallback is functionally identical and adds no
 # native `-lgmp` link, so the Trust rustc_driver link (which pulls clean-auto
 # through trust-certify) has no undefined `___gmpq_*` symbols.
-ay = { package = "ay", version = "0.28.0", git = "https://github.com/alabsystems/ay.git", rev = "9dfa20b5790b03c8ffe57fbbe67316ece665c5be", default-features = false }
-ay-dpll = { package = "ay-dpll", version = "0.28.0", git = "https://github.com/alabsystems/ay.git", rev = "9dfa20b5790b03c8ffe57fbbe67316ece665c5be" }
-ay-core = { package = "ay-core", version = "0.28.0", git = "https://github.com/alabsystems/ay.git", rev = "9dfa20b5790b03c8ffe57fbbe67316ece665c5be" }
-ay-lean-bridge = { package = "ay-lean-bridge", version = "0.28.0", git = "https://github.com/alabsystems/ay.git", rev = "9dfa20b5790b03c8ffe57fbbe67316ece665c5be" }
-ay-proof = { package = "ay-proof", version = "0.28.0", git = "https://github.com/alabsystems/ay.git", rev = "9dfa20b5790b03c8ffe57fbbe67316ece665c5be" }
-ay-frontend = { package = "ay-frontend", version = "0.28.0", git = "https://github.com/alabsystems/ay.git", rev = "9dfa20b5790b03c8ffe57fbbe67316ece665c5be" }
-ay-translate = { package = "ay-translate", version = "0.28.0", git = "https://github.com/alabsystems/ay.git", rev = "9dfa20b5790b03c8ffe57fbbe67316ece665c5be" }
+ay = { package = "ay", version = "0.28.2", git = "https://github.com/alabsystems/ay.git", rev = "8bbc43108643d475a81a89b2b4f262e817ee1724", default-features = false }
+ay-dpll = { package = "ay-dpll", version = "0.28.2", git = "https://github.com/alabsystems/ay.git", rev = "8bbc43108643d475a81a89b2b4f262e817ee1724" }
+ay-core = { package = "ay-core", version = "0.28.2", git = "https://github.com/alabsystems/ay.git", rev = "8bbc43108643d475a81a89b2b4f262e817ee1724" }
+ay-lean-bridge = { package = "ay-lean-bridge", version = "0.28.2", git = "https://github.com/alabsystems/ay.git", rev = "8bbc43108643d475a81a89b2b4f262e817ee1724" }
+ay-proof = { package = "ay-proof", version = "0.28.2", git = "https://github.com/alabsystems/ay.git", rev = "8bbc43108643d475a81a89b2b4f262e817ee1724" }
+ay-frontend = { package = "ay-frontend", version = "0.28.2", git = "https://github.com/alabsystems/ay.git", rev = "8bbc43108643d475a81a89b2b4f262e817ee1724" }
+ay-translate = { package = "ay-translate", version = "0.28.2", git = "https://github.com/alabsystems/ay.git", rev = "8bbc43108643d475a81a89b2b4f262e817ee1724" }
 
 [profile.dev]
 # Reduce debug binary sizes to mitigate macOS _dyld_start stalls (#1388).
@@ -346,6 +367,14 @@ overflow-checks = true
 lto = false
 codegen-units = 1
 
+# TrustIR's publishable manifest pins Clean crates by Git revision. Redirect
+# those dependencies back into this workspace so standalone Clean testing does
+# not resolve a second copy of its own packages through the external graph.
+[patch."https://github.com/alabsystems/clean.git"]
+clean-kernel = { path = "crates/clean-kernel" }
+clean-mathverse = { path = "crates/clean-mathverse" }
+clean-olean = { path = "crates/clean-olean" }
+
 [workspace.metadata.atpkg]
 # The user-facing commands for `clean`. The mathverse_*, mm_*, verify_*, *_gate, solver_serve,
 # doc-gen and conformance bins are internal tooling.
@@ -354,7 +383,17 @@ expose = ["clean", "clean-lsp"]
 # Alethe proofs. A default-feature build exposes the command but rejects every
 # proof. This feature also enables the required ay-smt lane transitively.
 # clean-lsp is not a default-member, so build both exposed programs explicitly.
-build-args = ["-p", "clean", "-p", "clean-lsp", "--features", "clean/carcara-verify"]
+# WS6.13 (two-language roadmap, F-119 scout-lean B7): the shipped `clean` MUST
+# carry the trust-ir backend, so `clean compile --emit trustir|trustir-bin|obj`
+# exist in the pack. Without the feature the variants are not compiled at all
+# and `--emit` offers only `l5ir|l5cnf|c|rust` (measured on the stage1 build).
+# The pack's linkable runtime archive (`clean_runtime.o` + `runtime_extern.o` +
+# the prelude-shims object) needs no build arg: it ships INSIDE the binary and
+# is written out by `clean native-runtime --out-dir <dir>`; `clean --version`
+# prints the git sha (F-118). scripts/test_atpkg_recipe.py guards this line;
+# publish/transform.py's bootstrap projection strips the feature together with
+# the backend it forwards to (docs/PACKAGING_TRUST_IR_BACKEND.md).
+build-args = ["-p", "clean", "-p", "clean-lsp", "--features", "clean/carcara-verify,clean/trust-ir-backend"]
 
 # What a package of main is held to before aterm's tip lane (`atpkg-publish lane run tip`)
 # stages it. The two source steps are this package's own guards in publish/config.sh's release

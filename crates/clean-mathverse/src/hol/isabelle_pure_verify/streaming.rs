@@ -252,6 +252,39 @@ pub(super) fn stream_with_recorder(
         )
     };
 
+    // EMIT the synthesized definitional constants the registration sweeps put in
+    // `env` (both the fresh and the snapshot-resume arm above end with a full
+    // `refresh_registries`, so this sees the complete set either way). Without
+    // this the shard declares theorems whose types/values reference
+    // `isabelle.def.*` / `isabelle.polyinst.*` / … constants no header declares,
+    // and the consumer's dependency loader fails closed on every one of them.
+    // Read back out of the kernel's store, so the `KernelVerified` stamp is
+    // earned by `add_decl` having type-checked the value. See [`super::emit_defs`].
+    //
+    // The bracketing `constants_len` reads hand the exact writer slot window to
+    // the shard recorder: these indices sit OUTSIDE every shard's line range, so
+    // a per-range `.mathverse` that carved only `record_line`'s indices would
+    // drop the whole prelude and reproduce the very unregisterable-closure bug
+    // this emission removes.
+    //
+    // The inductive FAMILIES (`register_datatype_inductives` → `Num`) are
+    // emitted INSIDE the same bracket for exactly the same reason: they are
+    // shared infrastructure, referenced from theorem types/values all across the
+    // corpus, so every range shard must carry them. See
+    // [`super::emit_defs::emit_inductive_families`] for why they are written at
+    // the honest non-KernelVerified tier.
+    let shared_const_lo = writer.constants_len();
+    let emitted_defs = super::emit_defs::emit_synthesized_def_consts(&env, writer, &mut out);
+    let emitted_families = super::emit_defs::emit_inductive_families(&env, writer, &mut out);
+    let shared_const_hi = writer.constants_len();
+    if let Some(r) = recorder.as_mut() {
+        r.record_shared_consts(shared_const_lo, shared_const_hi);
+    }
+    if std::env::var_os("ISA_EMIT_DEF_STATS").is_some() {
+        eprintln!("isa-emit-defs: {emitted_defs} synthesized definitions written");
+        eprintln!("isa-emit-defs: {emitted_families} inductive-family rows written");
+    }
+
     // Optional periodic progress interval (`ISA_PROGRESS_EVERY`, lines): 0 = off
     // (default). Read once, not per line. See the checkpoint print in PASS 2.
     let progress_every: usize = std::env::var("ISA_PROGRESS_EVERY")

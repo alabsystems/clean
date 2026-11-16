@@ -100,6 +100,74 @@ fn shard_declarations(path: &std::path::Path) -> Vec<(String, u8, String, String
     decls
 }
 
+/// The translator-synthesized definitional prelude declared by a shard, as a
+/// sorted semantic fingerprint: every `isabelle.*` constant that is NOT a
+/// per-theorem kernel identity (`isabelle.s<digits>` / `isabelle.anon.*`) and not
+/// a trusted-ledger axiom (`isabelle.trusted.*`) — i.e. exactly the
+/// `emit_defs::is_synthesized_def` family. These are shared by the whole corpus,
+/// emitted once before the line loop, and every range shard must carry ALL of
+/// them: they are the closure its own theorems' types and proof values reference.
+fn synthesized_prelude(
+    decls: &[(String, u8, String, String)],
+) -> Vec<(String, u8, String, String)> {
+    let is_serial_identity = |n: &str| {
+        n.strip_prefix("isabelle.s")
+            .is_some_and(|r| !r.is_empty() && r.bytes().all(|b| b.is_ascii_digit()))
+    };
+    let mut v: Vec<(String, u8, String, String)> = decls
+        .iter()
+        .filter(|(n, ..)| {
+            n.starts_with("isabelle.")
+                && !n.starts_with("isabelle.anon.")
+                && !n.starts_with("isabelle.trusted.")
+                && !is_serial_identity(n)
+        })
+        .cloned()
+        .collect();
+    v.sort();
+    v
+}
+
+/// The inductive-FAMILY skeleton declared by a shard, as a sorted fingerprint:
+/// every `DeclKind::Inductive` / `Constructor` / `Recursor` header.
+///
+/// Shared infrastructure exactly like [`synthesized_prelude`]: the lane installs
+/// its datatypes (`Num`) through the kernel's checked `add_inductive` once at
+/// bootstrap, theorems all across the corpus reference the members from their
+/// types and proof values, and a range shard that omits them declares theorems
+/// whose closure it cannot provide — the consumer's dependency loader then fails
+/// closed with `Unknown constant: Num` and every dependent KernelVerified
+/// theorem is uncitable at `TrustGate::Strict`. Read straight from the header
+/// kinds so a rename of the datatype cannot silently empty this check.
+fn inductive_family_skeleton(path: &std::path::Path) -> Vec<(String, u8, u8)> {
+    let reader = ShardReader::from_file(path).expect("open .mathverse shard");
+    let mut v: Vec<(String, u8, u8)> = reader
+        .constants
+        .iter()
+        .filter(|c| {
+            matches!(
+                clean_mathverse::types::DeclKind::try_from(c.decl_kind),
+                Ok(clean_mathverse::types::DeclKind::Inductive)
+                    | Ok(clean_mathverse::types::DeclKind::Constructor)
+                    | Ok(clean_mathverse::types::DeclKind::Recursor)
+            )
+        })
+        .map(|c| {
+            (
+                reader
+                    .strings
+                    .get(c.name_idx as usize)
+                    .cloned()
+                    .unwrap_or_default(),
+                c.decl_kind,
+                c.import_confidence,
+            )
+        })
+        .collect();
+    v.sort();
+    v
+}
+
 /// **Per-range `.mathverse` emission gate** (design note §8 follow-up). A sharded
 /// run's per-range `.mathverse` shards, merged, declare exactly the same constants
 /// (with the same `KernelVerified` verdicts + reconstructed type/value) as the
@@ -162,15 +230,69 @@ fn merged_shard_mathverse_matches_unsharded() {
     let merged_mv = dir.join("merged.mathverse");
     let merged_count =
         merge_shard_mathverse(&shard_paths, &merged_mv).expect("merge shard .mathverse");
-    assert_eq!(
-        merged_count, full.kernel_verified,
-        "merged .mathverse must carry exactly the unsharded KV constant count"
-    );
-
     // Semantic equality via the format's own reader: same declaration set, same
     // verdicts, same reconstructed type/value — the load-bearing equivalence.
     let unsharded_decls = shard_declarations(&unsharded_mv);
     let merged_decls = shard_declarations(&merged_mv);
+
+    // EVERY range shard must independently carry the shared synthesized
+    // definitional prelude, not merely the merged artifact: a shard that declares
+    // theorems whose types and proof values reference `isabelle.def.*` /
+    // `isabelle.polyinst.*` / … constants it does not carry is exactly the shard
+    // whose KernelVerified theorems fail the consumer's dependency loader and are
+    // uncitable at TrustGate::Strict. Asserted against each `shard_k.mathverse`
+    // FILE, not against the merged artifact: the merge alone could hide a
+    // prelude-less shard behind a sibling that carried the prelude.
+    let shared_defs = synthesized_prelude(&unsharded_decls);
+    assert!(
+        !shared_defs.is_empty(),
+        "fixture must synthesize definitional constants at all"
+    );
+    for p in &shard_paths {
+        assert_eq!(
+            synthesized_prelude(&shard_declarations(p)),
+            shared_defs,
+            "range shard {} must carry the shared definitional prelude",
+            p.display()
+        );
+    }
+
+    // Same discipline for the inductive-FAMILY skeleton: it is shared
+    // infrastructure emitted once before the line loop, so EVERY range shard
+    // must carry it independently, not just the merged artifact.
+    let shared_family = inductive_family_skeleton(&unsharded_mv);
+    assert!(
+        !shared_family.is_empty(),
+        "the lane always installs its datatype inductives at bootstrap, so the \
+         unsharded shard must declare a family skeleton"
+    );
+    for p in &shard_paths {
+        assert_eq!(
+            inductive_family_skeleton(p),
+            shared_family,
+            "range shard {} must carry the shared inductive-family skeleton",
+            p.display()
+        );
+    }
+
+    // Compare the merged count against the UNSHARDED SHARD's own constant count,
+    // not against `full.kernel_verified`.
+    //
+    // The old form asserted `merged_count == full.kernel_verified`, i.e. that a
+    // shard holds exactly one constant per KernelVerified theorem. That identity
+    // held only while the writer emitted theorems alone. The shard now also
+    // carries the translator-synthesized `isabelle.*` definitional constants that
+    // those theorems' types and proof values REFERENCE — without them the
+    // dependency closure cannot be registered and the theorem is uncitable at
+    // TrustGate::Strict. So constants > theorems is now the correct shape.
+    //
+    // The KV-verdict conservation this line used to stand in for is asserted
+    // directly above (`kv_total == full.kernel_verified`) and is unaffected.
+    assert_eq!(
+        merged_count,
+        unsharded_decls.len(),
+        "merged .mathverse must carry exactly the unsharded run's constant count"
+    );
     assert!(
         !merged_decls.is_empty(),
         "fixture must yield real KernelVerified constants"
@@ -179,14 +301,37 @@ fn merged_shard_mathverse_matches_unsharded() {
         unsharded_decls, merged_decls,
         "merged per-range shards' .mathverse must declare exactly the unsharded run's constants"
     );
-    // Every merged constant is a genuine KernelVerified verdict (not a downgrade).
+    // Every merged VALUE-BEARING constant is a genuine KernelVerified verdict
+    // (not a downgrade). `shard_declarations` renders a `NO_VALUE` value slot as
+    // the literal `<AXIOM>`, which is exactly the value-less inductive-family
+    // skeleton (`Num`, its constructors, `Num.rec`).
+    //
+    // Those must NOT be KernelVerified — and that is asserted below, not
+    // excused. An inductive type former, a constructor and a recursor have no
+    // value, so nothing can type-check their value; the stamp would be
+    // fabricated. They are admitted on the consumer side by RESIDENCY earned
+    // through the kernel's own checked `add_inductive` replay, never by a tier.
     let kv_confidence = clean_mathverse::types::ImportConfidence::KernelVerified as u8;
     assert!(
         merged_decls
             .iter()
-            .all(|(_, conf, _, _)| *conf == kv_confidence),
-        "every merged constant must stay KernelVerified"
+            .all(|(_, conf, _, value)| (value == "<AXIOM>") || *conf == kv_confidence),
+        "every merged value-bearing constant must stay KernelVerified"
     );
+    assert!(
+        merged_decls
+            .iter()
+            .any(|(_, _, _, value)| value == "<AXIOM>"),
+        "the value-less family skeleton must be present (otherwise the clause \
+         above is vacuous)"
+    );
+    for (name, kind, conf) in inductive_family_skeleton(&merged_mv) {
+        assert_ne!(
+            conf, kv_confidence,
+            "value-less family member `{name}` (kind {kind}) must not carry a \
+             fabricated KernelVerified stamp"
+        );
+    }
 
     let _ = std::fs::remove_dir_all(&dir);
 }

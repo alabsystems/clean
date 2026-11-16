@@ -126,7 +126,7 @@ impl Ctx {
                     }
                     _ => {
                         let ty = self.embed_type(t)?;
-                        Ok(self.const_param(n, ty))
+                        self.const_param_checked(n, ty)
                     }
                 }
             }
@@ -147,14 +147,14 @@ impl Ctx {
                     return Ok(e);
                 }
                 let ty = self.embed_type(t)?;
-                Ok(self.const_param(n, ty))
+                self.const_param_checked(n, ty)
             }
             IsaTerm::Const { n, t } if n == "List.list.Cons" => {
                 if let Some(e) = self.embed_list_cons(t)? {
                     return Ok(e);
                 }
                 let ty = self.embed_type(t)?;
-                Ok(self.const_param(n, ty))
+                self.const_param_checked(n, ty)
             }
             // The `'a list` datatype **recursor** `List.list.rec_list`. Isabelle's
             // primitive-recursion combinator over `list` has the (constant-motive)
@@ -169,7 +169,7 @@ impl Ctx {
                     return Ok(e);
                 }
                 let ty = self.embed_type(t)?;
-                Ok(self.const_param(n, ty))
+                self.const_param_checked(n, ty)
             }
             // The `'a list` datatype **case combinator** `List.list.case_list`. Its
             // instantiated type `'b ⇒ ('a ⇒ 'a list ⇒ 'b) ⇒ 'a list ⇒ 'b` is the
@@ -183,7 +183,7 @@ impl Ctx {
                     return Ok(e);
                 }
                 let ty = self.embed_type(t)?;
-                Ok(self.const_param(n, ty))
+                self.const_param_checked(n, ty)
             }
             // The `'a list` **functor map** `List.list.map : ('a⇒'b) ⇒ 'a list ⇒
             // 'b list`. HOL defines it through the BNF `ctor_fold_list`/`map_pre_list`
@@ -201,7 +201,7 @@ impl Ctx {
                     return Ok(e);
                 }
                 let ty = self.embed_type(t)?;
-                Ok(self.const_param(n, ty))
+                self.const_param_checked(n, ty)
             }
             // ── HOL **BNF (bounded-natural-functor) combinators** for `list`
             // (gated on `instance_unfold`, strictly additive). HOL constructs the
@@ -224,42 +224,42 @@ impl Ctx {
                     return Ok(e);
                 }
                 let ty = self.embed_type(t)?;
-                Ok(self.const_param(n, ty))
+                self.const_param_checked(n, ty)
             }
             IsaTerm::Const { n, t } if self.instance_unfold && n == "Product_Type.map_prod" => {
                 if let Some(e) = self.embed_map_prod(t)? {
                     return Ok(e);
                 }
                 let ty = self.embed_type(t)?;
-                Ok(self.const_param(n, ty))
+                self.const_param_checked(n, ty)
             }
             IsaTerm::Const { n, t } if self.instance_unfold && n == "Option.map_option" => {
                 if let Some(e) = self.embed_map_option(t)? {
                     return Ok(e);
                 }
                 let ty = self.embed_type(t)?;
-                Ok(self.const_param(n, ty))
+                self.const_param_checked(n, ty)
             }
             IsaTerm::Const { n, t } if self.instance_unfold && n == "BNF_Composition.id_bnf" => {
                 if let Some(e) = self.embed_id_bnf(t)? {
                     return Ok(e);
                 }
                 let ty = self.embed_type(t)?;
-                Ok(self.const_param(n, ty))
+                self.const_param_checked(n, ty)
             }
             IsaTerm::Const { n, t } if self.instance_unfold && n == "List.list.ctor_list" => {
                 if let Some(e) = self.embed_ctor_list(t)? {
                     return Ok(e);
                 }
                 let ty = self.embed_type(t)?;
-                Ok(self.const_param(n, ty))
+                self.const_param_checked(n, ty)
             }
             IsaTerm::Const { n, t } if self.instance_unfold && n == "List.list.ctor_fold_list" => {
                 if let Some(e) = self.embed_ctor_fold_list(t)? {
                     return Ok(e);
                 }
                 let ty = self.embed_type(t)?;
-                Ok(self.const_param(n, ty))
+                self.const_param_checked(n, ty)
             }
             IsaTerm::Const { n, t }
                 if self.instance_unfold && n == "List.pre_list.list.map_pre_list" =>
@@ -268,7 +268,7 @@ impl Ctx {
                     return Ok(e);
                 }
                 let ty = self.embed_type(t)?;
-                Ok(self.const_param(n, ty))
+                self.const_param_checked(n, ty)
             }
             // `Num.num` datatype constructors → the registered clean inductive's
             // constructors (`register_datatype_inductives`). Kept under the same
@@ -285,7 +285,7 @@ impl Ctx {
                     return Ok(e);
                 }
                 let ty = self.embed_type(t)?;
-                Ok(self.const_param(n, ty))
+                self.const_param_checked(n, ty)
             }
             // The `Nat.nat` datatype **recursor** `Nat.old.nat.rec_nat`. Isabelle's
             // primitive-recursion combinator over `nat` has the (constant-motive)
@@ -302,7 +302,7 @@ impl Ctx {
                     return Ok(e);
                 }
                 let ty = self.embed_type(t)?;
-                Ok(self.const_param(n, ty))
+                self.const_param_checked(n, ty)
             }
             // The `Nat.nat` datatype **case combinator** `Nat.nat.case_nat`. Its
             // instantiated type `α ⇒ (nat ⇒ α) ⇒ nat ⇒ α` is the non-recursive
@@ -317,7 +317,7 @@ impl Ctx {
                     return Ok(e);
                 }
                 let ty = self.embed_type(t)?;
-                Ok(self.const_param(n, ty))
+                self.const_param_checked(n, ty)
             }
             // A **nat base constructor** instantiated at `nat`
             // (`Groups.zero_class.zero : nat`, `Groups.one_class.one : nat`). HOL's
@@ -379,7 +379,7 @@ impl Ctx {
                     return Ok(e);
                 }
                 let ty = self.embed_type(t)?;
-                Ok(self.const_param(n, ty))
+                self.const_param_checked(n, ty)
             }
             // `Product_Type.prod.case_prod : ('a ⇒ 'b ⇒ 'c) ⇒ 'a×'b ⇒ 'c`  →
             // `λf p. f (fst p) (snd p)` — case analysis on a pair via the prelude
@@ -391,7 +391,7 @@ impl Ctx {
                     return Ok(e);
                 }
                 let ty = self.embed_type(t)?;
-                Ok(self.const_param(n, ty))
+                self.const_param_checked(n, ty)
             }
             // ── HOL `Sum_Type.sum` (`'a + 'b`) datatype structure (gated on
             // `instance_unfold`, the final escalation pass — strictly additive).
@@ -406,7 +406,7 @@ impl Ctx {
                     return Ok(e);
                 }
                 let ty = self.embed_type(t)?;
-                Ok(self.const_param(n, ty))
+                self.const_param_checked(n, ty)
             }
             // `Sum_Type.Inr : 'b ⇒ 'a+'b`  →  `@Sum.inr.{0,0} α β`.
             IsaTerm::Const { n, t } if self.instance_unfold && n == "Sum_Type.Inr" => {
@@ -414,7 +414,7 @@ impl Ctx {
                     return Ok(e);
                 }
                 let ty = self.embed_type(t)?;
-                Ok(self.const_param(n, ty))
+                self.const_param_checked(n, ty)
             }
             // `Sum_Type.sum.case_sum : ('a⇒'c) ⇒ ('b⇒'c) ⇒ 'a+'b ⇒ 'c`  →
             // `λ(f:α→γ)(g:β→γ)(s:Sum α β). @Sum.rec.{w,0,0} (λ_.γ) f g s` — the
@@ -428,7 +428,7 @@ impl Ctx {
                     return Ok(e);
                 }
                 let ty = self.embed_type(t)?;
-                Ok(self.const_param(n, ty))
+                self.const_param_checked(n, ty)
             }
             // `Sum_Type.sum.rec_sum` is the (non-recursive) sum recursor; it has the
             // SAME constant-motive type as `case_sum` (`('a⇒'c)⇒('b⇒'c)⇒'a+'b⇒'c`,
@@ -438,7 +438,7 @@ impl Ctx {
                     return Ok(e);
                 }
                 let ty = self.embed_type(t)?;
-                Ok(self.const_param(n, ty))
+                self.const_param_checked(n, ty)
             }
             // ── HOL `Option.option` (`'a option`) datatype structure (gated on
             // `instance_unfold`). `Option.option.None : 'a option`  →  `@Option.none.{0} α`.
@@ -447,7 +447,7 @@ impl Ctx {
                     return Ok(e);
                 }
                 let ty = self.embed_type(t)?;
-                Ok(self.const_param(n, ty))
+                self.const_param_checked(n, ty)
             }
             // `Option.option.Some : 'a ⇒ 'a option`  →  `@Option.some.{0} α`.
             IsaTerm::Const { n, t } if self.instance_unfold && n == "Option.option.Some" => {
@@ -455,7 +455,7 @@ impl Ctx {
                     return Ok(e);
                 }
                 let ty = self.embed_type(t)?;
-                Ok(self.const_param(n, ty))
+                self.const_param_checked(n, ty)
             }
             // `Option.option.case_option : 'b ⇒ ('a⇒'b) ⇒ 'a option ⇒ 'b`  →
             // `λ(z:β)(f:α→β)(o:Option α). @Option.rec.{w,0} (λ_.β) z f o` — HOL's
@@ -466,7 +466,7 @@ impl Ctx {
                     return Ok(e);
                 }
                 let ty = self.embed_type(t)?;
-                Ok(self.const_param(n, ty))
+                self.const_param_checked(n, ty)
             }
             // `Option.option.rec_option` — like `rec_sum`, option is non-recursive so
             // its recursor has the SAME type as `case_option` and embeds identically.
@@ -475,7 +475,7 @@ impl Ctx {
                     return Ok(e);
                 }
                 let ty = self.embed_type(t)?;
-                Ok(self.const_param(n, ty))
+                self.const_param_checked(n, ty)
             }
             // `Fun.map_fun : ('a⇒'b) ⇒ ('c⇒'d) ⇒ ('b⇒'c) ⇒ ('a⇒'d)`  →  `λg h f x.
             // h (f (g x))` (HOL's `map_fun g h f = h ∘ f ∘ g`). The lifted int ops
@@ -486,7 +486,7 @@ impl Ctx {
                     return Ok(e);
                 }
                 let ty = self.embed_type(t)?;
-                Ok(self.const_param(n, ty))
+                self.const_param_checked(n, ty)
             }
             _ => self.embed_const_term2(tm),
         }

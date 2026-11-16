@@ -81,9 +81,9 @@ capped every lint until verifier r9 (`rustflags = ["@lint.args"]`), and reading
 the flags back off the command line was a list of symptoms. Now the runs see an
 allowlisted environment (ENV_ALLOW); a private CARGO_HOME holding nothing but
 links to the real one's caches, so its configuration is never read;
-CARGO_ENCODED_RUSTFLAGS / _RUSTDOCFLAGS set to GATE_RUSTFLAGS, which REPLACES the
-rustflags of every configuration file, the repository's and the ones above it
-alike; and RUSTC_WRAPPER='' / RUSTC_WORKSPACE_WRAPPER='', which reset any
+CARGO_ENCODED_RUSTFLAGS / _RUSTDOCFLAGS set to GATE_RUSTFLAGS / GATE_RUSTDOCFLAGS,
+which REPLACE the rustflags of every configuration file, the repository's and the
+ones above it alike; and RUSTC_WRAPPER='' / RUSTC_WORKSPACE_WRAPPER='', which reset any
 configured wrapper (the clippy frontend sets the driver as its own). What cargo
 configuration can still say, cargo itself reports (`targo config get --merged
 no`), and a key outside MODELED_CONFIG is refused wherever its file lives -- a
@@ -207,6 +207,18 @@ KNOWN_ORPHANS: dict[str, str] = {
         "crates/clean-kernel/tests/kcheck_trace.rs, whose own [[test]] target needs the "
         "default-off kcheck-trace + reduction-stats features, and tests/pinned_literal.rs "
         "(1 test, pinned-import feature); no leg runs either"
+    ),
+    # Recorded 2026-11-15: landed with the R7 native-entry evidence packet
+    # (reports/cruise-r7-native-entry-refusals-2026-11-15) with no disposition
+    # here, which left this check RED on origin/main. The packet's other two
+    # copied trees were gzip-encoded in place (its TRANSPORT-ENCODING.json and
+    # restore_packet.py); this one cannot be: its byte-pinned README
+    # (payload/entry-probe-preparation/README.md, pinned by audit_packet.py)
+    # links each of its three files, and the audit books them by name.
+    "reports/cruise-r7-native-entry-refusals-2026-11-15/payload/entry-probe-preparation/capsule": (
+        "retained, never-admitted native-entry prototype of scripts/lint_types (own "
+        "[workspace]): historical evidence byte-pinned by its packet's audit; its test "
+        "module is that driver's at the packet's source commit; no leg builds or tests it"
     ),
 }
 
@@ -454,13 +466,30 @@ _LINT_CODEGEN_KEYS = frozenset({
     "incremental", "lto", "metadata", "opt-level", "overflow-checks", "panic",
     "split-debuginfo", "strip",
 })
-# The flags the runs pass through CARGO_ENCODED_RUSTFLAGS: the pinned `trust`
-# toolchain verifies every unit by default, and the third-party graph is not
-# what this check is about (.cargo/config.toml's header says why).
-GATE_RUSTFLAGS = ("-Ztrust-verify=off",)
+# The flags the runs pass through CARGO_ENCODED_RUSTDOCFLAGS and _RUSTFLAGS: the
+# pinned `trust` toolchain verifies every unit by default, and the third-party
+# graph is not what this check is about (.cargo/config.toml's header says why).
+GATE_RUSTDOCFLAGS = ("-Ztrust-verify=off",)
+# ...and, for rustc alone, an EXPLICIT front-end thread count. The installed
+# Trust SDK's targo (store 20882) appends `-Zthreads=<jobs>` to every native
+# unverified rustc unit whose line carries no thread or jobs control of its own
+# (targo-core `compiler/resource_budget/mod.rs`, `frontend_jobs`, called after
+# `--force-warn` in `compiler/mod.rs`), <jobs> being the run's resolved job
+# count -- `build.jobs = 4` in this repository's .cargo/config.toml, or
+# CARGO_BUILD_JOBS, or a build slot's plan -- so the line differed per box and
+# per admission and the allowlist below refused `-Z threads=4` on every tree
+# (2026-11-15, docs/DECISIONS.md). An explicit control on the line wins there
+# (its test `explicit_controls_and_opaque_arguments_win`), so the runs name
+# one, rustc's own default of 1: the line is then the same on every box, and
+# the allowlist admits exactly the value this check passed, never a count from
+# anywhere else. A thread count changes no lint level, cfg or verdict
+# (rustc_session `trust_frontend_threads_by_flags`: the option is untracked).
+# rustdoc gets no thread flag: targo adds none to a rustdoc invocation.
+GATE_RUSTFLAGS = (*GATE_RUSTDOCFLAGS, "-Zthreads=1")
 # ...and what cargo itself adds for CARGO_UNSTABLE_CHECKSUM_FRESHNESS (see
 # `hermetic_env`): the hash rustc records in dep-info.
-_LINT_UNSTABLE_OPTS = frozenset({"trust-verify=off", "checksum-hash-algorithm=blake3"})
+_LINT_UNSTABLE_OPTS = frozenset({"trust-verify=off", "threads=1",
+                                 "checksum-hash-algorithm=blake3"})
 
 
 def _split_flag(arg: str) -> tuple[str, str | None]:
@@ -831,9 +860,8 @@ def hermetic_env(env: dict[str, str], home: Path) -> dict[str, str]:
     real = Path(run.get("CARGO_HOME") or Path(run.get("HOME") or "~").expanduser() / ".cargo")
     _private_cargo_home(home, real)
     run["CARGO_HOME"] = str(home)
-    flags = "\x1f".join(GATE_RUSTFLAGS)
-    run["CARGO_ENCODED_RUSTFLAGS"] = flags
-    run["CARGO_ENCODED_RUSTDOCFLAGS"] = flags
+    run["CARGO_ENCODED_RUSTFLAGS"] = "\x1f".join(GATE_RUSTFLAGS)
+    run["CARGO_ENCODED_RUSTDOCFLAGS"] = "\x1f".join(GATE_RUSTDOCFLAGS)
     # An EMPTY value overrides any `build.rustc-wrapper` / `-workspace-wrapper`
     # and runs none (cargo's documented reset) -- for the scanner's build too
     # (verifier r10: a configured workspace wrapper built the scanner). The
@@ -1601,6 +1629,12 @@ flags="$flags --force-warn=unused_crate_dependencies"
 plant PLANT_FORCE_OTHER && flags="$flags --force-warn=clippy::wildcard_enum_match_arm"
 plant PLANT_FORCE_WARNINGS && flags="$flags --force-warn=warnings"
 plant PLANT_FORCE_REPEATED && flags="$flags --force-warn=unused_crate_dependencies"
+# What a profile's rustflags carrying another front-end thread count add ...
+plant PLANT_LINE_THREADS && flags="$flags -Zthreads=8"
+# ... and what the installed targo appends to a native unverified unit
+# (resource_budget `frontend_jobs`): its job count as the thread count, unless
+# the line already names one -- as GATE_RUSTFLAGS does.
+[[ "$flags" == *" -Zthreads="* ]] || flags="$flags -Zthreads=4"
 driver="$PWD/bin/tippy-driver"
 plant PLANT_RUSTC_WRAPPER && driver="/usr/local/bin/sccache $driver"
 capped=0
@@ -1745,6 +1779,11 @@ _SELFTEST_ARMS: tuple[tuple[str, str, bool, dict[str, str]], ...] = (
     ("13c `--cfg test` on the line (no lint is lowered; every `#[cfg(not(test))]` item leaves "
      "the lint)", "PLANT_LINE_CFG_TEST", False, {}),
     ("13d an `--extern` from outside this run's build dirs", "PLANT_LINE_EXTERN", False, {}),
+    # 2026-11-15: the stub `targo` appends `-Zthreads=4` as the installed one does
+    # whenever the line names no thread count, so dropping `-Zthreads=1` from
+    # GATE_RUSTFLAGS reddens the baseline; a count from anywhere else is refused.
+    ("13e a front-end thread count this check did not pass (`-Zthreads=8`) on the line",
+     "PLANT_LINE_THREADS", False, {}),
     ("14 the test unit is Fresh: nothing was linted over this run's arguments",
      "PLANT_FRESH_TEST_UNIT", False, {}),
     ("15 a rustc wrapper stands between cargo and the clippy driver",

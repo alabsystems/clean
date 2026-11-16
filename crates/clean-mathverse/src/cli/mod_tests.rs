@@ -1139,3 +1139,55 @@ fn test_isabelle_capture_chain_accepts_portable_home_override() {
         },
     }
 }
+
+#[test]
+fn test_isabelle_fetch_defaults_parse() {
+    let h = Harness::try_parse_from(["clean", "mathverse", "isabelle-fetch"]).expect("parse");
+    match h.command {
+        Top::Mathverse(args) => match args.command {
+            MathverseCommands::IsabelleFetch(f) => {
+                assert_eq!(f.work_dir, PathBuf::from("~/isabelle-work"));
+                assert!(f.only.is_empty(), "no --only means every input");
+                assert!(!f.dry);
+                assert!(f.manifest.is_none());
+            }
+            _ => panic!("expected IsabelleFetch"),
+        },
+    }
+}
+
+#[test]
+fn test_isabelle_fetch_repeatable_only_dry_and_manifest_parse() {
+    let h = Harness::try_parse_from([
+        "clean",
+        "mathverse",
+        "isabelle-fetch",
+        "--work-dir",
+        "/data/isabelle-work",
+        "--only",
+        "Isabelle2025",
+        "--only",
+        "Isabelle2025-2",
+        "--dry",
+        "--manifest",
+        "/tmp/inputs.json",
+    ])
+    .expect("parse");
+    match h.command {
+        Top::Mathverse(args) => match args.command {
+            MathverseCommands::IsabelleFetch(f) => {
+                assert_eq!(f.work_dir, PathBuf::from("/data/isabelle-work"));
+                assert_eq!(f.only, vec!["Isabelle2025", "Isabelle2025-2"]);
+                assert!(f.dry);
+                assert_eq!(f.manifest, Some(PathBuf::from("/tmp/inputs.json")));
+            }
+            _ => panic!("expected IsabelleFetch"),
+        },
+    }
+}
+
+#[test]
+fn test_isabelle_fetch_only_requires_a_value() {
+    let res = Harness::try_parse_from(["clean", "mathverse", "isabelle-fetch", "--only"]);
+    assert!(res.is_err(), "--only must take an input id");
+}

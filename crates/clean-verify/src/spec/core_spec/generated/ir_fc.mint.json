@@ -2,7 +2,7 @@
  "prefix": "ir_fc",
  "body": "flat::types::FlatFlags::contains",
  "core_digest": "7c9f5e0194c17162f38d3448c0e0cf7830a05b4a044d6cff2c06ba8efbeb3f8e",
- "defs_digest": "da7d88a297961b2526649ceaa149bf7ea16b12a5dc39f55f1feef25dbf495c3d",
+ "defs_digest": "8a6392c1e363816f327d9bbd08b4aaa829935bf236a336cf5e1764b932badaf9",
  "def_count": 4,
  "def_count_note": "TWO module definitions (the one block, the func, the module -- three) plus the ir_fc_tflags alias, which the mint reproduces BYTE-IDENTICAL to the interface-only struct pin the hand transcription already registered: def_count 4 = 1 alias + 1 block + func + module.",
  "artifact_core_digest": "53e469871568db5264370462e3567edd62d43ba248b7f7238a7ce947a5172d38",

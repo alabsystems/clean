@@ -374,6 +374,31 @@ pub fn import_proven_theorems(
         &list_fn_registry,
     );
 
+    // EMIT the synthesized definitional constants the sweeps above registered.
+    //
+    // Everything registered so far lives ONLY in `env`; none of it was ever
+    // handed to `writer`. Every theorem written below references those
+    // definitions in its type and proof value, so a shard without them is a
+    // shard whose KV theorems cannot be cited — the consumer's dependency
+    // loader fails closed on `Unknown constant: isabelle.def.…`.
+    //
+    // Emitted HERE, at the one point where `env`'s `isabelle.*` residents are
+    // exactly the synthesized definitions (no theorem has been added yet), and
+    // read back out of the kernel's own store so the `KernelVerified` stamp is
+    // earned by `add_decl` having type-checked the value. See
+    // [`super::emit_defs`].
+    let emitted_defs = super::emit_defs::emit_synthesized_def_consts(&env, writer, &mut out);
+    // EMIT the inductive FAMILIES the same registration bootstrap installed
+    // (`register_datatype_inductives` → `Num`). Value-less, so they are written
+    // at the honest non-KernelVerified tier and admitted on the consumer side by
+    // the kernel's own checked `add_inductive` replay. See
+    // [`super::emit_defs::emit_inductive_families`].
+    let emitted_families = super::emit_defs::emit_inductive_families(&env, writer, &mut out);
+    if std::env::var_os("ISA_EMIT_DEF_STATS").is_some() {
+        eprintln!("isa-emit-defs: {emitted_defs} synthesized definitions written");
+        eprintln!("isa-emit-defs: {emitted_families} inductive-family rows written");
+    }
+
     // Opaque proof-value elision (env-gated, default off): after each theorem is
     // KernelVerified, drop its resident proof VALUE so peak memory stays bounded
     // on the full corpus. See [`super::elide_proofs_enabled`] and `verify_one`.
@@ -476,14 +501,35 @@ pub(super) fn escalation_modes(
             RootLane::Off,
         ),
     ];
-    let mut ordered: Vec<_> = if concludes_registered_class_membership(thm, class_registry) {
-        let (real, erase): (Vec<_>, Vec<_>) = modes
-            .into_iter()
-            .partition(|(m, _, _, _)| *m == ClassMembership::Real);
-        real.into_iter().chain(erase).collect()
-    } else {
-        modes.into_iter().collect()
-    };
+    // FAITHFUL BEFORE ERASING, always.
+    //
+    // The driver stops at the FIRST mode the kernel accepts, so mode order is a
+    // fidelity policy, not a performance knob. `ClassMembership::Erase` embeds
+    // `OFCLASS('a, c)` as the constant `True` (datatypes/embed_use.rs), which
+    // DELETES the class constraint — the stored statement is then not the one
+    // Isabelle proved. Listing `Erase` first made erasure the DEFAULT rather
+    // than a fallback: it won whenever the erased statement happened to verify,
+    // which it often does precisely BECAUSE the constraint was dropped.
+    //
+    // `concludes_registered_class_membership` promoted `Real` only when the
+    // theorem's CONCLUSION is a registered class membership. That is far too
+    // narrow — a theorem with a class constraint in a PREMISE, or one merely
+    // mentioning a class, still got the erasing mode first. With 261 structured
+    // classes registered, registration was never the binding constraint; the
+    // ordering was.
+    //
+    // Now `Real` is always attempted first and `Erase` is a genuine fallback.
+    // This is strictly fidelity-improving and cannot admit anything unsound: a
+    // `Real` verdict is minted by the same checked kernel path as before, and a
+    // statement that only `Erase` can verify is still verified by `Erase` — it
+    // just no longer PREEMPTS the faithful embedding.
+    let (real, erase): (Vec<_>, Vec<_>) = modes
+        .into_iter()
+        .partition(|(m, _, _, _)| *m == ClassMembership::Real);
+    let mut ordered: Vec<_> = real.into_iter().chain(erase).collect();
+    // `concludes_registered_class_membership` is retained for its diagnostic
+    // value at the call sites below; the ordering no longer depends on it.
+    let _ = concludes_registered_class_membership(thm, class_registry);
     // **Namespace-crossed root lane** trailing modes (binder-order round): the
     // lane re-solves a leading sort-`AbsP` chain over a generic reference
     // expectation-pinned, which can build a DIFFERENT (occasionally wrong)
@@ -928,6 +974,29 @@ pub(super) fn verify_one_with_translations(
                 out,
                 elide,
             ) {
+                // DUMP BEFORE HANDING OVER. This arm `return`s, so a constant the
+                // ledger absorbs never reached the dump below — and with
+                // `ISA_TRUSTED_LEDGER=1` (what every grand run uses) that is most
+                // of them. The v32 run therefore diagnosed 1,211 rejects while
+                // leaving the ledger's 9,571 kernel-rejects with no signature at
+                // all: 83% of every primary failure, concentrated at the earliest
+                // (most foundational) serials, and invisible. The two populations
+                // are disjoint — no dumped serial appears anywhere in the ledger —
+                // so this is pure addition, tagged `ledger:` to keep them
+                // separable for consumers that rank the honest-reject population
+                // on its own.
+                if let (Some(target), Some(err), None) =
+                    (&dump_target, &last_kernel_err, origin.as_ref())
+                {
+                    super::dump::append_reject(
+                        target,
+                        "ledger:kernel-reject",
+                        &thm.name,
+                        thm.serial,
+                        err,
+                        &thm.proof,
+                    );
+                }
                 return;
             }
         }
@@ -988,14 +1057,25 @@ pub(super) fn verify_one_with_translations(
         );
     }
 
-    // The shard stores the human-readable name (or the kernel name when the
-    // node is anonymous), keeping the catalog readable.
-    let shard_name = if thm.name.is_empty() {
-        &kernel_name
-    } else {
-        &thm.name
-    };
-    let name_idx = writer.add_string(shard_name);
+    // The shard stores the KERNEL name — the identity every dependent's proof
+    // value actually references.
+    //
+    // Storing the human name here was a NAME-KEY MISMATCH, not a cosmetic
+    // choice. `kernel_name` (`isabelle.s<serial>`) is what this theorem was
+    // registered as (see the serial-identity note above: Isabelle has anonymous
+    // nodes and name-duplicating serials, so the serial is the only sound
+    // kernel key), so every later theorem's proof term spells the reference
+    // `Const(isabelle.s<serial>)`. Indexing the shard under `Pure.prop_def`
+    // instead left those references resolving to nothing, and the consumer's
+    // dependency loader failed closed:
+    //
+    //   dependency loader rejected `Orderings.ord_bool_inst.less_eq_bool`:
+    //     TypeCheckFailed(UnknownConst(isabelle.s154236))
+    //
+    // even though the constant WAS in the shard, under its Isabelle name. The
+    // human name is preserved as a separate kernel-checked ALIAS record below,
+    // so both `isabelle.s<serial>` and `Pure.prop_def` resolve.
+    let name_idx = writer.add_string(&kernel_name);
     let type_idx = lower_kernel_expr(&ty, writer);
     let value_idx = lower_kernel_expr(&proof_value, writer);
     let header = MathverseConstantHeader {
@@ -1016,16 +1096,75 @@ pub(super) fn verify_one_with_translations(
     let shard_idx = writer.add_constant(header);
     out.kernel_verified += 1;
     out.names.push(thm.name.clone());
-    // On a ledger run, record every written constant (here: tier-1 KV) so the
-    // publish step can stamp provenance at the right shard index even when the
-    // shard also holds tier-2 / ledger constants. Empty (untouched) when OFF.
-    if ledger_on {
-        out.written_constants.push(WrittenConstant {
-            name: shard_name.clone(),
-            shard_idx,
-            confidence: ImportConfidence::KernelVerified as u8,
-            ledger_note: None,
-        });
+    // Record every written constant (here: tier-1 KV) so the publish step can
+    // stamp provenance at the constant's ACTUAL shard index.
+    //
+    // This used to be gated on `ledger_on`, and the publish step fell back to
+    // "KV constant `i` is at shard index `i`" otherwise. That positional
+    // identity died the moment the shard also carries the synthesized
+    // definitional constants and the human-name aliases, so the ledger is now
+    // kept unconditionally — the writer is the only thing that knows what it
+    // wrote and where.
+    out.written_constants.push(WrittenConstant {
+        name: kernel_name.clone(),
+        shard_idx,
+        confidence: ImportConfidence::KernelVerified as u8,
+        ledger_note: None,
+    });
+
+    // HUMAN-NAME ALIAS — `Pure.prop_def : T := isabelle.s378`.
+    //
+    // The primary record above is keyed by the serial identity so dependents'
+    // `Const(isabelle.s<serial>)` references resolve. Citation, however, is BY
+    // ISABELLE NAME, so the catalog must still answer to `Pure.prop_def`. The
+    // alias is a real declaration, not a metadata pointer: its value is the
+    // primary constant and the kernel checks `Const(isabelle.s<serial>) : T`
+    // through the same `add_decl` every other declaration goes through. Only an
+    // ACCEPTED alias is written, so the `KernelVerified` stamp keeps meaning
+    // exactly "Clean's kernel type-checked this declaration's value".
+    //
+    // A rejected alias is almost always a DUPLICATE Isabelle name (several
+    // serials share one name — the very reason the kernel key is the serial).
+    // First writer wins, the rest keep only their serial name, and nothing is
+    // stamped that the kernel did not accept.
+    //
+    // `type_idx` is reused: the alias's type is literally the primary's type
+    // expression, already lowered into this shard's arena.
+    if !thm.name.is_empty() && thm.name != kernel_name {
+        let alias_value = Expr::const_str(&kernel_name);
+        let alias_decl = Declaration::Theorem {
+            name: Name::from_string(&thm.name),
+            level_params: Vec::new(),
+            type_: ty.clone(),
+            value: alias_value.clone(),
+        };
+        if env.add_decl(alias_decl).is_ok() {
+            let alias_name_idx = writer.add_string(&thm.name);
+            let alias_value_idx = lower_kernel_expr(&alias_value, writer);
+            let alias_shard_idx = writer.add_constant(MathverseConstantHeader {
+                name_idx: alias_name_idx,
+                type_idx,
+                value_idx: alias_value_idx,
+                source_system: SourceSystem::Isabelle as u8,
+                import_confidence: ImportConfidence::KernelVerified as u8,
+                content_domain: ContentDomain::Logic as u8,
+                decl_kind: DeclKind::Theorem as u8,
+                axiom_profile: AxiomProfile(0),
+                sidecar_digest: 0,
+                provenance_idx: 0,
+                level_params_start: 0,
+                level_params_count: 0,
+                _pad2: [0u8; 26],
+            });
+            out.written_constants.push(WrittenConstant {
+                name: thm.name.clone(),
+                shard_idx: alias_shard_idx,
+                confidence: ImportConfidence::KernelVerified as u8,
+                ledger_note: Some(format!(
+                    "human-name alias of {kernel_name}; kernel-checked by add_decl"
+                )),
+            });
+        }
     }
     // **Opt-in, env-gated** KernelVerified-name dump (`ISA_DUMP_KV=<file>`):
     // append one `name\tserial` line per verified theorem, the KV-side twin of

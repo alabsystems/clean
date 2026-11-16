@@ -3138,6 +3138,19 @@ impl<'a> ElabCtx<'a> {
             };
         }
 
+        // Lazy Mathverse resolution (`crate::mathverse_lazy`). Placed AFTER
+        // every diagnostic about a name this file or environment owns — the
+        // protected-name pointer (a resident declaration always wins over a
+        // library one), the self-reference report (the declaration being
+        // DEFINED must never be satisfied by a library constant of the same
+        // name, which would then collide at registration) and the same-batch
+        // sibling report (likewise the file's own declaration) — and BEFORE
+        // the ordinary unknown-identifier error, which it replaces only while
+        // a corpus is armed and the library offers the name.
+        if let Some(request) = self.mathverse_lazy_request(written.name()) {
+            return request;
+        }
+
         // The nearest-theorem scan is DEFERRED to where the error is reported
         // (`ElabError::with_ident_suggestions`): most of these errors are
         // raised on speculative paths that catch them, and the scan over every
@@ -3163,6 +3176,58 @@ impl<'a> ElabCtx<'a> {
         let written = written.qualify_under(&SurfaceName::default());
         let decl = decl.qualify_under(&SurfaceName::default());
         written == decl || written == self.qualify_name(&decl)
+    }
+
+    /// Ask the decl driver to install `name` from the Mathverse Library — a
+    /// REQUEST, not a diagnosis. Returns `None` in every case where the
+    /// ordinary error must stand.
+    ///
+    /// Three conditions, cheapest first:
+    ///
+    /// 1. a corpus is ARMED for this file (`import Mathverse.<Corpus>`), which
+    ///    is one hash probe on an option map. A file that never wrote such an
+    ///    import returns here, so no library lookup happens and the resulting
+    ///    error is byte-identical to before;
+    /// 2. `name` is NOT already resident — this is what makes lazy retry
+    ///    terminate: a granted request ends with the name resident, so it can
+    ///    never be requested twice;
+    /// 3. the installed library offers `name` (one hash probe, ~5ns on a miss).
+    ///
+    /// Condition 3 is deliberately corpus-BLIND: a name the library has under
+    /// the wrong corpus still produces a request so the loader can report the
+    /// provenance mismatch, rather than letting it present as a typo.
+    ///
+    /// `name` is the canonical written name (`_root_.` already stripped); the
+    /// library is keyed by its plain dotted spelling.
+    ///
+    /// `&self` — `ElabCtx` cannot install anything; see [`crate::mathverse_lazy`].
+    pub(super) fn mathverse_lazy_request(&self, name: &Name) -> Option<ElabError> {
+        if !self.mathverse_armed() || name.is_anon() || self.name_is_resident(name) {
+            return None;
+        }
+        let name = name.to_string();
+        crate::mathverse_lazy::library_offers(&name)
+            .then_some(ElabError::MathverseNameAvailable { name })
+    }
+
+    /// Did this file write a corpus-level `import Mathverse.<Corpus>`?
+    ///
+    /// One hash probe, no allocation. Every lazy-resolution path asks this
+    /// FIRST so a disarmed file pays nothing beyond it — in particular it must
+    /// be answered before any dotted name is reassembled.
+    pub(super) fn mathverse_armed(&self) -> bool {
+        self.get_option(crate::mathverse_lazy::MATHVERSE_ARMED_OPTION)
+            .is_some_and(Option::is_some)
+    }
+
+    /// Is `name` already installed in the environment under any declaration
+    /// kind? Ignores accessibility on purpose: a private-but-present constant
+    /// is still installed, and re-loading it would not help.
+    fn name_is_resident(&self, name: &Name) -> bool {
+        self.env.get_const(name).is_some()
+            || self.env.get_inductive(name).is_some()
+            || self.env.get_constructor(name).is_some()
+            || self.env.get_recursor(name).is_some()
     }
 
     pub(super) fn elab_universe(&mut self, univ: &UniverseExpr) -> Result<Expr, ElabError> {

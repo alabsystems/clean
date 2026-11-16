@@ -207,6 +207,32 @@ pub(crate) fn reconstruct_expr_table(
 // Wired up by the lazy/mmap closure loader (zero-copy MVP, ShardConstantSource)
 // and the structural-equivalence search path
 // (`MathverseLibrary::structural_rewrite_digest_of`).
+///
+/// # Why interactive consumers should prefer this over the prefix path
+///
+/// [`reconstruct_from_shard_with_level_lists`] memoizes a WHOLE-ARENA prefix
+/// build that stops at the first `UNSUPPORTED` node, so a single unconvertible
+/// expr renders every higher index permanently unreconstructable. Measured on a
+/// 67,028-constant merged library:
+///
+/// ```text
+/// failed to reconstruct expression 1303973
+///   (beyond reconstructable prefix of len 364075)
+/// ```
+///
+/// — roughly 70% of the arena lost to one bad node. This function only fails
+/// when an `UNSUPPORTED` node is IN the requested sub-DAG, and materializes just
+/// that sub-DAG, so it is both more complete and far cheaper on a large corpus.
+pub fn reconstruct_single_subdag_public(
+    exprs: &[FlatExpr],
+    levels: &[FlatLevel],
+    strings: &[String],
+    level_lists: &[u32],
+    root_idx: u32,
+) -> Result<Expr, String> {
+    reconstruct_single_subdag(exprs, levels, strings, level_lists, root_idx)
+}
+
 pub(crate) fn reconstruct_single_subdag(
     exprs: &[FlatExpr],
     levels: &[FlatLevel],

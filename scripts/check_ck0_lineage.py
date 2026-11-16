@@ -25,11 +25,16 @@ except ImportError:
     import tomli as tomllib
 
 ROOT = Path(__file__).resolve().parents[1]
-BASE = ('Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', '.cargo/config.toml',
+RESOURCE_HELPER = 'scripts/resource_transport.py'
+LEGACY_BASE = ('Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', '.cargo/config.toml',
         'reports/self-proof-q2-2026-11-12/seed.ndjson',
         'crates/clean-kernel/src/level/fixtures/lean_kernel_verdicts_v4.30.0-rc2.tsv')
+BASE = (*LEGACY_BASE, RESOURCE_HELPER)
 CRATE = 'crates/clean-ck0'
 SCHEMA = 'clean.ck0-lineage/v1'
+# Historical v1 source records did not bind the transport helper. Keep their
+# immutable scope explicit; a new capture cannot select that weaker profile.
+SOURCE_SCHEMA = 'clean.ck0-candidate-source/v2'
 PRODUCTION_PATHS = {'trust_manifest': 'crates/trust-spec-temporal/Cargo.toml',
                     'trust_lock': 'crates/trust-spec-temporal/Cargo.lock',
                     'ty_manifest': 'crates/tla-check/Cargo.toml'}
@@ -39,6 +44,10 @@ RUN_TAILS = {'default': ['test', '--all-targets'],
 ANSWERS_PINNED_INPUTS = True
 PRODUCER_FILES = ('scripts/check_ck0_lineage.py', 'scripts/rust_modules.py',
                   'scripts/check_add_decl_ratchet.py', 'scripts/ck0_input_stability.py')
+PRODUCTION_BATCH_TEST = 'scripts/test_ck0_production_batch.py'
+CANDIDATE_CONTEXT_TEST = 'scripts/test_ck0_candidate_context.py'
+TRANSPORT_TEST = 'scripts/test_ck0_transport.py'
+SOURCE_PROFILE_TEST = 'scripts/test_ck0_source_profiles.py'
 _RUST_MODULES = None
 
 
@@ -89,11 +98,25 @@ def checked_inventory(files, reason):
 
 
 def command(argv, cwd=ROOT, env=None):
-    return subprocess.check_output(argv, cwd=cwd, env=env, stderr=subprocess.PIPE).decode()
+    inherited = os.environ if env is None else env
+    return subprocess.check_output(argv, cwd=cwd, env=env, stderr=subprocess.PIPE,
+                                   pass_fds=_resource_fds(inherited)).decode()
+
+
+def _resource_fds(env):
+    """Forward live advertised locators; native owners still authenticate them.
+
+    The helper is a declared candidate input, so each physical source snapshot
+    binds it. Load its current source per call, never an ignored bytecode cache.
+    """
+    try:
+        return _source_module('ck0_resource_transport', ROOT / RESOURCE_HELPER).resource_fds(env)
+    except (RuntimeError, AttributeError) as error:
+        raise ValueError('Q6 inherited resource transport: ' + str(error)) from error
 
 
 def git(repo, *args):
-    return command(['git', '-C', str(repo), *args])
+    return _production_git(repo, *args).decode()
 
 
 def _rust_modules():
@@ -252,36 +275,131 @@ def same_inputs(expected, actual):
 
 
 def source_record(root):
-    revision = git(root, 'rev-parse', 'HEAD').strip()
+    revision = _production_commit(root, 'HEAD', label='candidate source')
     files = inventory(root)
     # Require every input to be a committed blob at this exact revision.
     for path, sha in files.items():
-        need(digest(subprocess.check_output(['git', '-C', str(root), 'show', f'{revision}:{path}'])) == sha,
+        need(digest(_production_git(root, 'show', f'{revision}:{path}')) == sha,
              f'input differs from committed source: {path}')
-    return {'schema': SCHEMA, 'kind': 'candidate-source', 'revision': revision,
+    return {'schema': SOURCE_SCHEMA, 'kind': 'candidate-source', 'revision': revision,
             'files': files, 'proof_claim': False, 'genesis_promoted': False}
 
 
 def checked_source(root, record):
-    need(record['schema'] == SCHEMA and record['kind'] == 'candidate-source', 'source schema')
+    need(record['schema'] == SOURCE_SCHEMA and record['kind'] == 'candidate-source', 'source schema')
     need(record['proof_claim'] is False and record['genesis_promoted'] is False, 'candidate cannot promote genesis or claim proof')
     need(re.fullmatch('[0-9a-f]{40}', record['revision']), 'source revision')
+    need(_production_commit(root, record['revision'], label='candidate source') == record['revision'],
+         'source commit identity')
     same_inputs(record['files'], inventory(root))
     for path, sha in record['files'].items():
-        blob = subprocess.check_output(['git', '-C', str(root), 'show', f"{record['revision']}:{path}"])
+        blob = _production_git(root, 'show', f"{record['revision']}:{path}")
         need(digest(blob) == sha, f'source commit mismatch: {path}')
 
 
-def git_files(repo, revision, prefixes):
-    """Hash committed blobs, never the mutable sibling working directory."""
-    rows = git(repo, 'ls-tree', '-r', revision, '--', *prefixes).splitlines()
+PRODUCTION_GIT_LOCAL_ENV = frozenset({
+    # Git's `rev-parse --local-env-vars` vocabulary, plus the namespace selector.
+    # A caller's checkout (including an invoking Git hook) must not override
+    # the repository passed to these committed-object reads. Config entry
+    # siblings are removed below with their count/parameter advertisements.
+    'GIT_ALTERNATE_OBJECT_DIRECTORIES', 'GIT_CONFIG', 'GIT_CONFIG_PARAMETERS',
+    'GIT_CONFIG_COUNT', 'GIT_OBJECT_DIRECTORY', 'GIT_DIR', 'GIT_WORK_TREE',
+    'GIT_IMPLICIT_WORK_TREE', 'GIT_GRAFT_FILE', 'GIT_INDEX_FILE',
+    'GIT_NO_REPLACE_OBJECTS', 'GIT_REPLACE_REF_BASE', 'GIT_PREFIX',
+    'GIT_SHALLOW_FILE', 'GIT_COMMON_DIR', 'GIT_NAMESPACE',
+})
+
+
+def _production_env():
+    # Isolate only Git repository-local context; preserve native resource fields.
+    env = {key: value for key, value in os.environ.items()
+           if key not in PRODUCTION_GIT_LOCAL_ENV and
+           not key.startswith(('GIT_CONFIG_KEY_', 'GIT_CONFIG_VALUE_'))}
+    env.update(GIT_NO_REPLACE_OBJECTS='1', GIT_NO_LAZY_FETCH='1',
+               GIT_TERMINAL_PROMPT='0')
+    return env
+
+
+def _production_git(repo, *args, reject_stderr=False):
+    result = subprocess.run(['git', '-C', str(repo), *args], env=_production_env(),
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+    need(not reject_stderr or not result.stderr, 'production reference emitted Git diagnostics')
+    return result.stdout
+
+
+def _production_commit(repo, ref, label='production Trust'):
+    """Resolve a caller's ref to one commit; warnings/ambiguous names refuse."""
+    need(isinstance(ref, str) and bool(ref), label + ' reference')
+    raw = _production_git(repo, '-c', 'core.warnAmbiguousRefs=true',
+                          'rev-parse', '--verify', '--end-of-options',
+                          ref + '^{commit}', reject_stderr=True)
+    need(re.fullmatch(rb'[0-9a-f]{40}\n', raw), label + ' commit identity')
+    return raw[:-1].decode('ascii')
+
+
+def _batch_blob_hashes(stream, oids):
+    """Read exactly the requested Git blob frames; trust no returned header."""
+    need(len(oids) == len(set(oids)) and all(
+        isinstance(oid, str) and re.fullmatch(r'[0-9a-f]{40}', oid)
+        for oid in oids), 'production batch object requests')
     result = {}
-    for row in rows:
-        meta, path = row.split('\t', 1)
-        mode, kind, oid = meta.split()
-        need(kind == 'blob' and mode in ('100644', '100755'), f'non-regular production input: {path}')
-        result[path] = digest(subprocess.check_output(['git', '-C', str(repo), 'cat-file', 'blob', oid]))
-    need(bool(result), 'empty production inventory')
+    for oid in oids:
+        header = stream.readline(128)
+        fields = header.removesuffix(b'\n').split(b' ')
+        need(header.endswith(b'\n') and len(fields) == 3 and
+             fields[:2] == [oid.encode('ascii'), b'blob'] and
+             re.fullmatch(rb'(?:0|[1-9][0-9]{0,19})', fields[2]),
+             'production batch object header: ' + oid)
+        size = int(fields[2])
+        need(size <= sys.maxsize, 'production blob size out of range: ' + oid)
+        content = hashlib.sha256()
+        object_hash = hashlib.sha1(usedforsecurity=False)
+        object_hash.update(b'blob ' + fields[2] + b'\0')
+        remaining = size
+        while remaining:
+            chunk = stream.read(min(remaining, 1024 * 1024))
+            need(bool(chunk), 'truncated production blob: ' + oid)
+            content.update(chunk)
+            object_hash.update(chunk)
+            remaining -= len(chunk)
+        need(stream.read(1) == b'\n', 'production blob frame terminator: ' + oid)
+        need(object_hash.hexdigest() == oid, 'production Git blob identity: ' + oid)
+        result[oid] = content.hexdigest()
+    need(stream.read(1) == b'', 'extra production batch response')
+    return result
+
+
+def git_files(repo, revision, prefixes):
+    """Hash committed blobs in one batch, never a sibling's mutable files.
+
+    NUL records preserve literal paths. Only full object IDs enter batch input;
+    duplicate content shares a request, never a path/census entry. Spool output
+    to a private temporary file so total source size is not resident in memory.
+    """
+    raw = _production_git(repo, 'ls-tree', '-rz', '--full-tree', revision, '--', *prefixes)
+    need(raw and raw.endswith(b'\0'), 'empty or malformed production inventory')
+    paths = {}
+    for row in raw[:-1].split(b'\0'):
+        fields = row.split(b'\t', 1)
+        need(len(fields) == 2, 'malformed production tree entry')
+        meta, path = fields[0].split(b' '), fields[1].decode('utf-8')
+        need(len(meta) == 3 and meta[0] in (b'100644', b'100755') and
+             meta[1] == b'blob', f'non-regular production input: {path}')
+        need(path and path not in paths, 'duplicate or empty production path')
+        oid = meta[2].decode('ascii')
+        need(re.fullmatch(r'[0-9a-f]{40}', oid),
+             'production tree object identity: ' + path)
+        paths[path] = oid
+    oids = list(dict.fromkeys(paths.values()))
+    with tempfile.TemporaryFile() as output:
+        subprocess.run(['git', '-C', str(repo), 'cat-file', '--batch'],
+                       input=''.join(oid + '\n' for oid in oids).encode('ascii'),
+                       stdout=output, stderr=subprocess.PIPE, check=True,
+                       env=_production_env())
+        output.seek(0)
+        hashes = _batch_blob_hashes(output, oids)
+    result = {path: hashes[oid] for path, oid in paths.items()}
+    checked_inventory(result, 'production source path census')
     return result
 
 
@@ -305,21 +423,30 @@ def production_route(documents):
 
 
 def production_record(trust, ty, clean, ref):
-    revision = git(trust, 'rev-parse', ref).strip()
+    revision = _production_commit(trust, ref)
     links = {}
     for name in ('clean', 'ty'):
-        row = git(trust, 'ls-tree', revision, 'first-party/' + name).split()
-        need(row[:2] == ['160000', 'commit'], 'missing production gitlink: ' + name)
-        links[name] = row[2]
+        path = ('first-party/' + name).encode('ascii')
+        raw = _production_git(trust, 'ls-tree', '-z', revision, '--', path.decode('ascii'))
+        fields = raw[:-1].split(b'\t', 1) if raw.endswith(b'\0') and raw.count(b'\0') == 1 else []
+        meta = fields[0].split(b' ') if len(fields) == 2 else []
+        need(len(meta) == 3 and meta[:2] == [b'160000', b'commit'] and
+             fields[1] == path and re.fullmatch(rb'[0-9a-f]{40}', meta[2]),
+             'missing or malformed production gitlink: ' + name)
+        links[name] = meta[2].decode('ascii')
+        need(_production_git(clean if name == 'clean' else ty,
+                             'cat-file', '-t', links[name]) == b'commit\n',
+             'production gitlink is not an exact commit: ' + name)
     paths = dict(PRODUCTION_PATHS)
-    documents = {key: git(ty if key == 'ty_manifest' else trust, 'show',
-                          f"{links['ty'] if key == 'ty_manifest' else revision}:{path}") for key, path in paths.items()}
+    documents = {key: _production_git(ty if key == 'ty_manifest' else trust, 'show',
+                          f"{links['ty'] if key == 'ty_manifest' else revision}:{path}").decode()
+                 for key, path in paths.items()}
     production_route(documents)
     return {'schema': SCHEMA, 'kind': 'production-source-provenance', 'trust_revision': revision,
             'gitlinks': links, 'document_paths': paths, 'documents': documents,
             'document_sha256': {k: digest(v.encode()) for k, v in documents.items()},
             'trust_files': git_files(trust, revision, ['Cargo.toml', 'Cargo.lock', '.cargo', 'crates/trust-spec-temporal']),
-            'clean_files': git_files(clean, links['clean'], [CRATE, *BASE, '.cargo']),
+            'clean_files': git_files(clean, links['clean'], [CRATE, *LEGACY_BASE, '.cargo']),
             'ty_files': git_files(ty, links['ty'], ['Cargo.toml', 'Cargo.lock', 'crates/tla-check',
                                                  'crates/tla-bignum', 'crates/tla-hash-fx']),
             'compiled_production_closure': False, 'proof_claim': False}
@@ -401,7 +528,7 @@ def compile_record(driver, compiler, label, output, source):
     checked_source(ROOT, source)
     output.mkdir(parents=True, exist_ok=False)
     (output / 'producer.py').write_bytes(Path(__file__).read_bytes())
-    env = os.environ.copy()
+    env = _production_env()
     env['CARGO_TARGET_DIR'] = str(ROOT / '.q6' / ('target-' + label + '.noindex'))
     env['RUSTC'] = str(compiler)
     env['RUSTDOC'] = str(compiler.with_name('trustdoc' if label == 'trust' else 'rustdoc'))
@@ -464,7 +591,8 @@ def compile_record(driver, compiler, label, output, source):
     for name in RUN_TAILS:
         argv = run_argv(driver.resolve(), label, name)
         with (output / (name + '.log')).open('wb') as log:
-            rc = subprocess.run(argv, cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT).returncode
+            rc = subprocess.run(argv, cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT,
+                                pass_fds=_resource_fds(env)).returncode
         data = (output / (name + '.log')).read_bytes()
         text = data.decode(errors='replace')
         artifacts = {}
@@ -1217,7 +1345,8 @@ const C: char = '\"';
                      ['--compile', 'stock', '--output', str(output)],
                      ['--compile', 'trust', '--output', str(output)]):
             result = subprocess.run([sys.executable, str(Path(__file__).resolve()),
-                                     '--require-q6', *mode], capture_output=True, text=True)
+                                     '--require-q6', *mode], capture_output=True, text=True,
+                                    pass_fds=_resource_fds(os.environ))
             need(result.returncode == 1 and 'Q6 incomplete:' in result.stderr and
                  not output.exists(), 'Q6 completion flag bypassed by early mode')
             count += 1
@@ -1232,33 +1361,41 @@ const C: char = '\"';
             receiver = ['--runs', str(output)] if mode else []
             result = subprocess.run([sys.executable, str(Path(__file__).resolve()),
                                      '--require-stability', *receiver, *mode],
-                                    capture_output=True, text=True, timeout=10)
+                                    capture_output=True, text=True, timeout=10,
+                                    pass_fds=_resource_fds(os.environ))
             need(result.returncode == 1 and '--require-stability requires' in result.stderr and
                  not output.exists(), 'stability receiver flag bypassed by early mode')
             count += 1
+    for controls in (PRODUCTION_BATCH_TEST, CANDIDATE_CONTEXT_TEST, TRANSPORT_TEST, SOURCE_PROFILE_TEST):
+        batch = subprocess.run([sys.executable, '-B', str(ROOT / controls)],
+                               capture_output=True, text=True, check=False,
+                               pass_fds=_resource_fds(os.environ))
+        need(batch.returncode == 0, controls + ' controls failed: ' + batch.stderr[-2000:])
+        print(batch.stdout + batch.stderr, end='')
     print(f'Q6 selftest: {count} negative controls refused; positive inventory, production route and run accepted')
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument('--selftest', action='store_true')
-    ap.add_argument('--pinned-inputs', action='store_true')
+    action = ap.add_mutually_exclusive_group()
+    action.add_argument('--selftest', action='store_true')
+    action.add_argument('--pinned-inputs', action='store_true')
     ap.add_argument('--require-stability', action='store_true')
     ap.add_argument('--source', type=Path, default=ROOT / 'genesis/ck0/CANDIDATE.json')
-    ap.add_argument('--capture-source', action='store_true')
-    ap.add_argument('--capture-production', action='store_true')
+    action.add_argument('--capture-source', action='store_true')
+    action.add_argument('--capture-production', action='store_true')
     ap.add_argument('--production', type=Path)
     ap.add_argument('--trust-repo', type=Path)
     ap.add_argument('--ty-repo', type=Path)
     ap.add_argument('--clean-repo', type=Path, default=ROOT)
     ap.add_argument('--trust-ref', default='origin/main')
-    ap.add_argument('--compile', choices=['trust', 'stock'])
+    action.add_argument('--compile', choices=['trust', 'stock'])
     ap.add_argument('--driver', type=Path)
     ap.add_argument('--compiler', type=Path)
     ap.add_argument('--output', type=Path)
     ap.add_argument('--runs', type=Path)
     ap.add_argument('--local', action='store_true')
-    ap.add_argument('--authenticate-production', action='store_true')
+    action.add_argument('--authenticate-production', action='store_true')
     ap.add_argument('--require-q6', action='store_true')
     args = ap.parse_args()
     if args.require_q6:
@@ -1268,7 +1405,9 @@ def main():
              args.capture_source, args.capture_production, args.compile)),
              '--require-stability requires --runs without early action modes')
     if args.pinned_inputs:
-        print('\n'.join(name for name in PRODUCER_FILES if name != 'scripts/check_ck0_lineage.py'))
+        print('\n'.join(sorted({PRODUCTION_BATCH_TEST, CANDIDATE_CONTEXT_TEST, TRANSPORT_TEST, SOURCE_PROFILE_TEST,
+                          'scripts/check_ck0_replay_custody.py', RESOURCE_HELPER, *(name for name in PRODUCER_FILES
+                          if name != 'scripts/check_ck0_lineage.py')})))
         return
     if args.capture_production:
         need(all((args.production, args.trust_repo, args.ty_repo)), '--capture-production requires --production, --trust-repo and --ty-repo')

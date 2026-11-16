@@ -789,3 +789,27 @@ async fn verify_c_stops_at_its_deadline() {
     wait_until_idle(&state).await;
 }
 
+#[tokio::test]
+async fn batch_prove_tla_stops_at_its_deadline() {
+    use clean_tla::encoding::TlaFormula;
+    use clean_tla::obligation::TlaObligation;
+    let items = (0..100_000)
+        .map(|i| BatchProveTlaItem {
+            id: format!("tla_{i}"),
+            obligation: TlaObligation::new(TlaFormula::Always(Box::new(TlaFormula::True))),
+        })
+        .collect();
+    let params = BatchProveTlaParams {
+        items,
+        threads: 2,
+        timeout_ms: Some(TIMEOUT_MS),
+    };
+    let (state, response, fast_first) = race!(prelude_state(), |s| handle_batch_prove_tla(
+        s,
+        RequestId::Number(1),
+        params,
+        None
+    ));
+    assert_timed_out(&response, fast_first);
+    wait_until_idle(&state).await;
+}

@@ -4,7 +4,7 @@
  "derivation": {
   "script": "scripts/verdict_io_contracts.py",
   "source_artifact": "data/verdict_set.json",
-  "source_artifact_sha256": "6d03312b697c01409b4fb4921bf886ecc282937b367db5b459c9401006b6f289",
+  "source_artifact_sha256": "bbfbecc316e92457fe16cfe0ed6b7e6959e2d56125a6fad42b80530e81189547",
   "shared_denominator": "the site scan is IMPORTED from scripts/verdict_set.py (production_lines + IO_TOKENS) and re-run over the same members at the same pinned digests; a total that disagrees with the committed io_site_total aborts the mint",
   "axis_1_effect": {
    "what": "what the site actually does, decided by ordered lexical rules over the LEXED line (comments and literals blanked, #[cfg(test)] mod bodies removed); first match wins; a site matching no rule aborts the mint",
@@ -134,8 +134,8 @@
   "regenerate": "scripts/verdict_io_contracts.py     (--check to verify the committed file)"
  },
  "classification": {
-  "site_total": 316,
-  "sites_issuing_io": 210,
+  "site_total": 317,
+  "sites_issuing_io": 211,
   "sites_issuing_no_io": 106,
   "by_effect": {
    "read-file": 100,
@@ -145,14 +145,14 @@
    "error-value": 23,
    "spawn-process": 23,
    "read-dir": 22,
-   "read-env": 19,
+   "read-env": 20,
    "in-memory-no-io": 2,
    "process-stream": 2,
    "read-ambient": 2,
    "stat-file": 2
   },
   "by_dependence": {
-   "content-bearing": 170,
+   "content-bearing": 171,
    "verdict-irrelevant": 106,
    "success-only": 40
   },
@@ -161,7 +161,7 @@
     "read-file": 100,
     "spawn-process": 23,
     "read-dir": 22,
-    "read-env": 19,
+    "read-env": 20,
     "process-stream": 2,
     "read-ambient": 2,
     "stat-file": 2
@@ -395,9 +395,9 @@
     "declaration_only": false
    },
    "crates/clean-mathverse/src/verify/incremental/mod.rs": {
-    "sites": 6,
-    "issuing_io": 4,
-    "content_bearing": 2,
+    "sites": 7,
+    "issuing_io": 5,
+    "content_bearing": 3,
     "success_only": 2,
     "verdict_irrelevant": 2,
     "declaration_only": false
@@ -806,7 +806,7 @@
     "read-env"
    ],
    "dependence": "content-bearing",
-   "site_count": 19,
+   "site_count": 20,
    "member_count": 9,
    "members": [
     "crates/clean-mathverse/src/coq/alpha.rs",
@@ -848,14 +848,14 @@
     "crates/clean-mathverse/src/coq/universe_releveling.rs": 1,
     "crates/clean-mathverse/src/inductive_replay.rs": 5,
     "crates/clean-mathverse/src/shard.rs": 1,
-    "crates/clean-mathverse/src/verify/incremental/mod.rs": 2,
+    "crates/clean-mathverse/src/verify/incremental/mod.rs": 3,
     "crates/clean-olean/src/import/path.rs": 1,
     "crates/clean-olean/src/import/project_world.rs": 1,
     "crates/clean-verify/src/spec/core_spec/bundles.rs": 1,
     "crates/clean-verify/src/spec/decl_budget.rs": 2
    },
    "variables": {
-    "CLEAN_WS16_DEBUG": 6,
+    "CLEAN_WS16_DEBUG": 7,
     "COQ_MOTIVE_DEBUG": 4,
     "<unresolved>": 2,
     "CLEAN_COQ_VAR_RELEVEL": 1,
@@ -1995,16 +1995,16 @@
     "site_count": 5,
     "lines": [
      38,
-     1004,
-     1050,
-     1067,
-     1147
+     1012,
+     1058,
+     1075,
+     1155
     ],
     "statement": "crates/clean-mathverse/src/inductive_replay.rs assumes, without proof, that: The ABSENCE of every environment variable is the safe default, and no value a caller can set either changes what a verdict depends on or escapes being recorded in that verdict's provenance.",
     "checked": "NOTHING in the tree checks this contract",
     "probe": "scripts/verdict_io_contracts.py --sites C-ENV-NEUTRAL --member crates/clean-mathverse/src/inductive_replay.rs",
     "discharge": "commit a table of every variable name lane (b) reads with a declared disposition (`diagnostic-only` / `behaviour-changing`), enforce it here so an unlisted name aborts the mint, and require every behaviour-changing name to appear in the provenance of any verdict minted under it.",
-    "date": "2026-11-14",
+    "date": "2026-11-16",
     "owning_job": "R2b-ENV"
    },
    {
@@ -2028,16 +2028,17 @@
     "contract": "C-ENV-NEUTRAL",
     "class": "content-bearing",
     "member": "crates/clean-mathverse/src/verify/incremental/mod.rs",
-    "site_count": 2,
+    "site_count": 3,
     "lines": [
      1150,
-     1682
+     1682,
+     4102
     ],
     "statement": "crates/clean-mathverse/src/verify/incremental/mod.rs assumes, without proof, that: The ABSENCE of every environment variable is the safe default, and no value a caller can set either changes what a verdict depends on or escapes being recorded in that verdict's provenance.",
     "checked": "NOTHING in the tree checks this contract",
     "probe": "scripts/verdict_io_contracts.py --sites C-ENV-NEUTRAL --member crates/clean-mathverse/src/verify/incremental/mod.rs",
     "discharge": "commit a table of every variable name lane (b) reads with a declared disposition (`diagnostic-only` / `behaviour-changing`), enforce it here so an unlisted name aborts the mint, and require every behaviour-changing name to appear in the provenance of any verdict minted under it.",
-    "date": "2026-11-14",
+    "date": "2026-11-16",
     "owning_job": "R2b-ENV"
    },
    {
@@ -2491,8 +2492,8 @@
     "probe": "scripts/verdict_io_contracts.py --describe   # prints the borrowed token table",
     "discharge": "derive sites from the call graph instead of from tokens; until then, every added token lands with a mutation arm proving the scan would have missed it before.",
     "owning_job": "R2b-DENOM",
-    "date": "2026-11-14",
-    "site_count": 316
+    "date": "2026-11-16",
+    "site_count": 317
    }
   ]
  },
@@ -3665,7 +3666,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/inductive_replay.rs",
-   "line": 1004,
+   "line": 1012,
    "token": "env::var",
    "rule": "E-ENV",
    "effect": "read-env",
@@ -3676,7 +3677,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/inductive_replay.rs",
-   "line": 1050,
+   "line": 1058,
    "token": "env::var",
    "rule": "E-ENV",
    "effect": "read-env",
@@ -3687,7 +3688,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/inductive_replay.rs",
-   "line": 1067,
+   "line": 1075,
    "token": "env::var",
    "rule": "E-ENV",
    "effect": "read-env",
@@ -3698,7 +3699,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/inductive_replay.rs",
-   "line": 1147,
+   "line": 1155,
    "token": "env::var",
    "rule": "E-ENV",
    "effect": "read-env",
@@ -4885,6 +4886,17 @@
    "dependence": "success-only",
    "code": "if let Ok(mut file) = std::fs::OpenOptions::new()",
    "error_discarded": true
+  },
+  {
+   "member": "crates/clean-mathverse/src/verify/incremental/mod.rs",
+   "line": 4102,
+   "token": "env::var",
+   "rule": "E-ENV",
+   "effect": "read-env",
+   "dependence": "content-bearing",
+   "code": "if let Ok(filter) = std::env::var(                  ) {",
+   "env_name": "CLEAN_WS16_DEBUG",
+   "env_name_via": "literal"
   },
   {
    "member": "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs",

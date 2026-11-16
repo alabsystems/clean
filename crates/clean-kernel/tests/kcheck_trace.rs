@@ -198,7 +198,7 @@ fn ordinary_and_fenced_verdicts_and_reduction_counts_survive_local_tracing() {
     let t = app(lam(sort(), b(0)), b(0), sort());
     assert!(beta(&t, &mut j, |_, _, _| Err("unused".into())).is_some());
     let env = Environment::for_lean_replay();
-    let mut tracer = clean_kernel::kcheck_trace::core::CoreTracer::new(&env, 10000);
+    let mut tracer = core::CoreTracer::new(&env, 10000);
     let raw = Expr::app(
         Expr::lam(BinderData::default(), Expr::type_(), Expr::bvar(0)),
         Expr::sort(Level::zero()),
@@ -227,7 +227,7 @@ fn ordinary_and_fenced_verdicts_and_reduction_counts_survive_local_tracing() {
         &label.erase(),
     ));
     let redex = app(lam(sort(), b(0)), proposition, label);
-    let mut profiled = clean_kernel::kcheck_trace::core::CoreTracer::new(&env, 10000);
+    let mut profiled = core::CoreTracer::new(&env, 10000);
     profiled.whnf(&redex).expect("profiled domain guard");
     assert!(profiled
         .oracle_conversions

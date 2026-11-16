@@ -50,8 +50,9 @@ impl MintedScript {
 /// A module's `(globals …)` list mints as one `def {prefix}_g{k} : IRGlobal`
 /// per entry, placed after the alias definitions and before the first block
 /// — see [`check_global_namespace`] for what the list must agree with. An
-/// EMPTY list mints the literal `(IRList.nil IRGlobal)` it always did, so every
-/// chain without a global is byte-identical under this lane.
+/// List constructors name their type arguments explicitly with `@`, including
+/// the empty global list. This changes the source spelling and its digest,
+/// while preserving the constructor application and decoded core module.
 ///
 /// # Errors
 /// Returns [`MintError`] on a malformed core module, a construct outside the
@@ -131,16 +132,16 @@ pub fn mint(core: &Sx, prefix: &str, tags: &Tags) -> Result<MintedScript, MintEr
         ));
         func_names.push(format!("{fp}_func"));
     }
-    let mut list = String::from("(IRList.nil IRFunc)");
+    let mut list = String::from("(@IRList.nil IRFunc)");
     for n in func_names.iter().rev() {
-        list = format!("(IRList.cons IRFunc {n} {list})");
+        list = format!("(@IRList.cons IRFunc {n} {list})");
     }
     // The global list is spelled the same way, and its empty case is the
-    // literal `(IRList.nil IRGlobal)` every chain before the globals lane
-    // minted — byte for byte, which every one of their M3 gates asserts.
-    let mut glist = String::from("(IRList.nil IRGlobal)");
+    // explicit literal `(@IRList.nil IRGlobal)`. M3 checks the regenerated
+    // source spelling against this renderer as well as its decoded module.
+    let mut glist = String::from("(@IRList.nil IRGlobal)");
     for n in global_names.iter().rev() {
-        glist = format!("(IRList.cons IRGlobal {n} {glist})");
+        glist = format!("(@IRList.cons IRGlobal {n} {glist})");
     }
     // The lists are already parenthesised, which is what every chain before
     // this lane minted and what `IRModule.mk`'s argument positions need.
@@ -215,9 +216,9 @@ pub fn mint(core: &Sx, prefix: &str, tags: &Tags) -> Result<MintedScript, MintEr
     let head = if enc_names.is_empty() {
         format!("IRModule.mk {list} {glist}")
     } else {
-        let mut elist = String::from("(IRList.nil IREnc)");
+        let mut elist = String::from("(@IRList.nil IREnc)");
         for n in enc_names.iter().rev() {
-            elist = format!("(IRList.cons IREnc {n} {elist})");
+            elist = format!("(@IRList.cons IREnc {n} {elist})");
         }
         format!("IRModule.mkv {list} {glist} {elist}")
     };
@@ -376,9 +377,9 @@ fn nat_list(items: &[Sx]) -> Result<String, MintError> {
         1 => format!("(ir_nl1 {})", vals[0]),
         2 => format!("(ir_nl2 {} {})", vals[0], vals[1]),
         _ => {
-            let mut s = String::from("(IRList.nil Nat)");
+            let mut s = String::from("(@IRList.nil Nat)");
             for v in vals.iter().rev() {
-                s = format!("(IRList.cons Nat {v} {s})");
+                s = format!("(@IRList.cons Nat {v} {s})");
             }
             s
         }
@@ -400,9 +401,9 @@ fn node_list(nodes: &[Sx], tags: &Tags) -> Result<String, MintError> {
             rendered[0], rendered[1], rendered[2], rendered[3], rendered[4], rendered[5]
         ),
         _ => {
-            let mut s = String::from("(IRList.nil IRNode)");
+            let mut s = String::from("(@IRList.nil IRNode)");
             for r in rendered.iter().rev() {
-                s = format!("(IRList.cons IRNode {r} {s})");
+                s = format!("(@IRList.cons IRNode {r} {s})");
             }
             s
         }
@@ -461,8 +462,8 @@ pub(super) fn arg(kind: Arg, a: &Sx, tags: &Tags) -> Result<String, MintError> {
         Arg::Cases => cases(a.tagged("cases")?, tags)?,
         Arg::Const => cst(a, tags)?,
         Arg::OptVal => match a.list()?.first().map(Sx::atom).transpose()? {
-            Some("none") => "(IROption.none Nat)".into(),
-            Some("some") => format!("(IROption.some Nat {})", nat(a.tagged("some")?[0].num()?)?),
+            Some("none") => "(@IROption.none Nat)".into(),
+            Some("some") => format!("(@IROption.some Nat {})", nat(a.tagged("some")?[0].num()?)?),
             other => {
                 return Err(CoreError::Shape(format!(
                     "expected (some n) or (none), found `{other:?}`"
@@ -493,7 +494,7 @@ fn cases(items: &[Sx], _tags: &Tags) -> Result<String, MintError> {
             format!("(ir_sc {} {} {s})", nat(ci[0].num()?)?, nat(ci[1].num()?)?)
         } else {
             format!(
-                "(IRList.cons IRSwitchCase (IRSwitchCase.mk {} {} {}) {s})",
+                "(@IRList.cons IRSwitchCase (IRSwitchCase.mk {} {} {}) {s})",
                 nat(ci[0].num()?)?,
                 nat(ci[1].num()?)?,
                 nat_list(args)?

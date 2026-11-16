@@ -93,7 +93,7 @@ COVERAGE: dict[str, tuple[str, str, str]] = {
     "crates/clean-mathverse/src/hol/isabelle_verified.rs#import_verified_hol_proofs": (ENTRY, "kernel.add_decl", "needs Isabelle dumps"),
     "crates/clean-mathverse/src/lean4/mathlib_kernel_verify.rs#verify_mathlib_lemmas_kernel": (ENTRY, "kernel.check_type", "needs a Mathlib lemma table"),
     "crates/clean-mathverse/src/lean4/shard_verify.rs#verify_shard_into_env": (ENTRY, "kernel.add_decl", "a second shard engine; the probed one is verify/incremental"),
-    "crates/clean-mathverse/src/library.rs#MathverseLibrary::verify_foreign": (ENTRY, "kernel.add_decl", "starts from Environment::new(), where neither `False` nor `Nat.zero` is resident"),
+    "crates/clean-mathverse/src/library.rs#MathverseLibrary::submit_proven": (ENTRY, "reference.add_checked", "admits the submission through ReferenceKernel::add_checked over an empty Environment::default(), where neither `False` nor `Nat.zero` is resident"),
     "crates/clean-mathverse/src/nnverify_ieee754_shard.rs#verify_nnverify_ieee754_shard": (ENTRY, "kernel.check_type", "fixed NN-verification shard"),
     "crates/clean-mathverse/src/shard_verify/constant_verify.rs#verify_single_constant": (ENTRY, "kernel.add_decl", "starts from Environment::new()"),
     "crates/clean-mathverse/src/trust_sign/reauditor.rs#reaudit_one": (EXERCISED, "mathverse.trust_sign.attest", "reaudit_one's verdict is attest's"),

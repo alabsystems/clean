@@ -24,6 +24,7 @@ pub mod glob;
 pub(crate) mod interpolate;
 pub mod manifest;
 mod module_options;
+mod module_world;
 #[cfg(test)]
 mod test_env;
 pub mod toml_config;

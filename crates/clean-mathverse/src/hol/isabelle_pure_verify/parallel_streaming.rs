@@ -224,6 +224,26 @@ pub fn import_proven_theorems_parallel(
             Vec::new(),
         )
     };
+    // EMIT the synthesized definitional constants the registration sweeps put in
+    // `env` (both arms above end with a full registry build/refresh, so this sees
+    // the complete set either way). Without this the shard declares theorems
+    // whose types/values reference `isabelle.def.*` / `isabelle.polyinst.*` / …
+    // constants no header declares, and the consumer's dependency loader fails
+    // closed on every one of them. Read back out of the kernel's store, so the
+    // `KernelVerified` stamp is earned by `add_decl` having type-checked the
+    // value. See [`super::emit_defs`].
+    let emitted_defs = super::emit_defs::emit_synthesized_def_consts(&env, writer, &mut out);
+    // EMIT the inductive FAMILIES installed by the same bootstrap
+    // (`register_datatype_inductives` → `Num`) — value-less, written at the
+    // honest non-KernelVerified tier, admitted on the consumer side by the
+    // kernel's checked `add_inductive` replay. See
+    // [`super::emit_defs::emit_inductive_families`].
+    let emitted_families = super::emit_defs::emit_inductive_families(&env, writer, &mut out);
+    if std::env::var_os("ISA_EMIT_DEF_STATS").is_some() {
+        eprintln!("isa-emit-defs: {emitted_defs} synthesized definitions written");
+        eprintln!("isa-emit-defs: {emitted_families} inductive-family rows written");
+    }
+
     let closure = Arc::new(RwLock::new(closure));
 
     let progress_every: usize = std::env::var("ISA_PROGRESS_EVERY")

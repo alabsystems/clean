@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 # Copyright 2026 Andrew Yates
 # SPDX-License-Identifier: Apache-2.0
-"""Run P3's patched-kernel control through Trust's trust-certify mint sites (the Trust leg).
+"""Run P3's patched-kernel control through Trust's trust-certify mint sites and its temporal
+source certification (the Trust leg).
 
-    scripts/heavy_gate.sh run 26 p3-trust-leg -- \\
+    scripts/heavy_gate.sh run 52 p3-trust-leg -- \\
         python3 scripts/patched_kernel_control_trust.py [--trust-repo DIR] \\
-            [--trust-ref REF] [--work-dir DIR] [--keep] [--write-record]
+            [--trust-ref REF] [--gitlink-source first-party/NAME=DIR]... \\
+            [--work-dir DIR] [--keep] [--write-record]
 
 `scripts/patched_kernel_control.py` measures Clean's own mint sites and the
 `clean-kernel` calls Trust makes; this script measures Trust's code on top of
@@ -14,12 +16,25 @@ reference gate and judgment check, the E9 mints (the scalar one the compiler
 calls and the exact-domain one) with the grade the compiler reads, from the
 audited judgment through the fenced entry to the certificate the compiler's
 `Certified` mint reads back (`trust_certify::reference_certificate_for`), a
-calculus row over a stand-in VF5 family, and presented violation-refutation
-evidence. The test it runs is `scripts/p3_trust_leg/p3_planted_e9.rs` (its docs
-state the sites and the contract); it is built with Trust's
+calculus row over a stand-in VF5 family, presented violation-refutation
+evidence, and the planted pair from island source through a term-level
+`let rec` (both doors, then the helper and the parent cited through the E9
+lane on the batched door's session environment); and, in the separate
+`trust-spec-temporal` workspace, `certify_clean_temporal_source` and
+`recheck_clean_temporal_certificate` on the plain and the `let rec` source. The
+tests it runs are `scripts/p3_trust_leg/p3_planted_e9.rs` (built with Trust's
 `calculus-row-test-support` feature, a test door that gates only
-`calculus_row::test_support`. The weight above is 1.3 times the 19.82 GB peak
-of a run (2026-11-15); `scripts/heavy_gate.sh peaks` has the current one.
+`calculus_row::test_support`) and `scripts/p3_trust_leg/p3_planted_temporal.rs`;
+their docs state the sites. Both trees give Clean's clean-tla the two `Expr::BuiltinSet` match
+arms of Clean's commit 7253ee4957, without which `trust-spec-temporal` does not compile from
+Trust's own pins (`shim_clean_tla`, which states why and refuses once either pin makes the
+arms wrong); the record carries the shim. `scripts/p3_trust_leg/` mirrors the `tests/`
+directory each is installed into, with its modules and the contract both share
+(`p3_contract/contract.rs`); the runner installs every file there, refuses a
+file in it that no test installs, and records each installed file's digest. The weight above is 1.3 times the class's largest
+completed peak, 39.65 GB (2026-11-15; the same command has also peaked under
+20 GB, and the cause of the difference was not determined); the gate raises a
+lower weight to it, and `scripts/heavy_gate.sh peaks` has the current one.
 
 Trust's tree is taken at `--trust-ref`. Every `first-party/*` gitlink there
 must be held by a complete local repository: when Trust's main pins a commit
@@ -33,18 +48,21 @@ holds the pinned commit (this repository for `first-party/clean`, then Trust's
 own submodule store, then a sibling checkout `../<name>`, then any repository
 named for that path with `--gitlink-source PATH=DIR`; a partial clone is
 skipped wherever it is named and no git call here may fetch:
-`GIT_NO_LAZY_FETCH=1`; the record says which source was named), copies the test
-into `crates/trust-certify/tests/`, and clones the tree once more with P3's
+`GIT_NO_LAZY_FETCH=1`; the record says which source was named), installs each
+test with its modules and the shared contract into its crate's `tests/`
+(`crates/trust-certify/tests/`, `crates/trust-spec-temporal/tests/`), gives
+clean-tla the shim's two arms, and clones the tree once more with P3's
 mutant M1 applied to `first-party/clean`'s `infer.rs` (the anchor and the
-replacement are `patched_kernel_control.py`'s). Three legs, each tree with its
-own fresh target directory (never shared: P3's 2026-11-13 finding):
+replacement are `patched_kernel_control.py`'s). Three legs, each tree and each
+workspace with its own fresh target directory (never shared: P3's 2026-11-13
+finding), each running both tests:
 
   unmodified  the pinned Clean: every site refuses the planted pair;
   mutant      M1 with CLEAN_P3_KERNEL_UNDER_TEST naming it: each site's
               outcome must match its pin;
   undeclared  M1 again without the variable: must fail with `P3 WRONG ACCEPT`.
 
-A leg passes only when its exit status is the required one AND its printed
+A test's leg passes only when its exit status is the required one AND its printed
 rows name exactly the pinned sites with its binary's pinned outcomes (the
 undeclared leg runs the mutant's), its controls all mint, and its kernel line
 declares the leg's kernel. The undeclared leg must report `P3 WRONG ACCEPT` at
@@ -53,7 +71,8 @@ mutant, and fail in no other way. The test runs with `TRUST_KR0_DEBUG=1`,
 Trust's measurement-only report of each reference-entry refusal: on the mutant
 binary the refutation's entry (lane `int`) must refuse exactly once, by a type
 mismatch, and on the unmodified binary it must not be reached (the open-term
-check refuses first). The scratch root is deleted on exit, failure and
+check refuses first). That rule is the E9 test's; the temporal test reaches no
+reference entry and must report no miss. The scratch root is deleted on exit, failure and
 SIGTERM/SIGHUP/SIGINT included, unless `--keep`. With `--write-record` (this
 runner, P3's runner and the test committed and unmodified, before and after)
 the measurement is written to RECORD.
@@ -74,26 +93,58 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import patched_kernel_control as p3  # noqa: E402  (the mutant and the targo resolution are P3's)
+from patched_kernel_control_trust_tree import (  # noqa: E402  (the scratch tree)
+    CLEAN_GITLINK, clone_tree, extract, fail, gitlinks, named_sources, run, shim_clean_tla, shown_path, source_for,
+)
 
 ROOT = p3.ROOT
 RECORD = "reports/self-proof-p3-2026-11-12/patched_kernel_control_trust.json"
-FIXTURE = "scripts/p3_trust_leg/p3_planted_e9.rs"
+FIXTURE_DIR = "scripts/p3_trust_leg"
 RUNNER = "scripts/patched_kernel_control_trust.py"
-COMMITTED = [FIXTURE, RUNNER, "scripts/patched_kernel_control.py"]
-PACKAGE = "trust-certify"
-TEST = "p3_planted_e9"
-TEST_FN = "p3_planted_false_through_trust_certify_e9_lane"
-TEST_DEST = "crates/trust-certify/tests/p3_planted_e9.rs"
-CLEAN_GITLINK = "first-party/clean"
-CONTROL_STAGES = [
+CONTRACT = "p3_contract/contract.rs"
+E9_CONTROL_STAGES = [
     "island", "audited", "reference", "registered",
     "domains.audited", "domains.reference", "domains.registered",
     "grade", "island_judgment_universe", "calculus.certify", "calculus.registered",
     "island_example", "batch_example",
     "refutation.certify_vc", "refutation.replay", "refutation.linear_int",
+    "let_rec.island", "let_rec.batch", "let_rec.audited", "let_rec.reference",
+    "let_rec.registered", "let_rec.grade", "let_rec_parent.audited",
+    "let_rec_parent.reference", "let_rec_parent.registered", "let_rec_parent.grade",
 ]
-# The test door the calculus rows need (it gates only `calculus_row::test_support`).
-FEATURES = "calculus-row-test-support"
+# Each test: where it is installed (paths under FIXTURE_DIR keep their place under
+# `tests`), the workspace it is built in, the `targo test` selection, the one
+# test function, its control stages, and whether the refutation's `int` miss rule
+# applies (the E9 test's; the temporal test must report no miss at all). The E9
+# test is built with the test door the calculus rows need (it gates only
+# `calculus_row::test_support`).
+TESTS = [
+    {
+        "name": "p3_planted_e9",
+        "workspace": ".",
+        "tests": "crates/trust-certify/tests",
+        "files": ["p3_planted_e9.rs", "p3_planted_e9/controls.rs", "p3_planted_e9/evidence.rs",
+                  "p3_planted_e9/lanes.rs", "p3_planted_e9/planted.rs", CONTRACT],
+        "select": ["-p", "trust-certify", "--features", "calculus-row-test-support", "--test", "p3_planted_e9"],
+        "test_fn": "p3_planted_false_through_trust_certify_e9_lane",
+        "controls": E9_CONTROL_STAGES,
+        "int_miss_rule": True,
+    },
+    {
+        "name": "p3_planted_temporal",
+        "workspace": "crates/trust-spec-temporal",
+        "tests": "crates/trust-spec-temporal/tests",
+        "files": ["p3_planted_temporal.rs", CONTRACT],
+        "select": ["--test", "p3_planted_temporal"],
+        "test_fn": "p3_planted_false_through_temporal_certification",
+        "controls": ["temporal.honest.certify", "temporal.honest.recheck",
+                     "temporal.let_rec.certify", "temporal.let_rec.recheck"],
+        "int_miss_rule": False,
+    },
+]
+SPEC = {test["name"]: test for test in TESTS}
+FIXTURE_FILES = sorted({f"{FIXTURE_DIR}/{name}" for test in TESTS for name in test["files"]})
+COMMITTED = [*FIXTURE_FILES, RUNNER, "scripts/patched_kernel_control_trust_tree.py", "scripts/patched_kernel_control.py"]
 # leg -> (declare the mutant, required exit 0, kernel line printed by the test)
 LEGS = {
     "unmodified": (False, True, "declared=Unmodified\tlive=false"),
@@ -108,95 +159,12 @@ LIVENESS = WRONG_ACCEPT + p3.MODE_ENV + " is unset"
 # (`reference_mint::note_miss`, on when `TRUST_KR0_DEBUG` is set; it never changes
 # a verdict). The refutation replay reports its entry's refusal as lane `int`.
 MISS_PREFIX = "TRUST_KR0_DEBUG REFERENCE-MISS lane="
-NO_FETCH = {**os.environ, "GIT_NO_LAZY_FETCH": "1"}
 
 _children: list[subprocess.Popen] = []
 
 
-def fail(message: str) -> None:
-    print(f"patched_kernel_control_trust: {message}", file=sys.stderr)
-    raise SystemExit(1)
-
-
 def on_signal(signum: int, _frame: object) -> None:
     raise SystemExit(128 + signum)
-
-
-def run(*args: str) -> str:
-    out = subprocess.run(list(args), capture_output=True, text=True, env=NO_FETCH)
-    if out.returncode != 0:
-        fail(f"`{' '.join(args)}` exited {out.returncode}: {out.stderr.strip()}")
-    return out.stdout
-
-
-def is_partial_clone(repo: Path) -> bool:
-    probe = subprocess.run(["git", "-C", str(repo), "config", "--get-regexp", r"^remote\..*\.(promisor|partialclonefilter)$"],
-                           capture_output=True, text=True, env=NO_FETCH)
-    return bool(probe.stdout.strip())
-
-
-def has_commit(repo: Path, sha: str) -> bool:
-    if not (repo / ".git").exists() or is_partial_clone(repo):
-        return False
-    probe = subprocess.run(["git", "-C", str(repo), "cat-file", "-e", f"{sha}^{{commit}}"], capture_output=True, env=NO_FETCH)
-    return probe.returncode == 0
-
-
-def gitlinks(trust: Path, sha: str) -> dict[str, str]:
-    links = {}
-    for line in run("git", "-C", str(trust), "ls-tree", sha, "first-party/").splitlines():
-        meta, path = line.split("\t", 1)
-        mode, kind, commit = meta.split()
-        if mode == "160000" and kind == "commit":
-            links[path] = commit
-    if CLEAN_GITLINK not in links:
-        fail(f"Trust {sha} has no {CLEAN_GITLINK} gitlink")
-    return links
-
-
-def source_for(path: str, commit: str, trust: Path, named: dict[str, list[Path]] | None = None) -> tuple[Path, bool]:
-    """A complete local repository holding `commit`, and whether `--gitlink-source`
-    named it. The usual places come first; a named repository is held to the
-    same rules (not a partial clone, the commit present). Nothing is fetched."""
-    name = path.removeprefix("first-party/")
-    usual = list(dict.fromkeys(repo.resolve() for repo in ([ROOT] if path == CLEAN_GITLINK else []) + [trust / path, ROOT.parent / name, trust.parent / name]))
-    chosen = (named or {}).get(path, [])
-    extra = [repo for repo in chosen if repo not in usual]
-    for repo in usual + extra:
-        if has_commit(repo, commit):
-            # Marked whenever it was named, even where a usual place is the same directory.
-            return repo, repo in chosen
-    fail(f"no complete local repository holds {path} at {commit} (looked in {', '.join(map(str, usual + extra))}; partial clones are skipped)")
-    raise AssertionError
-
-
-def named_sources(specs: list[str]) -> dict[str, list[Path]]:
-    """`--gitlink-source first-party/<name>=DIR`, repeatable."""
-    named: dict[str, list[Path]] = {}
-    for spec in specs:
-        path, sep, directory = spec.partition("=")
-        if not sep or not path.startswith("first-party/") or not directory:
-            fail(f"--gitlink-source wants first-party/<name>=DIR, not {spec!r}")
-        named.setdefault(path, []).append(Path(directory).resolve())
-    return named
-
-
-def shown_path(repo: Path, trust: Path) -> str:
-    """Where a source came from, without a machine-specific prefix."""
-    if repo == ROOT:
-        return "this repository"
-    return os.path.relpath(repo, trust.parent)
-
-
-def extract(repo: Path, commit: str, dest: Path) -> None:
-    """`commit` of `repo` into `dest`, every file stamped now (`tar -m`)."""
-    dest.mkdir(parents=True, exist_ok=True)
-    pack = subprocess.Popen(["git", "-C", str(repo), "archive", "--format=tar", commit], stdout=subprocess.PIPE, env=NO_FETCH)
-    unpack = subprocess.Popen(["tar", "-x", "-m", "-f", "-", "-C", str(dest)], stdin=pack.stdout)
-    assert pack.stdout is not None
-    pack.stdout.close()  # tar holds the read end; git sees EPIPE if tar dies
-    if unpack.wait() != 0 or pack.wait() != 0:
-        fail(f"extracting {repo} at {commit} into {dest} failed")
 
 
 def build_tree(dest: Path, trust: Path, sha: str, links: dict[str, str],
@@ -212,34 +180,39 @@ def build_tree(dest: Path, trust: Path, sha: str, links: dict[str, str],
         sources[path] = {"commit": commit, "from": shown_path(repo, trust)}
         if was_named:
             sources[path]["named_by"] = "--gitlink-source"
-    installed = dest / TEST_DEST
-    if installed.exists():
-        fail(f"Trust already has {TEST_DEST}; this runner would overwrite it")
-    shutil.copyfile(ROOT / FIXTURE, installed)
+    for source, installed in installs():
+        if (dest / installed).exists():
+            fail(f"Trust already has {installed}; this runner would overwrite it")
+        (dest / installed).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(ROOT / source, dest / installed)
     return sources
 
 
-def clone_tree(src: Path, dest: Path) -> None:
-    # APFS clone where available (copy-on-write: no data copied, writes stay
-    # private to the clone); a plain copy elsewhere.
-    if subprocess.run(["cp", "-c", "-R", str(src), str(dest)], capture_output=True).returncode != 0:
-        shutil.rmtree(dest, ignore_errors=True)
-        shutil.copytree(src, dest, symlinks=True)
+def installs() -> list[tuple[str, str]]:
+    """(file under FIXTURE_DIR, where it is installed in Trust's tree), for every test."""
+    return [(f"{FIXTURE_DIR}/{name}", f"{test['tests']}/{name}") for test in TESTS for name in test["files"]]
 
 
-def run_leg(leg: str, tree: Path, target: Path, logs: Path, targo: str) -> dict:
+def fixture_files_unclaimed() -> list[str]:
+    """Files under FIXTURE_DIR that no test installs (a module nothing builds)."""
+    present = {str(path.relative_to(ROOT)) for path in (ROOT / FIXTURE_DIR).rglob("*") if path.is_file()}
+    return sorted(present - set(FIXTURE_FILES))
+
+
+def run_leg(leg: str, test: dict, tree: Path, target: Path, logs: Path, targo: str) -> dict:
     declare, _, _ = LEGS[leg]
-    command = [targo, "--unverified", "test", "--locked", "-p", PACKAGE, "--features", FEATURES, "--test", TEST,
-               "--", "--exact", TEST_FN, "--nocapture"]
+    command = [targo, "--unverified", "test", "--locked", *test["select"],
+               "--", "--exact", test["test_fn"], "--nocapture"]
     env = {k: v for k, v in os.environ.items() if k != p3.MODE_ENV}
     env["CARGO_TARGET_DIR"] = str(target)
     env["TRUST_KR0_DEBUG"] = "1"
     if declare:
         env[p3.MODE_ENV] = p3.MUTANT_ID
-    log = logs / f"{leg}.log"
-    print(f"patched_kernel_control_trust: {leg} leg (log {log})", flush=True)
+    log = logs / f"{leg}-{test['name']}.log"
+    print(f"patched_kernel_control_trust: {leg} leg, {test['name']} (log {log})", flush=True)
     with log.open("w") as out:
-        child = subprocess.Popen(command, cwd=tree, env=env, stdout=out, stderr=subprocess.STDOUT, start_new_session=True)
+        child = subprocess.Popen(command, cwd=tree / test["workspace"], env=env, stdout=out,
+                                 stderr=subprocess.STDOUT, start_new_session=True)
         _children.append(child)
         status = child.wait()
         _children.remove(child)
@@ -263,13 +236,17 @@ def run_leg(leg: str, tree: Path, target: Path, logs: Path, targo: str) -> dict:
     shown = ["targo", *command[1:]]
     if declare:
         shown = [f"{p3.MODE_ENV}={p3.MUTANT_ID}", *shown]
-    return {"leg": leg, "command": " ".join(shown), "exit_status": status, "kernel": kernel, "failures": failures,
-            "reference_misses": misses, "pins": pins, "control": control, "rows": rows, "log": text}
+    return {"leg": leg, "test": test["name"], "workspace": test["workspace"], "command": " ".join(shown),
+            "exit_status": status, "kernel": kernel, "failures": failures, "reference_misses": misses,
+            "pins": pins, "control": control, "rows": rows, "log": text}
 
 
 def judge(leg: dict) -> list[str]:
-    """Why `leg` did not end as its contract requires (empty when it did)."""
+    """Why one test's `leg` did not end as its contract requires (empty when it did)."""
     declare, passes, kernel = LEGS[leg["leg"]]
+    test = SPEC.get(leg.get("test", ""))
+    if test is None:
+        return [f"no test named {leg.get('test')!r}"]
     problems = []
     if (leg["exit_status"] == 0) != passes:
         problems.append(f"exit status {leg['exit_status']}, required {'0' if passes else 'non-zero'}")
@@ -278,7 +255,7 @@ def judge(leg: dict) -> list[str]:
     pinned = [pin["site"] for pin in leg["pins"]]
     if not pinned or [row["site"] for row in leg["rows"]] != pinned:
         problems.append(f"measured sites {[row['site'] for row in leg['rows']]} are not the pinned sites {pinned}")
-    if [c["stage"] for c in leg["control"]] != CONTROL_STAGES or any(c["outcome"] != "Minted" for c in leg["control"]):
+    if [c["stage"] for c in leg["control"]] != test["controls"] or any(c["outcome"] != "Minted" for c in leg["control"]):
         problems.append(f"controls {[(c['stage'], c['outcome']) for c in leg['control']]} are not all minted")
     # Every leg's rows are its binary's pins: the undeclared leg runs the mutant's.
     column = "mutant" if MUTANT_BINARY[leg["leg"]] else "unmodified"
@@ -307,6 +284,10 @@ def judge(leg: dict) -> list[str]:
             problems.append(f"`P3 WRONG ACCEPT` at {sorted(reported)}, required at {sorted(expected)}")
         if other:
             problems.append(f"other failures: {other[:3]}")
+    if not test["int_miss_rule"]:
+        if leg["reference_misses"]:
+            problems.append(f"a test that reaches no reference entry reported misses: {leg['reference_misses'][:3]}")
+        return problems
     # Where the presented refutation evidence is refused: by the reference entry
     # (one kernel type mismatch) on the mutant binary, before it otherwise.
     int_misses = [miss["miss"] for miss in leg["reference_misses"] if miss["lane"] == "int"]
@@ -335,11 +316,14 @@ def main() -> int:
     args = parser.parse_args()
 
     if not os.environ.get("HEAVY_GATE_HELD"):
-        fail("run me under scripts/heavy_gate.sh run 26 p3-trust-leg -- python3 scripts/patched_kernel_control_trust.py ...")
+        fail("run me under scripts/heavy_gate.sh run 52 p3-trust-leg -- python3 scripts/patched_kernel_control_trust.py ...")
     if args.write_record and not committed_unmodified(COMMITTED):
         fail(f"--write-record needs {', '.join(COMMITTED)} committed and unmodified")
+    unclaimed = fixture_files_unclaimed()
+    if unclaimed:
+        fail(f"{', '.join(unclaimed)} under {FIXTURE_DIR} would be installed by no test")
     clean_commit = run("git", "-C", str(ROOT), "rev-parse", "HEAD").strip()
-    fixture_sha = p3.sha256(ROOT / FIXTURE)
+    fixture_shas = {source: p3.sha256(ROOT / source) for source in FIXTURE_FILES}
     trust = args.trust_repo.resolve()
     trust_sha = run("git", "-C", str(trust), "rev-parse", f"{args.trust_ref}^{{commit}}").strip()
     links = gitlinks(trust, trust_sha)
@@ -371,8 +355,9 @@ def main() -> int:
 
         base = work / "unmodified" / "trust"
         sources = build_tree(base, trust, trust_sha, links, named)
-        if p3.sha256(base / TEST_DEST) != fixture_sha:
-            fail("the installed test is not the fixture this run started from")
+        shim = shim_clean_tla(base)
+        if any(p3.sha256(base / installed) != fixture_shas[source] for source, installed in installs()):
+            fail("an installed test file is not the fixture this run started from")
         mutant = work / "mutant" / "trust"
         mutant.parent.mkdir(parents=True)
         clone_tree(base, mutant)
@@ -380,18 +365,22 @@ def main() -> int:
         mutation = p3.mutate(mutant / CLEAN_GITLINK)
         if mutation["original_sha256"] != base_infer or p3.sha256(base / CLEAN_GITLINK / p3.MUTATION_FILE) != base_infer:
             fail("the mutant's infer.rs did not start as the unmodified tree's, or patching it moved the unmodified tree's")
+        if any(p3.sha256(tree / shim["file"]) != shim["patched_sha256"] for tree in (base, mutant)):
+            fail("a tree's clean-tla is not the shimmed file")
 
+        # Every test in each leg; the undeclared leg reuses the mutant's targets.
         legs = [
-            run_leg("unmodified", base, work / "target-unmodified", logs, targo),
-            run_leg("mutant", mutant, work / "target-mutant", logs, targo),
-            run_leg("undeclared", mutant, work / "target-mutant", logs, targo),
+            run_leg(leg, test, tree, work / f"target-{target}-{test['name']}", logs, targo)
+            for leg, tree, target in (("unmodified", base, "unmodified"), ("mutant", mutant, "mutant"),
+                                      ("undeclared", mutant, "mutant"))
+            for test in TESTS
         ]
         if p3.sha256(base / CLEAN_GITLINK / p3.MUTATION_FILE) != base_infer:
             fail("the unmodified tree's infer.rs moved during the run")
 
         verdicts = [judge(leg) for leg in legs]
         for leg, problems in zip(legs, verdicts):
-            print(f"patched_kernel_control_trust: {leg['leg']}: exit {leg['exit_status']} "
+            print(f"patched_kernel_control_trust: {leg['leg']}, {leg['test']}: exit {leg['exit_status']} "
                   f"({'as required' if not problems else 'NOT as required: ' + '; '.join(problems)})")
             for row in leg["rows"]:
                 print(f"    {row['site']}: {row['outcome']} -- {row['detail'][:200]}")
@@ -400,22 +389,25 @@ def main() -> int:
                 if problems:
                     print(leg["log"][-6000:], file=sys.stderr)
             fail("a leg did not end as required")
-        if legs[0]["pins"] != legs[1]["pins"] or legs[1]["pins"] != legs[2]["pins"]:
-            fail("the legs printed different pins")
+        pins = {test["name"]: [leg["pins"] for leg in legs if leg["test"] == test["name"]] for test in TESTS}
+        if any(any(each != printed[0] for each in printed) for printed in pins.values()):
+            fail("the legs of a test printed different pins")
 
         if args.write_record:
             if not committed_unmodified(COMMITTED) or run("git", "-C", str(ROOT), "rev-parse", "HEAD").strip() != clean_commit:
                 fail("the runner, P3's runner or the test moved during the run; nothing recorded")
             record = {
-                "schema": "clean.p3-trust-leg/v1",
-                "what_this_is": "P3's planted proof of False through trust-certify's island doors, reference gate and judgment check, the E9 mints and grade, a calculus row over a stand-in family and presented refutation evidence (the sites are the pins), measured by " + RUNNER,
+                "schema": "clean.p3-trust-leg/v2",
+                "what_this_is": "P3's planted proof of False through trust-certify's island doors, reference gate and judgment check, the E9 mints and grade, a calculus row over a stand-in family and presented refutation evidence, and through trust-spec-temporal's source certification and its recheck (the sites are each test's pins), measured by " + RUNNER,
                 "measured_at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
                 "clean_commit": clean_commit,
                 "trust": {"ref": args.trust_ref, "commit": trust_sha, "gitlinks": sources},
                 "clean_pin_in_trust": clean_pin,
                 "mutation": {"id": p3.MUTANT_ID, "file": f"{CLEAN_GITLINK}/{p3.MUTATION_FILE}", **mutation},
-                "fixture": {"path": FIXTURE, "installed_as": TEST_DEST, "sha256": fixture_sha},
-                "pins": legs[0]["pins"],
+                "clean_tla_shim": shim,
+                "fixture": [{"path": source, "installed_as": installed, "sha256": fixture_shas[source]}
+                            for source, installed in installs()],
+                "pins": {name: printed[0] for name, printed in pins.items()},
                 "legs": [{k: v for k, v in leg.items() if k not in ("log", "pins")} for leg in legs],
             }
             (ROOT / RECORD).write_text(json.dumps(record, indent=2) + "\n")

@@ -11,12 +11,15 @@ import unittest
 from pathlib import Path
 
 import patched_kernel_control_trust as runner
+import patched_kernel_control_trust_tree as tree
 
 PINS = [
     {"site": "trust.island.source", "unmodified": "Refused", "mutant": "Refused"},
     {"site": "kernel.add_decl", "unmodified": "Refused", "mutant": "Minted"},
 ]
-CONTROL = [{"stage": stage, "outcome": "Minted", "detail": ""} for stage in runner.CONTROL_STAGES]
+CONTROL = [{"stage": stage, "outcome": "Minted", "detail": ""} for stage in runner.SPEC["p3_planted_e9"]["controls"]]
+TEMPORAL_CONTROL = [{"stage": stage, "outcome": "Minted", "detail": ""}
+                    for stage in runner.SPEC["p3_planted_temporal"]["controls"]]
 LIVENESS = f"{runner.LIVENESS}, but the linked clean-kernel accepts the planted pair"
 SITE_WRONG_ACCEPT = f"{runner.WRONG_ACCEPT}kernel.add_decl: resident"
 ENTRY_MISS = {"lane": "int", "miss": "Refused(Kernel(TypeCheckFailed { source: TypeMismatch { .. } }))"}
@@ -25,9 +28,10 @@ DEFAULT_MISSES = {"unmodified": [E9_MISS], "mutant": [ENTRY_MISS], "undeclared":
 DEFAULT_FAILURES = {"unmodified": [], "mutant": [], "undeclared": [LIVENESS, SITE_WRONG_ACCEPT]}
 
 
-def leg(name, exit_status, kernel, outcomes, failures=None, control=None, pins=None, misses=None):
+def leg(name, exit_status, kernel, outcomes, failures=None, control=None, pins=None, misses=None,
+        test="p3_planted_e9"):
     rows = [{"site": pin["site"], "outcome": outcome, "detail": ""} for pin, outcome in zip(PINS, outcomes)]
-    return {"leg": name, "exit_status": exit_status, "kernel": kernel,
+    return {"leg": name, "test": test, "exit_status": exit_status, "kernel": kernel,
             "failures": DEFAULT_FAILURES[name] if failures is None else failures,
             "reference_misses": DEFAULT_MISSES[name] if misses is None else misses,
             "pins": PINS if pins is None else pins, "control": CONTROL if control is None else control, "rows": rows}
@@ -91,6 +95,66 @@ class JudgeEachLeg(unittest.TestCase):
         self.assertTrue(runner.judge(leg("unmodified", 0, "declared=Unmodified\tlive=false", ["Refused", "Refused"], control=CONTROL[:2])))
 
 
+class EachTestHasItsOwnContract(unittest.TestCase):
+    def temporal(self, name, exit_status, kernel, outcomes, **kw):
+        return leg(name, exit_status, kernel, outcomes, test="p3_planted_temporal", control=TEMPORAL_CONTROL,
+                   misses=[], **kw)
+
+    def test_the_temporal_test_passes_with_its_controls_and_no_reference_miss(self):
+        self.assertEqual(runner.judge(self.temporal("unmodified", 0, "declared=Unmodified\tlive=false", ["Refused", "Refused"])), [])
+        self.assertEqual(runner.judge(self.temporal("mutant", 0, "declared=Mutant\tlive=true", ["Refused", "Minted"])), [])
+        self.assertEqual(runner.judge(self.temporal("undeclared", 101, "declared=Unmodified\tlive=true", ["Refused", "Minted"])), [])
+
+    def test_the_temporal_test_is_held_to_its_own_controls_and_reports_no_miss(self):
+        mutant = ("mutant", 0, "declared=Mutant\tlive=true", ["Refused", "Minted"])
+        self.assertTrue(runner.judge(leg(*mutant, test="p3_planted_temporal", control=CONTROL, misses=[])))
+        problems = runner.judge(leg(*mutant, test="p3_planted_temporal", control=TEMPORAL_CONTROL, misses=[ENTRY_MISS]))
+        self.assertTrue(any("reported misses" in p for p in problems), problems)
+
+    def test_a_leg_naming_no_known_test_fails(self):
+        self.assertTrue(runner.judge(leg("mutant", 0, "declared=Mutant\tlive=true", ["Refused", "Minted"], test="nope")))
+
+    def test_every_fixture_file_is_installed_and_the_contract_beside_each_test(self):
+        self.assertEqual(runner.fixture_files_unclaimed(), [])
+        installed = dict()
+        for source, dest in runner.installs():
+            installed.setdefault(source, []).append(dest)
+        contract = f"{runner.FIXTURE_DIR}/{runner.CONTRACT}"
+        self.assertEqual(sorted(installed[contract]), sorted(f"{t['tests']}/{runner.CONTRACT}" for t in runner.TESTS))
+        for source in runner.FIXTURE_FILES:
+            self.assertTrue((runner.ROOT / source).is_file(), source)
+            self.assertIn(source, runner.COMMITTED)
+
+
+class TheCleanTlaShimRefusesWhenItIsWrong(unittest.TestCase):
+    PINNED = "        | Expr::Int(_)\n" + "".join(tree.TLA_SHIM_ANCHORS)
+
+    def tree_with(self, root, clean_text, ty_text):
+        (root / tree.CLEAN_GITLINK / tree.TLA_SHIM_FILE).parent.mkdir(parents=True)
+        (root / tree.CLEAN_GITLINK / tree.TLA_SHIM_FILE).write_text(clean_text)
+        if ty_text is not None:
+            (root / tree.TY_GITLINK / tree.TY_AST).parent.mkdir(parents=True)
+            (root / tree.TY_GITLINK / tree.TY_AST).write_text(ty_text)
+
+    def test_the_two_arms_are_added_beside_numeric_set(self):
+        with tempfile.TemporaryDirectory(prefix="p3-trust-leg-selftest-") as tmp:
+            self.tree_with(Path(tmp), self.PINNED, "enum Expr {\n" + tree.TY_VARIANT + "}\n")
+            shim = tree.shim_clean_tla(Path(tmp))
+            text = (Path(tmp) / tree.CLEAN_GITLINK / tree.TLA_SHIM_FILE).read_text()
+            self.assertEqual(text.count("        | Expr::NumericSet(_)\n        | Expr::BuiltinSet(_) => "), 2)
+            self.assertNotEqual(shim["original_sha256"], shim["patched_sha256"])
+
+    def test_an_obsolete_or_uncompilable_or_unanchored_shim_is_refused(self):
+        variant = "enum Expr {\n" + tree.TY_VARIANT + "}\n"
+        for clean_text, ty_text in [(self.PINNED + "BuiltinSet\n", variant), (self.PINNED, "enum Expr {}\n"),
+                                    (self.PINNED, None), (tree.TLA_SHIM_ANCHORS[0], variant),
+                                    (self.PINNED + tree.TLA_SHIM_ANCHORS[1], variant)]:
+            with tempfile.TemporaryDirectory(prefix="p3-trust-leg-selftest-") as tmp:
+                self.tree_with(Path(tmp), clean_text, ty_text)
+                with self.assertRaises(SystemExit):
+                    tree.shim_clean_tla(Path(tmp))
+
+
 class NeverAPartialClone(unittest.TestCase):
     def test_a_promisor_repository_is_not_a_source(self):
         with tempfile.TemporaryDirectory(prefix="p3-trust-leg-selftest-") as tmp:
@@ -101,10 +165,10 @@ class NeverAPartialClone(unittest.TestCase):
             subprocess.run([*git, "add", "f"], check=True)
             subprocess.run([*git, "commit", "-q", "-m", "c"], check=True)
             sha = subprocess.run([*git, "rev-parse", "HEAD"], check=True, capture_output=True, text=True).stdout.strip()
-            self.assertTrue(runner.has_commit(repo, sha))
-            self.assertFalse(runner.has_commit(repo, "0" * 40))
+            self.assertTrue(tree.has_commit(repo, sha))
+            self.assertFalse(tree.has_commit(repo, "0" * 40))
             subprocess.run([*git, "config", "remote.origin.promisor", "true"], check=True)
-            self.assertFalse(runner.has_commit(repo, sha))
+            self.assertFalse(tree.has_commit(repo, sha))
 
     def test_a_named_source_is_used_last_recorded_and_held_to_the_same_rules(self):
         with tempfile.TemporaryDirectory(prefix="p3-trust-leg-selftest-") as tmp:
@@ -119,20 +183,20 @@ class NeverAPartialClone(unittest.TestCase):
             sha = subprocess.run([*git, "rev-parse", "HEAD"], check=True, capture_output=True, text=True).stdout.strip()
             path = "first-party/zz-p3-selftest"
             with self.assertRaises(SystemExit):
-                runner.source_for(path, sha, trust)
-            named = runner.named_sources([f"{path}={repo}"])
-            self.assertEqual(runner.source_for(path, sha, trust, named), (repo.resolve(), True))
+                tree.source_for(path, sha, trust)
+            named = tree.named_sources([f"{path}={repo}"])
+            self.assertEqual(tree.source_for(path, sha, trust, named), (repo.resolve(), True))
             subprocess.run([*git, "config", "remote.origin.promisor", "true"], check=True)
             with self.assertRaises(SystemExit):
-                runner.source_for(path, sha, trust, named)
+                tree.source_for(path, sha, trust, named)
             subprocess.run([*git, "config", "--unset", "remote.origin.promisor"], check=True)
             beside = root / "named" / "trust"
             beside.mkdir()
-            self.assertEqual(runner.source_for(path, sha, beside), (repo.resolve(), False))
-            self.assertEqual(runner.source_for(path, sha, beside, named), (repo.resolve(), True))
+            self.assertEqual(tree.source_for(path, sha, beside), (repo.resolve(), False))
+            self.assertEqual(tree.source_for(path, sha, beside, named), (repo.resolve(), True))
             for bad in ["zz=" + str(repo), path, path + "="]:
                 with self.assertRaises(SystemExit):
-                    runner.named_sources([bad])
+                    tree.named_sources([bad])
 
 
 if __name__ == "__main__":

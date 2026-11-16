@@ -2,7 +2,7 @@
  "prefix": "ir_vc",
  "body": "env::native_reducers_char::is_valid_char",
  "core_digest": "94443754c4f6f3649780c74cc5044c8e378379b4636120a4cda03b4fc5b3c0c4",
- "defs_digest": "066577052ebc4ea45f8fbc3cab6c5a8fc0109db1c02294f51db5b8a751199cf3",
+ "defs_digest": "8e9fc8b5facd6aea40ead95423bcfd40889375f4b3f866a5330101c7ffbe3f19",
  "def_count": 9,
  "artifact_core_digest": "e117f7af018d246563a78a8686ec9eb3c5b424f96edf7dc674b2451f57b4c65a",
  "artifact_core_digest_note": "Reader A's OWN digest of the projection, printed by scripts/crystal_a2_project and taken over the domain-separated `clean.ir_mint.core.v1` prefix. `core_digest` above is ir_mint::digest of the same text under this crate's domain, which is a different constant; the two are recorded side by side rather than reconciled, because a reader that could not disagree with itself is not a second reader. This value equals every column of the is_valid_char row in generated/ir_mint.producer_ab.json AND the fresh 2026-08-21 projection below -- four dumps, one core text.",

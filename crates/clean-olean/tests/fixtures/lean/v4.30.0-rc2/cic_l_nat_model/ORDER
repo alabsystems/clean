@@ -1,0 +1,5 @@
+# Nat model, complete source dependency closure.
+theory cic_l
+theory cic_l_model
+theory kcheck_spec
+theory cic_l_nat_model

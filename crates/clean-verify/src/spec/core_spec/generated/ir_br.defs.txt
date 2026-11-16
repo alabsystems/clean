@@ -5,5 +5,5 @@ def ir_br_b3 : IRBlock := IRBlock.mk ir_d3 (ir_nl1 ir_d3) (ir_bd1 (ir_nd (IRInst
 def ir_br_b4 : IRBlock := IRBlock.mk ir_d4 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.icmp IRICmpOp.ult (IRTy.uint_ 32) ir_d0 ir_d2) ir_d9) (ir_nd (IRInst.br ir_d6 (ir_nl1 ir_d9))))
 def ir_br_b5 : IRBlock := IRBlock.mk ir_d5 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.const_ IRTy.bool_ (IRConst.bool_ Bool.false)) ir_d10) (ir_nd (IRInst.br ir_d6 (ir_nl1 ir_d10))))
 def ir_br_b6 : IRBlock := IRBlock.mk ir_d6 (ir_nl1 ir_d4) (ir_bd1 (ir_nd (IRInst.br ir_d3 (ir_nl1 ir_d4))))
-def ir_br_func : IRFunc := IRFunc.mk ir_d0 (IRList.cons Nat ir_d0 (IRList.cons Nat ir_d1 (IRList.cons Nat ir_d2 (IRList.nil Nat)))) ir_d0 (ir_blk ir_br_b0 (ir_blk ir_br_b1 (ir_blk ir_br_b2 (ir_blk ir_br_b3 (ir_blk ir_br_b4 (ir_blk ir_br_b5 (ir_blk ir_br_b6 ir_blk0)))))))
-def ir_br_module : IRModule := IRModule.mk (IRList.cons IRFunc ir_br_func (IRList.nil IRFunc)) (IRList.nil IRGlobal)
+def ir_br_func : IRFunc := IRFunc.mk ir_d0 (@IRList.cons Nat ir_d0 (@IRList.cons Nat ir_d1 (@IRList.cons Nat ir_d2 (@IRList.nil Nat)))) ir_d0 (ir_blk ir_br_b0 (ir_blk ir_br_b1 (ir_blk ir_br_b2 (ir_blk ir_br_b3 (ir_blk ir_br_b4 (ir_blk ir_br_b5 (ir_blk ir_br_b6 ir_blk0)))))))
+def ir_br_module : IRModule := IRModule.mk (@IRList.cons IRFunc ir_br_func (@IRList.nil IRFunc)) (@IRList.nil IRGlobal)

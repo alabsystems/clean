@@ -124,7 +124,15 @@ pub(crate) fn reconstruct_constant_from_slices(
     slices: ShardSlices<'_>,
     constant: &MathverseConstantHeader,
 ) -> Result<ReconstructedConstant, String> {
-    let type_expr = reconstruct_from_shard_with_level_lists(
+    // SUB-DAG, not the whole-arena prefix. The prefix builder stops at the
+    // first UNSUPPORTED node, so on a large merged corpus every constant beyond
+    // that point becomes unreconstructable — measured at 67,028 constants, the
+    // prefix ended at 364,075 of ~1.3M exprs. That silently broke INDUCTIVE
+    // FAMILY REPLAY: `replay_inductive_family_checked` reconstructs the family
+    // head here first, so a truncated arena made it return "no metadata" and the
+    // family was never installed, with no diagnostic. Byte-identical per
+    // `single_subdag_matches_full_reconstruct`, and strictly more complete.
+    let type_expr = crate::shard_reconstruct::reconstruct_single_subdag_public(
         slices.exprs,
         slices.levels,
         slices.strings,
@@ -144,7 +152,7 @@ pub(crate) fn reconstruct_constant_from_slices(
     // ReconstructFailed` in the cake gate, skip-and-report in the CLI lanes).
     let value_expr = if constant.value_idx != NO_VALUE {
         Some(
-            reconstruct_from_shard_with_level_lists(
+            crate::shard_reconstruct::reconstruct_single_subdag_public(
                 slices.exprs,
                 slices.levels,
                 slices.strings,

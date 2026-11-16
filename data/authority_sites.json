@@ -353,25 +353,25 @@
   ],
   "summary": {
    "sites_by_role": {
-    "call": 47,
+    "call": 48,
     "construct": 240,
     "def": 61,
     "import": 15,
-    "mention": 15,
+    "mention": 16,
     "read": 193
    },
    "occurrences_by_role": {
-    "call": 48,
+    "call": 49,
     "construct": 299,
     "def": 64,
     "import": 15,
-    "mention": 22,
+    "mention": 23,
     "read": 223
    },
    "classified_sites_by_class": {
     "mint": 96,
     "relabel": 97,
-    "root": 48,
+    "root": 49,
     "threshold": 46
    },
    "mint_sites_by_checker": {
@@ -10028,18 +10028,6 @@
     "reach": "user"
    },
    {
-    "id": "clean:crates/clean-olean/src/semr_bool_body.rs#<module>#ReferenceKernel#import",
-    "file": "crates/clean-olean/src/semr_bool_body.rs",
-    "symbol": "<module>",
-    "family": "root",
-    "token": "ReferenceKernel",
-    "role": "import",
-    "count": 1,
-    "lines": [
-     13
-    ]
-   },
-   {
     "id": "clean:crates/clean-olean/src/semr_bool_body.rs#UnboundBoolMathematicsContext::check#check_closed_term#call",
     "file": "crates/clean-olean/src/semr_bool_body.rs",
     "symbol": "UnboundBoolMathematicsContext::check",
@@ -10048,7 +10036,7 @@
     "role": "call",
     "count": 1,
     "lines": [
-     327
+     225
     ],
     "class": "root",
     "mints": "a ReferenceAccepted token for a closed Bool-body judgment",
@@ -10063,28 +10051,75 @@
     "reach": "user"
    },
    {
-    "id": "clean:crates/clean-olean/src/semr_bool_body.rs#struct CheckedSourceReference#ReferenceKernel#mention",
-    "file": "crates/clean-olean/src/semr_bool_body.rs",
+    "id": "clean:crates/clean-olean/src/semr_model.rs#<module>#ReferenceKernel#import",
+    "file": "crates/clean-olean/src/semr_model.rs",
+    "symbol": "<module>",
+    "family": "root",
+    "token": "ReferenceKernel",
+    "role": "import",
+    "count": 1,
+    "lines": [
+     4
+    ]
+   },
+   {
+    "id": "clean:crates/clean-olean/src/semr_model.rs#impl SemrModelContext#ReferenceKernel#mention",
+    "file": "crates/clean-olean/src/semr_model.rs",
+    "symbol": "impl SemrModelContext",
+    "family": "root",
+    "token": "ReferenceKernel",
+    "role": "mention",
+    "count": 1,
+    "lines": [
+     55
+    ]
+   },
+   {
+    "id": "clean:crates/clean-olean/src/semr_model.rs#struct CheckedSourceReference#ReferenceKernel#mention",
+    "file": "crates/clean-olean/src/semr_model.rs",
     "symbol": "struct CheckedSourceReference",
     "family": "root",
     "token": "ReferenceKernel",
     "role": "mention",
     "count": 1,
     "lines": [
-     91
+     30
     ]
    },
    {
-    "id": "clean:crates/clean-olean/src/semr_bool_body.rs#struct UnboundBoolMathematicsContext#ReferenceKernel#mention",
-    "file": "crates/clean-olean/src/semr_bool_body.rs",
-    "symbol": "struct UnboundBoolMathematicsContext",
+    "id": "clean:crates/clean-olean/src/semr_model.rs#struct SemrModelContext#ReferenceKernel#mention",
+    "file": "crates/clean-olean/src/semr_model.rs",
+    "symbol": "struct SemrModelContext",
     "family": "root",
     "token": "ReferenceKernel",
     "role": "mention",
     "count": 1,
     "lines": [
-     83
+     21
     ]
+   },
+   {
+    "id": "clean:crates/clean-olean/src/semr_native_execution.rs#UnboundNativeExecutionMathematicsContext::check#check_closed_term#call",
+    "file": "crates/clean-olean/src/semr_native_execution.rs",
+    "symbol": "UnboundNativeExecutionMathematicsContext::check",
+    "family": "root",
+    "token": "check_closed_term",
+    "role": "call",
+    "count": 1,
+    "lines": [
+     308
+    ],
+    "class": "root",
+    "mints": "a fenced ReferenceAccepted check of the fixed expected original-execution judgment, discarded before returning an unbound mathematical wrapper",
+    "checker": {
+     "kind": "clean-kernel",
+     "entry": "reference",
+     "theory": "LeanReference",
+     "detail": "check rebuilds expected_goal from caller-supplied expected execution data and invokes check_closed_term in the completed reference model; the resulting wrapper grants no source, ABI, compiler or emission authority"
+    },
+    "evidence_tokens": [],
+    "kcheck_rung": 2,
+    "reach": "user"
    },
    {
     "id": "clean:crates/clean-olean/src/semr_scalar.rs#<module>#ReferenceKernel#import",

@@ -1,56 +1,1087 @@
 {
   "schema": "clean.ay-consumer-qualification/v1",
   "what_this_is": "The consumer qualification of the AY revision Clean pins: the counts the one qualifying command (AY_CONSUMER_QUALIFICATION_COMMAND in scripts/check_workspace_dependency_boundary.py) printed at that revision. The dep-boundary leg refuses a tree whose AY pin this record does not name, or whose run failed or ran nothing. It is the pusher's evidence, not a re-run: nothing on the push path runs a ten-minute test. Written only from a finished run's log.",
-  "ay_rev": "91d6b45ab17373b5381d6cdf4e6a97ee4e84dbcc",
+  "ay_rev": "f528c4df13861950dfca570523b079a7fff69b4c",
   "command": "targo --unverified test --locked -p clean-auto --features carcara-verify,ay-bv-blast --lib",
-  "passed": 2498,
+  "passed": 2499,
   "failed": 0,
   "ignored": 0,
   "measured": {
-    "date": "2026-11-13",
-    "on": "fb8a315e4da921a74651e8416d0bd5b03575b56f",
-    "lane": "Genuine Trust Targo --unverified; no formal Rust/proof claim",
+    "base_head": "879eacec5aeaf2e4ab26e3eb5e632b6f4d5b7737",
     "actual_argv": [
-      "$HOME/.cache/ty-cg-ay028-adoption-qafdy4ms/overlay/bin/targo",
+      "$HOME/Library/Application Support/aterm/pkg/store/trust/16387.noindex/bin/targo",
       "--unverified",
       "test",
       "--locked",
+      "--offline",
       "-p",
       "clean-auto",
       "--features",
       "carcara-verify,ay-bv-blast",
       "--lib"
     ],
-    "test_seconds": 319.75,
+    "started_utc": "2026-11-15T15:30:30.276223+00:00",
+    "test_seconds": 456.2,
     "filtered_out": 0,
-    "compile_and_test_seconds": 422.0011581669969,
-    "admitted_total_seconds": 433.145533417,
-    "source_input_count": 36933,
-    "source_package_count": 300,
-    "source_metadata_argv": [
-      "$HOME/.cache/ty-cg-ay028-adoption-qafdy4ms/overlay/bin/targo",
-      "metadata",
-      "--locked",
-      "--format-version",
-      "1",
-      "--features",
-      "clean-auto/carcara-verify,clean-auto/ay-bv-blast"
-    ],
-    "source_book_scope": "Exact requested root features; conservative root normal/build/dev and transitive normal/build closure with all targets/metadata feature union retained. All regular package files, native archives/headers/fixtures, two exact AY91d Git120000 license links and their Git100644 root target, plus root Cargo/config/operational scripts.",
+    "whole_command_seconds": 755.2249455830315,
     "source_bookends_equal": true,
-    "tool_bookends_equal": true,
-    "log_sha256": "52a6a217b4b19b2dbd18c069bbf0ce099bc5aad6c03fbb122180891739f6fa20",
-    "result_sha256": "3b59430a64964833d23c5d85169b4ba9e618da12a40306b6145f6f31891d1502",
-    "resource_gate": "build-slot6CPU34GiB requested; existing heavy_gate auto-raised39GiB from earlier29.49GiB peak; current observed group peak10.78GiB;6testthreads; no hard Darwin memory cap",
-    "publication_reuse": {
-      "execution_source": "fb8a315e4da921a74651e8416d0bd5b03575b56f",
-      "merged_source": "c01c093079de68882d55cdef1e21c43bbc776bf5",
-      "incoming": "e14a98fd8c06dcdda13c2cee4dbbb49a8d506bd8",
-      "input_count": 36933,
-      "changed": [],
-      "scope": "All corrected requested-feature source-package, license-link/target and operational-control inputs equal after current-main merge. Incoming mutual-elaboration/olean-test/diagnostic/report code is outside the conservative qualified clean-auto package closure. No full workspace/diagnostic restamp."
+    "source_package_count": 300,
+    "source_input_count": 40661,
+    "source_book_scope": "resolved subject normal/build/dev and transitive normal/build; conservative union of metadata activation; complete Git or registry package files, workspace config and tracked scripts/third-party/data/tests/fixtures",
+    "tools": {
+      "trustc": {
+        "path": "$HOME/Library/Application Support/aterm/pkg/store/trust/16387.noindex/bin/trustc",
+        "sha256": "0acc4862fe98d55f71585dd2e651ad166ce789f049d77b78dfe3d11112889c34",
+        "version": "rustc 1.101.0-dev (29ebb403d 2026-10-28) (trustc 0.12.0+g29ebb403d)\nbinary: trustc\ncommit-hash: 29ebb403de7a102850d6cb10a62d5cc3baf723ed\ncommit-date: 2026-10-28\nhost: aarch64-apple-darwin\nrelease: 1.101.0-dev\ntrust: 0.12.0+g29ebb403d\nLLVM version: 23.1.4\n"
+      },
+      "targo": {
+        "path": "$HOME/Library/Application Support/aterm/pkg/store/trust/16387.noindex/bin/targo",
+        "sha256": "e8592cdacfbd112d38a6f338665c0e130fb10e9fe67c1c0e031acb50bd32fb2a",
+        "version": "targo 1.101.0-dev (29ebb403d 2026-10-28) (targo 0.12.0+g29ebb403d)\n"
+      }
     },
-    "earlier_attempt_scope": "Prior2498 pass outcomes and their default-feature books remain historical limited source coverage; they omit feature-only Carcara and are superseded for complete-source qualification by this exact-feature epoch. Symlink and Git-CWD preflight failures, native source timeout and publication lease refusal remain retained externally.",
-    "scope": "Shared Clean-auto AY0.28 library consumer on unchanged IR e664/CG b5 predecessor cohort. External Clean A0b retains historical f955 scoped identity. No external reader, old CG414 native, model/native, full workspace or diagnostic/vendor restamp."
+    "resource_request": {
+      "source_head": "879eacec5aeaf2e4ab26e3eb5e632b6f4d5b7737",
+      "tools": {
+        "trustc": {
+          "path": "$HOME/Library/Application Support/aterm/pkg/store/trust/16387.noindex/bin/trustc",
+          "sha256": "0acc4862fe98d55f71585dd2e651ad166ce789f049d77b78dfe3d11112889c34",
+          "version": "rustc 1.101.0-dev (29ebb403d 2026-10-28) (trustc 0.12.0+g29ebb403d)\nbinary: trustc\ncommit-hash: 29ebb403de7a102850d6cb10a62d5cc3baf723ed\ncommit-date: 2026-10-28\nhost: aarch64-apple-darwin\nrelease: 1.101.0-dev\ntrust: 0.12.0+g29ebb403d\nLLVM version: 23.1.4\n"
+        },
+        "targo": {
+          "path": "$HOME/Library/Application Support/aterm/pkg/store/trust/16387.noindex/bin/targo",
+          "sha256": "e8592cdacfbd112d38a6f338665c0e130fb10e9fe67c1c0e031acb50bd32fb2a",
+          "version": "targo 1.101.0-dev (29ebb403d 2026-10-28) (targo 0.12.0+g29ebb403d)\n"
+        }
+      },
+      "command_inputs": {
+        "successor_qualify_clean_epoch16.py": "4b518c2e7cba68818a8745128d96682475b4f2483b44ea6f6afd7dd03f3491c1",
+        "successor_run.py": "5bde6dc586b1cdea9f8be06aabebca8c840ed49d6df9674b8a511ad9d195fdc3",
+        "successor_receipt_parser.py": "92d4f3ac606719a9b0c9ccc37c72e8dacd54a22bb6e00a65f2a1707eeff9a5ea",
+        "source_book.py": "fc25989b88cd25548a96b2b1ef69d0dcb6527225b7a29dfd2162ebf02bfc829c",
+        "successor-clean-epoch16-run-metadata.json": "e4f2fbb676e27143fb180270932a00f5e0f20177cba7c202c1d89aeb55fb3611"
+      },
+      "owner_pid": 47527,
+      "owner_pgid": 47362,
+      "started_utc": "2026-11-15T15:22:01.225845+00:00",
+      "resource_environment": {
+        "BUILD_SLOT_HELD": "1",
+        "BUILD_SLOT_CPU_PROTOCOL": "1",
+        "BUILD_SLOT_FENCE_FDS": null,
+        "CARGO_BUILD_JOBS": "6",
+        "RUST_TEST_THREADS": "6",
+        "CARGO_TARGET_DIR": "$HOME/.ubd/own-ay-cohort-5592-m79/clean-target.noindex"
+      },
+      "scope": "Fresh unverified source checks after canonical source repair; no provider/native/proof/model grade"
+    },
+    "log_sha256": "691a17fe2b8b1dadb3fd373b6f5ef8ae3fbdac09d7844abfe87029cff0d53668",
+    "actual_result": "successor-clean-epoch16-run-auto.result.json",
+    "source_before_sha256": "d5f4696e4b3769e5e53e9ec516aebe9547baf13cbdb36d9f37dbb3c321b3ec76",
+    "source_after_sha256": "d5f4696e4b3769e5e53e9ec516aebe9547baf13cbdb36d9f37dbb3c321b3ec76",
+    "publication_reuse": {
+      "executed_source": "879eacec5aeaf2e4ab26e3eb5e632b6f4d5b7737",
+      "composition_review": {
+        "observed_utc": "2026-11-15T16:31:40.827959+00:00",
+        "qualified_source": "879eacec5aeaf2e4ab26e3eb5e632b6f4d5b7737",
+        "composed_source": "c03dbd97f226f2fe6078ffc5102d7dedd8afbe2e",
+        "public_main": "0fdc93af0904a3344d3fe8c2670bf5b35ae3a620",
+        "reviews": [
+          {
+            "subject": "clean-verify",
+            "before": "successor-clean-epoch16-run-verify-source-after.json",
+            "after": "successor-clean-epoch16-report-intake-clean-verify.json",
+            "changed_conservative_support_inputs": [
+              "$HOME/.ubd/own-ay-cohort-5592-m79/clean/data/authority_sites.json"
+            ],
+            "unchanged_packages": true,
+            "unchanged_file_membership": true,
+            "unchanged_compiled_command_runtime_inputs": true,
+            "reason": "The only changed support file is a derived authority census consumed by check_authority_sites.py, local_gate.sh and patched_kernel_control.py. None of these diagnostic lanes was invoked by the actual recorded Rust commands. No Rust consumer reference exists, and none of329 incoming changed paths occurs in1002 compiler depfiles. No source/manifest/lock/config/fixture changed."
+          },
+          {
+            "subject": "clean-auto",
+            "before": "successor-clean-epoch16-run-auto-source-after.json",
+            "after": "successor-clean-epoch16-report-intake-clean-auto.json",
+            "changed_conservative_support_inputs": [
+              "$HOME/.ubd/own-ay-cohort-5592-m79/clean/data/authority_sites.json"
+            ],
+            "unchanged_packages": true,
+            "unchanged_file_membership": true,
+            "unchanged_compiled_command_runtime_inputs": true,
+            "reason": "The only changed support file is a derived authority census consumed by check_authority_sites.py, local_gate.sh and patched_kernel_control.py. None of these diagnostic lanes was invoked by the actual recorded Rust commands. No Rust consumer reference exists, and none of329 incoming changed paths occurs in1002 compiler depfiles. No source/manifest/lock/config/fixture changed."
+          }
+        ],
+        "compiled_review": "successor-clean-epoch16-report-compiled-input-review.json",
+        "scope": "Unchanged actual compiler/command/runtime input review for ordinary source composition only. Preserve every result at its executed source; no workload rerun or source/provider/SDK/native/model/proof regrade."
+      },
+      "actual_result": "successor-clean-epoch16-run-auto.result.json",
+      "reason": "Fresh full current-source Auto retained at its actual execution source; explicit unchanged-input review across subsequent diagnostic reports"
+    },
+    "composed_source": "684030dc3e535a3aa1980b1294cf9ca9a9ab1afd",
+    "qualified_repair_source": "879eacec5aeaf2e4ab26e3eb5e632b6f4d5b7737",
+    "source_components": {
+      "source_head": "879eacec5aeaf2e4ab26e3eb5e632b6f4d5b7737",
+      "tools": {
+        "trustc": {
+          "path": "$HOME/Library/Application Support/aterm/pkg/store/trust/16387.noindex/bin/trustc",
+          "sha256": "0acc4862fe98d55f71585dd2e651ad166ce789f049d77b78dfe3d11112889c34",
+          "version": "rustc 1.101.0-dev (29ebb403d 2026-10-28) (trustc 0.12.0+g29ebb403d)\nbinary: trustc\ncommit-hash: 29ebb403de7a102850d6cb10a62d5cc3baf723ed\ncommit-date: 2026-10-28\nhost: aarch64-apple-darwin\nrelease: 1.101.0-dev\ntrust: 0.12.0+g29ebb403d\nLLVM version: 23.1.4\n"
+        },
+        "targo": {
+          "path": "$HOME/Library/Application Support/aterm/pkg/store/trust/16387.noindex/bin/targo",
+          "sha256": "e8592cdacfbd112d38a6f338665c0e130fb10e9fe67c1c0e031acb50bd32fb2a",
+          "version": "targo 1.101.0-dev (29ebb403d 2026-10-28) (targo 0.12.0+g29ebb403d)\n"
+        }
+      },
+      "rows": [
+        {
+          "name": "successor-clean-epoch16-run-recursor",
+          "command": [
+            "$HOME/Library/Application Support/aterm/pkg/store/trust/16387.noindex/bin/targo",
+            "--unverified",
+            "test",
+            "--locked",
+            "--offline",
+            "-p",
+            "clean-verify",
+            "--lib",
+            "sat_verify::cdcl::tests_cdcl_kernel::",
+            "--",
+            "--nocapture",
+            "--test-threads=1"
+          ],
+          "exit": 0,
+          "results": [
+            [
+              "ok",
+              "7",
+              "0",
+              "0",
+              "0",
+              "8196"
+            ]
+          ],
+          "failures": [],
+          "check": "recursor"
+        },
+        {
+          "name": "successor-clean-epoch16-run-auto",
+          "command": [
+            "$HOME/Library/Application Support/aterm/pkg/store/trust/16387.noindex/bin/targo",
+            "--unverified",
+            "test",
+            "--locked",
+            "--offline",
+            "-p",
+            "clean-auto",
+            "--features",
+            "carcara-verify,ay-bv-blast",
+            "--lib"
+          ],
+          "exit": 0,
+          "results": [
+            [
+              "ok",
+              "2499",
+              "0",
+              "0",
+              "0",
+              "0"
+            ]
+          ],
+          "failures": [],
+          "check": "auto"
+        },
+        {
+          "name": "successor-clean-epoch16-run-production-source",
+          "command": [
+            "$HOME/Library/Application Support/aterm/pkg/store/trust/16387.noindex/bin/targo",
+            "--unverified",
+            "test",
+            "--locked",
+            "--offline",
+            "-p",
+            "clean-verify",
+            "--test",
+            "eval_ir",
+            "production_source_intake::",
+            "--",
+            "--nocapture",
+            "--test-threads=1"
+          ],
+          "exit": 0,
+          "results": [
+            [
+              "ok",
+              "3",
+              "0",
+              "0",
+              "0",
+              "25"
+            ]
+          ],
+          "failures": [],
+          "check": "production-source"
+        },
+        {
+          "name": "successor-clean-epoch16-run-semr-model-source",
+          "command": [
+            "$HOME/Library/Application Support/aterm/pkg/store/trust/16387.noindex/bin/targo",
+            "--unverified",
+            "test",
+            "--locked",
+            "--offline",
+            "-p",
+            "clean-olean",
+            "--lib",
+            "semr_model::tests::"
+          ],
+          "exit": 0,
+          "results": [
+            [
+              "ok",
+              "1",
+              "0",
+              "0",
+              "0",
+              "1053"
+            ]
+          ],
+          "failures": [],
+          "check": "semr-model-source"
+        },
+        {
+          "name": "successor-clean-epoch16-run-closed-reference-census",
+          "command": [
+            "$HOME/Library/Application Support/aterm/pkg/store/trust/16387.noindex/bin/targo",
+            "--unverified",
+            "test",
+            "--locked",
+            "--offline",
+            "-p",
+            "clean-olean",
+            "--lib",
+            "by_name_census_tests::"
+          ],
+          "exit": 0,
+          "results": [
+            [
+              "ok",
+              "15",
+              "0",
+              "0",
+              "0",
+              "1039"
+            ]
+          ],
+          "failures": [],
+          "check": "closed-reference-census"
+        },
+        {
+          "name": "successor-clean-epoch16-run-native-capture-data",
+          "command": [
+            "$HOME/Library/Application Support/aterm/pkg/store/trust/16387.noindex/bin/targo",
+            "--unverified",
+            "test",
+            "--locked",
+            "--offline",
+            "-p",
+            "clean-olean",
+            "--test",
+            "native_execution_context",
+            "capture_retains_complete_original_program_and_contract"
+          ],
+          "exit": 0,
+          "results": [
+            [
+              "ok",
+              "1",
+              "0",
+              "0",
+              "0",
+              "1"
+            ]
+          ],
+          "failures": [],
+          "check": "native-capture-data"
+        },
+        {
+          "name": "successor-clean-epoch16-run-reflection",
+          "command": [
+            "$HOME/Library/Application Support/aterm/pkg/store/trust/16387.noindex/bin/targo",
+            "--unverified",
+            "test",
+            "--locked",
+            "--offline",
+            "-p",
+            "clean-reflect",
+            "--all-targets"
+          ],
+          "exit": 0,
+          "results": [
+            [
+              "ok",
+              "131",
+              "0",
+              "0",
+              "0",
+              "0"
+            ],
+            [
+              "ok",
+              "6",
+              "0",
+              "0",
+              "0",
+              "0"
+            ],
+            [
+              "ok",
+              "8",
+              "0",
+              "0",
+              "0",
+              "0"
+            ]
+          ],
+          "failures": [],
+          "check": "reflection"
+        },
+        {
+          "name": "successor-clean-epoch16-run-sat",
+          "command": [
+            "$HOME/Library/Application Support/aterm/pkg/store/trust/16387.noindex/bin/targo",
+            "--unverified",
+            "test",
+            "--locked",
+            "--offline",
+            "-p",
+            "clean-verify",
+            "--features",
+            "sat-verify",
+            "--lib",
+            "sat_verify::"
+          ],
+          "exit": 0,
+          "results": [
+            [
+              "ok",
+              "2766",
+              "0",
+              "0",
+              "0",
+              "5437"
+            ]
+          ],
+          "failures": [],
+          "check": "sat"
+        },
+        {
+          "name": "successor-clean-epoch16-run-cli-source-world",
+          "command": [
+            "$HOME/Library/Application Support/aterm/pkg/store/trust/16387.noindex/bin/targo",
+            "--unverified",
+            "test",
+            "--locked",
+            "--offline",
+            "--config",
+            "target.aarch64-apple-darwin.runner=[\"/usr/bin/env\",\"ELAN_HOME=$HOME/.ubd/own-ay-cohort-5592-m79/lean-worlds.noindex\"]",
+            "-p",
+            "clean-cli",
+            "--features",
+            "trust-ir-backend",
+            "--lib",
+            "cmd_core::source_world_tests::"
+          ],
+          "exit": 0,
+          "results": [
+            [
+              "ok",
+              "3",
+              "0",
+              "0",
+              "0",
+              "991"
+            ]
+          ],
+          "failures": [],
+          "check": "cli-source-world"
+        },
+        {
+          "name": "successor-clean-epoch16-run-smt",
+          "command": [
+            "$HOME/Library/Application Support/aterm/pkg/store/trust/16387.noindex/bin/targo",
+            "--unverified",
+            "test",
+            "--locked",
+            "--offline",
+            "-p",
+            "clean-elab",
+            "--features",
+            "ay-smt",
+            "--lib",
+            "tactic::smt::"
+          ],
+          "exit": 0,
+          "results": [
+            [
+              "ok",
+              "168",
+              "0",
+              "0",
+              "0",
+              "13074"
+            ]
+          ],
+          "failures": [],
+          "check": "smt"
+        },
+        {
+          "name": "successor-clean-epoch16-run-olean-payload",
+          "command": [
+            "$HOME/Library/Application Support/aterm/pkg/store/trust/16387.noindex/bin/targo",
+            "--unverified",
+            "test",
+            "--locked",
+            "--offline",
+            "-p",
+            "clean-olean",
+            "--lib",
+            "clean_payload_requirement"
+          ],
+          "exit": 0,
+          "results": [
+            [
+              "ok",
+              "7",
+              "0",
+              "0",
+              "0",
+              "1047"
+            ]
+          ],
+          "failures": [],
+          "check": "olean-payload"
+        },
+        {
+          "name": "successor-clean-epoch16-run-elab-payload",
+          "command": [
+            "$HOME/Library/Application Support/aterm/pkg/store/trust/16387.noindex/bin/targo",
+            "--unverified",
+            "test",
+            "--locked",
+            "--offline",
+            "-p",
+            "clean-elab",
+            "--features",
+            "ay-smt",
+            "--lib",
+            "clean_payload_requirement"
+          ],
+          "exit": 0,
+          "results": [
+            [
+              "ok",
+              "5",
+              "0",
+              "0",
+              "0",
+              "13237"
+            ]
+          ],
+          "failures": [],
+          "check": "elab-payload"
+        },
+        {
+          "name": "successor-clean-epoch16-run-format",
+          "command": [
+            "$HOME/Library/Application Support/aterm/pkg/store/trust/16387.noindex/bin/targo",
+            "--unverified",
+            "test",
+            "--locked",
+            "--offline",
+            "-p",
+            "clean-elab",
+            "--features",
+            "ay-smt",
+            "--lib",
+            "clean_format_tests::"
+          ],
+          "exit": 0,
+          "results": [
+            [
+              "ok",
+              "12",
+              "0",
+              "0",
+              "0",
+              "13230"
+            ]
+          ],
+          "failures": [],
+          "check": "format"
+        },
+        {
+          "name": "successor-clean-epoch16-run-alias-metadata",
+          "command": [
+            "$HOME/Library/Application Support/aterm/pkg/store/trust/16387.noindex/bin/targo",
+            "--unverified",
+            "test",
+            "--locked",
+            "--offline",
+            "-p",
+            "clean-elab",
+            "--features",
+            "ay-smt",
+            "--lib",
+            "register::alias_metadata_tests::"
+          ],
+          "exit": 0,
+          "results": [
+            [
+              "ok",
+              "2",
+              "0",
+              "0",
+              "0",
+              "13240"
+            ]
+          ],
+          "failures": [],
+          "check": "alias-metadata"
+        },
+        {
+          "name": "successor-clean-epoch16-run-alias-telescope",
+          "command": [
+            "$HOME/Library/Application Support/aterm/pkg/store/trust/16387.noindex/bin/targo",
+            "--unverified",
+            "test",
+            "--locked",
+            "--offline",
+            "-p",
+            "clean-elab",
+            "--features",
+            "ay-smt",
+            "--test",
+            "alias_telescope_preservation"
+          ],
+          "exit": 0,
+          "results": [
+            [
+              "ok",
+              "2",
+              "0",
+              "0",
+              "0",
+              "0"
+            ]
+          ],
+          "failures": [],
+          "check": "alias-telescope"
+        },
+        {
+          "name": "successor-clean-epoch16-run-placeholder-refusals",
+          "command": [
+            "$HOME/Library/Application Support/aterm/pkg/store/trust/16387.noindex/bin/targo",
+            "--unverified",
+            "test",
+            "--locked",
+            "--offline",
+            "-p",
+            "clean-elab",
+            "--features",
+            "ay-smt",
+            "--lib",
+            "tests_source_placeholder_authority::"
+          ],
+          "exit": 0,
+          "results": [
+            [
+              "ok",
+              "10",
+              "0",
+              "0",
+              "0",
+              "13232"
+            ]
+          ],
+          "failures": [],
+          "check": "placeholder-refusals"
+        },
+        {
+          "name": "successor-clean-epoch16-run-source-modules",
+          "command": [
+            "$HOME/Library/Application Support/aterm/pkg/store/trust/16387.noindex/bin/targo",
+            "--unverified",
+            "test",
+            "--locked",
+            "--offline",
+            "-p",
+            "clean-elab",
+            "--features",
+            "ay-smt",
+            "--lib",
+            "module_driver::source_modules::tests::"
+          ],
+          "exit": 0,
+          "results": [
+            [
+              "ok",
+              "10",
+              "0",
+              "0",
+              "0",
+              "13232"
+            ]
+          ],
+          "failures": [],
+          "check": "source-modules"
+        },
+        {
+          "name": "successor-clean-epoch16-run-compiler",
+          "command": [
+            "$HOME/Library/Application Support/aterm/pkg/store/trust/16387.noindex/bin/targo",
+            "--unverified",
+            "test",
+            "--locked",
+            "--offline",
+            "-p",
+            "clean-compiler",
+            "--features",
+            "trust-ir-backend",
+            "--lib"
+          ],
+          "exit": 101,
+          "results": [
+            [
+              "FAILED",
+              "5121",
+              "2",
+              "0",
+              "0",
+              "0"
+            ]
+          ],
+          "failures": [
+            "emit_trust_ir::tests::ws6_4::test_ws6_4_ws6_2_sqlet_linkrun_at_o1",
+            "emit_trust_ir::tests::ws6_4::test_ws6_4_ws6_2_sqlet_linkrun_at_o2"
+          ],
+          "check": "compiler"
+        },
+        {
+          "name": "successor-clean-epoch16-run-production-parity",
+          "command": [
+            "$HOME/Library/Application Support/aterm/pkg/store/trust/16387.noindex/bin/targo",
+            "--unverified",
+            "test",
+            "--locked",
+            "--offline",
+            "-p",
+            "clean-verify",
+            "--test",
+            "eval_ir",
+            "trust_ir_parity::",
+            "--",
+            "--nocapture",
+            "--test-threads=1"
+          ],
+          "exit": 0,
+          "results": [
+            [
+              "ok",
+              "5",
+              "0",
+              "0",
+              "0",
+              "23"
+            ]
+          ],
+          "failures": [],
+          "check": "production-parity"
+        }
+      ],
+      "actual_auto": "successor-clean-epoch16-run-auto.result.json",
+      "actual_auto_source": "879eacec5aeaf2e4ab26e3eb5e632b6f4d5b7737",
+      "command_inputs": {
+        "successor_qualify_clean_epoch16.py": "4b518c2e7cba68818a8745128d96682475b4f2483b44ea6f6afd7dd03f3491c1",
+        "successor_run.py": "5bde6dc586b1cdea9f8be06aabebca8c840ed49d6df9674b8a511ad9d195fdc3",
+        "successor_receipt_parser.py": "92d4f3ac606719a9b0c9ccc37c72e8dacd54a22bb6e00a65f2a1707eeff9a5ea",
+        "source_book.py": "fc25989b88cd25548a96b2b1ef69d0dcb6527225b7a29dfd2162ebf02bfc829c",
+        "successor-clean-epoch16-run-metadata.json": "e4f2fbb676e27143fb180270932a00f5e0f20177cba7c202c1d89aeb55fb3611"
+      },
+      "retained_broad_kernel_actual_source": "3d12e88ff9f45280de401a83c41fb39f0f9bb69c",
+      "retained_broad_kernel_actual_result": "successor-clean-epoch15-run-kernel-env.result.json",
+      "parity_context": "Upstream production execution vocabulary; prior legacy3/2 rows retain their own original source/context and are not regraded",
+      "scope": "Actual unverified source component outcomes; all losing rows retained. No provider/native/proof/model grade."
+    },
+    "post_component_report_only_changes": [
+      "data/authority_sites.json",
+      "docs/DECISIONS.md",
+      "docs/plans/SELF_PROOF_COMPLETION_MAP_2026-11-14.json",
+      "docs/plans/SELF_PROOF_COMPLETION_MAP_2026-11-14.md",
+      "docs/plans/SELF_PROOF_EXECUTION_PLAN_2026-11-12.md",
+      "reports/cruise-canonical-nat-fa43-publication-2026-11-15/INDEX.json",
+      "reports/cruise-canonical-nat-fa43-publication-2026-11-15/README.md",
+      "reports/cruise-canonical-nat-fa43-publication-2026-11-15/documentation/receipt.json",
+      "reports/cruise-canonical-nat-fa43-publication-2026-11-15/documentation/stderr.log",
+      "reports/cruise-canonical-nat-fa43-publication-2026-11-15/documentation/stdout.log",
+      "reports/cruise-canonical-nat-fa43-publication-2026-11-15/independent-audit/AUDIT_INDEX.json",
+      "reports/cruise-canonical-nat-fa43-publication-2026-11-15/independent-audit/README.md",
+      "reports/cruise-canonical-nat-fa43-publication-2026-11-15/independent-audit/audit-initial-parser.py.txt",
+      "reports/cruise-canonical-nat-fa43-publication-2026-11-15/independent-audit/audit-initial-parser.stderr.log",
+      "reports/cruise-canonical-nat-fa43-publication-2026-11-15/independent-audit/audit-initial-parser.stdout.log",
+      "reports/cruise-canonical-nat-fa43-publication-2026-11-15/independent-audit/audit.py",
+      "reports/cruise-canonical-nat-fa43-publication-2026-11-15/independent-audit/audit.stderr.log",
+      "reports/cruise-canonical-nat-fa43-publication-2026-11-15/independent-audit/audit.stdout.json",
+      "reports/cruise-canonical-nat-fa43-publication-2026-11-15/independent-audit/execution.json",
+      "reports/cruise-canonical-nat-fa43-publication-2026-11-15/independent-audit/git.stderr.log",
+      "reports/cruise-canonical-nat-fa43-publication-2026-11-15/independent-audit/git.stdout.json",
+      "reports/cruise-canonical-nat-fa43-publication-2026-11-15/independent-audit/initial-audit-disposition.json",
+      "reports/cruise-canonical-nat-fa43-publication-2026-11-15/independent-audit/portable-optimized.stderr.log",
+      "reports/cruise-canonical-nat-fa43-publication-2026-11-15/independent-audit/portable-optimized.stdout.json",
+      "reports/cruise-canonical-nat-fa43-publication-2026-11-15/independent-audit/snapshot-books.json",
+      "reports/cruise-canonical-nat-fa43-publication-2026-11-15/merged-main-paragon/receipt.json",
+      "reports/cruise-canonical-nat-fa43-publication-2026-11-15/merged-main-paragon/stderr.log",
+      "reports/cruise-canonical-nat-fa43-publication-2026-11-15/merged-main-paragon/stdout.log",
+      "reports/cruise-canonical-nat-fa43-publication-2026-11-15/owned-r7-cache-cleanup/aborted-replay.stderr.log",
+      "reports/cruise-canonical-nat-fa43-publication-2026-11-15/owned-r7-cache-cleanup/aborted-replay.stdout.log",
+      "reports/cruise-canonical-nat-fa43-publication-2026-11-15/owned-r7-cache-cleanup/discriminator.stderr.log",
+      "reports/cruise-canonical-nat-fa43-publication-2026-11-15/owned-r7-cache-cleanup/discriminator.stdout.log",
+      "reports/cruise-canonical-nat-fa43-publication-2026-11-15/owned-r7-cache-cleanup/receipt.json",
+      "reports/cruise-canonical-nat-fa43-publication-2026-11-15/prior-landing-observation/additional-incoming-readset.json",
+      "reports/cruise-canonical-nat-fa43-publication-2026-11-15/prior-landing-observation/receipt.json",
+      "reports/cruise-canonical-nat-fa43-publication-2026-11-15/publication.json",
+      "reports/cruise-canonical-nat-fa43-publication-2026-11-15/receiver-tool-terminal.json",
+      "reports/cruise-capsule-byte-binding-2026-11-15/README.md",
+      "reports/cruise-capsule-byte-binding-2026-11-15/archive-custody.json",
+      "reports/cruise-capsule-byte-binding-2026-11-15/original-packet.tar.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/INDEX.json",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/README.md",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/admitted-canonical-nat-producer.stderr.log.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/admitted-canonical-nat-producer.stdout.log.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/artifact-audit-tool.json",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/body-config.json.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/body.json.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/canonical-discovery.stderr.log.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/canonical-discovery.stdout.log.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/constructor-binding.stderr.log.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/constructor-binding.stdout.log.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/fetch.stderr.log.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/fetch.stdout.log.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/format.stderr.log.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/format.stdout.log.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/generic-below-eq.stderr.log.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/generic-below-eq.stdout.log.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/generic-below.stderr.log.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/generic-below.stdout.log.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/FILES.json",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/147c6f7fa8e95ef2d93c391998581bf936a6c75d5f5c7333fe1756c83069b854.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/17b047ea45bd2f5c160e00d3abda458c7b7151983ba1514f55404cb56c19d20c.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/1af349740f5aa525e8f53594d58bf4c19aed6f92ef1e43651d3c782eb52072b5.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/1d294a975cbe0f2e986bbf34a1b3a5635440ec932af48d17a576ccfca9ed2e10.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/1ef55c357f3316d2ea6ef52f1fb90965361591a325ab4930f539b83327bb30be.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/20ec116a92ec9e2560590142ab25bdaf6c8e8ff3f2d1d8df208420b5afaaacf4.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/2167cd6f79a3fed15fe8cb59850ca7afa8507e351dba216eab80638d9f6c98fd.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/224d6b37d8400005ea27c0a7fcc5b3517b01d780417a8e9cdda8921824df7224.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/29486792ffec22a75ab35643c20f6c982d72e6be587f992abcc6fbe3e992713d.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/2a223770e325689f3f2b0b943bb04bead930d56a4aa37638d0c977fea702a54e.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/3517f24508d95e56c012c7270c071dbcb95337a0af46627fe074c0396dfd6473.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/368d9b53ad50545d686acba04b6ca11dc144cec5ef7f904bb08dc84d32330f34.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/420f76aff55c77eef7f1836497bae7d7b59bb365d348062be18eeeab85cd79c8.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/4b420982a828b3f0b7f60fa06e6a85103f4475300f5687453169bbd6922425dd.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/4b4500f696d58bfd3be90d30d368649040f4cdcb176dbe223b57d063e8434901.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/4c548eb87d1c287c9dd224926c936fc85e05daf0e482df46bda211360e36b19a.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/4d279aecceb33b066d6be7fbc167b8b45110657e146444601b4f6f5b11b7c5ee.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/4f24dbf4efe6282877b983e4b80b57ca2fc4705e4193d6feb7f5f52ae39f4042.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/570743632d46dd7ba3972b6013c49d4a755210c031b7274a88ed74c08c5a2c7a.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/5c94156049afa8c250429b5386e5ad07f1b349398081740669b38226742baa86.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/622623d66b585d63746eb797ec7a8a3b7b69ae3f74930b52d054048f984c4f34.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/665d674dd040bbfbd47b810f0e6eee190fbd3a8e57d5e193bd05d0b9d4af1d04.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/69471a49f10945dfedafa0cb22f690f31d038f4318de543133db181039fd6769.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/6b01c600aa96f416380d9d89f4b608ddcab1a502d2a150e8f0254a60ef23b8dd.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/6f3583c675238f2028fd338b7c45296f4d815c73558915b99bd77ac3f3f81986.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/700d4497118478282e9265c49972dca6d3a0c453092ef820437b95475275c83d.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/746637665ca824900a2fa998e6b8b5b02018ee7d3479932c8f3d63550b7f6635.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/7ae9d3a3c458cee0a08093e9d31b3fe0f23c3ebd35c33903d757ef13c400dd73.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/7d52ccee514e447695df14505c625242a8851117c769e0d95005b4c429974349.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/7dcdeadfb204007efe1ea62810de7ec8c9bb652b1c5620b44f854907f2316986.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/8498aea6474c008894ae974737c3d9ced2e824e6ed60c9cb5b7e04ae0c8e2b81.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/894f0778b6902e3c6027153b792dda6f50a64aa982aefd0dbe081e8f0ba18641.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/8af3c3cae7b11bd59e4c19142bd70aa16d23944cf7a05519f915dd76385ae029.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/8d791df53a17d94c9410f965886fc65b987b5f575cc7eda29bdf874aebbb5214.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/8ee5f25a95af5528a33f320dee76f824020ab99f8a1a676cf3ee4833aca33a1d.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/9244f9582f05a408eab784daaaf0f97206f6439c2852175d48cc0831e82f2042.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/941c0ac2488c50b32bc483e6cb0b0db15675d484629c93cc0d27ab7a790e077c.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/9c027c95eb557bf543a89450782494e5b63595ded56183a486802daabd972efe.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/9fb9466f7a03d6dd7821f56af8a2997f65d049a4f2e43ee129a272d5a9f80aef.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/a1d82ceca899ef72badd2914dc1a3f971f346d749a72eab6d105bf582b2dcbeb.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/a3004662010155a8787b1b011f0eb5886a4f367cfab80e5f94619f8a647544c6.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/a44b38217a0563284e827458c141610c825ad9bb28bb38171249d36a35d80501.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/a710f77c5fae69e8157fc116d217878674ad7f3390e14bb5fb45b1e5ed88d69d.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/a7ee2e7f264da6217b86d514339f833856b7fb23e349886eedc4b1c68d327179.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/a90cf452dcf791b117565f65edf76bde0dd26f605c3dea99e192f83b16c29553.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/b04352aa318a509b7abe16f3a8896de746be541696c3d522424b442ff3f91265.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/b0c2cd8405cf4d7e1e665c96b008453092e83cb96108439cb7725b0596b4aab5.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/b102df7c654e41e71755ef4a186cd3d29ec7bf90938c808f15e37e14a7f11f31.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/b85a65dd8c291fee72c160b7107b6aa760507733ff3ba190b3525d118076f0fa.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/bef8a7b45400931bf0f32ee203e090a36e954efc5a9d613d1975d6afde05def0.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/c0abdccebd2b8db8d13c1cf34e3fd2ea5685512cc0bad31670a055510bd9c8df.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/c224fbcda0077504fc0d31c221d8e185cca4ccad021601f32a1ff04561dcc54d.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/c5d82cf2f4cde1ffb6c8554f378b51767d54a9de92c29580ec1a7d9bc9f59bcf.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/d480a73a697afb2b55ceee870f4adaa9034e5c34074d5441dec23e5d440460b5.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/d9e025da3adbdf1b7e81067b91309f86cc4c8134bb8572634bc14393e742d7c2.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/db4145757bc90e0ee1ea435381b85f3f701189878759d30b14fa5265c24235fc.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/e5d6e5d3ead3811293d7434182c88ddfd4726b8455beabe624f90622e45326ca.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/e72510bf5a5d18a8df69686fd85dca2eb3d7d0ce4c699ae5feb6d28a1160392d.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/e8e65c51d147c713b0999319d1213f76f03138f2c9c01008361a74312166cbdd.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/ea798020722478461cb379978c2e1d925a85957f5dd23c1c4d36e0fe04d3be97.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/f1300a39da40c63f83367f6a8f01ee3ec2dbc61122d9e9823c728773935dc553.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/metadata-custody/objects/f6037d3409f069e94d98b2168464382c093ff87c7364c9b02e938dce9b831a93.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/nat-lifecycle.stderr.log.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/nat-lifecycle.stdout.log.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/observed-tool-launch.json.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/observed-tool-terminal.json",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/observed-tool-terminal.json.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/preflight/cpu-status.stderr.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/preflight/cpu-status.stdout.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/preflight/memory-status.stderr.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/preflight/memory-status.stdout.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/preflight/result.json.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/preflight/weight.stderr.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/preflight/weight.stdout.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/receipt.json",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/result.json.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/source-after.json.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/source-before.json.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/source-inputs.stderr.log.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/source-inputs.stdout.log.gz",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/source-snapshots/BOOKS.json",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/source-snapshots/crates/clean-kernel/src/env/core.rs.txt",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/source-snapshots/crates/clean-kernel/src/env/core/pprod_family.rs.txt",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/source-snapshots/crates/clean-kernel/src/env/data_types_nat.rs.txt",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/source-snapshots/crates/clean-kernel/src/env/data_types_nat/canonical_nat_tests.rs.txt",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/source-snapshots/crates/clean-kernel/src/env/inductive_builder.rs.txt",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/source-snapshots/crates/clean-kernel/src/env/mod.rs.txt",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/source-snapshots/crates/clean-kernel/src/env/nat_add_source.json.txt",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/source-snapshots/crates/clean-kernel/src/env/nat_add_source.rs.txt",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/source-snapshots/crates/clean-kernel/src/env/nat_add_source_tests.rs.txt",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/source-snapshots/crates/clean-kernel/src/env/tests_below.rs.txt",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/source-snapshots/crates/clean-kernel/src/env/tests_below_eq.rs.txt",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/source-snapshots/crates/clean-olean/src/recheck_closed/extension_binding_canonical_nat_constructor_tests.rs.txt",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/source-snapshots/crates/clean-olean/src/recheck_closed/extension_binding_lean_tests.rs.txt",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/source-snapshots/reports/cruise-k1-foundation-2026-11-14/canonical-nat-producer-harness/body.py.txt",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/source-snapshots/reports/cruise-k1-foundation-2026-11-14/canonical-nat-producer-harness/manifest.json.txt",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/source-snapshots/reports/cruise-k1-foundation-2026-11-14/canonical-nat-producer-harness/qualify.py.txt",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/source-snapshots/reports/cruise-k1-foundation-2026-11-14/canonical-nat-producer-harness/run.py.txt",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/source-snapshots/reports/cruise-k1-foundation-2026-11-14/canonical-nat-producer-harness/transport.py.txt",
+      "reports/cruise-k1-foundation-2026-11-14/canonical-nat-fa728d-actual/source-snapshots/scripts/resource_transport.py.txt",
+      "reports/cruise-paragon-attribution-2026-11-15/INDEX.json",
+      "reports/cruise-paragon-attribution-2026-11-15/README.md",
+      "reports/cruise-paragon-attribution-2026-11-15/TRANSPORT.json",
+      "reports/cruise-paragon-attribution-2026-11-15/documentation/receipt.json",
+      "reports/cruise-paragon-attribution-2026-11-15/documentation/stderr.log",
+      "reports/cruise-paragon-attribution-2026-11-15/documentation/stdout.log",
+      "reports/cruise-paragon-attribution-2026-11-15/owned-cleanup/clippy.stderr.log",
+      "reports/cruise-paragon-attribution-2026-11-15/owned-cleanup/clippy.stdout.log",
+      "reports/cruise-paragon-attribution-2026-11-15/owned-cleanup/controller.py.txt",
+      "reports/cruise-paragon-attribution-2026-11-15/owned-cleanup/receipt.json",
+      "reports/cruise-paragon-attribution-2026-11-15/owned-cleanup/types.stderr.log",
+      "reports/cruise-paragon-attribution-2026-11-15/owned-cleanup/types.stdout.log",
+      "reports/cruise-paragon-attribution-2026-11-15/peer-audit/INDEX.json",
+      "reports/cruise-paragon-attribution-2026-11-15/peer-audit/README.md",
+      "reports/cruise-paragon-attribution-2026-11-15/peer-audit/audit.py",
+      "reports/cruise-paragon-attribution-2026-11-15/peer-audit/execution.json",
+      "reports/cruise-paragon-attribution-2026-11-15/peer-audit/initial-zero-separator-assumption.py.txt",
+      "reports/cruise-paragon-attribution-2026-11-15/peer-audit/initial-zero-separator-assumption.stderr.log",
+      "reports/cruise-paragon-attribution-2026-11-15/peer-audit/initial-zero-separator-assumption.stdout.log",
+      "reports/cruise-paragon-attribution-2026-11-15/peer-audit/result.json",
+      "reports/cruise-paragon-attribution-2026-11-15/peer-audit/stderr.log",
+      "reports/cruise-paragon-attribution-2026-11-15/prior-publication-merge/intake.json",
+      "reports/cruise-paragon-attribution-2026-11-15/prior-publication-merge/peer-audit/audit.py",
+      "reports/cruise-paragon-attribution-2026-11-15/prior-publication-merge/peer-audit/custody.json",
+      "reports/cruise-paragon-attribution-2026-11-15/prior-publication-merge/peer-audit/result.json",
+      "reports/cruise-paragon-attribution-2026-11-15/prior-publication-merge/resolution.json",
+      "reports/cruise-paragon-attribution-2026-11-15/retained/INDEX.json",
+      "reports/cruise-paragon-attribution-2026-11-15/retained/PROPOSAL.md",
+      "reports/cruise-paragon-attribution-2026-11-15/retained/actual-root-gate/receipt.json",
+      "reports/cruise-paragon-attribution-2026-11-15/retained/actual-root-gate/stderr.log",
+      "reports/cruise-paragon-attribution-2026-11-15/retained/actual-root-gate/stdout.log",
+      "reports/cruise-paragon-attribution-2026-11-15/retained/collect.stderr.log",
+      "reports/cruise-paragon-attribution-2026-11-15/retained/collect.stdout.json",
+      "reports/cruise-paragon-attribution-2026-11-15/retained/collect_evidence.py",
+      "reports/cruise-paragon-attribution-2026-11-15/retained/evidence-commands.json",
+      "reports/cruise-paragon-attribution-2026-11-15/retained/evidence/Clean-callers.stderr",
+      "reports/cruise-paragon-attribution-2026-11-15/retained/evidence/Clean-callers.stdout",
+      "reports/cruise-paragon-attribution-2026-11-15/retained/evidence/Trust-callers.stderr",
+      "reports/cruise-paragon-attribution-2026-11-15/retained/evidence/Trust-callers.stdout",
+      "reports/cruise-paragon-attribution-2026-11-15/retained/evidence/eligible-interval-diff.stderr",
+      "reports/cruise-paragon-attribution-2026-11-15/retained/evidence/eligible-interval-diff.stdout",
+      "reports/cruise-paragon-attribution-2026-11-15/retained/evidence/incoming-commit.stderr",
+      "reports/cruise-paragon-attribution-2026-11-15/retained/evidence/incoming-commit.stdout",
+      "reports/cruise-paragon-attribution-2026-11-15/retained/evidence/paid-commit-narrative.stderr",
+      "reports/cruise-paragon-attribution-2026-11-15/retained/evidence/paid-commit-narrative.stdout",
+      "reports/cruise-paragon-attribution-2026-11-15/retained/execution.json",
+      "reports/cruise-paragon-attribution-2026-11-15/retained/replay.py",
+      "reports/cruise-paragon-attribution-2026-11-15/retained/replay.stderr.log",
+      "reports/cruise-paragon-attribution-2026-11-15/retained/replay.stdout.json",
+      "reports/cruise-paragon-attribution-2026-11-15/retained/results/22b20c796c.json.gz",
+      "reports/cruise-paragon-attribution-2026-11-15/retained/results/5955aa0575.json.gz",
+      "reports/cruise-paragon-attribution-2026-11-15/retained/results/comparison.json",
+      "reports/cruise-paragon-attribution-2026-11-15/retained/results/fecd07c66d.json.gz",
+      "reports/cruise-paragon-attribution-2026-11-15/retained/source-books.json",
+      "reports/cruise-paragon-attribution-2026-11-15/retained/source-captures/crates/clean-olean/src/lib.rs",
+      "reports/cruise-paragon-attribution-2026-11-15/retained/source-captures/crates/clean-olean/src/semr_bool_body.rs",
+      "reports/cruise-paragon-attribution-2026-11-15/retained/source-captures/crates/clean-olean/src/semr_model.rs",
+      "reports/cruise-paragon-attribution-2026-11-15/retained/source-captures/crates/clean-olean/src/semr_native_execution.rs",
+      "reports/cruise-paragon-attribution-2026-11-15/retained/source-captures/crates/clean-olean/tests/fixtures/lean/v4.30.0-rc2/semr_wp/SemRNativeExecutionCapture.lean",
+      "reports/cruise-paragon-attribution-2026-11-15/retained/source-captures/crates/clean-olean/tests/native_execution_context.rs",
+      "reports/cruise-paragon-attribution-2026-11-15/retained/source-captures/data/paragon_ratchet.json",
+      "reports/cruise-paragon-attribution-2026-11-15/retained/source-captures/scripts/paragon_ratchet.sh",
+      "reports/q6-merged-wide-2026-11-15/FILES.sha256",
+      "reports/q6-merged-wide-2026-11-15/README.md",
+      "reports/q6-merged-wide-2026-11-15/authority-clean.stderr",
+      "reports/q6-merged-wide-2026-11-15/authority-clean.stdout",
+      "reports/q6-merged-wide-2026-11-15/authority-repair/before.json",
+      "reports/q6-merged-wide-2026-11-15/authority-repair/negative-missing-entry.json",
+      "reports/q6-merged-wide-2026-11-15/authority-repair/negative-missing-entry.stderr",
+      "reports/q6-merged-wide-2026-11-15/authority-repair/negative-missing-entry.stdout",
+      "reports/q6-merged-wide-2026-11-15/authority-repair/negative-missing-root.json",
+      "reports/q6-merged-wide-2026-11-15/authority-repair/negative-missing-root.stderr",
+      "reports/q6-merged-wide-2026-11-15/authority-repair/negative-missing-root.stdout",
+      "reports/q6-merged-wide-2026-11-15/authority-repair/positive-both.json",
+      "reports/q6-merged-wide-2026-11-15/authority-repair/positive-both.stderr",
+      "reports/q6-merged-wide-2026-11-15/authority-repair/positive-both.stdout",
+      "reports/q6-merged-wide-2026-11-15/authority-repair/positive-clean.json",
+      "reports/q6-merged-wide-2026-11-15/authority-repair/positive-clean.stderr",
+      "reports/q6-merged-wide-2026-11-15/authority-repair/positive-clean.stdout",
+      "reports/q6-merged-wide-2026-11-15/authority-repair/restored-clean.json",
+      "reports/q6-merged-wide-2026-11-15/authority-repair/restored-clean.stderr",
+      "reports/q6-merged-wide-2026-11-15/authority-repair/restored-clean.stdout",
+      "reports/q6-merged-wide-2026-11-15/authority-repair/result.json",
+      "reports/q6-merged-wide-2026-11-15/authority-repair/selftest.json",
+      "reports/q6-merged-wide-2026-11-15/authority-repair/selftest.stderr",
+      "reports/q6-merged-wide-2026-11-15/authority-repair/selftest.stdout",
+      "reports/q6-merged-wide-2026-11-15/authority-repair/writer-classified.json",
+      "reports/q6-merged-wide-2026-11-15/authority-repair/writer-classified.stderr",
+      "reports/q6-merged-wide-2026-11-15/authority-repair/writer-classified.stdout",
+      "reports/q6-merged-wide-2026-11-15/authority-repair/writer-register.json",
+      "reports/q6-merged-wide-2026-11-15/authority-repair/writer-register.stderr",
+      "reports/q6-merged-wide-2026-11-15/authority-repair/writer-register.stdout",
+      "reports/q6-merged-wide-2026-11-15/authority-selftest.stderr",
+      "reports/q6-merged-wide-2026-11-15/authority-selftest.stdout",
+      "reports/q6-merged-wide-2026-11-15/canonical-metadata.stderr",
+      "reports/q6-merged-wide-2026-11-15/canonical-metadata.stdout",
+      "reports/q6-merged-wide-2026-11-15/ci-result.json",
+      "reports/q6-merged-wide-2026-11-15/ci-start.json",
+      "reports/q6-merged-wide-2026-11-15/executed-claim.py.data",
+      "reports/q6-merged-wide-2026-11-15/final-checks.py",
+      "reports/q6-merged-wide-2026-11-15/final-checks/canonical.stderr",
+      "reports/q6-merged-wide-2026-11-15/final-checks/canonical.stdout",
+      "reports/q6-merged-wide-2026-11-15/final-checks/diff-check.stderr",
+      "reports/q6-merged-wide-2026-11-15/final-checks/diff-check.stdout",
+      "reports/q6-merged-wide-2026-11-15/final-checks/documentation-selected-siblings.stderr",
+      "reports/q6-merged-wide-2026-11-15/final-checks/documentation-selected-siblings.stdout",
+      "reports/q6-merged-wide-2026-11-15/final-checks/full-expanded-gate.stderr",
+      "reports/q6-merged-wide-2026-11-15/final-checks/full-expanded-gate.stdout",
+      "reports/q6-merged-wide-2026-11-15/final-checks/result.json",
+      "reports/q6-merged-wide-2026-11-15/final-checks/terminal-controls.stderr",
+      "reports/q6-merged-wide-2026-11-15/final-checks/terminal-controls.stdout",
+      "reports/q6-merged-wide-2026-11-15/full-ci-admission/admission.lock",
+      "reports/q6-merged-wide-2026-11-15/full-ci-admission/cancelled.json",
+      "reports/q6-merged-wide-2026-11-15/full-ci-admission/owned-process.json",
+      "reports/q6-merged-wide-2026-11-15/full-ci-admission/request-result.json",
+      "reports/q6-merged-wide-2026-11-15/full-ci-admission/spec.json",
+      "reports/q6-merged-wide-2026-11-15/full-ci-admission/wrapper.log",
+      "reports/q6-merged-wide-2026-11-15/gate-result.json",
+      "reports/q6-merged-wide-2026-11-15/gate-start.json",
+      "reports/q6-merged-wide-2026-11-15/gate.stderr",
+      "reports/q6-merged-wide-2026-11-15/gate.stdout",
+      "reports/q6-merged-wide-2026-11-15/intake.json",
+      "reports/q6-merged-wide-2026-11-15/metadata-refresh/canonical.stderr",
+      "reports/q6-merged-wide-2026-11-15/metadata-refresh/canonical.stdout",
+      "reports/q6-merged-wide-2026-11-15/metadata-refresh/documentation.stderr",
+      "reports/q6-merged-wide-2026-11-15/metadata-refresh/documentation.stdout",
+      "reports/q6-merged-wide-2026-11-15/metadata-refresh/ledger.stderr",
+      "reports/q6-merged-wide-2026-11-15/metadata-refresh/ledger.stdout",
+      "reports/q6-merged-wide-2026-11-15/metadata-refresh/require-q6.stderr",
+      "reports/q6-merged-wide-2026-11-15/metadata-refresh/require-q6.stdout",
+      "reports/q6-merged-wide-2026-11-15/metadata-refresh/result.json",
+      "reports/q6-merged-wide-2026-11-15/metadata-refresh/scoreboard.stderr",
+      "reports/q6-merged-wide-2026-11-15/metadata-refresh/scoreboard.stdout",
+      "reports/q6-merged-wide-2026-11-15/metadata-refresh/status-page.stderr",
+      "reports/q6-merged-wide-2026-11-15/metadata-refresh/status-page.stdout",
+      "reports/q6-merged-wide-2026-11-15/metadata-refresh/verdict-io.stderr",
+      "reports/q6-merged-wide-2026-11-15/metadata-refresh/verdict-io.stdout",
+      "reports/q6-merged-wide-2026-11-15/metadata-refresh/verdict-set.stderr",
+      "reports/q6-merged-wide-2026-11-15/metadata-refresh/verdict-set.stdout",
+      "reports/q6-merged-wide-2026-11-15/qualified-tracked-diff.patch",
+      "reports/q6-merged-wide-2026-11-15/record-intake.py",
+      "reports/q6-merged-wide-2026-11-15/refresh-metadata.py",
+      "reports/q6-merged-wide-2026-11-15/repair-authority.py",
+      "reports/q6-merged-wide-2026-11-15/run-ci.executed.py.data",
+      "reports/q6-merged-wide-2026-11-15/run-ci.py",
+      "reports/q6-merged-wide-2026-11-15/run-ci.terminal-replay.py.data",
+      "reports/q6-merged-wide-2026-11-15/run-gate.executed.py.data",
+      "reports/q6-merged-wide-2026-11-15/run-gate.py",
+      "reports/q6-merged-wide-2026-11-15/run-source-checks.py",
+      "reports/q6-merged-wide-2026-11-15/source-checks.json",
+      "reports/q6-merged-wide-2026-11-15/terminal-controls-optimized.stderr",
+      "reports/q6-merged-wide-2026-11-15/terminal-controls-optimized.stdout",
+      "reports/q6-merged-wide-2026-11-15/terminal-controls.stderr",
+      "reports/q6-merged-wide-2026-11-15/terminal-controls.stdout",
+      "reports/q6-merged-wide-2026-11-15/terminal-replay/gate-result.json",
+      "reports/q6-merged-wide-2026-11-15/terminal-replay/gate-start.json",
+      "reports/q6-merged-wide-2026-11-15/terminal-replay/gate.stderr",
+      "reports/q6-merged-wide-2026-11-15/terminal-replay/gate.stdout",
+      "reports/q6-merged-wide-2026-11-15/terminal.py",
+      "reports/q6-merged-wide-2026-11-15/test_terminal.py",
+      "reports/q6-merged-wide-2026-11-15/vendor-manifest.stderr",
+      "reports/q6-merged-wide-2026-11-15/vendor-manifest.stdout",
+      "reports/q6-merged-wide-landing-2026-11-15/FILES.sha256",
+      "reports/q6-merged-wide-landing-2026-11-15/README.md",
+      "reports/q6-merged-wide-landing-2026-11-15/documentation.stderr",
+      "reports/q6-merged-wide-landing-2026-11-15/documentation.stdout",
+      "reports/q6-merged-wide-landing-2026-11-15/resolution.json",
+      "reports/q6-merged-wide-landing-2026-11-15/resolve-decisions.py",
+      "reports/q6-merged-wide-landing-2026-11-15/result.json",
+      "reports/q6-merged-wide-landing-2026-11-15/verify.py"
+    ],
+    "diagnostic_census_input_review": {
+      "observed_utc": "2026-11-15T16:31:40.827959+00:00",
+      "qualified_source": "879eacec5aeaf2e4ab26e3eb5e632b6f4d5b7737",
+      "composed_source": "c03dbd97f226f2fe6078ffc5102d7dedd8afbe2e",
+      "public_main": "0fdc93af0904a3344d3fe8c2670bf5b35ae3a620",
+      "reviews": [
+        {
+          "subject": "clean-verify",
+          "before": "successor-clean-epoch16-run-verify-source-after.json",
+          "after": "successor-clean-epoch16-report-intake-clean-verify.json",
+          "changed_conservative_support_inputs": [
+            "$HOME/.ubd/own-ay-cohort-5592-m79/clean/data/authority_sites.json"
+          ],
+          "unchanged_packages": true,
+          "unchanged_file_membership": true,
+          "unchanged_compiled_command_runtime_inputs": true,
+          "reason": "The only changed support file is a derived authority census consumed by check_authority_sites.py, local_gate.sh and patched_kernel_control.py. None of these diagnostic lanes was invoked by the actual recorded Rust commands. No Rust consumer reference exists, and none of329 incoming changed paths occurs in1002 compiler depfiles. No source/manifest/lock/config/fixture changed."
+        },
+        {
+          "subject": "clean-auto",
+          "before": "successor-clean-epoch16-run-auto-source-after.json",
+          "after": "successor-clean-epoch16-report-intake-clean-auto.json",
+          "changed_conservative_support_inputs": [
+            "$HOME/.ubd/own-ay-cohort-5592-m79/clean/data/authority_sites.json"
+          ],
+          "unchanged_packages": true,
+          "unchanged_file_membership": true,
+          "unchanged_compiled_command_runtime_inputs": true,
+          "reason": "The only changed support file is a derived authority census consumed by check_authority_sites.py, local_gate.sh and patched_kernel_control.py. None of these diagnostic lanes was invoked by the actual recorded Rust commands. No Rust consumer reference exists, and none of329 incoming changed paths occurs in1002 compiler depfiles. No source/manifest/lock/config/fixture changed."
+        }
+      ],
+      "compiled_review": "successor-clean-epoch16-report-compiled-input-review.json",
+      "scope": "Unchanged actual compiler/command/runtime input review for ordinary source composition only. Preserve every result at its executed source; no workload rerun or source/provider/SDK/native/model/proof regrade."
+    },
+    "scope": "Actual fresh unfiltered Auto execution on recorded merged source; no prior-source result restamped. Source components have their own source identities. All losing rows and epoch4 UNKNOWN normal exit retained. No proof/SDK/provider/native/model/TY/TLC grade."
   }
 }

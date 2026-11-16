@@ -29,8 +29,11 @@
 //! name when the calling file defines none, a SCREAMING_CASE identifier to
 //! every static/const of that name, and every reached type's
 //! implicitly-called trait methods (`fmt`, `eq`, `hash`, `drop`, `deref`, …)
-//! are reached too. Every identifier-shaped string literal in a reached item
-//! is then a by-name reference, in whatever form it is used.
+//! are reached too. Every identifier-shaped string or byte-string literal in
+//! a reached item stays in the inventory. Occurrence-local syntax identifies
+//! byte-array initializers, build-environment keys, let-binder labels and
+//! persistent-extension registry/wire names; everything else stays a possible
+//! by-name reference. No file or spelling is exempted by these roles.
 //!
 //! Each one must be (a) an extension key (gated by fingerprint), (b) a
 //! quotient primitive (kernel-built, installed only by `add_quot`), or (c)
@@ -47,9 +50,15 @@ use super::EXTENSION_KEYS;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
+#[path = "by_name_census_tests_controls.rs"]
+mod controls;
+#[path = "by_name_census_tests_identity.rs"]
+mod identity;
 #[cfg(test)]
 #[path = "by_name_census_tests_reach.rs"]
 mod reach;
+#[path = "by_name_census_tests_roles.rs"]
+mod roles;
 #[cfg(test)]
 #[path = "by_name_census_tests_scan.rs"]
 mod scan;
@@ -159,11 +168,6 @@ const FARKAS: &str = "reached only through the census's SCREAMING_CASE rule (`NA
 
 const NATIVE_FOLD: &str = "a name-keyed native fold (a registered native reducer, the kernel-theory list of reducers Lean's theory admits, or the canonical-digest table that authorizes them): it fires only through `TypeChecker::native_reducer_for` (tc/config.rs), which needs the environment's native-reducer table — empty in the replay (`Environment::default()`, asserted by `a_forged_bool_not_does_not_prove_false_through_the_default_replay`) — AND the native-fold authority (env/native_fold_authority.rs, tc/fold_admission.rs), which admits a fold only when the constant's δ-closure digest is canonical; an admitted declaration of that name with any other content never folds";
 const SORRY_BUILDER: &str = "installs Clean's own polymorphic `sorry` axiom (`init_sorry`), called by `Environment::new`, the prelude constructors and the nn-verify builders only; the replay starts from `Environment::default()` and admits declarations only through `add_decl` / `add_inductive_core` / `add_quot`";
-const FORMAT_MAGIC: &str = "a byte-string format magic (`b\"…\"`) that a decoder compares against the leading bytes of a serialized certificate archive, flat-mmap file or theorem DAG; it is never a constant name, and it is reached only through the census's SCREAMING_CASE rule (`MAGIC` also names `env/ext_name_payload.rs`'s payload magic)";
-const CRATE_VERSION: &str = "the compile-time Cargo variable behind `clean_kernel::VERSION` (`env!`), pure metadata recorded as a snapshot's `kernel_format_version`; never read by the checker, and reached only through the census's SCREAMING_CASE rule (`VERSION` also names `flat/header.rs`'s `Self::VERSION`)";
-const EXT_REGISTRY_NAME: &str = "the key under which a persistent environment extension registers in the process-global `ExtensionRegistry` (`register_persistent_ext`): it names extension STATE, never a constant, and no declaration is looked up, admitted or reduced by it. The module-exposure state it keys is read only by `exporting_view` / `definitions` (clean-elab's source attribute validation); kernel checking keeps the original values. Reached only because the census resolves work_meter.rs's `stats::record` (an inline module) to every free fn named `record`";
-const EXT_ENTRY_TAG: &str = "the entry-name tag of the csimp extension's portable-snapshot entry (`EnvExtensionEntry.name`), compared only against another entry of that same extension while decoding it; csimp rules feed the compiler's lowering, never kernel checking, and no declaration name is compared against it";
-const TRACE_BINDER: &str = "the binder name `kcheck_trace::Term::new` gives an erased `let`: binder names take no part in definitional equality and no constant is resolved by it. Reached only because the census keys types by bare name (`tc/equiv_manager.rs`'s `Node` pulls in kcheck_trace's `Node`, whose fields name `Term`)";
 const PROOF_TERM: &str = "names `Eq.refl` in a proof TERM the proof-producing WHNF returns (tc/whnf_proof.rs); nothing is evaluated or believed by that name — a consumer type-checks the returned term against the environment's actual `Eq.refl` — and it is reached only through the census's SCREAMING_CASE rule (`EQ_REFL`)";
 
 /// Every by-name reference at a reachable site that is neither an extension
@@ -554,50 +558,6 @@ pub(super) const EXPLAINED: &[(&str, &[&str], &str)] = &[
         &["definition", "fold", "refused"],
         NOT_A_NAME,
     ),
-    // Reached since 493d4c3aa added `env/exposure.rs`: the census resolves
-    // `stats::record` to `exposure::record`, which pulls in the persistent-
-    // extension machinery and, through its `MAGIC`/`VERSION` mentions, every
-    // static of those names (the theorem-DAG magic since 226e15716).
-    (
-        "cert/compression/streaming.rs",
-        &["L5CS"],
-        FORMAT_MAGIC,
-    ),
-    (
-        "cert/compression/types.rs",
-        &["L5CC"],
-        FORMAT_MAGIC,
-    ),
-    (
-        "env/dag_serialization/theorem.rs",
-        &["CLENTHG1"],
-        FORMAT_MAGIC,
-    ),
-    (
-        "flat/header.rs",
-        &["L5FM"],
-        FORMAT_MAGIC,
-    ),
-    (
-        "lib.rs",
-        &["CARGO_PKG_VERSION"],
-        CRATE_VERSION,
-    ),
-    (
-        "env/exposure.rs",
-        &["Clean.module.definitionExposure"],
-        EXT_REGISTRY_NAME,
-    ),
-    (
-        "env/csimp.rs",
-        &["snapshot.v1"],
-        EXT_ENTRY_TAG,
-    ),
-    (
-        "kcheck_trace/term.rs",
-        &["_trace"],
-        TRACE_BINDER,
-    ),
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -614,6 +574,28 @@ fn every_by_name_reference_the_replay_can_reach_is_gated_or_explained() {
         std::fs::write(&path, census.dump()).expect("write census dump");
     }
     let literals = census.literals();
+    let sites = census.literal_sites();
+    // SELF-SKIP OK: optional diagnostic write only; all assertions still run.
+    if let Ok(path) = std::env::var("CLEAN_BY_NAME_LITERAL_DUMP") {
+        let dump = sites
+            .iter()
+            .map(|((file, at), (s, role))| format!("{file}\t{at}\t{s}\t{role:?}\n"))
+            .collect::<String>();
+        std::fs::write(path, dump).expect("write literal roles");
+    }
+    // Classification keeps the original denominator. In particular all byte
+    // literals remain visible, even when their direct role is byte data.
+    let mut site_literals: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for ((file, _), (s, _)) in &sites {
+        site_literals
+            .entry(s.clone())
+            .or_default()
+            .insert(file.clone());
+    }
+    assert_eq!(
+        literals, site_literals,
+        "literal inventory lost an occurrence"
+    );
 
     // Liveness: the kernel's own native-reducer lookup — behind the
     // native-fold authority — is reached from the checker, now that the gate
@@ -642,24 +624,7 @@ fn every_by_name_reference_the_replay_can_reach_is_gated_or_explained() {
         );
     }
 
-    let gated: BTreeSet<&str> = EXTENSION_KEYS.iter().map(|k| k.name).collect();
-    let quotient: BTreeSet<&str> = ["Quot", "Quot.mk", "Quot.lift", "Quot.ind", "Quot.sound"]
-        .into_iter()
-        .collect();
-    let mut unclassified: Vec<String> = Vec::new();
-    for (literal, files) in &literals {
-        if gated.contains(literal.as_str()) || quotient.contains(literal.as_str()) {
-            continue;
-        }
-        for file in files {
-            let explained = EXPLAINED
-                .iter()
-                .any(|(f, ls, _)| f == file && ls.contains(&literal.as_str()));
-            if !explained {
-                unclassified.push(format!("{literal:?} in {file}"));
-            }
-        }
-    }
+    let unclassified = census.unclassified();
     assert!(
         unclassified.is_empty(),
         "{} by-name references reachable from the replay are neither gated nor explained:\n{}",

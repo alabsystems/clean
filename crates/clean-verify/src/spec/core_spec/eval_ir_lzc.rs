@@ -134,7 +134,7 @@ const RET_FALSE: &str = "(IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.false)))";
 const STUCK_NO_FUNC: &str = "(IROutcome.stuck IRFault.no_func)";
 
 /// The memory `ir_init` hands the machine, spelled as the cons it really is.
-const G0_CONS: &str = "(IRList.cons IRMemSlot ir_lzc_g0_cell mem)";
+const G0_CONS: &str = "(@IRList.cons IRMemSlot ir_lzc_g0_cell mem)";
 
 fn run(fid: &str, args: &str, heap: &str) -> String {
     format!("(ir_eval ir_fuel ir_lzc_module {fid} {args} {heap} {NA})")
@@ -155,7 +155,7 @@ pub(super) fn lzc_maxzz_init() -> String {
 /// A witness proved by `Eq.refl`: the kernel runs the machine and compares.
 fn witness(name: &str, binder: &str, fid: &str, args: &str, heap: &str, out: &str) -> String {
     format!(
-        "def {name} {binder}: Eq IROutcome {} {out} := Eq.refl IROutcome {out}",
+        "def {name} {binder}: Eq IROutcome {} {out} := @Eq.refl IROutcome {out}",
         run(fid, args, heap)
     )
 }
@@ -191,60 +191,60 @@ impl Specification {
         }
 
         self.add_recursive_def(
-            "def ir_lzc_func0_is_the_lz_mint : Eq IRFunc ir_lzc_func ir_lz_func := Eq.refl IRFunc ir_lz_func",
-            "ir_lzc_func0_is_the_lz_mint: *** THE EQUATION THAT KEEPS ir_lz BYTE-FROZEN WHILE ir_lzc RE-MINTS IT. *** Function 0 of this chain is the designated target under NEW names -- ir_lzc_tlevel for ir_lz_tlevel, ir_lzc_b0..b9 for ir_lz_b0..b9 -- because re-using the old names would register each of them twice. Eq.refl makes the kernel unfold both sides through delta and compare the whole function: every block, every node, every operand, the switch table and its exhaustive flag. A re-mint that drifted from the frozen projection anywhere fails HERE, at build time, rather than leaving two `is_zero` terms in the environment that nothing compares. DerivedProved, zero axiom_deps.",
+            "def ir_lzc_func0_is_the_lz_mint : Eq IRFunc ir_lzc_func ir_lz_func := @Eq.refl IRFunc ir_lz_func",
+            "ir_lzc_func0_is_the_lz_mint: *** THE EQUATION THAT KEEPS ir_lz BYTE-FROZEN WHILE ir_lzc RE-MINTS IT. *** Function 0 of this chain is the designated target under NEW names -- ir_lzc_tlevel for ir_lz_tlevel, ir_lzc_b0..b9 for ir_lz_b0..b9 -- because re-using the old names would register each of them twice. @Eq.refl makes the kernel unfold both sides through delta and compare the whole function: every block, every node, every operand, the switch table and its exhaustive flag. A re-mint that drifted from the frozen projection anywhere fails HERE, at build time, rather than leaving two `is_zero` terms in the environment that nothing compares. DerivedProved, zero axiom_deps.",
         )?;
 
         for (name, idx, tgt, doc) in [
             (
                 "ir_lzc_func1_is_the_minted_deref",
                 "ir_d1",
-                "(IROption.some IRFunc ir_lad_func)",
+                "(@IROption.some IRFunc ir_lad_func)",
                 "ir_lzc_func1_is_the_minted_deref: id 1 of this module resolves to the deref's OWN EMITTED BODY. This is the one structural difference from ir_lz_module and the whole point of the chain: over ir_lz_module ir_func_find returns none at id 1 and ir_call_exec halts stuck; here it returns the minted ir_lad_func. Note what is NOT claimed -- that the frame it pushes computes anything. It does not; see ir_lzc_callee2_is_a_declaration. DerivedProved, zero axiom_deps.",
             ),
             (
                 "ir_lzc_callee2_is_a_declaration",
                 "ir_d2",
-                "(IROption.none IRFunc)",
+                "(@IROption.none IRFunc)",
                 "ir_lzc_callee2_is_a_declaration: *** THE HONEST PHASE-A STATEMENT. *** id 2 is std::option::Option::<T>::as_deref, which the crate artifact carries as a HEADER WITH NO INSTRUCTIONS (dump-control:120627, `rustcc fn @std::option::Option::<T>::as_deref(functy.900) {}`). It is not in this module's function list, so ir_func_find returns none and the deref frame goes stuck at its first node. Registered as an equation rather than left implicit, because it is the precise residual Phase B has to retire: not `what does the deref do` any more, but `what do these two declarations do`. DerivedProved, zero axiom_deps.",
             ),
             (
                 "ir_lzc_callee3_is_a_declaration",
                 "ir_d3",
-                "(IROption.none IRFunc)",
+                "(@IROption.none IRFunc)",
                 "ir_lzc_callee3_is_a_declaration: id 3 is std::option::Option::<T>::expect (dump-control:117847, functy.896), the other declaration. NEVER REACHED in Phase A -- the frame is already stuck at call 2 -- so this equation is about the module's shape, not about a run. DerivedProved, zero axiom_deps.",
             ),
         ] {
             self.add_recursive_def(
-                &format!("def {name} : Eq (IROption IRFunc) (ir_func_find (ir_mod_funcs ir_lzc_module) {idx}) {tgt} := Eq.refl (IROption IRFunc) {tgt}"),
+                &format!("def {name} : Eq (IROption IRFunc) (ir_func_find (ir_mod_funcs ir_lzc_module) {idx}) {tgt} := @Eq.refl (IROption IRFunc) {tgt}"),
                 doc,
             )?;
         }
 
         self.add_recursive_def(
-            "def ir_lzc_global_is_declared : Eq (IROption IRGlobal) (ir_global_find (ir_mod_globals ir_lzc_module) ir_d0) (IROption.some IRGlobal ir_lzc_g0) := Eq.refl (IROption IRGlobal) (IROption.some IRGlobal ir_lzc_g0)",
+            "def ir_lzc_global_is_declared : Eq (IROption IRGlobal) (ir_global_find (ir_mod_globals ir_lzc_module) ir_d0) (@IROption.some IRGlobal ir_lzc_g0) := @Eq.refl (IROption IRGlobal) (@IROption.some IRGlobal ir_lzc_g0)",
             "ir_lzc_global_is_declared: ir_global_find resolves id 0 of this module's globals list to the message. The globals half of the func_find equations above, and the premise ir_globaladdr_eval discharges. DerivedProved, zero axiom_deps.",
         )?;
         self.add_recursive_def(
-            "def ir_lzc_globaladdr_evals : Eq IRStepResult (ir_globaladdr_eval ir_lzc_module ir_d0) (IRStepResult.value (IRScalar.ptr_ ir_d0)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.ptr_ ir_d0))",
+            "def ir_lzc_globaladdr_evals : Eq IRStepResult (ir_globaladdr_eval ir_lzc_module ir_d0) (IRStepResult.value (IRScalar.ptr_ ir_d0)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.ptr_ ir_d0))",
             "ir_lzc_globaladdr_evals: the deref's second instruction, EXECUTED. `globaladdr 0` yields ptr 0 -- a global's id IS its address, which is exactly what ir_init's cell materialisation makes true. This is a POSITIVE globaladdr equation and it is NEW: the only precedent in the tree, ir_w2c_ga_no_global (eval_ir_w2c_synth.rs:155), is the NEGATIVE one -- the no_global fault on a module that declares nothing. Nothing before this chain had a global to address. DerivedProved, zero axiom_deps.",
         )?;
 
         self.add_recursive_def(
-            "def ir_lzc_g0_cell : IRMemSlot := IRGlobal.rec (fun (_ : IRGlobal) => IRMemSlot) (fun (i : Nat) (c : IRConst) => IRMemSlot.mk i (ir_const_value c) Bool.true) ir_lzc_g0",
-            "ir_lzc_g0_cell: the memory cell ir_globals_mem materialises for this global -- live, at the address that is its id, holding ir_const_value of the promoted aggregate. Spelled through IRGlobal.rec rather than as a literal so that a change to the global's id or value moves the cell with it instead of leaving a stale copy beside it. DerivedProved, zero axiom_deps.",
+            "def ir_lzc_g0_cell : IRMemSlot := @IRGlobal.rec (fun (_ : IRGlobal) => IRMemSlot) (fun (i : Nat) (c : IRConst) => IRMemSlot.mk i (ir_const_value c) Bool.true) ir_lzc_g0",
+            "ir_lzc_g0_cell: the memory cell ir_globals_mem materialises for this global -- live, at the address that is its id, holding ir_const_value of the promoted aggregate. Spelled through @IRGlobal.rec rather than as a literal so that a change to the global's id or value moves the cell with it instead of leaving a stale copy beside it. DerivedProved, zero axiom_deps.",
         )?;
         self.add_recursive_def(
-            &format!("def ir_lzc_init_mem (mem : IRList IRMemSlot) : Eq (IRList IRMemSlot) (ir_mem_concat (ir_globals_mem (ir_mod_globals ir_lzc_module)) mem) {G0_CONS} := Eq.refl (IRList IRMemSlot) {G0_CONS}"),
+            &format!("def ir_lzc_init_mem (mem : IRList IRMemSlot) : Eq (IRList IRMemSlot) (ir_mem_concat (ir_globals_mem (ir_mod_globals ir_lzc_module)) mem) {G0_CONS} := @Eq.refl (IRList IRMemSlot) {G0_CONS}"),
             "ir_lzc_init_mem: *** THE TWIN OF ir_lzm_init_mem_is_mem0, FOR THE MODULE THAT DOES DECLARE A GLOBAL. *** That lemma (eval_ir_fuel.rs:47,64-68) states that ir_init's globals concatenation is the IDENTITY on the caller heap, and says in its own rationale that it exists so it STOPS REDUCING when a module with globals arrives. That alarm is quantified over ir_lzm_module alone, which has no globals and never will, so it did NOT fire when this module arrived -- ir_lzc_module is a separate constant, and this twin is written, not triggered; the alarm's value was the sentence in its rationale, not an automatic refusal. The concat here is NOT the identity: it is one cons, the message cell in front of whatever heap the caller supplied, for every mem. Stated rather than discovered, so no theorem over this module can quietly assume the caller's heap is what the machine sees. DerivedProved, zero axiom_deps.",
         )?;
         self.add_recursive_def(
-            &format!("def ir_lzc_global_shadows_cell_zero (mem : IRList IRMemSlot) : Eq (IROption IRMemSlot) (ir_mem_lookup {G0_CONS} ir_d0) (IROption.some IRMemSlot ir_lzc_g0_cell) := Eq.refl (IROption IRMemSlot) (IROption.some IRMemSlot ir_lzc_g0_cell)"),
+            &format!("def ir_lzc_global_shadows_cell_zero (mem : IRList IRMemSlot) : Eq (IROption IRMemSlot) (ir_mem_lookup {G0_CONS} ir_d0) (@IROption.some IRMemSlot ir_lzc_g0_cell) := @Eq.refl (IROption IRMemSlot) (@IROption.some IRMemSlot ir_lzc_g0_cell)"),
             "ir_lzc_global_shadows_cell_zero: cell 0 IS shadowed -- for EVERY caller heap, the lookup at address 0 returns the message cell and never reaches mem. Half of `the shadow set is exactly {0}`, and the half a one-directional passthrough lemma would leave unproved: without it, `only cell zero` would be consistent with the global shadowing NOTHING. ir_mem_lookup is head-first (eval_ir_state.rs:1429-1441) and ir_nat_eqb 0 0 is true, so Eq.refl. DerivedProved, zero axiom_deps.",
         )?;
         self.add_recursive_def(
-            &format!("def ir_lzc_global_shadows_only_cell_zero (mem : IRList IRMemSlot) (a : Nat) (h : Eq Bool (ir_nat_eqb ir_d0 a) Bool.false) : Eq (IROption IRMemSlot) (ir_mem_lookup {G0_CONS} a) (ir_mem_lookup mem a) := Eq.subst Bool (fun (b : Bool) => Eq (IROption IRMemSlot) (Bool.rec (fun (_ : Bool) => IROption IRMemSlot) (ir_mem_lookup mem a) (IROption.some IRMemSlot ir_lzc_g0_cell) b) (ir_mem_lookup mem a)) Bool.false (ir_nat_eqb ir_d0 a) (Eq.symm Bool (ir_nat_eqb ir_d0 a) Bool.false h) (Eq.refl (IROption IRMemSlot) (ir_mem_lookup mem a))"),
-            "ir_lzc_global_shadows_only_cell_zero: and NOTHING ELSE is shadowed -- at every address the machine decides is not 0, the lookup passes straight through to the caller's heap, for every mem. The other half of `exactly {0}`. Not an Eq.refl: `a` is abstract, so ir_mem_lookup is stuck at the Bool.rec on ir_nat_eqb 0 a, and the hypothesis is substituted INTO that scrutinee position -- Eq.subst at the Bool motive, with the refl at the false minor. Together with ir_lzc_global_shadows_cell_zero this is what licenses the restated heaps below: put the receiver anywhere but 0 and the global is invisible to it. DerivedProved, zero axiom_deps.",
+            &format!("def ir_lzc_global_shadows_only_cell_zero (mem : IRList IRMemSlot) (a : Nat) (h : Eq Bool (ir_nat_eqb ir_d0 a) Bool.false) : Eq (IROption IRMemSlot) (ir_mem_lookup {G0_CONS} a) (ir_mem_lookup mem a) := @Eq.subst Bool (fun (b : Bool) => Eq (IROption IRMemSlot) (@Bool.rec (fun (_ : Bool) => IROption IRMemSlot) (ir_mem_lookup mem a) (@IROption.some IRMemSlot ir_lzc_g0_cell) b) (ir_mem_lookup mem a)) Bool.false (ir_nat_eqb ir_d0 a) (@Eq.symm Bool (ir_nat_eqb ir_d0 a) Bool.false h) (@Eq.refl (IROption IRMemSlot) (ir_mem_lookup mem a))"),
+            "ir_lzc_global_shadows_only_cell_zero: and NOTHING ELSE is shadowed -- at every address the machine decides is not 0, the lookup passes straight through to the caller's heap, for every mem. The other half of `exactly {0}`. Not an Eq.refl: `a` is abstract, so ir_mem_lookup is stuck at the @Bool.rec on ir_nat_eqb 0 a, and the hypothesis is substituted INTO that scrutinee position -- @Eq.subst at the Bool motive, with the refl at the false minor. Together with ir_lzc_global_shadows_cell_zero this is what licenses the restated heaps below: put the receiver anywhere but 0 and the global is invisible to it. DerivedProved, zero axiom_deps.",
         )?;
 
         for (name, binder, heap, out, doc) in [
@@ -274,12 +274,12 @@ impl Specification {
     pub(super) fn add_eval_ir_lzc_steps(&mut self) -> Result<(), SpecError> {
         let running = "IROutcome.fuel_out";
         self.add_recursive_def(
-            &format!("def ir_lzc_max_running_at_8 : Eq IROutcome (ir_config_outcome (ir_steps ir_d8 ir_lzc_module {})) {running} := Eq.refl IROutcome {running}", init(HEAP_MAXZZ)),
+            &format!("def ir_lzc_max_running_at_8 : Eq IROutcome (ir_config_outcome (ir_steps ir_d8 ir_lzc_module {})) {running} := @Eq.refl IROutcome {running}", init(HEAP_MAXZZ)),
             "ir_lzc_max_running_at_8: *** STILL RUNNING WHERE ir_lz HAD ALREADY HALTED. *** ir_config_outcome reads fuel_out off a RUNNING configuration and the real outcome off a halted one, so this equation says the machine has not halted after eight steps. Eight is where ir_lz_on_max_stuck dies (eval_ir_level_minted.rs:142). Registered because ir_lzc_max_stuck_at_9 alone would NOT pin the depth: a halted configuration is a fixed point of ir_steps, so an `= halted` equation at 9 is implied by halting at 8, at 7, at anything below. This is the direction that makes the pair exact. DerivedProved, zero axiom_deps.",
         )?;
         let tgt = "(IRConfig.halted (IROutcome.stuck IRFault.no_func))";
         self.add_recursive_def(
-            &format!("def ir_lzc_max_stuck_at_9 : Eq IRConfig (ir_steps ir_d9 ir_lzc_module {}) {tgt} := Eq.refl IRConfig {tgt}", init(HEAP_MAXZZ)),
+            &format!("def ir_lzc_max_stuck_at_9 : Eq IRConfig (ir_steps ir_d9 ir_lzc_module {}) {tgt} := @Eq.refl IRConfig {tgt}", init(HEAP_MAXZZ)),
             "ir_lzc_max_stuck_at_9: *** AND HALTED AT NINE. *** The ninth step is the deref frame's first instruction, `call 2`, and it goes stuck no_func. With ir_lzc_max_running_at_8 above, the pair pins THIS module's stuck site exactly: running at 8, halted at 9 -- step 8 is the call that now resolves and pushes the frame, step 9 is the call inside it that does not. BOTH of those numbers are computed by the kernel, not asserted; an off-by-one is a build failure. The COMPARISON to ir_lz is only half computed, and is stated that way on purpose: ir_lz's 8 is a PROSE figure in ir_lz_on_max_stuck's rationale (eval_ir_level_minted.rs:142, `the kernel executed eight steps`) -- no ir_lz_*_at_8 declaration exists anywhere in core_spec, so nothing kernel-checks it. It is re-derivable by counting the emitted body: b0's load/extractfield/switch are steps 1-3, and b4's const/gep/const/gep put `call 1` at step 8 (generated/ir_lz.defs.txt, ir_lz_b0 and ir_lz_b4). Registering ir_lz_max_stuck_at_8 beside this pair would make `one step deeper` computed end to end, but it would add a stage to the FROZEN ir_lz chain, so it is an owner call rather than a Phase-A edit. DerivedProved, zero axiom_deps.",
         )?;
         Ok(())
@@ -322,7 +322,7 @@ mod tests {
             "it addresses the global"
         );
         assert!(
-            s.contains("(IRList.cons IRGlobal ir_lzc_g0 (IRList.nil IRGlobal))"),
+            s.contains("(@IRList.cons IRGlobal ir_lzc_g0 (@IRList.nil IRGlobal))"),
             "and the module declares it"
         );
         assert!(

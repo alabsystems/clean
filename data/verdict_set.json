@@ -20,8 +20,8 @@
   },
   "closure_limit": "This is a REFERENCE closure at module granularity, NOT the per-body CALL closure. The call closure needs the trust-host whole-crate dump that data/spine_set.PENDING.md records as not yet produced (the same blocker G-SPINE-SET has). Until that dump exists, lane (a)'s membership is a conservative module-level surface: it can contain bodies no verdict path reaches, and it can MISS a body reached only through a dyn/fn-pointer edge. scripts/verdict_gate.sh refuses on this.",
   "input_pins": {
-   "data/env_bypass_census.json": "0e5a467c9ae540a63c00838588c04545956f5e966312db9314d9c94f673d0112",
-   "data/gate_registry.json": "4807116d2584ed732823e351d42cfe9785266f7bce2c5b7b2978416958e71823"
+   "data/env_bypass_census.json": "0bcd921a2d6121c79ab04e0c6a1d195b139109ad1374f1638ab7683800648f57",
+   "data/gate_registry.json": "64fa6854845ed89d49f12bde53c59127ab09c08c827d0f67f5b5f300592c7770"
   },
   "regenerate": "scripts/verdict_set.py            (--check to verify the committed copy)"
  },
@@ -445,8 +445,8 @@
      "why": [
       "reached by the in-crate reference closure from a root"
      ],
-     "lines": 460,
-     "sha256": "cb887954e813133615f77f774fb09ff73e5982766fa2617206f67460c0ed2f0a",
+     "lines": 484,
+     "sha256": "ff467dc88a2b046eef68e2c7931120d3980dc6ca3d6013500e8f3c150f3f5131",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -769,8 +769,8 @@
      "why": [
       "reached by the in-crate reference closure from a root"
      ],
-     "lines": 965,
-     "sha256": "6441ce0a963efd347bc9abd3322425c3cca7625701ab68d9f8e7697bc6c00eb7",
+     "lines": 991,
+     "sha256": "85de3b85852871f5cb17b48f2fb31ff464040b4638455041f3f152b4cb5fd2ac",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -1045,8 +1045,8 @@
      "why": [
       "reached by the in-crate reference closure from a root"
      ],
-     "lines": 1464,
-     "sha256": "c62d9b8bad7fdf6b58f4a90a79ab92cb8c4918b4a54dc7244f1e43d62656753c",
+     "lines": 1553,
+     "sha256": "609b0334cf1df3574fe1e045026cab49ee891b279dd2694bc1f02a6814fc5ecd",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -2888,7 +2888,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 364,
-     "sha256": "10d553946d6e17674f508d3e334863ddd22a6278e45747d3697ae7cc25e17177",
+     "sha256": "e60221260f746f3cb3525b4468b1cc212940315fad354672da4514514560ee65",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -2911,7 +2911,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 499,
-     "sha256": "9fbd4c8041b47fe7293c59fd2270462055f85ab45c27639f9500faee90f1bec2",
+     "sha256": "c807c6dc364c27168dd0f7cc05c986d5d4fcec7ab43f677c50076e70aec69aa8",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -3726,7 +3726,7 @@
     "depth_5": 1,
     "depth_6": 1
    },
-   "io_site_total": 316,
+   "io_site_total": 317,
    "members": [
     {
      "path": "crates/clean-mathverse/src/artifacts.rs",
@@ -4536,8 +4536,8 @@
      "why": [
       "reached by the in-crate reference closure from a root"
      ],
-     "lines": 1549,
-     "sha256": "16600cd29f69378c118036bdbd7c1802fdbbe542d0f74ac6ebdcfaf4b4d293c4",
+     "lines": 1557,
+     "sha256": "7e29ab090941d2244804086d697c95f76cb70a6fb82732bdff050db2614c5967",
      "io_token_count": 5,
      "io_sites": [
       {
@@ -4545,19 +4545,19 @@
        "token": "env::var"
       },
       {
-       "line": 1004,
+       "line": 1012,
        "token": "env::var"
       },
       {
-       "line": 1050,
+       "line": 1058,
        "token": "env::var"
       },
       {
-       "line": 1067,
+       "line": 1075,
        "token": "env::var"
       },
       {
-       "line": 1147,
+       "line": 1155,
        "token": "env::var"
       }
      ],
@@ -5095,9 +5095,9 @@
      "why": [
       "reached by the in-crate reference closure from a root"
      ],
-     "lines": 4483,
-     "sha256": "3825e6bed4d6bccb813e630607a62a91bdc460246ba9831fed1079cd11304ab9",
-     "io_token_count": 6,
+     "lines": 4605,
+     "sha256": "025e3a982b93c8be551094a0d45aeb52f4ab473a2c285c2edf916af5e3313e57",
+     "io_token_count": 7,
      "io_sites": [
       {
        "line": 1150,
@@ -5122,6 +5122,10 @@
       {
        "line": 1707,
        "token": "OpenOptions"
+      },
+      {
+       "line": 4102,
+       "token": "env::var"
       }
      ],
      "io_sites_truncated": 0,
@@ -5872,18 +5876,18 @@
   },
   "c_script_surface": {
    "obligation": "each member either rewritten in Rust (entering lane (a)) or declared TCB with a committed digest + line-count ratchet; and a claim-owning gate that has never been SEEN to refuse is an unearned claim (registry: demonstrated or waived)",
-   "member_count": 145,
+   "member_count": 147,
    "rewritten_to_rust_count": 0,
-   "tcb_declared_count": 145,
+   "tcb_declared_count": 147,
    "demonstrated_count": 111,
    "waived_count": 1,
-   "undemonstrated_unwaived_count": 33,
+   "undemonstrated_unwaived_count": 35,
    "undemonstrated_with_self_test_count": 7,
    "line_ratchet": {
     "what": "total committed lines of the TCB script surface; may fall freely, may rise only through scripts/verdict_set.py --rebase-up '<reason>' (recorded below)",
     "direction": "down",
-    "baseline_total_lines": 128935,
-    "measured_total_lines": 128935,
+    "baseline_total_lines": 129826,
+    "measured_total_lines": 129826,
     "minted_utc": "2026-11-14T21:29:51Z",
     "rebases": [
      {
@@ -7493,6 +7497,54 @@
       "from": 128908,
       "to": 128935,
       "reason": "2026-11-15: +27 measured lines in check_gate_registry.py preserve selected live resource descriptors through compiler-facing launches and retain fatal transport refusals. Qualified by inert14 normal/optimized controls, original chain13, and native registry self-repin0; no gate/member/criterion change or evidence waiver. rederive_chain adds11 lines outside this existing lane-c roster. Full lint baseline remains red and its72-arm replay has no new credit."
+     },
+     {
+      "date": "2026-11-15",
+      "from": 128935,
+      "to": 129006,
+      "reason": "Q6 production Git batching: measured source growth for committed-object frame/identity checks and pinned standing controls; no manual budget or pin edits, no native/independent-DDC/diagnostic/genesis waiver. Preserve every history."
+     },
+     {
+      "date": "2026-11-15",
+      "from": 129006,
+      "to": 129026,
+      "reason": "Q6 production commit identity: measured source growth for canonical commit/ref diagnostics and exact named-repository gitlink type checks; standing controls and both affected replay pins qualified. No manual numeric/pin edit, native/proof/diagnostic/genesis waiver. Preserve every history."
+     },
+     {
+      "date": "2026-11-15",
+      "from": 129026,
+      "to": 129044,
+      "reason": "Isolate repository-local Git context and reject conflicting Q6 caller actions; real Git/CLI omission controls, no Rust, checker or authority change"
+     },
+     {
+      "date": "2026-11-15",
+      "from": 129044,
+      "to": 129100,
+      "reason": "2026-11-15: expand E7 Lean axiom census to all 11 theories/* packages and wire remaining fixture ORDER theory inputs in verify_runner.py"
+     },
+     {
+      "date": "2026-11-15",
+      "from": 129100,
+      "to": 129105,
+      "reason": "2026-11-15: +5 physical lines only in crystal_perturb_float_div.sh, replacing optimization-elided assertions with unconditional positive/count/uniqueness checks. Actual extracted-helper normal/-O12 methods pass; old optimized suite1 exposes10 guard bypasses. All34 battery cases/predicates unchanged; real69 replay and R7 freshness remain owed."
+     },
+     {
+      "date": "2026-11-15",
+      "from": 129100,
+      "to": 129146,
+      "reason": "Bind current Q6 candidates to exact named commits and source profile including transport helper, preserve actual inherited descriptors and compiler-child Git isolation; actual Git/pipe controls, no Rust or proof claim"
+     },
+     {
+      "date": "2026-11-15",
+      "from": 129105,
+      "to": 129151,
+      "reason": "Lossless join of Q6 source follow-through (+46 physical script lines) with incoming main ce8dc88b6d float anchor guard (+5); preserve both rebase histories, regenerate canonical metadata, no new native or proof credit"
+     },
+     {
+      "date": "2026-11-16",
+      "from": 129151,
+      "to": 129826,
+      "reason": "Q6 owned genesis fixture lifecycle: unreaped leader identity, original-group cleanup, bounded byte diagnostics and sticky nested scratch retention after actual census-error/SIGINT; real before/after controls, exact historical scripts unchanged. Measured lane-c 129151->129826 (+675), 145->147 members: own genesis checker243->553 (+310); already-merged lint coverage2087->2126 (+39), newly enumerated existing Isabelle shard_falsity_census151 and shard_triviality_census175. Exact attribution in reports/q6-genesis-lifecycle-2026-11-15/ratchet-attribution.json and ratchet-membership.json. This derives current metadata and preserves prior histories; it does not qualify incoming compiler/native source or change its proof status. No native/DDC/proof claim"
      }
     ]
    },
@@ -7592,12 +7644,13 @@
      "wired_by": [
       "Justfile",
       "scripts/check_authority_sites.py",
+      "scripts/check_ck0_lineage.py",
       "scripts/deny_sorry_gate.sh",
       "scripts/githooks/pre-push",
       "scripts/local_gate.sh",
       "scripts/release_readiness_smoke.sh",
-      "scripts/check_ck0_lineage.py",
-      "scripts/rust_modules.py"
+      "scripts/rust_modules.py",
+      "scripts/test_ck0_custody_loader.py"
      ]
     },
     {
@@ -7717,13 +7770,15 @@
      "kind": "gate",
      "claims": "evidence",
      "disposition": "tcb-declared",
-     "lines": 243,
-     "sha256": "6aeb275e9e64a89d34f0fb6dffd1c2802fd08e50e8760bb74f54d58835c8e539",
+     "lines": 553,
+     "sha256": "47c4049310a9098103c805fb26a1f139767518ec84ad8407a9b26dcc3547320a",
      "demonstrated": true,
      "waived": false,
      "self_test_entry_point": true,
      "wired_by": [
-      "Justfile"
+      "Justfile",
+      "scripts/test_ck0_genesis_lifecycle.py",
+      "scripts/test_ck0_genesis_retention.py"
      ]
     },
     {
@@ -7732,14 +7787,17 @@
      "kind": "gate",
      "claims": "evidence",
      "disposition": "tcb-declared",
-     "lines": 1323,
-     "sha256": "68382fbf10f6283651dc153cab8553433d1817bb7561701657a6f71cde8447b9",
+     "lines": 1462,
+     "sha256": "53e44908bc72d2aced84e4251cedc2046428207267990e3f11fbcddcd4e0e471",
      "demonstrated": true,
      "waived": false,
      "self_test_entry_point": true,
      "wired_by": [
       "Justfile",
-      "scripts/check_ck0_replay_custody.py"
+      "scripts/check_ck0_replay_custody.py",
+      "scripts/test_ck0_custody_loader.py",
+      "scripts/test_ck0_source_profiles.py",
+      "scripts/test_ck0_transport.py"
      ]
     },
     {
@@ -7748,13 +7806,16 @@
      "kind": "gate",
      "claims": "evidence",
      "disposition": "tcb-declared",
-     "lines": 955,
-     "sha256": "126fa33b47dc38efc6f63b23de60e140c5f26eedf43e4858fc2f6d507d0c7203",
+     "lines": 971,
+     "sha256": "85cc374a4be0ba7331af9b0cc1e28ddbd6f9c4f4f325ca99847baccf9f519389",
      "demonstrated": true,
      "waived": false,
      "self_test_entry_point": true,
      "wired_by": [
-      "Justfile"
+      "Justfile",
+      "scripts/check_ck0_lineage.py",
+      "scripts/test_ck0_custody_loader.py",
+      "scripts/test_ck0_source_profiles.py"
      ]
     },
     {
@@ -7940,8 +8001,8 @@
      "kind": "gate",
      "claims": "evidence",
      "disposition": "tcb-declared",
-     "lines": 420,
-     "sha256": "47ac1647b590a66dfc7493bf31ed9cfe9fe579b7c14900b7f3c5bd65f052c333",
+     "lines": 432,
+     "sha256": "690e7c372c34338cf9340679aac204e88a746f72713bc86845c17b5de4330c39",
      "demonstrated": true,
      "waived": false,
      "self_test_entry_point": true,
@@ -7955,8 +8016,8 @@
      "kind": "gate",
      "claims": "hygiene",
      "disposition": "tcb-declared",
-     "lines": 2087,
-     "sha256": "4355e0eba5409965f6cccc0a01a5e806094385243bb9b9fddf0810c8a8c3d410",
+     "lines": 2126,
+     "sha256": "31be447543415ac7e279f4f2e002f05e954ce271904f02dc1d61bd54c15ac189",
      "demonstrated": true,
      "waived": false,
      "self_test_entry_point": true,
@@ -8261,7 +8322,8 @@
      "waived": false,
      "self_test_entry_point": false,
      "wired_by": [
-      "scripts/check_ck0_lineage.py"
+      "scripts/check_ck0_lineage.py",
+      "scripts/test_ck0_custody_loader.py"
      ]
     },
     {
@@ -8496,8 +8558,8 @@
      "kind": "battery",
      "claims": "evidence",
      "disposition": "tcb-declared",
-     "lines": 353,
-     "sha256": "ba8d1110b33e3f577034aee638d09f01613879fc173225a9c936b5fda980130b",
+     "lines": 358,
+     "sha256": "60f3e4216ea3d451c6cafd37486cd9f7c67bfd9ec8543c7c731ea241c0c23b21",
      "demonstrated": true,
      "waived": false,
      "self_test_entry_point": false,
@@ -8845,6 +8907,32 @@
      "wired_by": []
     },
     {
+     "path": "scripts/isabelle/shard_falsity_census.py",
+     "registry_id": "isabelle_shard_falsity_census",
+     "kind": "tool",
+     "claims": "evidence",
+     "disposition": "tcb-declared",
+     "lines": 151,
+     "sha256": "e1e06999e4609f085799e4c85039d532fa0dc8d48625078de5c54952275d9e46",
+     "demonstrated": false,
+     "waived": false,
+     "self_test_entry_point": false,
+     "wired_by": []
+    },
+    {
+     "path": "scripts/isabelle/shard_triviality_census.py",
+     "registry_id": "isabelle_shard_triviality_census",
+     "kind": "tool",
+     "claims": "evidence",
+     "disposition": "tcb-declared",
+     "lines": 175,
+     "sha256": "fec2bc69ee1462c85d97789f3c3b19c541392bf6d663530d48477b5068a1127a",
+     "demonstrated": false,
+     "waived": false,
+     "self_test_entry_point": false,
+     "wired_by": []
+    },
+    {
      "path": "scripts/kernel_lint_ratchet.sh",
      "registry_id": "kernel_lint_ratchet",
      "kind": "gate",
@@ -8998,7 +9086,8 @@
      "self_test_entry_point": true,
      "wired_by": [
       "scripts/kstar_recheck.py",
-      "scripts/lean_export_replay.sh"
+      "scripts/lean_export_replay.sh",
+      "scripts/verify_runner.py"
      ]
     },
     {
@@ -9289,7 +9378,8 @@
      "waived": false,
      "self_test_entry_point": false,
      "wired_by": [
-      "scripts/check_ck0_lineage.py"
+      "scripts/check_ck0_lineage.py",
+      "scripts/test_ck0_custody_loader.py"
      ]
     },
     {
@@ -9757,8 +9847,8 @@
      "kind": "tool",
      "claims": "evidence",
      "disposition": "tcb-declared",
-     "lines": 7217,
-     "sha256": "7645938603460e61d1d8136ece9f5b21864f50f6c039df544df1bba017bb0244",
+     "lines": 7261,
+     "sha256": "d837b42db3fb63472517d0b46b89a61edad5813cf1ea7d4b25722ab5c95f7b73",
      "demonstrated": false,
      "waived": false,
      "self_test_entry_point": false,
@@ -10190,10 +10280,11 @@
    {
     "id": "R-MINT-scope-gap",
     "date": "2026-08-25",
-    "statement": "Ring R2 lane (a) scopes the KernelVerified-minting lane to clean-mathverse. Measured: 3 production module(s) in OTHER crates mint TrustLevel::KernelVerified in a value position. Same posture as the olean scope gap: the lane widens or a dated decision says why not.",
+    "statement": "Ring R2 lane (a) scopes the KernelVerified-minting lane to clean-mathverse. Measured: 4 production module(s) in OTHER crates mint TrustLevel::KernelVerified in a value position. Same posture as the olean scope gap: the lane widens or a dated decision says why not.",
     "sites": [
      "crates/clean-cli/src/cmd_attempts.rs",
      "crates/clean-cli/src/cmd_audit.rs",
+     "crates/clean-elab/src/tactic/mathverse_use.rs",
      "crates/clean-kernel/src/cert/bundle.rs"
     ],
     "owed": "a scope decision (widen lane (a), or record why these are out of scope)"
@@ -10277,6 +10368,12 @@
    },
    {
     "file": "crates/clean-olean/src/import/load_register.rs",
+    "census_row": "axiom-stub-discharge",
+    "classification": "P",
+    "reason": "census classification does not contain S (not a lane R1 keeps structural)"
+   },
+   {
+    "file": "crates/clean-elab/src/tactic/mathverse_use.rs",
     "census_row": "axiom-stub-discharge",
     "classification": "P",
     "reason": "census classification does not contain S (not a lane R1 keeps structural)"
@@ -10415,6 +10512,16 @@
      {
       "line": 787,
       "form": "Some(TrustLevel::KernelVerified)"
+     }
+    ],
+    "note": "Ring R2 lane (a) scopes the KernelVerified-minting lane to clean-mathverse; this site mints the same verdict OUTSIDE that scope. Recorded so the scoping is a measured decision, not a silence (R10: silence must mean no)."
+   },
+   {
+    "file": "crates/clean-elab/src/tactic/mathverse_use.rs",
+    "mint_sites": [
+     {
+      "line": 1030,
+      "form": "trust_level: clean_mathverse::types::TrustLevel::KernelVerified,"
      }
     ],
     "note": "Ring R2 lane (a) scopes the KernelVerified-minting lane to clean-mathverse; this site mints the same verdict OUTSIDE that scope. Recorded so the scoping is a measured decision, not a silence (R10: silence must mean no)."

@@ -1,0 +1,1 @@
+Pinned-source proof modules for the partial C3 semantic induction. Full dependency replay and all own theorem proof/False pairs run in the kcheck_labelled integration target. This does not establish the open mutual induction or headline.

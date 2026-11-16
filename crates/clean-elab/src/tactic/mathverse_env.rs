@@ -74,7 +74,25 @@ impl MathverseEnvironment {
         }
     }
 
-    /// Check if a constant is already loaded in the cache.
+    /// Drop every memoized reconstruction.
+    ///
+    /// MUST be called whenever the backing `MathverseLibrary` is replaced. The
+    /// memo is keyed by NAME ONLY, so a name both corpora define would otherwise
+    /// be served from the OLD library after the swap — while the trust gate reads
+    /// the NEW library's headers. The gate would then validate one declaration
+    /// and `add_decl` would install another.
+    pub(crate) fn clear(&mut self) {
+        self.loaded.clear();
+        self.lru_names.clear();
+    }
+
+    /// Is `name`'s reconstruction memoized?
+    ///
+    /// A cache-occupancy predicate for the LRU tests. Deliberately NOT used by
+    /// [`Self::load_with_deps`] to decide what to return: what is in this memo
+    /// says nothing about what is in any caller's `Environment`, and conflating
+    /// the two is exactly the bug that doc comment describes.
+    #[cfg(test)]
     pub(crate) fn is_loaded(&self, name: &str) -> bool {
         self.loaded.contains_key(name)
     }
@@ -83,6 +101,24 @@ impl MathverseEnvironment {
     ///
     /// Returns the declarations in topological order (dependencies first)
     /// suitable for sequential `Environment::add_decl` calls.
+    ///
+    /// # The cache is a MEMO, not a record of what some environment holds
+    ///
+    /// The returned vector is the constant's FULL closure every time. `loaded`
+    /// memoizes the (pure) header → `Declaration` reconstruction, so a repeat
+    /// call is cheap, but it never suppresses a declaration from the result.
+    ///
+    /// This is load-bearing, not a style choice. The cache is keyed by NAME
+    /// only and has no notion of which `Environment` a previous call's
+    /// declarations were registered into. It used to `continue` past any cached
+    /// dependency, which is correct exactly once — for the first environment
+    /// that asked. A second, fresh environment (the next file, the next test,
+    /// the next `clean check` unit on the same thread) then received a SHORT
+    /// closure and its constants were simply absent, surfacing later as a
+    /// kernel `Unknown constant` instead of a trust diagnostic. Returning the
+    /// full closure and letting the caller skip what its own environment
+    /// already has (`load_candidate_closure_inner`'s `get_const(..).is_none()`
+    /// guard) makes the result environment-independent by construction.
     ///
     /// # Budget
     ///
@@ -97,8 +133,23 @@ impl MathverseEnvironment {
         // Find the root constant's index. This also validates the name exists.
         let root_idx = self.find_constant_idx(name, library)?;
 
-        // BFS/topological walk via the library's walk_deps.
-        let dep_indices: Vec<ConstantIdx> = library.walk_deps(root_idx).collect();
+        // Closure membership comes from walk_deps; the ORDER does not.
+        //
+        // `walk_deps` collects the closure by BFS and then drains it through a
+        // LIFO stack (library.rs `walk_deps`, search.rs `DependencyIterator`),
+        // so it yields REVERSE-BFS — which is not topological. Counter-example:
+        // with A→B, A→C, C→B it yields C before B, and registering C first
+        // fails with `Unknown constant: B`. Observed for real on Mathlib:
+        //   checked registration for `_private.…unique_subtype_iff_existsUnique
+        //   .match_1_5` failed: Unknown constant: ExistsUnique
+        //
+        // Registration REQUIRES dependencies before dependents, so sort the
+        // closure topologically here. Fixed locally rather than in `walk_deps`
+        // because that is shared API whose other callers (trust validation, the
+        // inductive-family pre-pass) are order-independent, and several tests
+        // assert on its current output.
+        let dep_indices: Vec<ConstantIdx> =
+            Self::topological_order(library, library.walk_deps(root_idx).collect());
 
         // Budget check.
         if dep_indices.len() > budget {
@@ -108,11 +159,16 @@ impl MathverseEnvironment {
             });
         }
 
-        // Collect declarations for constants not yet loaded.
+        // Collect the FULL closure, serving already-reconstructed members from
+        // the memo. See the doc comment: skipping cached members here made the
+        // result depend on which environment happened to ask first.
         let mut result = Vec::new();
         for idx in &dep_indices {
             if let Some(dep_name) = library.get_name(*idx) {
-                if self.is_loaded(dep_name) {
+                if let Some(cached) = self.loaded.get(dep_name).cloned() {
+                    // Touch for LRU recency, then serve from the memo.
+                    self.insert_cached(dep_name.to_string(), cached.clone());
+                    result.push(cached);
                     continue;
                 }
 
@@ -125,6 +181,65 @@ impl MathverseEnvironment {
         }
 
         Ok(result)
+    }
+
+    /// Order `closure` so every constant appears after the dependencies it
+    /// references — the order checked registration requires.
+    ///
+    /// Iterative DFS post-order over the library's adjacency, restricted to
+    /// `closure`. Iterative rather than recursive because a Mathlib closure is
+    /// deep enough to blow the stack.
+    ///
+    /// CYCLES: mutual recursion and mutually-referential families make the
+    /// dependency graph genuinely cyclic, so a strict topological order need not
+    /// exist. A node already on the DFS path is treated as satisfied and the
+    /// edge is skipped; the result is then a valid topological order for the
+    /// acyclic part and a stable, deterministic order within each cycle. That is
+    /// strictly better than reverse-BFS, which orders even the ACYCLIC part
+    /// wrongly. A cycle that genuinely cannot be registered in any order still
+    /// fails at `add_decl`, fail-closed, with the kernel's own diagnostic.
+    fn topological_order(
+        library: &MathverseLibrary,
+        closure: Vec<ConstantIdx>,
+    ) -> Vec<ConstantIdx> {
+        let members: std::collections::HashSet<ConstantIdx> = closure.iter().copied().collect();
+        let mut done: std::collections::HashSet<ConstantIdx> = std::collections::HashSet::new();
+        let mut on_path: std::collections::HashSet<ConstantIdx> = std::collections::HashSet::new();
+        let mut out: Vec<ConstantIdx> = Vec::with_capacity(closure.len());
+
+        // (node, next-dependency-cursor)
+        let mut stack: Vec<(ConstantIdx, usize)> = Vec::new();
+        for &root in &closure {
+            if done.contains(&root) {
+                continue;
+            }
+            stack.push((root, 0));
+            on_path.insert(root);
+            while let Some((node, cursor)) = stack.pop() {
+                let deps = library.deps().get(node as usize);
+                let next = deps.and_then(|d| d.get(cursor)).copied();
+                match next {
+                    Some(dep) => {
+                        stack.push((node, cursor + 1));
+                        // Skip deps outside the closure, already emitted, or on
+                        // the current path (a cycle edge).
+                        if members.contains(&dep) && !done.contains(&dep) && !on_path.contains(&dep)
+                        {
+                            stack.push((dep, 0));
+                            on_path.insert(dep);
+                        }
+                    }
+                    None => {
+                        // All dependencies emitted: this node is now safe.
+                        on_path.remove(&node);
+                        if done.insert(node) {
+                            out.push(node);
+                        }
+                    }
+                }
+            }
+        }
+        out
     }
 
     /// Number of currently cached constants.
@@ -171,7 +286,7 @@ impl MathverseEnvironment {
         library: &MathverseLibrary,
     ) -> Declaration {
         use clean_mathverse::shard_reconstruct::{
-            reconstruct_from_shard, reconstruct_level_params,
+            reconstruct_level_params, reconstruct_single_subdag_public,
         };
 
         let decl_name = Name::from_string(name);
@@ -186,10 +301,20 @@ impl MathverseEnvironment {
         .unwrap_or_default();
 
         // Reconstruct the real type expression from the shard data.
-        let type_expr = reconstruct_from_shard(
+        //
+        // MUST pass `library.level_lists()`. The no-arg `reconstruct_from_shard`
+        // hardcodes an empty level-list table (shard_reconstruct.rs:56-63), which
+        // rebuilds EVERY `Const` with `vec![]` universe arguments — collapsing
+        // `Const(Eq, [u])` to `Const(Eq, [])` and failing `add_decl` with
+        // `LevelCountMismatch { expected: 1, got: 0 }` for every reference to a
+        // universe-polymorphic constant. The writer side already documents this
+        // exact failure (lean4/env_import.rs:255-262); the consumer side was
+        // never updated.
+        let type_expr = reconstruct_single_subdag_public(
             library.exprs(),
             library.levels(),
             library.strings(),
+            library.level_lists(),
             header.type_idx,
         )
         .unwrap_or_else(|_| clean_kernel::Expr::sort(clean_kernel::Level::zero()));
@@ -203,17 +328,45 @@ impl MathverseEnvironment {
             // The trust level is tracked via ImportConfidence in the shard header,
             // and the mathverse_use tactic gates on trust level before applying.
             // See #3359 for the trust gating design.
-            if let Ok(value_expr) = reconstruct_from_shard(
+            if let Ok(value_expr) = reconstruct_single_subdag_public(
                 library.exprs(),
                 library.levels(),
                 library.strings(),
+                library.level_lists(),
                 header.value_idx,
             ) {
-                Declaration::Theorem {
-                    name: decl_name,
-                    level_params: level_params.clone(),
-                    type_: type_expr,
-                    value: value_expr,
+                // Preserve the DECLARATION KIND. Registering everything
+                // value-bearing as a `Theorem` was wrong twice over: it rejected
+                // real definitions downstream (`can_replay_missing_dependency`),
+                // and it silently changed their reduction behaviour — a
+                // `Definition` is delta-reducible, a `Theorem` is proof-irrelevant
+                // and is not unfolded the same way. Mathlib closures are full of
+                // match auxiliaries (`....match_1_5`) and other private
+                // definitions whose bodies MUST unfold for defeq to succeed.
+                match header.decl_kind() {
+                    Ok(clean_mathverse::types::DeclKind::Definition) => Declaration::Definition {
+                        name: decl_name,
+                        level_params: level_params.clone(),
+                        type_: type_expr,
+                        value: value_expr,
+                        // Conservative: not eagerly unfolded. The kernel can
+                        // still delta-reduce on demand; marking every imported
+                        // definition reducible would change unfolding strategy
+                        // corpus-wide.
+                        is_reducible: false,
+                    },
+                    Ok(clean_mathverse::types::DeclKind::Opaque) => Declaration::Opaque {
+                        name: decl_name,
+                        level_params: level_params.clone(),
+                        type_: type_expr,
+                        value: value_expr,
+                    },
+                    _ => Declaration::Theorem {
+                        name: decl_name,
+                        level_params: level_params.clone(),
+                        type_: type_expr,
+                        value: value_expr,
+                    },
                 }
             } else {
                 // Value reconstruction failed; register as axiom with real type.
@@ -349,8 +502,16 @@ mod tests {
         assert!(env.is_loaded("dep2"));
     }
 
+    /// The cache memoizes reconstruction; it must NOT shorten the closure.
+    ///
+    /// It is keyed by name only and knows nothing about which `Environment` a
+    /// previous call's declarations went into, so suppressing cached members
+    /// handed the SECOND environment to ask an incomplete closure — the
+    /// constants were then absent and surfaced as a kernel `Unknown constant`
+    /// rather than a trust diagnostic. Callers de-duplicate against their own
+    /// environment instead.
     #[test]
-    fn test_mathverse_env_load_with_deps_already_cached() {
+    fn test_mathverse_env_load_with_deps_repeat_returns_full_closure() {
         let shard = build_test_shard(&["a", "b"]);
         let mut lib = MathverseLibrary::new(TrustPolicy::permissive());
         lib.load_shard(&shard).unwrap();
@@ -362,11 +523,13 @@ mod tests {
         let decls1 = env.load_with_deps("a", &lib, 1000).unwrap();
         assert_eq!(decls1.len(), 2);
 
-        // Second load: already cached, should return empty.
+        // Second load: SAME full closure, served from the memo.
         let decls2 = env.load_with_deps("a", &lib, 1000).unwrap();
-        assert!(
-            decls2.is_empty(),
-            "already-cached constants should not be re-returned"
+        assert_eq!(
+            decls2.len(),
+            2,
+            "a repeat load must still describe the whole closure; the cache is a \
+             reconstruction memo, not a record of some environment's contents"
         );
     }
 

@@ -375,6 +375,12 @@ pub(super) struct ShardRecorder {
     /// Not serialized into [`ShardVerdicts`] (a writer-internal index, not a
     /// verdict); consumed by [`super::shard_mathverse`] after the replay.
     emitted_const_indices: Vec<u32>,
+    /// Writer constant indices of the SHARED PRELUDE — the translator-synthesized
+    /// definitional constants emitted ONCE before the per-line loop, hence outside
+    /// every shard's `[lo, hi)` line range. Every range shard must carry them:
+    /// they are the closure its own theorems' types and proof values reference,
+    /// and a shard without them declares theorems no consumer can register.
+    shared_const_indices: Vec<u32>,
 }
 
 impl ShardRecorder {
@@ -393,12 +399,30 @@ impl ShardRecorder {
                 ..Default::default()
             },
             emitted_const_indices: Vec::new(),
+            shared_const_indices: Vec::new(),
         }
     }
 
-    /// The shard-writer constant indices this range's lines emitted (line order).
-    pub(super) fn emitted_const_indices(&self) -> &[u32] {
-        &self.emitted_const_indices
+    /// Record the writer constant slots `[lo, hi)` occupied by the shared
+    /// definitional prelude. Verdict-neutral: a pure observation of the sink,
+    /// exactly like [`Self::record_line`]'s per-line window. The caller brackets
+    /// the emit call with [`ShardWriter::constants_len`], so `hi - lo` is the
+    /// emitted count by construction — no assumption about WHERE in the writer
+    /// the prelude lands.
+    pub(super) fn record_shared_consts(&mut self, lo: usize, hi: usize) {
+        self.shared_const_indices.extend((lo..hi).map(|i| i as u32));
+    }
+
+    /// Every writer constant index this shard's `.mathverse` must carry: the
+    /// shared definitional prelude first (emission order), then this range's own
+    /// constants. A range shard carrying only the latter declares theorems whose
+    /// closures it does not provide.
+    pub(super) fn carried_const_indices(&self) -> Vec<u32> {
+        let mut v =
+            Vec::with_capacity(self.shared_const_indices.len() + self.emitted_const_indices.len());
+        v.extend_from_slice(&self.shared_const_indices);
+        v.extend_from_slice(&self.emitted_const_indices);
+        v
     }
 
     /// Whether raw line index `cur` falls in this shard's emission range.
@@ -480,9 +504,10 @@ pub fn import_proven_theorems_streaming_shard(
 /// Run one shard's full deterministic replay and return the populated
 /// [`ShardRecorder`] — the shared body behind the shard entry points. The caller
 /// gets both the mergeable [`ShardVerdicts`] (via [`ShardRecorder::into_verdicts`])
-/// and, for a per-range `.mathverse` emission, the writer constant indices this
-/// range emitted (via [`ShardRecorder::emitted_const_indices`]). `writer` holds
-/// the WHOLE replay's constants on return (the recorder carves the range's subset).
+/// and, for a per-range `.mathverse` emission, the writer constant indices that
+/// artifact must carry — this range's own plus the shared definitional prelude
+/// (via [`ShardRecorder::carried_const_indices`]). `writer` holds the WHOLE
+/// replay's constants on return (the recorder carves the shard's subset).
 ///
 /// # Errors
 /// [`StreamError`] on file / snapshot errors, exactly like the serial driver.

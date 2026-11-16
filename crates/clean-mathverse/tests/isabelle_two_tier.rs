@@ -36,7 +36,7 @@
 
 use clean_mathverse::hol::isabelle_pure::{parse_proven_theorem, IsaProof, IsaProvenTheorem};
 use clean_mathverse::hol::isabelle_pure_verify::{import_proven_theorems, PureVerifiedImport};
-use clean_mathverse::shard::ShardWriter;
+use clean_mathverse::shard::{ShardReader, ShardWriter};
 
 const FIXTURE: &str = include_str!("fixtures/isabelle/hol_foundational_closure.jsonl");
 
@@ -127,10 +127,51 @@ fn two_tier_ledger_preserves_kernel_verified_and_is_off_by_default() {
     assert_eq!(off_a.kernel_checked_ledger, 0, "tier-2 must be 0 when OFF");
     assert_eq!(off_a.ledger_size, 0, "ledger must be 0 when OFF");
     assert!(off_a.ledger.is_empty(), "ledger records must be empty OFF");
-    assert!(
-        off_a.written_constants.is_empty(),
-        "written_constants is a ledger-run artifact, empty OFF"
+    // `written_constants` is now recorded on EVERY run, not just ledger runs: the
+    // publish step's old "KV constant `i` is at shard index `i`" identity is false
+    // once the shard also carries the synthesized def-consts and the human-name
+    // aliases, so the writer's own record is the only thing that knows what it
+    // wrote and where. Emptiness was an implementation detail; the property with
+    // teeth — and the one the production publish path hard-gates on
+    // (`isabelle_import_dispatch.rs`, where a mismatch refuses to stamp) — is that
+    // the record is a BIJECTION with the shard headers, name- and
+    // confidence-exact. Asserted here for the OFF (non-ledger) run.
+    let off_a_reader = ShardReader::from_bytes(&off_a_bytes).expect("read OFF shard");
+    assert_eq!(
+        off_a.written_constants.len(),
+        off_a_reader.constants.len(),
+        "OFF: written_constants must account for every shard header"
     );
+    let mut slots: Vec<u32> = off_a
+        .written_constants
+        .iter()
+        .map(|w| w.shard_idx)
+        .collect();
+    slots.sort_unstable();
+    slots.dedup();
+    assert_eq!(
+        slots.len(),
+        off_a_reader.constants.len(),
+        "OFF: each shard header must be claimed by exactly one written_constants record"
+    );
+    for wc in &off_a.written_constants {
+        let hdr = off_a_reader
+            .constants
+            .get(wc.shard_idx as usize)
+            .expect("recorded shard index in range");
+        assert_eq!(
+            off_a_reader
+                .strings
+                .get(hdr.name_idx as usize)
+                .map(String::as_str),
+            Some(wc.name.as_str()),
+            "OFF: written_constants must name the constant at its recorded index"
+        );
+        assert_eq!(
+            hdr.import_confidence, wc.confidence,
+            "OFF: recorded confidence must match the header's"
+        );
+    }
     // Historical conservation invariant holds unchanged when OFF.
     assert_eq!(
         off_a.kernel_verified + off_a.rejected,

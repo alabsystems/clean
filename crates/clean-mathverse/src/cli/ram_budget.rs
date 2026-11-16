@@ -13,10 +13,11 @@
 //! way). Clamping `jobs` caps the peak.
 //!
 //! This mirrors the proven clamp the corpus-sharded driver uses
-//! (`mathverse_shard verify-kernel --corpus-sharded`): `min(cpus, max(1,
-//! ram_gib / PER_WORKER_GIB))`. The clamp applies ONLY to the default — an
-//! explicit `--jobs N` is always honored verbatim, so an operator with headroom
-//! can still raise it.
+//! (`mathverse_shard verify-kernel --corpus-sharded`), with the base term the
+//! original arithmetic dropped: `min(cpus, max(1, (ram_gib - BASE_RESERVE_GIB)
+//! / PER_WORKER_GIB))`. The clamp applies ONLY to the default — an explicit
+//! `--jobs N` is always honored verbatim, so an operator with headroom can
+//! still raise it.
 //!
 //! Soundness-neutral: scheduling only. The number of workers never changes any
 //! constant's verdict — each worker runs the identical read-only
@@ -28,19 +29,42 @@
 /// after the 2026-06-22 OOM/jetsam incident.
 pub const PER_WORKER_GIB: u64 = 12;
 
+/// RAM withheld before the remainder is divided among workers, covering the OS
+/// and PARAGON's SHARED BASE — the environment every worker reads against,
+/// which exists once regardless of `jobs`.
+///
+/// Without this term the clamp hands the entire nameplate to workers, so the
+/// bound it returns is precisely the point where nothing is left: on a 36 GiB
+/// host, `36 / 12 = 3` workers x 12 GiB = 100% of physical RAM. On 2026-08-01
+/// that default SIGKILLed (jetsam) two full-Mathlib chunks ~28 min into each,
+/// losing their manifests while leaving partial shards behind. The peak-RSS
+/// model in this module's header is `base + jobs * (...)`; this constant is
+/// the `base` the arithmetic was missing.
+///
+/// Sized at one worker's budget: the shared base is the same order as a single
+/// module's closure, and reserving less only moves the OOM to a heavier
+/// subtree (Analysis / Topology / CategoryTheory / SetTheory).
+pub const BASE_RESERVE_GIB: u64 = 12;
+
 /// Clamp a default worker count to what physical RAM can hold.
 ///
 /// Pure function of `cpus` and `ram_gib` so it is unit-testable without touching
 /// the host. `ram_gib == None` means "RAM unknown" — we stay conservative
 /// (`min(cpus, 4)`) rather than trust `nproc`. With a known RAM figure the bound
-/// is `max(1, ram_gib / PER_WORKER_GIB)`; the result is always `>= 1`.
+/// is `max(1, (ram_gib - BASE_RESERVE_GIB) / PER_WORKER_GIB)`; the result is
+/// always `>= 1`.
+///
+/// The subtraction saturates, so a host smaller than the reserve yields one
+/// worker rather than zero — one worker that may swap beats a pool that
+/// deadlocks.
 #[must_use]
 pub fn clamp_jobs_for_ram(cpus: usize, ram_gib: Option<u64>) -> usize {
     let cpus = cpus.max(1);
     match ram_gib {
         None => cpus.min(4),
         Some(ram_gib) => {
-            let ram_bound = std::cmp::max(1, (ram_gib / PER_WORKER_GIB) as usize);
+            let usable = ram_gib.saturating_sub(BASE_RESERVE_GIB);
+            let ram_bound = std::cmp::max(1, (usable / PER_WORKER_GIB) as usize);
             cpus.min(ram_bound)
         }
     }
@@ -86,10 +110,12 @@ mod tests {
 
     #[test]
     fn test_clamp_jobs_low_ram_caps_below_cpus() {
-        // 24 GiB host, 16 cores: 24/12 = 2 jobs (NOT 16) — the SetTheory-jetsam
-        // case the clamp exists to prevent.
-        assert_eq!(clamp_jobs_for_ram(16, Some(24)), 2);
-        // 15 GiB host (this validation box): 15/12 = 1 job.
+        // 24 GiB host, 16 cores: (24-12)/12 = 1 job (NOT 16) — the
+        // SetTheory-jetsam case the clamp exists to prevent. This asserted 2
+        // before the base reserve landed; 2 workers x 12 GiB left 0 GiB for the
+        // shared base on a 24 GiB box, which is the bug, not the baseline.
+        assert_eq!(clamp_jobs_for_ram(16, Some(24)), 1);
+        // 15 GiB host (this validation box): saturates to 3/12 = 0 -> 1 job.
         assert_eq!(clamp_jobs_for_ram(16, Some(15)), 1);
     }
 
@@ -116,9 +142,29 @@ mod tests {
 
     #[test]
     fn test_clamp_jobs_exact_multiple() {
-        // 48 GiB / 12 = 4; with 4 cores that is exactly 4.
-        assert_eq!(clamp_jobs_for_ram(4, Some(48)), 4);
-        // 36 GiB / 12 = 3, clamps 8 cores down to 3.
-        assert_eq!(clamp_jobs_for_ram(8, Some(36)), 3);
+        // (48-12)/12 = 3; 4 cores clamp to 3. Was 4 before the base reserve.
+        assert_eq!(clamp_jobs_for_ram(4, Some(48)), 3);
+        // (36-12)/12 = 2, clamps 8 cores down to 2. Was 3 before the base
+        // reserve — see the regression test below for what that 3 cost.
+        assert_eq!(clamp_jobs_for_ram(8, Some(36)), 2);
+    }
+
+    /// The 2026-08-01 full-Mathlib jetsam kill, pinned as an invariant.
+    ///
+    /// A 36 GiB host must never be handed a default that budgets 100% of
+    /// physical RAM to workers: the shared base has to fit too. Stated as an
+    /// inequality rather than a magic number so it keeps meaning something if
+    /// either constant is retuned.
+    #[test]
+    fn test_clamp_jobs_leaves_room_for_the_shared_base() {
+        for (cpus, ram_gib) in [(8usize, 36u64), (16, 24), (4, 48), (10, 64)] {
+            let jobs = clamp_jobs_for_ram(cpus, Some(ram_gib));
+            let worker_demand = jobs as u64 * PER_WORKER_GIB;
+            assert!(
+                worker_demand < ram_gib,
+                "{cpus} cpus / {ram_gib} GiB -> {jobs} jobs demands {worker_demand} GiB, \
+                 leaving nothing for the shared base"
+            );
+        }
     }
 }

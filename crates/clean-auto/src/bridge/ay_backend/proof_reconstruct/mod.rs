@@ -118,6 +118,11 @@ mod tests;
 mod tests_boundary;
 #[cfg(test)]
 mod tests_contract_gate_support;
+// Gated with the BV bit-blast lane: these tests import `ay_proof::bv_blast_export`.
+#[cfg(all(test, feature = "ay-bv-blast"))]
+mod tests_criterion2_gvn_lowering;
+#[cfg(all(test, feature = "ay-bv-blast"))]
+mod tests_criterion2_join;
 #[cfg(test)]
 mod tests_e2e;
 #[cfg(test)]
@@ -158,6 +163,9 @@ mod tests_trace;
 mod tests_trace_rooting;
 #[cfg(test)]
 mod tests_trust;
+// Gated with the BV bit-blast lane: imports `ay_proof::bv_blast_export`.
+#[cfg(all(test, feature = "ay-bv-blast"))]
+mod tests_trust_cg_obligation;
 #[cfg(test)]
 mod tests_tseitin;
 #[cfg(test)]

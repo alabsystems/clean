@@ -1,0 +1,25 @@
+# Copyright 2026 Andrew Yates
+# Author: Andrew Yates <andrewyates.name@gmail.com>
+# SPDX-License-Identifier: Apache-2.0
+
+[package]
+name = "clean-autoform"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Autoformalization honesty shell (M1+M2) — two-meter trust labeling for the trust-ir -> CIC SemanticReflection map"
+readme.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+clean-kernel = { workspace = true }
+clean-cake = { workspace = true }
+trust-ir-contract = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

@@ -15,6 +15,7 @@ use super::*;
 pub(super) enum Tok {
     Ident(String),
     Str(String),
+    ByteStr(String),
     Punct(char),
 }
 
@@ -74,27 +75,68 @@ pub(super) fn lex(src: &str) -> Vec<Tok> {
                     }
                     j += 1;
                 }
-                out.push(Tok::Str(b[start..j.min(b.len())].iter().collect()));
+                let value = b[start..j.min(b.len())].iter().collect();
+                out.push(if c == 'b' {
+                    Tok::ByteStr(value)
+                } else {
+                    Tok::Str(value)
+                });
                 i = j + 1 + hashes;
                 continue;
             }
         }
-        if c == '"' {
-            let mut j = i + 1;
+        if c == '"' || (!prev_ident && c == 'b' && b.get(i + 1) == Some(&'"')) {
+            let byte = c == 'b';
+            let mut j = i + 1 + usize::from(byte);
             let mut s = String::new();
             while j < b.len() && b[j] != '"' {
                 if b[j] == '\\' {
-                    s.push(b[j]);
-                    if let Some(&n) = b.get(j + 1) {
-                        s.push(n);
+                    j += 1;
+                    let escaped = *b.get(j).expect("terminated Rust string escape");
+                    j += 1;
+                    match escaped {
+                        'n' => s.push('\n'),
+                        'r' => s.push('\r'),
+                        't' => s.push('\t'),
+                        '0' => s.push('\0'),
+                        '\\' | '\'' | '"' => s.push(escaped),
+                        'x' => {
+                            let digits: String = b[j..j + 2].iter().collect();
+                            s.push(char::from(
+                                u8::from_str_radix(&digits, 16).expect("Rust hex escape"),
+                            ));
+                            j += 2;
+                        }
+                        'u' => {
+                            assert_eq!(b.get(j), Some(&'{'), "Rust Unicode escape");
+                            j += 1;
+                            let start = j;
+                            while b.get(j) != Some(&'}') {
+                                j += 1;
+                            }
+                            let digits: String =
+                                b[start..j].iter().filter(|c| **c != '_').collect();
+                            s.push(
+                                char::from_u32(
+                                    u32::from_str_radix(&digits, 16).expect("Rust Unicode scalar"),
+                                )
+                                .expect("Rust Unicode scalar"),
+                            );
+                            j += 1;
+                        }
+                        '\n' | '\r' => {
+                            while b.get(j).is_some_and(|c| c.is_whitespace()) {
+                                j += 1;
+                            }
+                        }
+                        _ => panic!("unknown Rust string escape: {escaped}"),
                     }
-                    j += 2;
                 } else {
                     s.push(b[j]);
                     j += 1;
                 }
             }
-            out.push(Tok::Str(s));
+            out.push(if byte { Tok::ByteStr(s) } else { Tok::Str(s) });
             i = j + 1;
             continue;
         }

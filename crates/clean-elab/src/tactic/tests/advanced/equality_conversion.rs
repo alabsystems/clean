@@ -297,6 +297,10 @@ fn test_change_at_accepts_delta_reducible_nested_subexpr() {
     .unwrap();
 
     let goal_ty = Expr::const_(Name::from_string("B"), vec![]);
+
+    // Hypothesis h : Fam MyA, in scope from the start so the root metavariable
+    // is minted with it (`change_at` closes that metavariable, and a goal
+    // widened after creation is refused by `close_goal`).
     let fvar = FVarId::new(0);
     let f_my_a = Expr::app(
         Expr::const_(Name::from_string("Fam"), vec![]),

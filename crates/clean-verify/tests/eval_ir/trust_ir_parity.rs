@@ -37,7 +37,16 @@
 
 use clean_kernel::Name;
 use clean_verify::spec::Specification;
-use clean_verify::test_utils::build_eval_ir_spec_with_stack;
+use clean_verify::test_utils::run_with_stack;
+
+/// Inspect the vocabulary installed for actual source/IR consumers. Historical
+/// Crystal worked examples are independent of these enum coverage claims.
+fn execution_spec() -> Specification {
+    run_with_stack(|| {
+        Specification::new_eval_ir_prelude_spec()
+            .expect("production EvalIR execution vocabulary should build")
+    })
+}
 
 /// How an EvalIR alphabet images one `trust_ir` variant.
 #[derive(Clone, Copy, Debug)]
@@ -271,7 +280,11 @@ fn derived_claim(a: &Alphabet) -> (String, Vec<&str>) {
 /// Every alphabet's registered constructors and description, against its enum.
 #[test]
 fn eval_ir_operator_alphabet_claims_match_the_trust_ir_enums() {
-    let spec = build_eval_ir_spec_with_stack();
+    assert_operator_contract(execution_spec());
+}
+
+/// The same enum/constructor/description assertions, with the producer context explicit.
+pub(super) fn assert_operator_contract(spec: Specification) {
     let mut wrong = Vec::new();
     for (clean, a) in alphabets() {
         let registered = ctors_in_order(&spec, clean);
@@ -341,8 +354,12 @@ fn ty_variant_total() -> usize {
 /// (not one-to-one), and that count is the enum's.
 #[test]
 fn eval_ir_ty_description_states_the_trust_ir_ty_variant_count() {
+    assert_ty_contract(execution_spec());
+}
+
+/// The same exhaustive Ty denominator and registered-description assertion.
+pub(super) fn assert_ty_contract(spec: Specification) {
     let total = ty_variant_total();
-    let spec = build_eval_ir_spec_with_stack();
     let desc = description(&spec, "IRTy");
     let claim = format!("the {total} trust_ir::Ty variants");
     assert!(

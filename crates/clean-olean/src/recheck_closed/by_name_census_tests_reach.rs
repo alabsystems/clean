@@ -5,6 +5,8 @@
 //! The by-name census's reachability: which kernel items the replay's
 //! entry points reach (`by_name_census_tests.rs`).
 
+use super::identity::Identity;
+use super::roles::{self, Role};
 use super::scan::*;
 use super::*;
 
@@ -17,6 +19,7 @@ type ItemRef = (u8, String, usize);
 /// The reached part of the kernel crate.
 pub(super) struct Census {
     items: Items,
+    identity: Identity,
     reached: BTreeSet<ItemRef>,
 }
 
@@ -31,8 +34,24 @@ fn is_type_like(s: &str) -> bool {
 
 impl Census {
     pub(super) fn build() -> Self {
+        Self::from_sources(source_files(&kernel_src()))
+    }
+
+    /// Plant code in a real kernel file in memory. It goes through the same
+    /// lexer, discovery, reachability and classification as the live census.
+    pub(super) fn with_plant(file: &str, plant: &str) -> Self {
+        let mut sources = source_files(&kernel_src());
+        let (_, source) = sources
+            .iter_mut()
+            .find(|(f, _)| f == file)
+            .expect("plant file");
+        source.push_str(plant);
+        Self::from_sources(sources)
+    }
+
+    fn from_sources(sources: Vec<(String, String)>) -> Self {
         let mut items = Items::default();
-        for (file, text) in source_files(&kernel_src()) {
+        for (file, text) in sources {
             let toks = lex(&text);
             let idx = items.files.len();
             collect_items(&file, idx, &toks, 0, None, None, &mut items);
@@ -57,8 +76,10 @@ impl Census {
             uses.insert(file.clone(), parse_uses(here, &items.files[k], &names));
         }
         items.uses = uses;
+        let identity = Identity::new(&items);
         let mut census = Self {
             items,
+            identity,
             reached: BTreeSet::new(),
         };
         census.reach();
@@ -433,7 +454,7 @@ impl Census {
         for r in &self.reached {
             let item = self.item(r);
             for t in self.body(item) {
-                if let Tok::Str(s) = t {
+                if let Tok::Str(s) | Tok::ByteStr(s) = t {
                     if looks_like_a_name(s) {
                         out.entry(s.clone()).or_default().insert(item.file.clone());
                     }
@@ -441,6 +462,111 @@ impl Census {
             }
         }
         out
+    }
+
+    fn name_data_items(&self) -> BTreeSet<ItemRef> {
+        let mut work: Vec<_> = self
+            .reached
+            .iter()
+            .filter(|r| roles::computed_name_input(self.body(self.item(r))))
+            .cloned()
+            .collect();
+        let mut demanded = BTreeSet::new();
+        while let Some(r) = work.pop() {
+            if !demanded.insert(r.clone()) {
+                continue;
+            }
+            for t in self.body(self.item(&r)) {
+                let Tok::Ident(name) = t else {
+                    continue;
+                };
+                for (kind, map) in [(STATIC, &self.items.statics), (FN, &self.items.fns)] {
+                    for (k, item) in map.get(name).into_iter().flatten().enumerate() {
+                        if kind == STATIC || item.owner.is_none() {
+                            work.push((kind, name.clone(), k));
+                        }
+                    }
+                }
+            }
+        }
+        demanded
+    }
+
+    /// Preserve ALL discovered literals, classified per token occurrence.
+    /// Collapsing by (file, spelling) before classification would let a benign
+    /// metadata occurrence conceal a lookup of the same spelling beside it.
+    pub(super) fn literal_sites(&self) -> BTreeMap<(String, usize), (String, Role)> {
+        let demanded = self.name_data_items();
+        let mut out = BTreeMap::new();
+        for r in &self.reached {
+            let item = self.item(r);
+            let codec = r.0 == FN
+                && self.items.impl_fns.iter().any(|((_, tr), fns)| {
+                    tr == "PersistentExtEntry" && fns.contains(&(r.1.clone(), r.2))
+                });
+            let toks = &self.items.files[item.file_idx];
+            for at in item.range.0..item.range.1 {
+                let (Tok::Str(s) | Tok::ByteStr(s)) = &toks[at] else {
+                    continue;
+                };
+                if !looks_like_a_name(s) {
+                    continue;
+                }
+                let mut role = roles::role(item, toks, at, codec);
+                if !self.identity.allows(item, toks, at, role) {
+                    role = Role::Candidate;
+                }
+                // These are built-in macros only when no kernel macro can
+                // shadow them, and the invocation is unqualified. Unknown
+                // macro expansions keep every literal as a candidate.
+                let builtin = match role {
+                    Role::BuildEnvironment => Some(("env", at - 3)),
+                    Role::FormatString => Some(("write", at - 5)),
+                    _ => None,
+                };
+                if builtin.is_some_and(|(name, start)| {
+                    self.items.macros.contains_key(name)
+                        || self
+                            .items
+                            .uses
+                            .get(&item.file)
+                            .into_iter()
+                            .flatten()
+                            .any(|u| u.alias.as_deref().or(u.name.as_deref()) == Some(name))
+                        || start.checked_sub(1).is_some_and(|i| {
+                            is_punct(toks.get(i), ':') || is_punct(toks.get(i), '.')
+                        })
+                }) {
+                    role = Role::Candidate;
+                }
+                if matches!(role, Role::ByteArray | Role::FormatString) && demanded.contains(r) {
+                    role = Role::Candidate;
+                }
+                let entry = out
+                    .entry((item.file.clone(), at))
+                    .or_insert((s.clone(), role));
+                // Overlapping discovered items must agree; a candidate wins.
+                if role == Role::Candidate {
+                    entry.1 = role;
+                }
+            }
+        }
+        out
+    }
+
+    pub(super) fn unclassified(&self) -> Vec<String> {
+        self.literal_sites()
+            .into_iter()
+            .filter_map(|((file, at), (s, role))| {
+                let known = EXTENSION_KEYS.iter().any(|key| key.name == s)
+                    || ["Quot", "Quot.mk", "Quot.lift", "Quot.ind", "Quot.sound"]
+                        .contains(&s.as_str())
+                    || EXPLAINED
+                        .iter()
+                        .any(|(f, ls, _)| *f == file && ls.contains(&s.as_str()));
+                (role == Role::Candidate && !known).then(|| format!("{s:?} in {file} (token {at})"))
+            })
+            .collect()
     }
 
     /// `reached<TAB>kind<TAB>owner<TAB>name<TAB>file` for EVERY item the

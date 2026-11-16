@@ -1,15 +1,19 @@
 // Copyright 2026 Andrew Yates | SPDX-License-Identifier: Apache-2.0
 //! C4 experimental building blocks, excluded from normal builds.
 //!
-//! This module does NOT emit declaration advice or establish R2/R3. In
-//! particular, its token journal is not an advice certificate. Neither ordinary
-//! checking nor `ReferenceKernel` calls this module. See the C4 report for the
-//! remaining inference/reduction work; do not derive R2/R3 from this API.
+//! The diagnostic token journal is not an advice certificate. The separate
+//! core::advice producer emits untrusted candidates for bounded ordinary-core
+//! inputs; only the adopted checker can accept those candidates. The observing
+//! fenced replay calls it without changing admission. Normal checking and
+//! ReferenceKernel do not use candidate success as authority. Full Init/C4
+//! coverage and R2/R3 are not established by this API.
 pub mod core;
 pub mod term;
+/// Untrusted token/frame encoding; checker acceptance remains separate.
+pub mod wire;
 use term::{Label, Node, Term};
 
-/// The tags named in design section 3.2. Operands/encoding are still owed by C4.
+/// The tags named in design section 3.2; wire defines their candidate encoding.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Token {
     /// Declaration's supplied depth bound (Revision 1).

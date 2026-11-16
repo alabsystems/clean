@@ -66,9 +66,14 @@ hits = [i for i, l in enumerate(lines)
 # (b03937e74/c6388730e) added a reproduction stanza that restates
 # `markers_detail` and `markers_exact`, so those anchors now denote TWO lines
 # that must move together. Still fail-closed: any other count aborts.
-assert len(hits) == want, "anchor must match exactly %d line(s), matched %d: %s" % (want, len(hits), a[:80])
+if want <= 0:
+    raise ValueError("expected anchor count must be positive")
+if len(hits) != want:
+    raise ValueError("anchor must match exactly %d line(s), matched %d: %s" % (want, len(hits), a[:80]))
 for i in hits:
-    assert lines[i].count(a) == 1, "anchor not unique within its line: %s" % a[:80]
+    if lines[i].count(a) != 1:
+        raise ValueError("anchor not unique within its line: %s" % a[:80])
+for i in hits:
     lines[i] = lines[i].replace(a, b, 1)
 open(p, "w").write("\n".join(lines))
 PY
@@ -149,16 +154,16 @@ expect PASS "P8 reverted"
 
 echo
 echo "== P9: THE PARAMETER LIST — the closure environment pointer dropped =="
-sub "$FD_DEFS" "(IRList.cons Nat ir_d0 (IRList.cons Nat ir_d1 (IRList.cons Nat ir_d2 (IRList.nil Nat))))" "(IRList.cons Nat ir_d1 (IRList.cons Nat ir_d2 (IRList.nil Nat)))"
+sub "$FD_DEFS" "(@IRList.cons Nat ir_d0 (@IRList.cons Nat ir_d1 (@IRList.cons Nat ir_d2 (@IRList.nil Nat))))" "(@IRList.cons Nat ir_d1 (@IRList.cons Nat ir_d2 (@IRList.nil Nat)))"
 expect FAIL "P9 mutated: two parameters where the artifact takes three, so every operand id shifts"; reason
-sub "$FD_DEFS" "(IRList.cons Nat ir_d1 (IRList.cons Nat ir_d2 (IRList.nil Nat)))" "(IRList.cons Nat ir_d0 (IRList.cons Nat ir_d1 (IRList.cons Nat ir_d2 (IRList.nil Nat))))"
+sub "$FD_DEFS" "(@IRList.cons Nat ir_d1 (@IRList.cons Nat ir_d2 (@IRList.nil Nat)))" "(@IRList.cons Nat ir_d0 (@IRList.cons Nat ir_d1 (@IRList.cons Nat ir_d2 (@IRList.nil Nat))))"
 expect PASS "P9 reverted"
 
 echo
 echo "== P10: THE ENTRY BLOCK the function starts at =="
-sub "$FD_DEFS" "(IRList.nil Nat)))) ir_d0 (ir_blk" "(IRList.nil Nat)))) ir_d1 (ir_blk"
+sub "$FD_DEFS" "(@IRList.nil Nat)))) ir_d0 (ir_blk" "(@IRList.nil Nat)))) ir_d1 (ir_blk"
 expect FAIL "P10 mutated: the function enters at bb1, which does not exist"; reason
-sub "$FD_DEFS" "(IRList.nil Nat)))) ir_d1 (ir_blk" "(IRList.nil Nat)))) ir_d0 (ir_blk"
+sub "$FD_DEFS" "(@IRList.nil Nat)))) ir_d1 (ir_blk" "(@IRList.nil Nat)))) ir_d0 (ir_blk"
 expect PASS "P10 reverted"
 
 # NOT A CASE, and recorded rather than omitted: giving bb0 a BLOCK PARAMETER

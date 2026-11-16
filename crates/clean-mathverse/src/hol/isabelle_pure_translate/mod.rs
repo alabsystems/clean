@@ -93,6 +93,34 @@ pub enum TranslateError {
     /// ([`PREMISE_STEP_BUDGET_DEFAULT`]); `ISA_PREMISE_STEP_BUDGET=0` opts out.
     #[error("premise-search step budget exceeded ({0} steps)")]
     PremiseBudgetExceeded(u64),
+    /// An overloaded/opaque HOL constant had no faithful clean mapping, and
+    /// `ISA_STRICT_CONST_MAP=1` refused to abstract it into a quantified
+    /// parameter.
+    ///
+    /// # Why abstraction is not a safe fallback
+    ///
+    /// [`Ctx::const_param`] replaces an unmapped constant with a universally
+    /// quantified variable. Isabelle's type classes make `+`, `0`, `≤` ad-hoc
+    /// overloaded, so this fires on ordinary mathematics and **strips the
+    /// hypotheses that made the theorem true**:
+    ///
+    /// ```text
+    /// Isabelle:  add_0_right :  a + 0 = a                       (true, proved)
+    /// stored:    ∀ (plus : ℕ→ℕ→ℕ) (a z : ℕ), plus a z = a       (FALSE)
+    /// ```
+    ///
+    /// Nothing is wrong with Isabelle here — the falsity is manufactured by the
+    /// importer on the way in. The abstraction is lossy enough that
+    /// `Nat.add_0_right` and `Nat.diff_0_eq_0` collapse to the *same* false
+    /// statement. Measured over the v3.2 shard, ~44.7% of the 123,027
+    /// trusted-ledger axioms and ~18.0% of tier-2 carry this shape
+    /// (`scripts/isabelle/shard_falsity_census.py`; a conservative LOWER bound —
+    /// it excludes the polymorphic and class-predicate families).
+    ///
+    /// An honest reject is strictly better than a stored falsehood: the line is
+    /// counted rejected and nothing unsound enters the corpus.
+    #[error("unmapped overloaded constant (strict const-map): {0}")]
+    UnmappedConst(String),
 }
 
 /// The per-theorem translation node budget (`None` = unlimited). Reads the

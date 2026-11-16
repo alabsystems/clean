@@ -569,7 +569,7 @@ fn ir_lzd_mints_the_five_body_derived_module() {
         assert!(module.contains(f), "the module must carry {f}:\n{module}");
     }
     assert_eq!(
-        module.matches("IRList.cons IRFunc").count(),
+        module.matches("@IRList.cons IRFunc").count(),
         5,
         "exactly five functions:\n{module}"
     );

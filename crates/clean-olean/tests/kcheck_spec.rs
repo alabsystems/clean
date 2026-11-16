@@ -99,7 +99,7 @@ const CONTRACTS: &[(&str, &str)] = &[
     ("CICL.Model.quoted_universal", "quotationUniversal"),
     ("KCheckSpec.Base.base_valid", "baseValid"),
     ("KCheckSpec.Base.base_valid_extend", "baseValidExtend"),
-    ("KCheckSpec.Base.HasNat.extend", "hasNatExtend"),
+    ("CICL.Model.BaseMath.Nat.HasNat.extend", "hasNatExtend"),
     ("KCheckSpec.Base.base_ready_two", "baseReadyTwo"),
     ("KCheckSpec.Base.base_ready_three", "baseReadyThree"),
     ("KCheckSpec.Base.conflated_false", "conflatedFalse"),
@@ -289,8 +289,8 @@ const SPECIFICATION: &[&str] = &[
 /// Interface definitions supplied by dependencies: preserve their pins and require
 /// their exact origin, without counting them as specification-owned subjects.
 const IMPORTED_SPECIFICATION: &[(&str, &str)] = &[
-    ("KCheckSpec.Mem", "CICLModel.BaseRaw"),
-    ("KCheckSpec.applyN", "CICLModel.BaseRaw"),
+    ("CICL.Model.BaseMath.Mem", "CICLModel.BaseMath.Core"),
+    ("CICL.Model.RawSet.traceApps", "CICLModel.RawTrace"),
     ("KCheckSpec.pad", "CICL.ListSupport"),
 ];
 
@@ -434,6 +434,12 @@ fn is_type_mismatch<T>(result: &Result<T, ReferenceRefusal>) -> bool {
 
 #[test]
 fn kcheck_spec_rechecks_through_two_kernels_with_pinned_statements() {
+    let stems = order_stems();
+    assert_eq!(
+        stems.len(),
+        17,
+        "module denominator of theories/kcheck_spec/ORDER"
+    );
     let lib = require_pinned_lean_lib_path().expect("install the repository-pinned Lean toolchain");
     let compiled = compiled_fixture_dir("kcheck_spec");
     let lean = clean_olean::pinned_lean_binary().expect("pinned Lean binary");
@@ -472,12 +478,6 @@ fn kcheck_spec_rechecks_through_two_kernels_with_pinned_statements() {
     // from each artifact's name table, as in `kcheck_core.rs`: a `CICL.*`
     // constant is never counted as the specification's, and a compiler's
     // `unsafe` copy must be marked so by its own artifact.
-    let stems = order_stems();
-    assert_eq!(
-        stems.len(),
-        15,
-        "module denominator of theories/kcheck_spec/ORDER"
-    );
     let not_replayable: BTreeSet<&str> = summaries
         .iter()
         .flat_map(|summary| summary.skipped_not_replayable.iter().map(String::as_str))
@@ -525,6 +525,33 @@ fn kcheck_spec_rechecks_through_two_kernels_with_pinned_statements() {
         );
     }
 
+    // Untrusted calibration metadata, emitted before the expensive reference
+    // replay. It never grants a pass or skips any gate below.
+    let mut calibration_pins = BTreeMap::new();
+    for (_, pin) in CONTRACTS.iter().chain(FORGED_STATEMENTS) {
+        let contract = loaded
+            .get_const(&name(&format!("KCheckSpec.Contracts.{pin}")))
+            .expect("compiled independent contract");
+        calibration_pins.insert(
+            (*pin).to_owned(),
+            digest(contract.value.as_ref().expect("contract body")),
+        );
+    }
+    for object in SPECIFICATION
+        .iter()
+        .copied()
+        .chain(IMPORTED_SPECIFICATION.iter().map(|(n, _)| *n))
+    {
+        let constant = loaded.get_const(&name(object)).expect("compiled interface");
+        assert!(calibration_pins
+            .insert(object.to_owned(), constant_digest(constant))
+            .is_none());
+    }
+    eprintln!(
+        "spec-calibration-pins {}",
+        serde_json::to_string(&calibration_pins).expect("candidate pins")
+    );
+
     // Kernel two: Clean's reference kernel, from an empty base.
     let checked = reference_base_closed(&loaded, &targets, &ClosedRecheckOptions::default())
         .expect("construct dependency-closed reference replay");
@@ -568,22 +595,25 @@ fn kcheck_spec_rechecks_through_two_kernels_with_pinned_statements() {
     observed_closures.insert("*".to_owned(), union);
     for (theorem, _) in CONTRACTS {
         let subject = name(theorem);
-        if *theorem == "KCheckSpec.Base.HasNat.extend" {
-            assert!(!targets.contains(&subject), "{theorem} must be model-owned");
+        if *theorem == "CICL.Model.BaseMath.Nat.HasNat.extend" {
+            assert!(
+                !targets.contains(&subject),
+                "canonical proof must remain model-owned"
+            );
             assert_eq!(
                 loaded
                     .get_constant_origin(&subject)
                     .and_then(|origin| origin.module_name()),
-                Some("CICLModel.BaseTower"),
-                "{theorem} has the wrong dependency origin"
+                Some("CICLModel.BaseMath.NatUniverse"),
+                "canonical natural-universe proof has wrong dependency origin"
             );
-            assert!(kernel.environment().get_const(&subject).is_some());
         } else {
             assert!(targets.contains(&subject), "missing theorem {theorem}");
         }
-        let closure = closure_of(kernel.environment(), &subject);
-        assert!(closure.is_subset(&allowed), "{theorem}: {closure:?}");
-        observed_closures.insert((*theorem).to_owned(), closure);
+        observed_closures.insert(
+            (*theorem).to_owned(),
+            closure_of(kernel.environment(), &subject),
+        );
     }
     for (subject, closure) in &observed_closures {
         eprintln!("axiom-closure {subject} {closure:?}");

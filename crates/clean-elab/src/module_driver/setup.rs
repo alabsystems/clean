@@ -250,7 +250,12 @@ pub fn module_environment_for_header_in_world(
 
 /// Admit only the genuine world's logical foundations and their dependency
 /// cone. Native Eq and OfNat implementations must not shadow genuine imports.
-fn foundation_import_base(
+///
+/// The citation base of every module that imports genuine Init: an explicit
+/// `prelude` header's imports here, `clean check`'s artifact consumers, and
+/// `clean lake build`'s modules, which elaborate over the world's genuine
+/// Init as Lean's implicit `import Init` does.
+pub fn foundation_import_base(
     decision: &clean_olean::SourceWorldDecision,
 ) -> Result<clean_olean::ImportedConeGate, ModuleSetupError> {
     use clean_kernel::Name;

@@ -622,6 +622,60 @@ const ISABELLE_FLIP_GATE_DESC: FeatureDescriptor = FeatureDescriptor {
     feature_gate: None,
 };
 
+const ISABELLE_FETCH_DESC: FeatureDescriptor = FeatureDescriptor {
+    path: &["mathverse", "isabelle-fetch"],
+    summary: "Download the Isabelle import's public inputs and check each against its pinned checksum",
+    description: "Brings back the public inputs the Isabelle import was built \
+         from, into a work folder (`--work-dir`, default ~/isabelle-work), and \
+         checks each against the pin committed in \
+         `data/isabelle_public_inputs.json` (built into the binary; \
+         `--manifest` reads another file). The Isabelle2025 and Isabelle2025-2 \
+         macOS archives are downloaded with `curl` to `<file>.part`, \
+         size-checked and stream-hashed (sha256), and renamed into place only \
+         on a match; a mismatch deletes the partial file and fails. An archive \
+         already present with the pinned size and sha256 is reported VERIFIED \
+         and left alone. The AFP is made with `git init` plus a depth-1 \
+         `git fetch` of its pinned commit into `afp.part`, renamed to `afp` \
+         once `git rev-parse HEAD` matches; an existing `afp` at the pinned \
+         commit with no modified tracked file is VERIFIED, and one at another \
+         commit, with modified tracked files, or that is not a git checkout is \
+         REFUSED and left untouched. `--only <id>` (repeatable) limits the run \
+         to `Isabelle2025`, `Isabelle2025-2` or `afp`; `--dry` hashes what is \
+         present and prints what a real run would download, starting no \
+         download. Every run ends with the manifest's list of what the import \
+         needs that this command cannot fetch (the capture-hook edit to \
+         Isabelle's Pure/ROOT.ML, the ZP-* heaps, the raw zproof captures, the \
+         corpora, snapshots and shards that `clean mathverse isabelle-*` runs \
+         regenerate, the YXML export, the preserved binaries, and records that \
+         exist only in the old work folder), each with how to get it back. \
+         Exits nonzero if any requested input ends FAILED or REFUSED.",
+    category: Category::Import,
+    stability: Stability::Usable,
+    examples: &[
+        Example {
+            cmd: "clean mathverse isabelle-fetch --dry",
+            what: "check what is already in ~/isabelle-work and print what a real run would download",
+        },
+        Example {
+            cmd: "clean mathverse isabelle-fetch --work-dir ~/isabelle-work --only Isabelle2025 --only Isabelle2025-2 --dry",
+            what: "confirm the two archives already in ~/isabelle-work match their pinned size and sha256",
+        },
+        Example {
+            cmd: "clean mathverse isabelle-fetch --work-dir /data/isabelle-work --only Isabelle2025-2 --only afp",
+            what: "download the Isabelle2025-2 archive and check out the pinned AFP into a fresh work folder",
+        },
+    ],
+    see_also: &[
+        "mathverse isabelle-doctor",
+        "mathverse isabelle-capture-chain",
+        "mathverse isabelle-import",
+    ],
+    references: &[MATHVERSE_DESIGN_REF, ISSUE_3436],
+    domain_root: Some("mathverse"),
+    alternative_forms: &[],
+    feature_gate: None,
+};
+
 const TRUST_RECEIPT_BUILD_DESC: FeatureDescriptor = FeatureDescriptor {
     path: &["mathverse", "trust-receipt", "build"],
     summary: "(Re)build a Merkle trust receipt from a published leaves manifest",
@@ -1270,6 +1324,7 @@ pub const FEATURES: &[FeatureDescriptor] = &[
     ISABELLE_DOCTOR_DESC,
     ISABELLE_SNAPSHOT_PRESERVE_DESC,
     ISABELLE_FLIP_GATE_DESC,
+    ISABELLE_FETCH_DESC,
     TRUST_RECEIPT_BUILD_DESC,
     TRUST_RECEIPT_VERIFY_DESC,
     TRUST_RECEIPT_PROVE_DESC,

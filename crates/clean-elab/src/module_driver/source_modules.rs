@@ -188,9 +188,17 @@ pub struct SourceModuleSetup {
 
 impl SourceModuleSetup {
     /// Retain source isolation while matching the prelude of a complete
-    /// Clean-format artifact closure. Clean's Lake producer uses the built-in
-    /// prelude; importing its payload over genuine Init can lose checked seed
-    /// definitions (for example a body referenced by a stored instance).
+    /// Clean-format artifact closure. Since 2026-11-15 Clean's Lake producer
+    /// elaborates every module without `prelude` over genuine Init and
+    /// records `Init` as its first import, so such an artifact's closure
+    /// reaches a genuine artifact and never takes this route. (A `prelude`
+    /// module stays refused by Clean Lake, so it writes no artifact.) The
+    /// route remains for closures that still rest on the built-in prelude:
+    /// artifacts a Clean build wrote before that change, and those Clean
+    /// Lake writes in a project whose Lean world is refused (R111), which
+    /// keeps the bootstrap prelude and records no `Init`. Importing their
+    /// payload over genuine Init can lose checked seed definitions (for
+    /// example a body referenced by a stored instance).
     /// Only the oracle world's existing bootstrap semantics are eligible.
     /// Recent selected worlds retain their genuine-Init contract.
     pub fn for_file(

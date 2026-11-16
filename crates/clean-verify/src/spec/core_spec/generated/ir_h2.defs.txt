@@ -5,4 +5,4 @@ def ir_h2_b2 : IRBlock := IRBlock.mk ir_d2 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.const_
 def ir_h2_b3 : IRBlock := IRBlock.mk ir_d3 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.const_ IRTy.bool_ (IRConst.bool_ Bool.false)) ir_d6) (ir_nd (IRInst.br ir_d4 (ir_nl1 ir_d6))))
 def ir_h2_b4 : IRBlock := IRBlock.mk ir_d4 (ir_nl1 ir_d1) (ir_bd1 (ir_nd (IRInst.ret (ir_nl1 ir_d1))))
 def ir_h2_func : IRFunc := IRFunc.mk ir_d0 (ir_nl1 ir_d0) ir_d0 (ir_blk ir_h2_b0 (ir_blk ir_h2_b1 (ir_blk ir_h2_b2 (ir_blk ir_h2_b3 (ir_blk ir_h2_b4 ir_blk0)))))
-def ir_h2_module : IRModule := IRModule.mk (IRList.cons IRFunc ir_h2_func (IRList.nil IRFunc)) (IRList.nil IRGlobal)
+def ir_h2_module : IRModule := IRModule.mk (@IRList.cons IRFunc ir_h2_func (@IRList.nil IRFunc)) (@IRList.nil IRGlobal)

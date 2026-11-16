@@ -70,7 +70,10 @@ use clean_kernel::name::Name;
 use clean_kernel::{ReferenceKernel, ReferenceRefusal, TheoryId};
 use clean_olean::recheck_closed::ClosedRecheckOptions;
 use clean_olean::test_support::compiled_fixture_dir;
-use clean_olean::{load_module_with_deps, parse_module, reference_base_closed, DefinitionSafety};
+use clean_olean::{
+    load_module_with_deps, load_modules_with_deps, parse_module, reference_base_closed,
+    DefinitionSafety,
+};
 use sha2::{Digest, Sha256};
 
 #[path = "support/lean_axiom_census.rs"]
@@ -1324,8 +1327,24 @@ fn semr_theorems_are_admitted_through_the_entry_with_closure_in_ax0() {
         MODULE,
         EXPECTED,
     );
-    load_module_with_deps(&mut env, MODULE, &[dir, lib])
-        .unwrap_or_else(|e| panic!("load {MODULE}: {e}"));
+    // The audit covers the entire roster, including independent modules that
+    // SemRCheck does not import. Load that same union before selecting roots.
+    let modules: Vec<String> = MODEL_MODULES
+        .iter()
+        .map(|module| (*module).to_owned())
+        .collect();
+    let summaries = load_modules_with_deps(&mut env, &modules, &[dir, lib])
+        .unwrap_or_else(|e| panic!("load full SemR roster: {e}"));
+    let loaded_modules: BTreeSet<_> = summaries
+        .iter()
+        .filter_map(|summary| summary.module_name.as_deref())
+        .collect();
+    for module in MODEL_MODULES {
+        assert!(
+            loaded_modules.contains(module),
+            "audit module was not loaded: {module}"
+        );
+    }
 
     // Every constant SemR and SemRCheck declare, not only the theorems' cones.
     let (built, violations, (unsafe_aux, compiler_names)) =

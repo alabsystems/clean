@@ -294,7 +294,7 @@ impl ProofState {
             goals: VecDeque::from([main_goal]),
             metas,
             root_meta_id: meta_id,
-            next_fvar: 0,
+            next_fvar: Self::initial_next_fvar(0),
             instances: None,
             universe_params: Vec::new(),
             level_mint: crate::level_mint::LevelMint::new(),
@@ -339,7 +339,7 @@ impl ProofState {
             goals: VecDeque::from([main_goal]),
             metas,
             root_meta_id: meta_id,
-            next_fvar: 0,
+            next_fvar: Self::initial_next_fvar(0),
             instances: Some(instances),
             universe_params: Vec::new(),
             level_mint: crate::level_mint::LevelMint::new(),
@@ -356,6 +356,39 @@ impl ProofState {
             namespace_state: None,
             instance_visibility: None,
         }
+    }
+
+    /// Starting value for a new state's global FVar counter, given the floor
+    /// implied by its initial context.
+    ///
+    /// Under `CLEAN_TACTIC_FVAR_BURN=<k>` (test builds only) the counter starts
+    /// `k` past that floor, simulating a state where earlier tactic work has
+    /// already advanced it beyond `fvar_base`.
+    ///
+    /// This is the mechanical detector for #2533. A tactic that allocates a
+    /// binder over its goal with [`fresh_fvar`](Self::fresh_fvar) rather than
+    /// from [`goal_binder_base`](Self::goal_binder_base) (directly, or through
+    /// [`fresh_goal_binder_fvar`](Self::fresh_goal_binder_fvar)) is correct only
+    /// while the two coincide — that is, only in a pristine state.
+    /// `close_fvars` binds a tactic FVar `n` from `n - fvar_base` against the
+    /// binder *nesting depth*, so an id drawn from the monotonic counter has no
+    /// reachable binder slot the moment the counter runs ahead. Real proofs
+    /// advance it constantly (discharged subgoals, `simp` scratch locals,
+    /// rewrite validation), so seeding it is a faithful simulation of ordinary
+    /// use, not a synthetic stress. The whole tactic suite must pass at any `k`.
+    #[cfg(test)]
+    fn initial_next_fvar(floor: u64) -> u64 {
+        std::env::var("CLEAN_TACTIC_FVAR_BURN")
+            .ok()
+            .and_then(|k| k.parse::<u64>().ok())
+            .map_or(floor, |k| floor.saturating_add(k))
+    }
+
+    /// Starting value for a new state's global FVar counter. Identity outside
+    /// test builds; see the `cfg(test)` twin for the #2533 burn-in detector.
+    #[cfg(not(test))]
+    fn initial_next_fvar(floor: u64) -> u64 {
+        floor
     }
 
     /// Create a new proof state with an existing local context
@@ -394,7 +427,7 @@ impl ProofState {
             goals: VecDeque::from([main_goal]),
             metas,
             root_meta_id: meta_id,
-            next_fvar,
+            next_fvar: Self::initial_next_fvar(next_fvar),
             instances: None,
             universe_params: Vec::new(),
             level_mint: crate::level_mint::LevelMint::new(),

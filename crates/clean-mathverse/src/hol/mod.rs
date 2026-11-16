@@ -17,6 +17,7 @@ pub mod isabelle_bridge;
 pub mod isabelle_capture_chain;
 pub mod isabelle_corpus_diff;
 pub mod isabelle_doctor;
+pub(crate) mod isabelle_fetch;
 pub mod isabelle_flip_gate;
 pub mod isabelle_import;
 pub mod isabelle_index;

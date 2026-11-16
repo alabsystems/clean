@@ -35,6 +35,7 @@ mod graduate_dispatch;
 mod import_cache;
 mod isabelle_capture_chain_dispatch;
 mod isabelle_doctor_dispatch;
+mod isabelle_fetch_dispatch;
 mod isabelle_flip_gate_dispatch;
 mod isabelle_import_dispatch;
 mod isabelle_sessions_dispatch;
@@ -47,7 +48,8 @@ mod passthrough_dispatch;
 mod per_constant_load;
 /// RAM-aware default worker count, shared by the PARAGON `--parallel` verifier
 /// and the `mathverse_shard --corpus-sharded` driver binary (single source of
-/// truth for the `min(cpus, max(1, ram_gib / PER_WORKER_GIB))` clamp).
+/// truth for the
+/// `min(cpus, max(1, (ram_gib - BASE_RESERVE_GIB) / PER_WORKER_GIB))` clamp).
 pub mod ram_budget;
 mod replay_dispatch;
 mod stamp_family_audit;
@@ -222,6 +224,14 @@ pub enum MathverseCommands {
     /// binary whose ENV-LAYOUT matches its builder). One command instead of the
     /// manual `cp` dance; reports the snapshot↔binary pairing from the sidecar.
     IsabelleSnapshotPreserve(IsabelleSnapshotPreserveArgs),
+    /// Download the public inputs of the Isabelle import (the Isabelle2025 and
+    /// Isabelle2025-2 macOS archives and the AFP at its pinned commit) into a
+    /// work folder and check each against the checksum pinned in
+    /// `data/isabelle_public_inputs.json`. Inputs already present with the
+    /// pinned checksum are left alone, `--dry` prints the plan, and every run
+    /// ends with the list of what the import needs that this command cannot
+    /// fetch.
+    IsabelleFetch(IsabelleFetchArgs),
     /// PER-CONSTANT streaming closure loader: kernel-verify ONE target constant
     /// by demand-loading only its transitive CONSTANT closure (not the whole
     /// module-import closure). Orders of magnitude less Expr reconstruction than
@@ -1529,6 +1539,28 @@ pub struct IsabelleFlipGateArgs {
     pub lock_timeout_secs: u64,
 }
 
+/// Args for `mathverse isabelle-fetch` — download the public inputs of the
+/// Isabelle import and check each against its pinned checksum.
+#[derive(Debug, Args)]
+pub struct IsabelleFetchArgs {
+    /// Folder the inputs are checked in and downloaded to: each archive at
+    /// `<work-dir>/<file>`, the AFP checkout at `<work-dir>/afp`.
+    #[arg(long, default_value = "~/isabelle-work")]
+    pub work_dir: PathBuf,
+    /// Limit the run to this input id; repeat for several. The committed
+    /// manifest's ids are `Isabelle2025`, `Isabelle2025-2` and `afp`.
+    #[arg(long, value_name = "ID")]
+    pub only: Vec<String>,
+    /// Check the inputs already present and print what a real run would
+    /// download; start no download and write nothing.
+    #[arg(long)]
+    pub dry: bool,
+    /// Read the pins from this manifest instead of the copy of
+    /// `data/isabelle_public_inputs.json` built into the binary.
+    #[arg(long)]
+    pub manifest: Option<PathBuf>,
+}
+
 /// Errors surfaced by `clean mathverse <verb>` dispatch.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
@@ -1567,6 +1599,11 @@ pub enum MathverseCliError {
     /// before this error is returned).
     #[error("isabelle-flip-gate: {0}")]
     IsabelleFlipGate(String),
+    /// The `isabelle-fetch` verb failed: the manifest could not be read, an
+    /// `--only` id is unknown, or a requested input ended FAILED or REFUSED
+    /// (the per-input report is printed before this error is returned).
+    #[error("isabelle-fetch: {0}")]
+    IsabelleFetch(String),
     /// A `trust-receipt` verb failed (bad input, audit mismatch, missing leaf, …).
     #[error("trust-receipt: {0}")]
     TrustReceipt(String),
@@ -1852,6 +1889,7 @@ pub fn run(args: MathverseArgs) -> Result<(), MathverseCliError> {
         MathverseCommands::IsabelleFlipGate(a) => {
             isabelle_flip_gate_dispatch::cmd_isabelle_flip_gate(a)
         }
+        MathverseCommands::IsabelleFetch(a) => isabelle_fetch_dispatch::cmd_isabelle_fetch(a),
         // The library path cannot see `clean-cli`'s compile-time build metadata,
         // so it runs the doctor with an UNKNOWN build identity (that check then
         // warns). The `clean` binary intercepts this verb in `cmd_mathverse.rs`

@@ -87,6 +87,11 @@ fn test_fin_cases_fin3_dependent_target_succeeds() {
     );
     let r_const = Expr::const_(Name::from_string("R"), vec![]);
 
+    // Construct with the REAL obligation. `ProofState::new(env, Expr::prop())`
+    // followed by `goals[0].target = ...` mints the root metavariable holding
+    // `⊢ Prop` over an empty scope while the goal claims `⊢ R h` with `h` in
+    // scope; `close_goal` refuses to accept a proof of the latter against the
+    // former.
     let h_fvar = FVarId::new(0);
     let target = Expr::app(r_const.clone(), Expr::fvar(h_fvar));
     let mut state = ProofState::with_context(
@@ -127,6 +132,7 @@ fn test_fin_cases_fin3_branch_requires_equality_transport() {
     );
     let r_const = Expr::const_(Name::from_string("R"), vec![]);
 
+    // Real obligation up front — see `test_fin_cases_fin3_dependent_target_succeeds`.
     let h_fvar = FVarId::new(0);
     let target = Expr::app(r_const, Expr::fvar(h_fvar));
     let mut state = ProofState::with_context(

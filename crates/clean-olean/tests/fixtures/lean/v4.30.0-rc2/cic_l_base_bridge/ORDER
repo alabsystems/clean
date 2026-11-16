@@ -1,0 +1,5 @@
+# Primitive model / labelled checker-base bridge.
+theory cic_l
+theory cic_l_model
+theory kcheck_spec
+theory cic_l_base_bridge

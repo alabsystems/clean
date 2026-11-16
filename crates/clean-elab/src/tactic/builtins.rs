@@ -337,6 +337,17 @@ fn register_core_nullary(registry: &mut TacticRegistry) {
         pattern: TacticArgPattern::Nullary,
         handler: Arc::new(super::mathverse_use::eval_mathverse_suggest),
     });
+    // mathverse_apply <name> — cite a library lemma BY NAME and apply it to the
+    // goal, synthesizing its arguments. This is the `exact add_comm a b` shape;
+    // `mathverse_use` above is nullary SEARCH and cannot express "I know which
+    // lemma I want". NonemptyIdentList because the argument is a constant NAME
+    // that is not yet in the environment (the tactic is what loads it), so it
+    // cannot be pre-elaborated as a term.
+    registry.register(TacticEntry {
+        name: "mathverse_apply".to_string(),
+        pattern: TacticArgPattern::NonemptyIdentList,
+        handler: Arc::new(super::mathverse_use::eval_mathverse_apply),
+    });
 
     // Phase 3C Wave 1: 5 remaining nullary + 2 conv-nullary (#2430)
     register_phase3c_nullary(registry);

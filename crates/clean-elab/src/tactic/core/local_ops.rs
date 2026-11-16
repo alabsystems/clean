@@ -109,7 +109,9 @@ impl ProofState {
             next_fvar: self.next_fvar,
         };
 
-        let new_fvar = self.fresh_fvar();
+        // Depth-1 binder over `goal` — same allocator as the type-shadow
+        // path below (#2533).
+        let new_fvar = self.fresh_goal_binder_fvar(&goal);
         let replacement_goal = build_value_shadow_goal(
             self,
             &goal,
@@ -329,7 +331,20 @@ fn replace_local_decl_core(
         return Err(TacticError::TypeMismatch { expected, actual });
     }
 
-    let new_fvar = state.fresh_fvar();
+    // The replacement local is bound by the `let` this function builds below,
+    // a binder sitting directly over `goal`. Its id must therefore come from
+    // THIS goal's tactic-binder base, not from the monotonic global counter
+    // (#2533, same defect `intro` fixed in `proof_term::intro`). Everything
+    // that runs before this point — `push_neg`/`contrapose` normalisation, the
+    // def-eq check, `validate_rewritten_goal_with_cache_reset` — can advance
+    // `next_fvar` arbitrarily, and `fresh_fvar` would then hand back an id far
+    // above the base. `close_fvars` maps a tactic FVar to a BVar only when
+    // `id - fvar_base < binder_depth`, so such an id has no reachable binder:
+    // the `close_goal` scope guard rejects the assignment up front, and with
+    // the guard removed `closed_proof` merely fails later with an
+    // ID-to-binder gap. Allocating from the goal's base makes the id
+    // depth-correct by construction.
+    let new_fvar = state.fresh_goal_binder_fvar(goal);
     let replacement = Expr::fvar(new_fvar);
     let new_decl = LocalDecl {
         binder_info: old_decl.binder_info,

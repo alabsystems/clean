@@ -889,10 +889,10 @@ impl BuildContext {
                 })
                 .or_insert(digest);
         }
+        let stdlib_paths = self.module_world(module, content)?.stdlib_search_paths();
         for imp in Self::extract_all_imports(content)? {
             if self.is_stdlib_import(&imp)
-                && clean_olean::find_module_olean(&imp, &clean_olean::default_search_paths())
-                    .is_none()
+                && clean_olean::find_module_olean(&imp, &stdlib_paths).is_none()
             {
                 external.insert(imp, "unresolved".to_string());
             }
@@ -1016,6 +1016,26 @@ impl BuildContext {
         Ok(())
     }
 
+    /// Where `module`, whose source is `content`, starts elaborating
+    /// ([`crate::module_world`]): genuine Init of its project's Lean world,
+    /// or, for a `prelude` module or a refused world, the bootstrap prelude.
+    fn module_world(
+        &self,
+        module: &str,
+        content: &str,
+    ) -> LakeResult<crate::module_world::ModuleWorld> {
+        let src_path = self
+            .workspace
+            .find_module(module)
+            .ok_or_else(|| LakeError::ModuleNotFound(module.to_string()))?;
+        crate::module_world::ModuleWorld::of(&src_path, content).map_err(|reason| {
+            LakeError::BuildFailed {
+                module: module.to_string(),
+                reason,
+            }
+        })
+    }
+
     fn loaded_closure(&self, module: &str, content: &str) -> LakeResult<Arc<Vec<LoadedImport>>> {
         if let Some(closure) = self
             .closures
@@ -1025,8 +1045,16 @@ impl BuildContext {
         {
             return Ok(Arc::clone(closure));
         }
-        let defaults = clean_olean::default_search_paths();
+        let world = self.module_world(module, content)?;
+        let defaults = world.stdlib_search_paths();
         let mut out = std::collections::BTreeSet::new();
+        // Lean's implicit `import Init` is loaded like any toolchain import:
+        // walked here, so it is admitted and its parts enter the trace.
+        if world.imports_init() {
+            if let Err(e) = self.walk_imports("Init", &defaults, &mut out) {
+                self.unreadable_import(module, &format!("failed to load implicit Init: {e}"))?;
+            }
+        }
         for imp in Self::extract_all_imports(content)? {
             if self.is_stdlib_import(&imp) {
                 if let Err(e) = self.walk_imports(&imp, &defaults, &mut out) {
@@ -1250,18 +1278,41 @@ impl BuildContext {
         let header = parsed.header;
         let surface = parsed.decls;
 
-        // Create environment with imported modules
-        let mut env = clean_kernel::Environment::with_prelude();
-        env.init_io_ops().map_err(|e| LakeError::BuildFailed {
-            module: module.to_string(),
-            reason: format!("IO operation initialization failed: {e}"),
-        })?;
-        // The environment as this build constructed it, BEFORE any import:
-        // everything loaded below — stdlib and local dependency artifacts
-        // alike — enters structurally (never type-checked), so before this
-        // module is exported its declarations' cited closure is re-admitted
-        // by the kernel over exactly this base (module-trust, 2026-09-24).
-        let mut import_gate = clean_olean::ImportedConeGate::new(&env);
+        // Create environment with imported modules. A module without
+        // `prelude` starts, as Lean's implicit `import Init` makes it start,
+        // from genuine Init of its project's Lean world; its cited closure is
+        // re-admitted over that world's reference-admitted foundations, the
+        // citation base `clean check` gives a genuine-Init consumer. A
+        // `prelude` module or a refused world keeps the bootstrap prelude:
+        // there everything loaded below — stdlib and local dependency
+        // artifacts alike — enters structurally (never type-checked), so
+        // before this module is exported its declarations' cited closure is
+        // re-admitted by the kernel over the environment as this build
+        // constructed it, BEFORE any import (module-trust, 2026-09-24).
+        let world = self.module_world(module, &content)?;
+        let stdlib_search_paths = world.stdlib_search_paths();
+        let (mut env, mut import_gate, genuine_init) = match &world {
+            crate::module_world::ModuleWorld::GenuineInit { decision, .. } => {
+                let files = crate::module_world::init_files(&trace_inputs.stdlib);
+                let init =
+                    crate::module_world::genuine_init(decision, &files).map_err(|reason| {
+                        LakeError::BuildFailed {
+                            module: module.to_string(),
+                            reason: format!("cannot load implicit Init: {reason}"),
+                        }
+                    })?;
+                (init.environment(), init.citation_base(), Some(init))
+            }
+            crate::module_world::ModuleWorld::Bootstrap => {
+                let mut env = clean_kernel::Environment::with_prelude();
+                env.init_io_ops().map_err(|e| LakeError::BuildFailed {
+                    module: module.to_string(),
+                    reason: format!("IO operation initialization failed: {e}"),
+                })?;
+                let gate = clean_olean::ImportedConeGate::new(&env);
+                (env, gate, None)
+            }
+        };
 
         // Extract ALL imports (including stdlib) from this file
         let all_imports = Self::extract_all_imports(&content)?;
@@ -1273,7 +1324,7 @@ impl BuildContext {
             .collect();
 
         if !stdlib_imports.is_empty() {
-            let search_paths = clean_olean::default_search_paths();
+            let search_paths = stdlib_search_paths.clone();
             if self.options.verbose && !search_paths.is_empty() {
                 eprintln!("  Stdlib search paths: {:?}", search_paths);
             }
@@ -1331,7 +1382,7 @@ impl BuildContext {
         // (every package's modules land there) and falls back to the stdlib
         // search paths for deps that import Init/Std.
         let mut dep_search_paths = vec![self.workspace.lib_dir()];
-        dep_search_paths.extend(clean_olean::default_search_paths());
+        dep_search_paths.extend(stdlib_search_paths);
         for dep in &import_names {
             let olean_path = self.workspace.olean_path(dep)?;
             if olean_path.exists() {
@@ -1394,7 +1445,7 @@ impl BuildContext {
         // installed as the initial option state of its file (gap G50).
         let lean_args = self.module_lean_options(module)?;
         let (example_roots, global_readds) =
-            Self::elaborate_module(module, &surface, &header, &mut env, &lean_args)?;
+            Self::elaborate_module(module, &surface, &header, &mut env, &lean_args, &world)?;
 
         Self::gate_module_examples(module, &env, &mut import_gate, &example_roots)?;
         Self::gate_module_closure(module, &env, &mut import_gate, &baseline_consts)?;
@@ -1459,8 +1510,21 @@ impl BuildContext {
             std::fs::create_dir_all(parent)?;
         }
 
-        // Generate .olean file using the exporter
-        let imports: Vec<(&str, bool)> = import_names.iter().map(|s| (s.as_str(), false)).collect();
+        // Generate .olean file using the exporter. A module over genuine Init
+        // records it first, then every import of its header, as Lean's
+        // `headerToImports` does (an explicit `import Init` is not repeated);
+        // a bootstrap module records its in-workspace imports, as before.
+        let recorded_imports: Vec<String> = if world.imports_init() {
+            std::iter::once("Init".to_string())
+                .chain(all_imports.iter().filter(|m| *m != "Init").cloned())
+                .collect()
+        } else {
+            import_names.clone()
+        };
+        let imports: Vec<(&str, bool)> = recorded_imports
+            .iter()
+            .map(|s| (s.as_str(), false))
+            .collect();
         let const_refs: Vec<&str> = export_const_names.iter().map(String::as_str).collect();
 
         // The module's `protected` / `private` marks travel with its
@@ -1551,7 +1615,16 @@ impl BuildContext {
             implemented_by,
             externs,
             implemented_by_order,
-            csimp: clean_kernel::env::csimp::export_compilation_snapshot(&env),
+            // Over genuine Init, Init's own compiler records are the
+            // importer's to rebuild from its own load of the `Init` this
+            // artifact records; only this module's records travel.
+            csimp: match &genuine_init {
+                Some(init) => clean_kernel::env::csimp::export_compilation_snapshot_over(
+                    &env,
+                    init.environment_ref(),
+                ),
+                None => clean_kernel::env::csimp::export_compilation_snapshot(&env),
+            },
             definition_exposure,
         };
 
@@ -1749,6 +1822,7 @@ impl BuildContext {
         header: &clean_parser::FileHeader,
         env: &mut clean_kernel::Environment,
         options: &[clean_elab::command_line_options::CommandLineOption],
+        world: &crate::module_world::ModuleWorld,
     ) -> LakeResult<(std::collections::BTreeSet<Name>, Vec<Name>)> {
         let fail = |reason: String| LakeError::BuildFailed {
             module: module.to_string(),
@@ -1766,14 +1840,23 @@ impl BuildContext {
         // declaration is written into the artifact as Lean writes it,
         // `_private.<module>.0.<name>` (G21), the name `clean check` gives it.
         file_ctx.set_main_module(Name::from_string(module));
-        let imports: Vec<Name> = surface
-            .iter()
-            .filter_map(|decl| match decl {
-                clean_parser::SurfaceDecl::Import { paths, .. } => Some(paths),
-                _ => None,
-            })
-            .flatten()
-            .map(|path| path.name().clone())
+        // The implicit `import Init` is an import of the module like any
+        // other: Init's compiler rules are visible to its bodies, and the
+        // module's compiler view is the one an importer rebuilds from the
+        // `Init`-first import list its artifact records.
+        let implicit_init = world.imports_init().then(|| Name::from_string("Init"));
+        let imports: Vec<Name> = implicit_init
+            .into_iter()
+            .chain(
+                surface
+                    .iter()
+                    .filter_map(|decl| match decl {
+                        clean_parser::SurfaceDecl::Import { paths, .. } => Some(paths),
+                        _ => None,
+                    })
+                    .flatten()
+                    .map(|path| path.name().clone()),
+            )
             .collect();
         for import in &imports {
             file_ctx.record_compiler_import(import);
@@ -2295,7 +2378,10 @@ def mainVal : Type 1 := baseVal"
 
         // Verify payload-backed .olean files can be loaded with dependencies
         let mut load_env = clean_kernel::Environment::new();
-        let load_paths = vec![lib_dir.clone()];
+        // Each artifact records Lean's implicit `Init` import, which only
+        // the toolchain library resolves, as for an artifact Lean wrote.
+        let mut load_paths = vec![lib_dir.clone()];
+        load_paths.extend(clean_olean::default_search_paths());
         let summaries =
             clean_olean::load_module_with_deps(&mut load_env, "MyProject.Main", &load_paths)
                 .expect("load with deps");
@@ -2532,7 +2618,11 @@ lean_lib DepTest where
         // Validate that loading Top pulls in dependency constants via payloads
         let mut env = clean_kernel::Environment::new();
         let lib_dir = tmp.path().join(".lake/build/lib");
-        let _ = clean_olean::load_module_with_deps(&mut env, "DepTest.Top", &[lib_dir])
+        // The artifacts record Lean's implicit `Init` import: the toolchain
+        // library resolves it, as for an artifact Lean wrote.
+        let mut load_paths = vec![lib_dir];
+        load_paths.extend(clean_olean::default_search_paths());
+        let _ = clean_olean::load_module_with_deps(&mut env, "DepTest.Top", &load_paths)
             .expect("load top with deps");
         for name in ["baseVal", "midVal", "topVal"] {
             let n = Name::from_string(name);
@@ -2762,6 +2852,10 @@ mod block_tests;
 #[cfg(test)]
 #[path = "build_options_tests.rs"]
 mod options_tests;
+
+#[cfg(test)]
+#[path = "build_world_tests.rs"]
+mod world_tests;
 
 /// The environment's class, instance, alias and namespace tables before a
 /// module is elaborated, to read off what the module EXPORTS of them (the

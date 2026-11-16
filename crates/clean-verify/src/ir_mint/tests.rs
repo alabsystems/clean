@@ -986,7 +986,7 @@ fn supported_instruction_subset_matches_actual_headers_and_omissions_fail_closed
                 "{error}"
             );
             let name = format!("unsupported_{suffix}");
-            spec.add_recursive_def(&format!("def {name} : IRModule := IRModule.mk (IRList.cons IRFunc (IRFunc.mk 0 (IRList.nil Nat) 0 (IRList.cons IRBlock (IRBlock.mk 0 (IRList.nil Nat) (IRList.cons IRNode (IRNode.mk (IRInst.{suffix} {args}) (IRList.nil Nat)) (IRList.nil IRNode))) (IRList.nil IRBlock))) (IRList.nil IRFunc)) (IRList.nil IRGlobal)"), "Unsupported text-mint data only").unwrap();
+            spec.add_recursive_def(&format!("def {name} : IRModule := IRModule.mk (@IRList.cons IRFunc (IRFunc.mk 0 (@IRList.nil Nat) 0 (@IRList.cons IRBlock (IRBlock.mk 0 (@IRList.nil Nat) (@IRList.cons IRNode (IRNode.mk (IRInst.{suffix} {args}) (@IRList.nil Nat)) (@IRList.nil IRNode))) (@IRList.nil IRBlock))) (@IRList.nil IRFunc)) (@IRList.nil IRGlobal)"), "Unsupported text-mint data only").unwrap();
             let error = super::decode::decode(spec.env(), &name, &tags)
                 .expect_err("unsupported canonical constructor must not decode");
             assert!(

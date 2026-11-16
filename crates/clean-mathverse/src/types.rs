@@ -5,6 +5,7 @@
 //! Core Mathverse Library types: constant headers, axiom profiles, source systems.
 
 use serde::{Deserialize, Serialize};
+use std::fmt;
 
 /// Index into the FlatExpr arena within a shard.
 pub type ExprIdx = u32;
@@ -151,6 +152,94 @@ pub enum SourceSystem {
     /// a digest-bound `mathverse-graduation-v2` (or legacy v1) sidecar record
     /// and pass `shard_verify::cake_gate::verify_cake_shard`.
     Cake = 69,
+}
+
+impl SourceSystem {
+    /// The system's human-readable name, as user-facing messages print it.
+    ///
+    /// The single label table: `cli::format` and [`fmt::Display`] both read it,
+    /// so a refusal never falls back to the `Debug` spelling of a variant.
+    #[must_use]
+    pub(crate) const fn label(self) -> &'static str {
+        match self {
+            SourceSystem::Lean4 => "Lean4",
+            SourceSystem::Coq => "Coq",
+            SourceSystem::Agda => "Agda",
+            SourceSystem::Idris2 => "Idris2",
+            SourceSystem::FStar => "F*",
+            SourceSystem::Cedille => "Cedille",
+            SourceSystem::Isabelle => "Isabelle",
+            SourceSystem::HolLight => "HOL Light",
+            SourceSystem::Hol4 => "HOL4",
+            SourceSystem::Metamath => "Metamath",
+            SourceSystem::Mizar => "Mizar",
+            SourceSystem::Dafny => "Dafny",
+            SourceSystem::Why3 => "Why3",
+            SourceSystem::Nuprl => "Nuprl",
+            SourceSystem::Pvs => "PVS",
+            SourceSystem::Acl2 => "ACL2",
+            SourceSystem::LiquidHaskell => "LiquidHaskell",
+            SourceSystem::Key => "KeY",
+            SourceSystem::FramaC => "Frama-C",
+            SourceSystem::Spark => "SPARK",
+            SourceSystem::GammaCrown => "gamma-crown",
+            SourceSystem::AlphaBetaCrown => "alpha-beta-CROWN",
+            SourceSystem::Z3 => "Z3",
+            SourceSystem::Cvc5 => "cvc5",
+            SourceSystem::Vampire => "Vampire",
+            SourceSystem::CaDiCaL => "CaDiCaL",
+            SourceSystem::Tlc => "TLC",
+            SourceSystem::CleanNative => "clean",
+            SourceSystem::KeyFramacSpark => "KeY/Frama-C/SPARK",
+            SourceSystem::SmtSolver => "SMT",
+            SourceSystem::SatSolver => "SAT",
+            SourceSystem::Atp => "ATP",
+            SourceSystem::Arxiv => "arXiv",
+            SourceSystem::Dedukti => "Dedukti",
+            SourceSystem::Lambdapi => "Lambdapi",
+            SourceSystem::Abella => "Abella",
+            SourceSystem::Beluga => "Beluga",
+            SourceSystem::Twelf => "Twelf",
+            SourceSystem::Naproche => "Naproche",
+            SourceSystem::Minlog => "Minlog",
+            SourceSystem::Arend => "Arend",
+            SourceSystem::Mm0 => "Metamath Zero",
+            SourceSystem::Kind2 => "Kind2",
+            SourceSystem::Rzk => "Rzk",
+            SourceSystem::Ats2 => "ATS2",
+            SourceSystem::Latte => "LaTTe",
+            SourceSystem::CubicalTT => "cubicaltt",
+            SourceSystem::Cooltt => "cooltt",
+            SourceSystem::Redtt => "redtt",
+            SourceSystem::Verus => "Verus",
+            SourceSystem::Creusot => "Creusot",
+            SourceSystem::Kani => "Kani",
+            SourceSystem::Prusti => "Prusti",
+            SourceSystem::Aeneas => "Aeneas",
+            SourceSystem::Hax => "Hax",
+            SourceSystem::CreuSat => "CreuSAT",
+            SourceSystem::Stainless => "Stainless",
+            SourceSystem::Lisa => "LISA",
+            SourceSystem::MoveProver => "Move Prover",
+            SourceSystem::Boogie => "Boogie",
+            SourceSystem::Viper => "Viper",
+            SourceSystem::VeriFast => "VeriFast",
+            SourceSystem::Sail => "Sail",
+            SourceSystem::KFramework => "K Framework",
+            SourceSystem::Alloy => "Alloy",
+            SourceSystem::PLang => "P",
+            SourceSystem::EthAct => "Ethereum Act",
+            SourceSystem::SvBenchmarks => "SV-COMP",
+            SourceSystem::Matita => "Matita",
+            SourceSystem::Cake => "Cake",
+        }
+    }
+}
+
+impl fmt::Display for SourceSystem {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.label())
+    }
 }
 
 impl TryFrom<u8> for SourceSystem {

@@ -1,7 +1,7 @@
 {
  "prefix": "ir_h2",
  "core_digest": "9e20f562ea4f88a0546f4cadbd32063462cf30ee42a342f8c79ea1551e37faf8",
- "defs_digest": "d5222a0336afeb7ed3856f6ece3ab8645f75d962474650e0339018801ff2ebdc",
+ "defs_digest": "6dbafbf79b6591eb1996db61d499a73d0aa7b638c9e209aec14bbfa624ca85fa",
  "def_count": 8,
  "text_unwitnessed": [
   { "slot": "bb0#2 switch arg4", "why": "trust-ir Display never prints Switch.exhaustive_enum_unreachable" }

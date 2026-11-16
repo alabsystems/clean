@@ -32,6 +32,7 @@ use clean_kernel::cli::{CertCommands, KernelCommands};
 use clean_lake::cli::LakeArgs;
 use clean_rust_sem::cli::RustVerifyArgs;
 use clean_server::cli::ServerArgs;
+use clean_tla::cli::TlaVerifyArgs;
 #[cfg(feature = "sat-verify")]
 use clean_verify::cli::VerifyProofArgs;
 
@@ -253,6 +254,8 @@ pub(crate) enum Commands {
     },
     /// AI-driven proof discovery loop (see `clean help discover`)
     Discover(clean_discovery::cli::DiscoverArgs),
+    /// TLAPS benchmark and obligation tooling (absorbs `tlaps-bench`, #3448).
+    Tlaps(clean_tla::bench::cli::TlapsArgs),
     /// List every registered feature as a flat index
     ///
     /// Part of Epic #3436. The descriptor registry is empty in Phase 1; domain
@@ -417,6 +420,13 @@ pub(crate) enum VerifyCommands {
     /// `--list` to enumerate it. Arbitrary-file verification is deferred to a
     /// follow-up issue — see descriptor documentation.
     Rust(RustVerifyArgs),
+    /// Verify a TLA+ proof obligation via `clean-tla` (Experimental).
+    ///
+    /// Accepts a JSON-encoded `TlaObligation` file path, `--sample <NAME>` to
+    /// verify a bundled fixture, or `--list` to enumerate fixtures. See
+    /// `clean help "verify tla"` for the obligation schema. Epic #3436
+    /// Phase 4 (#3452).
+    Tla(TlaVerifyArgs),
     /// Verify a SAT/SMT proof (LRAT/DRAT/Alethe/SMT-LIB2/VeriPB).
     ///
     /// Absorbs the `proof_check` standalone binary (Epic #3436, #3511).

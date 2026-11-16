@@ -5737,3 +5737,95 @@ fn test_bump_recursor_motive_levels_bumps_only_slot_zero_on_poly_recursor() {
         other => panic!("expected const, got {other:?}"),
     }
 }
+
+// ---------------------------------------------------------------------------
+// Public inductive-family replay entry point (used by the `mathverse_use`
+// tactic to install a Mathlib/Isabelle structure before a citing theorem).
+// ---------------------------------------------------------------------------
+
+/// The happy path: a shard-resident family replays into a real `Environment`
+/// through the kernel's CHECKED `add_inductive`, and its members are then
+/// present. This is what lets a theorem whose closure mentions a non-core
+/// inductive be cited at all.
+#[test]
+fn test_replay_inductive_family_checked_installs_family() {
+    let reader = build_simple_inductive_replay_shard();
+    let idx = reader
+        .constants
+        .iter()
+        .position(|c| {
+            reader.strings.get(c.name_idx as usize).map(String::as_str) == Some("ReplayNat")
+        })
+        .expect("fixture must contain ReplayNat") as u32;
+
+    let mut env = Environment::new();
+    assert!(
+        env.get_const(&Name::from_string("ReplayNat")).is_none(),
+        "precondition: family absent before replay"
+    );
+
+    let replayed = super::replay_inductive_family_checked(
+        &mut env,
+        &reader,
+        idx,
+        super::InductiveReplayPolicy::default(),
+    )
+    .expect("replay must not fault internally");
+
+    assert!(replayed, "the fixture family must replay");
+    for member in ["ReplayNat", "ReplayNat.zero", "ReplayNat.succ"] {
+        assert!(
+            env.get_const(&Name::from_string(member)).is_some(),
+            "{member} must be installed by the checked family replay"
+        );
+    }
+}
+
+/// Asking for a CONSTRUCTOR (or recursor) directly returns `false` rather than
+/// half-installing anything: family members are installed BY the family replay,
+/// never individually.
+#[test]
+fn test_replay_inductive_family_checked_declines_non_inductive_kind() {
+    let reader = build_simple_inductive_replay_shard();
+    let idx = reader
+        .constants
+        .iter()
+        .position(|c| {
+            reader.strings.get(c.name_idx as usize).map(String::as_str) == Some("ReplayNat.zero")
+        })
+        .expect("fixture must contain ReplayNat.zero") as u32;
+
+    let mut env = Environment::new();
+    let replayed = super::replay_inductive_family_checked(
+        &mut env,
+        &reader,
+        idx,
+        super::InductiveReplayPolicy::default(),
+    )
+    .expect("must not fault");
+
+    assert!(!replayed, "a constructor is not a family entry point");
+    assert!(
+        env.get_const(&Name::from_string("ReplayNat")).is_none(),
+        "declining must leave the environment untouched"
+    );
+}
+
+/// An out-of-range index is an internal fault (`Err`), not a silent `false` —
+/// the caller must be able to tell "no such constant" from "did not replay".
+#[test]
+fn test_replay_inductive_family_checked_rejects_bad_index() {
+    let reader = build_simple_inductive_replay_shard();
+    let mut env = Environment::new();
+    let out_of_range = reader.constants.len() as u32 + 99;
+    assert!(
+        super::replay_inductive_family_checked(
+            &mut env,
+            &reader,
+            out_of_range,
+            super::InductiveReplayPolicy::default(),
+        )
+        .is_err(),
+        "an out-of-bounds constant index must surface as Err"
+    );
+}

@@ -2,7 +2,7 @@
  "prefix": "ir_fd",
  "body": "env::native_reducers_float::reduce_float_div::{closure#0}",
  "core_digest": "e5fa6939748c8fcfa62d40d7f185a31861277307a3ffc318e2ad4cbd5702e006",
- "defs_digest": "60cca815f628eaf9c0a38f6aca3b8ae6c95b37cf83244b2d939276be2856ff01",
+ "defs_digest": "cf99940d33dd3fe9db0f79ce27ba7659c2e7062a157fe0d870fd8a2141a8b0ef",
  "def_count": 3,
  "artifact_core_digest": "e14d9020881f9d58192cda35d00b5b7a05fb8478b4415319a8262094c791e3f7",
  "artifact_core_digest_note": "Reader A's OWN digest of the projection, printed by scripts/crystal_a2_project and taken over the domain-separated `clean.ir_mint.core.v1` prefix. `core_digest` above is ir_mint::digest of the same text under this crate's domain, which is a different constant; the two are recorded side by side rather than reconciled, because a reader that could not disagree with itself is not a second reader.",

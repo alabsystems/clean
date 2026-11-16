@@ -1256,3 +1256,6 @@ fn kcheck_labelled_rechecks_through_two_kernels_with_forged_runs() {
         BETA_DEFINITIONS.len()
     );
 }
+
+#[path = "kcheck_labelled/semantic_soundness.rs"]
+mod semantic_soundness;

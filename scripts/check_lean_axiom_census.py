@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Copyright 2026 Andrew Yates
 # SPDX-License-Identifier: Apache-2.0
-"""E7: build five pinned Lean packages; census ALL constants by origin module.
+"""E7: build all eleven pinned Lean packages under theories/; census ALL constants by origin module.
 
 Run under build-slot / heavy_gate.sh. No source text patterns determine a
 verdict: module names come from source paths, declarations and closures from
@@ -31,7 +31,19 @@ ANSWERS_PINNED_INPUTS = True
 ROOT = Path(__file__).resolve().parent.parent
 ARTIFACT = ROOT / 'data/lean_axiom_census.json'
 HELPER = ROOT / 'scripts/lean_axiom_census.lean'
-PACKAGES = ('cic_l', 'cic_l_model', 'kcheck', 'kcheck_spec', 'kcheck_labelled')
+PACKAGES = (
+    'cic_l',
+    'cic_l_base_bridge',
+    'cic_l_model',
+    'cic_l_nat_model',
+    'kcheck',
+    'kcheck_spec',
+    'kcheck_labelled',
+    'kcheck_soundness',
+    'kcheck_sort_bounds',
+    'binding_not_review',
+    'chk_lia',
+)
 AX0 = frozenset(('propext', 'Quot.sound', 'Classical.choice'))
 
 

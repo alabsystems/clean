@@ -1,0 +1,52 @@
+{
+  "schema": "ty.cert/v1",
+  "verdict": "inductive-safety-safe",
+  "spec_src": "---- MODULE Accumulator ----\nEXTENDS Integers\nVARIABLE x\nInit == x = 0\nNext == x' = x + 1\nSafety == x >= 0\n====\n",
+  "init": "Init",
+  "next": "Next",
+  "invariants": [
+    "Safety"
+  ],
+  "invariant_j_tla": "x >= 0",
+  "var_sorts": [
+    [
+      "x",
+      "Int"
+    ]
+  ],
+  "ay_proof_obligations": [
+    {
+      "name": "initiation",
+      "strict_verified": true,
+      "clean_supported": false,
+      "lrat_present": true,
+      "alethe": "(assume t0 (< x__0 0))\n(assume t1 (= x__0 0))\n(step t2 (cl (= (< x__0 0) (< 0 0))) :rule cong :premises (t1))\n(step t3 (cl (not (= (< x__0 0) (< 0 0))) (not (< x__0 0)) (< 0 0)) :rule equiv_pos2)\n(step t4 (cl (not (< x__0 0)) (< 0 0)) :rule th_resolution :premises (t3 t2))\n(step t5 (cl (< 0 0)) :rule th_resolution :premises (t4 t0))\n(step t6 (cl (not (< 0 0))) :rule la_generic :args (1))\n(step t7 (cl) :rule th_resolution :premises (t6 t5))\n",
+      "bundle_json": "{\"schema\":\"ay.proofbundle/v1\",\"steps\":[{\"Assume\":6},{\"Assume\":5},{\"Step\":{\"rule\":\"Cong\",\"clause\":[10],\"premises\":[1],\"args\":[]}},{\"Step\":{\"rule\":\"EquivPos2\",\"clause\":[11,9,7],\"premises\":[],\"args\":[]}},{\"Step\":{\"rule\":\"ThResolution\",\"clause\":[9,7],\"premises\":[3,2],\"args\":[]}},{\"Step\":{\"rule\":\"ThResolution\",\"clause\":[7],\"premises\":[4,0],\"args\":[]}},{\"TheoryLemma\":{\"theory\":\"LIA\",\"clause\":[8],\"farkas\":{\"coefficients\":[[1,1]]},\"kind\":\"LraFarkas\",\"lia\":null}},{\"Step\":{\"rule\":\"ThResolution\",\"clause\":[],\"premises\":[6,5],\"args\":[]}}],\"term_entries\":[[{\"Const\":{\"Bool\":true}},\"Bool\"],[{\"Const\":{\"Bool\":false}},\"Bool\"],[{\"Var\":[\"x__0\",0]},\"Int\"],[{\"Var\":[\"x__1\",1]},\"Int\"],[{\"Const\":{\"Int\":[0,[]]}},\"Int\"],[{\"App\":[{\"Named\":\"=\"},[2,4]]},\"Bool\"],[{\"App\":[{\"Named\":\"<\"},[2,4]]},\"Bool\"],[{\"App\":[{\"Named\":\"<\"},[4,4]]},\"Bool\"],[{\"Not\":7},\"Bool\"],[{\"Not\":6},\"Bool\"],[{\"App\":[{\"Named\":\"=\"},[6,7]]},\"Bool\"],[{\"Not\":10},\"Bool\"]],\"true_term\":0,\"false_term\":1,\"var_counter\":2,\"obligation_assertions\":[5,6]}"
+    },
+    {
+      "name": "consecution",
+      "strict_verified": true,
+      "clean_supported": false,
+      "lrat_present": true,
+      "alethe": "(assume t0 (<= 0 x__0))\n(assume t1 (< x__1 0))\n(assume t2 (= x__1 (+ x__0 1)))\n(step t3 (cl (= (< x__1 0) (< (+ x__0 1) 0))) :rule cong :premises (t2))\n(step t4 (cl (not (= (< x__1 0) (< (+ x__0 1) 0))) (not (< x__1 0)) (< (+ x__0 1) 0)) :rule equiv_pos2)\n(step t5 (cl (not (< x__1 0)) (< (+ x__0 1) 0)) :rule th_resolution :premises (t4 t3))\n(step t6 (cl (< (+ x__0 1) 0)) :rule th_resolution :premises (t5 t1))\n(step t7 (cl (not (< (+ x__0 1) 0)) (not (<= 0 x__0))) :rule la_generic :args (1 1))\n(step t8 (cl (not (< (+ x__0 1) 0))) :rule th_resolution :premises (t7 t0))\n(step t9 (cl) :rule th_resolution :premises (t8 t6))\n",
+      "bundle_json": "{\"schema\":\"ay.proofbundle/v1\",\"steps\":[{\"Assume\":5},{\"Assume\":9},{\"Assume\":8},{\"Step\":{\"rule\":\"Cong\",\"clause\":[14],\"premises\":[2],\"args\":[]}},{\"Step\":{\"rule\":\"EquivPos2\",\"clause\":[15,13,10],\"premises\":[],\"args\":[]}},{\"Step\":{\"rule\":\"ThResolution\",\"clause\":[13,10],\"premises\":[4,3],\"args\":[]}},{\"Step\":{\"rule\":\"ThResolution\",\"clause\":[10],\"premises\":[5,1],\"args\":[]}},{\"TheoryLemma\":{\"theory\":\"LIA\",\"clause\":[11,12],\"farkas\":{\"coefficients\":[[1,1],[1,1]]},\"kind\":\"LraFarkas\",\"lia\":null}},{\"Step\":{\"rule\":\"ThResolution\",\"clause\":[11],\"premises\":[7,0],\"args\":[]}},{\"Step\":{\"rule\":\"ThResolution\",\"clause\":[],\"premises\":[8,6],\"args\":[]}}],\"term_entries\":[[{\"Const\":{\"Bool\":true}},\"Bool\"],[{\"Const\":{\"Bool\":false}},\"Bool\"],[{\"Var\":[\"x__0\",0]},\"Int\"],[{\"Var\":[\"x__1\",1]},\"Int\"],[{\"Const\":{\"Int\":[0,[]]}},\"Int\"],[{\"App\":[{\"Named\":\"<=\"},[4,2]]},\"Bool\"],[{\"Const\":{\"Int\":[1,[1]]}},\"Int\"],[{\"App\":[{\"Named\":\"+\"},[2,6]]},\"Int\"],[{\"App\":[{\"Named\":\"=\"},[3,7]]},\"Bool\"],[{\"App\":[{\"Named\":\"<\"},[3,4]]},\"Bool\"],[{\"App\":[{\"Named\":\"<\"},[7,4]]},\"Bool\"],[{\"Not\":10},\"Bool\"],[{\"Not\":5},\"Bool\"],[{\"Not\":9},\"Bool\"],[{\"App\":[{\"Named\":\"=\"},[9,10]]},\"Bool\"],[{\"Not\":14},\"Bool\"]],\"true_term\":0,\"false_term\":1,\"var_counter\":2,\"obligation_assertions\":[5,8,9]}"
+    },
+    {
+      "name": "safety",
+      "strict_verified": true,
+      "clean_supported": false,
+      "lrat_present": true,
+      "alethe": "(assume t0 (<= 0 x__0))\n(assume t1 (< x__0 0))\n(step t2 (cl (not (<= 0 x__0)) (not (< x__0 0))) :rule la_generic :args (1 1))\n(step t3 (cl (not (< x__0 0))) :rule th_resolution :premises (t2 t0))\n(step t4 (cl) :rule th_resolution :premises (t3 t1))\n",
+      "bundle_json": "{\"schema\":\"ay.proofbundle/v1\",\"steps\":[{\"Assume\":5},{\"Assume\":6},{\"TheoryLemma\":{\"theory\":\"LIA\",\"clause\":[8,7],\"farkas\":{\"coefficients\":[[1,1],[1,1]]},\"kind\":\"LraFarkas\",\"lia\":null}},{\"Step\":{\"rule\":\"ThResolution\",\"clause\":[7],\"premises\":[2,0],\"args\":[]}},{\"Step\":{\"rule\":\"ThResolution\",\"clause\":[],\"premises\":[3,1],\"args\":[]}}],\"term_entries\":[[{\"Const\":{\"Bool\":true}},\"Bool\"],[{\"Const\":{\"Bool\":false}},\"Bool\"],[{\"Var\":[\"x__0\",0]},\"Int\"],[{\"Var\":[\"x__1\",1]},\"Int\"],[{\"Const\":{\"Int\":[0,[]]}},\"Int\"],[{\"App\":[{\"Named\":\"<=\"},[4,2]]},\"Bool\"],[{\"App\":[{\"Named\":\"<\"},[2,4]]},\"Bool\"],[{\"Not\":6},\"Bool\"],[{\"Not\":5},\"Bool\"]],\"true_term\":0,\"false_term\":1,\"var_counter\":2,\"obligation_assertions\":[5,6]}"
+    },
+    {
+      "name": "deadlock_freedom",
+      "strict_verified": true,
+      "clean_supported": true,
+      "lrat_present": false,
+      "alethe": "structural: unguarded total Next => Enabled(Next) == TRUE",
+      "bundle_json": ""
+    }
+  ],
+  "digest": "29a39e8c74c24dc8ccc4f15309d29412a58e3c53af431fdfd117b4325d7db783"
+}

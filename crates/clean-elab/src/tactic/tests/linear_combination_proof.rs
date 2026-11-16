@@ -23,6 +23,11 @@ fn setup_eq_goal_with_hyp(
 ) -> ProofState {
     let n_ty = Expr::const_(Name::from_string("N"), vec![]);
     let eq_target = make_eq(n_ty.clone(), goal_lhs, goal_rhs);
+
+    // Hypothesis h : hyp_lhs = hyp_rhs. It must be part of the state's INITIAL
+    // context so the root metavariable captures it: adding it to `goals[0]`
+    // afterwards widens the goal past its metavariable's immutable creation
+    // scope, and `close_goal` correctly refuses to accept a proof against it.
     let h_ty = make_eq(n_ty, hyp_lhs, hyp_rhs);
     ProofState::with_context(
         env,

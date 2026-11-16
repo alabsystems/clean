@@ -2,7 +2,7 @@
  "prefix": "ir_gc",
  "body": "env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}",
  "core_digest": "a5722ce124e12216ef1d0e9c02038c26efc2605a9f6cdb662f6f6f92e47eba90",
- "defs_digest": "27516dc8aa103a4290a93327c98d06c14d6d975eddb2af62cd74a116cb175d55",
+ "defs_digest": "9324a827ad47c9d140fe19c4d348240e015f88154c700bf0c932965208fd83e2",
  "def_count": 3,
  "artifact_core_digest": "7c4117f0e1e0e7f78bb3f60ace35250c2aa7054a7843bbd0320a04eb00cf3ee9",
  "artifact_core_digest_note": "Reader A's OWN digest of the projection, printed by scripts/crystal_a2_project and taken over the domain-separated `clean.ir_mint.core.v1` prefix. `core_digest` above is ir_mint::digest of the same text under this crate's domain, which is a different constant; the two are recorded side by side rather than reconciled, because a reader that could not disagree with itself is not a second reader. This value equals every column of the get_char_val_trunc row in generated/ir_mint.producer_ab.json AND the fresh 2026-08-21 projection below -- four dumps, one core text.",

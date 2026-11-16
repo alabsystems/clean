@@ -63,9 +63,10 @@ pub(crate) mod auto_bound;
 // production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
 #[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod auto_bound_ext;
-// Unwired roadmap prototype (2026-08-10): compiled only with its unit tests until the live
-// pipeline owns it. Mirrors pattern_match_ext / error_recovery* precedent.
-#[cfg(test)]
+// Roadmap prototype (2026-08-10), compiled with its unit tests and, since the shipped
+// binary enables `mathverse-library`, for `tactic::mathverse_use`, which calls its
+// `collect_universe_params`. Mirrors pattern_match_ext / error_recovery* precedent.
+#[cfg(any(test, feature = "mathverse-library"))]
 pub(crate) mod auto_param_ext;
 pub mod cert;
 pub mod check_cmd;
@@ -308,6 +309,16 @@ pub(crate) mod macro_hygiene_ext2;
 #[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod macro_hygiene_ext3;
 pub(crate) mod macro_integration;
+/// `import Mathverse.<Corpus>[.<Constant>]` — Mathverse content as ambient,
+/// kernel-checked declarations through the existing gated loader.
+pub(crate) mod mathverse_import;
+/// Lazy, on-demand resolution of Mathverse names after a CORPUS-level
+/// `import Mathverse.<Corpus>` — the request half of the request/load split.
+pub(crate) mod mathverse_lazy;
+#[cfg(test)]
+mod mathverse_lazy_tests;
+#[cfg(test)]
+mod mathverse_term_resolution_tests;
 pub(crate) mod meta;
 // Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
 // production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
@@ -1346,6 +1357,42 @@ fn elaborate_decl_and_register_leaf(
 
     // Handle imports: initialize appropriate Mathlib stubs
     if let clean_parser::SurfaceDecl::Import { paths, .. } = decl {
+        // `import Mathverse.…` addresses the Mathverse Library, not the `.olean`
+        // search path. Split it out FIRST so an ordinary import is dispatched
+        // byte-for-byte as before; the test is one string compare on the first
+        // path segment (`mathverse_import::is_mathverse_path`).
+        //
+        // This is where a Mathverse constant becomes AMBIENT. `ElabCtx` holds an
+        // immutable `&Environment` for its whole lifetime, so nothing inside term
+        // elaboration can install a declaration — but this arm runs with
+        // `&mut Environment` in hand, well before any `ElabCtx` is constructed.
+        // Once the closure is resident, the elaborator's UNCHANGED name
+        // resolution finds it, which is what makes `:= eq_or_ne x y` work without
+        // a single hook in `elab_ident`.
+        // The `any` probe keeps the ordinary case allocation-free: a file that
+        // never mentions Mathverse pays one root-segment compare per import
+        // path and reaches `process_imports*` with the very same slice it does
+        // today.
+        let names_mathverse = paths.iter().any(mathverse_import::is_mathverse_path);
+        let module_paths: Vec<clean_parser::SurfaceName>;
+        let paths: &[clean_parser::SurfaceName] = if names_mathverse {
+            let (mv, rest): (Vec<_>, Vec<_>) = paths
+                .iter()
+                .cloned()
+                .partition(mathverse_import::is_mathverse_path);
+            mathverse_import::process_mathverse_imports(env, &mv)?;
+            if rest.is_empty() {
+                return Ok(RegisteredElabResult {
+                    result: ElabResult::Skipped,
+                    warning: None,
+                    hole_contexts: Vec::new(),
+                });
+            }
+            module_paths = rest;
+            &module_paths
+        } else {
+            paths
+        };
         let external_enabled = file_ctx
             .as_ref()
             .map(|fc| fc.external_import_search_enabled())
@@ -1851,13 +1898,25 @@ fn elaborate_decl_and_register_leaf(
             fc.enter_local_scope();
             fc.activate_scoped_instances(env, &activated);
             let result = fc.activate_scoped_csimp(env, &activated).and_then(|()| {
-                elaborate_general_and_register(env, decl, Some(&mut *fc), aux_source)
+                elaborate_general_and_register(
+                    env,
+                    decl,
+                    Some(&mut *fc),
+                    aux_source,
+                    mathverse_lazy::MATHVERSE_LAZY_LOAD_BUDGET,
+                )
             });
             fc.exit_local_scope();
             fc.retire_local_attributes(env);
             result
         }
-        _ => elaborate_general_and_register(env, decl, file_ctx, aux_source),
+        _ => elaborate_general_and_register(
+            env,
+            decl,
+            file_ctx,
+            aux_source,
+            mathverse_lazy::MATHVERSE_LAZY_LOAD_BUDGET,
+        ),
     }
 }
 
@@ -1903,8 +1962,73 @@ fn in_command_activations(
     wrapped.then_some(activated)
 }
 
+/// Install the one library constant a failed elaboration asked for, then
+/// re-elaborate the declaration from scratch.
+///
+/// Reached only from the `Err` arm of [`elaborate_general_and_register`], and
+/// only when the error carries an [`ElabError::MathverseNameAvailable`]
+/// request — which the elaborator mints only while a corpus is armed. Every
+/// other failure is returned untouched, so a disarmed file cannot enter this
+/// function at all.
+///
+/// # Why re-elaborate the whole declaration
+///
+/// `ElabCtx` borrows an elaboration-advice environment built from `env` for
+/// its whole lifetime, so the constant cannot be installed mid-elaboration.
+/// Nothing has been registered at this point (registration runs after a
+/// successful elaboration) and the failed attempt has no environment side
+/// effects, so the retry starts from a clean slate — it rebuilds the advice
+/// environment, which then contains the installed constant.
+///
+/// # Termination
+///
+/// `budget` is the belt; the progress rule is the braces. A request is minted
+/// only for a NOT-resident name, and `load_gated_constant` fails closed unless
+/// the name ends up resident, so no name can be requested twice and each round
+/// strictly grows the environment.
+///
+/// The retry stays inside the declaration's automation-budget window and any
+/// `open … in` scope its caller entered: it is the same declaration, elaborated
+/// again, not a new command.
+fn mathverse_lazy_retry(
+    env: &mut clean_kernel::Environment,
+    decl: &clean_parser::SurfaceDecl,
+    file_ctx: Option<&mut FileContext>,
+    aux_source: Option<(
+        clean_parser::SurfaceName,
+        Vec<clean_parser::SurfaceMatchArm>,
+        Vec<(clean_parser::SurfaceName, clean_parser::SurfaceExpr)>,
+    )>,
+    budget: u8,
+    error: ElabError,
+) -> Result<RegisteredElabResult, ElabError> {
+    let Some(name) = mathverse_lazy::requested_name(&error).map(ToString::to_string) else {
+        return Err(error);
+    };
+    if budget == 0 {
+        return Err(ElabError::MathverseImportFailed {
+            name,
+            detail: format!(
+                "this declaration needed more than {} lazily-resolved Mathverse constants; \
+                 import the extras explicitly with `import Mathverse.<Corpus>.<Constant>`",
+                mathverse_lazy::MATHVERSE_LAZY_LOAD_BUDGET
+            ),
+        });
+    }
+    // THE GATE — the same `load_gated_constant` the eager
+    // `import Mathverse.<Corpus>.<Constant>` arm calls. A trust refusal is
+    // returned as itself, so a below-`Strict` name fails closed with its reason
+    // instead of presenting as `Unknown identifier`.
+    mathverse_import::lazy_load_armed(env, &name)?;
+    elaborate_general_and_register(env, decl, file_ctx, aux_source, budget - 1)
+}
+
 /// Elaborate one ordinary declaration and register it with its attributes
 /// (the general arm of [`elaborate_decl_and_register_inner_with_aux`]).
+///
+/// `budget` is the number of lazily-resolved Mathverse constants this
+/// declaration may still install ([`mathverse_lazy_retry`]); every caller
+/// outside the retry passes [`mathverse_lazy::MATHVERSE_LAZY_LOAD_BUDGET`].
 fn elaborate_general_and_register(
     env: &mut clean_kernel::Environment,
     decl: &clean_parser::SurfaceDecl,
@@ -1914,6 +2038,7 @@ fn elaborate_general_and_register(
         Vec<clean_parser::SurfaceMatchArm>,
         Vec<(clean_parser::SurfaceName, clean_parser::SurfaceExpr)>,
     )>,
+    budget: u8,
 ) -> Result<RegisteredElabResult, ElabError> {
     // Apply file-level option overrides to the environment before elaboration
     // so that options set in earlier declarations (including section-scoped ones)
@@ -1927,6 +2052,21 @@ fn elaborate_general_and_register(
     // request those explicit stub fragments in the actual registration context.
     let advice = source_elaboration_advice(env)?;
     let mut ctx = ElabCtx::new(&advice);
+
+    // Keep a copy of the auxiliary-arm source for a possible lazy-Mathverse
+    // retry: `set_nested_mutual_aux_arms` consumes it, and the retry rebuilds
+    // the `ElabCtx` from scratch. `None` — every declaration except a fused
+    // nested-mutual fold — clones for free.
+    let aux_retry = aux_source.clone();
+    // Likewise the pending section-variable pruning request, which
+    // `take_pending_section_prune` consumes below: a retry must elaborate under
+    // the same request or it would keep every section variable. Copied only
+    // while a corpus is armed (the same probe as `ElabCtx::mathverse_armed`) —
+    // no other file can retry.
+    let lazy_armed = env
+        .get_option(mathverse_lazy::MATHVERSE_ARMED_OPTION)
+        .is_some_and(Option::is_some);
+    let mut section_prune_retry = None;
 
     // Track AA: install the fused nested-mutual fold's auxiliary-arm source (if
     // any) so the nested-recursor minor builder fills the auxiliary minors with
@@ -1995,6 +2135,9 @@ fn elaborate_general_and_register(
         // it prepended every section variable and asked for the unused ones
         // to be dropped from the elaborated term (`infer::section_prune`).
         if let Some(request) = file_ctx.take_pending_section_prune(decl.span()) {
+            if lazy_armed {
+                section_prune_retry = Some(request.clone());
+            }
             ctx.set_section_prune_request(request);
         }
     }
@@ -2007,6 +2150,26 @@ fn elaborate_general_and_register(
         file_ctx.replace_tactic_registry(ctx.take_tactic_registry());
         file_ctx.replace_user_term_elabs(ctx.take_user_term_elabs());
     }
+
+    // Lazy Mathverse resolution (`mathverse_lazy`). A failure that carries an
+    // `ElabError::MathverseNameAvailable` request means the elaborator hit a
+    // name the installed library HAS, the environment does NOT, and a corpus
+    // was armed by `import Mathverse.<Corpus>`. Install it through the gate and
+    // re-elaborate. Every other failure — and every failure at all in a file
+    // that armed no corpus — takes main's path below unchanged.
+    let result = match result {
+        Err(error) if mathverse_lazy::requested_name(&error).is_some() => {
+            // The failed attempt is discarded whole: its partial term info is
+            // NOT recorded (the retry records its own, and the capture is
+            // append-only, so recording both would duplicate every span).
+            drop(ctx);
+            if let (Some(fc), Some(request)) = (file_ctx.as_deref_mut(), section_prune_retry) {
+                fc.set_pending_section_prune(decl.span(), Some(request));
+            }
+            return mathverse_lazy_retry(env, decl, file_ctx, aux_retry, budget, error);
+        }
+        result => result,
+    };
 
     ctx.finish_term_info();
     let result = result?;

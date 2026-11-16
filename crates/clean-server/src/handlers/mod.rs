@@ -30,6 +30,7 @@ mod shared_env;
 mod state;
 mod swarm;
 mod tactic;
+mod tla_handler;
 pub(crate) mod types;
 mod verify;
 mod widget;
@@ -107,6 +108,12 @@ pub use tactic::{
     ExtractProofResult, FailureBlocker, GetProofStateParams, InitProofStateParams,
     InitProofStateResult, OpenObligationParams, ProofStateGoalSearchParams, ProofVerification,
     RetainProofStateParams, RetainProofStateResult, SearchTacticsResult, SearchTheoremsResult,
+};
+
+// Re-export TLA+ handler types and functions
+pub use tla_handler::{
+    handle_batch_prove_tla, handle_prove_tla, BatchProveTlaItem, BatchProveTlaItemResult,
+    BatchProveTlaParams, BatchProveTlaResult, BatchProveTlaStats, ProveTlaParams, ProveTlaResult,
 };
 
 // Re-export premise selection types and handlers

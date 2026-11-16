@@ -88,6 +88,23 @@ fn test_compound_first_retries_recoverable_error() {
     );
 }
 
+/// `first` must NOT swallow a fatal error.
+///
+/// "Fatal" here is a deliberate, narrow set — `NoGoals`, `UnknownTactic`,
+/// `MissingArgument`, `UserThrowError`, `ParseFailed`. These signal a MALFORMED
+/// SCRIPT or an explicit user abort, not "this branch did not apply", and
+/// backtracking past them would hide the real problem behind a later branch
+/// that happens to succeed.
+///
+/// This test previously used `TypeCheckFailed`, which has since been
+/// RECLASSIFIED as recoverable on purpose (see
+/// `TacticError::is_recoverable_first_failure`): Lean 4's `first` backtracks on
+/// any tactic failure, and treating it as fatal made `first | rfl | exact h`
+/// propagate `rfl`'s mismatch instead of falling through to `exact h`. The code
+/// change was right and this test was left asserting the superseded semantics,
+/// so it failed. Switched to `ParseFailed` — a malformed script, which must
+/// never be silently retried past — which preserves what the test was actually
+/// for.
 #[test]
 fn test_compound_first_stops_on_fatal_error() {
     let mut eval = StubEval {

@@ -159,7 +159,18 @@ pub(crate) fn refine_elaborated_with_goals(
     }
 
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
-    let (mapping, new_goals) = import_pending_goals(state, &goal, elab_metas, pending_goals)?;
+    // Each hole's captured locals are binders of `term` stacked over `goal`,
+    // and `close_fvars` resolves them positionally once the holes are solved,
+    // so they are numbered by depth from the goal's binder base — never from
+    // the global counter, which other machinery (discharged subgoals, `simp`
+    // scratch locals, rewrite validation) advances past that base (#2533).
+    let (mapping, new_goals) = import_pending_goals_with(
+        state,
+        &goal,
+        elab_metas,
+        pending_goals,
+        PendingLocalIds::ByDepth,
+    )?;
     let translated_term = remap_elab_metas(&term, &mapping, elab_metas)?;
     finish_refine(state, &goal, translated_term, new_goals)
 }
@@ -215,14 +226,17 @@ fn import_pending_goals(
 /// How the tactic FVar of a pending goal's captured local is chosen.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PendingLocalIds {
-    /// From the global counter (`fresh_fvar`).
+    /// From the global counter (`fresh_fvar`). Used only by
+    /// `import_open_term` (`rw` rules, `simp` arguments, `rcases` type
+    /// ascriptions); an ordinary `refine` numbers its holes' locals `ByDepth`.
     Fresh,
     /// By binder depth: the `k`-th local a pending goal captures — the `k`-th
     /// binder enclosing its hole below the goal's own proof position — gets
     /// `goal_binder_base(goal) + k`, the id `close_fvars` resolves at that
     /// depth. Sibling goals then reuse ids at equal depths, exactly as the
     /// branches of `cases` do (`cases_core`'s per-branch reset): every arm of
-    /// an eliminator is its own lambda chain. A global counter numbered the
+    /// an eliminator, and every hole of an ordinary `refine` term, sits under
+    /// its own binder chain. A global counter numbered the
     /// SECOND binding arm's first local one past the first arm's, at depth 0
     /// of its own lambda, and its assignment was refused as a scope
     /// violation. A local shared by several goals (a column-split match's

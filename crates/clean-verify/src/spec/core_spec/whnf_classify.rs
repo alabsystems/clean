@@ -66,8 +66,8 @@ impl Specification {
     fn add_result_classification(&mut self) -> Result<(), SpecError> {
         self.add_recursive_def(
             "def whnf_fuel_red_classifies_at_result (n : Nat) (e : KExpr) (r : KExpr) \
-             (h : Eq (OptionType KExpr) (whnf_fuel_red the_red_env n e) \
-             (OptionType.some KExpr r)) \
+             (h : @Eq (OptionType KExpr) (whnf_fuel_red the_red_env n e) \
+             (@OptionType.some KExpr r)) \
              (hc : red_closed_at r Nat.zero) \
              (hd : consts_defined_red the_red_env r) : whnf_noredex_class r := \
              reduce_once_red_none_classifies r \
@@ -89,7 +89,7 @@ impl Specification {
     fn add_defeq_fuel_accepts(&mut self) -> Result<(), SpecError> {
         self.add_inductive(
             "inductive DefEqFuelAccepts (a : KExpr) (b : KExpr) : Type\n\
-             | mk : forall (n : Nat), Eq Bool (def_eq_fuel the_red_env n a b) Bool.true -> \
+             | mk : forall (n : Nat), @Eq Bool (def_eq_fuel the_red_env n a b) Bool.true -> \
              DefEqFuelAccepts a b",
             "DefEqFuelAccepts a b: SOME fuel is enough for the structural conversion algorithm to \
              accept a against b. The conclusion the completeness capstone must reach. The spec \
@@ -105,12 +105,12 @@ impl Specification {
         self.add_recursive_def(
             "def def_eq_fuel_accepts_le (a : KExpr) (b : KExpr) (m : Nat) \
              (w : DefEqFuelAccepts a b) \
-             (hb : forall (k : Nat), Eq Bool (def_eq_fuel the_red_env k a b) Bool.true -> \
-             Le k m) : Eq Bool (def_eq_fuel the_red_env m a b) Bool.true := \
-             DefEqFuelAccepts.rec a b \
+             (hb : forall (k : Nat), @Eq Bool (def_eq_fuel the_red_env k a b) Bool.true -> \
+             Le k m) : @Eq Bool (def_eq_fuel the_red_env m a b) Bool.true := \
+             @DefEqFuelAccepts.rec a b \
              (fun (_w : DefEqFuelAccepts a b) => \
-             Eq Bool (def_eq_fuel the_red_env m a b) Bool.true) \
-             (fun (n : Nat) (hn : Eq Bool (def_eq_fuel the_red_env n a b) Bool.true) => \
+             @Eq Bool (def_eq_fuel the_red_env m a b) Bool.true) \
+             (fun (n : Nat) (hn : @Eq Bool (def_eq_fuel the_red_env n a b) Bool.true) => \
              def_eq_fuel_le n m (hb n hn) a b hn) w",
             "def_eq_fuel_accepts_le: cash a DefEqFuelAccepts witness at any fuel bound the \
              witness's own fuel is below. The bound is supplied as a function of the witnessed \

@@ -71,19 +71,19 @@ impl Specification {
         "def self_app_loop_not_whnf_acc (d : KExpr) \
          (hloop : whnf_step (KExpr.app d d) (KExpr.app d d)) (C : Type) \
          (h : whnf_acc (KExpr.app d d)) : C := \
-         whnf_acc.rec \
-         (fun (x : KExpr) (_hx : whnf_acc x) => Eq KExpr x (KExpr.app d d) -> C) \
+         @whnf_acc.rec \
+         (fun (x : KExpr) (_hx : whnf_acc x) => @Eq KExpr x (KExpr.app d d) -> C) \
          (fun (x : KExpr) \
          (_f : forall (y : KExpr), whnf_step x y -> whnf_acc y) \
          (ih : forall (y : KExpr) (_s : whnf_step x y), \
-         Eq KExpr y (KExpr.app d d) -> C) \
-         (heq : Eq KExpr x (KExpr.app d d)) => \
+         @Eq KExpr y (KExpr.app d d) -> C) \
+         (heq : @Eq KExpr x (KExpr.app d d)) => \
          ih (KExpr.app d d) \
-         (Eq.substType KExpr \
+         (@Eq.substType KExpr \
          (fun (z : KExpr) => whnf_step z (KExpr.app d d)) \
-         (KExpr.app d d) x (Eq.symm KExpr x (KExpr.app d d) heq) hloop) \
-         (Eq.refl KExpr (KExpr.app d d))) \
-         (KExpr.app d d) h (Eq.refl KExpr (KExpr.app d d))"
+         (KExpr.app d d) x (@Eq.symm KExpr x (KExpr.app d d) heq) hloop) \
+         (@Eq.refl KExpr (KExpr.app d d))) \
+         (KExpr.app d d) h (@Eq.refl KExpr (KExpr.app d d))"
             .to_string()
     }
 
@@ -115,28 +115,28 @@ impl Specification {
              whnf_acc {d} := \
              whnf_acc.intro {d} \
              (fun (e2 : KExpr) (st : whnf_step {d} e2) => \
-             whnf_step.rec {d} e2 (fun (_h : whnf_step {d} e2) => whnf_acc e2) \
+             @whnf_step.rec {d} e2 (fun (_h : whnf_step {d} e2) => whnf_acc e2) \
              (fun (hb : beta_reduces {d} e2) => \
              beta_reduces_lam_inv (KExpr.bvar Nat.zero) {body} e2 (whnf_acc e2) hb \
              (fun (A2 : KExpr) (hsA : beta_reduces (KExpr.bvar Nat.zero) A2) \
-             (_he : Eq KExpr e2 (KExpr.lam A2 {body})) => \
+             (_he : @Eq KExpr e2 (KExpr.lam A2 {body})) => \
              no_whnf_step_bvar Nat.zero A2 (whnf_acc e2) \
              (whnf_step.beta (KExpr.bvar Nat.zero) A2 hsA)) \
              (fun (b2 : KExpr) (hsb : beta_reduces {body} b2) \
-             (_he : Eq KExpr e2 (KExpr.lam (KExpr.bvar Nat.zero) b2)) => \
+             (_he : @Eq KExpr e2 (KExpr.lam (KExpr.bvar Nat.zero) b2)) => \
              whnf_step_app_inv (KExpr.bvar Nat.zero) (KExpr.bvar Nat.zero) b2 \
              (whnf_acc e2) (whnf_step.beta {body} b2 hsb) \
              (fun (A0 : KExpr) (body0 : KExpr) \
-             (hl : Eq KExpr (KExpr.bvar Nat.zero) (KExpr.lam A0 body0)) \
-             (_hb : Eq KExpr b2 (instantiate body0 (KExpr.bvar Nat.zero))) => \
+             (hl : @Eq KExpr (KExpr.bvar Nat.zero) (KExpr.lam A0 body0)) \
+             (_hb : @Eq KExpr b2 (instantiate body0 (KExpr.bvar Nat.zero))) => \
              lam_ne_bvar A0 body0 Nat.zero (whnf_acc e2) \
-             (Eq.symm KExpr (KExpr.bvar Nat.zero) (KExpr.lam A0 body0) hl)) \
+             (@Eq.symm KExpr (KExpr.bvar Nat.zero) (KExpr.lam A0 body0) hl)) \
              (fun (f2 : KExpr) (hsf : beta_reduces (KExpr.bvar Nat.zero) f2) \
-             (_hb : Eq KExpr b2 (KExpr.app f2 (KExpr.bvar Nat.zero))) => \
+             (_hb : @Eq KExpr b2 (KExpr.app f2 (KExpr.bvar Nat.zero))) => \
              no_whnf_step_bvar Nat.zero f2 (whnf_acc e2) \
              (whnf_step.beta (KExpr.bvar Nat.zero) f2 hsf)) \
              (fun (a2 : KExpr) (hsa : beta_reduces (KExpr.bvar Nat.zero) a2) \
-             (_hb : Eq KExpr b2 (KExpr.app (KExpr.bvar Nat.zero) a2)) => \
+             (_hb : @Eq KExpr b2 (KExpr.app (KExpr.bvar Nat.zero) a2)) => \
              no_whnf_step_bvar Nat.zero a2 (whnf_acc e2) \
              (whnf_step.beta (KExpr.bvar Nat.zero) a2 hsa)) \
              (fun (hir : iota_reduces {body} b2) => \

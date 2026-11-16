@@ -84,7 +84,7 @@ impl Specification {
         let arm = |vals: &str| format!("(fun ({vals}) => {blind})");
         let inner = format!(
             "def RedWInner (ih : KExpr -> KExpr -> Type) (e0 : KExpr) (t : KExpr) : Type := \
-             KExpr.rec (fun (_t : KExpr) => Type) \
+             @KExpr.rec (fun (_t : KExpr) => Type) \
              {sort} {bvar} {app} {lam} \
              (fun (ty : KExpr) (bb : KExpr) (i1 : Type) (i2 : Type) => \
              AndType (whnf_acc e0) \
@@ -106,14 +106,14 @@ impl Specification {
                 "RedWClause".to_string(),
                 "def RedWClause (ih : KExpr -> KExpr -> Type) (e0 : KExpr) \
                  (o : OptionType KExpr) : Type := \
-                 OptionType.rec KExpr (fun (_o : OptionType KExpr) => Type) \
+                 @OptionType.rec KExpr (fun (_o : OptionType KExpr) => Type) \
                  (whnf_acc e0) (fun (U : KExpr) => RedWInner ih e0 U) o"
                     .to_string(),
             ),
             (
                 "RedW".to_string(),
                 "def RedW : Nat -> KExpr -> KExpr -> Type := \
-                 Nat.rec (fun (_k : Nat) => KExpr -> KExpr -> Type) \
+                 @Nat.rec (fun (_k : Nat) => KExpr -> KExpr -> Type) \
                  (fun (T0 : KExpr) (e0 : KExpr) => whnf_acc e0) \
                  (fun (n : Nat) (ih : KExpr -> KExpr -> Type) => \
                  fun (T0 : KExpr) (e0 : KExpr) => \
@@ -183,7 +183,7 @@ impl Specification {
             "def redw_redConst_free_at_the_empty_env (n : Name) (us : ListType Level) \
              (A : KExpr) (s : Nat -> KExpr) \
              (h : Eq (OptionType KExpr) (kdecl_type_at kdecl_empty n us) \
-             (OptionType.some KExpr A)) : \
+             (@OptionType.some KExpr A)) : \
              RedWStep (psubst s A) (KExpr.const n us) := \
              redconst_premise_is_refutable_at_the_empty_env n us A \
              (RedWStep (psubst s A) (KExpr.const n us)) h"
@@ -222,7 +222,7 @@ impl Specification {
                  (hall : forall (e2 : KExpr), whnf_step e e2 -> RedWStep {s0} e2) : \
                  RedWStep {s0} e := \
                  fun (n : Nat) => \
-                 Nat.rec (fun (k : Nat) => RedW k {s0} e) \
+                 @Nat.rec (fun (k : Nat) => RedW k {s0} e) \
                  (whnf_acc.intro e (fun (e2 : KExpr) (st : whnf_step e e2) => \
                  hall e2 st Nat.zero)) \
                  (fun (k : Nat) (_ih : RedW k {s0} e) => \
@@ -276,7 +276,7 @@ impl Specification {
                  whnf_acc (instantiate bb x)) : \
                  RedWStep {s0} {redex} := \
                  fun (n : Nat) => \
-                 Nat.rec (fun (k : Nat) => RedW k {s0} {redex}) \
+                 @Nat.rec (fun (k : Nat) => RedW k {s0} {redex}) \
                  ({app}) \
                  (fun (k : Nat) (_ih : RedW k {s0} {redex}) => ({app})) n"
             ),
@@ -325,7 +325,7 @@ impl Specification {
                  AndType (whnf_acc e2) {p2}) \
                  (hpt : {pointwise}) : \
                  AndType (whnf_acc e) {pointwise} := \
-                 AndType.intro (whnf_acc e) {pointwise} \
+                 @AndType.intro (whnf_acc e) {pointwise} \
                  (whnf_acc.intro e (fun (e2 : KExpr) (st : whnf_step e e2) => \
                  AndType.left (whnf_acc e2) {p2} (hall e2 st))) \
                  hpt",
@@ -379,18 +379,18 @@ impl Specification {
             format!(
                 "def redw_cr1_at_index (k : Nat) (T : KExpr) (e : KExpr) \
                  (h : RedW k T e) : whnf_acc e := \
-                 Nat.rec (fun (kk : Nat) => forall (T0 : KExpr) (e0 : KExpr), \
+                 @Nat.rec (fun (kk : Nat) => forall (T0 : KExpr) (e0 : KExpr), \
                  RedW kk T0 e0 -> whnf_acc e0) \
                  (fun (T0 : KExpr) (e0 : KExpr) (h0 : whnf_acc e0) => h0) \
                  (fun (j : Nat) (_ih : forall (T0 : KExpr) (e0 : KExpr), \
                  RedW j T0 e0 -> whnf_acc e0) => \
                  fun (T0 : KExpr) (e : KExpr) => \
-                 OptionType.rec KExpr \
+                 @OptionType.rec KExpr \
                  (fun (o : OptionType KExpr) => \
                  RedWClause (RedW j) e o -> whnf_acc e) \
                  ({idarm}) \
                  (fun (U : KExpr) => \
-                 KExpr.rec (fun (t0 : KExpr) => \
+                 @KExpr.rec (fun (t0 : KExpr) => \
                  RedWInner (RedW j) e t0 -> whnf_acc e) \
                  {sort} {bvar} {app} {lam} {pi_arm} {konst} {let_} {proj} {mvar} U) \
                  (whnf_fuel_red_wh3 the_red_env (Nat.succ j) T0)) \
@@ -465,7 +465,7 @@ impl Specification {
                  delta_reduces (KExpr.app e a0) z -> RedW k bb z) : \
                  forall (x : KExpr), RedW k ty x -> RedW k bb (KExpr.app e x) := \
                  fun (x : KExpr) (hx : RedW k ty x) => \
-                 whnf_acc.rec \
+                 @whnf_acc.rec \
                  (fun (w : KExpr) (_hw : whnf_acc w) => \
                  RedW k ty w -> {goal}) \
                  (fun (w : KExpr) \
@@ -551,7 +551,7 @@ impl Specification {
                      Neutral t -> \
                      (forall (z : KExpr), whnf_step t z -> RedW k {s0} z) -> \
                      RedW k {s0} t := \
-                     Nat.rec (fun (kk : Nat) => forall (t : KExpr), Neutral t -> \
+                     @Nat.rec (fun (kk : Nat) => forall (t : KExpr), Neutral t -> \
                      (forall (z : KExpr), whnf_step t z -> RedW kk {s0} z) -> \
                      RedW kk {s0} t) \
                      (fun (t : KExpr) (_hn : Neutral t) \
@@ -576,7 +576,7 @@ impl Specification {
                      forall (k : Nat) (t : KExpr), Neutral t -> \
                      (forall (z : KExpr), whnf_step t z -> RedW k {pi} z) -> \
                      RedW k {pi} t := \
-                     Nat.rec (fun (kk : Nat) => forall (t : KExpr), Neutral t -> \
+                     @Nat.rec (fun (kk : Nat) => forall (t : KExpr), Neutral t -> \
                      (forall (z : KExpr), whnf_step t z -> RedW kk {pi} z) -> \
                      RedW kk {pi} t) \
                      (fun (t : KExpr) (_hn : Neutral t) \
@@ -588,7 +588,7 @@ impl Specification {
                      fun (t : KExpr) (hn : Neutral t) \
                      (hall : forall (z : KExpr), whnf_step t z -> \
                      AndType (whnf_acc z) {pw_z}) => \
-                     AndType.intro (whnf_acc t) {pw_t} \
+                     @AndType.intro (whnf_acc t) {pw_t} \
                      (whnf_acc.intro t (fun (z : KExpr) (sz : whnf_step t z) => \
                      AndType.left (whnf_acc z) {pw_z} (hall z sz))) \
                      (redw_cr3_pointwise_at_a_nondependent_codomain k ty {s0} t hn \
@@ -653,7 +653,7 @@ impl Specification {
                  forall (k : Nat) (t : KExpr), Neutral t -> \
                  (forall (z : KExpr), whnf_step t z -> RedW k {pi} z) -> \
                  RedW k {pi} t := \
-                 Nat.rec (fun (kk : Nat) => forall (t : KExpr), Neutral t -> \
+                 @Nat.rec (fun (kk : Nat) => forall (t : KExpr), Neutral t -> \
                  (forall (z : KExpr), whnf_step t z -> RedW kk {pi} z) -> \
                  RedW kk {pi} t) \
                  (fun (t : KExpr) (_hn : Neutral t) \
@@ -665,7 +665,7 @@ impl Specification {
                  fun (t : KExpr) (hn : Neutral t) \
                  (hall : forall (z : KExpr), whnf_step t z -> \
                  AndType (whnf_acc z) {pwc_z}) => \
-                 AndType.intro (whnf_acc t) {pwc_t} \
+                 @AndType.intro (whnf_acc t) {pwc_t} \
                  (whnf_acc.intro t (fun (z : KExpr) (sz : whnf_step t z) => \
                  AndType.left (whnf_acc z) {pwc_z} (hall z sz))) \
                  (fun (x : KExpr) (hx : RedW k ty x) => \
@@ -709,7 +709,7 @@ impl Specification {
         let pi_arm = format!(
             "(fun (ty : KExpr) (bb : KExpr) (j0 : {ihty}) (j1 : {ihbb}) => \
              fun (hh : RedWInner (RedW k) x (KExpr.pi ty bb)) (st : whnf_step x y) => \
-             AndType.intro (whnf_acc y) \
+             @AndType.intro (whnf_acc y) \
              (forall (z : KExpr), RedW k ty z -> \
              RedW k (instantiate bb z) (KExpr.app y z)) \
              (whnf_acc_step x y \
@@ -726,19 +726,19 @@ impl Specification {
             ihbb = ih_ty("bb"),
         );
         let body_open = format!(
-            "Nat.rec (fun (kk : Nat) => forall (T : KExpr) (x : KExpr) (y : KExpr), \
+            "@Nat.rec (fun (kk : Nat) => forall (T : KExpr) (x : KExpr) (y : KExpr), \
              RedW kk T x -> whnf_step x y -> RedW kk T y) \
              (fun (T : KExpr) (x : KExpr) (y : KExpr) (h : whnf_acc x) \
              (st : whnf_step x y) => whnf_acc_step x y h st) \
              (fun (k : Nat) (ih : forall (T : KExpr) (x : KExpr) (y : KExpr), \
              RedW k T x -> whnf_step x y -> RedW k T y) => \
              fun (T : KExpr) (x : KExpr) (y : KExpr) => \
-             OptionType.rec KExpr \
+             @OptionType.rec KExpr \
              (fun (o : OptionType KExpr) => \
              RedWClause (RedW k) x o -> whnf_step x y -> RedWClause (RedW k) y o) \
              ({step_arm}) \
              (fun (U : KExpr) => \
-             KExpr.rec (fun (t0 : KExpr) => \
+             @KExpr.rec (fun (t0 : KExpr) => \
              RedWInner (RedW k) x t0 -> whnf_step x y -> RedWInner (RedW k) y t0) \
              {sort} {bvar} {app} {lam} {pi_arm} {konst} {let_} {proj} {mvar} U) \
              (whnf_fuel_red_wh3 the_red_env (Nat.succ k) T))",
@@ -828,10 +828,10 @@ impl Specification {
         // T e` is defeq to this applied at `whnf_fuel_red_wh3 .. (succ n) T`.
         let clause = format!(
             "(fun (o : OptionType KExpr) => \
-             OptionType.rec KExpr (fun (_o : OptionType KExpr) => Type) \
+             @OptionType.rec KExpr (fun (_o : OptionType KExpr) => Type) \
              ({blind}) \
              (fun (U : KExpr) => \
-             KExpr.rec (fun (_t : KExpr) => Type) \
+             @KExpr.rec (fun (_t : KExpr) => Type) \
              {sort} {bvar} {app} {lam} \
              (fun (ty : KExpr) (bb : KExpr) (i1 : Type) (i2 : Type) => \
              AndType (whnf_acc e) \
@@ -905,9 +905,9 @@ impl Specification {
              RedW k (instantiate B x) (KExpr.app f x)) : \
              RedWStep (KExpr.pi A B) f := \
              fun (n : Nat) => \
-             Nat.rec (fun (k : Nat) => RedW k (KExpr.pi A B) f) hw \
+             @Nat.rec (fun (k : Nat) => RedW k (KExpr.pi A B) f) hw \
              (fun (k : Nat) (_ih : RedW k (KExpr.pi A B) f) => \
-             AndType.intro (whnf_acc f) \
+             @AndType.intro (whnf_acc f) \
              (forall (x : KExpr), RedW k A x -> \
              RedW k (instantiate B x) (KExpr.app f x)) hw (hp k)) n"
                 .to_string(),
@@ -949,7 +949,7 @@ impl Specification {
                      (AndType (whnf_acc e) \
                      (forall (x : KExpr), RedW Nat.zero {s0} x -> \
                      RedW Nat.zero {s0} (KExpr.app e x))) := \
-                     Eq.refl Type (AndType (whnf_acc e) \
+                     @Eq.refl Type (AndType (whnf_acc e) \
                      (forall (x : KExpr), RedW Nat.zero {s0} x -> \
                      RedW Nat.zero {s0} (KExpr.app e x)))"
                 ),
@@ -959,7 +959,7 @@ impl Specification {
                 "def redw_red_sort (nn : Level) (e : KExpr) (h : whnf_acc e) : \
                  RedWStep (KExpr.sort nn) e := \
                  fun (n : Nat) => \
-                 Nat.rec (fun (k : Nat) => RedW k (KExpr.sort nn) e) h \
+                 @Nat.rec (fun (k : Nat) => RedW k (KExpr.sort nn) e) h \
                  (fun (k : Nat) (_ih : RedW k (KExpr.sort nn) e) => h) n"
                     .to_string(),
             ),

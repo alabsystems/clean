@@ -199,8 +199,8 @@ pub fn synth_outcome_obligation(
     let rhs = outcome.clean_term(encoding)?;
     let fuel = super::obligations::ir_numeral(fuel)?;
     Ok(format!(
-        "def {def_name} : Eq IROutcome (ir_eval {fuel} {module} {fid} {tail}) {rhs} \
-         := Eq.refl IROutcome {rhs}"
+        "def {def_name} : @Eq IROutcome (ir_eval {fuel} {module} {fid} {tail}) {rhs} \
+         := @Eq.refl IROutcome {rhs}"
     ))
 }
 
@@ -260,7 +260,7 @@ mod tests {
             "{src}"
         );
         assert!(
-            src.contains(":= Eq.refl IROutcome (IROutcome.ub IRFault.unreachable)"),
+            src.contains(":= @Eq.refl IROutcome (IROutcome.ub IRFault.unreachable)"),
             "{src}"
         );
     }

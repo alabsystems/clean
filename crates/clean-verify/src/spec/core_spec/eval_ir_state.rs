@@ -449,6 +449,15 @@
 use crate::spec::error::SpecError;
 use crate::spec::Specification;
 
+// The foundation declares explicit equality binders; the production prelude
+// follows Lean's implicit binders. `@` supplies the same actual telescope in
+// both environments without asking ordinary elaboration to guess by arity.
+pub(super) const IR_EQ_CONG_SOURCE: &str = concat!(
+    "def ir_eq_cong (A : Type) (B : Type) (f : A -> B) (x : A) (y : A) ",
+    "(h : @Eq A x y) : @Eq B (f x) (f y) := ",
+    "@Eq.subst A (fun (z : A) => @Eq B (f x) (f z)) x y h (@Eq.refl B (f x))",
+);
+
 impl Specification {
     /// Register the `EvalIR` runtime state algebra and its arithmetic /
     /// container substrate.
@@ -644,11 +653,7 @@ impl Specification {
         // prelude marks them implicit. Spell every supplied argument explicitly,
         // independently of binder visibility in either vocabulary.
         self.add_recursive_def(
-            concat!(
-                "def ir_eq_cong (A : Type) (B : Type) (f : A -> B) (x : A) (y : A) ",
-                "(h : @Eq A x y) : @Eq B (f x) (f y) := ",
-                "@Eq.subst A (fun (z : A) => @Eq B (f x) (f z)) x y h (@Eq.refl B (f x))",
-            ),
+            IR_EQ_CONG_SOURCE,
             "Congruence: x = y implies f x = f y. The foundation proves this as `Eq.cong` from \
              based `Eq.rec`; this is the same fact proved from `Eq.subst`, which is the ONE \
              transport primitive carried with an identical argument order by both the spec \
@@ -691,7 +696,7 @@ impl Specification {
                 "(fun (m : Nat) (ih : @Eq Nat (Nat.sub Nat.zero m) Nat.zero) => ",
                 "ir_eq_cong Nat Nat Nat.pred (Nat.sub Nat.zero m) Nat.zero ih) k",
             ),
-            "0 - k = 0, by Nat.rec on k and ir_eq_cong Nat.pred (Nat.sub recurses on its SECOND \
+            "0 - k = 0, by @Nat.rec on k and ir_eq_cong Nat.pred (Nat.sub recurses on its SECOND \
              argument, so the successor case is `Nat.pred (Nat.sub 0 m)`, and `Nat.pred 0` is \
              `0` by iota). A duplicate of the foundation stage's `nat_sub_zero_left` under an \
              `ir_` name for the same reason `ir_nat_eqb` duplicates `nat_eqb`: that one lives \
@@ -712,7 +717,7 @@ impl Specification {
                 "ir_eq_cong Nat Nat Nat.pred ",
                 "(Nat.sub (Nat.succ a) (Nat.succ k)) (Nat.sub a k) ih) b",
             ),
-            "(succ a) - (succ b) = a - b, by Nat.rec on b and ir_eq_cong Nat.pred — Nat.sub \
+            "(succ a) - (succ b) = a - b, by @Nat.rec on b and ir_eq_cong Nat.pred — Nat.sub \
              recurses on its SECOND argument, so the symbolic successor case needs induction \
              rather than Eq.refl. A duplicate of the foundation stage's `nat_sub_succ_succ` \
              under an `ir_` name, for the same reason as ir_nat_sub_zero_left above: neither \
@@ -748,7 +753,7 @@ impl Specification {
             ),
             "Boolean equality on Nat as a PAIRED UNARY WALK — the reference definition, kept \
              so `ir_nat_eqb_walk_eq` has a theorem to state. It peels its FIRST operand one \
-             Nat.rec layer at a time, which is what made a concrete is_valid_char run cost \
+             @Nat.rec layer at a time, which is what made a concrete is_valid_char run cost \
              about its code point. EvalIR substrate (the spec's nat_eqb lives in the rec_env \
              stage, which EvalIR deliberately does not depend on).",
         )?;
@@ -894,8 +899,8 @@ impl Specification {
             "THE LESS-THAN LEMMA FOR THE SUBTRACTION TEST: `ir_nat_sub_ltb` (the core \
              `ir_nat_ltb` lands on after its two peels; from 2026-08-15 to 2026-09-08 it WAS \
              what the machine ran directly) and the paired unary \
-             walk are the SAME PREDICATE, at every pair of arguments. Nat.rec on a with the \
-             motive generalized over b; the zero case is Eq.refl (`ir_nat_ltb_walk 0 y` and \
+             walk are the SAME PREDICATE, at every pair of arguments. @Nat.rec on a with the \
+             motive generalized over b; the zero case is @Eq.refl (`ir_nat_ltb_walk 0 y` and \
              `ir_nat_pos (Nat.sub y 0)` are the same recursor application after delta), the \
              successor case splits on b: at 0 through ir_nat_sub_zero_left, at succ z through \
              ir_nat_sub_succ_succ and the induction hypothesis. Nothing here is about literals — \
@@ -920,7 +925,7 @@ impl Specification {
             ),
             "THE LESS-THAN LEMMA, restated over the peeled comparison: what the machine runs \
              and the paired unary walk are the SAME PREDICATE at every pair of arguments. \
-             Nat.rec on a with the motive generalized over b, then Nat.rec on b. Every case \
+             @Nat.rec on a with the motive generalized over b, then @Nat.rec on b. Every case \
              but one is Eq.refl, because after the two peels both sides are literally the \
              same recursor application: at a = 0 both are `ir_nat_pos y`; at (succ x, 0) both \
              are Bool.false. At (succ x, succ z) the peeled comparison IS `ir_nat_sub_ltb x z` \
@@ -964,10 +969,10 @@ impl Specification {
              same three ingredients as ir_nat_sub_ltb_walk_eq: `ir_nat_sub_eqb` (the core \
              `ir_nat_eqb` lands on after its two peels; the machine's direct comparison from \
              2026-08-15 to 2026-09-08) and the \
-             paired unary walk are the SAME PREDICATE at every pair of arguments. Nat.rec on a \
-             with the motive generalized over b. The zero case is NOT Eq.refl — unlike the \
+             paired unary walk are the SAME PREDICATE at every pair of arguments. @Nat.rec on a \
+             with the motive generalized over b. The zero case is NOT @Eq.refl — unlike the \
              less-than lemma it needs ir_nat_sub_zero_left, because `0 - y` sits under the \
-             Bool.rec scrutinee and does not reduce at a symbolic y; once it is 0 the \
+             @Bool.rec scrutinee and does not reduce at a symbolic y; once it is 0 the \
              scrutinee is true and the true minor is `ir_nat_iszero (y - 0)`, which IS the \
              walk's zero minor after delta. The successor case splits on b: at 0 both sides \
              are Bool.false by iota, at succ z two ir_eq_congs move both subtractions down \
@@ -1070,12 +1075,12 @@ impl Specification {
                 "(ir_nat_ltb x b)) ",
                 "fuel a",
             ),
-            "Fuel-driven quotient by repeated subtraction. Bool.rec minor order is (false, true) \
+            "Fuel-driven quotient by repeated subtraction. @Bool.rec minor order is (false, true) \
              — the kernel declares Bool.false first — so the FIRST minor is the x >= b step and \
              the second is the x < b base. The guard is ir_nat_ltb, which is the subtraction \
              test, and that is the literal-folding lemma cashed in: the loop is IDENTICAL to \
              the walk-guarded one (see ir_div_go_guard) but each guard costs one native BigNat \
-             subtraction instead of min(x,b) Nat.rec unfoldings, which is what made a width-w \
+             subtraction instead of min(x,b) @Nat.rec unfoldings, which is what made a width-w \
              residue cost O(dividend). EvalIR substrate.",
         )?;
 
@@ -1130,7 +1135,7 @@ impl Specification {
                 "def ir_bool_xor (a : Bool) (b : Bool) : Bool := ",
                 "@Bool.rec (fun (_ : Bool) => Bool) b (Bool.not b) a",
             ),
-            "Exclusive or on Bool (Bool.rec minor order is false, true). EvalIR substrate for the \
+            "Exclusive or on Bool (@Bool.rec minor order is false, true). EvalIR substrate for the \
              i1 case of BinOp::Xor.",
         )?;
 

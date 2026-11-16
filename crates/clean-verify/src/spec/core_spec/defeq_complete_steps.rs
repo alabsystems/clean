@@ -127,13 +127,13 @@ impl Specification {
             let (l1, r1) = st.comps[1];
             (
                 format!(
-                    "DefEqFuelAcceptsPair.rec {l0} {r0} {l1} {r1} \
+                    "@DefEqFuelAcceptsPair.rec {l0} {r0} {l1} {r1} \
                      (fun (_p : DefEqFuelAcceptsPair {l0} {r0} {l1} {r1}) => \
                      DefEqFuelAccepts a b) \
                      (fun (k : Nat) \
-                     (hc0 : Eq Bool (def_eq_fuel the_red_env k {l0} {r0}) Bool.true) \
-                     (hc1 : Eq Bool (def_eq_fuel the_red_env k {l1} {r1}) Bool.true) => \
-                     DefEqFuelAccepts.mk a b (Nat.succ (Nat.add n k)) \
+                     (hc0 : @Eq Bool (def_eq_fuel the_red_env k {l0} {r0}) Bool.true) \
+                     (hc1 : @Eq Bool (def_eq_fuel the_red_env k {l1} {r1}) Bool.true) => \
+                     @DefEqFuelAccepts.mk a b (Nat.succ (Nat.add n k)) \
                      ({cong} (Nat.add n k) a b {args} {lega} {legb} {c0} {c1})) \
                      (def_eq_fuel_accepts_pair {l0} {r0} {l1} {r1} w0 w1)",
                     cong = st.cong,
@@ -149,11 +149,11 @@ impl Specification {
             let (l0, r0) = st.comps[0];
             (
                 format!(
-                    "DefEqFuelAccepts.rec {l0} {r0} \
+                    "@DefEqFuelAccepts.rec {l0} {r0} \
                      (fun (_p : DefEqFuelAccepts {l0} {r0}) => DefEqFuelAccepts a b) \
                      (fun (k : Nat) \
-                     (hc0 : Eq Bool (def_eq_fuel the_red_env k {l0} {r0}) Bool.true) => \
-                     DefEqFuelAccepts.mk a b (Nat.succ (Nat.add n k)) \
+                     (hc0 : @Eq Bool (def_eq_fuel the_red_env k {l0} {r0}) Bool.true) => \
+                     @DefEqFuelAccepts.mk a b (Nat.succ (Nat.add n k)) \
                      ({cong} (Nat.add n k) a b {args} {lega} {legb} {c0})) w0",
                     cong = st.cong,
                     args = st.binders_args(),
@@ -167,10 +167,10 @@ impl Specification {
 
         let src = format!(
             "def def_eq_complete_step_{head} (n : Nat) (a : KExpr) (b : KExpr) {binders} \
-             (ha : Eq (OptionType KExpr) (whnf_fuel_red the_red_env n a) \
-             (OptionType.some KExpr {na})) \
-             (hb : Eq (OptionType KExpr) (whnf_fuel_red the_red_env n b) \
-             (OptionType.some KExpr {nb})) {accept_binders} : DefEqFuelAccepts a b := {body}",
+             (ha : @Eq (OptionType KExpr) (whnf_fuel_red the_red_env n a) \
+             (@OptionType.some KExpr {na})) \
+             (hb : @Eq (OptionType KExpr) (whnf_fuel_red the_red_env n b) \
+             (@OptionType.some KExpr {nb})) {accept_binders} : DefEqFuelAccepts a b := {body}",
             head = st.head,
             binders = st.binders,
             na = st.na,

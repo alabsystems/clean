@@ -45,7 +45,7 @@ use crate::spec::Specification;
 /// bodies. Universe-instantiated invariance is derived below, never assumed.
 const DEF_SCHEMATIC_CLOSED_FACT: &str = concat!(
     "forall (dname : Name) (defval : KExpr), ",
-    "Eq (OptionType KExpr) (defval_for env dname) (OptionType.some KExpr defval) -> ",
+    "@Eq (OptionType KExpr) (defval_for env dname) (@OptionType.some KExpr defval) -> ",
     "is_closed_at defval Nat.zero"
 );
 
@@ -76,7 +76,7 @@ instL_preserves_closed_at (paramSubstN (kconst_params (kdef_signature defn)) us)
                 "Schematic closure interface: every raw stored definition body is structurally closed at depth zero. This is not a premise about independently instantiated outputs.",
             )?;
             self.add_recursive_def(
-                &format!("def {prefix}_raw (env : DefEnv) (n : Name) (body : KExpr) (w : {iface} env) (found : Eq (OptionType KExpr) (defval_for env n) (OptionType.some KExpr body)) : is_closed_at body Nat.zero := {iface}.rec env (fun (_ : {iface} env) => is_closed_at body Nat.zero) (fun (hc : {DEF_SCHEMATIC_CLOSED_FACT}) => hc n body found) w"),
+                &format!("def {prefix}_raw (env : DefEnv) (n : Name) (body : KExpr) (w : {iface} env) (found : @Eq (OptionType KExpr) (defval_for env n) (@OptionType.some KExpr body)) : is_closed_at body Nat.zero := @{iface}.rec env (fun (_ : {iface} env) => is_closed_at body Nat.zero) (fun (hc : {DEF_SCHEMATIC_CLOSED_FACT}) => hc n body found) w"),
                 "Project structural closedness of the raw schematic body.",
             )?;
             let (extra, args, instantiate) = if operation == "instantiate_at" {
@@ -98,13 +98,13 @@ instL_preserves_closed_at (paramSubstN (kconst_params (kdef_signature defn)) us)
                 type_src: format!(
                     "forall (env : DefEnv) (n : Name) (body : KExpr) {extra}, \
                      {iface} env -> \
-                     Eq (OptionType KExpr) (defval_for env n) (OptionType.some KExpr body) -> \
-                     Eq KExpr ({operation} body {args}) body"
+                     @Eq (OptionType KExpr) (defval_for env n) (@OptionType.some KExpr body) -> \
+                     @Eq KExpr ({operation} body {args}) body"
                 ),
                 value_src: Some(format!(
                     "fun (env : DefEnv) (n : Name) (body : KExpr) {extra} \
                      (w : {iface} env) \
-                     (found : Eq (OptionType KExpr) (defval_for env n) (OptionType.some KExpr body)) => \
+                     (found : @Eq (OptionType KExpr) (defval_for env n) (@OptionType.some KExpr body)) => \
                      {instantiate}"
                 )),
                 is_axiom: false,
@@ -134,15 +134,15 @@ instL_preserves_closed_at (paramSubstN (kconst_params (kdef_signature defn)) us)
             self.add_recursive_def(
                 &format!(r"def {prefix}_value_at (env : DefEnv) (n : Name) (us : ListType Level) (body : KExpr) {extra}
 (w : {iface} env)
-(found : Eq (OptionType KExpr) (kdef_value_at env n us) (OptionType.some KExpr body)) :
-Eq KExpr ({operation} body {args}) body :=
-kdef_value_at_guard_inv env n us body (Eq KExpr ({operation} body {args}) body) found
+(found : @Eq (OptionType KExpr) (kdef_value_at env n us) (@OptionType.some KExpr body)) :
+@Eq KExpr ({operation} body {args}) body :=
+kdef_value_at_guard_inv env n us body (@Eq KExpr ({operation} body {args}) body) found
   (fun (defn : KDefSig)
-    (lookup : Eq (OptionType KDefSig) (kdef_for env n) (OptionType.some KDefSig defn))
-    (_guard : Eq Bool (nat_eqb (name_list_len (kconst_params (kdef_signature defn))) (level_list_len us)) Bool.true)
-    (result : Eq KExpr body (kdef_inst_value defn us)) =>
-    Eq.substType KExpr (fun (v : KExpr) => Eq KExpr ({operation} v {args}) v)
-      (kdef_inst_value defn us) body (Eq.symm KExpr body (kdef_inst_value defn us) result)
+    (lookup : @Eq (OptionType KDefSig) (kdef_for env n) (@OptionType.some KDefSig defn))
+    (_guard : @Eq Bool (nat_eqb (name_list_len (kconst_params (kdef_signature defn))) (level_list_len us)) Bool.true)
+    (result : @Eq KExpr body (kdef_inst_value defn us)) =>
+    @Eq.substType KExpr (fun (v : KExpr) => @Eq KExpr ({operation} v {args}) v)
+      (kdef_inst_value defn us) body (@Eq.symm KExpr body (kdef_inst_value defn us) result)
       ({derived}))"),
                 "Actual unfolding bodies are invariant under term substitution/lift, derived by guarded-lookup inversion, raw schematic closedness, instL preservation and structural invariance. No per-instantiated-result assumption.",
             )?;
@@ -176,10 +176,10 @@ kdef_value_at_guard_inv env n us body (Eq KExpr ({operation} body {args}) body) 
             ),
         ] {
             let guard = |e: &str| {
-                format!("Eq (OptionType Name) (kexpr_const_name (kapp_fn {e})) (OptionType.some Name n)")
+                format!("@Eq (OptionType Name) (kexpr_const_name (kapp_fn {e})) (@OptionType.some Name n)")
             };
             let goal =
-                |e: &str| format!("Eq KExpr (kapp_fn ({operation} {e} {args})) (kapp_fn {e})");
+                |e: &str| format!("@Eq KExpr (kapp_fn ({operation} {e} {args})) (kapp_fn {e})");
             let ih = |e: &str| format!("{} -> {}", guard(e), goal(e));
             let bad = |e: &str| {
                 format!(
@@ -190,19 +190,19 @@ kdef_value_at_guard_inv env n us body (Eq KExpr ({operation} body {args}) body) 
             };
             let body = format!(
                 r"fun {params} (n : Name) (e : KExpr) =>
-KExpr.rec (fun (e0 : KExpr) => {motive})
+@KExpr.rec (fun (e0 : KExpr) => {motive})
   (fun (u : Level) {sort})
   (fun (i : Nat) {bvar})
   (fun (f : KExpr) (a : KExpr) (ihf : {ihf}) (_iha : {iha}) (h : {app_guard}) =>
-    Eq.trans KExpr (kapp_fn ({operation} (KExpr.app f a) {args}))
+    @Eq.trans KExpr (kapp_fn ({operation} (KExpr.app f a) {args}))
       (kapp_fn ({operation} f {args})) (kapp_fn (KExpr.app f a))
-      (Eq.cong KExpr KExpr kapp_fn ({operation} (KExpr.app f a) {args})
+      (@Eq.cong KExpr KExpr kapp_fn ({operation} (KExpr.app f a) {args})
         (KExpr.app ({operation} f {args}) ({operation} a {args})) ({app_law} f a {args}))
       (ihf h))
   (fun (A : KExpr) (b : KExpr) (_ihA : {ihA}) (_ihb : {ihb}) {lam})
   (fun (A : KExpr) (b : KExpr) (_ihA : {ihA}) (_ihb : {ihb}) {pi})
   (fun (nm : Name) (us : ListType Level) (_h : {const_guard}) =>
-    Eq.cong KExpr KExpr kapp_fn ({operation} (KExpr.const nm us) {args})
+    @Eq.cong KExpr KExpr kapp_fn ({operation} (KExpr.const nm us) {args})
       (KExpr.const nm us) ({const_law} nm us {args}))
   (fun (A : KExpr) (v0 : KExpr) (b : KExpr) (_ihA : {ihA}) (_ihv : {ihv}) (_ihb : {ihb}) {let_})
   (fun (sn : Name) (i : Nat) (sub : KExpr) (_ihsub : {ihsub}) {proj})
@@ -270,48 +270,48 @@ KExpr.rec (fun (e0 : KExpr) => {motive})
 
             // s1 : LHS = B  (kapp_args survives inst under the head-const guard).
             let s1 = format!(
-                "(Eq.cong (ListType KExpr) KExpr (fun (L : ListType KExpr) => apply_spine L val) \
+                "(@Eq.cong (ListType KExpr) KExpr (fun (L : ListType KExpr) => apply_spine L val) \
                  (kapp_args (instantiate_at e v d)) (list_map {fmap} (kapp_args e)) \
                  (instantiate_at_kapp_args_const v d dname e h1))"
             );
             // s2 : B = C  (the whole val is fixed by inst — closed env).
             let s2 = format!(
-                "(Eq.cong KExpr KExpr (fun (Y : KExpr) => apply_spine (list_map {fmap} (kapp_args e)) Y) \
+                "(@Eq.cong KExpr KExpr (fun (Y : KExpr) => apply_spine (list_map {fmap} (kapp_args e)) Y) \
                  val (instantiate_at val v d) \
-                 (Eq.symm KExpr (instantiate_at val v d) val \
+                 (@Eq.symm KExpr (instantiate_at val v d) val \
                  (defenv_closed_value_at env dname (kexpr_const_levels (kapp_fn e)) val v d closed h2)))"
             );
             // s3 : C = MID  (symm of instantiate_at_apply_spine).
             let s3 = format!(
-                "(Eq.symm KExpr {mid} {c} (instantiate_at_apply_spine (kapp_args e) val v d))"
+                "(@Eq.symm KExpr {mid} {c} (instantiate_at_apply_spine (kapp_args e) val v d))"
             );
             // LHS = MID via s1 ∘ s2 ∘ s3.
             let lhs_to_mid = format!(
-                "(Eq.trans KExpr {lhs} {b} {mid} {s1} (Eq.trans KExpr {b} {c} {mid} {s2} {s3}))"
+                "(@Eq.trans KExpr {lhs} {b} {mid} {s1} (@Eq.trans KExpr {b} {c} {mid} {s2} {s3}))"
             );
             // MID = RHS via cong F on option_some_inj h2r.
             let mid_to_rhs = format!(
-                "(Eq.cong KExpr KExpr {fmap} (apply_spine (kapp_args e) val) e' \
+                "(@Eq.cong KExpr KExpr {fmap} (apply_spine (kapp_args e) val) e' \
                  (option_some_inj KExpr (apply_spine (kapp_args e) val) e' h2r))"
             );
             let value = format!(
                 "fun (env : DefEnv) (v : KExpr) (d : Nat) (e : KExpr) (e' : KExpr) \
                  (dname : Name) (val : KExpr) \
                  (closed : DefEnvClosed env) \
-                 (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name dname)) \
-                 (h2 : Eq (OptionType KExpr) (kdef_value_at env dname (kexpr_const_levels (kapp_fn e))) (OptionType.some KExpr val)) \
-                 (h2r : Eq (OptionType KExpr) (OptionType.some KExpr (apply_spine (kapp_args e) val)) (OptionType.some KExpr e')) => \
-                 Eq.trans KExpr {lhs} {mid} {rhs} {lhs_to_mid} {mid_to_rhs}"
+                 (h1 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (@OptionType.some Name dname)) \
+                 (h2 : @Eq (OptionType KExpr) (kdef_value_at env dname (kexpr_const_levels (kapp_fn e))) (@OptionType.some KExpr val)) \
+                 (h2r : @Eq (OptionType KExpr) (@OptionType.some KExpr (apply_spine (kapp_args e) val)) (@OptionType.some KExpr e')) => \
+                 @Eq.trans KExpr {lhs} {mid} {rhs} {lhs_to_mid} {mid_to_rhs}"
             );
             self.add_definition(SpecDefinition {
                 name: "delta_reduct_inst_eq".to_string(),
                 type_src: "forall (env : DefEnv) (v : KExpr) (d : Nat) (e : KExpr) (e' : KExpr) \
                      (dname : Name) (val : KExpr), \
                      DefEnvClosed env -> \
-                     Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name dname) -> \
-                     Eq (OptionType KExpr) (kdef_value_at env dname (kexpr_const_levels (kapp_fn e))) (OptionType.some KExpr val) -> \
-                     Eq (OptionType KExpr) (OptionType.some KExpr (apply_spine (kapp_args e) val)) (OptionType.some KExpr e') -> \
-                     Eq KExpr (apply_spine (kapp_args (instantiate_at e v d)) val) (instantiate_at e' v d)"
+                     @Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (@OptionType.some Name dname) -> \
+                     @Eq (OptionType KExpr) (kdef_value_at env dname (kexpr_const_levels (kapp_fn e))) (@OptionType.some KExpr val) -> \
+                     @Eq (OptionType KExpr) (@OptionType.some KExpr (apply_spine (kapp_args e) val)) (@OptionType.some KExpr e') -> \
+                     @Eq KExpr (apply_spine (kapp_args (instantiate_at e v d)) val) (instantiate_at e' v d)"
                     .to_string(),
                 value_src: Some(value),
                 is_axiom: false,
@@ -354,27 +354,27 @@ KExpr.rec (fun (e0 : KExpr) => {motive})
 
             // The inst-side opt_bind continuations (delta_reduct's def with e:=inst e).
             let f2 = format!(
-                "(fun (val : KExpr) => OptionType.some KExpr (apply_spine (kapp_args {ei}) val))"
+                "(fun (val : KExpr) => @OptionType.some KExpr (apply_spine (kapp_args {ei}) val))"
             );
             let f1 =
                 format!("(fun (dname : Name) => opt_bind KExpr KExpr (kdef_value_at env dname (kexpr_const_levels (kapp_fn {ei}))) {f2})");
 
             // Level-1 inst-side lookup: the head const-name survives inst.
             let h1i = format!(
-                "(Eq.trans (OptionType Name) (kexpr_const_name (kapp_fn {ei})) (kexpr_const_name (kapp_fn e)) (OptionType.some Name dname) \
+                "(@Eq.trans (OptionType Name) (kexpr_const_name (kapp_fn {ei})) (kexpr_const_name (kapp_fn e)) (@OptionType.some Name dname) \
                  (kexpr_const_name_instantiate_const v d dname e h1) h1)"
             );
             // Level-2: some (apply_spine (kapp_args (inst e)) val) = some (inst e') via
             // delta_reduct_inst_eq + cong some.
             let hf2 = format!(
-                "(Eq.cong KExpr (OptionType KExpr) (fun (X : KExpr) => OptionType.some KExpr X) \
+                "(@Eq.cong KExpr (OptionType KExpr) (fun (X : KExpr) => @OptionType.some KExpr X) \
                  (apply_spine (kapp_args {ei}) val) {iep} \
                  (delta_reduct_inst_eq env v d e e' dname val closed h1 h2 h2r))"
             );
 
             // The nested opt_bind_some_intro chain (outside-in, 2 levels).
             let h2i = format!(
-                "(Eq.trans (OptionType KExpr) (kdef_value_at env dname (kexpr_const_levels (kapp_fn {ei}))) (kdef_value_at env dname (kexpr_const_levels (kapp_fn e))) (OptionType.some KExpr val) (Eq.cong KExpr (OptionType KExpr) (fun (head : KExpr) => kdef_value_at env dname (kexpr_const_levels head)) (kapp_fn {ei}) (kapp_fn e) (delta_head_const_invariant_inst v d dname e h1)) h2)"
+                "(@Eq.trans (OptionType KExpr) (kdef_value_at env dname (kexpr_const_levels (kapp_fn {ei}))) (kdef_value_at env dname (kexpr_const_levels (kapp_fn e))) (@OptionType.some KExpr val) (@Eq.cong KExpr (OptionType KExpr) (fun (head : KExpr) => kdef_value_at env dname (kexpr_const_levels head)) (kapp_fn {ei}) (kapp_fn e) (delta_head_const_invariant_inst v d dname e h1)) h2)"
             );
 
             let recon = format!(
@@ -385,20 +385,20 @@ KExpr.rec (fun (e0 : KExpr) => {motive})
             // The continuation k passed to delta_reduct_some_inv (binders match kont).
             let kont_lambda = format!(
                 "(fun (dname : Name) (val : KExpr) \
-                 (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name dname)) \
-                 (h2 : Eq (OptionType KExpr) (kdef_value_at env dname (kexpr_const_levels (kapp_fn e))) (OptionType.some KExpr val)) \
-                 (h2r : Eq (OptionType KExpr) (OptionType.some KExpr (apply_spine (kapp_args e) val)) (OptionType.some KExpr e')) => \
+                 (h1 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (@OptionType.some Name dname)) \
+                 (h2 : @Eq (OptionType KExpr) (kdef_value_at env dname (kexpr_const_levels (kapp_fn e))) (@OptionType.some KExpr val)) \
+                 (h2r : @Eq (OptionType KExpr) (@OptionType.some KExpr (apply_spine (kapp_args e) val)) (@OptionType.some KExpr e')) => \
                  {recon})"
             );
 
             let goal_c = format!(
-                "(Eq (OptionType KExpr) (delta_reduct env {ei}) (OptionType.some KExpr {iep}))"
+                "(@Eq (OptionType KExpr) (delta_reduct env {ei}) (@OptionType.some KExpr {iep}))"
             );
 
             let value = format!(
                 "fun (env : DefEnv) (e : KExpr) (e' : KExpr) (v : KExpr) (d : Nat) \
                  (closed : DefEnvClosed env) \
-                 (h : Eq (OptionType KExpr) (delta_reduct env e) (OptionType.some KExpr e')) => \
+                 (h : @Eq (OptionType KExpr) (delta_reduct env e) (@OptionType.some KExpr e')) => \
                  delta_reduct_some_inv env e e' {goal_c} h {kont_lambda}"
             );
 
@@ -407,8 +407,8 @@ KExpr.rec (fun (e0 : KExpr) => {motive})
                 type_src: concat!(
                     "forall (env : DefEnv) (e : KExpr) (e' : KExpr) (v : KExpr) (d : Nat), ",
                     "DefEnvClosed env -> ",
-                    "Eq (OptionType KExpr) (delta_reduct env e) (OptionType.some KExpr e') -> ",
-                    "Eq (OptionType KExpr) (delta_reduct env (instantiate_at e v d)) (OptionType.some KExpr (instantiate_at e' v d))"
+                    "@Eq (OptionType KExpr) (delta_reduct env e) (@OptionType.some KExpr e') -> ",
+                    "@Eq (OptionType KExpr) (delta_reduct env (instantiate_at e v d)) (@OptionType.some KExpr (instantiate_at e' v d))"
                 )
                 .to_string(),
                 value_src: Some(value),
@@ -462,43 +462,43 @@ KExpr.rec (fun (e0 : KExpr) => {motive})
 
             // s1 : LHS = B  (kapp_args survives lift — UNCONDITIONAL).
             let s1 = format!(
-                "(Eq.cong (ListType KExpr) KExpr (fun (L : ListType KExpr) => apply_spine L val) \
+                "(@Eq.cong (ListType KExpr) KExpr (fun (L : ListType KExpr) => apply_spine L val) \
                  (kapp_args (lift_at e c a)) (list_map {gmap} (kapp_args e)) \
                  (lift_at_kapp_args c a e))"
             );
             // s2 : B = C  (the whole val is fixed by lift — lift-closed env).
             let s2 = format!(
-                "(Eq.cong KExpr KExpr (fun (Y : KExpr) => apply_spine (list_map {gmap} (kapp_args e)) Y) \
+                "(@Eq.cong KExpr KExpr (fun (Y : KExpr) => apply_spine (list_map {gmap} (kapp_args e)) Y) \
                  val (lift_at val c a) \
-                 (Eq.symm KExpr (lift_at val c a) val \
+                 (@Eq.symm KExpr (lift_at val c a) val \
                  (defenv_lift_closed_value_at env dname (kexpr_const_levels (kapp_fn e)) val c a liftclosed h2)))"
             );
             // s3 : C = MID  (symm of lift_at_apply_spine).
             let s3 =
-                format!("(Eq.symm KExpr {mid} {c} (lift_at_apply_spine (kapp_args e) val c a))");
+                format!("(@Eq.symm KExpr {mid} {c} (lift_at_apply_spine (kapp_args e) val c a))");
             let lhs_to_mid = format!(
-                "(Eq.trans KExpr {lhs} {b} {mid} {s1} (Eq.trans KExpr {b} {c} {mid} {s2} {s3}))"
+                "(@Eq.trans KExpr {lhs} {b} {mid} {s1} (@Eq.trans KExpr {b} {c} {mid} {s2} {s3}))"
             );
             let mid_to_rhs = format!(
-                "(Eq.cong KExpr KExpr {gmap} (apply_spine (kapp_args e) val) e' \
+                "(@Eq.cong KExpr KExpr {gmap} (apply_spine (kapp_args e) val) e' \
                  (option_some_inj KExpr (apply_spine (kapp_args e) val) e' h2r))"
             );
             let value = format!(
                 "fun (env : DefEnv) (c : Nat) (a : Nat) (e : KExpr) (e' : KExpr) \
                  (dname : Name) (val : KExpr) \
                  (liftclosed : DefEnvLiftClosed env) \
-                 (h2 : Eq (OptionType KExpr) (kdef_value_at env dname (kexpr_const_levels (kapp_fn e))) (OptionType.some KExpr val)) \
-                 (h2r : Eq (OptionType KExpr) (OptionType.some KExpr (apply_spine (kapp_args e) val)) (OptionType.some KExpr e')) => \
-                 Eq.trans KExpr {lhs} {mid} {rhs} {lhs_to_mid} {mid_to_rhs}"
+                 (h2 : @Eq (OptionType KExpr) (kdef_value_at env dname (kexpr_const_levels (kapp_fn e))) (@OptionType.some KExpr val)) \
+                 (h2r : @Eq (OptionType KExpr) (@OptionType.some KExpr (apply_spine (kapp_args e) val)) (@OptionType.some KExpr e')) => \
+                 @Eq.trans KExpr {lhs} {mid} {rhs} {lhs_to_mid} {mid_to_rhs}"
             );
             self.add_definition(SpecDefinition {
                 name: "delta_reduct_lift_eq".to_string(),
                 type_src: "forall (env : DefEnv) (c : Nat) (a : Nat) (e : KExpr) (e' : KExpr) \
                      (dname : Name) (val : KExpr), \
                      DefEnvLiftClosed env -> \
-                     Eq (OptionType KExpr) (kdef_value_at env dname (kexpr_const_levels (kapp_fn e))) (OptionType.some KExpr val) -> \
-                     Eq (OptionType KExpr) (OptionType.some KExpr (apply_spine (kapp_args e) val)) (OptionType.some KExpr e') -> \
-                     Eq KExpr (apply_spine (kapp_args (lift_at e c a)) val) (lift_at e' c a)"
+                     @Eq (OptionType KExpr) (kdef_value_at env dname (kexpr_const_levels (kapp_fn e))) (@OptionType.some KExpr val) -> \
+                     @Eq (OptionType KExpr) (@OptionType.some KExpr (apply_spine (kapp_args e) val)) (@OptionType.some KExpr e') -> \
+                     @Eq KExpr (apply_spine (kapp_args (lift_at e c a)) val) (lift_at e' c a)"
                     .to_string(),
                 value_src: Some(value),
                 is_axiom: false,
@@ -538,26 +538,26 @@ KExpr.rec (fun (e0 : KExpr) => {motive})
             let epl = "(lift_at e' c a)";
 
             let f2 = format!(
-                "(fun (val : KExpr) => OptionType.some KExpr (apply_spine (kapp_args {el}) val))"
+                "(fun (val : KExpr) => @OptionType.some KExpr (apply_spine (kapp_args {el}) val))"
             );
             let f1 =
                 format!("(fun (dname : Name) => opt_bind KExpr KExpr (kdef_value_at env dname (kexpr_const_levels (kapp_fn {el}))) {f2})");
 
             // Level-1 lift-side lookup: the head const-name survives lift (no guard).
             let h1l = format!(
-                "(Eq.trans (OptionType Name) (kexpr_const_name (kapp_fn {el})) (kexpr_const_name (kapp_fn e)) (OptionType.some Name dname) \
+                "(@Eq.trans (OptionType Name) (kexpr_const_name (kapp_fn {el})) (kexpr_const_name (kapp_fn e)) (@OptionType.some Name dname) \
                  (kexpr_const_name_lift c a e) h1)"
             );
             // Level-2: some (apply_spine (kapp_args (lift e)) val) = some (lift e') via
             // delta_reduct_lift_eq + cong some.
             let hf2 = format!(
-                "(Eq.cong KExpr (OptionType KExpr) (fun (X : KExpr) => OptionType.some KExpr X) \
+                "(@Eq.cong KExpr (OptionType KExpr) (fun (X : KExpr) => @OptionType.some KExpr X) \
                  (apply_spine (kapp_args {el}) val) {epl} \
                  (delta_reduct_lift_eq env c a e e' dname val liftclosed h2 h2r))"
             );
 
             let h2l = format!(
-                "(Eq.trans (OptionType KExpr) (kdef_value_at env dname (kexpr_const_levels (kapp_fn {el}))) (kdef_value_at env dname (kexpr_const_levels (kapp_fn e))) (OptionType.some KExpr val) (Eq.cong KExpr (OptionType KExpr) (fun (head : KExpr) => kdef_value_at env dname (kexpr_const_levels head)) (kapp_fn {el}) (kapp_fn e) (delta_head_const_invariant_lift c a dname e h1)) h2)"
+                "(@Eq.trans (OptionType KExpr) (kdef_value_at env dname (kexpr_const_levels (kapp_fn {el}))) (kdef_value_at env dname (kexpr_const_levels (kapp_fn e))) (@OptionType.some KExpr val) (@Eq.cong KExpr (OptionType KExpr) (fun (head : KExpr) => kdef_value_at env dname (kexpr_const_levels head)) (kapp_fn {el}) (kapp_fn e) (delta_head_const_invariant_lift c a dname e h1)) h2)"
             );
 
             let recon = format!(
@@ -567,20 +567,20 @@ KExpr.rec (fun (e0 : KExpr) => {motive})
 
             let kont_lambda = format!(
                 "(fun (dname : Name) (val : KExpr) \
-                 (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name dname)) \
-                 (h2 : Eq (OptionType KExpr) (kdef_value_at env dname (kexpr_const_levels (kapp_fn e))) (OptionType.some KExpr val)) \
-                 (h2r : Eq (OptionType KExpr) (OptionType.some KExpr (apply_spine (kapp_args e) val)) (OptionType.some KExpr e')) => \
+                 (h1 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (@OptionType.some Name dname)) \
+                 (h2 : @Eq (OptionType KExpr) (kdef_value_at env dname (kexpr_const_levels (kapp_fn e))) (@OptionType.some KExpr val)) \
+                 (h2r : @Eq (OptionType KExpr) (@OptionType.some KExpr (apply_spine (kapp_args e) val)) (@OptionType.some KExpr e')) => \
                  {recon})"
             );
 
             let goal_c = format!(
-                "(Eq (OptionType KExpr) (delta_reduct env {el}) (OptionType.some KExpr {epl}))"
+                "(@Eq (OptionType KExpr) (delta_reduct env {el}) (@OptionType.some KExpr {epl}))"
             );
 
             let value = format!(
                 "fun (env : DefEnv) (e : KExpr) (e' : KExpr) (c : Nat) (a : Nat) \
                  (liftclosed : DefEnvLiftClosed env) \
-                 (h : Eq (OptionType KExpr) (delta_reduct env e) (OptionType.some KExpr e')) => \
+                 (h : @Eq (OptionType KExpr) (delta_reduct env e) (@OptionType.some KExpr e')) => \
                  delta_reduct_some_inv env e e' {goal_c} h {kont_lambda}"
             );
 
@@ -589,8 +589,8 @@ KExpr.rec (fun (e0 : KExpr) => {motive})
                 type_src: concat!(
                     "forall (env : DefEnv) (e : KExpr) (e' : KExpr) (c : Nat) (a : Nat), ",
                     "DefEnvLiftClosed env -> ",
-                    "Eq (OptionType KExpr) (delta_reduct env e) (OptionType.some KExpr e') -> ",
-                    "Eq (OptionType KExpr) (delta_reduct env (lift_at e c a)) (OptionType.some KExpr (lift_at e' c a))"
+                    "@Eq (OptionType KExpr) (delta_reduct env e) (@OptionType.some KExpr e') -> ",
+                    "@Eq (OptionType KExpr) (delta_reduct env (lift_at e c a)) (@OptionType.some KExpr (lift_at e' c a))"
                 )
                 .to_string(),
                 value_src: Some(value),

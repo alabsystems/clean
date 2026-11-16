@@ -233,7 +233,7 @@ fn add(spec: &mut Specification, source: &str) {
 }
 
 fn result(kind: &str) -> String {
-    format!("IROption.some KExpr literal_{kind}_type")
+    format!("@IROption.some KExpr literal_{kind}_type")
 }
 
 fn equality(spec: &mut Specification, name: &str, actual: &str, expected: &str) {
@@ -241,18 +241,18 @@ fn equality(spec: &mut Specification, name: &str, actual: &str, expected: &str) 
         spec,
         &format!(
             "def {name} : Eq ({RESULT}) ({actual}) ({expected}) :=
-              Eq.refl ({RESULT}) ({expected})"
+              @Eq.refl ({RESULT}) ({expected})"
         ),
     );
 }
 
 fn fixture(spec: &mut Specification, name: &str, word: &[u16]) {
     let bytes = word.iter().enumerate().rev().fold(
-        "IROption.none Nat".to_string(),
+        "@IROption.none Nat".to_string(),
         |tail, (index, byte)| {
             format!(
-                "Bool.rec (fun (_ : Bool) => IROption Nat) ({tail})
-                  (IROption.some Nat {byte}) (ir_nat_eqb address {})",
+                "@Bool.rec (fun (_ : Bool) => IROption Nat) ({tail})
+                  (@IROption.some Nat {byte}) (ir_nat_eqb address {})",
                 65 + index
             )
         },
@@ -261,8 +261,8 @@ fn fixture(spec: &mut Specification, name: &str, word: &[u16]) {
         spec,
         &format!(
             "def {name} : IRByteMemoryV1 := IRByteMemoryV1.mk
-              (IRList.cons IRByteAllocationV1 (IRByteAllocationV1.mk 64 16 7 Bool.true)
-                (IRList.nil IRByteAllocationV1)) (fun (address : Nat) => {bytes}) 1024"
+              (@IRList.cons IRByteAllocationV1 (IRByteAllocationV1.mk 64 16 7 Bool.true)
+                (@IRList.nil IRByteAllocationV1)) (fun (address : Nat) => {bytes}) 1024"
         ),
     );
 }
@@ -291,21 +291,21 @@ fn byte_literal_joint_maps_atoms_to_existing_builtin_aliases_without_numeric_tag
                 &format!(
                     "def joint_atom_{kind} :
                       Eq KExpr (ir_byte_builtin_literal_type_v1 IRBuiltinNameAtomV1.{kind}_)
-                        literal_{kind}_type := Eq.refl KExpr literal_{kind}_type"
+                        literal_{kind}_type := @Eq.refl KExpr literal_{kind}_type"
                 ),
             );
             equality(
                 &mut spec,
                 &format!("joint_option_{kind}"),
-                &format!("ir_byte_literal_type_result_v1 (IROption.some IRBuiltinNameAtomV1 IRBuiltinNameAtomV1.{kind}_ )"),
+                &format!("ir_byte_literal_type_result_v1 (@IROption.some IRBuiltinNameAtomV1 IRBuiltinNameAtomV1.{kind}_ )"),
                 &result(kind),
             );
         }
         equality(
             &mut spec,
             "joint_none_stays_none",
-            "ir_byte_literal_type_result_v1 (IROption.none IRBuiltinNameAtomV1)",
-            "IROption.none KExpr",
+            "ir_byte_literal_type_result_v1 (@IROption.none IRBuiltinNameAtomV1)",
+            "@IROption.none KExpr",
         );
     });
 }
@@ -323,11 +323,11 @@ fn byte_literal_joint_input_laws_derive_both_model_results_from_bytes() {
             for (index, byte) in word.iter().enumerate() {
                 premises.push_str(&format!(
                     " (byte{index} : Eq (IROption Nat) (bytes ({address}))
-                      (IROption.some Nat {byte}))"
+                      (@IROption.some Nat {byte}))"
                 ));
                 arguments.push_str(&format!(" byte{index}"));
                 inhabited.push_str(&format!(
-                    " (Eq.refl (IROption Nat) (IROption.some Nat {byte}))"
+                    " (@Eq.refl (IROption Nat) (@IROption.some Nat {byte}))"
                 ));
                 address = format!("Nat.succ ({address})");
             }
@@ -354,7 +354,7 @@ fn byte_literal_joint_input_laws_derive_both_model_results_from_bytes() {
                       (ir_byte_literal_type_v1 {memory} IRTy.fatstr_ (IRScalar.fat_ 65 {length}))
                       ({expected}) := ir_byte_literal_{kind}_input_v1
                         (ir_byte_mem_allocs_v1 {memory}) (ir_byte_mem_bytes_v1 {memory}) 1024 65
-                        (Nat.le_add_right 66 {}) (Eq.refl Bool Bool.true) {inhabited}",
+                        (Nat.le_add_right 66 {}) (@Eq.refl Bool Bool.true) {inhabited}",
                     (1_u128 << 64) - 66
                 ),
             );
@@ -384,7 +384,7 @@ fn byte_literal_joint_wrong_nominal_kinds_and_corrupt_bytes_do_not_map() {
                         "ir_byte_literal_type_v1 {memory} ({ty}) (IRScalar.fat_ 65 {})",
                         word.len()
                     ),
-                    "IROption.none KExpr",
+                    "@IROption.none KExpr",
                 );
             }
             let mut wrong = word.to_vec();
@@ -398,7 +398,7 @@ fn byte_literal_joint_wrong_nominal_kinds_and_corrupt_bytes_do_not_map() {
                     "ir_byte_literal_type_v1 {memory} IRTy.fatstr_ (IRScalar.fat_ 65 {})",
                     word.len()
                 ),
-                "IROption.none KExpr",
+                "@IROption.none KExpr",
             );
         }
     });
@@ -415,7 +415,7 @@ fn byte_literal_joint_swapped_model_types_are_semantic_proof_failures() {
             let wrong = result(WORDS[1 - index].0);
             let source = format!(
                 "def {name} : Eq ({RESULT}) (ir_byte_literal_type_v1 {memory}
-                  IRTy.fatstr_ (IRScalar.fat_ 65 {})) ({wrong}) := Eq.refl ({RESULT}) ({wrong})",
+                  IRTy.fatstr_ (IRScalar.fat_ 65 {})) ({wrong}) := @Eq.refl ({RESULT}) ({wrong})",
                 word.len()
             );
             let error = spec
@@ -442,11 +442,11 @@ fn byte_literal_joint_initialized_bytes_derive_inference_and_typing() {
             for (index, byte) in word.iter().enumerate() {
                 premises.push_str(&format!(
                     " (byte{index} : Eq (IROption Nat) (bytes ({address}))
-                      (IROption.some Nat {byte}))"
+                      (@IROption.some Nat {byte}))"
                 ));
                 arguments.push_str(&format!(" byte{index}"));
                 inhabited.push_str(&format!(
-                    " (Eq.refl (IROption Nat) (IROption.some Nat {byte}))"
+                    " (@Eq.refl (IROption Nat) (@IROption.some Nat {byte}))"
                 ));
                 address = format!("Nat.succ ({address})");
             }
@@ -478,7 +478,7 @@ fn byte_literal_joint_initialized_bytes_derive_inference_and_typing() {
                               (IRScalar.fat_ 65 {length})) :=
                           ir_byte_literal_{kind}_{judgment}_input_v1 tenv G payload
                             (ir_byte_mem_allocs_v1 {memory}) (ir_byte_mem_bytes_v1 {memory}) 1024 65
-                            (Nat.le_add_right 66 {}) (Eq.refl Bool Bool.true) {inhabited}",
+                            (Nat.le_add_right 66 {}) (@Eq.refl Bool Bool.true) {inhabited}",
                         (1_u128 << 64) - 66
                     ),
                 );
@@ -510,7 +510,7 @@ fn byte_literal_joint_failed_observations_cannot_be_typed_as_success() {
                 &format!(
                     "def joint_{judgment}_none_is_empty
                       (tenv : KDeclEnv) (G : ListType KExpr) (input : KExpr)
-                      (h : ir_byte_literal_{judgment}_v1 tenv G input (IROption.none KExpr)) :
+                      (h : ir_byte_literal_{judgment}_v1 tenv G input (@IROption.none KExpr)) :
                       Empty := h"
                 ),
             );
@@ -533,7 +533,7 @@ fn byte_literal_joint_failed_observations_cannot_be_typed_as_success() {
                             "def {name} (tenv : KDeclEnv) (G : ListType KExpr) (payload : Nat) :
                               ir_byte_literal_{judgment}_v1 tenv G (literal_{kind} payload)
                                 (ir_byte_literal_type_v1 {selected_memory} {ty}
-                                  (IRScalar.fat_ 65 {})) := {relation}.lit_{kind} tenv G payload",
+                                  (IRScalar.fat_ 65 {})) := @{relation}.lit_{kind} tenv G payload",
                             word.len()
                         ),
                     );
@@ -561,7 +561,7 @@ fn byte_literal_joint_exact_inference_rejects_the_other_literal_kind() {
                     "def {name} (tenv : KDeclEnv) (G : ListType KExpr) (payload : Nat) :
                       ir_byte_literal_infers_v1 tenv G (literal_{other} payload)
                         (ir_byte_literal_type_v1 {memory} IRTy.fatstr_
-                          (IRScalar.fat_ 65 {})) := KernelInfers.lit_{other} tenv G payload",
+                          (IRScalar.fat_ 65 {})) := @KernelInfers.lit_{other} tenv G payload",
                     word.len()
                 ),
             );

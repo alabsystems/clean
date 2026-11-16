@@ -57,7 +57,7 @@ impl Specification {
                     "(wd : DefEnvWellformed the_red_env) ",
                     "(wr : RecEnvWellformed (red_rec the_red_env)) ",
                     "(h1 : has_type e T1) (h2 : has_type e T2) => ",
-                    "Typing.rec ",
+                    "@Typing.rec ",
                     // Motive: P(e, T1, _) = ∀ T2, Typing e T2 → DefEq T1 T2
                     "(fun (e0 : KExpr) (T0 : KExpr) (_ : Typing e0 T0) => ",
                     "forall (T2 : KExpr), Typing e0 T2 -> DefEq T0 T2) ",
@@ -93,20 +93,20 @@ impl Specification {
                     "DefEq.trans (KExpr.sort (Level.imax _n m)) (KExpr.sort (Level.imax n2 m2)) T2 ",
                     // Bridge: DefEq (Sort (imax_nat _n m)) (Sort (imax_nat n2 m2))
                     // via Eq.substType from Eq KExpr built by sort injectivity + imax_nat congruence
-                    "(Eq.substType KExpr (fun (x : KExpr) => DefEq x (KExpr.sort (Level.imax n2 m2))) ",
+                    "(@Eq.substType KExpr (fun (x : KExpr) => DefEq x (KExpr.sort (Level.imax n2 m2))) ",
                     "(KExpr.sort (Level.imax n2 m2)) (KExpr.sort (Level.imax _n m)) ",
-                    "(Eq.symm KExpr (KExpr.sort (Level.imax _n m)) (KExpr.sort (Level.imax n2 m2)) ",
+                    "(@Eq.symm KExpr (KExpr.sort (Level.imax _n m)) (KExpr.sort (Level.imax n2 m2)) ",
                     // Eq KExpr (Sort (imax_nat _n m)) (Sort (imax_nat n2 m2))
-                    "(Eq.cong Level KExpr KExpr.sort (Level.imax _n m) (Level.imax n2 m2) ",
+                    "(@Eq.cong Level KExpr KExpr.sort (Level.imax _n m) (Level.imax n2 m2) ",
                     // Eq Level (Level.imax _n m) (Level.imax n2 m2)
-                    "(Eq.trans Level (Level.imax _n m) (Level.imax n2 m) (Level.imax n2 m2) ",
+                    "(@Eq.trans Level (Level.imax _n m) (Level.imax n2 m) (Level.imax n2 m2) ",
                     // Eq Level (Level.imax _n m) (Level.imax n2 m) — congruence in first arg
-                    "(Eq.cong Level Level (fun (x : Level) => Level.imax x m) _n n2 ",
+                    "(@Eq.cong Level Level (fun (x : Level) => Level.imax x m) _n n2 ",
                     // Eq Nat _n n2 — sort injectivity on ihA via sort_def_eq_eq + Eq.cong
                     // Part of #464 Packet C: retired def_eq_to_eq in favor of
                     // the Sort-specialized Church-Rosser lemma from Packet A.
-                    "(Eq.cong KExpr Level ",
-                    "(fun (e : KExpr) => KExpr.rec (fun (_ : KExpr) => Level) ",
+                    "(@Eq.cong KExpr Level ",
+                    "(fun (e : KExpr) => @KExpr.rec (fun (_ : KExpr) => Level) ",
                     "(fun (k : Level) => k) (fun (_ : Nat) => _n) ",
                     "(fun (_ : KExpr) (_ : KExpr) (_ : Level) (_ : Level) => _n) ",
                     "(fun (_ : KExpr) (_ : KExpr) (_ : Level) (_ : Level) => _n) ",
@@ -120,11 +120,11 @@ impl Specification {
                     "(KExpr.sort _n) (KExpr.sort n2) ",
                     "(sort_def_eq_eq hf _n n2 (ihA (KExpr.sort n2) hAn2)))) ",
                     // Eq Level (Level.imax n2 m) (Level.imax n2 m2) — congruence in second arg
-                    "(Eq.cong Level Level (fun (y : Level) => Level.imax n2 y) m m2 ",
+                    "(@Eq.cong Level Level (fun (y : Level) => Level.imax n2 y) m m2 ",
                     // Eq Level m m2 — sort injectivity on ihB via sort_def_eq_eq + Eq.cong
                     // Part of #464 Packet C.
-                    "(Eq.cong KExpr Level ",
-                    "(fun (e : KExpr) => KExpr.rec (fun (_ : KExpr) => Level) ",
+                    "(@Eq.cong KExpr Level ",
+                    "(fun (e : KExpr) => @KExpr.rec (fun (_ : KExpr) => Level) ",
                     "(fun (k : Level) => k) (fun (_ : Nat) => m) ",
                     "(fun (_ : KExpr) (_ : KExpr) (_ : Level) (_ : Level) => m) ",
                     "(fun (_ : KExpr) (_ : KExpr) (_ : Level) (_ : Level) => m) ",
@@ -345,13 +345,13 @@ impl Specification {
                 "(wd : DefEnvWellformed the_red_env) ",
                 "(wr : RecEnvWellformed (red_rec the_red_env)) ",
                 "(h : typing_is_def_eq e e') => ",
-                "TypedDefEq.rec ",
+                "@TypedDefEq.rec ",
                 // Motive P
                 "(fun (a : KExpr) (b : KExpr) (_h : TypedDefEq a b) => ",
                 "AndType (forall (T : KExpr), has_type a T -> has_type b T) ",
                 "(forall (T : KExpr), has_type b T -> has_type a T)) ",
                 // Case: refl — identity in both directions
-                "(fun (a : KExpr) => AndType.intro ",
+                "(fun (a : KExpr) => @AndType.intro ",
                 "(forall (T : KExpr), has_type a T -> has_type a T) ",
                 "(forall (T : KExpr), has_type a T -> has_type a T) ",
                 "(fun (T : KExpr) (ht : has_type a T) => ht) ",
@@ -360,7 +360,7 @@ impl Specification {
                 "(fun (a : KExpr) (b : KExpr) (_h : TypedDefEq a b) ",
                 "(ih : AndType (forall (T : KExpr), has_type a T -> has_type b T) ",
                 "(forall (T : KExpr), has_type b T -> has_type a T)) => ",
-                "AndType.intro ",
+                "@AndType.intro ",
                 "(forall (T : KExpr), has_type b T -> has_type a T) ",
                 "(forall (T : KExpr), has_type a T -> has_type b T) ",
                 "(AndType.right ",
@@ -376,7 +376,7 @@ impl Specification {
                 "(forall (T : KExpr), has_type b T -> has_type a T)) ",
                 "(ih_bc : AndType (forall (T : KExpr), has_type b T -> has_type c T) ",
                 "(forall (T : KExpr), has_type c T -> has_type b T)) => ",
-                "AndType.intro ",
+                "@AndType.intro ",
                 "(forall (T : KExpr), has_type a T -> has_type c T) ",
                 "(forall (T : KExpr), has_type c T -> has_type a T) ",
                 "(fun (T : KExpr) (ht : has_type a T) => ",
@@ -396,7 +396,7 @@ impl Specification {
                 "(fun (A : KExpr) (body : KExpr) (arg : KExpr) ",
                 "(B : KExpr) (u : Level) (hA : Typing A (KExpr.sort u)) ",
                 "(hbody : Typing body B) (harg : Typing arg A) => ",
-                "AndType.intro ",
+                "@AndType.intro ",
                 "(forall (T : KExpr), has_type (KExpr.app (KExpr.lam A body) arg) T -> has_type (instantiate body arg) T) ",
                 "(forall (T : KExpr), has_type (instantiate body arg) T -> has_type (KExpr.app (KExpr.lam A body) arg) T) ",
                 "(fun (T : KExpr) (ht : has_type (KExpr.app (KExpr.lam A body) arg) T) => ",
@@ -411,7 +411,7 @@ impl Specification {
                 "(forall (T : KExpr), has_type f' T -> has_type f T)) ",
                 "(ih_a : AndType (forall (T : KExpr), has_type a T -> has_type a' T) ",
                 "(forall (T : KExpr), has_type a' T -> has_type a T)) => ",
-                "AndType.intro ",
+                "@AndType.intro ",
                 "(forall (T : KExpr), has_type (KExpr.app f a) T -> has_type (KExpr.app f' a') T) ",
                 "(forall (T : KExpr), has_type (KExpr.app f' a') T -> has_type (KExpr.app f a) T) ",
                 "(fun (T : KExpr) (ht : has_type (KExpr.app f a) T) => ",
@@ -434,7 +434,7 @@ impl Specification {
                 "(forall (T : KExpr), has_type A' T -> has_type A T)) ",
                 "(ih_b : AndType (forall (T : KExpr), has_type b T -> has_type b' T) ",
                 "(forall (T : KExpr), has_type b' T -> has_type b T)) => ",
-                "AndType.intro ",
+                "@AndType.intro ",
                 "(forall (T : KExpr), has_type (KExpr.lam A b) T -> has_type (KExpr.lam A' b') T) ",
                 "(forall (T : KExpr), has_type (KExpr.lam A' b') T -> has_type (KExpr.lam A b) T) ",
                 "(fun (T : KExpr) (ht : has_type (KExpr.lam A b) T) => ",
@@ -457,7 +457,7 @@ impl Specification {
                 "(forall (T : KExpr), has_type A' T -> has_type A T)) ",
                 "(ih_B : AndType (forall (T : KExpr), has_type B T -> has_type B' T) ",
                 "(forall (T : KExpr), has_type B' T -> has_type B T)) => ",
-                "AndType.intro ",
+                "@AndType.intro ",
                 "(forall (T : KExpr), has_type (KExpr.pi A B) T -> has_type (KExpr.pi A' B') T) ",
                 "(forall (T : KExpr), has_type (KExpr.pi A' B') T -> has_type (KExpr.pi A B) T) ",
                 "(fun (T : KExpr) (ht : has_type (KExpr.pi A B) T) => ",
@@ -474,14 +474,14 @@ impl Specification {
                 "(forall (U : KExpr), has_type B' U -> has_type B U) ih_B))) ",
                 // Case: delta — use delta_type_preservation_fwd/bwd
                 "(fun (e_d : KExpr) (e_d' : KExpr) (hd : delta_reduces e_d e_d') => ",
-                "AndType.intro ",
+                "@AndType.intro ",
                 "(forall (T : KExpr), has_type e_d T -> has_type e_d' T) ",
                 "(forall (T : KExpr), has_type e_d' T -> has_type e_d T) ",
                 "(delta_type_preservation_fwd e_d e_d' wd hd) ",
                 "(delta_type_preservation_bwd e_d e_d' wd hd)) ",
                 // Case: iota — use iota_type_preservation_fwd/bwd
                 "(fun (e_i : KExpr) (e_i' : KExpr) (hi : iota_reduces e_i e_i') => ",
-                "AndType.intro ",
+                "@AndType.intro ",
                 "(forall (T : KExpr), has_type e_i T -> has_type e_i' T) ",
                 "(forall (T : KExpr), has_type e_i' T -> has_type e_i T) ",
                 "(iota_type_preservation_fwd e_i e_i' wr hi) ",

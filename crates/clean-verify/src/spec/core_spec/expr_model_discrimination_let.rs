@@ -20,7 +20,7 @@ use crate::spec::Specification;
 
 /// Large-elimination discriminator: Let_ -> Empty, every other ctor -> Nat.
 const KEXPR_NOT_LET_INLINE: &str = concat!(
-    "(KExpr.rec (fun (_ : KExpr) => Type) ",
+    "(@KExpr.rec (fun (_ : KExpr) => Type) ",
     "(fun (_ : Level) => Nat) ",
     "(fun (_ : Nat) => Nat) ",
     "(fun (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) => Nat) ",
@@ -34,7 +34,7 @@ const KEXPR_NOT_LET_INLINE: &str = concat!(
 
 /// Large-elimination discriminator: App -> Empty, every other ctor -> Nat.
 const KEXPR_NOT_APP_INLINE: &str = concat!(
-    "(KExpr.rec (fun (_ : KExpr) => Type) ",
+    "(@KExpr.rec (fun (_ : KExpr) => Type) ",
     "(fun (_ : Level) => Nat) ",
     "(fun (_ : Nat) => Nat) ",
     "(fun (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) => Empty) ",
@@ -48,7 +48,7 @@ const KEXPR_NOT_APP_INLINE: &str = concat!(
 
 /// Large-elimination discriminator: Lam -> Empty, every other ctor -> Nat.
 const KEXPR_NOT_LAM_INLINE: &str = concat!(
-    "(KExpr.rec (fun (_ : KExpr) => Type) ",
+    "(@KExpr.rec (fun (_ : KExpr) => Type) ",
     "(fun (_ : Level) => Nat) ",
     "(fun (_ : Nat) => Nat) ",
     "(fun (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) => Nat) ",
@@ -62,7 +62,7 @@ const KEXPR_NOT_LAM_INLINE: &str = concat!(
 
 /// Large-elimination discriminator: Pi -> Empty, every other ctor -> Nat.
 const KEXPR_NOT_PI_INLINE: &str = concat!(
-    "(KExpr.rec (fun (_ : KExpr) => Type) ",
+    "(@KExpr.rec (fun (_ : KExpr) => Type) ",
     "(fun (_ : Level) => Nat) ",
     "(fun (_ : Nat) => Nat) ",
     "(fun (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) => Nat) ",
@@ -76,7 +76,7 @@ const KEXPR_NOT_PI_INLINE: &str = concat!(
 
 /// Large-elimination discriminator: Proj -> Empty, every other ctor -> Nat.
 const KEXPR_NOT_PROJ_INLINE: &str = concat!(
-    "(KExpr.rec (fun (_ : KExpr) => Type) ",
+    "(@KExpr.rec (fun (_ : KExpr) => Type) ",
     "(fun (_ : Level) => Nat) ",
     "(fun (_ : Nat) => Nat) ",
     "(fun (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) => Nat) ",
@@ -228,15 +228,15 @@ impl Specification {
             self.add_definition(SpecDefinition {
                 name: c.name.to_string(),
                 type_src: format!(
-                    "forall {binders} (R : Type), Eq KExpr {lhs} {rhs} -> R",
+                    "forall {binders} (R : Type), @Eq KExpr {lhs} {rhs} -> R",
                     binders = c.binders,
                     lhs = c.lhs,
                     rhs = c.rhs,
                 ),
                 value_src: Some(format!(
-                    "fun {binders} (R : Type) (h : Eq KExpr {lhs} {rhs}) => \
-                     Empty.rec (fun (_ : Empty) => R) \
-                     (Eq.substType KExpr {discr} {lhs} {rhs} h Nat.zero)",
+                    "fun {binders} (R : Type) (h : @Eq KExpr {lhs} {rhs}) => \
+                     @Empty.rec (fun (_ : Empty) => R) \
+                     (@Eq.substType KExpr {discr} {lhs} {rhs} h Nat.zero)",
                     binders = c.binders,
                     lhs = c.lhs,
                     rhs = c.rhs,
@@ -278,21 +278,21 @@ impl Specification {
                 name: "let_inj_fst",
                 proj_var: "(fun (t : KExpr) (_ : KExpr) (_ : KExpr) (_ : KExpr) (_ : KExpr) (_ : KExpr) => t)",
                 default: "t1",
-                concl: "Eq KExpr t1 t2",
+                concl: "@Eq KExpr t1 t2",
                 desc: "Let_ injectivity (fst): let_ t1 v1 b1 = let_ t2 v2 b2 -> t1 = t2 (let promotion, task #28).",
             },
             InjCase {
                 name: "let_inj_snd",
                 proj_var: "(fun (_ : KExpr) (v : KExpr) (_ : KExpr) (_ : KExpr) (_ : KExpr) (_ : KExpr) => v)",
                 default: "v1",
-                concl: "Eq KExpr v1 v2",
+                concl: "@Eq KExpr v1 v2",
                 desc: "Let_ injectivity (snd): let_ t1 v1 b1 = let_ t2 v2 b2 -> v1 = v2 (let promotion, task #28).",
             },
             InjCase {
                 name: "let_inj_thd",
                 proj_var: "(fun (_ : KExpr) (_ : KExpr) (b : KExpr) (_ : KExpr) (_ : KExpr) (_ : KExpr) => b)",
                 default: "b1",
-                concl: "Eq KExpr b1 b2",
+                concl: "@Eq KExpr b1 b2",
                 desc: "Let_ injectivity (thd): let_ t1 v1 b1 = let_ t2 v2 b2 -> b1 = b2 (let promotion, task #28).",
             },
         ];
@@ -301,14 +301,14 @@ impl Specification {
                 name: c.name.to_string(),
                 type_src: format!(
                     "forall (t1 : KExpr) (v1 : KExpr) (b1 : KExpr) (t2 : KExpr) (v2 : KExpr) (b2 : KExpr), \
-                     Eq KExpr (KExpr.let_ t1 v1 b1) (KExpr.let_ t2 v2 b2) -> {concl}",
+                     @Eq KExpr (KExpr.let_ t1 v1 b1) (KExpr.let_ t2 v2 b2) -> {concl}",
                     concl = c.concl,
                 ),
                 value_src: Some(format!(
                     "fun (t1 : KExpr) (v1 : KExpr) (b1 : KExpr) (t2 : KExpr) (v2 : KExpr) (b2 : KExpr) \
-                     (h : Eq KExpr (KExpr.let_ t1 v1 b1) (KExpr.let_ t2 v2 b2)) => \
-                     Eq.cong KExpr KExpr \
-                     (fun (e : KExpr) => KExpr.rec (fun (_ : KExpr) => KExpr) \
+                     (h : @Eq KExpr (KExpr.let_ t1 v1 b1) (KExpr.let_ t2 v2 b2)) => \
+                     @Eq.cong KExpr KExpr \
+                     (fun (e : KExpr) => @KExpr.rec (fun (_ : KExpr) => KExpr) \
                        (fun (_ : Level) => {default}) \
                        (fun (_ : Nat) => {default}) \
                        (fun (_ : KExpr) (_ : KExpr) (_ : KExpr) (_ : KExpr) => {default}) \
@@ -364,7 +364,7 @@ impl Specification {
                 motive_ty: "Name",
                 default: "Name.anonymous",
                 proj_arm: "(fun (nm : Name) (_ : Nat) (_ : KExpr) (_ : Name) => nm)",
-                concl: "Eq Name s1 s2",
+                concl: "@Eq Name s1 s2",
                 desc: "Proj injectivity (name): proj s1 i1 sub1 = proj s2 i2 sub2 -> s1 = s2 (proj/lit fragment rung).",
             },
             ProjInjCase {
@@ -372,7 +372,7 @@ impl Specification {
                 motive_ty: "Nat",
                 default: "Nat.zero",
                 proj_arm: "(fun (_ : Name) (idx : Nat) (_ : KExpr) (_ : Nat) => idx)",
-                concl: "Eq Nat i1 i2",
+                concl: "@Eq Nat i1 i2",
                 desc: "Proj injectivity (idx): proj s1 i1 sub1 = proj s2 i2 sub2 -> i1 = i2 (proj/lit fragment rung).",
             },
             ProjInjCase {
@@ -380,7 +380,7 @@ impl Specification {
                 motive_ty: "KExpr",
                 default: "sub1",
                 proj_arm: "(fun (_ : Name) (_ : Nat) (sub : KExpr) (_ : KExpr) => sub)",
-                concl: "Eq KExpr sub1 sub2",
+                concl: "@Eq KExpr sub1 sub2",
                 desc: "Proj injectivity (sub): proj s1 i1 sub1 = proj s2 i2 sub2 -> sub1 = sub2 (proj/lit fragment rung).",
             },
         ];
@@ -389,14 +389,14 @@ impl Specification {
                 name: c.name.to_string(),
                 type_src: format!(
                     "forall (s1 : Name) (i1 : Nat) (sub1 : KExpr) (s2 : Name) (i2 : Nat) (sub2 : KExpr), \
-                     Eq KExpr (KExpr.proj s1 i1 sub1) (KExpr.proj s2 i2 sub2) -> {concl}",
+                     @Eq KExpr (KExpr.proj s1 i1 sub1) (KExpr.proj s2 i2 sub2) -> {concl}",
                     concl = c.concl,
                 ),
                 value_src: Some(format!(
                     "fun (s1 : Name) (i1 : Nat) (sub1 : KExpr) (s2 : Name) (i2 : Nat) (sub2 : KExpr) \
-                     (h : Eq KExpr (KExpr.proj s1 i1 sub1) (KExpr.proj s2 i2 sub2)) => \
-                     Eq.cong KExpr {mty} \
-                     (fun (e : KExpr) => KExpr.rec (fun (_ : KExpr) => {mty}) \
+                     (h : @Eq KExpr (KExpr.proj s1 i1 sub1) (KExpr.proj s2 i2 sub2)) => \
+                     @Eq.cong KExpr {mty} \
+                     (fun (e : KExpr) => @KExpr.rec (fun (_ : KExpr) => {mty}) \
                        (fun (_ : Level) => {default}) \
                        (fun (_ : Nat) => {default}) \
                        (fun (_ : KExpr) (_ : KExpr) (_ : {mty}) (_ : {mty}) => {default}) \

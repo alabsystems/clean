@@ -22,7 +22,7 @@ impl Specification {
         // Part of #461.
         self.add_definition(SpecDefinition {
             name: "lift_zero_identity".to_string(),
-            type_src: "forall (e : KExpr), Eq KExpr (lift e Nat.zero) e".to_string(),
+            type_src: "forall (e : KExpr), @Eq KExpr (lift e Nat.zero) e".to_string(),
             value_src: Some(
                 "fun (e : KExpr) => lift_at_amount_zero e Nat.zero".to_string(),
             ),
@@ -46,15 +46,15 @@ impl Specification {
         // structural induction). Part of #461.
         self.add_definition(SpecDefinition {
             name: "instantiate_bvar_zero".to_string(),
-            type_src: "forall (val : KExpr), Eq KExpr (instantiate (KExpr.bvar Nat.zero) val) val"
+            type_src: "forall (val : KExpr), @Eq KExpr (instantiate (KExpr.bvar Nat.zero) val) val"
                 .to_string(),
             value_src: Some(concat!(
                 "fun (val : KExpr) => ",
-                "Eq.trans KExpr ",
+                "@Eq.trans KExpr ",
                 "(instantiate (KExpr.bvar Nat.zero) val) ",
                 "(lift_at val Nat.zero Nat.zero) ",
                 "val ",
-                "(Eq.trans KExpr ",
+                "(@Eq.trans KExpr ",
                 "(instantiate (KExpr.bvar Nat.zero) val) ",
                 "(instantiate_bvar_at Nat.zero Nat.zero val) ",
                 "(lift_at val Nat.zero Nat.zero) ",
@@ -81,8 +81,8 @@ impl Specification {
         // Derivable by match reduction; safe with symbolic n/val because the constructor is explicit.
         self.add_definition(SpecDefinition {
             name: "instantiate_sort".to_string(),
-            type_src: "forall (n : Level) (val : KExpr), Eq KExpr (instantiate (KExpr.sort n) val) (KExpr.sort n)".to_string(),
-            value_src: Some("fun (n : Level) (val : KExpr) => Eq.refl KExpr (KExpr.sort n)".to_string()),
+            type_src: "forall (n : Level) (val : KExpr), @Eq KExpr (instantiate (KExpr.sort n) val) (KExpr.sort n)".to_string(),
+            value_src: Some("fun (n : Level) (val : KExpr) => @Eq.refl KExpr (KExpr.sort n)".to_string()),
             is_axiom: false,
             description: "instantiate (sort n) val = sort n. Derived by reduction; constructor is explicit.".to_string(),
             category: AxiomCategory::DerivedLemma,
@@ -95,9 +95,9 @@ impl Specification {
 
         self.add_definition(SpecDefinition {
             name: "instantiate_const".to_string(),
-            type_src: "forall (n : Name) (us : ListType Level) (val : KExpr), Eq KExpr (instantiate (KExpr.const n us) val) (KExpr.const n us)".to_string(),
+            type_src: "forall (n : Name) (us : ListType Level) (val : KExpr), @Eq KExpr (instantiate (KExpr.const n us) val) (KExpr.const n us)".to_string(),
             value_src: Some(
-                "fun (n : Name) (us : ListType Level) (val : KExpr) => Eq.refl KExpr (KExpr.const n us)".to_string(),
+                "fun (n : Name) (us : ListType Level) (val : KExpr) => @Eq.refl KExpr (KExpr.const n us)".to_string(),
             ),
             is_axiom: false,
             description: "instantiate (const n us) val = const n us.".to_string(),
@@ -118,9 +118,9 @@ impl Specification {
         // instantiate_at (sort n) val depth = sort n
         self.add_definition(SpecDefinition {
             name: "instantiate_at_sort".to_string(),
-            type_src: "forall (n : Level) (val : KExpr) (depth : Nat), Eq KExpr (instantiate_at (KExpr.sort n) val depth) (KExpr.sort n)".to_string(),
+            type_src: "forall (n : Level) (val : KExpr) (depth : Nat), @Eq KExpr (instantiate_at (KExpr.sort n) val depth) (KExpr.sort n)".to_string(),
             value_src: Some(
-                "fun (n : Level) (val : KExpr) (depth : Nat) => Eq.refl KExpr (KExpr.sort n)"
+                "fun (n : Level) (val : KExpr) (depth : Nat) => @Eq.refl KExpr (KExpr.sort n)"
                     .to_string(),
             ),
             is_axiom: false,
@@ -137,9 +137,9 @@ impl Specification {
 
         self.add_definition(SpecDefinition {
             name: "instantiate_at_const".to_string(),
-            type_src: "forall (n : Name) (us : ListType Level) (val : KExpr) (depth : Nat), Eq KExpr (instantiate_at (KExpr.const n us) val depth) (KExpr.const n us)".to_string(),
+            type_src: "forall (n : Name) (us : ListType Level) (val : KExpr) (depth : Nat), @Eq KExpr (instantiate_at (KExpr.const n us) val depth) (KExpr.const n us)".to_string(),
             value_src: Some(
-                "fun (n : Name) (us : ListType Level) (val : KExpr) (depth : Nat) => Eq.refl KExpr (KExpr.const n us)".to_string(),
+                "fun (n : Name) (us : ListType Level) (val : KExpr) (depth : Nat) => @Eq.refl KExpr (KExpr.const n us)".to_string(),
             ),
             is_axiom: false,
             description: "instantiate_at (const n us) val depth = const n us.".to_string(),
@@ -158,8 +158,8 @@ impl Specification {
         // bypasses this false negative. Part of #661, #461.
         self.add_definition_structural(SpecDefinition {
             name: "instantiate_at_app".to_string(),
-            type_src: "forall (f : KExpr) (a : KExpr) (val : KExpr) (depth : Nat), Eq KExpr (instantiate_at (KExpr.app f a) val depth) (KExpr.app (instantiate_at f val depth) (instantiate_at a val depth))".to_string(),
-            value_src: Some("fun (f : KExpr) (a : KExpr) (val : KExpr) (depth : Nat) => Eq.refl KExpr (KExpr.app (instantiate_at f val depth) (instantiate_at a val depth))".to_string()),
+            type_src: "forall (f : KExpr) (a : KExpr) (val : KExpr) (depth : Nat), @Eq KExpr (instantiate_at (KExpr.app f a) val depth) (KExpr.app (instantiate_at f val depth) (instantiate_at a val depth))".to_string(),
+            value_src: Some("fun (f : KExpr) (a : KExpr) (val : KExpr) (depth : Nat) => @Eq.refl KExpr (KExpr.app (instantiate_at f val depth) (instantiate_at a val depth))".to_string()),
             is_axiom: false,
             description: "instantiate_at distributes over app. DerivedProved via Eq.refl + structural registration (iota false negative bypass). Part of #661, #461.".to_string(),
             category: AxiomCategory::DerivedLemma,
@@ -174,8 +174,8 @@ impl Specification {
         // Same iota false negative bypass as instantiate_at_app. Part of #661, #461.
         self.add_definition_structural(SpecDefinition {
             name: "instantiate_at_lam".to_string(),
-            type_src: "forall (ty : KExpr) (b : KExpr) (val : KExpr) (depth : Nat), Eq KExpr (instantiate_at (KExpr.lam ty b) val depth) (KExpr.lam (instantiate_at ty val depth) (instantiate_at b val (Nat.succ depth)))".to_string(),
-            value_src: Some("fun (ty : KExpr) (b : KExpr) (val : KExpr) (depth : Nat) => Eq.refl KExpr (KExpr.lam (instantiate_at ty val depth) (instantiate_at b val (Nat.succ depth)))".to_string()),
+            type_src: "forall (ty : KExpr) (b : KExpr) (val : KExpr) (depth : Nat), @Eq KExpr (instantiate_at (KExpr.lam ty b) val depth) (KExpr.lam (instantiate_at ty val depth) (instantiate_at b val (Nat.succ depth)))".to_string(),
+            value_src: Some("fun (ty : KExpr) (b : KExpr) (val : KExpr) (depth : Nat) => @Eq.refl KExpr (KExpr.lam (instantiate_at ty val depth) (instantiate_at b val (Nat.succ depth)))".to_string()),
             is_axiom: false,
             description: "instantiate_at distributes over lam (incrementing depth). DerivedProved via Eq.refl + structural registration. Part of #661, #461.".to_string(),
             category: AxiomCategory::DerivedLemma,
@@ -190,8 +190,8 @@ impl Specification {
         // Same iota false negative bypass as instantiate_at_app. Part of #661, #461.
         self.add_definition_structural(SpecDefinition {
             name: "instantiate_at_pi".to_string(),
-            type_src: "forall (ty : KExpr) (b : KExpr) (val : KExpr) (depth : Nat), Eq KExpr (instantiate_at (KExpr.pi ty b) val depth) (KExpr.pi (instantiate_at ty val depth) (instantiate_at b val (Nat.succ depth)))".to_string(),
-            value_src: Some("fun (ty : KExpr) (b : KExpr) (val : KExpr) (depth : Nat) => Eq.refl KExpr (KExpr.pi (instantiate_at ty val depth) (instantiate_at b val (Nat.succ depth)))".to_string()),
+            type_src: "forall (ty : KExpr) (b : KExpr) (val : KExpr) (depth : Nat), @Eq KExpr (instantiate_at (KExpr.pi ty b) val depth) (KExpr.pi (instantiate_at ty val depth) (instantiate_at b val (Nat.succ depth)))".to_string(),
+            value_src: Some("fun (ty : KExpr) (b : KExpr) (val : KExpr) (depth : Nat) => @Eq.refl KExpr (KExpr.pi (instantiate_at ty val depth) (instantiate_at b val (Nat.succ depth)))".to_string()),
             is_axiom: false,
             description: "instantiate_at distributes over pi (incrementing depth). DerivedProved via Eq.refl + structural registration. Part of #661, #461.".to_string(),
             category: AxiomCategory::DerivedLemma,
@@ -208,8 +208,8 @@ impl Specification {
         // Part of the let-promotion surgery (task #28).
         self.add_definition_structural(SpecDefinition {
             name: "instantiate_at_let_".to_string(),
-            type_src: "forall (ty : KExpr) (v : KExpr) (b : KExpr) (val : KExpr) (depth : Nat), Eq KExpr (instantiate_at (KExpr.let_ ty v b) val depth) (KExpr.let_ (instantiate_at ty val depth) (instantiate_at v val depth) (instantiate_at b val (Nat.succ depth)))".to_string(),
-            value_src: Some("fun (ty : KExpr) (v : KExpr) (b : KExpr) (val : KExpr) (depth : Nat) => Eq.refl KExpr (KExpr.let_ (instantiate_at ty val depth) (instantiate_at v val depth) (instantiate_at b val (Nat.succ depth)))".to_string()),
+            type_src: "forall (ty : KExpr) (v : KExpr) (b : KExpr) (val : KExpr) (depth : Nat), @Eq KExpr (instantiate_at (KExpr.let_ ty v b) val depth) (KExpr.let_ (instantiate_at ty val depth) (instantiate_at v val depth) (instantiate_at b val (Nat.succ depth)))".to_string(),
+            value_src: Some("fun (ty : KExpr) (v : KExpr) (b : KExpr) (val : KExpr) (depth : Nat) => @Eq.refl KExpr (KExpr.let_ (instantiate_at ty val depth) (instantiate_at v val depth) (instantiate_at b val (Nat.succ depth)))".to_string()),
             is_axiom: false,
             description: "instantiate_at distributes over let_ (ty/val at depth, body at succ depth). DerivedProved via Eq.refl + structural registration. Part of the let-promotion surgery (task #28).".to_string(),
             category: AxiomCategory::DerivedLemma,
@@ -225,8 +225,8 @@ impl Specification {
         // is a leaf (identity). DerivedProved via Eq.refl + structural registration.
         self.add_definition_structural(SpecDefinition {
             name: "instantiate_at_proj".to_string(),
-            type_src: "forall (s : Name) (i : Nat) (sub : KExpr) (val : KExpr) (depth : Nat), Eq KExpr (instantiate_at (KExpr.proj s i sub) val depth) (KExpr.proj s i (instantiate_at sub val depth))".to_string(),
-            value_src: Some("fun (s : Name) (i : Nat) (sub : KExpr) (val : KExpr) (depth : Nat) => Eq.refl KExpr (KExpr.proj s i (instantiate_at sub val depth))".to_string()),
+            type_src: "forall (s : Name) (i : Nat) (sub : KExpr) (val : KExpr) (depth : Nat), @Eq KExpr (instantiate_at (KExpr.proj s i sub) val depth) (KExpr.proj s i (instantiate_at sub val depth))".to_string(),
+            value_src: Some("fun (s : Name) (i : Nat) (sub : KExpr) (val : KExpr) (depth : Nat) => @Eq.refl KExpr (KExpr.proj s i (instantiate_at sub val depth))".to_string()),
             is_axiom: false,
             description: "instantiate_at descends into a proj scrutinee (no binder, same depth). DerivedProved via Eq.refl + structural registration. Part of the proj/lit fragment rung.".to_string(),
             category: AxiomCategory::DerivedLemma,
@@ -239,8 +239,8 @@ impl Specification {
 
         self.add_definition_structural(SpecDefinition {
             name: "instantiate_at_lit".to_string(),
-            type_src: "forall (v : Nat) (val : KExpr) (depth : Nat), Eq KExpr (instantiate_at (KExpr.lit v) val depth) (KExpr.lit v)".to_string(),
-            value_src: Some("fun (v : Nat) (val : KExpr) (depth : Nat) => Eq.refl KExpr (KExpr.lit v)".to_string()),
+            type_src: "forall (v : Nat) (val : KExpr) (depth : Nat), @Eq KExpr (instantiate_at (KExpr.lit v) val depth) (KExpr.lit v)".to_string(),
+            value_src: Some("fun (v : Nat) (val : KExpr) (depth : Nat) => @Eq.refl KExpr (KExpr.lit v)".to_string()),
             is_axiom: false,
             description: "instantiate_at leaves a literal unchanged (leaf). DerivedProved via Eq.refl + structural registration. Part of the proj/lit fragment rung.".to_string(),
             category: AxiomCategory::DerivedLemma,
@@ -253,8 +253,8 @@ impl Specification {
 
         self.add_definition_structural(SpecDefinition {
             name: "lift_at_proj".to_string(),
-            type_src: "forall (s : Name) (i : Nat) (sub : KExpr) (c : Nat) (a : Nat), Eq KExpr (lift_at (KExpr.proj s i sub) c a) (KExpr.proj s i (lift_at sub c a))".to_string(),
-            value_src: Some("fun (s : Name) (i : Nat) (sub : KExpr) (c : Nat) (a : Nat) => Eq.refl KExpr (KExpr.proj s i (lift_at sub c a))".to_string()),
+            type_src: "forall (s : Name) (i : Nat) (sub : KExpr) (c : Nat) (a : Nat), @Eq KExpr (lift_at (KExpr.proj s i sub) c a) (KExpr.proj s i (lift_at sub c a))".to_string(),
+            value_src: Some("fun (s : Name) (i : Nat) (sub : KExpr) (c : Nat) (a : Nat) => @Eq.refl KExpr (KExpr.proj s i (lift_at sub c a))".to_string()),
             is_axiom: false,
             description: "lift_at descends into a proj scrutinee (no binder, same cutoff). DerivedProved via Eq.refl + structural registration. Part of the proj/lit fragment rung.".to_string(),
             category: AxiomCategory::DerivedLemma,
@@ -267,8 +267,8 @@ impl Specification {
 
         self.add_definition_structural(SpecDefinition {
             name: "lift_at_lit".to_string(),
-            type_src: "forall (v : Nat) (c : Nat) (a : Nat), Eq KExpr (lift_at (KExpr.lit v) c a) (KExpr.lit v)".to_string(),
-            value_src: Some("fun (v : Nat) (c : Nat) (a : Nat) => Eq.refl KExpr (KExpr.lit v)".to_string()),
+            type_src: "forall (v : Nat) (c : Nat) (a : Nat), @Eq KExpr (lift_at (KExpr.lit v) c a) (KExpr.lit v)".to_string(),
+            value_src: Some("fun (v : Nat) (c : Nat) (a : Nat) => @Eq.refl KExpr (KExpr.lit v)".to_string()),
             is_axiom: false,
             description: "lift_at leaves a literal unchanged (leaf). DerivedProved via Eq.refl + structural registration. Part of the proj/lit fragment rung.".to_string(),
             category: AxiomCategory::DerivedLemma,
@@ -285,7 +285,7 @@ impl Specification {
         // instantiate over app distributes — forward through instantiate_at_app at depth 0
         self.add_definition(SpecDefinition {
             name: "instantiate_app".to_string(),
-            type_src: "forall (f : KExpr) (a : KExpr) (val : KExpr), Eq KExpr (instantiate (KExpr.app f a) val) (KExpr.app (instantiate f val) (instantiate a val))".to_string(),
+            type_src: "forall (f : KExpr) (a : KExpr) (val : KExpr), @Eq KExpr (instantiate (KExpr.app f a) val) (KExpr.app (instantiate f val) (instantiate a val))".to_string(),
             value_src: Some(
                 "fun (f : KExpr) (a : KExpr) (val : KExpr) => instantiate_at_app f a val Nat.zero"
                     .to_string(),
@@ -305,7 +305,7 @@ impl Specification {
         // binder-aware instantiate_at theorem at depth 0.
         self.add_definition(SpecDefinition {
             name: "instantiate_lam".to_string(),
-            type_src: "forall (ty : KExpr) (b : KExpr) (val : KExpr), Eq KExpr (instantiate (KExpr.lam ty b) val) (KExpr.lam (instantiate ty val) (instantiate_at b val (Nat.succ Nat.zero)))".to_string(),
+            type_src: "forall (ty : KExpr) (b : KExpr) (val : KExpr), @Eq KExpr (instantiate (KExpr.lam ty b) val) (KExpr.lam (instantiate ty val) (instantiate_at b val (Nat.succ Nat.zero)))".to_string(),
             value_src: Some(
                 "fun (ty : KExpr) (b : KExpr) (val : KExpr) => instantiate_at_lam ty b val Nat.zero"
                     .to_string(),
@@ -324,7 +324,7 @@ impl Specification {
         // binder-aware instantiate_at theorem at depth 0.
         self.add_definition(SpecDefinition {
             name: "instantiate_pi".to_string(),
-            type_src: "forall (ty : KExpr) (b : KExpr) (val : KExpr), Eq KExpr (instantiate (KExpr.pi ty b) val) (KExpr.pi (instantiate ty val) (instantiate_at b val (Nat.succ Nat.zero)))".to_string(),
+            type_src: "forall (ty : KExpr) (b : KExpr) (val : KExpr), @Eq KExpr (instantiate (KExpr.pi ty b) val) (KExpr.pi (instantiate ty val) (instantiate_at b val (Nat.succ Nat.zero)))".to_string(),
             value_src: Some(
                 "fun (ty : KExpr) (b : KExpr) (val : KExpr) => instantiate_at_pi ty b val Nat.zero"
                     .to_string(),
@@ -351,7 +351,7 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (e : KExpr) (h : is_value e) => ",
-                    "is_value.rec ",
+                    "@is_value.rec ",
                     "(fun (e0 : KExpr) (_ : is_value e0) => is_whnf e0) ",
                     "(fun (n : Level) => is_whnf.sort n) ",
                     "(fun (ty : KExpr) (body : KExpr) => is_whnf.lam ty body) ",
@@ -429,26 +429,26 @@ impl Specification {
             type_src: concat!(
                 "forall (A : KExpr) (B : KExpr) (val : KExpr) (depth : Nat) ",
                 "(A' : KExpr) (B' : KExpr), ",
-                "Eq KExpr (instantiate_at (KExpr.pi A B) val depth) (KExpr.pi A' B') -> ",
-                "Eq KExpr (instantiate_at B val (Nat.succ depth)) B'"
+                "@Eq KExpr (instantiate_at (KExpr.pi A B) val depth) (KExpr.pi A' B') -> ",
+                "@Eq KExpr (instantiate_at B val (Nat.succ depth)) B'"
             )
             .to_string(),
             value_src: Some(
                 concat!(
                     "fun (A : KExpr) (B : KExpr) (val : KExpr) (depth : Nat) ",
                     "(A' : KExpr) (B' : KExpr) ",
-                    "(h : Eq KExpr (instantiate_at (KExpr.pi A B) val depth) ",
+                    "(h : @Eq KExpr (instantiate_at (KExpr.pi A B) val depth) ",
                     "(KExpr.pi A' B')) => ",
                     "pi_inj_snd ",
                     "(instantiate_at A val depth) ",
                     "(instantiate_at B val (Nat.succ depth)) ",
                     "A' B' ",
-                    "(Eq.trans KExpr ",
+                    "(@Eq.trans KExpr ",
                     "(KExpr.pi (instantiate_at A val depth) ",
                     "(instantiate_at B val (Nat.succ depth))) ",
                     "(instantiate_at (KExpr.pi A B) val depth) ",
                     "(KExpr.pi A' B') ",
-                    "(Eq.symm KExpr ",
+                    "(@Eq.symm KExpr ",
                     "(instantiate_at (KExpr.pi A B) val depth) ",
                     "(KExpr.pi (instantiate_at A val depth) ",
                     "(instantiate_at B val (Nat.succ depth))) ",
@@ -485,14 +485,14 @@ impl Specification {
             name: "instantiate_at_pi_self_codomain_eq".to_string(),
             type_src: concat!(
                 "forall (A : KExpr) (B : KExpr) (val : KExpr) (depth : Nat), ",
-                "Eq KExpr (instantiate_at (KExpr.pi A B) val depth) (KExpr.pi A B) -> ",
-                "Eq KExpr (instantiate_at B val (Nat.succ depth)) B"
+                "@Eq KExpr (instantiate_at (KExpr.pi A B) val depth) (KExpr.pi A B) -> ",
+                "@Eq KExpr (instantiate_at B val (Nat.succ depth)) B"
             )
             .to_string(),
             value_src: Some(
                 concat!(
                     "fun (A : KExpr) (B : KExpr) (val : KExpr) (depth : Nat) ",
-                    "(h : Eq KExpr (instantiate_at (KExpr.pi A B) val depth) ",
+                    "(h : @Eq KExpr (instantiate_at (KExpr.pi A B) val depth) ",
                     "(KExpr.pi A B)) => ",
                     "instantiate_at_pi_codomain_eq A B val depth A B h"
                 )

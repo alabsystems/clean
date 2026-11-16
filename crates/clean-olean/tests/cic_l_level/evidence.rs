@@ -44,11 +44,25 @@
 //!   test loads is a refusal. The lakefile's roots are `ORDER`'s modules, so
 //!   `lake build` covers the same modules. The model is a package of its own
 //!   (`theories/cic_l_model`) with its own test.
-//! * **Statements.** `statement_pins.json` holds one digest per theorem the
-//!   level modules declare, private ones included: a theorem with no pin, a
-//!   pin with no theorem and a theorem whose stated type or universe
-//!   parameters moved each refuse. A pin binds the stated type as compiled; it
-//!   does not bind the definitions that type mentions.
+//! * **Statements.** `statement_pins.json` holds one meaning digest per
+//!   theorem the level modules declare, private ones included: a theorem with
+//!   no pin, a pin with no theorem and a theorem whose meaning moved each
+//!   refuse. The digest (`../support/meaning_digest.rs`, shared with the
+//!   model's and kcheck's tests) binds the stated type and universe parameters
+//!   AND every definition, inductive and compiler auxiliary of the package the
+//!   statement reaches, down to Init; it binds no proof. Every other target
+//!   has the same digest in `definition_pins.json` (`definition_pins.rs`),
+//!   and both files are compared before either refuses. The package is
+//!   `theories/cic_l`, the one theory the fixture family `cic_l_level`
+//!   compiles, selected by module of origin. This file pins the digest's
+//!   source by its SHA-256, so the definition of a pin cannot change without
+//!   this file, and the registry row that pins it, moving. Re-pin both files
+//!   with one command, `CLEAN_REPIN_STATEMENT_PINS=1 scripts/heavy_gate.sh run
+//!   16 cic-l-level-repin -- "$(rustup run trust rustc --print sysroot)/bin/targo"
+//!   --unverified test -p clean-olean --locked --test cic_l_level
+//!   level_theory_rechecks_with_false_computation_controls`: the run rewrites
+//!   each file that differs and still fails, and the next run without the
+//!   variable confirms.
 //! * **Axioms.** The union of every target's axiom closure equals
 //!   [`OBSERVED_AXIOM_CLOSURE`]. It is a ratchet in both directions: a closure
 //!   that reaches anything else refuses, and so does a pinned name nothing
@@ -90,7 +104,35 @@ use clean_olean::{
 };
 use sha2::{Digest, Sha256};
 
+use super::definition_pins;
 use super::{rule_witnesses_and_forged_controls, THEOREMS, THEORY_ROOT};
+
+/// The meaning digest every statement pin uses, shared with the model's and
+/// kcheck's qualification tests.
+#[path = "../support/meaning_digest.rs"]
+pub(crate) mod meaning_digest;
+
+use meaning_digest::{MeaningDigests, Package};
+
+/// The digest's source, which this file pins (see [`check_digest_source`]).
+const MEANING_DIGEST_SOURCE: &[u8] = include_bytes!("../support/meaning_digest.rs");
+
+/// The SHA-256 of `../support/meaning_digest.rs`. The registry row
+/// `cic-l-qualification` pins this file and no other, so this file pins that
+/// one: an edit to what a pin means refuses here until this line moves, and
+/// moving it stales the row, whose re-pin replays its arms.
+const MEANING_DIGEST_SOURCE_SHA256: &str =
+    "0a53b73d9d0932c17f8955432fcd20ecde87b124622bee998fe1db03dd15eacb";
+
+/// The fixture family whose compiled directory the test loads.
+const FAMILY: &str = "cic_l_level";
+
+/// The package the statement pins' closures range over: the theories the
+/// fixture family compiles.
+const PACKAGE_THEORIES: &[&str] = &["cic_l"];
+
+/// The committed pin file, relative to the workspace root.
+const PIN_FILE: &str = "crates/clean-olean/tests/cic_l_level/statement_pins.json";
 
 /// The theory's compile order: one module stem per line.
 const ORDER: &str = include_str!("../../../../theories/cic_l/ORDER");
@@ -126,6 +168,8 @@ const CENSUS_PACKAGE: &str = "cic_l";
 pub(crate) enum Refusal {
     /// The package's `lean-toolchain` is not the workspace pin.
     ToolchainPin { theory: String, workspace: String },
+    /// The meaning digest's source is not the one this file pins.
+    DigestSource { measured: String, pinned: String },
     /// E7's census was minted with another Lean than the theory names.
     CensusToolchain { census: String, theory: String },
     /// E7's census has more than one row for a declaration.
@@ -210,6 +254,13 @@ impl fmt::Display for Refusal {
                 f,
                 "theories/cic_l/lean-toolchain names {theory:?}, the workspace pins {workspace:?}: \
                  `lake build` and this test would compile the theory with different Leans"
+            ),
+            Self::DigestSource { measured, pinned } => write!(
+                f,
+                "tests/support/meaning_digest.rs has SHA-256 {measured}, this file pins \
+                 {pinned}: what a statement pin means changed; move MEANING_DIGEST_SOURCE_SHA256 \
+                 with a decision entry, re-pin the four pin files and the registry row \
+                 `cic-l-qualification`"
             ),
             Self::CensusToolchain { census, theory } => write!(
                 f,
@@ -348,12 +399,16 @@ fn level_theory_rechecks_with_false_computation_controls() {
     // the workspace's, and E7's census names each declaration once and was
     // minted with that Lean.
     hold(check_toolchain_pin(THEORY_TOOLCHAIN, WORKSPACE_TOOLCHAIN));
+    hold(check_digest_source(
+        MEANING_DIGEST_SOURCE,
+        MEANING_DIGEST_SOURCE_SHA256,
+    ));
     let census_document = census_document();
     let (census_toolchain, census) = hold(census_rows(&census_document));
     hold(check_census_toolchain(&census_toolchain, THEORY_TOOLCHAIN));
 
     let lib = require_pinned_lean_lib_path().expect("install the repository-pinned Lean toolchain");
-    let compiled = compiled_fixture_dir("cic_l_level");
+    let compiled = compiled_fixture_dir(FAMILY);
     independent_lean_replay(&compiled, &lib);
 
     // The modules, read from the compiled artifacts: this root reaches exactly
@@ -421,26 +476,73 @@ fn level_theory_rechecks_with_false_computation_controls() {
     let env = kernel.environment();
     hold(check_resident("the reference replay", env, &targets));
 
-    // Statements: every theorem the level modules declare is pinned, and the
-    // hand table names only such theorems.
-    let inventory = theorem_inventory(env, &targets);
+    // Statements: every theorem the level modules declare is pinned by its
+    // meaning digest over the package, and the hand table names only such
+    // theorems. The package, read from the theory's ORDER, is the declared
+    // names the import closure read: two readers of one selection.
+    let package = Package::of_fixture(&compiled_dir, FAMILY, PACKAGE_THEORIES);
+    assert_eq!(
+        package.names(),
+        &declared,
+        "the package by ORDER and the declared names by import closure differ"
+    );
+    // Every other target is pinned by the same digest in
+    // `definition_pins.json`; both files are compared before either refuses,
+    // so one re-pin run rewrites both.
+    let digests = MeaningDigests::new(env, &package);
+    let inventory = theorem_inventory(&digests, env, &targets);
+    let definitions =
+        definition_pins::non_theorem_inventory(&digests, env, &level_modules, &not_replayable);
     let pins = statement_pins();
+    let mut pin_failures = Vec::new();
     if let Err(refusal) = check_statements(&inventory, &pins) {
-        panic!(
-            "{refusal}\nthe measured inventory is at {}",
-            write_measured_inventory(&inventory)
-        );
+        pin_failures.push(format!(
+            "{refusal}\n{}",
+            meaning_digest::record_measured(&inventory, PIN_FILE)
+        ));
     }
+    if let Err(refusal) =
+        definition_pins::check_definition_pins(&definitions, &definition_pins::committed_pins())
+    {
+        pin_failures.push(format!(
+            "the non-theorem meaning pins differ from {}: {refusal:?}\n{}",
+            definition_pins::PIN_FILE,
+            meaning_digest::record_measured(&definitions, definition_pins::PIN_FILE)
+        ));
+    }
+    assert!(pin_failures.is_empty(), "{}", pin_failures.join("\n"));
     hold(check_hand_table(THEOREMS, &inventory));
+    definition_pins::verify_and_run_controls(
+        env,
+        &level_modules,
+        &not_replayable,
+        &inventory,
+        &definitions,
+    );
+    let pinned: Vec<Name> = targets
+        .iter()
+        .filter(|name| {
+            env.get_const(name)
+                .is_some_and(|c| c.kind == ConstantKind::Theorem)
+        })
+        .cloned()
+        .collect();
     eprintln!(
-        "statement pins: {} theorems, {} of them private, {} in the hand table",
+        "statement pins: {} theorems, {} of them private, {} in the hand table; {} other \
+         declarations pinned in {}; {}",
         inventory.len(),
         inventory
             .keys()
             .filter(|n| n.starts_with("_private."))
             .count(),
-        THEOREMS.len()
+        THEOREMS.len(),
+        definitions.len(),
+        definition_pins::PIN_FILE,
+        digests
+            .describe(&package, &pinned)
+            .unwrap_or_else(|error| panic!("{error}"))
     );
+    drop(digests);
 
     // Axioms: a ratchet on the closure every target was observed to have, not
     // an allow-list of what it may have.
@@ -495,7 +597,7 @@ fn level_theory_rechecks_with_false_computation_controls() {
     selection_controls(&declared, &not_replayable, &targets, &by_prefix);
     negative_controls(&loaded, &order, &level, &inventory, &pins, THEOREMS);
     census_controls(&census, &lean_rule, &kernel_named, &observed_named);
-    rule_witnesses_and_forged_controls(&loaded, kernel, &inventory, &pins);
+    rule_witnesses_and_forged_controls(&loaded, kernel, &package, &inventory, &pins);
 }
 
 /// `ORDER`'s stems as module names (`CICL/Level` → `CICL.Level`).
@@ -755,23 +857,25 @@ pub(crate) fn check_resident<'a>(
     }
 }
 
-/// SHA-256 of a statement: the `bincode` serialization of the pair (its
-/// universe parameter names, its type), so a reordered or added universe
-/// parameter moves the digest. The model's and kcheck's tests hash the type
-/// alone with the same serializer: their digests are not comparable with
-/// these.
-pub(crate) fn statement_digest(level_params: &[Name], type_: &Expr) -> String {
-    let params: Vec<String> = level_params.iter().map(ToString::to_string).collect();
-    let bytes = bincode::serde::encode_to_vec((&params, type_), bincode::config::standard())
-        .expect("serialize a statement");
-    Sha256::digest(&bytes)
+/// The meaning digest's source is the one this file pins.
+pub(crate) fn check_digest_source(source: &[u8], pinned: &str) -> Result<(), Refusal> {
+    let measured: String = Sha256::digest(source)
         .iter()
         .map(|byte| format!("{byte:02x}"))
-        .collect()
+        .collect();
+    if measured == pinned {
+        Ok(())
+    } else {
+        Err(Refusal::DigestSource {
+            measured,
+            pinned: pinned.to_owned(),
+        })
+    }
 }
 
-/// Printed name → statement digest, for every theorem among `targets` in `env`.
+/// Printed name → meaning digest, for every theorem among `targets` in `env`.
 pub(crate) fn theorem_inventory(
+    digests: &MeaningDigests<'_>,
     env: &Environment,
     targets: &BTreeSet<Name>,
 ) -> BTreeMap<String, String> {
@@ -780,10 +884,10 @@ pub(crate) fn theorem_inventory(
         .filter_map(|name| env.get_const(name))
         .filter(|c| c.kind == ConstantKind::Theorem)
         .map(|c| {
-            (
-                c.name.to_string(),
-                statement_digest(&c.level_params, &c.type_),
-            )
+            let digest = digests
+                .digest(&c.name)
+                .unwrap_or_else(|error| panic!("{error}"));
+            (c.name.to_string(), digest)
         })
         .collect()
 }
@@ -821,18 +925,6 @@ pub(crate) fn check_statements(
             missing,
             changed,
         })
-    }
-}
-
-/// Where a failing run leaves the inventory it measured, for review: the test
-/// still fails, and a changed pin needs its own decision entry (plan rule 4).
-pub(crate) fn write_measured_inventory(inventory: &BTreeMap<String, String>) -> String {
-    let path = Path::new(env!("CARGO_TARGET_TMPDIR")).join("cic_l_level_statement_pins.json");
-    let mut text = serde_json::to_string_pretty(inventory).expect("render the inventory");
-    text.push('\n');
-    match std::fs::write(&path, text) {
-        Ok(()) => path.display().to_string(),
-        Err(error) => format!("(not written: {error})"),
     }
 }
 
@@ -1278,21 +1370,31 @@ pub(crate) fn choice_user_closure(loaded: &Environment) -> BTreeSet<String> {
 }
 
 /// `subject` restated as `forged` is refused as a changed statement, and as
-/// nothing else.
+/// nothing else. Restated at its own statement `stated` it keeps its pin, so
+/// the refusal is the statement's and not the environment's or the package's.
 pub(crate) fn forged_statement_refused(
+    digests: &MeaningDigests<'_>,
     inventory: &BTreeMap<String, String>,
     pins: &BTreeMap<String, String>,
     subject: &Name,
     level_params: &[Name],
+    stated: &Expr,
     forged: &Expr,
 ) {
-    let subject = subject.to_string();
-    assert!(
-        inventory.contains_key(&subject),
-        "control theorem {subject} is not a pinned theorem of the level modules"
+    let restate = |type_: &Expr| {
+        digests
+            .statement_digest(subject, level_params, type_)
+            .unwrap_or_else(|error| panic!("{error}"))
+    };
+    let subject_name = subject.to_string();
+    assert_eq!(
+        inventory.get(&subject_name),
+        Some(&restate(stated)),
+        "control theorem {subject} restated at its own statement must keep its pin"
     );
+    let subject = subject_name;
     let mut forged_inventory = inventory.clone();
-    forged_inventory.insert(subject.clone(), statement_digest(level_params, forged));
+    forged_inventory.insert(subject.clone(), restate(forged));
     assert_eq!(
         check_statements(&forged_inventory, pins),
         Err(Refusal::Statements {
@@ -1311,6 +1413,17 @@ pub(crate) fn input_controls(census: &serde_json::Value) {
     let theory = THEORY_TOOLCHAIN.trim();
     let other = "leanprover/lean4:v4.29.0";
     assert_ne!(other, pin, "the controls need a Lean other than the pin");
+
+    // The digest's source with one byte appended: what a pin means moved.
+    let mut edited = MEANING_DIGEST_SOURCE.to_vec();
+    edited.push(b'\n');
+    assert!(
+        matches!(
+            check_digest_source(&edited, MEANING_DIGEST_SOURCE_SHA256),
+            Err(Refusal::DigestSource { ref pinned, .. }) if pinned == MEANING_DIGEST_SOURCE_SHA256
+        ),
+        "an edited digest source must be refused"
+    );
 
     // The package names another Lean, and the workspace pin moves without the
     // package's.
@@ -1357,8 +1470,9 @@ pub(crate) fn input_controls(census: &serde_json::Value) {
         Err(Refusal::CensusDuplicateRows { names: vec![twice] })
     );
     eprintln!(
-        "input controls: a package Lean off the pin, a pin moved without the package, a census \
-         of another Lean and a census row stated twice each refused as stated"
+        "input controls: an edited digest source, a package Lean off the pin, a pin moved \
+         without the package, a census of another Lean and a census row stated twice each \
+         refused as stated"
     );
 }
 

@@ -384,7 +384,8 @@ fn byte_ty_inner(module: &Module, ty: &Ty, resolving: &mut BTreeSet<u32>) -> R<S
             FatPtrKind::ContainerLen => "IRTy.containerlen_".into(),
             FatPtrKind::ContainerVtable => "IRTy.containervtable_".into(),
         },
-        unsupported @ (Ty::Isize
+        unsupported @ (Ty::FnItem(_)
+        | Ty::Isize
         | Ty::Usize
         | Ty::Char
         | Ty::Error

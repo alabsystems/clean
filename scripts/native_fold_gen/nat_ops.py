@@ -33,12 +33,12 @@ NATREC = Rec('Nat.rec', 'kcre_rec_meta_@@Nat.rec@@',
 NATREC.prefix = 3
 NATREC_RULES = {'Nat.zero': 'accepts_tc_nat_rec_zero_rule', 'Nat.succ': 'accepts_tc_nat_rec_succ_rule'}
 
-P_NATREC = ('(hm : Eq (OptionType RecMeta) (recmeta_for (red_rec R) kcre_name_@@Nat.rec@@) '
-            '(OptionType.some RecMeta kcre_rec_meta_@@Nat.rec@@)) '
-            '(hz : Eq (OptionType RecRule) (recrule_for (red_rec R) kcre_name_@@Nat.rec@@ kcre_name_@@Nat.zero@@) '
-            '(OptionType.some RecRule accepts_tc_nat_rec_zero_rule)) '
-            '(hs : Eq (OptionType RecRule) (recrule_for (red_rec R) kcre_name_@@Nat.rec@@ kcre_name_@@Nat.succ@@) '
-            '(OptionType.some RecRule accepts_tc_nat_rec_succ_rule))')
+P_NATREC = ('(hm : @Eq (OptionType RecMeta) (recmeta_for (red_rec R) kcre_name_@@Nat.rec@@) '
+            '(@OptionType.some RecMeta kcre_rec_meta_@@Nat.rec@@)) '
+            '(hz : @Eq (OptionType RecRule) (recrule_for (red_rec R) kcre_name_@@Nat.rec@@ kcre_name_@@Nat.zero@@) '
+            '(@OptionType.some RecRule accepts_tc_nat_rec_zero_rule)) '
+            '(hs : @Eq (OptionType RecRule) (recrule_for (red_rec R) kcre_name_@@Nat.rec@@ kcre_name_@@Nat.succ@@) '
+            '(@OptionType.some RecRule accepts_tc_nat_rec_succ_rule))')
 A_NATREC = 'hm hz hs'
 
 
@@ -51,7 +51,7 @@ def hyp(op):
 
 
 def p_body(op):
-    return '(%s : Eq (OptionType KExpr) (kdef_value_at (red_def R) kcre_name_@@%s@@ (ListType.nil Level)) (OptionType.some KExpr %s))' % (
+    return '(%s : @Eq (OptionType KExpr) (kdef_value_at (red_def R) kcre_name_@@%s@@ (@ListType.nil Level)) (@OptionType.some KExpr %s))' % (
         hyp(op), op, body_const(op))
 
 
@@ -81,7 +81,7 @@ def name_pieces(prefix, M, z, s):
 
 
 def nat_rec_proof(var, motive_ty, base, step_var, ih_name, step):
-    return '(Nat.rec (fun (%s : Nat) => %s) (%s) (fun (%s : Nat) (%s : %s) => %s) %s)' % (
+    return '(@Nat.rec (fun (%s : Nat) => %s) (%s) (fun (%s : Nat) (%s : %s) => %s) %s)' % (
         var, motive_ty(var), base, step_var, ih_name, motive_ty(step_var), step, var)
 
 
@@ -99,21 +99,21 @@ def add_thm(name, ty, body):
 
 IOTA_LOOKUP_TY = (
     'forall (env : RecEnv) (e : KExpr) (rn : Name) (mta : RecMeta) (major : KExpr) (cn : Name) (rule : RecRule) (r : KExpr), '
-    'Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name rn) -> '
-    'Eq (OptionType RecMeta) (recmeta_for env rn) (OptionType.some RecMeta mta) -> '
-    'Eq (OptionType KExpr) (list_head (list_drop (iota_major_index mta) (kapp_args e))) (OptionType.some KExpr major) -> '
-    'Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cn) -> '
-    'Eq (OptionType RecRule) (recrule_for env rn cn) (OptionType.some RecRule rule) -> '
-    'Eq (OptionType KExpr) (iota_contractum_at mta rule (kexpr_const_levels (kapp_fn e)) (kapp_args e) (kapp_args major)) (OptionType.some KExpr r) -> '
-    'Eq (OptionType KExpr) (iota_reduct env e) (OptionType.some KExpr r)')
+    '@Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (@OptionType.some Name rn) -> '
+    '@Eq (OptionType RecMeta) (recmeta_for env rn) (@OptionType.some RecMeta mta) -> '
+    '@Eq (OptionType KExpr) (list_head (list_drop (iota_major_index mta) (kapp_args e))) (@OptionType.some KExpr major) -> '
+    '@Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (@OptionType.some Name cn) -> '
+    '@Eq (OptionType RecRule) (recrule_for env rn cn) (@OptionType.some RecRule rule) -> '
+    '@Eq (OptionType KExpr) (iota_contractum_at mta rule (kexpr_const_levels (kapp_fn e)) (kapp_args e) (kapp_args major)) (@OptionType.some KExpr r) -> '
+    '@Eq (OptionType KExpr) (iota_reduct env e) (@OptionType.some KExpr r)')
 IOTA_LOOKUP_BODY = (
     'fun (env : RecEnv) (e : KExpr) (rn : Name) (mta : RecMeta) (major : KExpr) (cn : Name) (rule : RecRule) (r : KExpr) '
-    '(hhead : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name rn)) '
-    '(hmeta : Eq (OptionType RecMeta) (recmeta_for env rn) (OptionType.some RecMeta mta)) '
-    '(hmajor : Eq (OptionType KExpr) (list_head (list_drop (iota_major_index mta) (kapp_args e))) (OptionType.some KExpr major)) '
-    '(hcn : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cn)) '
-    '(hrule : Eq (OptionType RecRule) (recrule_for env rn cn) (OptionType.some RecRule rule)) '
-    '(hcontr : Eq (OptionType KExpr) (iota_contractum_at mta rule (kexpr_const_levels (kapp_fn e)) (kapp_args e) (kapp_args major)) (OptionType.some KExpr r)) => '
+    '(hhead : @Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (@OptionType.some Name rn)) '
+    '(hmeta : @Eq (OptionType RecMeta) (recmeta_for env rn) (@OptionType.some RecMeta mta)) '
+    '(hmajor : @Eq (OptionType KExpr) (list_head (list_drop (iota_major_index mta) (kapp_args e))) (@OptionType.some KExpr major)) '
+    '(hcn : @Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (@OptionType.some Name cn)) '
+    '(hrule : @Eq (OptionType RecRule) (recrule_for env rn cn) (@OptionType.some RecRule rule)) '
+    '(hcontr : @Eq (OptionType KExpr) (iota_contractum_at mta rule (kexpr_const_levels (kapp_fn e)) (kapp_args e) (kapp_args major)) (@OptionType.some KExpr r)) => '
     'opt_bind_some_intro Name KExpr (kexpr_const_name (kapp_fn e)) '
     '(fun (recname : Name) => opt_bind RecMeta KExpr (recmeta_for env recname) (fun (mta0 : RecMeta) => opt_bind KExpr KExpr (list_head (list_drop (iota_major_index mta0) (kapp_args e))) (fun (major0 : KExpr) => opt_bind Name KExpr (kexpr_const_name (kapp_fn major0)) (fun (cname : Name) => opt_bind RecRule KExpr (recrule_for env recname cname) (fun (rule0 : RecRule) => iota_contractum_at mta0 rule0 (kexpr_const_levels (kapp_fn e)) (kapp_args e) (kapp_args major0)))))) '
     'rn r hhead '
@@ -135,42 +135,42 @@ KA = 'KernelAcceptsTcIn R tenv Bool.false G'
 HELPERS = [
     ('accepts_tc_beta',
      'forall %s (A : KExpr) (b : KExpr) (a : KExpr), %s (KExpr.app (KExpr.lam A b) a) (instantiate b a)' % (HDR, KA),
-     'fun %s (A : KExpr) (b : KExpr) (a : KExpr) => KernelAcceptsTcIn.cdp R tenv G (KExpr.app (KExpr.lam A b) a) (instantiate b a) '
-     '(DefEqCDPIn.raw R (KExpr.app (KExpr.lam A b) a) (instantiate b a) (par_reduces_cdp.beta R A A b b a a '
-     '(par_reduces_cdp.refl R A) (par_reduces_cdp.refl R b) (par_reduces_cdp.refl R a)))' % HDR),
+     'fun %s (A : KExpr) (b : KExpr) (a : KExpr) => @KernelAcceptsTcIn.cdp R tenv G (KExpr.app (KExpr.lam A b) a) (instantiate b a) '
+     '(@DefEqCDPIn.raw R (KExpr.app (KExpr.lam A b) a) (instantiate b a) (@par_reduces_cdp.beta R A A b b a a '
+     '(@par_reduces_cdp.refl R A) (@par_reduces_cdp.refl R b) (@par_reduces_cdp.refl R a)))' % HDR),
     ('accepts_tc_app_l',
      'forall %s (f : KExpr) (f2 : KExpr) (a : KExpr), %s f f2 -> %s (KExpr.app f a) (KExpr.app f2 a)' % (HDR, KA, KA),
-     'fun %s (f : KExpr) (f2 : KExpr) (a : KExpr) (h : %s f f2) => KernelAcceptsTcIn.app_cong R tenv G f f2 a a h '
-     '(KernelAcceptsTcIn.cdp R tenv G a a (DefEqCDPIn.refl R a))' % (HDR, KA)),
+     'fun %s (f : KExpr) (f2 : KExpr) (a : KExpr) (h : %s f f2) => @KernelAcceptsTcIn.app_cong R tenv G f f2 a a h '
+     '(@KernelAcceptsTcIn.cdp R tenv G a a (@DefEqCDPIn.refl R a))' % (HDR, KA)),
     ('accepts_tc_app_r',
      'forall %s (f : KExpr) (a : KExpr) (a2 : KExpr), %s a a2 -> %s (KExpr.app f a) (KExpr.app f a2)' % (HDR, KA, KA),
-     'fun %s (f : KExpr) (a : KExpr) (a2 : KExpr) (h : %s a a2) => KernelAcceptsTcIn.app_cong R tenv G f f a a2 '
-     '(KernelAcceptsTcIn.cdp R tenv G f f (DefEqCDPIn.refl R f)) h' % (HDR, KA)),
+     'fun %s (f : KExpr) (a : KExpr) (a2 : KExpr) (h : %s a a2) => @KernelAcceptsTcIn.app_cong R tenv G f f a a2 '
+     '(@KernelAcceptsTcIn.cdp R tenv G f f (@DefEqCDPIn.refl R f)) h' % (HDR, KA)),
     ('accepts_tc_delta',
-     'forall %s (e : KExpr) (n : Name) (v : KExpr), Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name n) -> '
-     'Eq (OptionType KExpr) (kdef_value_at (red_def R) n (kexpr_const_levels (kapp_fn e))) (OptionType.some KExpr v) -> '
+     'forall %s (e : KExpr) (n : Name) (v : KExpr), @Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (@OptionType.some Name n) -> '
+     '@Eq (OptionType KExpr) (kdef_value_at (red_def R) n (kexpr_const_levels (kapp_fn e))) (@OptionType.some KExpr v) -> '
      '%s e (apply_spine (kapp_args e) v)' % (HDR, KA),
-     'fun %s (e : KExpr) (n : Name) (v : KExpr) (hh : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name n)) '
-     '(hv : Eq (OptionType KExpr) (kdef_value_at (red_def R) n (kexpr_const_levels (kapp_fn e))) (OptionType.some KExpr v)) => '
-     'KernelAcceptsTcIn.cdp R tenv G e (apply_spine (kapp_args e) v) (DefEqCDPIn.raw R e (apply_spine (kapp_args e) v) '
-     '(par_reduces_cdp.delta R e (apply_spine (kapp_args e) v) (delta_reduct_of_value_some (red_def R) e n v hh hv)))' % HDR),
+     'fun %s (e : KExpr) (n : Name) (v : KExpr) (hh : @Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (@OptionType.some Name n)) '
+     '(hv : @Eq (OptionType KExpr) (kdef_value_at (red_def R) n (kexpr_const_levels (kapp_fn e))) (@OptionType.some KExpr v)) => '
+     '@KernelAcceptsTcIn.cdp R tenv G e (apply_spine (kapp_args e) v) (@DefEqCDPIn.raw R e (apply_spine (kapp_args e) v) '
+     '(@par_reduces_cdp.delta R e (apply_spine (kapp_args e) v) (delta_reduct_of_value_some (red_def R) e n v hh hv)))' % HDR),
 ]
 IOTA_TY = ('forall %s (e : KExpr) (rn : Name) (mta : RecMeta) (major : KExpr) (cn : Name) (rule : RecRule) (r : KExpr), '
-           'Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name rn) -> '
-           'Eq (OptionType RecMeta) (recmeta_for (red_rec R) rn) (OptionType.some RecMeta mta) -> '
-           'Eq (OptionType KExpr) (list_head (list_drop (iota_major_index mta) (kapp_args e))) (OptionType.some KExpr major) -> '
-           'Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cn) -> '
-           'Eq (OptionType RecRule) (recrule_for (red_rec R) rn cn) (OptionType.some RecRule rule) -> '
-           'Eq (OptionType KExpr) (iota_contractum_at mta rule (kexpr_const_levels (kapp_fn e)) (kapp_args e) (kapp_args major)) (OptionType.some KExpr r) -> '
+           '@Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (@OptionType.some Name rn) -> '
+           '@Eq (OptionType RecMeta) (recmeta_for (red_rec R) rn) (@OptionType.some RecMeta mta) -> '
+           '@Eq (OptionType KExpr) (list_head (list_drop (iota_major_index mta) (kapp_args e))) (@OptionType.some KExpr major) -> '
+           '@Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (@OptionType.some Name cn) -> '
+           '@Eq (OptionType RecRule) (recrule_for (red_rec R) rn cn) (@OptionType.some RecRule rule) -> '
+           '@Eq (OptionType KExpr) (iota_contractum_at mta rule (kexpr_const_levels (kapp_fn e)) (kapp_args e) (kapp_args major)) (@OptionType.some KExpr r) -> '
            '%s e r') % (HDR, KA)
 IOTA_BODY = ('fun %s (e : KExpr) (rn : Name) (mta : RecMeta) (major : KExpr) (cn : Name) (rule : RecRule) (r : KExpr) '
-             '(h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name rn)) '
-             '(h2 : Eq (OptionType RecMeta) (recmeta_for (red_rec R) rn) (OptionType.some RecMeta mta)) '
-             '(h3 : Eq (OptionType KExpr) (list_head (list_drop (iota_major_index mta) (kapp_args e))) (OptionType.some KExpr major)) '
-             '(h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cn)) '
-             '(h5 : Eq (OptionType RecRule) (recrule_for (red_rec R) rn cn) (OptionType.some RecRule rule)) '
-             '(h6 : Eq (OptionType KExpr) (iota_contractum_at mta rule (kexpr_const_levels (kapp_fn e)) (kapp_args e) (kapp_args major)) (OptionType.some KExpr r)) => '
-             'KernelAcceptsTcIn.cdp R tenv G e r (DefEqCDPIn.raw R e r (par_reduces_cdp.iota R e r '
+             '(h1 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (@OptionType.some Name rn)) '
+             '(h2 : @Eq (OptionType RecMeta) (recmeta_for (red_rec R) rn) (@OptionType.some RecMeta mta)) '
+             '(h3 : @Eq (OptionType KExpr) (list_head (list_drop (iota_major_index mta) (kapp_args e))) (@OptionType.some KExpr major)) '
+             '(h4 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (@OptionType.some Name cn)) '
+             '(h5 : @Eq (OptionType RecRule) (recrule_for (red_rec R) rn cn) (@OptionType.some RecRule rule)) '
+             '(h6 : @Eq (OptionType KExpr) (iota_contractum_at mta rule (kexpr_const_levels (kapp_fn e)) (kapp_args e) (kapp_args major)) (@OptionType.some KExpr r)) => '
+             '@KernelAcceptsTcIn.cdp R tenv G e r (@DefEqCDPIn.raw R e r (@par_reduces_cdp.iota R e r '
              '(accepts_tc_iota_reduct_of_lookup (red_rec R) e rn mta major cn rule r h1 h2 h3 h4 h5 h6)))') % HDR
 
 
@@ -183,12 +183,12 @@ def base_items():
     add_def(NR_S_DEF, 'accepts_tc_nat_rec_succ_rule')
     # the canonical Nat.rec data IS the reflected seed's: each is a computation over kernel_core_red_env
     add_thm('accepts_tc_nat_rec_meta_reflected',
-            'Eq (OptionType RecMeta) (recmeta_for (red_rec kernel_core_red_env) kcre_name_@@Nat.rec@@) (OptionType.some RecMeta kcre_rec_meta_@@Nat.rec@@)',
-            'Eq.refl (OptionType RecMeta) (OptionType.some RecMeta kcre_rec_meta_@@Nat.rec@@)')
+            '@Eq (OptionType RecMeta) (recmeta_for (red_rec kernel_core_red_env) kcre_name_@@Nat.rec@@) (@OptionType.some RecMeta kcre_rec_meta_@@Nat.rec@@)',
+            '@Eq.refl (OptionType RecMeta) (@OptionType.some RecMeta kcre_rec_meta_@@Nat.rec@@)')
     for ctor, rule in (('Nat.zero', 'accepts_tc_nat_rec_zero_rule'), ('Nat.succ', 'accepts_tc_nat_rec_succ_rule')):
         add_thm(rule + '_reflected',
-                'Eq (OptionType RecRule) (recrule_for (red_rec kernel_core_red_env) kcre_name_@@Nat.rec@@ kcre_name_@@%s@@) (OptionType.some RecRule %s)' % (ctor, rule),
-                'Eq.refl (OptionType RecRule) (OptionType.some RecRule %s)' % rule)
+                '@Eq (OptionType RecRule) (recrule_for (red_rec kernel_core_red_env) kcre_name_@@Nat.rec@@ kcre_name_@@%s@@) (@OptionType.some RecRule %s)' % (ctor, rule),
+                '@Eq.refl (OptionType RecRule) (@OptionType.some RecRule %s)' % rule)
     from kx import inst_levels, name_term
     for nm, rhs in (('accepts_tc_nat_rec_zero_rhs1', NR_Z_RHS), ('accepts_tc_nat_rec_succ_rhs1', NR_S_RHS)):
         t = inst_levels(rhs, 'kcre_name_@@u@@', '(Level.succ Level.zero)')

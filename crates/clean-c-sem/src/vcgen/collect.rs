@@ -15,7 +15,7 @@ use super::{ModifiedLocation, VCGen};
 
 impl VCGen {
     /// Collect all locations modified by a statement
-    pub fn collect_modified_locations(&self, stmt: &CStmt) -> Vec<ModifiedLocation> {
+    pub(crate) fn collect_modified_locations(&self, stmt: &CStmt) -> Vec<ModifiedLocation> {
         let mut locations = Vec::new();
         self.collect_modified_recursive(stmt, &mut locations);
         locations
@@ -222,7 +222,7 @@ impl VCGen {
     }
 
     /// Collect all local variable names declared in a statement
-    pub fn collect_local_variables(&self, stmt: &CStmt) -> Vec<String> {
+    pub(crate) fn collect_local_variables(&self, stmt: &CStmt) -> Vec<String> {
         let mut locals = Vec::new();
         self.collect_locals_recursive(stmt, &mut locals);
         locals
@@ -293,7 +293,7 @@ impl VCGen {
     }
 
     /// Filter modified locations to exclude local variables
-    pub fn filter_non_locals(
+    pub(crate) fn filter_non_locals(
         &self,
         modified: Vec<ModifiedLocation>,
         locals: &[String],

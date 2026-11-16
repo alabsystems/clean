@@ -53,44 +53,44 @@ impl Specification {
             self,
             "kdecl_type_at_instL_supported_at",
             r"forall (env : KDeclEnv) (n : Name) (us : ListType Level) (A : KExpr),
- Eq (OptionType KExpr) (kdecl_type_at env n us) (OptionType.some KExpr A) ->
- (forall (sig : KConstSig), Eq (OptionType KConstSig) (env n) (OptionType.some KConstSig sig) ->
+ @Eq (OptionType KExpr) (kdecl_type_at env n us) (@OptionType.some KExpr A) ->
+ (forall (sig : KConstSig), @Eq (OptionType KConstSig) (env n) (@OptionType.some KConstSig sig) ->
    KExprParamSupport (kconst_params sig) (kconst_type sig)) ->
  forall (s : Name -> Level),
- Eq (OptionType KExpr) (kdecl_type_at env n (mapLL (substL s) us))
-   (OptionType.some KExpr (instL s A))",
+ @Eq (OptionType KExpr) (kdecl_type_at env n (mapLL (substL s) us))
+   (@OptionType.some KExpr (instL s A))",
             r"fun (env : KDeclEnv) (n : Name) (us : ListType Level) (A : KExpr)
- (accepted : Eq (OptionType KExpr) (kdecl_type_at env n us) (OptionType.some KExpr A))
+ (accepted : @Eq (OptionType KExpr) (kdecl_type_at env n us) (@OptionType.some KExpr A))
  (supported : forall (sig : KConstSig),
-   Eq (OptionType KConstSig) (env n) (OptionType.some KConstSig sig) ->
+   @Eq (OptionType KConstSig) (env n) (@OptionType.some KConstSig sig) ->
    KExprParamSupport (kconst_params sig) (kconst_type sig))
  (s : Name -> Level) =>
  kdecl_type_at_some_inv_prop env n us A accepted
-   (Eq (OptionType KExpr) (kdecl_type_at env n (mapLL (substL s) us))
-     (OptionType.some KExpr (instL s A)))
+   (@Eq (OptionType KExpr) (kdecl_type_at env n (mapLL (substL s) us))
+     (@OptionType.some KExpr (instL s A)))
    (fun (sig : KConstSig)
-     (found : Eq (OptionType KConstSig) (env n) (OptionType.some KConstSig sig))
+     (found : @Eq (OptionType KConstSig) (env n) (@OptionType.some KConstSig sig))
      (arity : kconst_arity sig us)
-     (result : Eq KExpr A (kconst_inst_type sig us)) =>
-     Eq.trans (OptionType KExpr)
+     (result : @Eq KExpr A (kconst_inst_type sig us)) =>
+     @Eq.trans (OptionType KExpr)
        (kdecl_type_at env n (mapLL (substL s) us))
-       (OptionType.some KExpr (kconst_inst_type sig (mapLL (substL s) us)))
-       (OptionType.some KExpr (instL s A))
+       (@OptionType.some KExpr (kconst_inst_type sig (mapLL (substL s) us)))
+       (@OptionType.some KExpr (instL s A))
        (kdecl_type_at_intro env n sig (mapLL (substL s) us) found
          (arity_mapLL (kconst_params sig) us arity (substL s)))
-       (Eq.cong KExpr (OptionType KExpr)
-         (fun (T : KExpr) => OptionType.some KExpr T)
+       (@Eq.cong KExpr (OptionType KExpr)
+         (fun (T : KExpr) => @OptionType.some KExpr T)
          (kconst_inst_type sig (mapLL (substL s) us)) (instL s A)
-         (Eq.trans KExpr
+         (@Eq.trans KExpr
            (kconst_inst_type sig (mapLL (substL s) us))
            (instL s (kconst_inst_type sig us)) (instL s A)
-           (Eq.symm KExpr (instL s (kconst_inst_type sig us))
+           (@Eq.symm KExpr (instL s (kconst_inst_type sig us))
              (kconst_inst_type sig (mapLL (substL s) us))
              (instL_instLevels_supported (kconst_params sig) (kconst_type sig) us
                (supported sig found) s))
-           (Eq.cong KExpr KExpr (fun (T : KExpr) => instL s T)
+           (@Eq.cong KExpr KExpr (fun (T : KExpr) => instL s T)
              (kconst_inst_type sig us) A
-             (Eq.symm KExpr A (kconst_inst_type sig us) result)))))",
+             (@Eq.symm KExpr A (kconst_inst_type sig us) result)))))",
             "Computed successful declaration lookup commutes with universe substitution from support of the actual signature at the queried name. Inversion supplies real lookup, exact arity and the original result equation; mapped arity and supported fusion derive the new result. No per-instantiated-output law is assumed.",
         )?;
 
@@ -99,19 +99,19 @@ impl Specification {
             "kdecl_type_at_instL_supported",
             r"forall (env : KDeclEnv),
  (forall (n : Name) (sig : KConstSig),
-   Eq (OptionType KConstSig) (env n) (OptionType.some KConstSig sig) ->
+   @Eq (OptionType KConstSig) (env n) (@OptionType.some KConstSig sig) ->
    KExprParamSupport (kconst_params sig) (kconst_type sig)) ->
  forall (n : Name) (us : ListType Level) (A : KExpr),
- Eq (OptionType KExpr) (kdecl_type_at env n us) (OptionType.some KExpr A) ->
+ @Eq (OptionType KExpr) (kdecl_type_at env n us) (@OptionType.some KExpr A) ->
  forall (s : Name -> Level),
- Eq (OptionType KExpr) (kdecl_type_at env n (mapLL (substL s) us))
-   (OptionType.some KExpr (instL s A))",
+ @Eq (OptionType KExpr) (kdecl_type_at env n (mapLL (substL s) us))
+   (@OptionType.some KExpr (instL s A))",
             r"fun (env : KDeclEnv)
  (supported : forall (n : Name) (sig : KConstSig),
-   Eq (OptionType KConstSig) (env n) (OptionType.some KConstSig sig) ->
+   @Eq (OptionType KConstSig) (env n) (@OptionType.some KConstSig sig) ->
    KExprParamSupport (kconst_params sig) (kconst_type sig))
  (n : Name) (us : ListType Level) (A : KExpr)
- (accepted : Eq (OptionType KExpr) (kdecl_type_at env n us) (OptionType.some KExpr A))
+ (accepted : @Eq (OptionType KExpr) (kdecl_type_at env n us) (@OptionType.some KExpr A))
  (s : Name -> Level) =>
  kdecl_type_at_instL_supported_at env n us A accepted (supported n) s",
             "Environment-wide corollary: support is required only of each stored schematic signature under its own declared parameters. This discharges the computed constant-lookup case, not the other typing/conversion cases or production admission.",
@@ -127,22 +127,22 @@ impl Specification {
         instantiation_theorem(
             self,
             "kdecl_type_at_instL_nonzero_witness",
-            r"Eq (OptionType KExpr)
- (kdecl_type_at (fun (_ : Name) => OptionType.some KConstSig (KConstSig.mk (ListType.cons Name Name.anonymous (ListType.nil Name)) (KExpr.sort (Level.param Name.anonymous)))) Name.anonymous
-   (mapLL (substL (fun (_ : Name) => Level.succ Level.zero)) (ListType.cons Level (Level.param Name.anonymous) (ListType.nil Level))))
- (OptionType.some KExpr (KExpr.sort (Level.succ Level.zero)))",
-            r"kdecl_type_at_instL_supported_at (fun (_ : Name) => OptionType.some KConstSig (KConstSig.mk (ListType.cons Name Name.anonymous (ListType.nil Name)) (KExpr.sort (Level.param Name.anonymous)))) Name.anonymous (ListType.cons Level (Level.param Name.anonymous) (ListType.nil Level)) (KExpr.sort (Level.param Name.anonymous))
- (Eq.refl (OptionType KExpr) (OptionType.some KExpr (KExpr.sort (Level.param Name.anonymous))))
+            r"@Eq (OptionType KExpr)
+ (kdecl_type_at (fun (_ : Name) => @OptionType.some KConstSig (KConstSig.mk (@ListType.cons Name Name.anonymous (@ListType.nil Name)) (KExpr.sort (Level.param Name.anonymous)))) Name.anonymous
+   (mapLL (substL (fun (_ : Name) => Level.succ Level.zero)) (@ListType.cons Level (Level.param Name.anonymous) (@ListType.nil Level))))
+ (@OptionType.some KExpr (KExpr.sort (Level.succ Level.zero)))",
+            r"kdecl_type_at_instL_supported_at (fun (_ : Name) => @OptionType.some KConstSig (KConstSig.mk (@ListType.cons Name Name.anonymous (@ListType.nil Name)) (KExpr.sort (Level.param Name.anonymous)))) Name.anonymous (@ListType.cons Level (Level.param Name.anonymous) (@ListType.nil Level)) (KExpr.sort (Level.param Name.anonymous))
+ (@Eq.refl (OptionType KExpr) (@OptionType.some KExpr (KExpr.sort (Level.param Name.anonymous))))
  (fun (sig : KConstSig)
-   (found : Eq (OptionType KConstSig) (OptionType.some KConstSig (KConstSig.mk (ListType.cons Name Name.anonymous (ListType.nil Name)) (KExpr.sort (Level.param Name.anonymous))))
-     (OptionType.some KConstSig sig)) =>
-   Eq.rec KConstSig (KConstSig.mk (ListType.cons Name Name.anonymous (ListType.nil Name)) (KExpr.sort (Level.param Name.anonymous)))
-     (fun (other : KConstSig) (_h : Eq KConstSig (KConstSig.mk (ListType.cons Name Name.anonymous (ListType.nil Name)) (KExpr.sort (Level.param Name.anonymous))) other) =>
+   (found : @Eq (OptionType KConstSig) (@OptionType.some KConstSig (KConstSig.mk (@ListType.cons Name Name.anonymous (@ListType.nil Name)) (KExpr.sort (Level.param Name.anonymous))))
+     (@OptionType.some KConstSig sig)) =>
+   @Eq.rec KConstSig (KConstSig.mk (@ListType.cons Name Name.anonymous (@ListType.nil Name)) (KExpr.sort (Level.param Name.anonymous)))
+     (fun (other : KConstSig) (_h : @Eq KConstSig (KConstSig.mk (@ListType.cons Name Name.anonymous (@ListType.nil Name)) (KExpr.sort (Level.param Name.anonymous))) other) =>
        KExprParamSupport (kconst_params other) (kconst_type other))
-     (KExprParamSupport.sort (ListType.cons Name Name.anonymous (ListType.nil Name)) (Level.param Name.anonymous)
-       (LevelParamSupport.param (ListType.cons Name Name.anonymous (ListType.nil Name)) Name.anonymous Nat.zero
-         (Eq.refl (OptionType Nat) (OptionType.some Nat Nat.zero))))
-     sig (option_some_inj KConstSig (KConstSig.mk (ListType.cons Name Name.anonymous (ListType.nil Name)) (KExpr.sort (Level.param Name.anonymous))) sig found))
+     (@KExprParamSupport.sort (@ListType.cons Name Name.anonymous (@ListType.nil Name)) (Level.param Name.anonymous)
+       (@LevelParamSupport.param (@ListType.cons Name Name.anonymous (@ListType.nil Name)) Name.anonymous Nat.zero
+         (@Eq.refl (OptionType Nat) (@OptionType.some Nat Nat.zero))))
+     sig (option_some_inj KConstSig (KConstSig.mk (@ListType.cons Name Name.anonymous (@ListType.nil Name)) (KExpr.sort (Level.param Name.anonymous))) sig found))
  (fun (_ : Name) => Level.succ Level.zero)",
             "Positive computed-lookup control: a one-parameter schematic sort is instantiated at a parameter argument and then a nonzero universe. Support is constructed from actual singleton membership and lookup injectivity.",
         )?;
@@ -150,14 +150,14 @@ impl Specification {
         instantiation_theorem(
             self,
             "kdecl_type_at_instL_unsupported_fails",
-            r"Eq (OptionType KExpr)
- (kdecl_type_at (fun (_ : Name) => OptionType.some KConstSig (KConstSig.mk (ListType.nil Name) (KExpr.sort (Level.param Name.anonymous)))) Name.anonymous
-   (mapLL (substL (fun (_ : Name) => Level.zero)) (ListType.nil Level)))
- (OptionType.some KExpr (instL (fun (_ : Name) => Level.zero) (KExpr.sort (Level.param Name.anonymous)))) -> Empty",
-            r"fun (h : Eq (OptionType KExpr)
- (kdecl_type_at (fun (_ : Name) => OptionType.some KConstSig (KConstSig.mk (ListType.nil Name) (KExpr.sort (Level.param Name.anonymous)))) Name.anonymous
-   (mapLL (substL (fun (_ : Name) => Level.zero)) (ListType.nil Level)))
- (OptionType.some KExpr (instL (fun (_ : Name) => Level.zero) (KExpr.sort (Level.param Name.anonymous))))) =>
+            r"@Eq (OptionType KExpr)
+ (kdecl_type_at (fun (_ : Name) => @OptionType.some KConstSig (KConstSig.mk (@ListType.nil Name) (KExpr.sort (Level.param Name.anonymous)))) Name.anonymous
+   (mapLL (substL (fun (_ : Name) => Level.zero)) (@ListType.nil Level)))
+ (@OptionType.some KExpr (instL (fun (_ : Name) => Level.zero) (KExpr.sort (Level.param Name.anonymous)))) -> Empty",
+            r"fun (h : @Eq (OptionType KExpr)
+ (kdecl_type_at (fun (_ : Name) => @OptionType.some KConstSig (KConstSig.mk (@ListType.nil Name) (KExpr.sort (Level.param Name.anonymous)))) Name.anonymous
+   (mapLL (substL (fun (_ : Name) => Level.zero)) (@ListType.nil Level)))
+ (@OptionType.some KExpr (instL (fun (_ : Name) => Level.zero) (KExpr.sort (Level.param Name.anonymous))))) =>
  unsupported_fusion_fails
    (Eq.symm Level (Level.param Name.anonymous) Level.zero
      (kexpr_sort_inj (Level.param Name.anonymous) Level.zero
@@ -207,12 +207,12 @@ mod tests {
             // This concrete signature has no declared parameters but its type
             // contains one. Exact arity and lookup succeed nonetheless: the
             // raw graph itself is deliberately not an admission checker.
-            let env = "(fun (_ : Name) => OptionType.some KConstSig (KConstSig.mk (ListType.nil Name) (KExpr.sort (Level.param Name.anonymous))))";
+            let env = "(fun (_ : Name) => @OptionType.some KConstSig (KConstSig.mk (@ListType.nil Name) (KExpr.sort (Level.param Name.anonymous))))";
             instantiation_theorem(
                 &mut spec,
                 "lookup_unsupported_signature_still_accepts_original",
-                &format!("Eq (OptionType KExpr) (kdecl_type_at {env} Name.anonymous (ListType.nil Level)) (OptionType.some KExpr (KExpr.sort (Level.param Name.anonymous)))"),
-                "Eq.refl (OptionType KExpr) (OptionType.some KExpr (KExpr.sort (Level.param Name.anonymous)))",
+                &format!("@Eq (OptionType KExpr) (kdecl_type_at {env} Name.anonymous (@ListType.nil Level)) (@OptionType.some KExpr (KExpr.sort (Level.param Name.anonymous)))"),
+                "@Eq.refl (OptionType KExpr) (@OptionType.some KExpr (KExpr.sort (Level.param Name.anonymous)))",
                 "Negative-control setup: lookup plus exact arity does not establish that schematic parameters were declared.",
             ).expect("the original raw lookup really succeeds");
             assert!(crate::spec_axiom_closure::computed_axiom_closure(
@@ -223,8 +223,8 @@ mod tests {
             assert!(instantiation_theorem(
                 &mut spec,
                 "lookup_unsupported_instantiation_must_fail",
-                &format!("Eq (OptionType KExpr) (kdecl_type_at {env} Name.anonymous (mapLL (substL (fun (_ : Name) => Level.zero)) (ListType.nil Level))) (OptionType.some KExpr (KExpr.sort Level.zero))"),
-                "Eq.refl (OptionType KExpr) (OptionType.some KExpr (KExpr.sort Level.zero))",
+                &format!("@Eq (OptionType KExpr) (kdecl_type_at {env} Name.anonymous (mapLL (substL (fun (_ : Name) => Level.zero)) (@ListType.nil Level))) (@OptionType.some KExpr (KExpr.sort Level.zero))"),
+                "@Eq.refl (OptionType KExpr) (@OptionType.some KExpr (KExpr.sort Level.zero))",
                 "Negative control: successful original lookup cannot fabricate the unsupported mapped-universe result.",
             ).is_err());
         });

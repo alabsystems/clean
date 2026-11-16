@@ -130,13 +130,13 @@ pub(crate) fn ir_itc_module_defs() -> &'static [&'static str] {
     &MINTED_IR_ITC_LINES
 }
 
-const SRC_ITC_MACH0: &str = "def ir_itc_mach0 (mem : IRList IRMemSlot) (p : Nat) (q : Nat) (na : Nat) : IRMachine := IRMachine.mk (IRList.cons IRFrame (IRFrame.mk ir_d0 ir_d0 Nat.zero (ir_bind_params (ir_nl2 ir_d0 ir_d1) (ir_vl2 (IRScalar.ptr_ p) (IRScalar.ptr_ q)) (IRList.nil IRBinding)) (IRList.nil Nat)) (IRList.nil IRFrame)) mem na";
+const SRC_ITC_MACH0: &str = "def ir_itc_mach0 (mem : IRList IRMemSlot) (p : Nat) (q : Nat) (na : Nat) : IRMachine := IRMachine.mk (@IRList.cons IRFrame (IRFrame.mk ir_d0 ir_d0 Nat.zero (ir_bind_params (ir_nl2 ir_d0 ir_d1) (ir_vl2 (IRScalar.ptr_ p) (IRScalar.ptr_ q)) (@IRList.nil IRBinding)) (@IRList.nil Nat)) (@IRList.nil IRFrame)) mem na";
 
-const SRC_ITC_INIT: &str = "def ir_itc_init_is_mach0 (mem : IRList IRMemSlot) (p : Nat) (q : Nat) (na : Nat) : Eq IRConfig (ir_init ir_itc_module ir_d0 (ir_vl2 (IRScalar.ptr_ p) (IRScalar.ptr_ q)) mem na) (IRConfig.running (ir_itc_mach0 mem p q na)) := Eq.refl IRConfig (IRConfig.running (ir_itc_mach0 mem p q na))";
+const SRC_ITC_INIT: &str = "def ir_itc_init_is_mach0 (mem : IRList IRMemSlot) (p : Nat) (q : Nat) (na : Nat) : @Eq IRConfig (ir_init ir_itc_module ir_d0 (ir_vl2 (IRScalar.ptr_ p) (IRScalar.ptr_ q)) mem na) (IRConfig.running (ir_itc_mach0 mem p q na)) := @Eq.refl IRConfig (IRConfig.running (ir_itc_mach0 mem p q na))";
 
-const SRC_ITC_ENTERS: &str = "def ir_itc_enters_the_heartbeat (mem : IRList IRMemSlot) (p : Nat) (q : Nat) (na : Nat) : Eq IROutcome (ir_eval ir_d3 ir_itc_module ir_d0 (ir_vl2 (IRScalar.ptr_ p) (IRScalar.ptr_ q)) mem na) IROutcome.fuel_out := Eq.refl IROutcome IROutcome.fuel_out";
+const SRC_ITC_ENTERS: &str = "def ir_itc_enters_the_heartbeat (mem : IRList IRMemSlot) (p : Nat) (q : Nat) (na : Nat) : @Eq IROutcome (ir_eval ir_d3 ir_itc_module ir_d0 (ir_vl2 (IRScalar.ptr_ p) (IRScalar.ptr_ q)) mem na) IROutcome.fuel_out := @Eq.refl IROutcome IROutcome.fuel_out";
 
-const SRC_ITC_STUCK: &str = "def ir_itc_halts_inside_the_heartbeat (mem : IRList IRMemSlot) (p : Nat) (q : Nat) (na : Nat) : Eq IROutcome (ir_eval ir_d16 ir_itc_module ir_d0 (ir_vl2 (IRScalar.ptr_ p) (IRScalar.ptr_ q)) mem na) (IROutcome.stuck IRFault.no_func) := Eq.refl IROutcome (IROutcome.stuck IRFault.no_func)";
+const SRC_ITC_STUCK: &str = "def ir_itc_halts_inside_the_heartbeat (mem : IRList IRMemSlot) (p : Nat) (q : Nat) (na : Nat) : @Eq IROutcome (ir_eval ir_d16 ir_itc_module ir_d0 (ir_vl2 (IRScalar.ptr_ p) (IRScalar.ptr_ q)) mem na) (IROutcome.stuck IRFault.no_func) := @Eq.refl IROutcome (IROutcome.stuck IRFault.no_func)";
 
 impl Specification {
     /// `ir_itc` — the target with its cut defined.

@@ -75,12 +75,12 @@ impl Specification {
     /// one that builds them.
     fn add_band_intro(&mut self) -> Result<(), SpecError> {
         self.add_recursive_def(
-            "def band_intro (p : Bool) (q : Bool) (hp : Eq Bool p Bool.true) \
-             (hq : Eq Bool q Bool.true) : Eq Bool (Bool.and p q) Bool.true := \
-             Eq.substType Bool (fun (z : Bool) => Eq Bool (Bool.and z q) Bool.true) \
+            "def band_intro (p : Bool) (q : Bool) (hp : @Eq Bool p Bool.true) \
+             (hq : @Eq Bool q Bool.true) : @Eq Bool (Bool.and p q) Bool.true := \
+             Eq.substType Bool (fun (z : Bool) => @Eq Bool (Bool.and z q) Bool.true) \
              Bool.true p (Eq.symm Bool p Bool.true hp) \
-             (Eq.substType Bool (fun (z : Bool) => Eq Bool (Bool.and Bool.true z) Bool.true) \
-             Bool.true q (Eq.symm Bool q Bool.true hq) (Eq.refl Bool Bool.true))",
+             (Eq.substType Bool (fun (z : Bool) => @Eq Bool (Bool.and Bool.true z) Bool.true) \
+             Bool.true q (Eq.symm Bool q Bool.true hq) (@Eq.refl Bool Bool.true))",
             "band_intro: Bool.and introduction — p = true and q = true give Bool.and p q = true. \
              Rewrite both conjuncts to Bool.true, where Bool.and reduces definitionally. The dual \
              of the in-tree band_eq_true_left / band_eq_true_right, which were the only Bool.and \
@@ -102,7 +102,7 @@ impl Specification {
         self.add_recursive_def(
             &format!(
                 "def def_eq_struct_intro_sort {cmp} (n : Level) : \
-                 Eq Bool (def_eq_struct cmp (KExpr.sort n) (KExpr.sort n)) Bool.true := \
+                 @Eq Bool (def_eq_struct cmp (KExpr.sort n) (KExpr.sort n)) Bool.true := \
                  level_eqb_refl n"
             ),
             "def_eq_struct_intro_sort: the grid accepts a sort against itself (level_eqb_refl). \
@@ -114,7 +114,7 @@ impl Specification {
         self.add_recursive_def(
             &format!(
                 "def def_eq_struct_intro_bvar {cmp} (i : Nat) : \
-                 Eq Bool (def_eq_struct cmp (KExpr.bvar i) (KExpr.bvar i)) Bool.true := \
+                 @Eq Bool (def_eq_struct cmp (KExpr.bvar i) (KExpr.bvar i)) Bool.true := \
                  nat_eqb_refl i"
             ),
             "def_eq_struct_intro_bvar: the grid accepts a bvar against itself (nat_eqb_refl). \
@@ -124,7 +124,7 @@ impl Specification {
         self.add_recursive_def(
             &format!(
                 "def def_eq_struct_intro_const {cmp} (nm : Name) (us : ListType Level) : \
-                 Eq Bool (def_eq_struct cmp (KExpr.const nm us) (KExpr.const nm us)) Bool.true := \
+                 @Eq Bool (def_eq_struct cmp (KExpr.const nm us) (KExpr.const nm us)) Bool.true := \
                  band_intro (name_eqb nm nm) (ulist_eqb us us) (name_eqb_refl nm) \
                  (ulist_eqb_refl us)"
             ),
@@ -136,7 +136,7 @@ impl Specification {
         self.add_recursive_def(
             &format!(
                 "def def_eq_struct_intro_lit {cmp} (w : Nat) : \
-                 Eq Bool (def_eq_struct cmp (KExpr.lit w) (KExpr.lit w)) Bool.true := \
+                 @Eq Bool (def_eq_struct cmp (KExpr.lit w) (KExpr.lit w)) Bool.true := \
                  nat_eqb_refl w"
             ),
             "def_eq_struct_intro_lit: the grid accepts a literal against itself (nat_eqb_refl). \
@@ -150,9 +150,9 @@ impl Specification {
         self.add_recursive_def(
             &format!(
                 "def def_eq_struct_intro_app {cmp} (f : KExpr) (a1 : KExpr) (g : KExpr) \
-                 (c : KExpr) (hf : Eq Bool (cmp f g) Bool.true) \
-                 (ha : Eq Bool (cmp a1 c) Bool.true) : \
-                 Eq Bool (def_eq_struct cmp (KExpr.app f a1) (KExpr.app g c)) Bool.true := \
+                 (c : KExpr) (hf : @Eq Bool (cmp f g) Bool.true) \
+                 (ha : @Eq Bool (cmp a1 c) Bool.true) : \
+                 @Eq Bool (def_eq_struct cmp (KExpr.app f a1) (KExpr.app g c)) Bool.true := \
                  band_intro (cmp f g) (cmp a1 c) hf ha"
             ),
             "def_eq_struct_intro_app: APP CONGRUENCE for the grid — componentwise acceptance \
@@ -165,9 +165,9 @@ impl Specification {
         self.add_recursive_def(
             &format!(
                 "def def_eq_struct_intro_lam {cmp} (ty1 : KExpr) (b1 : KExpr) (gt : KExpr) \
-                 (gb : KExpr) (ht : Eq Bool (cmp ty1 gt) Bool.true) \
-                 (hb : Eq Bool (cmp b1 gb) Bool.true) : \
-                 Eq Bool (def_eq_struct cmp (KExpr.lam ty1 b1) (KExpr.lam gt gb)) Bool.true := \
+                 (gb : KExpr) (ht : @Eq Bool (cmp ty1 gt) Bool.true) \
+                 (hb : @Eq Bool (cmp b1 gb) Bool.true) : \
+                 @Eq Bool (def_eq_struct cmp (KExpr.lam ty1 b1) (KExpr.lam gt gb)) Bool.true := \
                  band_intro (cmp ty1 gt) (cmp b1 gb) ht hb"
             ),
             "def_eq_struct_intro_lam: LAM CONGRUENCE for the grid — domain and body accepted \
@@ -177,9 +177,9 @@ impl Specification {
         self.add_recursive_def(
             &format!(
                 "def def_eq_struct_intro_pi {cmp} (ty1 : KExpr) (b1 : KExpr) (gt : KExpr) \
-                 (gb : KExpr) (ht : Eq Bool (cmp ty1 gt) Bool.true) \
-                 (hb : Eq Bool (cmp b1 gb) Bool.true) : \
-                 Eq Bool (def_eq_struct cmp (KExpr.pi ty1 b1) (KExpr.pi gt gb)) Bool.true := \
+                 (gb : KExpr) (ht : @Eq Bool (cmp ty1 gt) Bool.true) \
+                 (hb : @Eq Bool (cmp b1 gb) Bool.true) : \
+                 @Eq Bool (def_eq_struct cmp (KExpr.pi ty1 b1) (KExpr.pi gt gb)) Bool.true := \
                  band_intro (cmp ty1 gt) (cmp b1 gb) ht hb"
             ),
             "def_eq_struct_intro_pi: PI CONGRUENCE for the grid — domain and codomain accepted \
@@ -193,9 +193,9 @@ impl Specification {
             &format!(
                 "def def_eq_struct_intro_let {cmp} (lty : KExpr) (lv : KExpr) (lb : KExpr) \
                  (glt : KExpr) (glv : KExpr) (glb : KExpr) \
-                 (h1 : Eq Bool (cmp lty glt) Bool.true) (h2 : Eq Bool (cmp lv glv) Bool.true) \
-                 (h3 : Eq Bool (cmp lb glb) Bool.true) : \
-                 Eq Bool (def_eq_struct cmp (KExpr.let_ lty lv lb) (KExpr.let_ glt glv glb)) \
+                 (h1 : @Eq Bool (cmp lty glt) Bool.true) (h2 : @Eq Bool (cmp lv glv) Bool.true) \
+                 (h3 : @Eq Bool (cmp lb glb) Bool.true) : \
+                 @Eq Bool (def_eq_struct cmp (KExpr.let_ lty lv lb) (KExpr.let_ glt glv glb)) \
                  Bool.true := \
                  band_intro (cmp lty glt) (Bool.and (cmp lv glv) (cmp lb glb)) h1 \
                  (band_intro (cmp lv glv) (cmp lb glb) h2 h3)"
@@ -208,8 +208,8 @@ impl Specification {
         self.add_recursive_def(
             &format!(
                 "def def_eq_struct_intro_proj {cmp} (ps : Name) (pidx : Nat) (psub : KExpr) \
-                 (sub2 : KExpr) (hs : Eq Bool (cmp psub sub2) Bool.true) : \
-                 Eq Bool (def_eq_struct cmp (KExpr.proj ps pidx psub) \
+                 (sub2 : KExpr) (hs : @Eq Bool (cmp psub sub2) Bool.true) : \
+                 @Eq Bool (def_eq_struct cmp (KExpr.proj ps pidx psub) \
                  (KExpr.proj ps pidx sub2)) Bool.true := \
                  band_intro (Bool.and (name_eqb ps ps) (nat_eqb pidx pidx)) (cmp psub sub2) \
                  (band_intro (name_eqb ps ps) (nat_eqb pidx pidx) (name_eqb_refl ps) \
@@ -233,7 +233,7 @@ impl Specification {
         // wraps it over the a-side.
         let inner = "(fun (ny : KExpr) => def_eq_struct (def_eq_fuel the_red_env k) na ny)";
         let outer = String::from(
-            "(fun (nx : KExpr) => OptionType.rec KExpr (fun (_ : OptionType KExpr) => Bool) \
+            "(fun (nx : KExpr) => @OptionType.rec KExpr (fun (_ : OptionType KExpr) => Bool) \
              Bool.false (fun (ny : KExpr) => def_eq_struct (def_eq_fuel the_red_env k) nx ny) \
              (whnf_fuel_red the_red_env k b))",
         );
@@ -243,40 +243,40 @@ impl Specification {
         let step_b = format!(
             "(Eq.substType (OptionType KExpr) \
              (fun (o2 : OptionType KExpr) => \
-             Eq Bool (OptionType.rec KExpr (fun (_ : OptionType KExpr) => Bool) Bool.false \
+             @Eq Bool (@OptionType.rec KExpr (fun (_ : OptionType KExpr) => Bool) Bool.false \
              {inner} o2) Bool.true) \
-             (OptionType.some KExpr nb) (whnf_fuel_red the_red_env k b) \
+             (@OptionType.some KExpr nb) (whnf_fuel_red the_red_env k b) \
              (Eq.symm (OptionType KExpr) (whnf_fuel_red the_red_env k b) \
-             (OptionType.some KExpr nb) hb) hg)"
+             (@OptionType.some KExpr nb) hb) hg)"
         );
 
         // Step 1: same move on the a-side scrutinee.
         let step_a = format!(
             "(Eq.substType (OptionType KExpr) \
              (fun (o : OptionType KExpr) => \
-             Eq Bool (OptionType.rec KExpr (fun (_ : OptionType KExpr) => Bool) Bool.false \
+             @Eq Bool (@OptionType.rec KExpr (fun (_ : OptionType KExpr) => Bool) Bool.false \
              {outer} o) Bool.true) \
-             (OptionType.some KExpr na) (whnf_fuel_red the_red_env k a) \
+             (@OptionType.some KExpr na) (whnf_fuel_red the_red_env k a) \
              (Eq.symm (OptionType KExpr) (whnf_fuel_red the_red_env k a) \
-             (OptionType.some KExpr na) ha) {step_b})"
+             (@OptionType.some KExpr na) ha) {step_b})"
         );
 
         // Step 0: fold the unfolded fuel layer back into `def_eq_fuel … (succ k)`.
         let src = format!(
             "def def_eq_fuel_of_struct (k : Nat) (a : KExpr) (b : KExpr) (na : KExpr) \
              (nb : KExpr) \
-             (ha : Eq (OptionType KExpr) (whnf_fuel_red the_red_env k a) \
-             (OptionType.some KExpr na)) \
-             (hb : Eq (OptionType KExpr) (whnf_fuel_red the_red_env k b) \
-             (OptionType.some KExpr nb)) \
-             (hg : Eq Bool (def_eq_struct (def_eq_fuel the_red_env k) na nb) Bool.true) : \
-             Eq Bool (def_eq_fuel the_red_env (Nat.succ k) a b) Bool.true := \
-             Eq.substType Bool (fun (x : Bool) => Eq Bool x Bool.true) \
-             (OptionType.rec KExpr (fun (_ : OptionType KExpr) => Bool) Bool.false {outer} \
+             (ha : @Eq (OptionType KExpr) (whnf_fuel_red the_red_env k a) \
+             (@OptionType.some KExpr na)) \
+             (hb : @Eq (OptionType KExpr) (whnf_fuel_red the_red_env k b) \
+             (@OptionType.some KExpr nb)) \
+             (hg : @Eq Bool (def_eq_struct (def_eq_fuel the_red_env k) na nb) Bool.true) : \
+             @Eq Bool (def_eq_fuel the_red_env (Nat.succ k) a b) Bool.true := \
+             Eq.substType Bool (fun (x : Bool) => @Eq Bool x Bool.true) \
+             (@OptionType.rec KExpr (fun (_ : OptionType KExpr) => Bool) Bool.false {outer} \
              (whnf_fuel_red the_red_env k a)) \
              (def_eq_fuel the_red_env (Nat.succ k) a b) \
              (Eq.symm Bool (def_eq_fuel the_red_env (Nat.succ k) a b) \
-             (OptionType.rec KExpr (fun (_ : OptionType KExpr) => Bool) Bool.false {outer} \
+             (@OptionType.rec KExpr (fun (_ : OptionType KExpr) => Bool) Bool.false {outer} \
              (whnf_fuel_red the_red_env k a)) (def_eq_fuel_succ the_red_env k a b)) \
              {step_a}"
         );
@@ -339,8 +339,8 @@ impl Specification {
                 "(dom1 : KExpr) (cod1 : KExpr) (dom2 : KExpr) (cod2 : KExpr)",
                 "(KExpr.pi dom1 cod1)",
                 "(KExpr.pi dom2 cod2)",
-                "(hd : Eq Bool (def_eq_fuel the_red_env k dom1 dom2) Bool.true) \
-                 (hc : Eq Bool (def_eq_fuel the_red_env k cod1 cod2) Bool.true)",
+                "(hd : @Eq Bool (def_eq_fuel the_red_env k dom1 dom2) Bool.true) \
+                 (hc : @Eq Bool (def_eq_fuel the_red_env k cod1 cod2) Bool.true)",
                 "def_eq_struct_intro_pi (def_eq_fuel the_red_env k) dom1 cod1 dom2 cod2 hd hc",
             ),
             (
@@ -348,8 +348,8 @@ impl Specification {
                 "(ty1 : KExpr) (bd1 : KExpr) (ty2 : KExpr) (bd2 : KExpr)",
                 "(KExpr.lam ty1 bd1)",
                 "(KExpr.lam ty2 bd2)",
-                "(hd : Eq Bool (def_eq_fuel the_red_env k ty1 ty2) Bool.true) \
-                 (hc : Eq Bool (def_eq_fuel the_red_env k bd1 bd2) Bool.true)",
+                "(hd : @Eq Bool (def_eq_fuel the_red_env k ty1 ty2) Bool.true) \
+                 (hc : @Eq Bool (def_eq_fuel the_red_env k bd1 bd2) Bool.true)",
                 "def_eq_struct_intro_lam (def_eq_fuel the_red_env k) ty1 bd1 ty2 bd2 hd hc",
             ),
             (
@@ -357,8 +357,8 @@ impl Specification {
                 "(fn1 : KExpr) (arg1 : KExpr) (fn2 : KExpr) (arg2 : KExpr)",
                 "(KExpr.app fn1 arg1)",
                 "(KExpr.app fn2 arg2)",
-                "(hd : Eq Bool (def_eq_fuel the_red_env k fn1 fn2) Bool.true) \
-                 (hc : Eq Bool (def_eq_fuel the_red_env k arg1 arg2) Bool.true)",
+                "(hd : @Eq Bool (def_eq_fuel the_red_env k fn1 fn2) Bool.true) \
+                 (hc : @Eq Bool (def_eq_fuel the_red_env k arg1 arg2) Bool.true)",
                 "def_eq_struct_intro_app (def_eq_fuel the_red_env k) fn1 arg1 fn2 arg2 hd hc",
             ),
             (
@@ -367,9 +367,9 @@ impl Specification {
                  (lb2 : KExpr)",
                 "(KExpr.let_ lty1 lv1 lb1)",
                 "(KExpr.let_ lty2 lv2 lb2)",
-                "(hd : Eq Bool (def_eq_fuel the_red_env k lty1 lty2) Bool.true) \
-                 (hc : Eq Bool (def_eq_fuel the_red_env k lv1 lv2) Bool.true) \
-                 (he : Eq Bool (def_eq_fuel the_red_env k lb1 lb2) Bool.true)",
+                "(hd : @Eq Bool (def_eq_fuel the_red_env k lty1 lty2) Bool.true) \
+                 (hc : @Eq Bool (def_eq_fuel the_red_env k lv1 lv2) Bool.true) \
+                 (he : @Eq Bool (def_eq_fuel the_red_env k lb1 lb2) Bool.true)",
                 "def_eq_struct_intro_let (def_eq_fuel the_red_env k) lty1 lv1 lb1 lty2 lv2 lb2 \
                  hd hc he",
             ),
@@ -378,7 +378,7 @@ impl Specification {
                 "(ps : Name) (pidx : Nat) (psub1 : KExpr) (psub2 : KExpr)",
                 "(KExpr.proj ps pidx psub1)",
                 "(KExpr.proj ps pidx psub2)",
-                "(hd : Eq Bool (def_eq_fuel the_red_env k psub1 psub2) Bool.true)",
+                "(hd : @Eq Bool (def_eq_fuel the_red_env k psub1 psub2) Bool.true)",
                 "def_eq_struct_intro_proj (def_eq_fuel the_red_env k) ps pidx psub1 psub2 hd",
             ),
         ];
@@ -388,11 +388,11 @@ impl Specification {
             .map(|(name, binders, na, nb, premises, intro)| {
                 let src = format!(
                     "def {name} (k : Nat) (a : KExpr) (b : KExpr) {binders} \
-                     (ha : Eq (OptionType KExpr) (whnf_fuel_red the_red_env k a) \
-                     (OptionType.some KExpr {na})) \
-                     (hb : Eq (OptionType KExpr) (whnf_fuel_red the_red_env k b) \
-                     (OptionType.some KExpr {nb})) {premises} : \
-                     Eq Bool (def_eq_fuel the_red_env (Nat.succ k) a b) Bool.true := \
+                     (ha : @Eq (OptionType KExpr) (whnf_fuel_red the_red_env k a) \
+                     (@OptionType.some KExpr {na})) \
+                     (hb : @Eq (OptionType KExpr) (whnf_fuel_red the_red_env k b) \
+                     (@OptionType.some KExpr {nb})) {premises} : \
+                     @Eq Bool (def_eq_fuel the_red_env (Nat.succ k) a b) Bool.true := \
                      def_eq_fuel_of_struct k a b {na} {nb} ha hb ({intro})"
                 );
                 (name.to_string(), src)

@@ -10,7 +10,7 @@ INT = C('Int')
 NAT = N.NAT
 OFNAT = C('Int.ofNat')
 NEGSUCC = C('Int.negSucc')
-LVU = '(ListType.cons Level (Level.param kcre_name_@@u@@) (ListType.nil Level))'
+LVU = '(@ListType.cons Level (Level.param kcre_name_@@u@@) (@ListType.nil Level))'
 
 
 def ilit(payload):
@@ -47,12 +47,12 @@ INTREC = Rec('Int.rec', 'accepts_tc_int_rec_meta',
              'kcre_name_@@u@@', 'hmi', {'Int.ofNat': 'hio', 'Int.negSucc': 'hin'})
 INTREC.prefix = 3
 INTREC_RULES = {'Int.ofNat': 'accepts_tc_int_rec_ofnat_rule', 'Int.negSucc': 'accepts_tc_int_rec_negsucc_rule'}
-P_INTREC = ('(hmi : Eq (OptionType RecMeta) (recmeta_for (red_rec R) kcre_name_@@Int.rec@@) '
-            '(OptionType.some RecMeta accepts_tc_int_rec_meta)) '
-            '(hio : Eq (OptionType RecRule) (recrule_for (red_rec R) kcre_name_@@Int.rec@@ kcre_name_@@Int.ofNat@@) '
-            '(OptionType.some RecRule accepts_tc_int_rec_ofnat_rule)) '
-            '(hin : Eq (OptionType RecRule) (recrule_for (red_rec R) kcre_name_@@Int.rec@@ kcre_name_@@Int.negSucc@@) '
-            '(OptionType.some RecRule accepts_tc_int_rec_negsucc_rule))')
+P_INTREC = ('(hmi : @Eq (OptionType RecMeta) (recmeta_for (red_rec R) kcre_name_@@Int.rec@@) '
+            '(@OptionType.some RecMeta accepts_tc_int_rec_meta)) '
+            '(hio : @Eq (OptionType RecRule) (recrule_for (red_rec R) kcre_name_@@Int.rec@@ kcre_name_@@Int.ofNat@@) '
+            '(@OptionType.some RecRule accepts_tc_int_rec_ofnat_rule)) '
+            '(hin : @Eq (OptionType RecRule) (recrule_for (red_rec R) kcre_name_@@Int.rec@@ kcre_name_@@Int.negSucc@@) '
+            '(@OptionType.some RecRule accepts_tc_int_rec_negsucc_rule))')
 A_INTREC = 'hmi hio hin'
 
 
@@ -79,7 +79,7 @@ def ibody_const(op):
 
 
 def ip_body(op):
-    return '(%s : Eq (OptionType KExpr) (kdef_value_at (red_def R) kcre_name_@@%s@@ (ListType.nil Level)) (OptionType.some KExpr %s))' % (
+    return '(%s : @Eq (OptionType KExpr) (kdef_value_at (red_def R) kcre_name_@@%s@@ (@ListType.nil Level)) (@OptionType.some KExpr %s))' % (
         ihyp(op), op, ibody_const(op))
 
 
@@ -111,7 +111,7 @@ def iregister(op, binders, whole):
 
 
 def int_rec_proof(var, motive_ty, ofnat_var, ofnat_case, negsucc_var, negsucc_case):
-    return '(Int.rec (fun (%s : Int) => %s) (fun (%s : Nat) => %s) (fun (%s : Nat) => %s) %s)' % (
+    return '(@Int.rec (fun (%s : Int) => %s) (fun (%s : Nat) => %s) (fun (%s : Nat) => %s) %s)' % (
         var, motive_ty(var), ofnat_var, ofnat_case, negsucc_var, negsucc_case, var)
 
 
@@ -195,16 +195,16 @@ def gen_tonat():
 
 
 def base():
-    N.add_def('def accepts_tc_int_lit (i : Int) : KExpr := Int.rec (fun (_ : Int) => KExpr) '
-              '(fun (n : Nat) => KExpr.app (KExpr.const kcre_name_@@Int.ofNat@@ (ListType.nil Level)) (literal_nat n)) '
-              '(fun (n : Nat) => KExpr.app (KExpr.const kcre_name_@@Int.negSucc@@ (ListType.nil Level)) (literal_nat n)) i',
+    N.add_def('def accepts_tc_int_lit (i : Int) : KExpr := @Int.rec (fun (_ : Int) => KExpr) '
+              '(fun (n : Nat) => KExpr.app (KExpr.const kcre_name_@@Int.ofNat@@ (@ListType.nil Level)) (literal_nat n)) '
+              '(fun (n : Nat) => KExpr.app (KExpr.const kcre_name_@@Int.negSucc@@ (@ListType.nil Level)) (literal_nat n)) i',
               'accepts_tc_int_lit')
     if N.MODE['emit']:
         ITEMS.append({'kind': 'reflect_rec', 'of': 'Int.rec', 'meta': 'accepts_tc_int_rec_meta',
                       'rules': {'Int.ofNat': 'accepts_tc_int_rec_ofnat_rule', 'Int.negSucc': 'accepts_tc_int_rec_negsucc_rule'}})
     else:
         N.add_def('def accepts_tc_int_rec_meta : RecMeta := RecMeta.mk Nat.zero (Nat.succ Nat.zero) (Nat.succ (Nat.succ Nat.zero)) Nat.zero Bool.true '
-                  '(KConstSig.mk (ListType.cons Name kcre_name_@@u@@ (ListType.nil Name)) (KExpr.sort Level.zero))' + (' Nat.zero' if N.MODE.get('kflag') else ''),
+                  '(KConstSig.mk (@ListType.cons Name kcre_name_@@u@@ (@ListType.nil Name)) (KExpr.sort Level.zero))' + (' Nat.zero' if N.MODE.get('kflag') else ''),
                   'accepts_tc_int_rec_meta')
         N.add_def('def accepts_tc_int_rec_ofnat_rule : RecRule := RecRule.mk kcre_name_@@Int.ofNat@@ (Nat.succ Nat.zero) %s' % pr(INTREC_RHS_OFNAT),
                   'accepts_tc_int_rec_ofnat_rule')
@@ -296,7 +296,7 @@ def gen_neg():
 # ---------------------------------------------------------------- the Int predecessor step (subNatNat's step and
 # the pinned reduce_int_pred_fold step): Int.rec on an int literal
 def pred_step_meta(v):
-    return ('(Int.rec (fun (_ : Int) => Int) (fun (n3 : Nat) => Nat.rec (fun (_ : Nat) => Int) (Int.negSucc Nat.zero) '
+    return ('(@Int.rec (fun (_ : Int) => Int) (fun (n3 : Nat) => @Nat.rec (fun (_ : Nat) => Int) (Int.negSucc Nat.zero) '
             '(fun (n4 : Nat) (_ : Int) => Int.ofNat n4) n3) (fun (n3 : Nat) => Int.negSucc (Nat.succ n3)) %s)' % v)
 
 

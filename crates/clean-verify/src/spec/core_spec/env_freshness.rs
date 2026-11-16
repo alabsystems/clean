@@ -25,49 +25,49 @@ const DATA: &[&str] = &[
 const PROOFS: &[(&str, &str, &str)] = &[
     (
         "env_freshness_and_intro",
-        r"forall (a : Bool) (b : Bool), Eq Bool a Bool.true -> Eq Bool b Bool.true -> Eq Bool (Bool.and a b) Bool.true",
-        r"fun (a : Bool) (b : Bool) (ha : Eq Bool a Bool.true) (hb : Eq Bool b Bool.true) =>
-Eq.trans Bool (Bool.and a b) b Bool.true
- (Eq.cong Bool Bool (fun (x : Bool) => Bool.and x b) a Bool.true ha) hb",
+        r"forall (a : Bool) (b : Bool), @Eq Bool a Bool.true -> @Eq Bool b Bool.true -> @Eq Bool (Bool.and a b) Bool.true",
+        r"fun (a : Bool) (b : Bool) (ha : @Eq Bool a Bool.true) (hb : @Eq Bool b Bool.true) =>
+@Eq.trans Bool (Bool.and a b) b Bool.true
+ (@Eq.cong Bool Bool (fun (x : Bool) => Bool.and x b) a Bool.true ha) hb",
     ),
     (
         "env_freshness_and_false_right",
-        r"forall (a : Bool), Eq Bool (Bool.and a Bool.false) Bool.false",
-        r"fun (a : Bool) => Bool.rec
- (fun (x : Bool) => Eq Bool (Bool.and x Bool.false) Bool.false)
- (Eq.refl Bool Bool.false) (Eq.refl Bool Bool.false) a",
+        r"forall (a : Bool), @Eq Bool (Bool.and a Bool.false) Bool.false",
+        r"fun (a : Bool) => @Bool.rec
+ (fun (x : Bool) => @Eq Bool (Bool.and x Bool.false) Bool.false)
+ (@Eq.refl Bool Bool.false) (@Eq.refl Bool Bool.false) a",
     ),
     (
         "ctor_ids_fresh_head_refused",
         r"forall (id : Nat) (ty : KExpr) (rest : CtorDecls),
-Eq Bool (ctor_ids_fresh_b (CtorDecls.cons (CtorDecl.mk id ty) rest) id) Bool.false",
+@Eq Bool (ctor_ids_fresh_b (CtorDecls.cons (CtorDecl.mk id ty) rest) id) Bool.false",
         r"fun (id : Nat) (ty : KExpr) (rest : CtorDecls) =>
-Eq.cong Bool Bool (fun (b : Bool) => Bool.and (Bool.not b) (ctor_ids_fresh_b rest id))
+@Eq.cong Bool Bool (fun (b : Bool) => Bool.and (Bool.not b) (ctor_ids_fresh_b rest id))
  (nat_eqb id id) Bool.true (nat_eqb_refl id)",
     ),
     (
         "ctor_ids_fresh_tail_refused",
         r"forall (c : CtorDecl) (rest : CtorDecls) (id : Nat),
-Eq Bool (ctor_ids_fresh_b rest id) Bool.false ->
-Eq Bool (ctor_ids_fresh_b (CtorDecls.cons c rest) id) Bool.false",
+@Eq Bool (ctor_ids_fresh_b rest id) Bool.false ->
+@Eq Bool (ctor_ids_fresh_b (CtorDecls.cons c rest) id) Bool.false",
         r"fun (c : CtorDecl) (rest : CtorDecls) (id : Nat)
- (h : Eq Bool (ctor_ids_fresh_b rest id) Bool.false) =>
-Eq.trans Bool (ctor_ids_fresh_b (CtorDecls.cons c rest) id)
+ (h : @Eq Bool (ctor_ids_fresh_b rest id) Bool.false) =>
+@Eq.trans Bool (ctor_ids_fresh_b (CtorDecls.cons c rest) id)
  (Bool.and (Bool.not (nat_eqb (ctor_decl_id c) id)) Bool.false) Bool.false
- (Eq.cong Bool Bool (fun (b : Bool) => Bool.and (Bool.not (nat_eqb (ctor_decl_id c) id)) b)
+ (@Eq.cong Bool Bool (fun (b : Bool) => Bool.and (Bool.not (nat_eqb (ctor_decl_id c) id)) b)
    (ctor_ids_fresh_b rest id) Bool.false h)
  (env_freshness_and_false_right (Bool.not (nat_eqb (ctor_decl_id c) id)))",
     ),
     (
         "kenv_stored_ctor_refused",
         r"forall (env : KEnv) (family : Nat) (np : Nat) (ty : KExpr) (ctors : CtorDecls) (id : Nat),
-Eq Bool (ctor_ids_fresh_b ctors id) Bool.false ->
-Eq Bool (kenv_fresh (KEnv.addInductive env family np ty ctors) id) Bool.false",
+@Eq Bool (ctor_ids_fresh_b ctors id) Bool.false ->
+@Eq Bool (kenv_fresh (KEnv.addInductive env family np ty ctors) id) Bool.false",
         r"fun (env : KEnv) (family : Nat) (np : Nat) (ty : KExpr) (ctors : CtorDecls) (id : Nat)
- (h : Eq Bool (ctor_ids_fresh_b ctors id) Bool.false) =>
-Eq.trans Bool (kenv_fresh (KEnv.addInductive env family np ty ctors) id)
+ (h : @Eq Bool (ctor_ids_fresh_b ctors id) Bool.false) =>
+@Eq.trans Bool (kenv_fresh (KEnv.addInductive env family np ty ctors) id)
  (Bool.and (Bool.not (nat_eqb family id)) Bool.false) Bool.false
- (Eq.cong Bool Bool
+ (@Eq.cong Bool Bool
    (fun (b : Bool) => Bool.and (Bool.not (nat_eqb family id)) (Bool.and b (kenv_fresh env id)))
    (ctor_ids_fresh_b ctors id) Bool.false h)
  (env_freshness_and_false_right (Bool.not (nat_eqb family id)))",
@@ -75,30 +75,30 @@ Eq.trans Bool (kenv_fresh (KEnv.addInductive env family np ty ctors) id)
     (
         "kenv_occupied_const_preserved",
         r"forall (env : KEnv) (kind : ConstExtensionKind) (n : Nat) (ty : KExpr) (value : KExpr) (id : Nat),
-Eq Bool (kenv_fresh env id) Bool.false ->
-Eq Bool (kenv_fresh (KEnv.addConst env kind n ty value) id) Bool.false",
+@Eq Bool (kenv_fresh env id) Bool.false ->
+@Eq Bool (kenv_fresh (KEnv.addConst env kind n ty value) id) Bool.false",
         r"fun (env : KEnv) (kind : ConstExtensionKind) (n : Nat) (ty : KExpr) (value : KExpr) (id : Nat)
- (h : Eq Bool (kenv_fresh env id) Bool.false) =>
-Eq.trans Bool (kenv_fresh (KEnv.addConst env kind n ty value) id)
+ (h : @Eq Bool (kenv_fresh env id) Bool.false) =>
+@Eq.trans Bool (kenv_fresh (KEnv.addConst env kind n ty value) id)
  (Bool.and (Bool.not (nat_eqb n id)) Bool.false) Bool.false
- (Eq.cong Bool Bool (fun (b : Bool) => Bool.and (Bool.not (nat_eqb n id)) b)
+ (@Eq.cong Bool Bool (fun (b : Bool) => Bool.and (Bool.not (nat_eqb n id)) b)
    (kenv_fresh env id) Bool.false h)
  (env_freshness_and_false_right (Bool.not (nat_eqb n id)))",
     ),
     (
         "kenv_occupied_inductive_preserved",
         r"forall (env : KEnv) (n : Nat) (np : Nat) (ty : KExpr) (ctors : CtorDecls) (id : Nat),
-Eq Bool (kenv_fresh env id) Bool.false ->
-Eq Bool (kenv_fresh (KEnv.addInductive env n np ty ctors) id) Bool.false",
+@Eq Bool (kenv_fresh env id) Bool.false ->
+@Eq Bool (kenv_fresh (KEnv.addInductive env n np ty ctors) id) Bool.false",
         r"fun (env : KEnv) (n : Nat) (np : Nat) (ty : KExpr) (ctors : CtorDecls) (id : Nat)
- (h : Eq Bool (kenv_fresh env id) Bool.false) =>
-Eq.trans Bool (kenv_fresh (KEnv.addInductive env n np ty ctors) id)
+ (h : @Eq Bool (kenv_fresh env id) Bool.false) =>
+@Eq.trans Bool (kenv_fresh (KEnv.addInductive env n np ty ctors) id)
  (Bool.and (Bool.not (nat_eqb n id)) (Bool.and (ctor_ids_fresh_b ctors id) Bool.false)) Bool.false
- (Eq.cong Bool Bool (fun (b : Bool) => Bool.and (Bool.not (nat_eqb n id))
+ (@Eq.cong Bool Bool (fun (b : Bool) => Bool.and (Bool.not (nat_eqb n id))
    (Bool.and (ctor_ids_fresh_b ctors id) b)) (kenv_fresh env id) Bool.false h)
- (Eq.trans Bool (Bool.and (Bool.not (nat_eqb n id)) (Bool.and (ctor_ids_fresh_b ctors id) Bool.false))
+ (@Eq.trans Bool (Bool.and (Bool.not (nat_eqb n id)) (Bool.and (ctor_ids_fresh_b ctors id) Bool.false))
    (Bool.and (Bool.not (nat_eqb n id)) Bool.false) Bool.false
-   (Eq.cong Bool Bool (fun (b : Bool) => Bool.and (Bool.not (nat_eqb n id)) b)
+   (@Eq.cong Bool Bool (fun (b : Bool) => Bool.and (Bool.not (nat_eqb n id)) b)
      (Bool.and (ctor_ids_fresh_b ctors id) Bool.false) Bool.false
      (env_freshness_and_false_right (ctor_ids_fresh_b ctors id)))
    (env_freshness_and_false_right (Bool.not (nat_eqb n id))))",
@@ -106,19 +106,19 @@ Eq.trans Bool (kenv_fresh (KEnv.addInductive env n np ty ctors) id)
     (
         "fresh_ctor_decls_nil",
         r"forall (env : KEnv) (family : Nat), FreshCtorDecls env family CtorDecls.nil",
-        r"fun (env : KEnv) (family : Nat) => Eq.refl Bool Bool.true",
+        r"fun (env : KEnv) (family : Nat) => @Eq.refl Bool Bool.true",
     ),
     (
         "fresh_ctor_decls_cons_intro",
         r"forall (env : KEnv) (family : Nat) (c : CtorDecl) (rest : CtorDecls),
 FreshDeclName env (ctor_decl_id c) ->
-Eq Bool (Bool.not (nat_eqb family (ctor_decl_id c))) Bool.true ->
-Eq Bool (ctor_ids_fresh_b rest (ctor_decl_id c)) Bool.true ->
+@Eq Bool (Bool.not (nat_eqb family (ctor_decl_id c))) Bool.true ->
+@Eq Bool (ctor_ids_fresh_b rest (ctor_decl_id c)) Bool.true ->
 FreshCtorDecls env family rest -> FreshCtorDecls env family (CtorDecls.cons c rest)",
         r"fun (env : KEnv) (family : Nat) (c : CtorDecl) (rest : CtorDecls)
  (hf : FreshDeclName env (ctor_decl_id c))
- (hn : Eq Bool (Bool.not (nat_eqb family (ctor_decl_id c))) Bool.true)
- (hd : Eq Bool (ctor_ids_fresh_b rest (ctor_decl_id c)) Bool.true)
+ (hn : @Eq Bool (Bool.not (nat_eqb family (ctor_decl_id c))) Bool.true)
+ (hd : @Eq Bool (ctor_ids_fresh_b rest (ctor_decl_id c)) Bool.true)
  (hr : FreshCtorDecls env family rest) =>
 env_freshness_and_intro (kenv_fresh env (ctor_decl_id c))
  (Bool.and (Bool.not (nat_eqb family (ctor_decl_id c)))
@@ -139,7 +139,7 @@ band_eq_true_left (kenv_fresh env (ctor_decl_id c)) (Bool.and (Bool.not (nat_eqb
     (
         "fresh_ctor_decls_head_family",
         r"forall (env : KEnv) (family : Nat) (c : CtorDecl) (rest : CtorDecls),
-FreshCtorDecls env family (CtorDecls.cons c rest) -> Eq Bool (Bool.not (nat_eqb family (ctor_decl_id c))) Bool.true",
+FreshCtorDecls env family (CtorDecls.cons c rest) -> @Eq Bool (Bool.not (nat_eqb family (ctor_decl_id c))) Bool.true",
         r"fun (env : KEnv) (family : Nat) (c : CtorDecl) (rest : CtorDecls)
  (h : FreshCtorDecls env family (CtorDecls.cons c rest)) =>
 band_eq_true_left (Bool.not (nat_eqb family (ctor_decl_id c))) (Bool.and (ctor_ids_fresh_b rest (ctor_decl_id c)) (ctor_decls_fresh_b env family rest)) (band_eq_true_right (kenv_fresh env (ctor_decl_id c)) (Bool.and (Bool.not (nat_eqb family (ctor_decl_id c))) (Bool.and (ctor_ids_fresh_b rest (ctor_decl_id c)) (ctor_decls_fresh_b env family rest))) h)",
@@ -147,7 +147,7 @@ band_eq_true_left (Bool.not (nat_eqb family (ctor_decl_id c))) (Bool.and (ctor_i
     (
         "fresh_ctor_decls_head_distinct",
         r"forall (env : KEnv) (family : Nat) (c : CtorDecl) (rest : CtorDecls),
-FreshCtorDecls env family (CtorDecls.cons c rest) -> Eq Bool (ctor_ids_fresh_b rest (ctor_decl_id c)) Bool.true",
+FreshCtorDecls env family (CtorDecls.cons c rest) -> @Eq Bool (ctor_ids_fresh_b rest (ctor_decl_id c)) Bool.true",
         r"fun (env : KEnv) (family : Nat) (c : CtorDecl) (rest : CtorDecls)
  (h : FreshCtorDecls env family (CtorDecls.cons c rest)) =>
 band_eq_true_left (ctor_ids_fresh_b rest (ctor_decl_id c)) (ctor_decls_fresh_b env family rest) (band_eq_true_right (Bool.not (nat_eqb family (ctor_decl_id c))) (Bool.and (ctor_ids_fresh_b rest (ctor_decl_id c)) (ctor_decls_fresh_b env family rest)) (band_eq_true_right (kenv_fresh env (ctor_decl_id c)) (Bool.and (Bool.not (nat_eqb family (ctor_decl_id c))) (Bool.and (ctor_ids_fresh_b rest (ctor_decl_id c)) (ctor_decls_fresh_b env family rest))) h))",
@@ -166,23 +166,23 @@ band_eq_true_right (ctor_ids_fresh_b rest (ctor_decl_id c)) (ctor_decls_fresh_b 
 WellFormedCtorDecls env family np ty ctors -> FreshCtorDecls env family ctors",
         r"fun (env : KEnv) (family : Nat) (np : Nat) (ty : KExpr) (ctors : CtorDecls)
  (h : WellFormedCtorDecls env family np ty ctors) =>
-WellFormedCtorDecls.rec env family np ty ctors
+@WellFormedCtorDecls.rec env family np ty ctors
  (fun (_h : WellFormedCtorDecls env family np ty ctors) => FreshCtorDecls env family ctors)
  (fun (u : Level) (fresh : FreshCtorDecls env family ctors)
-   (_result : Eq KExpr (return_type ty) (KExpr.sort u))
-   (_shape : Eq Bool (ctor_decls_wf_b np ctors) Bool.true)
+   (_result : @Eq KExpr (return_type ty) (KExpr.sort u))
+   (_shape : @Eq Bool (ctor_decls_wf_b np ctors) Bool.true)
    (_typed : CtorsWellTyped u np ty ctors) => fresh) h",
     ),
     (
         "fresh_ctor_decls_occupied_refused",
         r"forall (env : KEnv) (family : Nat) (id : Nat) (ty : KExpr) (rest : CtorDecls) (C : Prop),
-Eq Bool (kenv_fresh env id) Bool.false ->
+@Eq Bool (kenv_fresh env id) Bool.false ->
 FreshCtorDecls env family (CtorDecls.cons (CtorDecl.mk id ty) rest) -> C",
         r"fun (env : KEnv) (family : Nat) (id : Nat) (ty : KExpr) (rest : CtorDecls) (C : Prop)
- (occupied : Eq Bool (kenv_fresh env id) Bool.false)
+ (occupied : @Eq Bool (kenv_fresh env id) Bool.false)
  (fresh : FreshCtorDecls env family (CtorDecls.cons (CtorDecl.mk id ty) rest)) =>
-bool_false_ne_true C (Eq.trans Bool Bool.false (kenv_fresh env id) Bool.true
- (Eq.symm Bool (kenv_fresh env id) Bool.false occupied)
+bool_false_ne_true C (@Eq.trans Bool Bool.false (kenv_fresh env id) Bool.true
+ (@Eq.symm Bool (kenv_fresh env id) Bool.false occupied)
  (fresh_ctor_decls_head_old env family (CtorDecl.mk id ty) rest fresh))",
     ),
     (
@@ -192,9 +192,9 @@ FreshCtorDecls env id (CtorDecls.cons (CtorDecl.mk id ty) rest) -> C",
         r"fun (env : KEnv) (id : Nat) (ty : KExpr) (rest : CtorDecls) (C : Prop)
  (fresh : FreshCtorDecls env id (CtorDecls.cons (CtorDecl.mk id ty) rest)) =>
 bool_false_ne_true C
- (Eq.trans Bool Bool.false (Bool.not (nat_eqb id id)) Bool.true
-   (Eq.symm Bool (Bool.not (nat_eqb id id)) Bool.false
-     (Eq.cong Bool Bool (fun (b : Bool) => Bool.not b) (nat_eqb id id) Bool.true (nat_eqb_refl id)))
+ (@Eq.trans Bool Bool.false (Bool.not (nat_eqb id id)) Bool.true
+   (@Eq.symm Bool (Bool.not (nat_eqb id id)) Bool.false
+     (@Eq.cong Bool Bool (fun (b : Bool) => Bool.not b) (nat_eqb id id) Bool.true (nat_eqb_refl id)))
    (fresh_ctor_decls_head_family env id (CtorDecl.mk id ty) rest fresh))",
     ),
     (
@@ -204,8 +204,8 @@ FreshCtorDecls env family (CtorDecls.cons (CtorDecl.mk id ty) (CtorDecls.cons (C
         r"fun (env : KEnv) (family : Nat) (id : Nat) (ty : KExpr) (ty2 : KExpr) (rest : CtorDecls) (C : Prop)
  (fresh : FreshCtorDecls env family (CtorDecls.cons (CtorDecl.mk id ty) (CtorDecls.cons (CtorDecl.mk id ty2) rest))) =>
 bool_false_ne_true C
- (Eq.trans Bool Bool.false (ctor_ids_fresh_b (CtorDecls.cons (CtorDecl.mk id ty2) rest) id) Bool.true
-   (Eq.symm Bool (ctor_ids_fresh_b (CtorDecls.cons (CtorDecl.mk id ty2) rest) id) Bool.false
+ (@Eq.trans Bool Bool.false (ctor_ids_fresh_b (CtorDecls.cons (CtorDecl.mk id ty2) rest) id) Bool.true
+   (@Eq.symm Bool (ctor_ids_fresh_b (CtorDecls.cons (CtorDecl.mk id ty2) rest) id) Bool.false
      (ctor_ids_fresh_head_refused id ty2 rest))
    (fresh_ctor_decls_head_distinct env family (CtorDecl.mk id ty)
      (CtorDecls.cons (CtorDecl.mk id ty2) rest) fresh))",
@@ -213,11 +213,11 @@ bool_false_ne_true C
     (
         "fresh_decl_occupied_refused",
         r"forall (env : KEnv) (id : Nat) (C : Prop),
-Eq Bool (kenv_fresh env id) Bool.false -> FreshDeclName env id -> C",
+@Eq Bool (kenv_fresh env id) Bool.false -> FreshDeclName env id -> C",
         r"fun (env : KEnv) (id : Nat) (C : Prop)
- (occupied : Eq Bool (kenv_fresh env id) Bool.false) (fresh : FreshDeclName env id) =>
-bool_false_ne_true C (Eq.trans Bool Bool.false (kenv_fresh env id) Bool.true
- (Eq.symm Bool (kenv_fresh env id) Bool.false occupied) fresh)",
+ (occupied : @Eq Bool (kenv_fresh env id) Bool.false) (fresh : FreshDeclName env id) =>
+bool_false_ne_true C (@Eq.trans Bool Bool.false (kenv_fresh env id) Bool.true
+ (@Eq.symm Bool (kenv_fresh env id) Bool.false occupied) fresh)",
     ),
     (
         "env_freshness_ctor_typed",
@@ -226,10 +226,10 @@ CtorsWellTyped (Level.succ Level.zero) Nat.zero env_freshness_type (env_freshnes
         r"fun (id : Nat) =>
 CtorsWellTyped.cons (Level.succ Level.zero) Nat.zero env_freshness_type
  id (KExpr.bvar Nat.zero) (Level.succ Level.zero) CtorDecls.nil
- (CtxTyping.var (ListType.cons KExpr env_freshness_type (ListType.nil KExpr))
-   Nat.zero env_freshness_type (CtxLookup.here env_freshness_type (ListType.nil KExpr)))
+ (CtxTyping.var (@ListType.cons KExpr env_freshness_type (@ListType.nil KExpr))
+   Nat.zero env_freshness_type (CtxLookup.here env_freshness_type (@ListType.nil KExpr)))
  (FieldsBounded.done_bvar (Level.succ Level.zero)
-   (ListType.cons KExpr env_freshness_type (ListType.nil KExpr)) Nat.zero)
+   (@ListType.cons KExpr env_freshness_type (@ListType.nil KExpr)) Nat.zero)
  (CtorsWellTyped.nil (Level.succ Level.zero) Nat.zero env_freshness_type)",
     ),
     (
@@ -239,9 +239,9 @@ FreshCtorDecls env family (env_freshness_ctors id) ->
 WellFormedCtorDecls env family Nat.zero env_freshness_type (env_freshness_ctors id)",
         r"fun (env : KEnv) (family : Nat) (id : Nat)
  (fresh : FreshCtorDecls env family (env_freshness_ctors id)) =>
-WellFormedCtorDecls.mk env family Nat.zero env_freshness_type (env_freshness_ctors id)
- (Level.succ Level.zero) fresh (Eq.refl KExpr env_freshness_type)
- (Eq.refl Bool Bool.true) (env_freshness_ctor_typed id)",
+@WellFormedCtorDecls.mk env family Nat.zero env_freshness_type (env_freshness_ctors id)
+ (Level.succ Level.zero) fresh (@Eq.refl KExpr env_freshness_type)
+ (@Eq.refl Bool Bool.true) (env_freshness_ctor_typed id)",
     ),
     (
         "env_freshness_extension",
@@ -252,13 +252,13 @@ InductiveExtension env (KEnv.addInductive env family Nat.zero env_freshness_type
  (hc : FreshCtorDecls env family (env_freshness_ctors id)) =>
 InductiveExtension.mk env family Nat.zero env_freshness_type (env_freshness_ctors id)
  (Level.succ (Level.succ Level.zero)) hf (Typing.sort (Level.succ Level.zero))
- (Eq.refl Bool Bool.true) (env_freshness_well_formed env family id hc)",
+ (@Eq.refl Bool Bool.true) (env_freshness_well_formed env family id hc)",
     ),
     (
         "env_freshness_first_extension",
         r"InductiveExtension KEnv.empty env_freshness_first",
         r"env_freshness_extension KEnv.empty Nat.zero env_freshness_one
- (Eq.refl Bool Bool.true) (Eq.refl Bool Bool.true)",
+ (@Eq.refl Bool Bool.true) (@Eq.refl Bool Bool.true)",
     ),
     (
         "env_freshness_first_sound",
@@ -269,7 +269,7 @@ InductiveExtension.mk env family Nat.zero env_freshness_type (env_freshness_ctor
         "env_freshness_second_extension",
         r"InductiveExtension env_freshness_first env_freshness_second",
         r"env_freshness_extension env_freshness_first env_freshness_two env_freshness_three
- (Eq.refl Bool Bool.true) (Eq.refl Bool Bool.true)",
+ (@Eq.refl Bool Bool.true) (@Eq.refl Bool Bool.true)",
     ),
     (
         "env_freshness_second_accepted",
@@ -292,7 +292,7 @@ InductiveExtension.mk env family Nat.zero env_freshness_type (env_freshness_ctor
         r"ConstantExtension env_freshness_first env_freshness_const_result",
         r"ConstantExtension.mk env_freshness_first ConstExtensionKind.reducible_ env_freshness_two
  env_freshness_type (KExpr.sort Level.zero) (Level.succ (Level.succ Level.zero))
- (Eq.refl Bool Bool.true) (Typing.sort (Level.succ Level.zero)) (Typing.sort Level.zero)",
+ (@Eq.refl Bool Bool.true) (Typing.sort (Level.succ Level.zero)) (Typing.sort Level.zero)",
     ),
     (
         "env_freshness_const_accepted",
@@ -307,55 +307,55 @@ InductiveExtension.mk env family Nat.zero env_freshness_type (env_freshness_ctor
     ),
     (
         "env_freshness_stored_ctor_refused",
-        r"Eq Bool (kenv_fresh env_freshness_first env_freshness_one) Bool.false",
-        r"Eq.refl Bool Bool.false",
+        r"@Eq Bool (kenv_fresh env_freshness_first env_freshness_one) Bool.false",
+        r"@Eq.refl Bool Bool.false",
     ),
     (
         "env_freshness_existing_ctor_refused",
-        r"Eq Bool (ctor_decls_fresh_b env_freshness_first env_freshness_two (env_freshness_ctors env_freshness_one)) Bool.false",
-        r"Eq.refl Bool Bool.false",
+        r"@Eq Bool (ctor_decls_fresh_b env_freshness_first env_freshness_two (env_freshness_ctors env_freshness_one)) Bool.false",
+        r"@Eq.refl Bool Bool.false",
     ),
     (
         "env_freshness_existing_family_refused",
-        r"Eq Bool (ctor_decls_fresh_b env_freshness_first env_freshness_two (env_freshness_ctors Nat.zero)) Bool.false",
-        r"Eq.refl Bool Bool.false",
+        r"@Eq Bool (ctor_decls_fresh_b env_freshness_first env_freshness_two (env_freshness_ctors Nat.zero)) Bool.false",
+        r"@Eq.refl Bool Bool.false",
     ),
     (
         "env_freshness_self_family_refused",
-        r"Eq Bool (ctor_decls_fresh_b KEnv.empty Nat.zero (env_freshness_ctors Nat.zero)) Bool.false",
-        r"Eq.refl Bool Bool.false",
+        r"@Eq Bool (ctor_decls_fresh_b KEnv.empty Nat.zero (env_freshness_ctors Nat.zero)) Bool.false",
+        r"@Eq.refl Bool Bool.false",
     ),
     (
         "env_freshness_intra_list_refused",
-        r"Eq Bool (ctor_decls_fresh_b KEnv.empty Nat.zero
+        r"@Eq Bool (ctor_decls_fresh_b KEnv.empty Nat.zero
  (CtorDecls.cons (CtorDecl.mk env_freshness_one (KExpr.bvar Nat.zero)) (env_freshness_ctors env_freshness_one))) Bool.false",
-        r"Eq.refl Bool Bool.false",
+        r"@Eq.refl Bool Bool.false",
     ),
     (
         "env_freshness_reducible_const_refused",
-        r"Eq Bool (ctor_decls_fresh_b
+        r"@Eq Bool (ctor_decls_fresh_b
  (KEnv.addConst KEnv.empty ConstExtensionKind.reducible_ env_freshness_one env_freshness_type (KExpr.sort Level.zero))
  Nat.zero (env_freshness_ctors env_freshness_one)) Bool.false",
-        r"Eq.refl Bool Bool.false",
+        r"@Eq.refl Bool Bool.false",
     ),
     (
         "env_freshness_opaque_const_refused",
-        r"Eq Bool (ctor_decls_fresh_b
+        r"@Eq Bool (ctor_decls_fresh_b
  (KEnv.addConst KEnv.empty ConstExtensionKind.opaque_ env_freshness_one env_freshness_type (KExpr.sort Level.zero))
  Nat.zero (env_freshness_ctors env_freshness_one)) Bool.false",
-        r"Eq.refl Bool Bool.false",
+        r"@Eq.refl Bool Bool.false",
     ),
     (
         "env_freshness_old_ctor_still_refused",
-        r"Eq Bool (kenv_fresh env_freshness_second env_freshness_one) Bool.false",
-        r"Eq.refl Bool Bool.false",
+        r"@Eq Bool (kenv_fresh env_freshness_second env_freshness_one) Bool.false",
+        r"@Eq.refl Bool Bool.false",
     ),
     (
         "env_freshness_nonadjacent_duplicate_refused",
-        r"Eq Bool (ctor_decls_fresh_b KEnv.empty Nat.zero
+        r"@Eq Bool (ctor_decls_fresh_b KEnv.empty Nat.zero
  (CtorDecls.cons (CtorDecl.mk env_freshness_one (KExpr.bvar Nat.zero))
    (CtorDecls.cons (CtorDecl.mk env_freshness_two (KExpr.bvar Nat.zero)) (env_freshness_ctors env_freshness_one)))) Bool.false",
-        r"Eq.refl Bool Bool.false",
+        r"@Eq.refl Bool Bool.false",
     ),
 ];
 
@@ -464,13 +464,13 @@ mod tests {
         run_with_stack(|| {
             let mut spec = build_spec_with_stack();
             for source in [
-                r"def env_freshness_forged_existing_ctor : FreshCtorDecls env_freshness_first env_freshness_two (env_freshness_ctors env_freshness_one) := Eq.refl Bool Bool.true",
-                r"def env_freshness_forged_self_family : FreshCtorDecls KEnv.empty Nat.zero (env_freshness_ctors Nat.zero) := Eq.refl Bool Bool.true",
-                r"def env_freshness_forged_duplicate : FreshCtorDecls KEnv.empty Nat.zero (CtorDecls.cons (CtorDecl.mk env_freshness_one (KExpr.bvar Nat.zero)) (env_freshness_ctors env_freshness_one)) := Eq.refl Bool Bool.true",
-                r"def env_freshness_forged_family : FreshDeclName env_freshness_first env_freshness_one := Eq.refl Bool Bool.true",
-                r"def env_freshness_forged_inductive : InductiveExtension env_freshness_first (KEnv.addInductive env_freshness_first env_freshness_two Nat.zero env_freshness_type (env_freshness_ctors env_freshness_one)) := env_freshness_extension env_freshness_first env_freshness_two env_freshness_one (Eq.refl Bool Bool.true) (Eq.refl Bool Bool.true)",
-                r"def env_freshness_forged_reducible : ConstantExtension env_freshness_first (KEnv.addConst env_freshness_first ConstExtensionKind.reducible_ env_freshness_one env_freshness_type (KExpr.sort Level.zero)) := ConstantExtension.mk env_freshness_first ConstExtensionKind.reducible_ env_freshness_one env_freshness_type (KExpr.sort Level.zero) (Level.succ (Level.succ Level.zero)) (Eq.refl Bool Bool.true) (Typing.sort (Level.succ Level.zero)) (Typing.sort Level.zero)",
-                r"def env_freshness_forged_opaque : ConstantExtension env_freshness_first (KEnv.addConst env_freshness_first ConstExtensionKind.opaque_ env_freshness_one env_freshness_type (KExpr.sort Level.zero)) := ConstantExtension.mk env_freshness_first ConstExtensionKind.opaque_ env_freshness_one env_freshness_type (KExpr.sort Level.zero) (Level.succ (Level.succ Level.zero)) (Eq.refl Bool Bool.true) (Typing.sort (Level.succ Level.zero)) (Typing.sort Level.zero)",
+                r"def env_freshness_forged_existing_ctor : FreshCtorDecls env_freshness_first env_freshness_two (env_freshness_ctors env_freshness_one) := @Eq.refl Bool Bool.true",
+                r"def env_freshness_forged_self_family : FreshCtorDecls KEnv.empty Nat.zero (env_freshness_ctors Nat.zero) := @Eq.refl Bool Bool.true",
+                r"def env_freshness_forged_duplicate : FreshCtorDecls KEnv.empty Nat.zero (CtorDecls.cons (CtorDecl.mk env_freshness_one (KExpr.bvar Nat.zero)) (env_freshness_ctors env_freshness_one)) := @Eq.refl Bool Bool.true",
+                r"def env_freshness_forged_family : FreshDeclName env_freshness_first env_freshness_one := @Eq.refl Bool Bool.true",
+                r"def env_freshness_forged_inductive : InductiveExtension env_freshness_first (KEnv.addInductive env_freshness_first env_freshness_two Nat.zero env_freshness_type (env_freshness_ctors env_freshness_one)) := env_freshness_extension env_freshness_first env_freshness_two env_freshness_one (@Eq.refl Bool Bool.true) (@Eq.refl Bool Bool.true)",
+                r"def env_freshness_forged_reducible : ConstantExtension env_freshness_first (KEnv.addConst env_freshness_first ConstExtensionKind.reducible_ env_freshness_one env_freshness_type (KExpr.sort Level.zero)) := ConstantExtension.mk env_freshness_first ConstExtensionKind.reducible_ env_freshness_one env_freshness_type (KExpr.sort Level.zero) (Level.succ (Level.succ Level.zero)) (@Eq.refl Bool Bool.true) (Typing.sort (Level.succ Level.zero)) (Typing.sort Level.zero)",
+                r"def env_freshness_forged_opaque : ConstantExtension env_freshness_first (KEnv.addConst env_freshness_first ConstExtensionKind.opaque_ env_freshness_one env_freshness_type (KExpr.sort Level.zero)) := ConstantExtension.mk env_freshness_first ConstExtensionKind.opaque_ env_freshness_one env_freshness_type (KExpr.sort Level.zero) (Level.succ (Level.succ Level.zero)) (@Eq.refl Bool Bool.true) (Typing.sort (Level.succ Level.zero)) (Typing.sort Level.zero)",
             ] {
                 let clean_parser::SurfaceDecl::Def { name, .. } =
                     clean_parser::parse_decl(source).expect("negative control must parse")

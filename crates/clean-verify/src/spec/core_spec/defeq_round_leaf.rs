@@ -62,9 +62,9 @@ impl Specification {
         self.add_recursive_def(
             &format!(
                 "def kexpr_lit_inj (v1 : Nat) (v2 : Nat) \
-                 (h : Eq KExpr (KExpr.lit v1) (KExpr.lit v2)) : Eq Nat v1 v2 := \
+                 (h : @Eq KExpr (KExpr.lit v1) (KExpr.lit v2)) : @Eq Nat v1 v2 := \
                  Eq.cong KExpr Nat \
-                 (fun (e : KExpr) => KExpr.rec (fun (_ : KExpr) => Nat) \
+                 (fun (e : KExpr) => @KExpr.rec (fun (_ : KExpr) => Nat) \
                  (fun (_ : Level) => {default}) \
                  (fun (_ : Nat) => {default}) \
                  (fun (_ : KExpr) (_ : KExpr) (_ : Nat) (_ : Nat) => {default}) \
@@ -151,17 +151,17 @@ impl Specification {
                     // The b-side leg and its reduction, transported onto the shape.
                     let hb2 = format!(
                         "(Eq.substType KExpr \
-                         (fun (z : KExpr) => Eq (OptionType KExpr) \
-                         (whnf_fuel_red the_red_env n bb) (OptionType.some KExpr z)) \
+                         (fun (z : KExpr) => @Eq (OptionType KExpr) \
+                         (whnf_fuel_red the_red_env n bb) (@OptionType.some KExpr z)) \
                          nb {rform} hshape hb)"
                     );
                     let src = format!(
                         "def def_eq_round_{head} {HNF}(n : Nat) (x : KExpr) (bb : KExpr) \
                          (nb : KExpr) {lbind} \
-                         (hx : Eq (OptionType KExpr) (whnf_fuel_red the_red_env n x) \
-                         (OptionType.some KExpr {lform})) \
-                         (hb : Eq (OptionType KExpr) (whnf_fuel_red the_red_env n bb) \
-                         (OptionType.some KExpr nb)) \
+                         (hx : @Eq (OptionType KExpr) (whnf_fuel_red the_red_env n x) \
+                         (@OptionType.some KExpr {lform})) \
+                         (hb : @Eq (OptionType KExpr) (whnf_fuel_red the_red_env n bb) \
+                         (@OptionType.some KExpr nb)) \
                          (hj : par_strips_witness_cd_star the_red_env {lform} nb) : \
                          DefEqFuelAccepts x bb := \
                          @par_strips_witness_cd_star.rec the_red_env {lform} nb \
@@ -170,8 +170,8 @@ impl Specification {
                          (fun (w : KExpr) \
                          (hlw : par_reduces_cd_star the_red_env {lform} w) \
                          (hrw : par_reduces_cd_star the_red_env nb w) => \
-                         {shape}.rec nb (fun (_s : {shape} nb) => DefEqFuelAccepts x bb) \
-                         (fun {rbind} (hshape : Eq KExpr nb {rform}) => \
+                         @{shape}.rec nb (fun (_s : {shape} nb) => DefEqFuelAccepts x bb) \
+                         (fun {rbind} (hshape : @Eq KExpr nb {rform}) => \
                          (fun (hrw2 : par_reduces_cd_star the_red_env {rform} w) => \
                          {step} hx {hb2} ({inj} {same})) \
                          (Eq.substType KExpr \
@@ -276,8 +276,8 @@ mod tests {
             );
             assert!(
                 src.contains(
-                    "(fun (z : KExpr) => Eq (OptionType KExpr) (whnf_fuel_red the_red_env n bb) \
-                     (OptionType.some KExpr z))"
+                    "(fun (z : KExpr) => @Eq (OptionType KExpr) (whnf_fuel_red the_red_env n bb) \
+                     (@OptionType.some KExpr z))"
                 ),
                 "the b-side LEG must be transported onto the shape\nterm: {src}"
             );

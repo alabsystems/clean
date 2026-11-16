@@ -59,7 +59,7 @@ impl Specification {
                 concat!(
                     "fun (e : KExpr) (e' : KExpr) (val : KExpr) (depth : Nat) ",
                     "(w : DefEnvWellformed the_red_env) (h : delta_reduces e e') => ",
-                    "DefEnvWellformed.rec the_red_env ",
+                    "@DefEnvWellformed.rec the_red_env ",
                     "(fun (_ : DefEnvWellformed the_red_env) => ",
                     "DefEq (instantiate_at e val depth) (instantiate_at e' val depth)) ",
                     "(fun (hs : {SUBST}) (hf : {FWD}) (hb : {BWD}) => ",
@@ -98,7 +98,7 @@ impl Specification {
                 concat!(
                     "fun (e : KExpr) (e' : KExpr) ",
                     "(w : DefEnvWellformed the_red_env) (h : delta_reduces e e') => ",
-                    "DefEnvWellformed.rec the_red_env ",
+                    "@DefEnvWellformed.rec the_red_env ",
                     "(fun (_ : DefEnvWellformed the_red_env) => ",
                     "forall (T : KExpr), has_type e T -> has_type e' T) ",
                     "(fun (hs : {SUBST}) (hf : {FWD}) (hb : {BWD}) => ",
@@ -137,7 +137,7 @@ impl Specification {
                 concat!(
                     "fun (e : KExpr) (e' : KExpr) ",
                     "(w : DefEnvWellformed the_red_env) (h : delta_reduces e e') => ",
-                    "DefEnvWellformed.rec the_red_env ",
+                    "@DefEnvWellformed.rec the_red_env ",
                     "(fun (_ : DefEnvWellformed the_red_env) => ",
                     "forall (T : KExpr), has_type e' T -> has_type e T) ",
                     "(fun (hs : {SUBST}) (hf : {FWD}) (hb : {BWD}) => ",
@@ -180,7 +180,7 @@ impl Specification {
                 concat!(
                     "fun (e : KExpr) (e' : KExpr) (val : KExpr) (depth : Nat) ",
                     "(w : RecEnvWellformed (red_rec the_red_env)) (h : iota_reduces e e') => ",
-                    "RecEnvWellformed.rec (red_rec the_red_env) ",
+                    "@RecEnvWellformed.rec (red_rec the_red_env) ",
                     "(fun (_ : RecEnvWellformed (red_rec the_red_env)) => ",
                     "DefEq (instantiate_at e val depth) (instantiate_at e' val depth)) ",
                     "(fun (hs : {SUBST}) (hf : {FWD}) (hb : {BWD}) => ",
@@ -219,7 +219,7 @@ impl Specification {
                 concat!(
                     "fun (e : KExpr) (e' : KExpr) ",
                     "(w : RecEnvWellformed (red_rec the_red_env)) (h : iota_reduces e e') => ",
-                    "RecEnvWellformed.rec (red_rec the_red_env) ",
+                    "@RecEnvWellformed.rec (red_rec the_red_env) ",
                     "(fun (_ : RecEnvWellformed (red_rec the_red_env)) => ",
                     "forall (T : KExpr), has_type e T -> has_type e' T) ",
                     "(fun (hs : {SUBST}) (hf : {FWD}) (hb : {BWD}) => ",
@@ -258,7 +258,7 @@ impl Specification {
                 concat!(
                     "fun (e : KExpr) (e' : KExpr) ",
                     "(w : RecEnvWellformed (red_rec the_red_env)) (h : iota_reduces e e') => ",
-                    "RecEnvWellformed.rec (red_rec the_red_env) ",
+                    "@RecEnvWellformed.rec (red_rec the_red_env) ",
                     "(fun (_ : RecEnvWellformed (red_rec the_red_env)) => ",
                     "forall (T : KExpr), has_type e' T -> has_type e T) ",
                     "(fun (hs : {SUBST}) (hf : {FWD}) (hb : {BWD}) => ",

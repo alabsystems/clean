@@ -1,0 +1,23 @@
+# The statements of trust-cg's e-graph rewrite rules over SemR, and their lemmas
+# (PKG-U2; README.md). Compiled in order by the pinned `lean -o` (Lean's kernel
+# checks them first): trust-ir's SemR — the `semr` family's `SemR.lean`, Clean's
+# one copy of trust-ir `lean/semr/SemR.lean` (`from semr SemR`;
+# `semr_reference.rs` pins its digest) — then the rule vocabulary (`EqsatRule`),
+# the proof helpers (`EqsatBasics`), the statements that pin the vocabulary
+# (`EqsatAnchors`), the two modules `gen_rule_defs.py` GENERATES from trust-cg's
+# rule files (`EqsatIntRuleDefs`, `EqsatIntWrongRuleDefs`), the lemmas of the
+# integer rule set (`EqsatIntSample`, then one module per lemma group:
+# `EqsatIntArith`, `EqsatIntCmpSelBool`, `EqsatIntBitwise`, `EqsatIntNegRot`) and
+# the refutations of the wrong rules (`EqsatIntControls`).
+from semr SemR
+EqsatRule
+EqsatBasics
+EqsatAnchors
+EqsatIntRuleDefs
+EqsatIntWrongRuleDefs
+EqsatIntSample
+EqsatIntArith
+EqsatIntCmpSelBool
+EqsatIntBitwise
+EqsatIntNegRot
+EqsatIntControls

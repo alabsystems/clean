@@ -106,7 +106,7 @@ fn byte_add_sub_machine_canonical_words_wrap_and_return() {
             // Initialization creates owner 1; Return retires it and keeps the
             // external allocation, host state and exact next-owner counter.
             check(&mut spec, &format!("byte_arithmetic_world_{case}"), "IRByteWorldV1 Nat", &world(&actual),
-                "IRByteWorldV1.mk Nat (ir_byte_retire_v1 1 byte_machine_external_mem) 73 (IRList.nil Nat) 2");
+                "@IRByteWorldV1.mk Nat (ir_byte_retire_v1 1 byte_machine_external_mem) 73 (@IRList.nil Nat) 2");
         }
     });
 }
@@ -142,7 +142,7 @@ fn byte_add_sub_machine_fuel_stops_before_return() {
             1,
         );
         check(&mut spec, "byte_arithmetic_one_step_world", "IRByteWorldV1 Nat", &world(&actual),
-            "IRByteWorldV1.mk Nat byte_machine_external_mem 19 (IRList.cons Nat 1 (IRList.nil Nat)) 2");
+            "@IRByteWorldV1.mk Nat byte_machine_external_mem 19 (@IRList.cons Nat 1 (@IRList.nil Nat)) 2");
         let resumed = format!(
             "ir_byte_run_v1 Nat byte_arithmetic_fuel_context byte_machine_no_import 1 ({actual})"
         );
@@ -277,7 +277,7 @@ fn byte_binop_machine_boolean_and_opcode_signedness_contract() {
                         &returned(&[scalar(value)]),
                     );
                     check(&mut spec, &format!("{ctx}_world"), "IRByteWorldV1 Nat", &world(&actual),
-                        "IRByteWorldV1.mk Nat (ir_byte_retire_v1 1 byte_machine_external_mem) 29 (IRList.nil Nat) 2");
+                        "@IRByteWorldV1.mk Nat (ir_byte_retire_v1 1 byte_machine_external_mem) 29 (@IRList.nil Nat) 2");
                 }
             }
         }

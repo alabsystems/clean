@@ -50,37 +50,37 @@ use crate::spec::Specification;
 
 const PROOFS: &[(&str, &str)] = &[
     (
-        r"def levelListEqSem_length (us : ListType Level) (vs : ListType Level) (h : LevelListEqSem us vs) : Eq Nat (level_list_len us) (level_list_len vs) :=
-LevelListEqSem.rec
- (fun (xs : ListType Level) (ys : ListType Level) (_ : LevelListEqSem xs ys) => Eq Nat (level_list_len xs) (level_list_len ys))
- (Eq.refl Nat Nat.zero)
+        r"def levelListEqSem_length (us : ListType Level) (vs : ListType Level) (h : LevelListEqSem us vs) : @Eq Nat (level_list_len us) (level_list_len vs) :=
+@LevelListEqSem.rec
+ (fun (xs : ListType Level) (ys : ListType Level) (_ : LevelListEqSem xs ys) => @Eq Nat (level_list_len xs) (level_list_len ys))
+ (@Eq.refl Nat Nat.zero)
  (fun (u : Level) (v : Level) (xs : ListType Level) (ys : ListType Level)
   (_hu : levelEqSem u v) (_hs : LevelListEqSem xs ys)
-  (ih : Eq Nat (level_list_len xs) (level_list_len ys)) =>
+  (ih : @Eq Nat (level_list_len xs) (level_list_len ys)) =>
   Eq.cong Nat Nat Nat.succ (level_list_len xs) (level_list_len ys) ih) us vs h",
         "Related universe lists have the same actual length, proved by their two constructors.",
     ),
     (
         r"def levelListEqSem_list_getD (us : ListType Level) (vs : ListType Level) (h : LevelListEqSem us vs) : forall (i : Nat), levelEqSem (list_getD us i) (list_getD vs i) :=
-LevelListEqSem.rec
+@LevelListEqSem.rec
  (fun (xs : ListType Level) (ys : ListType Level) (_ : LevelListEqSem xs ys) => forall (i : Nat), levelEqSem (list_getD xs i) (list_getD ys i))
  (fun (_i : Nat) => levelEqSem_refl Level.zero)
  (fun (u : Level) (v : Level) (xs : ListType Level) (ys : ListType Level)
   (hu : levelEqSem u v) (_hs : LevelListEqSem xs ys)
   (ih : forall (i : Nat), levelEqSem (list_getD xs i) (list_getD ys i)) =>
-  fun (i : Nat) => Nat.rec
-   (fun (j : Nat) => levelEqSem (list_getD (ListType.cons Level u xs) j) (list_getD (ListType.cons Level v ys) j))
+  fun (i : Nat) => @Nat.rec
+   (fun (j : Nat) => levelEqSem (list_getD (@ListType.cons Level u xs) j) (list_getD (@ListType.cons Level v ys) j))
    hu
-   (fun (j : Nat) (_ : levelEqSem (list_getD (ListType.cons Level u xs) j) (list_getD (ListType.cons Level v ys) j)) => ih j)
+   (fun (j : Nat) (_ : levelEqSem (list_getD (@ListType.cons Level u xs) j) (list_getD (@ListType.cons Level v ys) j)) => ih j)
    i) us vs h",
         "Same-position lookup returns semantically equal levels, including zero defaults beyond either equally long list.",
     ),
     (
         r"def paramSubstN_semantic_values (ps : ListType Name) (us : ListType Level) (vs : ListType Level) (h : LevelListEqSem us vs) (n : Name) : levelEqSem (paramSubstN ps us n) (paramSubstN ps vs n) :=
-OptionType.rec Nat
+@OptionType.rec Nat
  (fun (found : OptionType Nat) => levelEqSem
-  (OptionType.rec Nat (fun (_ : OptionType Nat) => Level) (Level.param n) (fun (i : Nat) => list_getD us i) found)
-  (OptionType.rec Nat (fun (_ : OptionType Nat) => Level) (Level.param n) (fun (i : Nat) => list_getD vs i) found))
+  (@OptionType.rec Nat (fun (_ : OptionType Nat) => Level) (Level.param n) (fun (i : Nat) => list_getD us i) found)
+  (@OptionType.rec Nat (fun (_ : OptionType Nat) => Level) (Level.param n) (fun (i : Nat) => list_getD vs i) found))
  (levelEqSem_refl (Level.param n))
  (fun (i : Nat) => levelListEqSem_list_getD us vs h i)
  (nameIdx ps n)",
@@ -88,7 +88,7 @@ OptionType.rec Nat
     ),
     (
         r"def substL_pointwise_semantic (s : Name -> Level) (t : Name -> Level) (h : forall (n : Name), levelEqSem (s n) (t n)) (l : Level) : levelEqSem (substL s l) (substL t l) :=
-Level.rec
+@Level.rec
  (fun (l0 : Level) => levelEqSem (substL s l0) (substL t l0))
  (levelEqSem_refl Level.zero)
  (fun (u : Level) (ih : levelEqSem (substL s u) (substL t u)) =>
@@ -104,7 +104,7 @@ Level.rec
     ),
     (
         r"def mapLL_substL_pointwise_semantic (s : Name -> Level) (t : Name -> Level) (h : forall (n : Name), levelEqSem (s n) (t n)) (us : ListType Level) : LevelListEqSem (mapLL (substL s) us) (mapLL (substL t) us) :=
-ListType.rec Level
+@ListType.rec Level
  (fun (xs : ListType Level) => LevelListEqSem (mapLL (substL s) xs) (mapLL (substL t) xs))
  LevelListEqSem.nil
  (fun (u : Level) (xs : ListType Level)
@@ -115,7 +115,7 @@ ListType.rec Level
     ),
     (
         r"def instL_pointwise_semantic (s : Name -> Level) (t : Name -> Level) (h : forall (n : Name), levelEqSem (s n) (t n)) (e : KExpr) : KExprUniverseEq (instL s e) (instL t e) :=
-KExpr.rec
+@KExpr.rec
  (fun (e0 : KExpr) => KExprUniverseEq (instL s e0) (instL t e0))
  (fun (u : Level) => KExprUniverseEq.sort (substL s u) (substL t u) (substL_pointwise_semantic s t h u))
  (fun (i : Nat) => KExprUniverseEq.bvar i)
@@ -144,14 +144,14 @@ instL_pointwise_semantic (paramSubstN ps us) (paramSubstN ps vs) (paramSubstN_se
     ),
     (
         r"def kdef_value_at_semantic_values (env : DefEnv) (n : Name) (us : ListType Level) (vs : ListType Level) (A : KExpr)
- (get : Eq (OptionType KExpr) (kdef_value_at env n us) (OptionType.some KExpr A))
+ (get : @Eq (OptionType KExpr) (kdef_value_at env n us) (@OptionType.some KExpr A))
  (related : LevelListEqSem us vs) (C : Type)
- (k : forall (B : KExpr), Eq (OptionType KExpr) (kdef_value_at env n vs) (OptionType.some KExpr B) -> KExprUniverseEq A B -> C) : C :=
+ (k : forall (B : KExpr), @Eq (OptionType KExpr) (kdef_value_at env n vs) (@OptionType.some KExpr B) -> KExprUniverseEq A B -> C) : C :=
 kdef_value_at_some_inv env n us A get C
  (fun (defn : KDefSig)
-  (found : Eq (OptionType KDefSig) (kdef_for env n) (OptionType.some KDefSig defn))
+  (found : @Eq (OptionType KDefSig) (kdef_for env n) (@OptionType.some KDefSig defn))
   (arity : kconst_arity (kdef_signature defn) us)
-  (result : Eq KExpr A (kdef_inst_value defn us)) =>
+  (result : @Eq KExpr A (kdef_inst_value defn us)) =>
   k (kdef_inst_value defn vs)
    (kdef_value_at_intro env n defn vs found
     (Eq.trans Nat (name_list_len (kconst_params (kdef_signature defn))) (level_list_len us) (level_list_len vs)
@@ -165,7 +165,7 @@ kdef_value_at_some_inv env n us A get C
 
 const CONTROLS: &[(&str, &str)] = &[
     (
-        r"def semantic_delta_params : ListType Name := ListType.cons Name Name.anonymous (ListType.nil Name)",
+        r"def semantic_delta_params : ListType Name := @ListType.cons Name Name.anonymous (@ListType.nil Name)",
         "Single shared parameter list for the guarded lookup controls.",
     ),
     (
@@ -177,11 +177,11 @@ const CONTROLS: &[(&str, &str)] = &[
         "Raw syntax distinct from one, but equal under every universe valuation.",
     ),
     (
-        r"def semantic_delta_us_raw : ListType Level := ListType.cons Level semantic_delta_raw_one (ListType.nil Level)",
+        r"def semantic_delta_us_raw : ListType Level := @ListType.cons Level semantic_delta_raw_one (@ListType.nil Level)",
         "Source universe arguments for the semantic replacement control.",
     ),
     (
-        r"def semantic_delta_us_one : ListType Level := ListType.cons Level semantic_delta_one (ListType.nil Level)",
+        r"def semantic_delta_us_one : ListType Level := @ListType.cons Level semantic_delta_one (@ListType.nil Level)",
         "Target universe arguments for the nonzero lookup control.",
     ),
     (
@@ -194,25 +194,25 @@ const CONTROLS: &[(&str, &str)] = &[
     ),
     (
         r"def semantic_delta_universes_related : LevelListEqSem semantic_delta_us_raw semantic_delta_us_one :=
-LevelListEqSem.cons semantic_delta_raw_one semantic_delta_one (ListType.nil Level) (ListType.nil Level)
- (fun (_r : Name -> Nat) => Eq.refl Nat (Nat.succ Nat.zero)) LevelListEqSem.nil",
+LevelListEqSem.cons semantic_delta_raw_one semantic_delta_one (@ListType.nil Level) (@ListType.nil Level)
+ (fun (_r : Name -> Nat) => @Eq.refl Nat (Nat.succ Nat.zero)) LevelListEqSem.nil",
         "Nontrivial pointwise semantic equality, raw imax(1,1) versus one.",
     ),
     (
-        r"def semantic_delta_lookup_at (u : Level) : Eq (OptionType KExpr)
- (kdef_value_at semantic_delta_env Name.anonymous (ListType.cons Level u (ListType.nil Level)))
- (OptionType.some KExpr (KExpr.sort u)) :=
-kdef_value_at_intro semantic_delta_env Name.anonymous semantic_delta_sig (ListType.cons Level u (ListType.nil Level))
- (Eq.refl (OptionType KDefSig) (OptionType.some KDefSig semantic_delta_sig))
- (Eq.refl Nat (Nat.succ Nat.zero))",
+        r"def semantic_delta_lookup_at (u : Level) : @Eq (OptionType KExpr)
+ (kdef_value_at semantic_delta_env Name.anonymous (@ListType.cons Level u (@ListType.nil Level)))
+ (@OptionType.some KExpr (KExpr.sort u)) :=
+kdef_value_at_intro semantic_delta_env Name.anonymous semantic_delta_sig (@ListType.cons Level u (@ListType.nil Level))
+ (@Eq.refl (OptionType KDefSig) (@OptionType.some KDefSig semantic_delta_sig))
+ (@Eq.refl Nat (Nat.succ Nat.zero))",
         "Actual generic guarded lookup introduced from a concrete stored record and exact arity.",
     ),
     (
-        r"def semantic_delta_lookup_zero : Eq (OptionType KExpr) (kdef_value_at semantic_delta_env Name.anonymous (ListType.cons Level Level.zero (ListType.nil Level))) (OptionType.some KExpr (KExpr.sort Level.zero)) := semantic_delta_lookup_at Level.zero",
+        r"def semantic_delta_lookup_zero : @Eq (OptionType KExpr) (kdef_value_at semantic_delta_env Name.anonymous (@ListType.cons Level Level.zero (@ListType.nil Level))) (@OptionType.some KExpr (KExpr.sort Level.zero)) := semantic_delta_lookup_at Level.zero",
         "Concrete zero-universe successful lookup.",
     ),
     (
-        r"def semantic_delta_lookup_one : Eq (OptionType KExpr) (kdef_value_at semantic_delta_env Name.anonymous semantic_delta_us_one) (OptionType.some KExpr (KExpr.sort semantic_delta_one)) := semantic_delta_lookup_at semantic_delta_one",
+        r"def semantic_delta_lookup_one : @Eq (OptionType KExpr) (kdef_value_at semantic_delta_env Name.anonymous semantic_delta_us_one) (@OptionType.some KExpr (KExpr.sort semantic_delta_one)) := semantic_delta_lookup_at semantic_delta_one",
         "Concrete nonzero-universe successful lookup.",
     ),
     (
@@ -221,45 +221,45 @@ kdef_value_at_semantic_values semantic_delta_env Name.anonymous semantic_delta_u
  (KExpr.sort semantic_delta_raw_one) (semantic_delta_lookup_at semantic_delta_raw_one)
  semantic_delta_universes_related (KExprUniverseEq (KExpr.sort semantic_delta_raw_one) (KExpr.sort semantic_delta_one))
  (fun (B : KExpr)
-  (get : Eq (OptionType KExpr) (kdef_value_at semantic_delta_env Name.anonymous semantic_delta_us_one) (OptionType.some KExpr B))
+  (get : @Eq (OptionType KExpr) (kdef_value_at semantic_delta_env Name.anonymous semantic_delta_us_one) (@OptionType.some KExpr B))
   (related : KExprUniverseEq (KExpr.sort semantic_delta_raw_one) B) =>
   Eq.substType KExpr (fun (X : KExpr) => KExprUniverseEq (KExpr.sort semantic_delta_raw_one) X)
    B (KExpr.sort semantic_delta_one)
    (option_some_inj KExpr B (KExpr.sort semantic_delta_one)
-    (Eq.trans (OptionType KExpr) (OptionType.some KExpr B)
+    (Eq.trans (OptionType KExpr) (@OptionType.some KExpr B)
      (kdef_value_at semantic_delta_env Name.anonymous semantic_delta_us_one)
-     (OptionType.some KExpr (KExpr.sort semantic_delta_one))
-     (Eq.symm (OptionType KExpr) (kdef_value_at semantic_delta_env Name.anonymous semantic_delta_us_one) (OptionType.some KExpr B) get)
+     (@OptionType.some KExpr (KExpr.sort semantic_delta_one))
+     (Eq.symm (OptionType KExpr) (kdef_value_at semantic_delta_env Name.anonymous semantic_delta_us_one) (@OptionType.some KExpr B) get)
      semantic_delta_lookup_one)) related)",
         "The actual CPS compatibility proof is executed on a nonzero semantic change. Both its returned graph equation and semantic relation are consumed to identify the result.",
     ),
     (
-        r"def semantic_delta_missing_name : Eq (OptionType KExpr) (kdef_value_at semantic_delta_env (Name.str Name.anonymous Nat.zero) semantic_delta_us_one) (OptionType.none KExpr) := Eq.refl (OptionType KExpr) (OptionType.none KExpr)",
+        r"def semantic_delta_missing_name : @Eq (OptionType KExpr) (kdef_value_at semantic_delta_env (Name.str Name.anonymous Nat.zero) semantic_delta_us_one) (@OptionType.none KExpr) := @Eq.refl (OptionType KExpr) (@OptionType.none KExpr)",
         "Actual missing-name lookup stays refused at nonzero universes.",
     ),
     (
-        r"def semantic_delta_wrong_arity : Eq (OptionType KExpr) (kdef_value_at semantic_delta_env Name.anonymous (ListType.nil Level)) (OptionType.none KExpr) := Eq.refl (OptionType KExpr) (OptionType.none KExpr)",
+        r"def semantic_delta_wrong_arity : @Eq (OptionType KExpr) (kdef_value_at semantic_delta_env Name.anonymous (@ListType.nil Level)) (@OptionType.none KExpr) := @Eq.refl (OptionType KExpr) (@OptionType.none KExpr)",
         "An existing body with a missing universe argument is refused; semantic replacement never bypasses the arity guard.",
     ),
     (
         r"def semantic_delta_no_body_support : KExprUniverseEq
- (instLevels (ListType.nil Name) (KExpr.sort (Level.param Name.anonymous)) semantic_delta_us_raw)
- (instLevels (ListType.nil Name) (KExpr.sort (Level.param Name.anonymous)) semantic_delta_us_one) :=
-instLevels_semantic_values (ListType.nil Name) (KExpr.sort (Level.param Name.anonymous))
+ (instLevels (@ListType.nil Name) (KExpr.sort (Level.param Name.anonymous)) semantic_delta_us_raw)
+ (instLevels (@ListType.nil Name) (KExpr.sort (Level.param Name.anonymous)) semantic_delta_us_one) :=
+instLevels_semantic_values (@ListType.nil Name) (KExpr.sort (Level.param Name.anonymous))
  semantic_delta_us_raw semantic_delta_us_one semantic_delta_universes_related",
         "The raw same-body lemma allows an undeclared parameter and mismatched parameter/value arity. This is deliberately not a successful guarded lookup or a fixed-environment substitution-commutation claim.",
     ),
     (
         r"def semantic_delta_duplicate_params : KExprUniverseEq (KExpr.sort semantic_delta_raw_one) (KExpr.sort semantic_delta_one) :=
 instLevels_semantic_values
- (ListType.cons Name Name.anonymous (ListType.cons Name Name.anonymous (ListType.nil Name)))
+ (@ListType.cons Name Name.anonymous (@ListType.cons Name Name.anonymous (@ListType.nil Name)))
  (KExpr.sort (Level.param Name.anonymous))
- (ListType.cons Level semantic_delta_raw_one (ListType.cons Level Level.zero (ListType.nil Level)))
- (ListType.cons Level semantic_delta_one (ListType.cons Level Level.zero (ListType.nil Level)))
+ (@ListType.cons Level semantic_delta_raw_one (@ListType.cons Level Level.zero (@ListType.nil Level)))
+ (@ListType.cons Level semantic_delta_one (@ListType.cons Level Level.zero (@ListType.nil Level)))
  (LevelListEqSem.cons semantic_delta_raw_one semantic_delta_one
-  (ListType.cons Level Level.zero (ListType.nil Level)) (ListType.cons Level Level.zero (ListType.nil Level))
-  (fun (_r : Name -> Nat) => Eq.refl Nat (Nat.succ Nat.zero))
-  (LevelListEqSem.cons Level.zero Level.zero (ListType.nil Level) (ListType.nil Level)
+  (@ListType.cons Level Level.zero (@ListType.nil Level)) (@ListType.cons Level Level.zero (@ListType.nil Level))
+  (fun (_r : Name -> Nat) => @Eq.refl Nat (Nat.succ Nat.zero))
+  (LevelListEqSem.cons Level.zero Level.zero (@ListType.nil Level) (@ListType.nil Level)
    (levelEqSem_refl Level.zero) LevelListEqSem.nil))",
         "The same duplicate parameter list selects the same first position on both sides. No NoDup is needed for this model relation; this does not identify Rust's first-match and last-match paths.",
     ),
@@ -268,24 +268,24 @@ instLevels_semantic_values
 const HEAD_VIEW_PROOFS: &[(&str, &str)] = &[
     (
         r"def kexprUniverseEq_const_name (e : KExpr) (e2 : KExpr) (h : KExprUniverseEq e e2) :
- Eq (OptionType Name) (kexpr_const_name e) (kexpr_const_name e2) :=
- KExprUniverseEq.rec
- (fun (a : KExpr) (b : KExpr) (_h : KExprUniverseEq a b) => Eq (OptionType Name) (kexpr_const_name a) (kexpr_const_name b))
- (fun (u : Level) (v : Level) (hu : levelEqSem u v) => Eq.refl (OptionType Name) (OptionType.none Name))
- (fun (i : Nat) => Eq.refl (OptionType Name) (OptionType.none Name))
- (fun (f : KExpr) (f2 : KExpr) (a : KExpr) (a2 : KExpr) (hf : KExprUniverseEq f f2) (ha : KExprUniverseEq a a2) (_ih0 : Eq (OptionType Name) (kexpr_const_name f) (kexpr_const_name f2)) (_ih1 : Eq (OptionType Name) (kexpr_const_name a) (kexpr_const_name a2)) => Eq.refl (OptionType Name) (OptionType.none Name))
- (fun (A : KExpr) (A2 : KExpr) (b : KExpr) (b2 : KExpr) (hA : KExprUniverseEq A A2) (hb : KExprUniverseEq b b2) (_ih0 : Eq (OptionType Name) (kexpr_const_name A) (kexpr_const_name A2)) (_ih1 : Eq (OptionType Name) (kexpr_const_name b) (kexpr_const_name b2)) => Eq.refl (OptionType Name) (OptionType.none Name))
- (fun (A : KExpr) (A2 : KExpr) (b : KExpr) (b2 : KExpr) (hA : KExprUniverseEq A A2) (hb : KExprUniverseEq b b2) (_ih0 : Eq (OptionType Name) (kexpr_const_name A) (kexpr_const_name A2)) (_ih1 : Eq (OptionType Name) (kexpr_const_name b) (kexpr_const_name b2)) => Eq.refl (OptionType Name) (OptionType.none Name))
- (fun (n : Name) (us : ListType Level) (vs : ListType Level) (hus : LevelListEqSem us vs) => Eq.refl (OptionType Name) (OptionType.some Name n))
- (fun (A : KExpr) (A2 : KExpr) (v : KExpr) (v2 : KExpr) (b : KExpr) (b2 : KExpr) (hA : KExprUniverseEq A A2) (hv : KExprUniverseEq v v2) (hb : KExprUniverseEq b b2) (_ih0 : Eq (OptionType Name) (kexpr_const_name A) (kexpr_const_name A2)) (_ih1 : Eq (OptionType Name) (kexpr_const_name v) (kexpr_const_name v2)) (_ih2 : Eq (OptionType Name) (kexpr_const_name b) (kexpr_const_name b2)) => Eq.refl (OptionType Name) (OptionType.none Name))
- (fun (sn : Name) (i : Nat) (sub : KExpr) (sub2 : KExpr) (hsub : KExprUniverseEq sub sub2) (_ih0 : Eq (OptionType Name) (kexpr_const_name sub) (kexpr_const_name sub2)) => Eq.refl (OptionType Name) (OptionType.none Name))
- (fun (n : Nat) => Eq.refl (OptionType Name) (OptionType.none Name)) e e2 h",
+ @Eq (OptionType Name) (kexpr_const_name e) (kexpr_const_name e2) :=
+ @KExprUniverseEq.rec
+ (fun (a : KExpr) (b : KExpr) (_h : KExprUniverseEq a b) => @Eq (OptionType Name) (kexpr_const_name a) (kexpr_const_name b))
+ (fun (u : Level) (v : Level) (hu : levelEqSem u v) => @Eq.refl (OptionType Name) (@OptionType.none Name))
+ (fun (i : Nat) => @Eq.refl (OptionType Name) (@OptionType.none Name))
+ (fun (f : KExpr) (f2 : KExpr) (a : KExpr) (a2 : KExpr) (hf : KExprUniverseEq f f2) (ha : KExprUniverseEq a a2) (_ih0 : @Eq (OptionType Name) (kexpr_const_name f) (kexpr_const_name f2)) (_ih1 : @Eq (OptionType Name) (kexpr_const_name a) (kexpr_const_name a2)) => @Eq.refl (OptionType Name) (@OptionType.none Name))
+ (fun (A : KExpr) (A2 : KExpr) (b : KExpr) (b2 : KExpr) (hA : KExprUniverseEq A A2) (hb : KExprUniverseEq b b2) (_ih0 : @Eq (OptionType Name) (kexpr_const_name A) (kexpr_const_name A2)) (_ih1 : @Eq (OptionType Name) (kexpr_const_name b) (kexpr_const_name b2)) => @Eq.refl (OptionType Name) (@OptionType.none Name))
+ (fun (A : KExpr) (A2 : KExpr) (b : KExpr) (b2 : KExpr) (hA : KExprUniverseEq A A2) (hb : KExprUniverseEq b b2) (_ih0 : @Eq (OptionType Name) (kexpr_const_name A) (kexpr_const_name A2)) (_ih1 : @Eq (OptionType Name) (kexpr_const_name b) (kexpr_const_name b2)) => @Eq.refl (OptionType Name) (@OptionType.none Name))
+ (fun (n : Name) (us : ListType Level) (vs : ListType Level) (hus : LevelListEqSem us vs) => @Eq.refl (OptionType Name) (@OptionType.some Name n))
+ (fun (A : KExpr) (A2 : KExpr) (v : KExpr) (v2 : KExpr) (b : KExpr) (b2 : KExpr) (hA : KExprUniverseEq A A2) (hv : KExprUniverseEq v v2) (hb : KExprUniverseEq b b2) (_ih0 : @Eq (OptionType Name) (kexpr_const_name A) (kexpr_const_name A2)) (_ih1 : @Eq (OptionType Name) (kexpr_const_name v) (kexpr_const_name v2)) (_ih2 : @Eq (OptionType Name) (kexpr_const_name b) (kexpr_const_name b2)) => @Eq.refl (OptionType Name) (@OptionType.none Name))
+ (fun (sn : Name) (i : Nat) (sub : KExpr) (sub2 : KExpr) (hsub : KExprUniverseEq sub sub2) (_ih0 : @Eq (OptionType Name) (kexpr_const_name sub) (kexpr_const_name sub2)) => @Eq.refl (OptionType Name) (@OptionType.none Name))
+ (fun (n : Nat) => @Eq.refl (OptionType Name) (@OptionType.none Name)) e e2 h",
         "The actual constant-name view preserves the exact name under semantic universe replacement; every nonconstant constructor maps to none.",
     ),
     (
         r"def kexprUniverseEq_const_levels (e : KExpr) (e2 : KExpr) (h : KExprUniverseEq e e2) :
  LevelListEqSem (kexpr_const_levels e) (kexpr_const_levels e2) :=
- KExprUniverseEq.rec
+ @KExprUniverseEq.rec
  (fun (a : KExpr) (b : KExpr) (_h : KExprUniverseEq a b) => LevelListEqSem (kexpr_const_levels a) (kexpr_const_levels b))
  (fun (u : Level) (v : Level) (hu : levelEqSem u v) => LevelListEqSem.nil)
  (fun (i : Nat) => LevelListEqSem.nil)
@@ -303,41 +303,41 @@ const HEAD_VIEW_PROOFS: &[(&str, &str)] = &[
 const REDUCT_PROOFS: &[(&str, &str)] = &[
     (
         r"def delta_reduct_of_value_some (env : DefEnv) (e : KExpr) (n : Name) (value : KExpr)
- (head : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name n))
- (found : Eq (OptionType KExpr) (kdef_value_at env n (kexpr_const_levels (kapp_fn e))) (OptionType.some KExpr value)) :
- Eq (OptionType KExpr) (delta_reduct env e) (OptionType.some KExpr (apply_spine (kapp_args e) value)) :=
+ (head : @Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (@OptionType.some Name n))
+ (found : @Eq (OptionType KExpr) (kdef_value_at env n (kexpr_const_levels (kapp_fn e))) (@OptionType.some KExpr value)) :
+ @Eq (OptionType KExpr) (delta_reduct env e) (@OptionType.some KExpr (apply_spine (kapp_args e) value)) :=
  opt_bind_some_intro Name KExpr (kexpr_const_name (kapp_fn e))
   (fun (nm : Name) => opt_bind KExpr KExpr (kdef_value_at env nm (kexpr_const_levels (kapp_fn e)))
-    (fun (body : KExpr) => OptionType.some KExpr (apply_spine (kapp_args e) body)))
+    (fun (body : KExpr) => @OptionType.some KExpr (apply_spine (kapp_args e) body)))
   n (apply_spine (kapp_args e) value) head
   (opt_bind_some_intro KExpr KExpr (kdef_value_at env n (kexpr_const_levels (kapp_fn e)))
-    (fun (body : KExpr) => OptionType.some KExpr (apply_spine (kapp_args e) body))
+    (fun (body : KExpr) => @OptionType.some KExpr (apply_spine (kapp_args e) body))
     value (apply_spine (kapp_args e) value) found
-    (Eq.refl (OptionType KExpr) (OptionType.some KExpr (apply_spine (kapp_args e) value))))",
+    (@Eq.refl (OptionType KExpr) (@OptionType.some KExpr (apply_spine (kapp_args e) value))))",
         "Reconstruct the actual delta evaluator from a successful constant view and guarded instantiated body lookup, without a step assumption.",
     ),
     (
         r"def delta_reduct_semantic_compat (env : DefEnv) (e : KExpr) (e2 : KExpr)
  (related : KExprUniverseEq e e2) (r : KExpr)
- (get : Eq (OptionType KExpr) (delta_reduct env e) (OptionType.some KExpr r)) (C : Type)
+ (get : @Eq (OptionType KExpr) (delta_reduct env e) (@OptionType.some KExpr r)) (C : Type)
  (k : forall (r2 : KExpr),
-   Eq (OptionType KExpr) (delta_reduct env e2) (OptionType.some KExpr r2) ->
+   @Eq (OptionType KExpr) (delta_reduct env e2) (@OptionType.some KExpr r2) ->
    KExprUniverseEq r r2 -> C) : C :=
  delta_reduct_some_inv_type env e r C get
   (fun (n : Name) (value : KExpr)
-    (head : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name n))
-    (found : Eq (OptionType KExpr) (kdef_value_at env n (kexpr_const_levels (kapp_fn e))) (OptionType.some KExpr value))
-    (result : Eq (OptionType KExpr) (OptionType.some KExpr (apply_spine (kapp_args e) value)) (OptionType.some KExpr r)) =>
+    (head : @Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (@OptionType.some Name n))
+    (found : @Eq (OptionType KExpr) (kdef_value_at env n (kexpr_const_levels (kapp_fn e))) (@OptionType.some KExpr value))
+    (result : @Eq (OptionType KExpr) (@OptionType.some KExpr (apply_spine (kapp_args e) value)) (@OptionType.some KExpr r)) =>
     kdef_value_at_semantic_values env n (kexpr_const_levels (kapp_fn e)) (kexpr_const_levels (kapp_fn e2))
       value found
       (kexprUniverseEq_const_levels (kapp_fn e) (kapp_fn e2) (kexprUniverseEq_kapp_fn e e2 related)) C
       (fun (value2 : KExpr)
-        (found2 : Eq (OptionType KExpr) (kdef_value_at env n (kexpr_const_levels (kapp_fn e2))) (OptionType.some KExpr value2))
+        (found2 : @Eq (OptionType KExpr) (kdef_value_at env n (kexpr_const_levels (kapp_fn e2))) (@OptionType.some KExpr value2))
         (values : KExprUniverseEq value value2) =>
         k (apply_spine (kapp_args e2) value2)
           (delta_reduct_of_value_some env e2 n value2
             (Eq.trans (OptionType Name)
-              (kexpr_const_name (kapp_fn e2)) (kexpr_const_name (kapp_fn e)) (OptionType.some Name n)
+              (kexpr_const_name (kapp_fn e2)) (kexpr_const_name (kapp_fn e)) (@OptionType.some Name n)
               (Eq.symm (OptionType Name)
                 (kexpr_const_name (kapp_fn e)) (kexpr_const_name (kapp_fn e2))
                 (kexprUniverseEq_const_name (kapp_fn e) (kapp_fn e2) (kexprUniverseEq_kapp_fn e e2 related))) head)
@@ -355,7 +355,7 @@ const REDUCT_CONTROLS: &[(&str, &str)] = &[
     (
         r"def semantic_delta_spine_input (u : Level) : KExpr :=
  KExpr.app
-  (KExpr.app (KExpr.const Name.anonymous (ListType.cons Level u (ListType.nil Level))) (KExpr.sort u))
+  (KExpr.app (KExpr.const Name.anonymous (@ListType.cons Level u (@ListType.nil Level))) (KExpr.sort u))
   (KExpr.lit Nat.zero)",
         "A genuine two-argument application spine whose head and first argument both carry universes.",
     ),
@@ -366,10 +366,10 @@ const REDUCT_CONTROLS: &[(&str, &str)] = &[
     ),
     (
         r"def semantic_delta_spine_step_at (u : Level) :
- Eq (OptionType KExpr) (delta_reduct semantic_delta_env (semantic_delta_spine_input u))
-   (OptionType.some KExpr (semantic_delta_spine_output u)) :=
+ @Eq (OptionType KExpr) (delta_reduct semantic_delta_env (semantic_delta_spine_input u))
+   (@OptionType.some KExpr (semantic_delta_spine_output u)) :=
  delta_reduct_of_value_some semantic_delta_env (semantic_delta_spine_input u) Name.anonymous (KExpr.sort u)
-  (Eq.refl (OptionType Name) (OptionType.some Name Name.anonymous))
+  (@Eq.refl (OptionType Name) (@OptionType.some Name Name.anonymous))
   (semantic_delta_lookup_at u)",
         "The real delta computation succeeds on the two-argument spine at any supplied universe, using its one-parameter signature.",
     ),
@@ -385,7 +385,7 @@ const REDUCT_CONTROLS: &[(&str, &str)] = &[
     (KExpr.sort semantic_delta_raw_one) (KExpr.sort semantic_delta_one)
     (KExprUniverseEq.const Name.anonymous semantic_delta_us_raw semantic_delta_us_one semantic_delta_universes_related)
     (KExprUniverseEq.sort semantic_delta_raw_one semantic_delta_one
-      (fun (_rho : Name -> Nat) => Eq.refl Nat (Nat.succ Nat.zero))))
+      (fun (_rho : Name -> Nat) => @Eq.refl Nat (Nat.succ Nat.zero))))
   (KExprUniverseEq.lit Nat.zero)",
         "Non-syntactically-identical but semantically related head universe lists and first arguments; the second literal payload is fixed.",
     ),
@@ -398,37 +398,37 @@ const REDUCT_CONTROLS: &[(&str, &str)] = &[
   (semantic_delta_spine_step_at semantic_delta_raw_one)
   (KExprUniverseEq (semantic_delta_spine_output semantic_delta_raw_one) (semantic_delta_spine_output semantic_delta_one))
   (fun (r2 : KExpr)
-    (get2 : Eq (OptionType KExpr) (delta_reduct semantic_delta_env (semantic_delta_spine_input semantic_delta_one)) (OptionType.some KExpr r2))
+    (get2 : @Eq (OptionType KExpr) (delta_reduct semantic_delta_env (semantic_delta_spine_input semantic_delta_one)) (@OptionType.some KExpr r2))
     (related : KExprUniverseEq (semantic_delta_spine_output semantic_delta_raw_one) r2) =>
     Eq.substType KExpr
       (fun (x : KExpr) => KExprUniverseEq (semantic_delta_spine_output semantic_delta_raw_one) x)
       r2 (semantic_delta_spine_output semantic_delta_one)
       (option_some_inj KExpr r2 (semantic_delta_spine_output semantic_delta_one)
         (Eq.trans (OptionType KExpr)
-          (OptionType.some KExpr r2) (delta_reduct semantic_delta_env (semantic_delta_spine_input semantic_delta_one))
-          (OptionType.some KExpr (semantic_delta_spine_output semantic_delta_one))
+          (@OptionType.some KExpr r2) (delta_reduct semantic_delta_env (semantic_delta_spine_input semantic_delta_one))
+          (@OptionType.some KExpr (semantic_delta_spine_output semantic_delta_one))
           (Eq.symm (OptionType KExpr)
-            (delta_reduct semantic_delta_env (semantic_delta_spine_input semantic_delta_one)) (OptionType.some KExpr r2) get2)
+            (delta_reduct semantic_delta_env (semantic_delta_spine_input semantic_delta_one)) (@OptionType.some KExpr r2) get2)
           (semantic_delta_spine_step_at semantic_delta_one)))
       related)",
         "Actual nonzero two-argument caller of the delta CPS theorem. Consumes both its derived graph equation and related output, checking the result against the independently reconstructed target computation.",
     ),
     (
         r"def semantic_delta_spine_wrong_arity :
- Eq (OptionType KExpr)
+ @Eq (OptionType KExpr)
   (delta_reduct semantic_delta_env
-    (KExpr.app (KExpr.const Name.anonymous (ListType.nil Level)) (KExpr.sort semantic_delta_one)))
-  (OptionType.none KExpr) :=
- Eq.refl (OptionType KExpr) (OptionType.none KExpr)",
+    (KExpr.app (KExpr.const Name.anonymous (@ListType.nil Level)) (KExpr.sort semantic_delta_one)))
+  (@OptionType.none KExpr) :=
+ @Eq.refl (OptionType KExpr) (@OptionType.none KExpr)",
         "An application argument does not supply a missing universe argument: actual delta remains blocked by signature arity.",
     ),
     (
         r"def semantic_delta_spine_missing_name :
- Eq (OptionType KExpr)
+ @Eq (OptionType KExpr)
   (delta_reduct semantic_delta_env
     (KExpr.app (KExpr.const (Name.str Name.anonymous Nat.zero) semantic_delta_us_one) (KExpr.sort semantic_delta_one)))
-  (OptionType.none KExpr) :=
- Eq.refl (OptionType KExpr) (OptionType.none KExpr)",
+  (@OptionType.none KExpr) :=
+ @Eq.refl (OptionType KExpr) (@OptionType.none KExpr)",
         "A related-universe application cannot manufacture a definition at an absent head name.",
     ),
 ];
@@ -498,7 +498,7 @@ mod tests {
         crate::test_utils::run_with_stack(|| {
             let mut spec = crate::test_utils::build_spec_with_stack();
             assert!(spec.add_recursive_def(
-                "def semantic_delta_forged_spine_arity : Eq (OptionType KExpr) (delta_reduct semantic_delta_env (KExpr.app (KExpr.const Name.anonymous (ListType.nil Level)) (KExpr.sort semantic_delta_one))) (OptionType.some KExpr (KExpr.app (KExpr.sort semantic_delta_one) (KExpr.sort semantic_delta_one))) := Eq.refl (OptionType KExpr) (OptionType.some KExpr (KExpr.app (KExpr.sort semantic_delta_one) (KExpr.sort semantic_delta_one)))",
+                "def semantic_delta_forged_spine_arity : @Eq (OptionType KExpr) (delta_reduct semantic_delta_env (KExpr.app (KExpr.const Name.anonymous (@ListType.nil Level)) (KExpr.sort semantic_delta_one))) (@OptionType.some KExpr (KExpr.app (KExpr.sort semantic_delta_one) (KExpr.sort semantic_delta_one))) := @Eq.refl (OptionType KExpr) (@OptionType.some KExpr (KExpr.app (KExpr.sort semantic_delta_one) (KExpr.sort semantic_delta_one)))",
                 "Rejected control: an expression argument cannot discharge the missing universe-arity guard."
             ).is_err());
         });

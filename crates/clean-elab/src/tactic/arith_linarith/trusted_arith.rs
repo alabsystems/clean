@@ -92,7 +92,7 @@ pub fn arith_proof_count() -> u64 {
 /// ENSURES: Result is monotonically non-decreasing across calls
 /// ENSURES: Result >= `arith_proof_count()` (lifetime includes all resets)
 #[cfg(test)]
-pub fn arith_lifetime_count() -> u64 {
+pub(crate) fn arith_lifetime_count() -> u64 {
     ARITH_LIFETIME_COUNTER.load(Ordering::SeqCst)
 }
 

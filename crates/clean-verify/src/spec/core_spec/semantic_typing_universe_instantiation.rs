@@ -25,7 +25,7 @@ const PROOFS: &[(&str, &str)] = &[
     (
         r"def KDeclEnvTypeParamSupported (tenv : KDeclEnv) : Prop :=
  forall (n : Name) (sig : KConstSig),
- Eq (OptionType KConstSig) (tenv n) (OptionType.some KConstSig sig) ->
+ @Eq (OptionType KConstSig) (tenv n) (@OptionType.some KConstSig sig) ->
  KExprParamSupport (kconst_params sig) (kconst_type sig)",
         "Every actually stored signature type uses only its declared universe parameters. This is a schematic syntax invariant, not per-instance typing or a production admission proof.",
     ),
@@ -36,12 +36,12 @@ const PROOFS: &[(&str, &str)] = &[
  (G : ListType KExpr) (e : KExpr) (T : KExpr)
  (typed : TypingCtxConvIn R tenv G e T) :
  TypingCtxConvIn R tenv (mapLT (instL s) G) (instL s e) (instL s T) :=
- TypingCtxConvIn.rec R tenv
+ @TypingCtxConvIn.rec R tenv
    (fun (G0 : ListType KExpr) (e0 : KExpr) (T0 : KExpr)
      (_h : TypingCtxConvIn R tenv G0 e0 T0) =>
      TypingCtxConvIn R tenv (mapLT (instL s) G0) (instL s e0) (instL s T0))
    (fun (G0 : ListType KExpr) (i : Nat) (A : KExpr)
-     (found : Eq (OptionType KExpr) (ctx_lookup G0 i) (OptionType.some KExpr A)) =>
+     (found : @Eq (OptionType KExpr) (ctx_lookup G0 i) (@OptionType.some KExpr A)) =>
      Eq.substType KExpr
        (fun (T0 : KExpr) => TypingCtxConvIn R tenv (mapLT (instL s) G0) (KExpr.bvar i) T0)
        (lift_at (instL s A) Nat.zero (Nat.succ i))
@@ -49,23 +49,23 @@ const PROOFS: &[(&str, &str)] = &[
        (Eq.symm KExpr (instL s (lift_at A Nat.zero (Nat.succ i)))
          (lift_at (instL s A) Nat.zero (Nat.succ i))
          (instL_lift_at s A Nat.zero (Nat.succ i)))
-       (TypingCtxConvIn.var R tenv (mapLT (instL s) G0) i (instL s A)
+       (@TypingCtxConvIn.var R tenv (mapLT (instL s) G0) i (instL s A)
          (ctx_lookup_mapLT_some (instL s) G0 i A found)))
    (fun (G0 : ListType KExpr) (u : Level) =>
-     TypingCtxConvIn.sort R tenv (mapLT (instL s) G0) (substL s u))
+     @TypingCtxConvIn.sort R tenv (mapLT (instL s) G0) (substL s u))
    (fun (G0 : ListType KExpr) (A : KExpr) (B : KExpr) (u : Level) (v : Level)
      (_hA : TypingCtxConvIn R tenv G0 A (KExpr.sort u))
-     (_hB : TypingCtxConvIn R tenv (ListType.cons KExpr A G0) B (KExpr.sort v))
+     (_hB : TypingCtxConvIn R tenv (@ListType.cons KExpr A G0) B (KExpr.sort v))
      (ihA : TypingCtxConvIn R tenv (mapLT (instL s) G0) (instL s A) (instL s (KExpr.sort u)))
-     (ihB : TypingCtxConvIn R tenv (mapLT (instL s) (ListType.cons KExpr A G0)) (instL s B) (instL s (KExpr.sort v))) =>
-     TypingCtxConvIn.pi R tenv (mapLT (instL s) G0) (instL s A) (instL s B)
+     (ihB : TypingCtxConvIn R tenv (mapLT (instL s) (@ListType.cons KExpr A G0)) (instL s B) (instL s (KExpr.sort v))) =>
+     @TypingCtxConvIn.pi R tenv (mapLT (instL s) G0) (instL s A) (instL s B)
        (substL s u) (substL s v) ihA ihB)
    (fun (G0 : ListType KExpr) (A : KExpr) (b : KExpr) (B : KExpr) (u : Level)
      (_hA : TypingCtxConvIn R tenv G0 A (KExpr.sort u))
-     (_hb : TypingCtxConvIn R tenv (ListType.cons KExpr A G0) b B)
+     (_hb : TypingCtxConvIn R tenv (@ListType.cons KExpr A G0) b B)
      (ihA : TypingCtxConvIn R tenv (mapLT (instL s) G0) (instL s A) (instL s (KExpr.sort u)))
-     (ihb : TypingCtxConvIn R tenv (mapLT (instL s) (ListType.cons KExpr A G0)) (instL s b) (instL s B)) =>
-     TypingCtxConvIn.lam R tenv (mapLT (instL s) G0) (instL s A) (instL s b) (instL s B)
+     (ihb : TypingCtxConvIn R tenv (mapLT (instL s) (@ListType.cons KExpr A G0)) (instL s b) (instL s B)) =>
+     @TypingCtxConvIn.lam R tenv (mapLT (instL s) G0) (instL s A) (instL s b) (instL s B)
        (substL s u) ihA ihb)
    (fun (G0 : ListType KExpr) (f : KExpr) (a : KExpr) (A : KExpr) (B : KExpr)
      (_hf : TypingCtxConvIn R tenv G0 f (KExpr.pi A B))
@@ -78,37 +78,37 @@ const PROOFS: &[(&str, &str)] = &[
        (instantiate (instL s B) (instL s a)) (instL s (instantiate B a))
        (Eq.symm KExpr (instL s (instantiate B a))
          (instantiate (instL s B) (instL s a)) (instL_instantiate s B a))
-       (TypingCtxConvIn.app R tenv (mapLT (instL s) G0)
+       (@TypingCtxConvIn.app R tenv (mapLT (instL s) G0)
          (instL s f) (instL s a) (instL s A) (instL s B) ihf iha))
    (fun (G0 : ListType KExpr) (n : Name) (us : ListType Level) (A : KExpr)
-     (found : Eq (OptionType KExpr) (kdecl_type_at tenv n us) (OptionType.some KExpr A)) =>
-     TypingCtxConvIn.const R tenv (mapLT (instL s) G0) n (mapLL (substL s) us) (instL s A)
+     (found : @Eq (OptionType KExpr) (kdecl_type_at tenv n us) (@OptionType.some KExpr A)) =>
+     @TypingCtxConvIn.const R tenv (mapLT (instL s) G0) n (mapLL (substL s) us) (instL s A)
        (kdecl_type_at_instL_supported tenv supported n us A found s))
    (fun (G0 : ListType KExpr) (e0 : KExpr) (A : KExpr) (B : KExpr)
      (_typed : TypingCtxConvIn R tenv G0 e0 A) (equivalent : DefEqIn R A B)
      (ih : TypingCtxConvIn R tenv (mapLT (instL s) G0) (instL s e0) (instL s A)) =>
-     TypingCtxConvIn.conv R tenv (mapLT (instL s) G0) (instL s e0) (instL s A) (instL s B)
+     @TypingCtxConvIn.conv R tenv (mapLT (instL s) G0) (instL s e0) (instL s A) (instL s B)
        ih (def_eq_in_instL_supported R hd hi s A B equivalent))
    (fun (G0 : ListType KExpr) (ty : KExpr) (v : KExpr) (b : KExpr) (B : KExpr) (u : Level)
      (_hty : TypingCtxConvIn R tenv G0 ty (KExpr.sort u))
      (_hv : TypingCtxConvIn R tenv G0 v ty)
-     (_hb : TypingCtxConvIn R tenv (ListType.cons KExpr ty G0) b B)
+     (_hb : TypingCtxConvIn R tenv (@ListType.cons KExpr ty G0) b B)
      (ihty : TypingCtxConvIn R tenv (mapLT (instL s) G0) (instL s ty) (instL s (KExpr.sort u)))
      (ihv : TypingCtxConvIn R tenv (mapLT (instL s) G0) (instL s v) (instL s ty))
-     (ihb : TypingCtxConvIn R tenv (mapLT (instL s) (ListType.cons KExpr ty G0)) (instL s b) (instL s B)) =>
+     (ihb : TypingCtxConvIn R tenv (mapLT (instL s) (@ListType.cons KExpr ty G0)) (instL s b) (instL s B)) =>
      Eq.substType KExpr
        (fun (T0 : KExpr) => TypingCtxConvIn R tenv (mapLT (instL s) G0)
          (KExpr.let_ (instL s ty) (instL s v) (instL s b)) T0)
        (instantiate (instL s B) (instL s v)) (instL s (instantiate B v))
        (Eq.symm KExpr (instL s (instantiate B v))
          (instantiate (instL s B) (instL s v)) (instL_instantiate s B v))
-       (TypingCtxConvIn.let_ R tenv (mapLT (instL s) G0)
+       (@TypingCtxConvIn.let_ R tenv (mapLT (instL s) G0)
          (instL s ty) (instL s v) (instL s b) (instL s B) (substL s u)
          ihty ihv ihb))
    (fun (G0 : ListType KExpr) (n : Nat) =>
-     TypingCtxConvIn.lit_nat R tenv (mapLT (instL s) G0) n)
+     @TypingCtxConvIn.lit_nat R tenv (mapLT (instL s) G0) n)
    (fun (G0 : ListType KExpr) (n : Nat) =>
-     TypingCtxConvIn.lit_string R tenv (mapLT (instL s) G0) n)
+     @TypingCtxConvIn.lit_string R tenv (mapLT (instL s) G0) n)
    G e T typed",
         "Actual ten-constructor semantic typing induction at the same explicit environment. Constant cases derive guarded lookup transport from stored schematic support; conversion uses the proved generic supported operational substitution theorem. No output typing or step closure is a premise.",
     ),
@@ -129,12 +129,12 @@ const PROOFS: &[(&str, &str)] = &[
  (hd : DefEnvBodyParamSupported (red_def R)) (hi : RecEnvRhsParamSupported (red_rec R))
  (tenv : KDeclEnv) (supported : KDeclEnvTypeParamSupported tenv)
  (defn : KDefSig) (us : ListType Level)
- (schematic : TypingCtxConvIn R tenv (ListType.nil KExpr)
+ (schematic : TypingCtxConvIn R tenv (@ListType.nil KExpr)
  (kdef_value defn) (kconst_type (kdef_signature defn))) :
- TypingCtxConvIn R tenv (ListType.nil KExpr) (kdef_inst_value defn us)
+ TypingCtxConvIn R tenv (@ListType.nil KExpr) (kdef_inst_value defn us)
  (kconst_inst_type (kdef_signature defn) us) :=
  typingctxconv_in_instLevels_supported R hd hi tenv supported
- (kconst_params (kdef_signature defn)) us (ListType.nil KExpr)
+ (kconst_params (kdef_signature defn)) us (@ListType.nil KExpr)
  (kdef_value defn) (kconst_type (kdef_signature defn)) schematic",
         "Derive instantiated definition body typing from one schematic empty-context derivation, the shared stored signature, and syntax support of actual environments. No per-instance typing contract is carried.",
     ),
@@ -147,22 +147,22 @@ const CONTROLS: &[(&str, &str)] = &[
  (supported : KExprParamSupport (kconst_params (kdef_signature defn)) (kdef_value defn)) :
  DefEnvBodyParamSupported (DefEnv.addDef env n defn) :=
  fun (query : Name) (selected : KDefSig)
- (found : Eq (OptionType KDefSig) (kdef_for (DefEnv.addDef env n defn) query) (OptionType.some KDefSig selected)) =>
+ (found : @Eq (OptionType KDefSig) (kdef_for (DefEnv.addDef env n defn) query) (@OptionType.some KDefSig selected)) =>
  opt_pick_some_inv KDefSig (name_eqb n query) defn (kdef_for env query) selected
  (KExprParamSupport (kconst_params (kdef_signature selected)) (kdef_value selected)) found
- (fun (_same_name : Eq Bool (name_eqb n query) Bool.true) (same_record : Eq KDefSig defn selected) =>
+ (fun (_same_name : @Eq Bool (name_eqb n query) Bool.true) (same_record : @Eq KDefSig defn selected) =>
  Eq.subst KDefSig (fun (d : KDefSig) => KExprParamSupport (kconst_params (kdef_signature d)) (kdef_value d))
  defn selected same_record supported)
- (fun (_different_name : Eq Bool (name_eqb n query) Bool.false)
- (old_lookup : Eq (OptionType KDefSig) (kdef_for env query) (OptionType.some KDefSig selected)) =>
+ (fun (_different_name : @Eq Bool (name_eqb n query) Bool.false)
+ (old_lookup : @Eq (OptionType KDefSig) (kdef_for env query) (@OptionType.some KDefSig selected)) =>
  old query selected old_lookup)",
         "The actual stored-body support invariant is preserved by addDef, including shadowing, by inverting its real name-selection helper. This is only syntax support preservation, not valid declaration admission.",
     ),
     (
         r"def rec_env_rhs_paramfree_empty : RecEnvRhsParamFree RecEnv.empty :=
  fun (rn : Name) (cn : Name) (rule : RecRule)
- (found : Eq (OptionType RecRule) (recrule_for RecEnv.empty rn cn) (OptionType.some RecRule rule)) =>
- option_none_ne_some RecRule rule (KExprParamSupport (ListType.nil Name) (recrule_rhs rule)) found",
+ (found : @Eq (OptionType RecRule) (recrule_for RecEnv.empty rn cn) (@OptionType.some RecRule rule)) =>
+ option_none_ne_some RecRule rule (KExprParamSupport (@ListType.nil Name) (recrule_rhs rule)) found",
         "The actual empty recursor table discharges RHS syntax support by computed failed lookup. This supplies a concrete environment invariant, not an impossible inference premise.",
     ),
     (
@@ -173,107 +173,107 @@ const CONTROLS: &[(&str, &str)] = &[
     (
         r"def kdecl_env_type_param_supported_singleton (n0 : Name) (sig0 : KConstSig)
  (supported : KExprParamSupport (kconst_params sig0) (kconst_type sig0)) :
- KDeclEnvTypeParamSupported (fun (n : Name) => opt_pick KConstSig (name_eqb n n0) sig0 (OptionType.none KConstSig)) :=
+ KDeclEnvTypeParamSupported (fun (n : Name) => opt_pick KConstSig (name_eqb n n0) sig0 (@OptionType.none KConstSig)) :=
  fun (query : Name) (selected : KConstSig)
- (found : Eq (OptionType KConstSig) (opt_pick KConstSig (name_eqb query n0) sig0 (OptionType.none KConstSig)) (OptionType.some KConstSig selected)) =>
- opt_pick_some_inv KConstSig (name_eqb query n0) sig0 (OptionType.none KConstSig) selected
+ (found : @Eq (OptionType KConstSig) (opt_pick KConstSig (name_eqb query n0) sig0 (@OptionType.none KConstSig)) (@OptionType.some KConstSig selected)) =>
+ opt_pick_some_inv KConstSig (name_eqb query n0) sig0 (@OptionType.none KConstSig) selected
  (KExprParamSupport (kconst_params selected) (kconst_type selected)) found
- (fun (_same_name : Eq Bool (name_eqb query n0) Bool.true) (same_record : Eq KConstSig sig0 selected) =>
+ (fun (_same_name : @Eq Bool (name_eqb query n0) Bool.true) (same_record : @Eq KConstSig sig0 selected) =>
  Eq.subst KConstSig (fun (sig : KConstSig) => KExprParamSupport (kconst_params sig) (kconst_type sig))
  sig0 selected same_record supported)
- (fun (_different_name : Eq Bool (name_eqb query n0) Bool.false)
- (missing : Eq (OptionType KConstSig) (OptionType.none KConstSig) (OptionType.some KConstSig selected)) =>
+ (fun (_different_name : @Eq Bool (name_eqb query n0) Bool.false)
+ (missing : @Eq (OptionType KConstSig) (@OptionType.none KConstSig) (@OptionType.some KConstSig selected)) =>
  option_none_ne_some KConstSig selected (KExprParamSupport (kconst_params selected) (kconst_type selected)) missing)",
         "Actual singleton signature lookup discharges stored-type support, with record identity derived in the successful branch and absent names refused.",
     ),
     (
         r"def acceptance_example_parameter_support :
  LevelParamSupport (kconst_params acceptance_example_sig) (Level.param Name.anonymous) :=
- LevelParamSupport.param (ListType.cons Name Name.anonymous (ListType.nil Name)) Name.anonymous Nat.zero
- (Eq.refl (OptionType Nat) (OptionType.some Nat Nat.zero))",
+ @LevelParamSupport.param (@ListType.cons Name Name.anonymous (@ListType.nil Name)) Name.anonymous Nat.zero
+ (@Eq.refl (OptionType Nat) (@OptionType.some Nat Nat.zero))",
         "The concrete schematic parameter actually appears at index zero in the existing acceptance example signature.",
     ),
     (
         r"def acceptance_example_def_body_supported : DefEnvBodyParamSupported (red_def acceptance_example_env) :=
  def_env_body_param_supported_add DefEnv.empty def_env_body_param_supported_empty Name.anonymous
  (KDefSig.mk acceptance_example_sig (KExpr.sort (Level.param Name.anonymous)))
- (KExprParamSupport.sort (kconst_params acceptance_example_sig) (Level.param Name.anonymous)
+ (@KExprParamSupport.sort (kconst_params acceptance_example_sig) (Level.param Name.anonymous)
  acceptance_example_parameter_support)",
         "Discharge actual stored-body support of the existing nonempty polymorphic definition environment, using its declared parameter rather than a per-instance body theorem.",
     ),
     (
         r"def acceptance_example_types_supported : KDeclEnvTypeParamSupported acceptance_example_tenv :=
  kdecl_env_type_param_supported_singleton Name.anonymous acceptance_example_sig
- (KExprParamSupport.sort (kconst_params acceptance_example_sig) (Level.succ (Level.param Name.anonymous))
- (LevelParamSupport.succ (kconst_params acceptance_example_sig) (Level.param Name.anonymous)
+ (@KExprParamSupport.sort (kconst_params acceptance_example_sig) (Level.succ (Level.param Name.anonymous))
+ (@LevelParamSupport.succ (kconst_params acceptance_example_sig) (Level.param Name.anonymous)
  acceptance_example_parameter_support))",
         "Discharge actual schematic signature-type support of the matching nonempty type environment, including the successor around its parameter.",
     ),
     (
         r"def acceptance_example_schematic_body_typed :
- TypingCtxConvIn acceptance_example_env acceptance_example_tenv (ListType.nil KExpr)
+ TypingCtxConvIn acceptance_example_env acceptance_example_tenv (@ListType.nil KExpr)
  (KExpr.sort (Level.param Name.anonymous)) (kconst_type acceptance_example_sig) :=
- TypingCtxConvIn.sort acceptance_example_env acceptance_example_tenv (ListType.nil KExpr)
+ @TypingCtxConvIn.sort acceptance_example_env acceptance_example_tenv (@ListType.nil KExpr)
  (Level.param Name.anonymous)",
         "One actual schematic body derivation under the same matched type/reduction environment; this is the input to the generic instantiation theorem.",
     ),
     (
         r"def acceptance_example_instantiated_body_typed (u : Level) :
- TypingCtxConvIn acceptance_example_env acceptance_example_tenv (ListType.nil KExpr)
+ TypingCtxConvIn acceptance_example_env acceptance_example_tenv (@ListType.nil KExpr)
  (KExpr.sort u) (KExpr.sort (Level.succ u)) :=
  typingctxconv_in_kdef_instantiated acceptance_example_env acceptance_example_def_body_supported
  rec_env_rhs_supported_empty acceptance_example_tenv acceptance_example_types_supported
  (KDefSig.mk acceptance_example_sig (KExpr.sort (Level.param Name.anonymous)))
- (ListType.cons Level u (ListType.nil Level)) acceptance_example_schematic_body_typed",
+ (@ListType.cons Level u (@ListType.nil Level)) acceptance_example_schematic_body_typed",
         "Apply the generic schematic-body theorem to the actual nonempty matched environment at every universe, with every syntax and typing premise discharged.",
     ),
     (
         r"def acceptance_example_instantiated_body_nonzero :
- TypingCtxConvIn acceptance_example_env acceptance_example_tenv (ListType.nil KExpr)
+ TypingCtxConvIn acceptance_example_env acceptance_example_tenv (@ListType.nil KExpr)
  (KExpr.sort (Level.succ Level.zero)) (KExpr.sort (Level.succ (Level.succ Level.zero))) :=
  acceptance_example_instantiated_body_typed (Level.succ Level.zero)",
         "Nonzero universe instance actually reaches the composed body theorem and changes the schematic parameter into Sort 1 with type Sort 2.",
     ),
     (
         r"def acceptance_example_constant_instantiation_caller (u : Level) :
- TypingCtxConvIn acceptance_example_env acceptance_example_tenv (ListType.nil KExpr)
- (KExpr.const Name.anonymous (ListType.cons Level u (ListType.nil Level)))
+ TypingCtxConvIn acceptance_example_env acceptance_example_tenv (@ListType.nil KExpr)
+ (KExpr.const Name.anonymous (@ListType.cons Level u (@ListType.nil Level)))
  (KExpr.sort (Level.succ u)) :=
  typingctxconv_in_instL_supported acceptance_example_env acceptance_example_def_body_supported
  rec_env_rhs_supported_empty acceptance_example_tenv acceptance_example_types_supported
- (fun (_n : Name) => u) (ListType.nil KExpr)
- (KExpr.const Name.anonymous (ListType.cons Level (Level.param Name.anonymous) (ListType.nil Level)))
+ (fun (_n : Name) => u) (@ListType.nil KExpr)
+ (KExpr.const Name.anonymous (@ListType.cons Level (Level.param Name.anonymous) (@ListType.nil Level)))
  (KExpr.sort (Level.succ (Level.param Name.anonymous)))
- (TypingCtxConvIn.const acceptance_example_env acceptance_example_tenv (ListType.nil KExpr)
- Name.anonymous (ListType.cons Level (Level.param Name.anonymous) (ListType.nil Level))
+ (@TypingCtxConvIn.const acceptance_example_env acceptance_example_tenv (@ListType.nil KExpr)
+ Name.anonymous (@ListType.cons Level (Level.param Name.anonymous) (@ListType.nil Level))
  (KExpr.sort (Level.succ (Level.param Name.anonymous)))
- (Eq.refl (OptionType KExpr) (OptionType.some KExpr (KExpr.sort (Level.succ (Level.param Name.anonymous))))))",
+ (@Eq.refl (OptionType KExpr) (@OptionType.some KExpr (KExpr.sort (Level.succ (Level.param Name.anonymous))))))",
         "The actual constant constructor with computed guarded lookup reaches the generic typing substitution theorem; its result instantiates both constant universe arguments and the retained type.",
     ),
     (
         r"def acceptance_example_semantic_conversion_typed :
- TypingCtxConvIn acceptance_example_env acceptance_example_tenv (ListType.nil KExpr)
+ TypingCtxConvIn acceptance_example_env acceptance_example_tenv (@ListType.nil KExpr)
  (KExpr.sort (Level.imax (Level.param Name.anonymous) Level.zero)) (KExpr.sort (Level.succ Level.zero)) :=
- TypingCtxConvIn.conv acceptance_example_env acceptance_example_tenv (ListType.nil KExpr)
+ @TypingCtxConvIn.conv acceptance_example_env acceptance_example_tenv (@ListType.nil KExpr)
  (KExpr.sort (Level.imax (Level.param Name.anonymous) Level.zero))
  (KExpr.sort (Level.succ (Level.imax (Level.param Name.anonymous) Level.zero)))
  (KExpr.sort (Level.succ Level.zero))
- (TypingCtxConvIn.sort acceptance_example_env acceptance_example_tenv (ListType.nil KExpr)
+ (@TypingCtxConvIn.sort acceptance_example_env acceptance_example_tenv (@ListType.nil KExpr)
  (Level.imax (Level.param Name.anonymous) Level.zero))
- (DefEqIn.levels acceptance_example_env
+ (@DefEqIn.levels acceptance_example_env
  (KExpr.sort (Level.succ (Level.imax (Level.param Name.anonymous) Level.zero)))
  (KExpr.sort (Level.succ Level.zero))
  (KExprUniverseEq.sort (Level.succ (Level.imax (Level.param Name.anonymous) Level.zero))
- (Level.succ Level.zero) (fun (_v : Name -> Nat) => Eq.refl Nat (Nat.succ Nat.zero))))",
+ (Level.succ Level.zero) (fun (_v : Name -> Nat) => @Eq.refl Nat (Nat.succ Nat.zero))))",
         "An actual typing derivation uses semantic imax conversion rather than raw syntactic equality; this exercises the new conversion arm's premises.",
     ),
     (
         r"def acceptance_example_semantic_typing_instantiation_caller :
- TypingCtxConvIn acceptance_example_env acceptance_example_tenv (ListType.nil KExpr)
+ TypingCtxConvIn acceptance_example_env acceptance_example_tenv (@ListType.nil KExpr)
  (KExpr.sort (Level.imax (Level.succ Level.zero) Level.zero)) (KExpr.sort (Level.succ Level.zero)) :=
  typingctxconv_in_instL_supported acceptance_example_env acceptance_example_def_body_supported
  rec_env_rhs_supported_empty acceptance_example_tenv acceptance_example_types_supported
- (fun (_n : Name) => Level.succ Level.zero) (ListType.nil KExpr)
+ (fun (_n : Name) => Level.succ Level.zero) (@ListType.nil KExpr)
  (KExpr.sort (Level.imax (Level.param Name.anonymous) Level.zero)) (KExpr.sort (Level.succ Level.zero))
  acceptance_example_semantic_conversion_typed",
         "A nonidentity universe substitution consumes actual semantic-conversion typing in the inhabited matched environment, so the checked preservation result is not only a sort-constructor fixture.",

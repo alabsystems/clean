@@ -80,7 +80,7 @@ impl Specification {
                 concat!(
                     "fun (e : KExpr) (e' : KExpr) ",
                     "(h : delta_step (red_def the_red_env) e e') => ",
-                    "delta_reduces.mk e e' h"
+                    "@delta_reduces.mk e e' h"
                 )
                 .to_string(),
             ),
@@ -111,8 +111,9 @@ impl Specification {
         // R2), delta_reduces.rec is the KERNEL-GENERATED recursor in the
         // PROMOTED-PARAMETER (AndType) shape: the e/e' indices are IMPLICIT params,
         // the motive ranges over the major premise only, and the single minor has
-        // no index binders — so the recursor takes just (motive, minor, major) with
-        // e/e' inferred (NOT the retired hand-axiom's 3-ary index-motive shape).
+        // no index binders. The source below makes the existing e/e' parameters
+        // explicit with @ before the unchanged (motive, minor, major); the motive
+        // still ranges only over the major (not the retired hand-axiom's indices).
         // Total function, NOT ex-falso. The δ engine of def_eq_joinable's delta arm.
         self.add_definition(SpecDefinition {
             name: "delta_reduces_to_step".to_string(),
@@ -124,7 +125,7 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (e : KExpr) (e' : KExpr) (h : delta_reduces e e') => ",
-                    "delta_reduces.rec ",
+                    "@delta_reduces.rec e e' ",
                     "(fun (_ : delta_reduces e e') => ",
                     "delta_step (red_def the_red_env) e e') ",
                     "(fun (h_step : delta_step (red_def the_red_env) e e') => h_step) ",

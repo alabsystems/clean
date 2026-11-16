@@ -80,7 +80,7 @@ fn test_reflected_function_is_the_branch_shape() {
     // Bool.rec's minor order is (false, true): the FALSE minor of the outer
     // recursion is the BOUNDED arm.
     assert!(SRC_EXPR_BVAR_IN_RANGE
-        .contains("(Bool.rec (fun (_ : Bool) => Bool) Bool.false (ir_br_c3 i e) (ir_br_c2 i s)) (ir_br_c2 i s) (ir_br_c1 e)"));
+        .contains("(@Bool.rec (fun (_ : Bool) => Bool) Bool.false (ir_br_c3 i e) (ir_br_c2 i s)) (ir_br_c2 i s) (ir_br_c1 e)"));
 }
 
 /// The double residue is deliberate and must not be quietly simplified —
@@ -124,10 +124,10 @@ fn test_a4_a5_shape() {
         3,
         "one recursor per parameter; fewer would leave a premise unused"
     );
-    assert!(SRC_IR_BR_MACHINE_SOUND.contains(": Eq Bool (expr_bvar_in_range i s e) c"));
+    assert!(SRC_IR_BR_MACHINE_SOUND.contains(": @Eq Bool (expr_bvar_in_range i s e) c"));
     assert!(SRC_IR_BR_MACHINE_SOUND.contains("ir_outcome_bool"));
     // …and A5 goes further than the reflected function, onto the arguments.
-    assert!(SRC_IR_BR_MACHINE_SOUND_LOWER.contains(": Eq Bool (ir_br_c2 i s) Bool.true"));
+    assert!(SRC_IR_BR_MACHINE_SOUND_LOWER.contains(": @Eq Bool (ir_br_c2 i s) Bool.true"));
     assert!(SRC_IR_BR_MACHINE_SOUND_LOWER.contains("ir_br_machine_sound mem fuel na"));
 }
 
@@ -146,7 +146,7 @@ fn test_exact_goes_through_the_two_step_split() {
     // condbr, whose scrutinee is symbolic, and the check stops being bounded.
     assert!(SRC_IR_BR_TWO_STEPS.contains("ir_steps ir_d2 ir_br_module"));
     assert!(
-        SRC_IR_BR_TWO_STEPS.contains(":= Eq.refl IRConfig"),
+        SRC_IR_BR_TWO_STEPS.contains(":= @Eq.refl IRConfig"),
         "two steps of the machine are decided by computation, not by a case analysis"
     );
     // …and the statement of A4's machine lemma is unchanged: same fuel, same

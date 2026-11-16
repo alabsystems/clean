@@ -51,7 +51,7 @@ pub enum WideEncoding {
 #[must_use]
 pub fn wide_ret_values(result: &RunResult, encoding: WideEncoding) -> Option<String> {
     match (result, encoding) {
-        (RunResult::Unit, _) => Some("(IRList.nil IRScalar)".to_owned()),
+        (RunResult::Unit, _) => Some("(@IRList.nil IRScalar)".to_owned()),
         (RunResult::Bool(b), WideEncoding::Scalar) => Some(format!(
             "(ir_vl1 (IRScalar.bool_ Bool.{}))",
             if *b { "true" } else { "false" }
@@ -76,9 +76,9 @@ pub fn wide_ret_values(result: &RunResult, encoding: WideEncoding) -> Option<Str
         // ONE-field-struct convention, so a Many under it refuses rather
         // than guessing which element the struct was.
         (RunResult::Many(vs), WideEncoding::Scalar) => {
-            let mut out = "(IRList.nil IRScalar)".to_owned();
+            let mut out = "(@IRList.nil IRScalar)".to_owned();
             for v in vs.iter().rev() {
-                out = format!("(IRList.cons IRScalar {} {out})", v.clean_scalar()?);
+                out = format!("(@IRList.cons IRScalar {} {out})", v.clean_scalar()?);
             }
             Some(out)
         }
@@ -110,8 +110,8 @@ pub fn wide_value_obligation(
     let fuel = ir_numeral(fuel)?;
     let rhs = format!("(IROutcome.ret {values})");
     Ok(format!(
-        "def {def_name} : Eq IROutcome (ir_eval {fuel} {module} {fid} {tail}) {rhs} \
-         := Eq.refl IROutcome {rhs}"
+        "def {def_name} : @Eq IROutcome (ir_eval {fuel} {module} {fid} {tail}) {rhs} \
+         := @Eq.refl IROutcome {rhs}"
     ))
 }
 
@@ -130,8 +130,8 @@ pub fn wide_fuel_out_obligation(
 ) -> Result<String, DiffError> {
     let fuel = ir_numeral(fuel)?;
     Ok(format!(
-        "def {def_name} : Eq IROutcome (ir_eval {fuel} {module} {fid} {tail}) IROutcome.fuel_out \
-         := Eq.refl IROutcome IROutcome.fuel_out"
+        "def {def_name} : @Eq IROutcome (ir_eval {fuel} {module} {fid} {tail}) IROutcome.fuel_out \
+         := @Eq.refl IROutcome IROutcome.fuel_out"
     ))
 }
 
@@ -140,9 +140,9 @@ pub fn wide_fuel_out_obligation(
 /// helper beyond what the minimal `EvalIr` bundle carries.
 #[must_use]
 pub fn wide_args(scalars: &[String]) -> String {
-    let mut out = "(IRList.nil IRScalar)".to_owned();
+    let mut out = "(@IRList.nil IRScalar)".to_owned();
     for s in scalars.iter().rev() {
-        out = format!("(IRList.cons IRScalar {s} {out})");
+        out = format!("(@IRList.cons IRScalar {s} {out})");
     }
     out
 }
@@ -229,9 +229,9 @@ mod tests {
         let args = wide_args(&[wide_int(3), wide_int(1), wide_int(5)]);
         assert_eq!(
             args,
-            "(IRList.cons IRScalar (IRScalar.int_ ir_d3) \
-             (IRList.cons IRScalar (IRScalar.int_ ir_d1) \
-             (IRList.cons IRScalar (IRScalar.int_ ir_d5) (IRList.nil IRScalar))))"
+            "(@IRList.cons IRScalar (IRScalar.int_ ir_d3) \
+             (@IRList.cons IRScalar (IRScalar.int_ ir_d1) \
+             (@IRList.cons IRScalar (IRScalar.int_ ir_d5) (@IRList.nil IRScalar))))"
         );
     }
 
@@ -288,8 +288,8 @@ mod tests {
         .expect("a float pair has a ret encoding");
         assert_eq!(
             many,
-            "(IRList.cons IRScalar (IRScalar.float_ ir_d0) \
-             (IRList.cons IRScalar (IRScalar.float_ 9223372036854775808) (IRList.nil IRScalar)))"
+            "(@IRList.cons IRScalar (IRScalar.float_ ir_d0) \
+             (@IRList.cons IRScalar (IRScalar.float_ 9223372036854775808) (@IRList.nil IRScalar)))"
         );
         assert!(wide_ret_values(&RunResult::Float(3), WideEncoding::AggInt).is_none());
     }
@@ -304,7 +304,7 @@ mod tests {
     fn test_unit_result_encodes_the_empty_ret() {
         let values = wide_ret_values(&RunResult::Unit, WideEncoding::Scalar)
             .expect("unit has a ret encoding");
-        assert_eq!(values, "(IRList.nil IRScalar)");
+        assert_eq!(values, "(@IRList.nil IRScalar)");
     }
 
     #[test]
@@ -329,8 +329,8 @@ mod tests {
         .expect("a scalar pair has a ret encoding");
         assert_eq!(
             values,
-            "(IRList.cons IRScalar (IRScalar.int_ ir_d5) \
-             (IRList.cons IRScalar (IRScalar.bool_ Bool.false) (IRList.nil IRScalar)))"
+            "(@IRList.cons IRScalar (IRScalar.int_ ir_d5) \
+             (@IRList.cons IRScalar (IRScalar.bool_ Bool.false) (@IRList.nil IRScalar)))"
         );
     }
 

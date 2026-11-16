@@ -281,6 +281,15 @@ fn build_candidate(
     })
 }
 
+/// A constant's coarse `TrustLevel`, read from its stored header through
+/// [`header_to_trust_level`]: the one map every [`PremiseCandidate`] takes its
+/// `trust_level` through, a by-name citation's included.
+impl From<&MathverseConstantHeader> for TrustLevel {
+    fn from(header: &MathverseConstantHeader) -> Self {
+        header_to_trust_level(header)
+    }
+}
+
 /// Derive a coarse `TrustLevel` from a constant header.
 fn header_to_trust_level(header: &MathverseConstantHeader) -> TrustLevel {
     use crate::types::ImportConfidence;

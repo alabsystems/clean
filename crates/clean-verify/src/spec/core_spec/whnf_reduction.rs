@@ -50,7 +50,7 @@ impl Specification {
             name: "const_whnf".to_string(),
             type_src: "Name -> ListType Level -> Prop".to_string(),
             value_src: Some(
-                "fun (n : Name) (us : ListType Level) => Eq (OptionType KExpr) (delta_reduct (red_def the_red_env) (KExpr.const n us)) (OptionType.none KExpr)".to_string(),
+                "fun (n : Name) (us : ListType Level) => @Eq (OptionType KExpr) (delta_reduct (red_def the_red_env) (KExpr.const n us)) (@OptionType.none KExpr)".to_string(),
             ),
             is_axiom: false,
             description: "const_whnf n us holds when constant head n/us is already in WHNF under \

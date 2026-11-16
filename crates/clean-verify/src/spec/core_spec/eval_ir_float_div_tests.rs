@@ -59,8 +59,8 @@ fn test_the_type_is_binary64() {
 #[test]
 fn test_three_parameters_and_the_env_pointer_is_unconstrained() {
     assert!(minted_line("ir_fd_func").contains(
-        "IRFunc.mk ir_d0 (IRList.cons Nat ir_d0 (IRList.cons Nat ir_d1 (IRList.cons Nat ir_d2 \
-         (IRList.nil Nat)))) ir_d0"
+        "IRFunc.mk ir_d0 (@IRList.cons Nat ir_d0 (@IRList.cons Nat ir_d1 (@IRList.cons Nat ir_d2 \
+         (@IRList.nil Nat)))) ir_d0"
     ));
     assert!(SRC_IR_FD_MACH0.contains("ir_bind_params (ir_nl3 ir_d0 ir_d1 ir_d2)"));
     // …through the FIFTH chain's builders. Re-declaring `ir_nl3` / `ir_vl3`
@@ -122,11 +122,11 @@ fn test_exhaustion_is_refuted_on_both_arms() {
 #[test]
 fn test_a5_inverts_and_reaches_the_arguments() {
     assert!(SRC_IR_FD_MACHINE_SOUND
-        .contains(": Eq (IROption Nat) (env_reduce_float_div a b) (IROption.some Nat k)"));
+        .contains(": @Eq (IROption Nat) (env_reduce_float_div a b) (@IROption.some Nat k)"));
     assert!(SRC_IR_FD_MACHINE_SOUND.contains("ir_fd_answer_res"));
     // The division-by-zero corollary concludes about the OPERANDS' signs.
     assert!(SRC_IR_FD_MACHINE_SOUND_DIVZERO.contains("(ir_f64_class b) IRF64Class.zero_"));
-    assert!(SRC_IR_FD_MACHINE_SOUND_DIVZERO.contains(": Eq Nat (ir_f64_qinf a b) k"));
+    assert!(SRC_IR_FD_MACHINE_SOUND_DIVZERO.contains(": @Eq Nat (ir_f64_qinf a b) k"));
     assert!(SRC_IR_FD_MACHINE_SOUND_DIVZERO.contains("ir_fd_machine_sound mem fuel na"));
 }
 
@@ -135,7 +135,7 @@ fn test_a5_inverts_and_reaches_the_arguments() {
 #[test]
 fn test_the_refusal_boundary_is_proved_both_ways() {
     assert!(SRC_IR_FD_RETURNS_IFF_MODELLED.contains(
-        ": Eq Bool (ir_outcome_is_ret (ir_eval fuel ir_fd_module ir_d0 (ir_vl3 p ra rb) mem \
+        ": @Eq Bool (ir_outcome_is_ret (ir_eval fuel ir_fd_module ir_d0 (ir_vl3 p ra rb) mem \
          na)) (ir_option_is_some (env_reduce_float_div a b))"
     ));
     assert!(SRC_IR_FD_NEVER_TRAPS.contains("(ir_outcome_is_trap"));
@@ -165,7 +165,7 @@ fn test_witnesses_cover_both_sides_of_the_boundary() {
     ] {
         assert!(src.contains("ir_eval ir_d2 ir_fd_module"));
         assert!(src.contains("IROutcome.ret"), "an answering witness");
-        assert!(src.contains(":= Eq.refl IROutcome"));
+        assert!(src.contains(":= @Eq.refl IROutcome"));
     }
     for src in [
         SRC_W_INF_OVER_INF,

@@ -9,12 +9,12 @@ use super::super::iota_immunity::ARM_ORDER;
 use super::super::kexpr_discr::CD_STRUCTURAL_ARMS;
 
 const DEAD: &str =
-    "Eq (OptionType KExpr) (kdef_value_at (red_def env) nm us) (OptionType.none KExpr)";
+    "@Eq (OptionType KExpr) (kdef_value_at (red_def env) nm us) (@OptionType.none KExpr)";
 const NO_REC: &str =
-    "Eq (OptionType RecMeta) (recmeta_for (red_rec env) nm) (OptionType.none RecMeta)";
+    "@Eq (OptionType RecMeta) (recmeta_for (red_rec env) nm) (@OptionType.none RecMeta)";
 
 fn head(e: &str) -> String {
-    format!("Eq KExpr (kapp_fn {e}) (KExpr.const nm us)")
+    format!("@Eq KExpr (kapp_fn {e}) (KExpr.const nm us)")
 }
 
 fn lifted(e: &str) -> String {
@@ -27,7 +27,7 @@ fn name_eq(e: &str, proof: &str) -> String {
 
 fn unlift(e: &str, value: &str) -> String {
     let p = head(e);
-    format!("LiftP.rec ({p}) (fun (_ : LiftP ({p})) => {p}) (fun (hp : {p}) => hp) ({value})")
+    format!("@LiftP.rec ({p}) (fun (_ : LiftP ({p})) => {p}) (fun (hp : {p}) => hp) ({value})")
 }
 
 fn step_source() -> String {
@@ -56,7 +56,7 @@ fn step_source() -> String {
             )
         } else if slot == 0 {
             format!(
-                "(fun (re : KExpr) (hr : {}) => LiftP.up ({}) hr)",
+                "(fun (re : KExpr) (hr : {}) => @LiftP.up ({}) hr)",
                 head("re"),
                 head("re")
             )
@@ -64,22 +64,22 @@ fn step_source() -> String {
             format!("(fun (ie : KExpr) (ie2 : KExpr) (hi : iota_step (red_rec env) ie ie2) (hr : {}) => iota_step_no_recmeta_absurd (red_rec env) ie ie2 nm ({}) ({}) hrec hi)", head("ie"), lifted("ie2"), name_eq("ie", "hr"))
         } else {
             debug_assert_eq!(slot, 8);
-            let lookup = "Eq.subst KExpr (fun (z : KExpr) => Eq (OptionType KExpr) (kdef_value_at (red_def env) nm (kexpr_const_levels z)) (OptionType.none KExpr)) (KExpr.const nm us) (kapp_fn de) (Eq.symm KExpr (kapp_fn de) (KExpr.const nm us) hr) hdef";
+            let lookup = "Eq.subst KExpr (fun (z : KExpr) => @Eq (OptionType KExpr) (kdef_value_at (red_def env) nm (kexpr_const_levels z)) (@OptionType.none KExpr)) (KExpr.const nm us) (kapp_fn de) (Eq.symm KExpr (kapp_fn de) (KExpr.const nm us) hr) hdef";
             let none = format!(
                 "delta_reduct_no_value_at (red_def env) de nm ({}) ({lookup})",
                 name_eq("de", "hr")
             );
-            format!("(fun (de : KExpr) (de2 : KExpr) (hd : delta_step (red_def env) de de2) (hr : {}) => option_none_ne_some_type KExpr de2 ({}) (Eq.trans (OptionType KExpr) (OptionType.none KExpr) (delta_reduct (red_def env) de) (OptionType.some KExpr de2) (Eq.symm (OptionType KExpr) (delta_reduct (red_def env) de) (OptionType.none KExpr) ({none})) hd))", head("de"), lifted("de2"))
+            format!("(fun (de : KExpr) (de2 : KExpr) (hd : delta_step (red_def env) de de2) (hr : {}) => option_none_ne_some_type KExpr de2 ({}) (Eq.trans (OptionType KExpr) (@OptionType.none KExpr) (delta_reduct (red_def env) de) (@OptionType.some KExpr de2) (Eq.symm (OptionType KExpr) (delta_reduct (red_def env) de) (@OptionType.none KExpr) ({none})) hd))", head("de"), lifted("de2"))
         };
         arms.push_str(&arm);
         arms.push(' ');
     }
-    let rec = format!("par_reduces_cd.rec env (fun (p : KExpr) (q : KExpr) (_ : par_reduces_cd env p q) => {} -> {}) {arms} e e2 h hh", head("p"), lifted("q"));
+    let rec = format!("@par_reduces_cd.rec env (fun (p : KExpr) (q : KExpr) (_ : par_reduces_cd env p q) => {} -> {}) {arms} e e2 h hh", head("p"), lifted("q"));
     format!("def const_head_levels_preserved_cd (env : RedEnv) (nm : Name) (us : ListType Level) (hdef : {DEAD}) (hrec : {NO_REC}) (e : KExpr) (e2 : KExpr) (h : par_reduces_cd env e e2) (hh : {}) : {} := {}", head("e"), head("e2"), unlift("e2", &rec))
 }
 
 fn star_source() -> String {
-    let rec = format!("par_reduces_cd_star.rec env (fun (p : KExpr) (q : KExpr) (_ : par_reduces_cd_star env p q) => {} -> {}) (fun (re : KExpr) (hr : {}) => LiftP.up ({}) hr) (fun (sx : KExpr) (sy : KExpr) (sz : KExpr) (hs : par_reduces_cd env sx sy) (_ht : par_reduces_cd_star env sy sz) (ih : {} -> {}) (hr : {}) => ih (const_head_levels_preserved_cd env nm us hdef hrec sx sy hs hr)) e e2 h hh", head("p"), lifted("q"), head("re"), head("re"), head("sy"), lifted("sz"), head("sx"));
+    let rec = format!("@par_reduces_cd_star.rec env (fun (p : KExpr) (q : KExpr) (_ : par_reduces_cd_star env p q) => {} -> {}) (fun (re : KExpr) (hr : {}) => @LiftP.up ({}) hr) (fun (sx : KExpr) (sy : KExpr) (sz : KExpr) (hs : par_reduces_cd env sx sy) (_ht : par_reduces_cd_star env sy sz) (ih : {} -> {}) (hr : {}) => ih (const_head_levels_preserved_cd env nm us hdef hrec sx sy hs hr)) e e2 h hh", head("p"), lifted("q"), head("re"), head("re"), head("sy"), lifted("sz"), head("sx"));
     format!("def const_head_levels_star_preserved (env : RedEnv) (nm : Name) (us : ListType Level) (hdef : {DEAD}) (hrec : {NO_REC}) (e : KExpr) (e2 : KExpr) (h : par_reduces_cd_star env e e2) (hh : {}) : {} := {}", head("e"), head("e2"), unlift("e2", &rec))
 }
 
@@ -130,7 +130,7 @@ fn neutral_source() -> String {
         let body = if index == 2 {
             "iota_neutral.app af aa (ih0 hh) (iota_immune_of_guarded_dead_head nm us hdef hrec (KExpr.app af aa) hh)".to_string()
         } else if index == 5 {
-            let dead = "delta_reduct_no_value_at (red_def the_red_env) (KExpr.const nm us) nm (Eq.refl (OptionType Name) (OptionType.some Name nm)) hdef";
+            let dead = "delta_reduct_no_value_at (red_def the_red_env) (KExpr.const nm us) nm (@Eq.refl (OptionType Name) (@OptionType.some Name nm)) hdef";
             format!("Eq.substType KExpr (fun (z : KExpr) => iota_neutral z) (KExpr.const nm us) {form} (Eq.symm KExpr {form} (KExpr.const nm us) hh) (iota_neutral.const nm us ({dead}) ({dead}))")
         } else {
             format!(
@@ -143,7 +143,7 @@ fn neutral_source() -> String {
             head(form)
         ));
     }
-    format!("def iota_neutral_of_guarded_dead_head (nm : Name) (us : ListType Level) (hdef : {}) (hrec : {}) (e : KExpr) : {} -> iota_neutral e := KExpr.rec (fun (z : KExpr) => {} -> iota_neutral z) {arms} e", DEAD.replace(" env)", " the_red_env)"), NO_REC.replace(" env)", " the_red_env)"), head("e"), head("z"))
+    format!("def iota_neutral_of_guarded_dead_head (nm : Name) (us : ListType Level) (hdef : {}) (hrec : {}) (e : KExpr) : {} -> iota_neutral e := @KExpr.rec (fun (z : KExpr) => {} -> iota_neutral z) {arms} e", DEAD.replace(" env)", " the_red_env)"), NO_REC.replace(" env)", " the_red_env)"), head("e"), head("z"))
 }
 
 pub(super) fn declarations() -> Vec<String> {
@@ -156,7 +156,7 @@ pub(super) fn declarations() -> Vec<String> {
         format!("def iota_immune_of_guarded_dead_head (nm : Name) (us : ListType Level) (hdef : {dead}) (hrec : {no_rec}) (e : KExpr) (hh : {}) : iota_immune e := fun (e2 : KExpr) (r : KExpr) (hstar : par_reduces_cd_star the_red_env e e2) (hfire : iota_step (red_rec the_red_env) e2 r) => iota_step_no_recmeta_absurd (red_rec the_red_env) e2 r nm Empty ({}) hrec hfire", head("e"), name_eq("e2", &format!("({preserved})"))),
         neutral_source(),
         format!("def nf_head_app_of_guarded_dead_head (nm : Name) (us : ListType Level) (hdef : {dead}) (hrec : {no_rec}) (f : KExpr) (a : KExpr) (hh : {}) : nf_head (KExpr.app f a) := nf_head.neutral f a (iota_neutral_of_guarded_dead_head nm us hdef hrec f hh) (iota_immune_of_guarded_dead_head nm us hdef hrec (KExpr.app f a) hh)", head("(KExpr.app f a)")),
-        format!("def hnf3_app_residual_of_guarded_dead_head (r0 : KExpr) (k0 : Nat) (zf : KExpr) (za : KExpr) (nm : Name) (us : ListType Level) (hdef : {dead}) (hrec : {no_rec}) (hh : {}) (_hs : wh3_stuck_at k0 r0) (heq : Eq KExpr r0 (KExpr.app zf za)) : nf_head r0 := Eq.substType KExpr (fun (z : KExpr) => nf_head z) (KExpr.app zf za) r0 (Eq.symm KExpr r0 (KExpr.app zf za) heq) (nf_head_app_of_guarded_dead_head nm us hdef hrec zf za (Eq.subst KExpr (fun (z : KExpr) => {}) r0 (KExpr.app zf za) heq hh))", head("r0"), head("z")),
+        format!("def hnf3_app_residual_of_guarded_dead_head (r0 : KExpr) (k0 : Nat) (zf : KExpr) (za : KExpr) (nm : Name) (us : ListType Level) (hdef : {dead}) (hrec : {no_rec}) (hh : {}) (_hs : wh3_stuck_at k0 r0) (heq : @Eq KExpr r0 (KExpr.app zf za)) : nf_head r0 := Eq.substType KExpr (fun (z : KExpr) => nf_head z) (KExpr.app zf za) r0 (Eq.symm KExpr r0 (KExpr.app zf za) heq) (nf_head_app_of_guarded_dead_head nm us hdef hrec zf za (Eq.subst KExpr (fun (z : KExpr) => {}) r0 (KExpr.app zf za) heq hh))", head("r0"), head("z")),
     ]
 }
 
@@ -165,13 +165,13 @@ pub(super) fn declarations() -> Vec<String> {
 /// not on an absent name or a hypothetical environment.
 pub(super) fn witnesses() -> Vec<String> {
     let nm = "fixture_def_env_closed_b_name";
-    let us = "(ListType.cons Level Level.zero (ListType.nil Level))";
+    let us = "(@ListType.cons Level Level.zero (@ListType.nil Level))";
     let f = format!("(KExpr.const {nm} {us})");
     let a = "(KExpr.sort Level.zero)";
     vec![
-        format!("def guarded_head_wrong_arity_no_value : Eq (OptionType KExpr) (kdef_value_at (red_def the_red_env) {nm} {us}) (OptionType.none KExpr) := Eq.refl (OptionType KExpr) (OptionType.none KExpr)"),
-        format!("def guarded_head_wrong_arity_raw_present : Eq Bool (opt_isnone KExpr (defval_for (red_def the_red_env) {nm})) Bool.false := Eq.refl Bool Bool.false"),
-        format!("def guarded_head_wrong_arity_nf_head : nf_head (KExpr.app {f} {a}) := nf_head_app_of_guarded_dead_head {nm} {us} guarded_head_wrong_arity_no_value (Eq.refl (OptionType RecMeta) (OptionType.none RecMeta)) {f} {a} (Eq.refl KExpr {f})"),
+        format!("def guarded_head_wrong_arity_no_value : @Eq (OptionType KExpr) (kdef_value_at (red_def the_red_env) {nm} {us}) (@OptionType.none KExpr) := @Eq.refl (OptionType KExpr) (@OptionType.none KExpr)"),
+        format!("def guarded_head_wrong_arity_raw_present : @Eq Bool (opt_isnone KExpr (defval_for (red_def the_red_env) {nm})) Bool.false := @Eq.refl Bool Bool.false"),
+        format!("def guarded_head_wrong_arity_nf_head : nf_head (KExpr.app {f} {a}) := nf_head_app_of_guarded_dead_head {nm} {us} guarded_head_wrong_arity_no_value (@Eq.refl (OptionType RecMeta) (@OptionType.none RecMeta)) {f} {a} (@Eq.refl KExpr {f})"),
     ]
 }
 

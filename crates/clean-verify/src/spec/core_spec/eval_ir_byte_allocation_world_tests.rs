@@ -45,16 +45,16 @@ fn allocation_world_quantified_roots_replay_without_axioms_or_trust() {
     });
 }
 
-const NIL: &str = "(IRList.nil IRByteAllocationV1)";
-const OWNER_TAIL: &str = "(IRList.cons Nat 1 (IRList.nil Nat))";
-const OWNER_LIST: &str = "(IRList.cons Nat 2 (IRList.cons Nat 1 (IRList.nil Nat)))";
-const CURRENT: &str = "(IRFrame.mk 9 0 7 (IRList.cons IRBinding (IRBinding.mk 40 (IRScalar.bool_ Bool.true)) (IRList.nil IRBinding)) (IRList.nil Nat))";
-const TAIL: &str = "(IRList.cons IRFrame (IRFrame.mk 8 0 3 (IRList.nil IRBinding) (IRList.nil Nat)) (IRList.nil IRFrame))";
-const LEGACY: &str = "(IRList.nil IRMemSlot)";
+const NIL: &str = "(@IRList.nil IRByteAllocationV1)";
+const OWNER_TAIL: &str = "(@IRList.cons Nat 1 (@IRList.nil Nat))";
+const OWNER_LIST: &str = "(@IRList.cons Nat 2 (@IRList.cons Nat 1 (@IRList.nil Nat)))";
+const CURRENT: &str = "(IRFrame.mk 9 0 7 (@IRList.cons IRBinding (IRBinding.mk 40 (IRScalar.bool_ Bool.true)) (@IRList.nil IRBinding)) (@IRList.nil Nat))";
+const TAIL: &str = "(@IRList.cons IRFrame (IRFrame.mk 8 0 3 (@IRList.nil IRBinding) (@IRList.nil Nat)) (@IRList.nil IRFrame))";
+const LEGACY: &str = "(@IRList.nil IRMemSlot)";
 
 fn rows(data: &[(u64, u64, u64, bool)]) -> String {
     data.iter().rev().fold(NIL.into(), |tail, (base, size, owner, live)| {
-        format!("(IRList.cons IRByteAllocationV1 (IRByteAllocationV1.mk {base} {size} {owner} Bool.{live}) {tail})")
+        format!("(@IRList.cons IRByteAllocationV1 (IRByteAllocationV1.mk {base} {size} {owner} Bool.{live}) {tail})")
     })
 }
 
@@ -83,30 +83,30 @@ fn allocation_world_actual_alloca_binds_pointer_and_retains_arbitrary_host_bytes
         let allocs = rows(&data);
         let high = high_water(&data, 65);
         let ty = "(IRTy.array_ (IRTy.uint_ 8) 16)";
-        let layout = format!("(IRByteLayoutV1.mk {ty} 16 1 (IRList.nil IRTy) (IRList.nil Nat))");
+        let layout = format!("(IRByteLayoutV1.mk {ty} 16 1 (@IRList.nil IRTy) (@IRList.nil Nat))");
         add(
             &mut spec,
             "allocation_world_context",
             &format!(
                 "def allocation_world_context : IRByteContextV1 :=
-          IRByteContextV1.mk (IRModule.mk (IRList.nil IRFunc) (IRList.nil IRGlobal))
-          (IRList.cons IRByteLayoutV1 {layout} (IRList.nil IRByteLayoutV1))
-          (IRList.nil IRByteSignatureV1) (IRList.nil IRByteFunctionV1) (IRList.nil IRByteSiteV1)"
+          IRByteContextV1.mk (IRModule.mk (@IRList.nil IRFunc) (@IRList.nil IRGlobal))
+          (@IRList.cons IRByteLayoutV1 {layout} (@IRList.nil IRByteLayoutV1))
+          (@IRList.nil IRByteSignatureV1) (@IRList.nil IRByteFunctionV1) (@IRList.nil IRByteSiteV1)"
             ),
         );
         add(&mut spec, "allocation_world_lookup", &format!("def allocation_world_lookup :
-          Eq (IROption IRByteLayoutV1) (ir_byte_layout_v1 allocation_world_context {ty})
-          (IROption.some IRByteLayoutV1 {layout}) := Eq.refl (IROption IRByteLayoutV1) (IROption.some IRByteLayoutV1 {layout})"));
+          @Eq (IROption IRByteLayoutV1) (ir_byte_layout_v1 allocation_world_context {ty})
+          (@IROption.some IRByteLayoutV1 {layout}) := @Eq.refl (IROption IRByteLayoutV1) (@IROption.some IRByteLayoutV1 {layout})"));
         let mem = format!("(IRByteMemoryV1.mk {allocs} bytes 65)");
-        let world = format!("(IRByteWorldV1.mk Nat {mem} host {OWNER_LIST} 5)");
-        let machine = format!("(IRMachine.mk (IRList.cons IRFrame {CURRENT} {TAIL}) {LEGACY} 1)");
-        let dests = "(IRList.cons Nat 99 (IRList.nil Nat))";
-        let values = "(IRList.cons IRScalar (IRScalar.ptr_ 72) (IRList.nil IRScalar))";
+        let world = format!("(@IRByteWorldV1.mk Nat {mem} host {OWNER_LIST} 5)");
+        let machine = format!("(IRMachine.mk (@IRList.cons IRFrame {CURRENT} {TAIL}) {LEGACY} 1)");
+        let dests = "(@IRList.cons Nat 99 (@IRList.nil Nat))";
+        let values = "(@IRList.cons IRScalar (IRScalar.ptr_ 72) (@IRList.nil IRScalar))";
         let site = format!("(IRByteSiteV1.mk 9 0 7 8 1 {PTR_TYPES})");
-        let actual = format!("(ir_byte_alloca_exec_v1 Nat allocation_world_context {machine} {world} {dests} {site} {ty} (IROption.none Nat))");
+        let actual = format!("(ir_byte_alloca_exec_v1 Nat allocation_world_context {machine} {world} {dests} {site} {ty} (@IROption.none Nat))");
         let fresh = format!("(ir_byte_fresh_memory_v1 {allocs} bytes 72 16 2)");
-        let expected = format!("(IRByteConfigV1.running Nat
-          (IRMachine.mk (IRList.cons IRFrame (ir_frame_advance (ir_frame_set_many {CURRENT} {dests} {values})) {TAIL}) {LEGACY} 1)
+        let expected = format!("(@IRByteConfigV1.running Nat
+          (IRMachine.mk (@IRList.cons IRFrame (ir_frame_advance (ir_frame_set_many {CURRENT} {dests} {values})) {TAIL}) {LEGACY} 1)
           (ir_byte_with_memory_v1 Nat {world} {fresh}))");
         let arguments = format!(
             "Nat {allocs} bytes 65 host 2 {OWNER_TAIL} 5 {CURRENT} {TAIL} {LEGACY} 1
@@ -114,10 +114,10 @@ fn allocation_world_actual_alloca_binds_pointer_and_retains_arbitrary_host_bytes
           (Nat.le_add_right 89 18446744073709551527) {high} allocation_world_lookup"
         );
         add(&mut spec, "allocation_world_actual_exact", &format!("def allocation_world_actual_exact
-          (bytes : Nat -> IROption Nat) (host : Nat) : Eq (IRByteConfigV1 Nat) {actual} {expected} :=
+          (bytes : Nat -> IROption Nat) (host : Nat) : @Eq (IRByteConfigV1 Nat) {actual} {expected} :=
           ir_byte_alloca_frame16_exact_v1 {arguments}"));
-        let predicate = "(fun (c : IRByteConfigV1 Nat) => IRByteConfigV1.rec Nat (fun (_ : IRByteConfigV1 Nat) => Prop)
-          (fun (s : IRMachine) (w : IRByteWorldV1 Nat) => Eq Bool (ir_byte_world_valid_v1 Nat s w) Bool.true)
+        let predicate = "(fun (c : IRByteConfigV1 Nat) => @IRByteConfigV1.rec Nat (fun (_ : IRByteConfigV1 Nat) => Prop)
+          (fun (s : IRMachine) (w : IRByteWorldV1 Nat) => @Eq Bool (ir_byte_world_valid_v1 Nat s w) Bool.true)
           (fun (_ : IROutcome) (_ : IRByteWorldV1 Nat) => False) c)";
         add(
             &mut spec,
@@ -125,34 +125,34 @@ fn allocation_world_actual_alloca_binds_pointer_and_retains_arbitrary_host_bytes
             &format!(
                 "def allocation_world_actual_valid
           (bytes : Nat -> IROption Nat) (host : Nat) : {predicate} {actual} :=
-          ir_byte_alloca_frame16_world_v1 {arguments} (Eq.refl Bool Bool.true)"
+          ir_byte_alloca_frame16_world_v1 {arguments} (@Eq.refl Bool Bool.true)"
             ),
         );
         // Actual TY sites use Fast=1. Alloca itself ignores the calling
         // convention field; check C=0 through the same generic theorem too.
         // This is not a claim that calls can ignore their convention.
         let c_site = format!("(IRByteSiteV1.mk 9 0 7 8 0 {PTR_TYPES})");
-        let c_actual = format!("(ir_byte_alloca_exec_v1 Nat allocation_world_context {machine} {world} {dests} {c_site} {ty} (IROption.none Nat))");
+        let c_actual = format!("(ir_byte_alloca_exec_v1 Nat allocation_world_context {machine} {world} {dests} {c_site} {ty} (@IROption.none Nat))");
         let c_arguments = format!(
             "Nat {allocs} bytes 65 host 2 {OWNER_TAIL} 5 {CURRENT} {TAIL} {LEGACY} 1
           allocation_world_context 99 9 0 7 0 (Nat.zero_lt_succ 64)
           (Nat.le_add_right 89 18446744073709551527) {high} allocation_world_lookup"
         );
         add(&mut spec, "allocation_world_c_exact", &format!("def allocation_world_c_exact
-          (bytes : Nat -> IROption Nat) (host : Nat) : Eq (IRByteConfigV1 Nat) {c_actual} {expected} :=
+          (bytes : Nat -> IROption Nat) (host : Nat) : @Eq (IRByteConfigV1 Nat) {c_actual} {expected} :=
           ir_byte_alloca_frame16_exact_v1 {c_arguments}"));
         add(&mut spec, "allocation_world_c_fast_same_alloca", &format!("def allocation_world_c_fast_same_alloca
-          (bytes : Nat -> IROption Nat) (host : Nat) : Eq (IRByteConfigV1 Nat) {c_actual} {actual} :=
-          Eq.trans (IRByteConfigV1 Nat) {c_actual} {expected} {actual}
+          (bytes : Nat -> IROption Nat) (host : Nat) : @Eq (IRByteConfigV1 Nat) {c_actual} {actual} :=
+          @Eq.trans (IRByteConfigV1 Nat) {c_actual} {expected} {actual}
             (allocation_world_c_exact bytes host)
-            (Eq.symm (IRByteConfigV1 Nat) {actual} {expected} (allocation_world_actual_exact bytes host))"));
+            (@Eq.symm (IRByteConfigV1 Nat) {actual} {expected} (allocation_world_actual_exact bytes host))"));
         // Independent pointer observation, in addition to the exact complete
         // frame/world endpoint above (SSA update, one advance and retained tail).
-        let observe = "(fun (c : IRByteConfigV1 Nat) => IRByteConfigV1.rec Nat (fun (_ : IRByteConfigV1 Nat) => IRScalar)
+        let observe = "(fun (c : IRByteConfigV1 Nat) => @IRByteConfigV1.rec Nat (fun (_ : IRByteConfigV1 Nat) => IRScalar)
           (fun (s : IRMachine) (_ : IRByteWorldV1 Nat) => ir_getd s 99)
           (fun (_ : IROutcome) (_ : IRByteWorldV1 Nat) => IRScalar.undef_) c)";
         add(&mut spec, "allocation_world_pointer_observation", &format!("def allocation_world_pointer_observation
-          (bytes : Nat -> IROption Nat) (host : Nat) : Eq IRScalar ({observe} {actual}) (IRScalar.ptr_ 72) :=
+          (bytes : Nat -> IROption Nat) (host : Nat) : @Eq IRScalar ({observe} {actual}) (IRScalar.ptr_ 72) :=
           ir_eq_cong (IRByteConfigV1 Nat) IRScalar {observe} {actual} {expected}
             (allocation_world_actual_exact bytes host)"));
         // A caller-owned slab would satisfy the owner-support invariant too,
@@ -163,9 +163,9 @@ fn allocation_world_actual_alloca_binds_pointer_and_retains_arbitrary_host_bytes
         let wrong_expected = expected.replace(&fresh, &wrong_fresh);
         add(&mut spec, "allocation_world_other_active_owner_valid", &format!("def allocation_world_other_active_owner_valid
           (bytes : Nat -> IROption Nat) (host : Nat) :
-          Eq Bool (ir_byte_world_valid_v1 Nat {machine} {wrong_world}) Bool.true := Eq.refl Bool Bool.true"));
+          @Eq Bool (ir_byte_world_valid_v1 Nat {machine} {wrong_world}) Bool.true := @Eq.refl Bool Bool.true"));
         reject(&mut spec, &format!("def allocation_world_wrong_owner_execution
-          (bytes : Nat -> IROption Nat) (host : Nat) : Eq (IRByteConfigV1 Nat) {actual} {wrong_expected} :=
+          (bytes : Nat -> IROption Nat) (host : Nat) : @Eq (IRByteConfigV1 Nat) {actual} {wrong_expected} :=
           allocation_world_actual_exact bytes host"));
     });
 }
@@ -230,7 +230,7 @@ fn allocation_world_invalid_owners_extents_and_history_are_not_preserved() {
                 72,
                 16,
                 2,
-                "(IRList.cons Nat 2 (IRList.cons Nat 2 (IRList.nil Nat)))".into(),
+                "(@IRList.cons Nat 2 (@IRList.cons Nat 2 (@IRList.nil Nat)))".into(),
                 5,
             ),
             (
@@ -248,7 +248,7 @@ fn allocation_world_invalid_owners_extents_and_history_are_not_preserved() {
                 72,
                 16,
                 0,
-                "(IRList.cons Nat 0 (IRList.cons Nat 1 (IRList.nil Nat)))".into(),
+                "(@IRList.cons Nat 0 (@IRList.cons Nat 1 (@IRList.nil Nat)))".into(),
                 5,
             ),
         ];
@@ -256,13 +256,13 @@ fn allocation_world_invalid_owners_extents_and_history_are_not_preserved() {
             let fresh = format!("(ir_byte_fresh_memory_v1 {allocs} bytes {base} {size} {owner})");
             let target = format!(
                 "(ir_byte_world_valid_v1 Nat
-              (IRMachine.mk (IRList.cons IRFrame {CURRENT} {TAIL}) {LEGACY} 1)
-              (IRByteWorldV1.mk Nat {fresh} host {owners} {next}))"
+              (IRMachine.mk (@IRList.cons IRFrame {CURRENT} {TAIL}) {LEGACY} 1)
+              (@IRByteWorldV1.mk Nat {fresh} host {owners} {next}))"
             );
             add(&mut spec, &format!("allocation_world_observed_{label}"), &format!("def allocation_world_observed_{label}
-              (bytes : Nat -> IROption Nat) (host : Nat) : Eq Bool {target} Bool.false := Eq.refl Bool Bool.false"));
+              (bytes : Nat -> IROption Nat) (host : Nat) : @Eq Bool {target} Bool.false := @Eq.refl Bool Bool.false"));
             reject(&mut spec, &format!("def allocation_world_bad_{label}
-              (bytes : Nat -> IROption Nat) (host : Nat) : Eq Bool {target} Bool.true := Eq.refl Bool Bool.true"));
+              (bytes : Nat -> IROption Nat) (host : Nat) : @Eq Bool {target} Bool.true := @Eq.refl Bool Bool.true"));
         }
         // The world predicate does not assert separation: even overlapping
         // old live/retired records and a zero allocation cursor can be valid.
@@ -270,10 +270,10 @@ fn allocation_world_invalid_owners_extents_and_history_are_not_preserved() {
         let overlap = rows(&[(16, 16, 1, true), (24, 8, 3, false)]);
         let target = format!(
             "(ir_byte_world_valid_v1 Nat
-          (IRMachine.mk (IRList.cons IRFrame {CURRENT} {TAIL}) {LEGACY} 1)
-          (IRByteWorldV1.mk Nat (IRByteMemoryV1.mk {overlap} bytes 0) host {OWNER_LIST} 5))"
+          (IRMachine.mk (@IRList.cons IRFrame {CURRENT} {TAIL}) {LEGACY} 1)
+          (@IRByteWorldV1.mk Nat (IRByteMemoryV1.mk {overlap} bytes 0) host {OWNER_LIST} 5))"
         );
         add(&mut spec, "allocation_world_not_high_water", &format!("def allocation_world_not_high_water
-          (bytes : Nat -> IROption Nat) (host : Nat) : Eq Bool {target} Bool.true := Eq.refl Bool Bool.true"));
+          (bytes : Nat -> IROption Nat) (host : Nat) : @Eq Bool {target} Bool.true := @Eq.refl Bool Bool.true"));
     });
 }

@@ -74,7 +74,7 @@ fn native_folds_and_k_like_register_axiom_free_and_say_what_they_claim() {
         let atom = clean_verify::red_env_reflect::committed_name_atom(op)
             .unwrap_or_else(|e| panic!("{op} must be interned: {e}"));
         assert!(
-            src.contains(&format!("(KExpr.const {atom} (ListType.nil Level))")),
+            src.contains(&format!("(KExpr.const {atom} (@ListType.nil Level))")),
             "{lemma} must fold the reflected {op}: {src}"
         );
         // `Nat.succ` is a constructor: its fold IS the literal rule, keyed on
@@ -206,46 +206,46 @@ const FORGED_K: &[(&str, &str)] = &[
     (
         "accepts_tc_forged_k_unflagged",
         r"def accepts_tc_forged_k_unflagged : RecKAdmitIn (RedEnv.mk (RecEnv.addRec RecEnv.empty accepts_k_rn (RecMeta.mk Nat.zero (Nat.succ Nat.zero) (Nat.succ Nat.zero) Nat.zero Bool.true accepts_k_rec_sig Nat.zero) (RecRules.cons (RecRule.mk accepts_k_cn Nat.zero accepts_k_rhs) RecRules.nil)) DefEnv.empty (IndCtorEnv.addCtor (IndCtorEnv.addInd IndCtorEnv.empty Name.anonymous accepts_k_ind_meta) accepts_k_cn accepts_k_ctor_meta)) accepts_k_rn Name.anonymous (RecMeta.mk Nat.zero (Nat.succ Nat.zero) (Nat.succ Nat.zero) Nat.zero Bool.true accepts_k_rec_sig Nat.zero) accepts_k_cn :=
-RecKAdmitIn.mk (RedEnv.mk (RecEnv.addRec RecEnv.empty accepts_k_rn (RecMeta.mk Nat.zero (Nat.succ Nat.zero) (Nat.succ Nat.zero) Nat.zero Bool.true accepts_k_rec_sig Nat.zero) (RecRules.cons (RecRule.mk accepts_k_cn Nat.zero accepts_k_rhs) RecRules.nil)) DefEnv.empty (IndCtorEnv.addCtor (IndCtorEnv.addInd IndCtorEnv.empty Name.anonymous accepts_k_ind_meta) accepts_k_cn accepts_k_ctor_meta)) accepts_k_rn Name.anonymous (RecMeta.mk Nat.zero (Nat.succ Nat.zero) (Nat.succ Nat.zero) Nat.zero Bool.true accepts_k_rec_sig Nat.zero) accepts_k_cn accepts_k_rhs accepts_k_ctor_meta accepts_k_ind_meta
-  (Eq.refl (OptionType RecMeta) (OptionType.some RecMeta (RecMeta.mk Nat.zero (Nat.succ Nat.zero) (Nat.succ Nat.zero) Nat.zero Bool.true accepts_k_rec_sig Nat.zero)))
-  (Eq.refl Nat (Nat.succ Nat.zero))
-  (Eq.refl (OptionType RecRules) (OptionType.some RecRules (RecRules.cons (RecRule.mk accepts_k_cn Nat.zero accepts_k_rhs) RecRules.nil)))
-  (Eq.refl (OptionType KCtorMeta) (OptionType.some KCtorMeta accepts_k_ctor_meta))
-  (Eq.refl Name Name.anonymous)
-  (Eq.refl Nat Nat.zero)
-  (Eq.refl (OptionType KIndMeta) (OptionType.some KIndMeta accepts_k_ind_meta))
-  (Eq.refl (ListType Name) (ListType.cons Name accepts_k_cn (ListType.nil Name)))
-  (Eq.refl (ListType Name) (ListType.cons Name Name.anonymous (ListType.nil Name)))
-  (Eq.refl Bool Bool.true)",
+@RecKAdmitIn.mk (RedEnv.mk (RecEnv.addRec RecEnv.empty accepts_k_rn (RecMeta.mk Nat.zero (Nat.succ Nat.zero) (Nat.succ Nat.zero) Nat.zero Bool.true accepts_k_rec_sig Nat.zero) (RecRules.cons (RecRule.mk accepts_k_cn Nat.zero accepts_k_rhs) RecRules.nil)) DefEnv.empty (IndCtorEnv.addCtor (IndCtorEnv.addInd IndCtorEnv.empty Name.anonymous accepts_k_ind_meta) accepts_k_cn accepts_k_ctor_meta)) accepts_k_rn Name.anonymous (RecMeta.mk Nat.zero (Nat.succ Nat.zero) (Nat.succ Nat.zero) Nat.zero Bool.true accepts_k_rec_sig Nat.zero) accepts_k_cn accepts_k_rhs accepts_k_ctor_meta accepts_k_ind_meta
+  (@Eq.refl (OptionType RecMeta) (@OptionType.some RecMeta (RecMeta.mk Nat.zero (Nat.succ Nat.zero) (Nat.succ Nat.zero) Nat.zero Bool.true accepts_k_rec_sig Nat.zero)))
+  (@Eq.refl Nat (Nat.succ Nat.zero))
+  (@Eq.refl (OptionType RecRules) (@OptionType.some RecRules (RecRules.cons (RecRule.mk accepts_k_cn Nat.zero accepts_k_rhs) RecRules.nil)))
+  (@Eq.refl (OptionType KCtorMeta) (@OptionType.some KCtorMeta accepts_k_ctor_meta))
+  (@Eq.refl Name Name.anonymous)
+  (@Eq.refl Nat Nat.zero)
+  (@Eq.refl (OptionType KIndMeta) (@OptionType.some KIndMeta accepts_k_ind_meta))
+  (@Eq.refl (ListType Name) (@ListType.cons Name accepts_k_cn (@ListType.nil Name)))
+  (@Eq.refl (ListType Name) (@ListType.cons Name Name.anonymous (@ListType.nil Name)))
+  (@Eq.refl Bool Bool.true)",
     ),
     (
         "accepts_tc_forged_k_type_valued",
-        r"def accepts_tc_forged_k_type_valued : RecKAdmitIn (RedEnv.mk (RecEnv.addRec RecEnv.empty accepts_k_rn accepts_k_rec_meta (RecRules.cons (RecRule.mk accepts_k_cn Nat.zero accepts_k_rhs) RecRules.nil)) DefEnv.empty (IndCtorEnv.addCtor (IndCtorEnv.addInd IndCtorEnv.empty Name.anonymous (KIndMeta.mk (KConstSig.mk (ListType.nil Name) (KExpr.sort (Level.succ Level.zero))) Nat.zero Nat.zero (ListType.cons Name accepts_k_cn (ListType.nil Name)) (ListType.cons Name Name.anonymous (ListType.nil Name)))) accepts_k_cn accepts_k_ctor_meta)) accepts_k_rn Name.anonymous accepts_k_rec_meta accepts_k_cn :=
-RecKAdmitIn.mk (RedEnv.mk (RecEnv.addRec RecEnv.empty accepts_k_rn accepts_k_rec_meta (RecRules.cons (RecRule.mk accepts_k_cn Nat.zero accepts_k_rhs) RecRules.nil)) DefEnv.empty (IndCtorEnv.addCtor (IndCtorEnv.addInd IndCtorEnv.empty Name.anonymous (KIndMeta.mk (KConstSig.mk (ListType.nil Name) (KExpr.sort (Level.succ Level.zero))) Nat.zero Nat.zero (ListType.cons Name accepts_k_cn (ListType.nil Name)) (ListType.cons Name Name.anonymous (ListType.nil Name)))) accepts_k_cn accepts_k_ctor_meta)) accepts_k_rn Name.anonymous accepts_k_rec_meta accepts_k_cn accepts_k_rhs accepts_k_ctor_meta (KIndMeta.mk (KConstSig.mk (ListType.nil Name) (KExpr.sort (Level.succ Level.zero))) Nat.zero Nat.zero (ListType.cons Name accepts_k_cn (ListType.nil Name)) (ListType.cons Name Name.anonymous (ListType.nil Name)))
-  (Eq.refl (OptionType RecMeta) (OptionType.some RecMeta accepts_k_rec_meta))
-  (Eq.refl Nat (Nat.succ Nat.zero))
-  (Eq.refl (OptionType RecRules) (OptionType.some RecRules (RecRules.cons (RecRule.mk accepts_k_cn Nat.zero accepts_k_rhs) RecRules.nil)))
-  (Eq.refl (OptionType KCtorMeta) (OptionType.some KCtorMeta accepts_k_ctor_meta))
-  (Eq.refl Name Name.anonymous)
-  (Eq.refl Nat Nat.zero)
-  (Eq.refl (OptionType KIndMeta) (OptionType.some KIndMeta (KIndMeta.mk (KConstSig.mk (ListType.nil Name) (KExpr.sort (Level.succ Level.zero))) Nat.zero Nat.zero (ListType.cons Name accepts_k_cn (ListType.nil Name)) (ListType.cons Name Name.anonymous (ListType.nil Name)))))
-  (Eq.refl (ListType Name) (ListType.cons Name accepts_k_cn (ListType.nil Name)))
-  (Eq.refl (ListType Name) (ListType.cons Name Name.anonymous (ListType.nil Name)))
-  (Eq.refl Bool Bool.true)",
+        r"def accepts_tc_forged_k_type_valued : RecKAdmitIn (RedEnv.mk (RecEnv.addRec RecEnv.empty accepts_k_rn accepts_k_rec_meta (RecRules.cons (RecRule.mk accepts_k_cn Nat.zero accepts_k_rhs) RecRules.nil)) DefEnv.empty (IndCtorEnv.addCtor (IndCtorEnv.addInd IndCtorEnv.empty Name.anonymous (KIndMeta.mk (KConstSig.mk (@ListType.nil Name) (KExpr.sort (Level.succ Level.zero))) Nat.zero Nat.zero (@ListType.cons Name accepts_k_cn (@ListType.nil Name)) (@ListType.cons Name Name.anonymous (@ListType.nil Name)))) accepts_k_cn accepts_k_ctor_meta)) accepts_k_rn Name.anonymous accepts_k_rec_meta accepts_k_cn :=
+@RecKAdmitIn.mk (RedEnv.mk (RecEnv.addRec RecEnv.empty accepts_k_rn accepts_k_rec_meta (RecRules.cons (RecRule.mk accepts_k_cn Nat.zero accepts_k_rhs) RecRules.nil)) DefEnv.empty (IndCtorEnv.addCtor (IndCtorEnv.addInd IndCtorEnv.empty Name.anonymous (KIndMeta.mk (KConstSig.mk (@ListType.nil Name) (KExpr.sort (Level.succ Level.zero))) Nat.zero Nat.zero (@ListType.cons Name accepts_k_cn (@ListType.nil Name)) (@ListType.cons Name Name.anonymous (@ListType.nil Name)))) accepts_k_cn accepts_k_ctor_meta)) accepts_k_rn Name.anonymous accepts_k_rec_meta accepts_k_cn accepts_k_rhs accepts_k_ctor_meta (KIndMeta.mk (KConstSig.mk (@ListType.nil Name) (KExpr.sort (Level.succ Level.zero))) Nat.zero Nat.zero (@ListType.cons Name accepts_k_cn (@ListType.nil Name)) (@ListType.cons Name Name.anonymous (@ListType.nil Name)))
+  (@Eq.refl (OptionType RecMeta) (@OptionType.some RecMeta accepts_k_rec_meta))
+  (@Eq.refl Nat (Nat.succ Nat.zero))
+  (@Eq.refl (OptionType RecRules) (@OptionType.some RecRules (RecRules.cons (RecRule.mk accepts_k_cn Nat.zero accepts_k_rhs) RecRules.nil)))
+  (@Eq.refl (OptionType KCtorMeta) (@OptionType.some KCtorMeta accepts_k_ctor_meta))
+  (@Eq.refl Name Name.anonymous)
+  (@Eq.refl Nat Nat.zero)
+  (@Eq.refl (OptionType KIndMeta) (@OptionType.some KIndMeta (KIndMeta.mk (KConstSig.mk (@ListType.nil Name) (KExpr.sort (Level.succ Level.zero))) Nat.zero Nat.zero (@ListType.cons Name accepts_k_cn (@ListType.nil Name)) (@ListType.cons Name Name.anonymous (@ListType.nil Name)))))
+  (@Eq.refl (ListType Name) (@ListType.cons Name accepts_k_cn (@ListType.nil Name)))
+  (@Eq.refl (ListType Name) (@ListType.cons Name Name.anonymous (@ListType.nil Name)))
+  (@Eq.refl Bool Bool.true)",
     ),
     (
         "accepts_tc_forged_k_ctor_field",
-        r"def accepts_tc_forged_k_ctor_field : RecKAdmitIn (RedEnv.mk (RecEnv.addRec RecEnv.empty accepts_k_rn accepts_k_rec_meta (RecRules.cons (RecRule.mk accepts_k_cn Nat.zero accepts_k_rhs) RecRules.nil)) DefEnv.empty (IndCtorEnv.addCtor (IndCtorEnv.addInd IndCtorEnv.empty Name.anonymous accepts_k_ind_meta) accepts_k_cn (KCtorMeta.mk (KConstSig.mk (ListType.nil Name) accepts_k_type) Name.anonymous Nat.zero (Nat.succ Nat.zero) Nat.zero))) accepts_k_rn Name.anonymous accepts_k_rec_meta accepts_k_cn :=
-RecKAdmitIn.mk (RedEnv.mk (RecEnv.addRec RecEnv.empty accepts_k_rn accepts_k_rec_meta (RecRules.cons (RecRule.mk accepts_k_cn Nat.zero accepts_k_rhs) RecRules.nil)) DefEnv.empty (IndCtorEnv.addCtor (IndCtorEnv.addInd IndCtorEnv.empty Name.anonymous accepts_k_ind_meta) accepts_k_cn (KCtorMeta.mk (KConstSig.mk (ListType.nil Name) accepts_k_type) Name.anonymous Nat.zero (Nat.succ Nat.zero) Nat.zero))) accepts_k_rn Name.anonymous accepts_k_rec_meta accepts_k_cn accepts_k_rhs (KCtorMeta.mk (KConstSig.mk (ListType.nil Name) accepts_k_type) Name.anonymous Nat.zero (Nat.succ Nat.zero) Nat.zero) accepts_k_ind_meta
-  (Eq.refl (OptionType RecMeta) (OptionType.some RecMeta accepts_k_rec_meta))
-  (Eq.refl Nat (Nat.succ Nat.zero))
-  (Eq.refl (OptionType RecRules) (OptionType.some RecRules (RecRules.cons (RecRule.mk accepts_k_cn Nat.zero accepts_k_rhs) RecRules.nil)))
-  (Eq.refl (OptionType KCtorMeta) (OptionType.some KCtorMeta (KCtorMeta.mk (KConstSig.mk (ListType.nil Name) accepts_k_type) Name.anonymous Nat.zero (Nat.succ Nat.zero) Nat.zero)))
-  (Eq.refl Name Name.anonymous)
-  (Eq.refl Nat Nat.zero)
-  (Eq.refl (OptionType KIndMeta) (OptionType.some KIndMeta accepts_k_ind_meta))
-  (Eq.refl (ListType Name) (ListType.cons Name accepts_k_cn (ListType.nil Name)))
-  (Eq.refl (ListType Name) (ListType.cons Name Name.anonymous (ListType.nil Name)))
-  (Eq.refl Bool Bool.true)",
+        r"def accepts_tc_forged_k_ctor_field : RecKAdmitIn (RedEnv.mk (RecEnv.addRec RecEnv.empty accepts_k_rn accepts_k_rec_meta (RecRules.cons (RecRule.mk accepts_k_cn Nat.zero accepts_k_rhs) RecRules.nil)) DefEnv.empty (IndCtorEnv.addCtor (IndCtorEnv.addInd IndCtorEnv.empty Name.anonymous accepts_k_ind_meta) accepts_k_cn (KCtorMeta.mk (KConstSig.mk (@ListType.nil Name) accepts_k_type) Name.anonymous Nat.zero (Nat.succ Nat.zero) Nat.zero))) accepts_k_rn Name.anonymous accepts_k_rec_meta accepts_k_cn :=
+@RecKAdmitIn.mk (RedEnv.mk (RecEnv.addRec RecEnv.empty accepts_k_rn accepts_k_rec_meta (RecRules.cons (RecRule.mk accepts_k_cn Nat.zero accepts_k_rhs) RecRules.nil)) DefEnv.empty (IndCtorEnv.addCtor (IndCtorEnv.addInd IndCtorEnv.empty Name.anonymous accepts_k_ind_meta) accepts_k_cn (KCtorMeta.mk (KConstSig.mk (@ListType.nil Name) accepts_k_type) Name.anonymous Nat.zero (Nat.succ Nat.zero) Nat.zero))) accepts_k_rn Name.anonymous accepts_k_rec_meta accepts_k_cn accepts_k_rhs (KCtorMeta.mk (KConstSig.mk (@ListType.nil Name) accepts_k_type) Name.anonymous Nat.zero (Nat.succ Nat.zero) Nat.zero) accepts_k_ind_meta
+  (@Eq.refl (OptionType RecMeta) (@OptionType.some RecMeta accepts_k_rec_meta))
+  (@Eq.refl Nat (Nat.succ Nat.zero))
+  (@Eq.refl (OptionType RecRules) (@OptionType.some RecRules (RecRules.cons (RecRule.mk accepts_k_cn Nat.zero accepts_k_rhs) RecRules.nil)))
+  (@Eq.refl (OptionType KCtorMeta) (@OptionType.some KCtorMeta (KCtorMeta.mk (KConstSig.mk (@ListType.nil Name) accepts_k_type) Name.anonymous Nat.zero (Nat.succ Nat.zero) Nat.zero)))
+  (@Eq.refl Name Name.anonymous)
+  (@Eq.refl Nat Nat.zero)
+  (@Eq.refl (OptionType KIndMeta) (@OptionType.some KIndMeta accepts_k_ind_meta))
+  (@Eq.refl (ListType Name) (@ListType.cons Name accepts_k_cn (@ListType.nil Name)))
+  (@Eq.refl (ListType Name) (@ListType.cons Name Name.anonymous (@ListType.nil Name)))
+  (@Eq.refl Bool Bool.true)",
     ),
 ];

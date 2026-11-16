@@ -67,7 +67,7 @@ impl Specification {
                 concat!(
                     "fun (e : KExpr) (e' : KExpr) ",
                     "(h : iota_step (red_rec the_red_env) e e') => ",
-                    "iota_reduces.mk e e' h"
+                    "@iota_reduces.mk e e' h"
                 )
                 .to_string(),
             ),
@@ -98,9 +98,10 @@ impl Specification {
         // Since iota_reduces is now a GENUINE inductive (Bricks R0+R1), iota_reduces.rec
         // is the KERNEL-GENERATED recursor in the PROMOTED-PARAMETER (AndType) shape: the
         // e/e' indices are IMPLICIT params, the motive ranges over the major premise only,
-        // and the single minor has no index binders — so the recursor takes just
-        // (motive, minor, major) with e/e' inferred (NOT the retired hand-axiom's 3-ary
-        // index-motive shape). A total function, NOT ex-falso. The engine of
+        // and the single minor has no index binders. Supply the uniform e/e'
+        // parameters explicitly with @ before the complete motive, minor and major
+        // (NOT the retired hand-axiom's 3-ary index-motive shape). A total function,
+        // NOT ex-falso. The engine of
         // def_eq_joinable's iota arm.
         self.add_definition(SpecDefinition {
             name: "iota_reduces_to_step".to_string(),
@@ -112,7 +113,7 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (e : KExpr) (e' : KExpr) (h : iota_reduces e e') => ",
-                    "iota_reduces.rec ",
+                    "@iota_reduces.rec e e' ",
                     "(fun (_ : iota_reduces e e') => ",
                     "iota_step (red_rec the_red_env) e e') ",
                     "(fun (h_step : iota_step (red_rec the_red_env) e e') => h_step) ",

@@ -521,7 +521,7 @@ fn the_axes_witnesses_and_refutations_hold_in_the_full_spec() {
         .and_then(|d| d.value_src.clone())
         .unwrap_or_default();
     assert!(
-        via.contains("ir_stk_activation_dests_gen") && via.contains("(IRList.nil Nat))"),
+        via.contains("ir_stk_activation_dests_gen") && via.contains("(@IRList.nil Nat))"),
         "the T witness must go through the general theorem from ONE run at the empty dests"
     );
     // The three-way reading and its exact return case, witnessed at the
@@ -606,8 +606,8 @@ fn the_module_axis_covers_both_module_forms() {
         ],
     );
     let he =
-        "(henc : forall (te : IRTy), Eq (IROption IREnc) (ir_enc_find es0 te) (ir_enc_find es te))";
-    let hl = "(hlen : Eq Nat (ir_enc_len es0) (ir_enc_len es))";
+        "(henc : forall (te : IRTy), @Eq (IROption IREnc) (ir_enc_find es0 te) (ir_enc_find es te))";
+    let hl = "(hlen : @Eq Nat (ir_enc_len es0) (ir_enc_len es))";
     for name in [
         "ir_mextv_run",
         "ir_mextvo_run",

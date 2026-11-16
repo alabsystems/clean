@@ -70,7 +70,7 @@ impl Specification {
 
         // lift_bvar: helper for micro_lift bvar case
         self.add_recursive_def(
-            r"def lift_bvar (idx : Nat) (cutoff : Nat) (amount : Nat) : Nat := Nat.rec (fun _ => Nat) (Nat.add idx amount) (fun _ _ => idx) (Nat.sub cutoff idx)",
+            r"def lift_bvar (idx : Nat) (cutoff : Nat) (amount : Nat) : Nat := @Nat.rec (fun _ => Nat) (Nat.add idx amount) (fun _ _ => idx) (Nat.sub cutoff idx)",
             "Compute lifted bvar index: idx+amount if idx >= cutoff, else idx. Part of #441.",
         )?;
 
@@ -89,13 +89,13 @@ impl Specification {
 
         // micro_instantiate_bvar_geq: helper for idx >= depth case
         self.add_recursive_def(
-            r"def micro_instantiate_bvar_geq (idx : Nat) (depth : Nat) (val : MicroExpr) : MicroExpr := Nat.rec (fun _ => MicroExpr) (micro_lift val Nat.zero depth) (fun _ _ => MicroExpr.bvar (Nat.sub idx (Nat.succ Nat.zero))) (Nat.sub idx depth)",
+            r"def micro_instantiate_bvar_geq (idx : Nat) (depth : Nat) (val : MicroExpr) : MicroExpr := @Nat.rec (fun _ => MicroExpr) (micro_lift val Nat.zero depth) (fun _ _ => MicroExpr.bvar (Nat.sub idx (Nat.succ Nat.zero))) (Nat.sub idx depth)",
             "Helper for micro_instantiate_at: handles idx >= depth case. Part of #647.",
         )?;
 
         // micro_instantiate_bvar_at: helper for bvar case
         self.add_recursive_def(
-            r"def micro_instantiate_bvar_at (idx : Nat) (depth : Nat) (val : MicroExpr) : MicroExpr := Nat.rec (fun _ => MicroExpr) (micro_instantiate_bvar_geq idx depth val) (fun _ _ => MicroExpr.bvar idx) (Nat.sub depth idx)",
+            r"def micro_instantiate_bvar_at (idx : Nat) (depth : Nat) (val : MicroExpr) : MicroExpr := @Nat.rec (fun _ => MicroExpr) (micro_instantiate_bvar_geq idx depth val) (fun _ _ => MicroExpr.bvar idx) (Nat.sub depth idx)",
             "Helper for micro_instantiate_at: three-way comparison of idx vs depth. Part of #647.",
         )?;
 
@@ -208,7 +208,7 @@ impl Specification {
         // MicroExpr is UNTYPED no fuel is COMPLETE (Ω-like terms never
         // head-normalise); none needs to be — see the block comment above.
         self.add_recursive_def(
-            r"def micro_whnf_iter (n : Nat) (e : MicroExpr) : MicroExpr := Nat.rec (fun (_ : Nat) => MicroExpr) e (fun (_ : Nat) (acc : MicroExpr) => micro_whnf acc) n",
+            r"def micro_whnf_iter (n : Nat) (e : MicroExpr) : MicroExpr := @Nat.rec (fun (_ : Nat) => MicroExpr) e (fun (_ : Nat) (acc : MicroExpr) => micro_whnf acc) n",
             "Iterate the single-step micro_whnf n times (Nat.rec fold). Identity at n=0; \
              fuel-incomplete on non-normalising terms (MicroExpr is untyped, so no fuel is \
              complete and none is needed). Part of the micro-band drain (Brick 3).",
@@ -229,8 +229,8 @@ impl Specification {
         //   (1) distinct constructors -> false (both sides are already values).
         self.add_definition(SpecDefinition {
             name: "micro_def_eq_distinct_sort_bvar_false".to_string(),
-            type_src: "Eq Bool (micro_def_eq (MicroExpr.sort MicroLevel.zero) (MicroExpr.bvar Nat.zero)) Bool.false".to_string(),
-            value_src: Some("Eq.refl Bool Bool.false".to_string()),
+            type_src: "@Eq Bool (micro_def_eq (MicroExpr.sort MicroLevel.zero) (MicroExpr.bvar Nat.zero)) Bool.false".to_string(),
+            value_src: Some("@Eq.refl Bool Bool.false".to_string()),
             is_axiom: false,
             description: "micro_def_eq (sort 0) (bvar 0) = false: distinct constructors are not \
                 def-eq. Non-vacuity witness (micro_def_eq is not constantly-true). Kernel-checked \
@@ -256,12 +256,12 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "micro_def_eq_beta_fires_true".to_string(),
             type_src: concat!(
-                "Eq Bool (micro_def_eq ",
+                "@Eq Bool (micro_def_eq ",
                 "(MicroExpr.app (MicroExpr.lam (MicroExpr.sort MicroLevel.zero) (MicroExpr.bvar Nat.zero)) (MicroExpr.sort MicroLevel.zero)) ",
                 "(MicroExpr.sort MicroLevel.zero)) Bool.true",
             )
             .to_string(),
-            value_src: Some("Eq.refl Bool Bool.true".to_string()),
+            value_src: Some("@Eq.refl Bool Bool.true".to_string()),
             is_axiom: false,
             description: "micro_def_eq (app (lam (sort 0) (bvar 0)) (sort 0)) (sort 0) = true: the \
                 LHS head-redex beta-reduces to sort 0 under micro_whnf_iter, so the two sides are \
@@ -354,7 +354,7 @@ impl Specification {
         // Part of Goal-2 sub-effort C.
         self.add_definition(SpecDefinition {
             name: "micro_instantiate_bvar_zero".to_string(),
-            type_src: "forall (v : MicroExpr), Eq MicroExpr (micro_instantiate (MicroExpr.bvar Nat.zero) v) v".to_string(),
+            type_src: "forall (v : MicroExpr), @Eq MicroExpr (micro_instantiate (MicroExpr.bvar Nat.zero) v) v".to_string(),
             value_src: Some(
                 "fun (v : MicroExpr) => micro_lift_zero_id v Nat.zero".to_string(),
             ),
@@ -373,8 +373,8 @@ impl Specification {
         // micro_instantiate on sort is identity
         self.add_definition(SpecDefinition {
             name: "micro_instantiate_sort".to_string(),
-            type_src: "forall (l : MicroLevel) (val : MicroExpr), Eq MicroExpr (micro_instantiate (MicroExpr.sort l) val) (MicroExpr.sort l)".to_string(),
-            value_src: Some("fun (l : MicroLevel) (val : MicroExpr) => Eq.refl MicroExpr (MicroExpr.sort l)".to_string()),
+            type_src: "forall (l : MicroLevel) (val : MicroExpr), @Eq MicroExpr (micro_instantiate (MicroExpr.sort l) val) (MicroExpr.sort l)".to_string(),
+            value_src: Some("fun (l : MicroLevel) (val : MicroExpr) => @Eq.refl MicroExpr (MicroExpr.sort l)".to_string()),
             is_axiom: false,
             description: "micro_instantiate (sort l) val = sort l. Derived by reduction. Part of #666.".to_string(),
             category: AxiomCategory::DerivedLemma,
@@ -395,8 +395,8 @@ impl Specification {
         // Retires the #643 HelperAxiom. Part of #666, Goal-2 sub-effort C.
         self.add_definition(SpecDefinition {
             name: "micro_instantiate_app".to_string(),
-            type_src: "forall (f : MicroExpr) (a : MicroExpr) (val : MicroExpr), Eq MicroExpr (micro_instantiate (MicroExpr.app f a) val) (MicroExpr.app (micro_instantiate f val) (micro_instantiate a val))".to_string(),
-            value_src: Some("fun (f : MicroExpr) (a : MicroExpr) (val : MicroExpr) => Eq.refl MicroExpr (MicroExpr.app (micro_instantiate f val) (micro_instantiate a val))".to_string()),
+            type_src: "forall (f : MicroExpr) (a : MicroExpr) (val : MicroExpr), @Eq MicroExpr (micro_instantiate (MicroExpr.app f a) val) (MicroExpr.app (micro_instantiate f val) (micro_instantiate a val))".to_string(),
+            value_src: Some("fun (f : MicroExpr) (a : MicroExpr) (val : MicroExpr) => @Eq.refl MicroExpr (MicroExpr.app (micro_instantiate f val) (micro_instantiate a val))".to_string()),
             is_axiom: false,
             description: "micro_instantiate (app f a) val = app (micro_instantiate f val) (micro_instantiate a val). DerivedProved via Eq.refl (delta+iota defeq). Part of #666.".to_string(),
             category: AxiomCategory::DerivedLemma,
@@ -418,8 +418,8 @@ impl Specification {
         // value_src is a direct Eq.refl. Retires HelperAxiom; 0 axiom_deps.
         self.add_definition(SpecDefinition {
             name: "micro_instantiate_lam".to_string(),
-            type_src: "forall (ty : MicroExpr) (b : MicroExpr) (val : MicroExpr), Eq MicroExpr (micro_instantiate (MicroExpr.lam ty b) val) (MicroExpr.lam (micro_instantiate ty val) (micro_instantiate_at b val (Nat.succ Nat.zero)))".to_string(),
-            value_src: Some("fun (ty : MicroExpr) (b : MicroExpr) (val : MicroExpr) => Eq.refl MicroExpr (MicroExpr.lam (micro_instantiate ty val) (micro_instantiate_at b val (Nat.succ Nat.zero)))".to_string()),
+            type_src: "forall (ty : MicroExpr) (b : MicroExpr) (val : MicroExpr), @Eq MicroExpr (micro_instantiate (MicroExpr.lam ty b) val) (MicroExpr.lam (micro_instantiate ty val) (micro_instantiate_at b val (Nat.succ Nat.zero)))".to_string(),
+            value_src: Some("fun (ty : MicroExpr) (b : MicroExpr) (val : MicroExpr) => @Eq.refl MicroExpr (MicroExpr.lam (micro_instantiate ty val) (micro_instantiate_at b val (Nat.succ Nat.zero)))".to_string()),
             is_axiom: false,
             description: "micro_instantiate (lam ty b) val = lam (micro_instantiate ty val) (micro_instantiate_at b val 1). DerivedProved via Eq.refl (delta+iota reduction); byte-for-byte mirror of micro_instantiate_pi. Part of #666.".to_string(),
             category: AxiomCategory::DerivedLemma,
@@ -442,8 +442,8 @@ impl Specification {
         // value_src is a direct Eq.refl. Retires HelperAxiom; 0 axiom_deps.
         self.add_definition(SpecDefinition {
             name: "micro_instantiate_pi".to_string(),
-            type_src: "forall (ty : MicroExpr) (b : MicroExpr) (val : MicroExpr), Eq MicroExpr (micro_instantiate (MicroExpr.pi ty b) val) (MicroExpr.pi (micro_instantiate ty val) (micro_instantiate_at b val (Nat.succ Nat.zero)))".to_string(),
-            value_src: Some("fun (ty : MicroExpr) (b : MicroExpr) (val : MicroExpr) => Eq.refl MicroExpr (MicroExpr.pi (micro_instantiate ty val) (micro_instantiate_at b val (Nat.succ Nat.zero)))".to_string()),
+            type_src: "forall (ty : MicroExpr) (b : MicroExpr) (val : MicroExpr), @Eq MicroExpr (micro_instantiate (MicroExpr.pi ty b) val) (MicroExpr.pi (micro_instantiate ty val) (micro_instantiate_at b val (Nat.succ Nat.zero)))".to_string(),
+            value_src: Some("fun (ty : MicroExpr) (b : MicroExpr) (val : MicroExpr) => @Eq.refl MicroExpr (MicroExpr.pi (micro_instantiate ty val) (micro_instantiate_at b val (Nat.succ Nat.zero)))".to_string()),
             is_axiom: false,
             description: "micro_instantiate (pi ty b) val = pi (micro_instantiate ty val) (micro_instantiate_at b val 1). DerivedProved via Eq.refl (delta+iota reduction); exact analog of KExpr instantiate_at_pi. Part of #666.".to_string(),
             category: AxiomCategory::DerivedLemma,
@@ -485,9 +485,9 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "micro_whnf_idempotent".to_string(),
             type_src:
-                "forall (ty : MicroExpr) (body : MicroExpr), Eq MicroExpr (micro_whnf (micro_whnf (MicroExpr.lam ty body))) (micro_whnf (MicroExpr.lam ty body))"
+                "forall (ty : MicroExpr) (body : MicroExpr), @Eq MicroExpr (micro_whnf (micro_whnf (MicroExpr.lam ty body))) (micro_whnf (MicroExpr.lam ty body))"
                     .to_string(),
-            value_src: Some("fun (ty : MicroExpr) (body : MicroExpr) => Eq.refl MicroExpr (MicroExpr.lam ty body)".to_string()),
+            value_src: Some("fun (ty : MicroExpr) (body : MicroExpr) => @Eq.refl MicroExpr (MicroExpr.lam ty body)".to_string()),
             is_axiom: false,
             description: "WHNF is idempotent on weak-head-normal forms: \
                 micro_whnf (micro_whnf (lam ty body)) = micro_whnf (lam ty body). DerivedProved via \
@@ -508,8 +508,8 @@ impl Specification {
         // Part of #3303: soundness audit — replace helper axioms with proof terms.
         self.add_definition(SpecDefinition {
             name: "micro_whnf_sort".to_string(),
-            type_src: "forall (l : MicroLevel), Eq MicroExpr (micro_whnf (MicroExpr.sort l)) (MicroExpr.sort l)".to_string(),
-            value_src: Some("fun (l : MicroLevel) => Eq.refl MicroExpr (MicroExpr.sort l)".to_string()),
+            type_src: "forall (l : MicroLevel), @Eq MicroExpr (micro_whnf (MicroExpr.sort l)) (MicroExpr.sort l)".to_string(),
+            value_src: Some("fun (l : MicroLevel) => @Eq.refl MicroExpr (MicroExpr.sort l)".to_string()),
             is_axiom: false,
             description: "Sorts are in WHNF. Derived by reduction: micro_whnf matches sort and returns it unchanged. Part of #3303.".to_string(),
             category: AxiomCategory::DerivedLemma,
@@ -525,8 +525,8 @@ impl Specification {
         // Part of #3303: soundness audit — replace helper axioms with proof terms.
         self.add_definition(SpecDefinition {
             name: "micro_whnf_lam".to_string(),
-            type_src: "forall (ty : MicroExpr) (body : MicroExpr), Eq MicroExpr (micro_whnf (MicroExpr.lam ty body)) (MicroExpr.lam ty body)".to_string(),
-            value_src: Some("fun (ty : MicroExpr) (body : MicroExpr) => Eq.refl MicroExpr (MicroExpr.lam ty body)".to_string()),
+            type_src: "forall (ty : MicroExpr) (body : MicroExpr), @Eq MicroExpr (micro_whnf (MicroExpr.lam ty body)) (MicroExpr.lam ty body)".to_string(),
+            value_src: Some("fun (ty : MicroExpr) (body : MicroExpr) => @Eq.refl MicroExpr (MicroExpr.lam ty body)".to_string()),
             is_axiom: false,
             description: "Lambdas are in WHNF. Derived by reduction: micro_whnf matches lam and returns it unchanged. Part of #3303.".to_string(),
             category: AxiomCategory::DerivedLemma,
@@ -542,8 +542,8 @@ impl Specification {
         // Part of #3303: soundness audit — replace helper axioms with proof terms.
         self.add_definition(SpecDefinition {
             name: "micro_whnf_pi".to_string(),
-            type_src: "forall (ty : MicroExpr) (body : MicroExpr), Eq MicroExpr (micro_whnf (MicroExpr.pi ty body)) (MicroExpr.pi ty body)".to_string(),
-            value_src: Some("fun (ty : MicroExpr) (body : MicroExpr) => Eq.refl MicroExpr (MicroExpr.pi ty body)".to_string()),
+            type_src: "forall (ty : MicroExpr) (body : MicroExpr), @Eq MicroExpr (micro_whnf (MicroExpr.pi ty body)) (MicroExpr.pi ty body)".to_string(),
+            value_src: Some("fun (ty : MicroExpr) (body : MicroExpr) => @Eq.refl MicroExpr (MicroExpr.pi ty body)".to_string()),
             is_axiom: false,
             description: "Pis are in WHNF. Derived by reduction: micro_whnf matches pi and returns it unchanged. Part of #3303.".to_string(),
             category: AxiomCategory::DerivedLemma,
@@ -580,8 +580,8 @@ impl Specification {
         // masquerade guard. axiom_deps = {} (foundational closure).
         self.add_definition(SpecDefinition {
             name: "micro_whnf_beta".to_string(),
-            type_src: "forall (ty : MicroExpr) (body : MicroExpr) (arg : MicroExpr), Eq MicroExpr (micro_whnf (MicroExpr.app (MicroExpr.lam ty body) arg)) (micro_instantiate body arg)".to_string(),
-            value_src: Some("fun (ty : MicroExpr) (body : MicroExpr) (arg : MicroExpr) => Eq.refl MicroExpr (micro_instantiate body arg)".to_string()),
+            type_src: "forall (ty : MicroExpr) (body : MicroExpr) (arg : MicroExpr), @Eq MicroExpr (micro_whnf (MicroExpr.app (MicroExpr.lam ty body) arg)) (micro_instantiate body arg)".to_string(),
+            value_src: Some("fun (ty : MicroExpr) (body : MicroExpr) (arg : MicroExpr) => @Eq.refl MicroExpr (micro_instantiate body arg)".to_string()),
             is_axiom: false,
             description: "WHNF performs ONE beta step: micro_whnf (app (lam ty body) arg) = \
                 micro_instantiate body arg. DerivedProved via Eq.refl (delta: app arm -> whnf_app; \
@@ -607,7 +607,7 @@ impl Specification {
         // (foundational closure through the already-proven structural refl).
         self.add_definition(SpecDefinition {
             name: "micro_def_eq_refl".to_string(),
-            type_src: "forall (e : MicroExpr), Eq Bool (micro_def_eq e e) Bool.true".to_string(),
+            type_src: "forall (e : MicroExpr), @Eq Bool (micro_def_eq e e) Bool.true".to_string(),
             value_src: Some(
                 "fun (e : MicroExpr) => micro_structural_eq_refl (micro_whnf_iter (micro_size e) e)"
                     .to_string(),
@@ -641,7 +641,7 @@ impl Specification {
         // (foundational closure through the argument-wise structural symmetry).
         self.add_definition(SpecDefinition {
             name: "micro_def_eq_symm".to_string(),
-            type_src: "forall (a : MicroExpr) (b : MicroExpr), Eq Bool (micro_def_eq a b) (micro_def_eq b a)".to_string(),
+            type_src: "forall (a : MicroExpr) (b : MicroExpr), @Eq Bool (micro_def_eq a b) (micro_def_eq b a)".to_string(),
             value_src: Some(
                 "fun (a : MicroExpr) (b : MicroExpr) => micro_structural_eq_symm (micro_whnf_iter (micro_size a) a) (micro_whnf_iter (micro_size b) b)"
                     .to_string(),
@@ -709,30 +709,30 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def micro_level_eqb (a : MicroLevel) (b : MicroLevel) : Bool := ",
-                "MicroLevel.rec (fun (_ : MicroLevel) => MicroLevel -> Bool) ",
+                "@MicroLevel.rec (fun (_ : MicroLevel) => MicroLevel -> Bool) ",
                 // a = zero
-                "(fun (y : MicroLevel) => MicroLevel.rec (fun (_ : MicroLevel) => Bool) ",
+                "(fun (y : MicroLevel) => @MicroLevel.rec (fun (_ : MicroLevel) => Bool) ",
                 "Bool.true ",
                 "(fun (yp : MicroLevel) (_ : Bool) => Bool.false) ",
                 "(fun (yl : MicroLevel) (yr : MicroLevel) (_ : Bool) (_ : Bool) => Bool.false) ",
                 "(fun (yl : MicroLevel) (yr : MicroLevel) (_ : Bool) (_ : Bool) => Bool.false) y) ",
                 // a = succ ap  (ih_ap : MicroLevel -> Bool)
                 "(fun (ap : MicroLevel) (ih_ap : MicroLevel -> Bool) => fun (y : MicroLevel) => ",
-                "MicroLevel.rec (fun (_ : MicroLevel) => Bool) ",
+                "@MicroLevel.rec (fun (_ : MicroLevel) => Bool) ",
                 "Bool.false ",
                 "(fun (yp : MicroLevel) (_ : Bool) => ih_ap yp) ",
                 "(fun (yl : MicroLevel) (yr : MicroLevel) (_ : Bool) (_ : Bool) => Bool.false) ",
                 "(fun (yl : MicroLevel) (yr : MicroLevel) (_ : Bool) (_ : Bool) => Bool.false) y) ",
                 // a = max al ar  (ih_al ih_ar : MicroLevel -> Bool)
                 "(fun (al : MicroLevel) (ar : MicroLevel) (ih_al : MicroLevel -> Bool) (ih_ar : MicroLevel -> Bool) => ",
-                "fun (y : MicroLevel) => MicroLevel.rec (fun (_ : MicroLevel) => Bool) ",
+                "fun (y : MicroLevel) => @MicroLevel.rec (fun (_ : MicroLevel) => Bool) ",
                 "Bool.false ",
                 "(fun (yp : MicroLevel) (_ : Bool) => Bool.false) ",
                 "(fun (yl : MicroLevel) (yr : MicroLevel) (_ : Bool) (_ : Bool) => Bool.and (ih_al yl) (ih_ar yr)) ",
                 "(fun (yl : MicroLevel) (yr : MicroLevel) (_ : Bool) (_ : Bool) => Bool.false) y) ",
                 // a = imax al ar  (ih_al ih_ar : MicroLevel -> Bool)
                 "(fun (al : MicroLevel) (ar : MicroLevel) (ih_al : MicroLevel -> Bool) (ih_ar : MicroLevel -> Bool) => ",
-                "fun (y : MicroLevel) => MicroLevel.rec (fun (_ : MicroLevel) => Bool) ",
+                "fun (y : MicroLevel) => @MicroLevel.rec (fun (_ : MicroLevel) => Bool) ",
                 "Bool.false ",
                 "(fun (yp : MicroLevel) (_ : Bool) => Bool.false) ",
                 "(fun (yl : MicroLevel) (yr : MicroLevel) (_ : Bool) (_ : Bool) => Bool.false) ",
@@ -761,9 +761,9 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def micro_structural_eq (a : MicroExpr) (b : MicroExpr) : Bool := ",
-                "MicroExpr.rec (fun (_ : MicroExpr) => MicroExpr -> Bool) ",
+                "@MicroExpr.rec (fun (_ : MicroExpr) => MicroExpr -> Bool) ",
                 // a = bvar i
-                "(fun (i : Nat) => fun (y : MicroExpr) => MicroExpr.rec (fun (_ : MicroExpr) => Bool) ",
+                "(fun (i : Nat) => fun (y : MicroExpr) => @MicroExpr.rec (fun (_ : MicroExpr) => Bool) ",
                 "(fun (j : Nat) => nat_eqb i j) ",
                 "(fun (m : MicroLevel) => Bool.false) ",
                 "(fun (g : MicroExpr) (c : MicroExpr) (_ : Bool) (_ : Bool) => Bool.false) ",
@@ -772,7 +772,7 @@ impl Specification {
                 "(fun (t : MicroExpr) (v : MicroExpr) (d : MicroExpr) (_ : Bool) (_ : Bool) (_ : Bool) => Bool.false) ",
                 "(fun (t : MicroExpr) (_ : Bool) => Bool.false) y) ",
                 // a = sort l
-                "(fun (l : MicroLevel) => fun (y : MicroExpr) => MicroExpr.rec (fun (_ : MicroExpr) => Bool) ",
+                "(fun (l : MicroLevel) => fun (y : MicroExpr) => @MicroExpr.rec (fun (_ : MicroExpr) => Bool) ",
                 "(fun (j : Nat) => Bool.false) ",
                 "(fun (m : MicroLevel) => micro_level_eqb l m) ",
                 "(fun (g : MicroExpr) (c : MicroExpr) (_ : Bool) (_ : Bool) => Bool.false) ",
@@ -782,7 +782,7 @@ impl Specification {
                 "(fun (t : MicroExpr) (_ : Bool) => Bool.false) y) ",
                 // a = app f a1  (ih_f ih_a : MicroExpr -> Bool)
                 "(fun (f : MicroExpr) (a1 : MicroExpr) (ih_f : MicroExpr -> Bool) (ih_a : MicroExpr -> Bool) => ",
-                "fun (y : MicroExpr) => MicroExpr.rec (fun (_ : MicroExpr) => Bool) ",
+                "fun (y : MicroExpr) => @MicroExpr.rec (fun (_ : MicroExpr) => Bool) ",
                 "(fun (j : Nat) => Bool.false) ",
                 "(fun (m : MicroLevel) => Bool.false) ",
                 "(fun (g : MicroExpr) (c : MicroExpr) (_ : Bool) (_ : Bool) => Bool.and (ih_f g) (ih_a c)) ",
@@ -792,7 +792,7 @@ impl Specification {
                 "(fun (t : MicroExpr) (_ : Bool) => Bool.false) y) ",
                 // a = lam ty1 b1  (ih_ty ih_b : MicroExpr -> Bool)
                 "(fun (ty1 : MicroExpr) (b1 : MicroExpr) (ih_ty : MicroExpr -> Bool) (ih_b : MicroExpr -> Bool) => ",
-                "fun (y : MicroExpr) => MicroExpr.rec (fun (_ : MicroExpr) => Bool) ",
+                "fun (y : MicroExpr) => @MicroExpr.rec (fun (_ : MicroExpr) => Bool) ",
                 "(fun (j : Nat) => Bool.false) ",
                 "(fun (m : MicroLevel) => Bool.false) ",
                 "(fun (g : MicroExpr) (c : MicroExpr) (_ : Bool) (_ : Bool) => Bool.false) ",
@@ -802,7 +802,7 @@ impl Specification {
                 "(fun (t : MicroExpr) (_ : Bool) => Bool.false) y) ",
                 // a = pi ty1 b1  (ih_ty ih_b : MicroExpr -> Bool)
                 "(fun (ty1 : MicroExpr) (b1 : MicroExpr) (ih_ty : MicroExpr -> Bool) (ih_b : MicroExpr -> Bool) => ",
-                "fun (y : MicroExpr) => MicroExpr.rec (fun (_ : MicroExpr) => Bool) ",
+                "fun (y : MicroExpr) => @MicroExpr.rec (fun (_ : MicroExpr) => Bool) ",
                 "(fun (j : Nat) => Bool.false) ",
                 "(fun (m : MicroLevel) => Bool.false) ",
                 "(fun (g : MicroExpr) (c : MicroExpr) (_ : Bool) (_ : Bool) => Bool.false) ",
@@ -812,7 +812,7 @@ impl Specification {
                 "(fun (t : MicroExpr) (_ : Bool) => Bool.false) y) ",
                 // a = let_ ty1 v1 b1  (ih_ty ih_v ih_b : MicroExpr -> Bool)
                 "(fun (ty1 : MicroExpr) (v1 : MicroExpr) (b1 : MicroExpr) (ih_ty : MicroExpr -> Bool) (ih_v : MicroExpr -> Bool) (ih_b : MicroExpr -> Bool) => ",
-                "fun (y : MicroExpr) => MicroExpr.rec (fun (_ : MicroExpr) => Bool) ",
+                "fun (y : MicroExpr) => @MicroExpr.rec (fun (_ : MicroExpr) => Bool) ",
                 "(fun (j : Nat) => Bool.false) ",
                 "(fun (m : MicroLevel) => Bool.false) ",
                 "(fun (g : MicroExpr) (c : MicroExpr) (_ : Bool) (_ : Bool) => Bool.false) ",
@@ -822,7 +822,7 @@ impl Specification {
                 "(fun (t : MicroExpr) (_ : Bool) => Bool.false) y) ",
                 // a = opaque_ ty1  (ih_ty : MicroExpr -> Bool)
                 "(fun (ty1 : MicroExpr) (ih_ty : MicroExpr -> Bool) => ",
-                "fun (y : MicroExpr) => MicroExpr.rec (fun (_ : MicroExpr) => Bool) ",
+                "fun (y : MicroExpr) => @MicroExpr.rec (fun (_ : MicroExpr) => Bool) ",
                 "(fun (j : Nat) => Bool.false) ",
                 "(fun (m : MicroLevel) => Bool.false) ",
                 "(fun (g : MicroExpr) (c : MicroExpr) (_ : Bool) (_ : Bool) => Bool.false) ",
@@ -851,11 +851,11 @@ impl Specification {
         // it up to defeq.
         self.add_definition(SpecDefinition {
             name: "micro_nat_eqb_refl".to_string(),
-            type_src: "forall (n : Nat), Eq Bool (nat_eqb n n) Bool.true".to_string(),
+            type_src: "forall (n : Nat), @Eq Bool (nat_eqb n n) Bool.true".to_string(),
             value_src: Some(
                 concat!(
                     "fun (n : Nat) => ",
-                    "Eq.cong Nat Bool ",
+                    "@Eq.cong Nat Bool ",
                     "(fun (s : Nat) => nat_is_zero (Nat.add s s)) ",
                     "(Nat.sub n n) Nat.zero ",
                     "(nat_sub_self n)",
@@ -888,37 +888,37 @@ impl Specification {
         //   (Eq.cong), residual Bool.and true (..r r) reduces to (..r r), IH closes.
         self.add_definition(SpecDefinition {
             name: "micro_level_eqb_refl".to_string(),
-            type_src: "forall (a : MicroLevel), Eq Bool (micro_level_eqb a a) Bool.true"
+            type_src: "forall (a : MicroLevel), @Eq Bool (micro_level_eqb a a) Bool.true"
                 .to_string(),
             value_src: Some(
                 concat!(
-                    "fun (a : MicroLevel) => MicroLevel.rec ",
-                    "(fun (z : MicroLevel) => Eq Bool (micro_level_eqb z z) Bool.true) ",
+                    "fun (a : MicroLevel) => @MicroLevel.rec ",
+                    "(fun (z : MicroLevel) => @Eq Bool (micro_level_eqb z z) Bool.true) ",
                     // zero
-                    "(Eq.refl Bool Bool.true) ",
+                    "(@Eq.refl Bool Bool.true) ",
                     // succ p : ih
-                    "(fun (p : MicroLevel) (ih : Eq Bool (micro_level_eqb p p) Bool.true) => ih) ",
+                    "(fun (p : MicroLevel) (ih : @Eq Bool (micro_level_eqb p p) Bool.true) => ih) ",
                     // max l r : ih_l, ih_r
                     "(fun (l : MicroLevel) (r : MicroLevel) ",
-                    "(ih_l : Eq Bool (micro_level_eqb l l) Bool.true) ",
-                    "(ih_r : Eq Bool (micro_level_eqb r r) Bool.true) => ",
-                    "Eq.trans Bool ",
+                    "(ih_l : @Eq Bool (micro_level_eqb l l) Bool.true) ",
+                    "(ih_r : @Eq Bool (micro_level_eqb r r) Bool.true) => ",
+                    "@Eq.trans Bool ",
                     "(micro_level_eqb (MicroLevel.max l r) (MicroLevel.max l r)) ",
                     "(Bool.and Bool.true (micro_level_eqb r r)) ",
                     "Bool.true ",
-                    "(Eq.cong Bool Bool ",
+                    "(@Eq.cong Bool Bool ",
                     "(fun (bl : Bool) => Bool.and bl (micro_level_eqb r r)) ",
                     "(micro_level_eqb l l) Bool.true ih_l) ",
                     "ih_r) ",
                     // imax l r : ih_l, ih_r
                     "(fun (l : MicroLevel) (r : MicroLevel) ",
-                    "(ih_l : Eq Bool (micro_level_eqb l l) Bool.true) ",
-                    "(ih_r : Eq Bool (micro_level_eqb r r) Bool.true) => ",
-                    "Eq.trans Bool ",
+                    "(ih_l : @Eq Bool (micro_level_eqb l l) Bool.true) ",
+                    "(ih_r : @Eq Bool (micro_level_eqb r r) Bool.true) => ",
+                    "@Eq.trans Bool ",
                     "(micro_level_eqb (MicroLevel.imax l r) (MicroLevel.imax l r)) ",
                     "(Bool.and Bool.true (micro_level_eqb r r)) ",
                     "Bool.true ",
-                    "(Eq.cong Bool Bool ",
+                    "(@Eq.cong Bool Bool ",
                     "(fun (bl : Bool) => Bool.and bl (micro_level_eqb r r)) ",
                     "(micro_level_eqb l l) Bool.true ih_l) ",
                     "ih_r) ",
@@ -959,74 +959,74 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "micro_structural_eq_refl".to_string(),
             type_src:
-                "forall (e : MicroExpr), Eq Bool (micro_structural_eq e e) Bool.true".to_string(),
+                "forall (e : MicroExpr), @Eq Bool (micro_structural_eq e e) Bool.true".to_string(),
             value_src: Some(
                 concat!(
-                    "fun (e : MicroExpr) => MicroExpr.rec ",
-                    "(fun (z : MicroExpr) => Eq Bool (micro_structural_eq z z) Bool.true) ",
+                    "fun (e : MicroExpr) => @MicroExpr.rec ",
+                    "(fun (z : MicroExpr) => @Eq Bool (micro_structural_eq z z) Bool.true) ",
                     // bvar i
                     "(fun (i : Nat) => micro_nat_eqb_refl i) ",
                     // sort l
                     "(fun (l : MicroLevel) => micro_level_eqb_refl l) ",
                     // app f a : ih_f, ih_a
                     "(fun (f : MicroExpr) (a : MicroExpr) ",
-                    "(ih_f : Eq Bool (micro_structural_eq f f) Bool.true) ",
-                    "(ih_a : Eq Bool (micro_structural_eq a a) Bool.true) => ",
-                    "Eq.trans Bool ",
+                    "(ih_f : @Eq Bool (micro_structural_eq f f) Bool.true) ",
+                    "(ih_a : @Eq Bool (micro_structural_eq a a) Bool.true) => ",
+                    "@Eq.trans Bool ",
                     "(micro_structural_eq (MicroExpr.app f a) (MicroExpr.app f a)) ",
                     "(Bool.and Bool.true (micro_structural_eq a a)) ",
                     "Bool.true ",
-                    "(Eq.cong Bool Bool ",
+                    "(@Eq.cong Bool Bool ",
                     "(fun (bf : Bool) => Bool.and bf (micro_structural_eq a a)) ",
                     "(micro_structural_eq f f) Bool.true ih_f) ",
                     "ih_a) ",
                     // lam ty b : ih_ty, ih_b
                     "(fun (ty : MicroExpr) (b : MicroExpr) ",
-                    "(ih_ty : Eq Bool (micro_structural_eq ty ty) Bool.true) ",
-                    "(ih_b : Eq Bool (micro_structural_eq b b) Bool.true) => ",
-                    "Eq.trans Bool ",
+                    "(ih_ty : @Eq Bool (micro_structural_eq ty ty) Bool.true) ",
+                    "(ih_b : @Eq Bool (micro_structural_eq b b) Bool.true) => ",
+                    "@Eq.trans Bool ",
                     "(micro_structural_eq (MicroExpr.lam ty b) (MicroExpr.lam ty b)) ",
                     "(Bool.and Bool.true (micro_structural_eq b b)) ",
                     "Bool.true ",
-                    "(Eq.cong Bool Bool ",
+                    "(@Eq.cong Bool Bool ",
                     "(fun (bt : Bool) => Bool.and bt (micro_structural_eq b b)) ",
                     "(micro_structural_eq ty ty) Bool.true ih_ty) ",
                     "ih_b) ",
                     // pi ty b : ih_ty, ih_b
                     "(fun (ty : MicroExpr) (b : MicroExpr) ",
-                    "(ih_ty : Eq Bool (micro_structural_eq ty ty) Bool.true) ",
-                    "(ih_b : Eq Bool (micro_structural_eq b b) Bool.true) => ",
-                    "Eq.trans Bool ",
+                    "(ih_ty : @Eq Bool (micro_structural_eq ty ty) Bool.true) ",
+                    "(ih_b : @Eq Bool (micro_structural_eq b b) Bool.true) => ",
+                    "@Eq.trans Bool ",
                     "(micro_structural_eq (MicroExpr.pi ty b) (MicroExpr.pi ty b)) ",
                     "(Bool.and Bool.true (micro_structural_eq b b)) ",
                     "Bool.true ",
-                    "(Eq.cong Bool Bool ",
+                    "(@Eq.cong Bool Bool ",
                     "(fun (bt : Bool) => Bool.and bt (micro_structural_eq b b)) ",
                     "(micro_structural_eq ty ty) Bool.true ih_ty) ",
                     "ih_b) ",
                     // let_ ty v b : ih_ty, ih_v, ih_b
                     "(fun (ty : MicroExpr) (v : MicroExpr) (b : MicroExpr) ",
-                    "(ih_ty : Eq Bool (micro_structural_eq ty ty) Bool.true) ",
-                    "(ih_v : Eq Bool (micro_structural_eq v v) Bool.true) ",
-                    "(ih_b : Eq Bool (micro_structural_eq b b) Bool.true) => ",
-                    "Eq.trans Bool ",
+                    "(ih_ty : @Eq Bool (micro_structural_eq ty ty) Bool.true) ",
+                    "(ih_v : @Eq Bool (micro_structural_eq v v) Bool.true) ",
+                    "(ih_b : @Eq Bool (micro_structural_eq b b) Bool.true) => ",
+                    "@Eq.trans Bool ",
                     "(micro_structural_eq (MicroExpr.let_ ty v b) (MicroExpr.let_ ty v b)) ",
                     "(Bool.and (micro_structural_eq v v) (micro_structural_eq b b)) ",
                     "Bool.true ",
-                    "(Eq.cong Bool Bool ",
+                    "(@Eq.cong Bool Bool ",
                     "(fun (bt : Bool) => Bool.and bt (Bool.and (micro_structural_eq v v) (micro_structural_eq b b))) ",
                     "(micro_structural_eq ty ty) Bool.true ih_ty) ",
-                    "(Eq.trans Bool ",
+                    "(@Eq.trans Bool ",
                     "(Bool.and (micro_structural_eq v v) (micro_structural_eq b b)) ",
                     "(Bool.and Bool.true (micro_structural_eq b b)) ",
                     "Bool.true ",
-                    "(Eq.cong Bool Bool ",
+                    "(@Eq.cong Bool Bool ",
                     "(fun (bv : Bool) => Bool.and bv (micro_structural_eq b b)) ",
                     "(micro_structural_eq v v) Bool.true ih_v) ",
                     "ih_b)) ",
                     // opaque_ ty : ih_ty
                     "(fun (ty : MicroExpr) ",
-                    "(ih_ty : Eq Bool (micro_structural_eq ty ty) Bool.true) => ih_ty) ",
+                    "(ih_ty : @Eq Bool (micro_structural_eq ty ty) Bool.true) => ih_ty) ",
                     "e",
                 )
                 .to_string(),
@@ -1061,8 +1061,8 @@ impl Specification {
         // sort 0 vs bvar 0 : different constructors -> false.
         self.add_definition(SpecDefinition {
             name: "micro_structural_eq_distinct_sort_bvar_false".to_string(),
-            type_src: "Eq Bool (micro_structural_eq (MicroExpr.sort MicroLevel.zero) (MicroExpr.bvar Nat.zero)) Bool.false".to_string(),
-            value_src: Some("Eq.refl Bool Bool.false".to_string()),
+            type_src: "@Eq Bool (micro_structural_eq (MicroExpr.sort MicroLevel.zero) (MicroExpr.bvar Nat.zero)) Bool.false".to_string(),
+            value_src: Some("@Eq.refl Bool Bool.false".to_string()),
             is_axiom: false,
             description: "micro_structural_eq (sort 0) (bvar 0) = false: distinct constructors \
                 compare unequal. Non-vacuity witness (micro_structural_eq is not constantly-true). \
@@ -1083,12 +1083,12 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "micro_structural_eq_distinct_app_lam_false".to_string(),
             type_src: concat!(
-                "Eq Bool (micro_structural_eq ",
+                "@Eq Bool (micro_structural_eq ",
                 "(MicroExpr.app (MicroExpr.bvar Nat.zero) (MicroExpr.bvar Nat.zero)) ",
                 "(MicroExpr.lam (MicroExpr.bvar Nat.zero) (MicroExpr.bvar Nat.zero))) Bool.false",
             )
             .to_string(),
-            value_src: Some("Eq.refl Bool Bool.false".to_string()),
+            value_src: Some("@Eq.refl Bool Bool.false".to_string()),
             is_axiom: false,
             description:
                 "micro_structural_eq (app ..) (lam ..) = false: distinct constructors with \
@@ -1110,8 +1110,8 @@ impl Specification {
         // payload comparison, not just constructor tag).
         self.add_definition(SpecDefinition {
             name: "micro_structural_eq_distinct_bvar_index_false".to_string(),
-            type_src: "Eq Bool (micro_structural_eq (MicroExpr.bvar Nat.zero) (MicroExpr.bvar (Nat.succ Nat.zero))) Bool.false".to_string(),
-            value_src: Some("Eq.refl Bool Bool.false".to_string()),
+            type_src: "@Eq Bool (micro_structural_eq (MicroExpr.bvar Nat.zero) (MicroExpr.bvar (Nat.succ Nat.zero))) Bool.false".to_string(),
+            value_src: Some("@Eq.refl Bool Bool.false".to_string()),
             is_axiom: false,
             description: "micro_structural_eq (bvar 0) (bvar 1) = false: same constructor, distinct \
                 de Bruijn index compares unequal (genuine payload comparison, not just constructor \
@@ -1142,11 +1142,12 @@ impl Specification {
         // nat_add_comm transported through nat_is_zero closes it up to defeq.
         self.add_definition(SpecDefinition {
             name: "nat_eqb_symm".to_string(),
-            type_src: "forall (i : Nat) (j : Nat), Eq Bool (nat_eqb i j) (nat_eqb j i)".to_string(),
+            type_src: "forall (i : Nat) (j : Nat), @Eq Bool (nat_eqb i j) (nat_eqb j i)"
+                .to_string(),
             value_src: Some(
                 concat!(
                     "fun (i : Nat) (j : Nat) => ",
-                    "Eq.cong Nat Bool (fun (s : Nat) => nat_is_zero s) ",
+                    "@Eq.cong Nat Bool (fun (s : Nat) => nat_is_zero s) ",
                     "(Nat.add (Nat.sub i j) (Nat.sub j i)) ",
                     "(Nat.add (Nat.sub j i) (Nat.sub i j)) ",
                     "(nat_add_comm (Nat.sub i j) (Nat.sub j i))",
@@ -1176,7 +1177,7 @@ impl Specification {
         // (4x4 double MicroLevel.rec; see micro_level_eqb_symm_value_src).
         self.add_definition(SpecDefinition {
             name: "micro_level_eqb_symm".to_string(),
-            type_src: "forall (a : MicroLevel) (b : MicroLevel), Eq Bool (micro_level_eqb a b) \
+            type_src: "forall (a : MicroLevel) (b : MicroLevel), @Eq Bool (micro_level_eqb a b) \
                 (micro_level_eqb b a)"
                 .to_string(),
             value_src: Some(Self::micro_level_eqb_symm_value_src()),
@@ -1206,7 +1207,7 @@ impl Specification {
         // cross-constructor pairs reduce to Bool.false.
         self.add_definition(SpecDefinition {
             name: "micro_structural_eq_symm".to_string(),
-            type_src: "forall (a : MicroExpr) (b : MicroExpr), Eq Bool (micro_structural_eq a b) \
+            type_src: "forall (a : MicroExpr) (b : MicroExpr), @Eq Bool (micro_structural_eq a b) \
                 (micro_structural_eq b a)"
                 .to_string(),
             value_src: Some(Self::micro_structural_eq_symm_value_src()),
@@ -1255,13 +1256,13 @@ impl Specification {
         // constant value. Nat-valued analogue of the KExpr `nat_rec_const`.
         self.add_definition(SpecDefinition {
             name: "micro_nat_rec_const".to_string(),
-            type_src: "forall (v : Nat) (n : Nat), Eq Nat (Nat.rec (fun (_ : Nat) => Nat) v (fun (_ : Nat) (_ : Nat) => v) n) v".to_string(),
+            type_src: "forall (v : Nat) (n : Nat), @Eq Nat (@Nat.rec (fun (_ : Nat) => Nat) v (fun (_ : Nat) (_ : Nat) => v) n) v".to_string(),
             value_src: Some(concat!(
-                "fun (v : Nat) (n : Nat) => Nat.rec ",
-                "(fun (k : Nat) => Eq Nat (Nat.rec (fun (_ : Nat) => Nat) v (fun (_ : Nat) (_ : Nat) => v) k) v) ",
-                "(Eq.refl Nat v) ",
-                "(fun (k : Nat) (ih : Eq Nat (Nat.rec (fun (_ : Nat) => Nat) v (fun (_ : Nat) (_ : Nat) => v) k) v) => ",
-                "Eq.refl Nat v) ",
+                "fun (v : Nat) (n : Nat) => @Nat.rec ",
+                "(fun (k : Nat) => @Eq Nat (@Nat.rec (fun (_ : Nat) => Nat) v (fun (_ : Nat) (_ : Nat) => v) k) v) ",
+                "(@Eq.refl Nat v) ",
+                "(fun (k : Nat) (ih : @Eq Nat (@Nat.rec (fun (_ : Nat) => Nat) v (fun (_ : Nat) (_ : Nat) => v) k) v) => ",
+                "@Eq.refl Nat v) ",
                 "n",
             ).to_string()),
             is_axiom: false,
@@ -1285,7 +1286,7 @@ impl Specification {
         // constant-rec lemma applies directly.
         self.add_definition(SpecDefinition {
             name: "micro_lift_bvar_amount_zero".to_string(),
-            type_src: "forall (i : Nat) (c : Nat), Eq Nat (lift_bvar i c Nat.zero) i".to_string(),
+            type_src: "forall (i : Nat) (c : Nat), @Eq Nat (lift_bvar i c Nat.zero) i".to_string(),
             value_src: Some(
                 "fun (i : Nat) (c : Nat) => micro_nat_rec_const i (Nat.sub c i)".to_string(),
             ),
@@ -1313,7 +1314,7 @@ impl Specification {
         // bodies recurse under a binder, so their IH is applied at Nat.succ c.
         self.add_definition(SpecDefinition {
             name: "micro_lift_zero_id".to_string(),
-            type_src: "forall (e : MicroExpr) (c : Nat), Eq MicroExpr (micro_lift e c Nat.zero) e"
+            type_src: "forall (e : MicroExpr) (c : Nat), @Eq MicroExpr (micro_lift e c Nat.zero) e"
                 .to_string(),
             value_src: Some(Self::micro_lift_zero_id_value_src()),
             is_axiom: false,
@@ -1343,88 +1344,88 @@ impl Specification {
     fn micro_lift_zero_id_value_src() -> String {
         concat!(
             "fun (e : MicroExpr) (c : Nat) => ",
-            "MicroExpr.rec ",
+            "@MicroExpr.rec ",
             // motive: universalize cutoff so lam/pi/let_ IHs work at Nat.succ c
-            "(fun (e : MicroExpr) => forall (c : Nat), Eq MicroExpr (micro_lift e c Nat.zero) e) ",
+            "(fun (e : MicroExpr) => forall (c : Nat), @Eq MicroExpr (micro_lift e c Nat.zero) e) ",
             // bvar branch: micro_lift (bvar i) c 0 = bvar (lift_bvar i c 0) = bvar i
             "(fun (i : Nat) (c : Nat) => ",
-            "Eq.cong Nat MicroExpr MicroExpr.bvar ",
+            "@Eq.cong Nat MicroExpr MicroExpr.bvar ",
             "(lift_bvar i c Nat.zero) i (micro_lift_bvar_amount_zero i c)) ",
             // sort branch: micro_lift (sort l) c 0 = sort l by match reduction
-            "(fun (l : MicroLevel) (c : Nat) => Eq.refl MicroExpr (MicroExpr.sort l)) ",
+            "(fun (l : MicroLevel) (c : Nat) => @Eq.refl MicroExpr (MicroExpr.sort l)) ",
             // app branch
             "(fun (f : MicroExpr) (a : MicroExpr) ",
-            "(ih_f : forall (c : Nat), Eq MicroExpr (micro_lift f c Nat.zero) f) ",
-            "(ih_a : forall (c : Nat), Eq MicroExpr (micro_lift a c Nat.zero) a) ",
+            "(ih_f : forall (c : Nat), @Eq MicroExpr (micro_lift f c Nat.zero) f) ",
+            "(ih_a : forall (c : Nat), @Eq MicroExpr (micro_lift a c Nat.zero) a) ",
             "(c : Nat) => ",
-            "Eq.trans MicroExpr ",
+            "@Eq.trans MicroExpr ",
             "(micro_lift (MicroExpr.app f a) c Nat.zero) ",
             "(MicroExpr.app f (micro_lift a c Nat.zero)) ",
             "(MicroExpr.app f a) ",
-            "(Eq.cong MicroExpr MicroExpr ",
+            "(@Eq.cong MicroExpr MicroExpr ",
             "(fun (x : MicroExpr) => MicroExpr.app x (micro_lift a c Nat.zero)) ",
             "(micro_lift f c Nat.zero) f (ih_f c)) ",
-            "(Eq.cong MicroExpr MicroExpr ",
+            "(@Eq.cong MicroExpr MicroExpr ",
             "(fun (x : MicroExpr) => MicroExpr.app f x) ",
             "(micro_lift a c Nat.zero) a (ih_a c))) ",
             // lam branch (body recurses at Nat.succ c)
             "(fun (ty : MicroExpr) (body : MicroExpr) ",
-            "(ih_ty : forall (c : Nat), Eq MicroExpr (micro_lift ty c Nat.zero) ty) ",
-            "(ih_body : forall (c : Nat), Eq MicroExpr (micro_lift body c Nat.zero) body) ",
+            "(ih_ty : forall (c : Nat), @Eq MicroExpr (micro_lift ty c Nat.zero) ty) ",
+            "(ih_body : forall (c : Nat), @Eq MicroExpr (micro_lift body c Nat.zero) body) ",
             "(c : Nat) => ",
-            "Eq.trans MicroExpr ",
+            "@Eq.trans MicroExpr ",
             "(micro_lift (MicroExpr.lam ty body) c Nat.zero) ",
             "(MicroExpr.lam ty (micro_lift body (Nat.succ c) Nat.zero)) ",
             "(MicroExpr.lam ty body) ",
-            "(Eq.cong MicroExpr MicroExpr ",
+            "(@Eq.cong MicroExpr MicroExpr ",
             "(fun (x : MicroExpr) => MicroExpr.lam x (micro_lift body (Nat.succ c) Nat.zero)) ",
             "(micro_lift ty c Nat.zero) ty (ih_ty c)) ",
-            "(Eq.cong MicroExpr MicroExpr ",
+            "(@Eq.cong MicroExpr MicroExpr ",
             "(fun (x : MicroExpr) => MicroExpr.lam ty x) ",
             "(micro_lift body (Nat.succ c) Nat.zero) body (ih_body (Nat.succ c)))) ",
             // pi branch (body recurses at Nat.succ c)
             "(fun (ty : MicroExpr) (body : MicroExpr) ",
-            "(ih_ty : forall (c : Nat), Eq MicroExpr (micro_lift ty c Nat.zero) ty) ",
-            "(ih_body : forall (c : Nat), Eq MicroExpr (micro_lift body c Nat.zero) body) ",
+            "(ih_ty : forall (c : Nat), @Eq MicroExpr (micro_lift ty c Nat.zero) ty) ",
+            "(ih_body : forall (c : Nat), @Eq MicroExpr (micro_lift body c Nat.zero) body) ",
             "(c : Nat) => ",
-            "Eq.trans MicroExpr ",
+            "@Eq.trans MicroExpr ",
             "(micro_lift (MicroExpr.pi ty body) c Nat.zero) ",
             "(MicroExpr.pi ty (micro_lift body (Nat.succ c) Nat.zero)) ",
             "(MicroExpr.pi ty body) ",
-            "(Eq.cong MicroExpr MicroExpr ",
+            "(@Eq.cong MicroExpr MicroExpr ",
             "(fun (x : MicroExpr) => MicroExpr.pi x (micro_lift body (Nat.succ c) Nat.zero)) ",
             "(micro_lift ty c Nat.zero) ty (ih_ty c)) ",
-            "(Eq.cong MicroExpr MicroExpr ",
+            "(@Eq.cong MicroExpr MicroExpr ",
             "(fun (x : MicroExpr) => MicroExpr.pi ty x) ",
             "(micro_lift body (Nat.succ c) Nat.zero) body (ih_body (Nat.succ c)))) ",
             // let_ branch (ty, val recurse at c; body recurses at Nat.succ c)
             "(fun (ty : MicroExpr) (val : MicroExpr) (body : MicroExpr) ",
-            "(ih_ty : forall (c : Nat), Eq MicroExpr (micro_lift ty c Nat.zero) ty) ",
-            "(ih_val : forall (c : Nat), Eq MicroExpr (micro_lift val c Nat.zero) val) ",
-            "(ih_body : forall (c : Nat), Eq MicroExpr (micro_lift body c Nat.zero) body) ",
+            "(ih_ty : forall (c : Nat), @Eq MicroExpr (micro_lift ty c Nat.zero) ty) ",
+            "(ih_val : forall (c : Nat), @Eq MicroExpr (micro_lift val c Nat.zero) val) ",
+            "(ih_body : forall (c : Nat), @Eq MicroExpr (micro_lift body c Nat.zero) body) ",
             "(c : Nat) => ",
-            "Eq.trans MicroExpr ",
+            "@Eq.trans MicroExpr ",
             "(micro_lift (MicroExpr.let_ ty val body) c Nat.zero) ",
             "(MicroExpr.let_ ty (micro_lift val c Nat.zero) (micro_lift body (Nat.succ c) Nat.zero)) ",
             "(MicroExpr.let_ ty val body) ",
-            "(Eq.cong MicroExpr MicroExpr ",
+            "(@Eq.cong MicroExpr MicroExpr ",
             "(fun (x : MicroExpr) => MicroExpr.let_ x (micro_lift val c Nat.zero) (micro_lift body (Nat.succ c) Nat.zero)) ",
             "(micro_lift ty c Nat.zero) ty (ih_ty c)) ",
-            "(Eq.trans MicroExpr ",
+            "(@Eq.trans MicroExpr ",
             "(MicroExpr.let_ ty (micro_lift val c Nat.zero) (micro_lift body (Nat.succ c) Nat.zero)) ",
             "(MicroExpr.let_ ty val (micro_lift body (Nat.succ c) Nat.zero)) ",
             "(MicroExpr.let_ ty val body) ",
-            "(Eq.cong MicroExpr MicroExpr ",
+            "(@Eq.cong MicroExpr MicroExpr ",
             "(fun (x : MicroExpr) => MicroExpr.let_ ty x (micro_lift body (Nat.succ c) Nat.zero)) ",
             "(micro_lift val c Nat.zero) val (ih_val c)) ",
-            "(Eq.cong MicroExpr MicroExpr ",
+            "(@Eq.cong MicroExpr MicroExpr ",
             "(fun (x : MicroExpr) => MicroExpr.let_ ty val x) ",
             "(micro_lift body (Nat.succ c) Nat.zero) body (ih_body (Nat.succ c))))) ",
             // opaque_ branch
             "(fun (ty : MicroExpr) ",
-            "(ih_ty : forall (c : Nat), Eq MicroExpr (micro_lift ty c Nat.zero) ty) ",
+            "(ih_ty : forall (c : Nat), @Eq MicroExpr (micro_lift ty c Nat.zero) ty) ",
             "(c : Nat) => ",
-            "Eq.cong MicroExpr MicroExpr MicroExpr.opaque_ ",
+            "@Eq.cong MicroExpr MicroExpr MicroExpr.opaque_ ",
             "(micro_lift ty c Nat.zero) ty (ih_ty c)) ",
             // major premise + cutoff application
             "e c",
@@ -1449,7 +1450,7 @@ impl Specification {
         // recursive-field IH binders are annotated with the inner motive.
         fn arm(ic: usize, a: &str, body: &str) -> String {
             let im =
-                |x: &str| format!("(Eq Bool (micro_level_eqb {a} {x}) (micro_level_eqb {x} {a}))");
+                |x: &str| format!("(@Eq Bool (micro_level_eqb {a} {x}) (micro_level_eqb {x} {a}))");
             match ic {
                 // `zero` is nullary: parenthesize the bare body so the outer
                 // recursor treats it as ONE argument (not `Eq.refl`, `Bool`,
@@ -1466,56 +1467,56 @@ impl Specification {
         }
         fn inner_rec(oc: usize, a: &str, diag: &str) -> String {
             let motive = format!(
-                "(fun (b : MicroLevel) => Eq Bool (micro_level_eqb {a} b) (micro_level_eqb b {a}))"
+                "(fun (b : MicroLevel) => @Eq Bool (micro_level_eqb {a} b) (micro_level_eqb b {a}))"
             );
             let arms: Vec<String> = (0..4)
                 .map(|ic| {
                     if ic == oc {
                         arm(ic, a, diag)
                     } else {
-                        arm(ic, a, "Eq.refl Bool Bool.false")
+                        arm(ic, a, "@Eq.refl Bool Bool.false")
                     }
                 })
                 .collect();
             format!(
-                "(fun (b : MicroLevel) => MicroLevel.rec {} {} b)",
+                "(fun (b : MicroLevel) => @MicroLevel.rec {} {} b)",
                 motive,
                 arms.join(" "),
             )
         }
         let outer_motive = "(fun (x : MicroLevel) => forall (b : MicroLevel), \
-             Eq Bool (micro_level_eqb x b) (micro_level_eqb b x))";
+             @Eq Bool (micro_level_eqb x b) (micro_level_eqb b x))";
         // zero: diagonal (inner zero) reduces to Bool.true on both sides.
-        let outer_zero = inner_rec(0, "MicroLevel.zero", "Eq.refl Bool Bool.true");
+        let outer_zero = inner_rec(0, "MicroLevel.zero", "@Eq.refl Bool Bool.true");
         // succ ap: diagonal (inner succ) = ih_ap bp.
         let outer_succ = format!(
             "(fun (ap : MicroLevel) (ih_ap : forall (b : MicroLevel), \
-              Eq Bool (micro_level_eqb ap b) (micro_level_eqb b ap)) => {})",
+              @Eq Bool (micro_level_eqb ap b) (micro_level_eqb b ap)) => {})",
             inner_rec(1, "(MicroLevel.succ ap)", "ih_ap bp"),
         );
         // max/imax diagonal: Bool.and congruence over the two outer IHs.
-        let diag_binary = "Eq.trans Bool \
+        let diag_binary = "@Eq.trans Bool \
              (Bool.and (micro_level_eqb al bl) (micro_level_eqb ar br)) \
              (Bool.and (micro_level_eqb bl al) (micro_level_eqb ar br)) \
              (Bool.and (micro_level_eqb bl al) (micro_level_eqb br ar)) \
-             (Eq.cong Bool Bool (fun (z : Bool) => Bool.and z (micro_level_eqb ar br)) \
+             (@Eq.cong Bool Bool (fun (z : Bool) => Bool.and z (micro_level_eqb ar br)) \
               (micro_level_eqb al bl) (micro_level_eqb bl al) (ih_al bl)) \
-             (Eq.cong Bool Bool (fun (z : Bool) => Bool.and (micro_level_eqb bl al) z) \
+             (@Eq.cong Bool Bool (fun (z : Bool) => Bool.and (micro_level_eqb bl al) z) \
               (micro_level_eqb ar br) (micro_level_eqb br ar) (ih_ar br))";
         let outer_binary = |ctor_expr: &str, oc: usize| {
             format!(
                 "(fun (al : MicroLevel) (ar : MicroLevel) \
                   (ih_al : forall (b : MicroLevel), \
-                   Eq Bool (micro_level_eqb al b) (micro_level_eqb b al)) \
+                   @Eq Bool (micro_level_eqb al b) (micro_level_eqb b al)) \
                   (ih_ar : forall (b : MicroLevel), \
-                   Eq Bool (micro_level_eqb ar b) (micro_level_eqb b ar)) => {})",
+                   @Eq Bool (micro_level_eqb ar b) (micro_level_eqb b ar)) => {})",
                 inner_rec(oc, ctor_expr, diag_binary),
             )
         };
         let outer_max = outer_binary("(MicroLevel.max al ar)", 2);
         let outer_imax = outer_binary("(MicroLevel.imax al ar)", 3);
         format!(
-            "fun (a : MicroLevel) => MicroLevel.rec {} {} {} {} {} a",
+            "fun (a : MicroLevel) => @MicroLevel.rec {} {} {} {} {} a",
             outer_motive, outer_zero, outer_succ, outer_max, outer_imax,
         )
     }
@@ -1536,7 +1537,7 @@ impl Specification {
         // MicroExpr ctors: 0=bvar, 1=sort, 2=app, 3=lam, 4=pi, 5=let_, 6=opaque_.
         fn arm(ic: usize, a: &str, body: &str) -> String {
             let im = |x: &str| {
-                format!("(Eq Bool (micro_structural_eq {a} {x}) (micro_structural_eq {x} {a}))")
+                format!("(@Eq Bool (micro_structural_eq {a} {x}) (micro_structural_eq {x} {a}))")
             };
             match ic {
                 0 => format!("(fun (j : Nat) => {body})"),
@@ -1570,19 +1571,19 @@ impl Specification {
         fn inner_rec(oc: usize, a: &str, diag: &str) -> String {
             let motive = format!(
                 "(fun (b : MicroExpr) => \
-                 Eq Bool (micro_structural_eq {a} b) (micro_structural_eq b {a}))"
+                 @Eq Bool (micro_structural_eq {a} b) (micro_structural_eq b {a}))"
             );
             let arms: Vec<String> = (0..7)
                 .map(|ic| {
                     if ic == oc {
                         arm(ic, a, diag)
                     } else {
-                        arm(ic, a, "Eq.refl Bool Bool.false")
+                        arm(ic, a, "@Eq.refl Bool Bool.false")
                     }
                 })
                 .collect();
             format!(
-                "(fun (b : MicroExpr) => MicroExpr.rec {} {} b)",
+                "(fun (b : MicroExpr) => @MicroExpr.rec {} {} b)",
                 motive,
                 arms.join(" "),
             )
@@ -1591,11 +1592,11 @@ impl Specification {
         let omih = |field: &str| {
             format!(
                 "(ih_{field} : forall (b : MicroExpr), \
-                 Eq Bool (micro_structural_eq {field} b) (micro_structural_eq b {field}))"
+                 @Eq Bool (micro_structural_eq {field} b) (micro_structural_eq b {field}))"
             )
         };
         let outer_motive = "(fun (x : MicroExpr) => forall (b : MicroExpr), \
-             Eq Bool (micro_structural_eq x b) (micro_structural_eq b x))";
+             @Eq Bool (micro_structural_eq x b) (micro_structural_eq b x))";
         // bvar / sort: non-recursive; diagonal via the *_symm substrate lemmas.
         let outer_bvar = format!(
             "(fun (i : Nat) => {})",
@@ -1606,13 +1607,13 @@ impl Specification {
             inner_rec(1, "(MicroExpr.sort l)", "micro_level_eqb_symm l m"),
         );
         // app: Bool.and congruence over ih_f, ih_a1.
-        let diag_app = "Eq.trans Bool \
+        let diag_app = "@Eq.trans Bool \
              (Bool.and (micro_structural_eq f g) (micro_structural_eq a1 c)) \
              (Bool.and (micro_structural_eq g f) (micro_structural_eq a1 c)) \
              (Bool.and (micro_structural_eq g f) (micro_structural_eq c a1)) \
-             (Eq.cong Bool Bool (fun (z : Bool) => Bool.and z (micro_structural_eq a1 c)) \
+             (@Eq.cong Bool Bool (fun (z : Bool) => Bool.and z (micro_structural_eq a1 c)) \
               (micro_structural_eq f g) (micro_structural_eq g f) (ih_f g)) \
-             (Eq.cong Bool Bool (fun (z : Bool) => Bool.and (micro_structural_eq g f) z) \
+             (@Eq.cong Bool Bool (fun (z : Bool) => Bool.and (micro_structural_eq g f) z) \
               (micro_structural_eq a1 c) (micro_structural_eq c a1) (ih_a1 c))";
         let outer_app = format!(
             "(fun (f : MicroExpr) (a1 : MicroExpr) {} {} => {})",
@@ -1621,13 +1622,13 @@ impl Specification {
             inner_rec(2, "(MicroExpr.app f a1)", diag_app),
         );
         // lam: Bool.and congruence over ih_lty, ih_lb.
-        let diag_lam = "Eq.trans Bool \
+        let diag_lam = "@Eq.trans Bool \
              (Bool.and (micro_structural_eq lty t) (micro_structural_eq lb d)) \
              (Bool.and (micro_structural_eq t lty) (micro_structural_eq lb d)) \
              (Bool.and (micro_structural_eq t lty) (micro_structural_eq d lb)) \
-             (Eq.cong Bool Bool (fun (z : Bool) => Bool.and z (micro_structural_eq lb d)) \
+             (@Eq.cong Bool Bool (fun (z : Bool) => Bool.and z (micro_structural_eq lb d)) \
               (micro_structural_eq lty t) (micro_structural_eq t lty) (ih_lty t)) \
-             (Eq.cong Bool Bool (fun (z : Bool) => Bool.and (micro_structural_eq t lty) z) \
+             (@Eq.cong Bool Bool (fun (z : Bool) => Bool.and (micro_structural_eq t lty) z) \
               (micro_structural_eq lb d) (micro_structural_eq d lb) (ih_lb d))";
         let outer_lam = format!(
             "(fun (lty : MicroExpr) (lb : MicroExpr) {} {} => {})",
@@ -1636,13 +1637,13 @@ impl Specification {
             inner_rec(3, "(MicroExpr.lam lty lb)", diag_lam),
         );
         // pi: Bool.and congruence over ih_pty, ih_pb.
-        let diag_pi = "Eq.trans Bool \
+        let diag_pi = "@Eq.trans Bool \
              (Bool.and (micro_structural_eq pty t) (micro_structural_eq pb d)) \
              (Bool.and (micro_structural_eq t pty) (micro_structural_eq pb d)) \
              (Bool.and (micro_structural_eq t pty) (micro_structural_eq d pb)) \
-             (Eq.cong Bool Bool (fun (z : Bool) => Bool.and z (micro_structural_eq pb d)) \
+             (@Eq.cong Bool Bool (fun (z : Bool) => Bool.and z (micro_structural_eq pb d)) \
               (micro_structural_eq pty t) (micro_structural_eq t pty) (ih_pty t)) \
-             (Eq.cong Bool Bool (fun (z : Bool) => Bool.and (micro_structural_eq t pty) z) \
+             (@Eq.cong Bool Bool (fun (z : Bool) => Bool.and (micro_structural_eq t pty) z) \
               (micro_structural_eq pb d) (micro_structural_eq d pb) (ih_pb d))";
         let outer_pi = format!(
             "(fun (pty : MicroExpr) (pb : MicroExpr) {} {} => {})",
@@ -1651,29 +1652,29 @@ impl Specification {
             inner_rec(4, "(MicroExpr.pi pty pb)", diag_pi),
         );
         // let_: nested Bool.and congruence over ih_lety, ih_lev, ih_leb.
-        let diag_let = "Eq.trans Bool \
+        let diag_let = "@Eq.trans Bool \
              (Bool.and (micro_structural_eq lety t) \
               (Bool.and (micro_structural_eq lev v) (micro_structural_eq leb d))) \
              (Bool.and (micro_structural_eq t lety) \
               (Bool.and (micro_structural_eq lev v) (micro_structural_eq leb d))) \
              (Bool.and (micro_structural_eq t lety) \
               (Bool.and (micro_structural_eq v lev) (micro_structural_eq d leb))) \
-             (Eq.cong Bool Bool \
+             (@Eq.cong Bool Bool \
               (fun (z : Bool) => Bool.and z \
                (Bool.and (micro_structural_eq lev v) (micro_structural_eq leb d))) \
               (micro_structural_eq lety t) (micro_structural_eq t lety) (ih_lety t)) \
-             (Eq.trans Bool \
+             (@Eq.trans Bool \
               (Bool.and (micro_structural_eq t lety) \
                (Bool.and (micro_structural_eq lev v) (micro_structural_eq leb d))) \
               (Bool.and (micro_structural_eq t lety) \
                (Bool.and (micro_structural_eq v lev) (micro_structural_eq leb d))) \
               (Bool.and (micro_structural_eq t lety) \
                (Bool.and (micro_structural_eq v lev) (micro_structural_eq d leb))) \
-              (Eq.cong Bool Bool \
+              (@Eq.cong Bool Bool \
                (fun (z : Bool) => Bool.and (micro_structural_eq t lety) \
                 (Bool.and z (micro_structural_eq leb d))) \
                (micro_structural_eq lev v) (micro_structural_eq v lev) (ih_lev v)) \
-              (Eq.cong Bool Bool \
+              (@Eq.cong Bool Bool \
                (fun (z : Bool) => Bool.and (micro_structural_eq t lety) \
                 (Bool.and (micro_structural_eq v lev) z)) \
                (micro_structural_eq leb d) (micro_structural_eq d leb) (ih_leb d)))";
@@ -1691,7 +1692,7 @@ impl Specification {
             inner_rec(6, "(MicroExpr.opaque_ oty)", "ih_oty t"),
         );
         format!(
-            "fun (a : MicroExpr) => MicroExpr.rec {} {} {} {} {} {} {} {} a",
+            "fun (a : MicroExpr) => @MicroExpr.rec {} {} {} {} {} {} {} {} a",
             outer_motive,
             outer_bvar,
             outer_sort,

@@ -18,38 +18,38 @@ const ROOTS: &[&str] = &[
 
 const CTX: &str = r"def field_preserve_ctx_v1 : IRByteContextV1 :=
   IRByteContextV1.mke
-    (IRModule.mk (IRList.nil IRFunc) (IRList.nil IRGlobal))
-    (IRList.cons IRByteLayoutV1
+    (IRModule.mk (@IRList.nil IRFunc) (@IRList.nil IRGlobal))
+    (@IRList.cons IRByteLayoutV1
       (IRByteLayoutV1.mk (IRTy.struct_ 9) 16 8
-        (IRList.cons IRTy IRTy.unit_ (IRList.cons IRTy IRTy.bool_ (IRList.nil IRTy)))
-        (IRList.nil Nat))
-      (IRList.nil IRByteLayoutV1))
-    (IRList.nil IRByteSignatureV1) (IRList.nil IRByteFunctionV1)
-    (IRList.nil IRByteSiteV1)
-    (IRList.cons IRByteEnumV1
+        (@IRList.cons IRTy IRTy.unit_ (@IRList.cons IRTy IRTy.bool_ (@IRList.nil IRTy)))
+        (@IRList.nil Nat))
+      (@IRList.nil IRByteLayoutV1))
+    (@IRList.nil IRByteSignatureV1) (@IRList.nil IRByteFunctionV1)
+    (@IRList.nil IRByteSiteV1)
+    (@IRList.cons IRByteEnumV1
       (IRByteEnumV1.mk 10 (IRTy.uint_ 64)
-        (IRList.cons IRByteEnumVariantV1
+        (@IRList.cons IRByteEnumVariantV1
           (IRByteEnumVariantV1.mk 2
-            (IRList.cons IRTy IRTy.unit_ (IRList.cons IRTy IRTy.bool_ (IRList.nil IRTy))))
-          (IRList.nil IRByteEnumVariantV1)))
-      (IRList.nil IRByteEnumV1))";
+            (@IRList.cons IRTy IRTy.unit_ (@IRList.cons IRTy IRTy.bool_ (@IRList.nil IRTy))))
+          (@IRList.nil IRByteEnumVariantV1)))
+      (@IRList.nil IRByteEnumV1))";
 
 const STRUCT_SPINE: &str = r"def field_preserve_struct_spine_v1 : IRScalar :=
   IRScalar.vcons IRScalar.unit_ (IRScalar.vcons (IRScalar.bool_ Bool.false) IRScalar.vnil)";
 
 const STRUCT_TYPES: &str = r"def field_preserve_struct_types_v1 : IRList IRTy :=
-  IRList.cons IRTy IRTy.unit_ (IRList.cons IRTy IRTy.bool_ (IRList.nil IRTy))";
+  @IRList.cons IRTy IRTy.unit_ (@IRList.cons IRTy IRTy.bool_ (@IRList.nil IRTy))";
 
 const ENUM_SPINE: &str = r"def field_preserve_enum_spine_v1 : IRScalar :=
   IRScalar.vcons (IRScalar.int_ 2)
     (IRScalar.vcons IRScalar.unit_ (IRScalar.vcons (IRScalar.bool_ Bool.false) IRScalar.vnil))";
 
 const ENUM_TYPES: &str = r"def field_preserve_enum_types_v1 : IRList IRTy :=
-  IRList.cons IRTy (IRTy.uint_ 64)
-    (IRList.cons IRTy IRTy.unit_ (IRList.cons IRTy IRTy.bool_ (IRList.nil IRTy)))";
+  @IRList.cons IRTy (IRTy.uint_ 64)
+    (@IRList.cons IRTy IRTy.unit_ (@IRList.cons IRTy IRTy.bool_ (@IRList.nil IRTy)))";
 
 const STRUCT_INSERT: &str = r"def field_preserve_closed_struct_insert_v1 :
-  Eq IRStepResult
+  @Eq IRStepResult
     (ir_byte_insert_typed_v1 field_preserve_ctx_v1 (IRTy.struct_ 9) IRTy.bool_
       (IRScalar.aggv field_preserve_struct_spine_v1) 1 (IRScalar.bool_ Bool.true))
     (IRStepResult.value
@@ -57,13 +57,13 @@ const STRUCT_INSERT: &str = r"def field_preserve_closed_struct_insert_v1 :
         (IRScalar.vcons IRScalar.unit_ (IRScalar.vcons (IRScalar.bool_ Bool.true) IRScalar.vnil)))) :=
   ir_byte_field_selected_insert_from_inputs_v1
     field_preserve_ctx_v1 (IRTy.struct_ 9) IRTy.bool_ IRTy.bool_ field_preserve_struct_spine_v1 1 field_preserve_struct_types_v1 (IRScalar.bool_ Bool.true)
-    (Eq.refl Bool Bool.true) (Eq.refl Bool Bool.true)
-    (Eq.refl (IROption (IRList IRTy)) (IROption.some (IRList IRTy) field_preserve_struct_types_v1))
-    (Eq.refl (IROption IRTy) (IROption.some IRTy IRTy.bool_))
-    (Eq.refl Bool Bool.true) (Eq.refl Bool Bool.true) (Eq.refl Bool Bool.true)";
+    (@Eq.refl Bool Bool.true) (@Eq.refl Bool Bool.true)
+    (@Eq.refl (IROption (IRList IRTy)) (@IROption.some (IRList IRTy) field_preserve_struct_types_v1))
+    (@Eq.refl (IROption IRTy) (@IROption.some IRTy IRTy.bool_))
+    (@Eq.refl Bool Bool.true) (@Eq.refl Bool Bool.true) (@Eq.refl Bool Bool.true)";
 
 const ENUM_INSERT: &str = r"def field_preserve_closed_enum_insert_v1 :
-  Eq IRStepResult
+  @Eq IRStepResult
     (ir_byte_insert_typed_v1 field_preserve_ctx_v1 (IRTy.enum_ 10) IRTy.bool_
       (IRScalar.aggv field_preserve_enum_spine_v1) 2 (IRScalar.bool_ Bool.true))
     (IRStepResult.value
@@ -72,10 +72,10 @@ const ENUM_INSERT: &str = r"def field_preserve_closed_enum_insert_v1 :
           (IRScalar.vcons IRScalar.unit_ (IRScalar.vcons (IRScalar.bool_ Bool.true) IRScalar.vnil))))) :=
   ir_byte_field_selected_insert_from_inputs_v1
     field_preserve_ctx_v1 (IRTy.enum_ 10) IRTy.bool_ IRTy.bool_ field_preserve_enum_spine_v1 2 field_preserve_enum_types_v1 (IRScalar.bool_ Bool.true)
-    (Eq.refl Bool Bool.true) (Eq.refl Bool Bool.true)
-    (Eq.refl (IROption (IRList IRTy)) (IROption.some (IRList IRTy) field_preserve_enum_types_v1))
-    (Eq.refl (IROption IRTy) (IROption.some IRTy IRTy.bool_))
-    (Eq.refl Bool Bool.true) (Eq.refl Bool Bool.true) (Eq.refl Bool Bool.true)";
+    (@Eq.refl Bool Bool.true) (@Eq.refl Bool Bool.true)
+    (@Eq.refl (IROption (IRList IRTy)) (@IROption.some (IRList IRTy) field_preserve_enum_types_v1))
+    (@Eq.refl (IROption IRTy) (@IROption.some IRTy IRTy.bool_))
+    (@Eq.refl Bool Bool.true) (@Eq.refl Bool Bool.true) (@Eq.refl Bool Bool.true)";
 
 fn specification() -> Specification {
     crate::eval_ir::build_byte_prelude_spec_v1_with_stack()

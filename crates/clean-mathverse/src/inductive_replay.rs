@@ -25,7 +25,7 @@ use clean_kernel::inductive::{
 use clean_kernel::{Environment, Name};
 
 use crate::shard::ShardReader;
-use crate::shard_reconstruct::{reconstruct_from_shard_with_level_lists, reconstruct_level_params};
+use crate::shard_reconstruct::reconstruct_level_params;
 use crate::types::{DeclKind, MathverseConstantHeader, NO_VALUE};
 use crate::verify::incremental::{alpha_type_match_against_existing, AlphaTypeMatch};
 

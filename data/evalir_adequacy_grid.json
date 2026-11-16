@@ -1525,11 +1525,11 @@
     "inputs": [
       {
         "path": "crates/clean-verify/src/spec/core_spec/eval_ir_syntax.rs",
-        "sha256": "96353ec20713bd6267e3a81205b7d3ca81b7d17fcc0cb651d26319ed010e9e63"
+        "sha256": "35ffd85d5c6d9f6eb8d242a14bfbef5bb17e04999f747ac45501fcd804375bb2"
       },
       {
         "path": "crates/clean-verify/src/spec/core_spec/eval_ir_machine.rs",
-        "sha256": "479356908cffb5a9126203cd715ca2d47ca461a988c81d68f42de7a3429bd63f"
+        "sha256": "e667d9ed74f94e85abae397ab5a24b0925ed4238ba5b223764035f439642a035"
       },
       {
         "path": "crates/clean-verify/src/spec/core_spec/eval_ir_adequacy.rs",
@@ -1541,23 +1541,23 @@
       },
       {
         "path": "crates/clean-verify/src/spec/core_spec/eval_ir_w2a_synth.rs",
-        "sha256": "161f3fd567502fd0da52789b614b074cb181c2ceeb5f19d8561f549c146ae039"
+        "sha256": "5ae6fe7cd1e4fbce21104fe6e56275212bd44792cffaa71f6f9bf332d3d309ac"
       },
       {
         "path": "crates/clean-verify/src/spec/core_spec/eval_ir_w2b_synth.rs",
-        "sha256": "b03a1734bba9e9e721f588aeb90059a6353d9f7c4aa1c726101f8060fbb03142"
+        "sha256": "6f791c8cdb8e5b38f8d6b0268240a73088c3e6b00d584c27077df116f1fc3875"
       },
       {
         "path": "crates/clean-verify/src/spec/core_spec/eval_ir_w2c_synth.rs",
-        "sha256": "852343610bff3512fd69841a5f017cbb73fb572dc79aede448905520d67e7399"
+        "sha256": "19496e8f39637d40a0b6b5e5ba985fa4df8547872b4e4a36e6b3ad6857110e39"
       },
       {
         "path": "crates/clean-verify/src/spec/core_spec/eval_ir_fcmp.rs",
-        "sha256": "4e7669737be7eb97cfa311b8bd0aea9f91ec5184ced37742e5398294d010e356"
+        "sha256": "ec28b3358bbe58eb48f0061d4e68afd2fd5f43a428907d704f5b0069012ee9ad"
       },
       {
         "path": "crates/clean-verify/src/spec/core_spec/eval_ir_float_res.rs",
-        "sha256": "692e773b92c92970dc77beff574ea67cbe8beca288600a7131656acf4c2e58f7"
+        "sha256": "33b8c134230f5b0a9116d25b3dbc4290ebc5da57c315c3eb5c4a4642b802a118"
       },
       {
         "path": "crates/clean-verify/src/spec/core_spec/eval_ir_float_res_witnesses.rs",
@@ -1565,11 +1565,11 @@
       },
       {
         "path": "crates/clean-verify/src/spec/core_spec/eval_ir_ops.rs",
-        "sha256": "07ee6c6f7a51920047eb645bb5ce9c13a98c833e0d10cee6d50b254d3b10a93b"
+        "sha256": "7e5360493be6eefdf7819052f8ec2cbd3bcf16570985baa19f02449dc1c38a02"
       },
       {
         "path": "crates/clean-verify/src/spec/core_spec/eval_ir_e5.rs",
-        "sha256": "ec9c1a53f54be2a22c2991fd6beccf08ee73b67521358178aa805b498d7e7dd6"
+        "sha256": "9bedd102db5b76718588ce8b8bf597e698b44042f43ae7d2b3ca44a3adbfc3d4"
       },
       {
         "path": "crates/clean-verify/src/ir_mint/emitted_inst.rs",
@@ -1585,7 +1585,7 @@
       },
       {
         "path": "crates/clean-verify/tests/crystal_a3_semdiff/synth_chains.rs",
-        "sha256": "4e3e2e9b6c38fa27c4a91d67b75a8462c9aa29ec106cdf8ba4c03997ba7bbbb0"
+        "sha256": "db871a71612c5512017d64e85bb5695d9f1360f4cf33e3348ca237485520f18f"
       },
       {
         "path": "crates/clean-verify/tests/crystal_a3_semdiff/w2b_chains.rs",

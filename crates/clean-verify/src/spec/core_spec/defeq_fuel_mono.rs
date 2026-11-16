@@ -58,8 +58,8 @@ impl Specification {
     fn mono_inner_rec(a_form: &str, arms: &[String; 9]) -> String {
         let motive = |zb: &str| {
             format!(
-                "Eq Bool (def_eq_struct cmp1 {a_form} {zb}) Bool.true -> \
-                 Eq Bool (def_eq_struct cmp2 {a_form} {zb}) Bool.true"
+                "@Eq Bool (def_eq_struct cmp1 {a_form} {zb}) Bool.true -> \
+                 @Eq Bool (def_eq_struct cmp2 {a_form} {zb}) Bool.true"
             )
         };
         let mut minors = String::new();
@@ -71,12 +71,12 @@ impl Specification {
             }
             minors.push_str(&format!(
                 "(fun {binders} {ih_binders}\
-                 (h : Eq Bool (def_eq_struct cmp1 {a_form} {form}) Bool.true) => {arm}) ",
+                 (h : @Eq Bool (def_eq_struct cmp1 {a_form} {form}) Bool.true) => {arm}) ",
                 arm = arms[idx]
             ));
         }
         format!(
-            "fun (b : KExpr) => KExpr.rec (fun (zb : KExpr) => {m}) {minors}b",
+            "fun (b : KExpr) => @KExpr.rec (fun (zb : KExpr) => {m}) {minors}b",
             m = motive("zb")
         )
     }
@@ -84,13 +84,13 @@ impl Specification {
     /// A cross-constructor arm: the `cmp1` grid entry is `Bool.false`, so the
     /// hypothesis is absurd. Prop-CPS, because the goal is an `Eq`.
     fn mono_absurd_arm(a_form: &str, b_form: &str) -> String {
-        format!("bool_false_ne_true (Eq Bool (def_eq_struct cmp2 {a_form} {b_form}) Bool.true) h")
+        format!("bool_false_ne_true (@Eq Bool (def_eq_struct cmp2 {a_form} {b_form}) Bool.true) h")
     }
 
     /// Present `h` in the reduced `cmp1` form via the matching computation rule.
     fn mono_present(a_form: &str, b_form: &str, rhs: &str, rule: &str) -> String {
         format!(
-            "(Eq.substType Bool (fun (x : Bool) => Eq Bool x Bool.true) \
+            "(Eq.substType Bool (fun (x : Bool) => @Eq Bool x Bool.true) \
              (def_eq_struct cmp1 {a_form} {b_form}) {rhs} ({rule}) h)"
         )
     }
@@ -156,7 +156,7 @@ impl Specification {
         // Recursive heads: split the cmp1 conjunction, map each conjunct
         // through hm, rebuild with band_intro.
         let app_arm = format!(
-            "(fun (hand : Eq Bool (Bool.and (cmp1 f g) (cmp1 a1 c)) Bool.true) => \
+            "(fun (hand : @Eq Bool (Bool.and (cmp1 f g) (cmp1 a1 c)) Bool.true) => \
              band_intro (cmp2 f g) (cmp2 a1 c) \
              (hm f g (band_eq_true_left (cmp1 f g) (cmp1 a1 c) hand)) \
              (hm a1 c (band_eq_true_right (cmp1 f g) (cmp1 a1 c) hand))) {p}",
@@ -169,10 +169,10 @@ impl Specification {
         );
         let outer_app = format!(
             "(fun (f : KExpr) (a1 : KExpr) \
-             (_ : forall (b : KExpr), Eq Bool (def_eq_struct cmp1 f b) Bool.true -> \
-             Eq Bool (def_eq_struct cmp2 f b) Bool.true) \
-             (_ : forall (b : KExpr), Eq Bool (def_eq_struct cmp1 a1 b) Bool.true -> \
-             Eq Bool (def_eq_struct cmp2 a1 b) Bool.true) => {})",
+             (_ : forall (b : KExpr), @Eq Bool (def_eq_struct cmp1 f b) Bool.true -> \
+             @Eq Bool (def_eq_struct cmp2 f b) Bool.true) \
+             (_ : forall (b : KExpr), @Eq Bool (def_eq_struct cmp1 a1 b) Bool.true -> \
+             @Eq Bool (def_eq_struct cmp2 a1 b) Bool.true) => {})",
             Self::mono_inner_rec(
                 "(KExpr.app f a1)",
                 &Self::mono_arms("(KExpr.app f a1)", 2, app_arm)
@@ -181,7 +181,7 @@ impl Specification {
 
         let binder_arm = |head: &str, rule: &str| {
             format!(
-                "(fun (hand : Eq Bool (Bool.and (cmp1 ty1 gt) (cmp1 b1 gb)) Bool.true) => \
+                "(fun (hand : @Eq Bool (Bool.and (cmp1 ty1 gt) (cmp1 b1 gb)) Bool.true) => \
                  band_intro (cmp2 ty1 gt) (cmp2 b1 gb) \
                  (hm ty1 gt (band_eq_true_left (cmp1 ty1 gt) (cmp1 b1 gb) hand)) \
                  (hm b1 gb (band_eq_true_right (cmp1 ty1 gt) (cmp1 b1 gb) hand))) {p}",
@@ -196,10 +196,10 @@ impl Specification {
         let binder_outer = |head: &str, diag: usize, arm: String| {
             format!(
                 "(fun (ty1 : KExpr) (b1 : KExpr) \
-                 (_ : forall (b : KExpr), Eq Bool (def_eq_struct cmp1 ty1 b) Bool.true -> \
-                 Eq Bool (def_eq_struct cmp2 ty1 b) Bool.true) \
-                 (_ : forall (b : KExpr), Eq Bool (def_eq_struct cmp1 b1 b) Bool.true -> \
-                 Eq Bool (def_eq_struct cmp2 b1 b) Bool.true) => {})",
+                 (_ : forall (b : KExpr), @Eq Bool (def_eq_struct cmp1 ty1 b) Bool.true -> \
+                 @Eq Bool (def_eq_struct cmp2 ty1 b) Bool.true) \
+                 (_ : forall (b : KExpr), @Eq Bool (def_eq_struct cmp1 b1 b) Bool.true -> \
+                 @Eq Bool (def_eq_struct cmp2 b1 b) Bool.true) => {})",
                 Self::mono_inner_rec(
                     &format!("(KExpr.{head} ty1 b1)"),
                     &Self::mono_arms(&format!("(KExpr.{head} ty1 b1)"), diag, arm)
@@ -218,9 +218,9 @@ impl Specification {
         );
 
         let let_arm = format!(
-            "(fun (hand : Eq Bool (Bool.and (cmp1 lty glt) \
+            "(fun (hand : @Eq Bool (Bool.and (cmp1 lty glt) \
              (Bool.and (cmp1 lv glv) (cmp1 lb glb))) Bool.true) => \
-             (fun (hrest : Eq Bool (Bool.and (cmp1 lv glv) (cmp1 lb glb)) Bool.true) => \
+             (fun (hrest : @Eq Bool (Bool.and (cmp1 lv glv) (cmp1 lb glb)) Bool.true) => \
              band_intro (cmp2 lty glt) (Bool.and (cmp2 lv glv) (cmp2 lb glb)) \
              (hm lty glt (band_eq_true_left (cmp1 lty glt) \
              (Bool.and (cmp1 lv glv) (cmp1 lb glb)) hand)) \
@@ -238,12 +238,12 @@ impl Specification {
         );
         let outer_let = format!(
             "(fun (lty : KExpr) (lv : KExpr) (lb : KExpr) \
-             (_ : forall (b : KExpr), Eq Bool (def_eq_struct cmp1 lty b) Bool.true -> \
-             Eq Bool (def_eq_struct cmp2 lty b) Bool.true) \
-             (_ : forall (b : KExpr), Eq Bool (def_eq_struct cmp1 lv b) Bool.true -> \
-             Eq Bool (def_eq_struct cmp2 lv b) Bool.true) \
-             (_ : forall (b : KExpr), Eq Bool (def_eq_struct cmp1 lb b) Bool.true -> \
-             Eq Bool (def_eq_struct cmp2 lb b) Bool.true) => {})",
+             (_ : forall (b : KExpr), @Eq Bool (def_eq_struct cmp1 lty b) Bool.true -> \
+             @Eq Bool (def_eq_struct cmp2 lty b) Bool.true) \
+             (_ : forall (b : KExpr), @Eq Bool (def_eq_struct cmp1 lv b) Bool.true -> \
+             @Eq Bool (def_eq_struct cmp2 lv b) Bool.true) \
+             (_ : forall (b : KExpr), @Eq Bool (def_eq_struct cmp1 lb b) Bool.true -> \
+             @Eq Bool (def_eq_struct cmp2 lb b) Bool.true) => {})",
             Self::mono_inner_rec(
                 "(KExpr.let_ lty lv lb)",
                 &Self::mono_arms("(KExpr.let_ lty lv lb)", 6, let_arm)
@@ -253,7 +253,7 @@ impl Specification {
         // proj: the name/index conjunct is comparator-free and carries over
         // unchanged; only the subject conjunct is mapped.
         let proj_arm = format!(
-            "(fun (hand : Eq Bool (Bool.and (Bool.and (name_eqb ps s2) (nat_eqb pidx i2)) \
+            "(fun (hand : @Eq Bool (Bool.and (Bool.and (name_eqb ps s2) (nat_eqb pidx i2)) \
              (cmp1 psub sub2)) Bool.true) => \
              band_intro (Bool.and (name_eqb ps s2) (nat_eqb pidx i2)) (cmp2 psub sub2) \
              (band_eq_true_left (Bool.and (name_eqb ps s2) (nat_eqb pidx i2)) \
@@ -269,8 +269,8 @@ impl Specification {
         );
         let outer_proj = format!(
             "(fun (ps : Name) (pidx : Nat) (psub : KExpr) \
-             (_ : forall (b : KExpr), Eq Bool (def_eq_struct cmp1 psub b) Bool.true -> \
-             Eq Bool (def_eq_struct cmp2 psub b) Bool.true) => {})",
+             (_ : forall (b : KExpr), @Eq Bool (def_eq_struct cmp1 psub b) Bool.true -> \
+             @Eq Bool (def_eq_struct cmp2 psub b) Bool.true) => {})",
             Self::mono_inner_rec(
                 "(KExpr.proj ps pidx psub)",
                 &Self::mono_arms("(KExpr.proj ps pidx psub)", 7, proj_arm)
@@ -280,14 +280,14 @@ impl Specification {
         format!(
             "def def_eq_struct_mono (cmp1 : KExpr -> KExpr -> Bool) \
              (cmp2 : KExpr -> KExpr -> Bool) \
-             (hm : forall (x : KExpr) (y : KExpr), Eq Bool (cmp1 x y) Bool.true -> \
-             Eq Bool (cmp2 x y) Bool.true) : \
-             forall (a : KExpr) (b : KExpr), Eq Bool (def_eq_struct cmp1 a b) Bool.true -> \
-             Eq Bool (def_eq_struct cmp2 a b) Bool.true := \
-             fun (a : KExpr) => KExpr.rec \
+             (hm : forall (x : KExpr) (y : KExpr), @Eq Bool (cmp1 x y) Bool.true -> \
+             @Eq Bool (cmp2 x y) Bool.true) : \
+             forall (a : KExpr) (b : KExpr), @Eq Bool (def_eq_struct cmp1 a b) Bool.true -> \
+             @Eq Bool (def_eq_struct cmp2 a b) Bool.true := \
+             fun (a : KExpr) => @KExpr.rec \
              (fun (za : KExpr) => forall (b : KExpr), \
-             Eq Bool (def_eq_struct cmp1 za b) Bool.true -> \
-             Eq Bool (def_eq_struct cmp2 za b) Bool.true) \
+             @Eq Bool (def_eq_struct cmp1 za b) Bool.true -> \
+             @Eq Bool (def_eq_struct cmp2 za b) Bool.true) \
              {outer_sort} {outer_bvar} {outer_app} {outer_lam} {outer_pi} {outer_const} \
              {outer_let} {outer_proj} {outer_lit} a"
         )
@@ -315,19 +315,19 @@ impl Specification {
         self.add_recursive_def(
             "def def_eq_fuel_le (k : Nat) (m : Nat) (hle : Le k m) : \
              forall (a : KExpr) (b : KExpr), \
-             Eq Bool (def_eq_fuel the_red_env k a b) Bool.true -> \
-             Eq Bool (def_eq_fuel the_red_env m a b) Bool.true := \
-             Le.rec k (fun (j : Nat) (_hj : Le k j) => forall (a : KExpr) (b : KExpr), \
-             Eq Bool (def_eq_fuel the_red_env k a b) Bool.true -> \
-             Eq Bool (def_eq_fuel the_red_env j a b) Bool.true) \
+             @Eq Bool (def_eq_fuel the_red_env k a b) Bool.true -> \
+             @Eq Bool (def_eq_fuel the_red_env m a b) Bool.true := \
+             @Le.rec k (fun (j : Nat) (_hj : Le k j) => forall (a : KExpr) (b : KExpr), \
+             @Eq Bool (def_eq_fuel the_red_env k a b) Bool.true -> \
+             @Eq Bool (def_eq_fuel the_red_env j a b) Bool.true) \
              (fun (a : KExpr) (b : KExpr) \
-             (h : Eq Bool (def_eq_fuel the_red_env k a b) Bool.true) => h) \
+             (h : @Eq Bool (def_eq_fuel the_red_env k a b) Bool.true) => h) \
              (fun (j : Nat) (_hj : Le k j) \
              (ihj : forall (a : KExpr) (b : KExpr), \
-             Eq Bool (def_eq_fuel the_red_env k a b) Bool.true -> \
-             Eq Bool (def_eq_fuel the_red_env j a b) Bool.true) \
+             @Eq Bool (def_eq_fuel the_red_env k a b) Bool.true -> \
+             @Eq Bool (def_eq_fuel the_red_env j a b) Bool.true) \
              (a : KExpr) (b : KExpr) \
-             (h : Eq Bool (def_eq_fuel the_red_env k a b) Bool.true) => \
+             (h : @Eq Bool (def_eq_fuel the_red_env k a b) Bool.true) => \
              def_eq_fuel_succ_mono j a b (ihj a b h)) m hle",
             "def_eq_fuel_le: fuel monotonicity in Le form — an acceptance at fuel k survives \
              raising the fuel to any Le-greater bound. Le.rec iterating def_eq_fuel_succ_mono, \
@@ -343,53 +343,53 @@ impl Specification {
     /// can see which universe variant of the option inversion it uses).
     pub(super) fn def_eq_fuel_succ_mono_src() -> String {
         "def def_eq_fuel_succ_mono : forall (k : Nat) (a : KExpr) (b : KExpr), \
-             Eq Bool (def_eq_fuel the_red_env k a b) Bool.true -> \
-             Eq Bool (def_eq_fuel the_red_env (Nat.succ k) a b) Bool.true := \
-             Nat.rec (fun (z : Nat) => forall (a : KExpr) (b : KExpr), \
-             Eq Bool (def_eq_fuel the_red_env z a b) Bool.true -> \
-             Eq Bool (def_eq_fuel the_red_env (Nat.succ z) a b) Bool.true) \
+             @Eq Bool (def_eq_fuel the_red_env k a b) Bool.true -> \
+             @Eq Bool (def_eq_fuel the_red_env (Nat.succ k) a b) Bool.true := \
+             @Nat.rec (fun (z : Nat) => forall (a : KExpr) (b : KExpr), \
+             @Eq Bool (def_eq_fuel the_red_env z a b) Bool.true -> \
+             @Eq Bool (def_eq_fuel the_red_env (Nat.succ z) a b) Bool.true) \
              (fun (a : KExpr) (b : KExpr) \
-             (h : Eq Bool (def_eq_fuel the_red_env Nat.zero a b) Bool.true) => \
+             (h : @Eq Bool (def_eq_fuel the_red_env Nat.zero a b) Bool.true) => \
              bool_false_ne_true \
-             (Eq Bool (def_eq_fuel the_red_env (Nat.succ Nat.zero) a b) Bool.true) \
+             (@Eq Bool (def_eq_fuel the_red_env (Nat.succ Nat.zero) a b) Bool.true) \
              (Eq.trans Bool Bool.false (def_eq_fuel the_red_env Nat.zero a b) Bool.true \
              (Eq.symm Bool (def_eq_fuel the_red_env Nat.zero a b) Bool.false \
              (def_eq_fuel_zero the_red_env a b)) h)) \
              (fun (j : Nat) \
              (ih : forall (a : KExpr) (b : KExpr), \
-             Eq Bool (def_eq_fuel the_red_env j a b) Bool.true -> \
-             Eq Bool (def_eq_fuel the_red_env (Nat.succ j) a b) Bool.true) \
+             @Eq Bool (def_eq_fuel the_red_env j a b) Bool.true -> \
+             @Eq Bool (def_eq_fuel the_red_env (Nat.succ j) a b) Bool.true) \
              (a : KExpr) (b : KExpr) \
-             (h : Eq Bool (def_eq_fuel the_red_env (Nat.succ j) a b) Bool.true) => \
+             (h : @Eq Bool (def_eq_fuel the_red_env (Nat.succ j) a b) Bool.true) => \
              opt_rec_bool_true_inv_p (whnf_fuel_red the_red_env j a) \
-             (fun (nx : KExpr) => OptionType.rec KExpr \
+             (fun (nx : KExpr) => @OptionType.rec KExpr \
              (fun (_ : OptionType KExpr) => Bool) Bool.false \
              (fun (ny : KExpr) => def_eq_struct (def_eq_fuel the_red_env j) nx ny) \
              (whnf_fuel_red the_red_env j b)) \
-             (Eq Bool (def_eq_fuel the_red_env (Nat.succ (Nat.succ j)) a b) Bool.true) \
+             (@Eq Bool (def_eq_fuel the_red_env (Nat.succ (Nat.succ j)) a b) Bool.true) \
              (fun (na : KExpr) \
-             (hna : Eq (OptionType KExpr) (whnf_fuel_red the_red_env j a) \
-             (OptionType.some KExpr na)) \
-             (hin : Eq Bool (OptionType.rec KExpr (fun (_ : OptionType KExpr) => Bool) \
+             (hna : @Eq (OptionType KExpr) (whnf_fuel_red the_red_env j a) \
+             (@OptionType.some KExpr na)) \
+             (hin : @Eq Bool (@OptionType.rec KExpr (fun (_ : OptionType KExpr) => Bool) \
              Bool.false \
              (fun (ny : KExpr) => def_eq_struct (def_eq_fuel the_red_env j) na ny) \
              (whnf_fuel_red the_red_env j b)) Bool.true) => \
              opt_rec_bool_true_inv_p (whnf_fuel_red the_red_env j b) \
              (fun (ny : KExpr) => def_eq_struct (def_eq_fuel the_red_env j) na ny) \
-             (Eq Bool (def_eq_fuel the_red_env (Nat.succ (Nat.succ j)) a b) Bool.true) \
+             (@Eq Bool (def_eq_fuel the_red_env (Nat.succ (Nat.succ j)) a b) Bool.true) \
              (fun (nb : KExpr) \
-             (hnb : Eq (OptionType KExpr) (whnf_fuel_red the_red_env j b) \
-             (OptionType.some KExpr nb)) \
-             (hg : Eq Bool (def_eq_struct (def_eq_fuel the_red_env j) na nb) Bool.true) => \
+             (hnb : @Eq (OptionType KExpr) (whnf_fuel_red the_red_env j b) \
+             (@OptionType.some KExpr nb)) \
+             (hg : @Eq Bool (def_eq_struct (def_eq_fuel the_red_env j) na nb) Bool.true) => \
              def_eq_fuel_of_struct (Nat.succ j) a b na nb \
              (whnf_fuel_red_monotone the_red_env j a na hna) \
              (whnf_fuel_red_monotone the_red_env j b nb hnb) \
              (def_eq_struct_mono (def_eq_fuel the_red_env j) \
              (def_eq_fuel the_red_env (Nat.succ j)) ih na nb hg)) hin) \
-             (Eq.substType Bool (fun (x : Bool) => Eq Bool x Bool.true) \
+             (Eq.substType Bool (fun (x : Bool) => @Eq Bool x Bool.true) \
              (def_eq_fuel the_red_env (Nat.succ j) a b) \
-             (OptionType.rec KExpr (fun (_ : OptionType KExpr) => Bool) Bool.false \
-             (fun (nx : KExpr) => OptionType.rec KExpr \
+             (@OptionType.rec KExpr (fun (_ : OptionType KExpr) => Bool) Bool.false \
+             (fun (nx : KExpr) => @OptionType.rec KExpr \
              (fun (_ : OptionType KExpr) => Bool) Bool.false \
              (fun (ny : KExpr) => def_eq_struct (def_eq_fuel the_red_env j) nx ny) \
              (whnf_fuel_red the_red_env j b)) \
@@ -422,7 +422,7 @@ mod tests {
     #[test]
     fn test_def_eq_struct_mono_src_has_exactly_72_absurd_arms() {
         let src = Specification::def_eq_struct_mono_src();
-        let absurd = src.matches("bool_false_ne_true (Eq Bool ").count();
+        let absurd = src.matches("bool_false_ne_true (@Eq Bool ").count();
         assert_eq!(
             absurd, 72,
             "expected 72 cross-constructor absurd arms, got {absurd}"

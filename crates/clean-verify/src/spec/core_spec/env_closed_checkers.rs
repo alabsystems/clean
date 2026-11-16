@@ -177,11 +177,11 @@ impl Specification {
         self.add_definition(Self::ecc_lemma(
             "ceiling_zero_le",
             "forall (e : KExpr) (d : Nat), \
-             Eq Bool (nat_eqb (bvar_ceiling e) Nat.zero) Bool.true -> Le (bvar_ceiling e) d",
+             @Eq Bool (nat_eqb (bvar_ceiling e) Nat.zero) Bool.true -> Le (bvar_ceiling e) d",
             "fun (e : KExpr) (d : Nat) \
-             (h : Eq Bool (nat_eqb (bvar_ceiling e) Nat.zero) Bool.true) => \
-             Eq.subst Nat (fun (z : Nat) => Le z d) Nat.zero (bvar_ceiling e) \
-             (Eq.symm Nat (bvar_ceiling e) Nat.zero \
+             (h : @Eq Bool (nat_eqb (bvar_ceiling e) Nat.zero) Bool.true) => \
+             @Eq.subst Nat (fun (z : Nat) => Le z d) Nat.zero (bvar_ceiling e) \
+             (@Eq.symm Nat (bvar_ceiling e) Nat.zero \
              (nat_eqb_eq (bvar_ceiling e) Nat.zero h)) \
              (le_zero_n d)",
             "Checker-test bridge: nat_eqb (bvar_ceiling e) 0 = true -> Le (bvar_ceiling e) d for \
@@ -206,36 +206,36 @@ impl Specification {
         self.add_definition(Self::ecc_lemma(
             "rec_rules_closed_b_sound",
             "forall (rs : RecRules) (cname : Name) (rule : RecRule), \
-             Eq (OptionType RecRule) (recrule_in_rules rs cname) (OptionType.some RecRule rule) -> \
-             Eq Bool (rec_rules_closed_b rs) Bool.true -> \
-             Eq Bool (nat_eqb (bvar_ceiling (recrule_rhs rule)) Nat.zero) Bool.true",
+             @Eq (OptionType RecRule) (recrule_in_rules rs cname) (@OptionType.some RecRule rule) -> \
+             @Eq Bool (rec_rules_closed_b rs) Bool.true -> \
+             @Eq Bool (nat_eqb (bvar_ceiling (recrule_rhs rule)) Nat.zero) Bool.true",
             "fun (rs : RecRules) (cname : Name) (rule : RecRule) => \
-             RecRules.rec \
+             @RecRules.rec \
              (fun (l : RecRules) => \
-             Eq (OptionType RecRule) (recrule_in_rules l cname) (OptionType.some RecRule rule) -> \
-             Eq Bool (rec_rules_closed_b l) Bool.true -> \
-             Eq Bool (nat_eqb (bvar_ceiling (recrule_rhs rule)) Nat.zero) Bool.true) \
-             (fun (hlk : Eq (OptionType RecRule) (recrule_in_rules RecRules.nil cname) (OptionType.some RecRule rule)) \
-             (_hb : Eq Bool (rec_rules_closed_b RecRules.nil) Bool.true) => \
+             @Eq (OptionType RecRule) (recrule_in_rules l cname) (@OptionType.some RecRule rule) -> \
+             @Eq Bool (rec_rules_closed_b l) Bool.true -> \
+             @Eq Bool (nat_eqb (bvar_ceiling (recrule_rhs rule)) Nat.zero) Bool.true) \
+             (fun (hlk : @Eq (OptionType RecRule) (recrule_in_rules RecRules.nil cname) (@OptionType.some RecRule rule)) \
+             (_hb : @Eq Bool (rec_rules_closed_b RecRules.nil) Bool.true) => \
              option_none_ne_some RecRule rule \
-             (Eq Bool (nat_eqb (bvar_ceiling (recrule_rhs rule)) Nat.zero) Bool.true) hlk) \
+             (@Eq Bool (nat_eqb (bvar_ceiling (recrule_rhs rule)) Nat.zero) Bool.true) hlk) \
              (fun (r : RecRule) (rest : RecRules) \
-             (ih : Eq (OptionType RecRule) (recrule_in_rules rest cname) (OptionType.some RecRule rule) -> \
-             Eq Bool (rec_rules_closed_b rest) Bool.true -> \
-             Eq Bool (nat_eqb (bvar_ceiling (recrule_rhs rule)) Nat.zero) Bool.true) \
-             (hlk : Eq (OptionType RecRule) (recrule_in_rules (RecRules.cons r rest) cname) (OptionType.some RecRule rule)) \
-             (hb : Eq Bool (rec_rules_closed_b (RecRules.cons r rest)) Bool.true) => \
+             (ih : @Eq (OptionType RecRule) (recrule_in_rules rest cname) (@OptionType.some RecRule rule) -> \
+             @Eq Bool (rec_rules_closed_b rest) Bool.true -> \
+             @Eq Bool (nat_eqb (bvar_ceiling (recrule_rhs rule)) Nat.zero) Bool.true) \
+             (hlk : @Eq (OptionType RecRule) (recrule_in_rules (RecRules.cons r rest) cname) (@OptionType.some RecRule rule)) \
+             (hb : @Eq Bool (rec_rules_closed_b (RecRules.cons r rest)) Bool.true) => \
              opt_pick_some_inv RecRule (name_eqb (recrule_ctor_name r) cname) r \
              (recrule_in_rules rest cname) rule \
-             (Eq Bool (nat_eqb (bvar_ceiling (recrule_rhs rule)) Nat.zero) Bool.true) hlk \
-             (fun (_ht : Eq Bool (name_eqb (recrule_ctor_name r) cname) Bool.true) \
-             (hval : Eq RecRule r rule) => \
-             Eq.subst RecRule \
-             (fun (z : RecRule) => Eq Bool (nat_eqb (bvar_ceiling (recrule_rhs z)) Nat.zero) Bool.true) \
+             (@Eq Bool (nat_eqb (bvar_ceiling (recrule_rhs rule)) Nat.zero) Bool.true) hlk \
+             (fun (_ht : @Eq Bool (name_eqb (recrule_ctor_name r) cname) Bool.true) \
+             (hval : @Eq RecRule r rule) => \
+             @Eq.subst RecRule \
+             (fun (z : RecRule) => @Eq Bool (nat_eqb (bvar_ceiling (recrule_rhs z)) Nat.zero) Bool.true) \
              r rule hval \
              (band_eq_true_left (nat_eqb (bvar_ceiling (recrule_rhs r)) Nat.zero) (rec_rules_closed_b rest) hb)) \
-             (fun (_hf : Eq Bool (name_eqb (recrule_ctor_name r) cname) Bool.false) \
-             (hrest : Eq (OptionType RecRule) (recrule_in_rules rest cname) (OptionType.some RecRule rule)) => \
+             (fun (_hf : @Eq Bool (name_eqb (recrule_ctor_name r) cname) Bool.false) \
+             (hrest : @Eq (OptionType RecRule) (recrule_in_rules rest cname) (@OptionType.some RecRule rule)) => \
              ih hrest \
              (band_eq_true_right (nat_eqb (bvar_ceiling (recrule_rhs r)) Nat.zero) (rec_rules_closed_b rest) hb))) \
              rs",
@@ -267,36 +267,36 @@ impl Specification {
         self.add_definition(Self::ecc_lemma(
             "rec_env_closed_b_sound",
             "forall (env : RecEnv) (rname : Name) (rules : RecRules), \
-             Eq (OptionType RecRules) (recrules_for env rname) (OptionType.some RecRules rules) -> \
-             Eq Bool (rec_env_closed_b env) Bool.true -> \
-             Eq Bool (rec_rules_closed_b rules) Bool.true",
+             @Eq (OptionType RecRules) (recrules_for env rname) (@OptionType.some RecRules rules) -> \
+             @Eq Bool (rec_env_closed_b env) Bool.true -> \
+             @Eq Bool (rec_rules_closed_b rules) Bool.true",
             "fun (env : RecEnv) (rname : Name) (rules : RecRules) => \
-             RecEnv.rec \
+             @RecEnv.rec \
              (fun (e : RecEnv) => \
-             Eq (OptionType RecRules) (recrules_for e rname) (OptionType.some RecRules rules) -> \
-             Eq Bool (rec_env_closed_b e) Bool.true -> \
-             Eq Bool (rec_rules_closed_b rules) Bool.true) \
-             (fun (hlk : Eq (OptionType RecRules) (recrules_for RecEnv.empty rname) (OptionType.some RecRules rules)) \
-             (_hb : Eq Bool (rec_env_closed_b RecEnv.empty) Bool.true) => \
+             @Eq (OptionType RecRules) (recrules_for e rname) (@OptionType.some RecRules rules) -> \
+             @Eq Bool (rec_env_closed_b e) Bool.true -> \
+             @Eq Bool (rec_rules_closed_b rules) Bool.true) \
+             (fun (hlk : @Eq (OptionType RecRules) (recrules_for RecEnv.empty rname) (@OptionType.some RecRules rules)) \
+             (_hb : @Eq Bool (rec_env_closed_b RecEnv.empty) Bool.true) => \
              option_none_ne_some RecRules rules \
-             (Eq Bool (rec_rules_closed_b rules) Bool.true) hlk) \
+             (@Eq Bool (rec_rules_closed_b rules) Bool.true) hlk) \
              (fun (tail : RecEnv) (rn : Name) (mta : RecMeta) (rls : RecRules) \
-             (ih : Eq (OptionType RecRules) (recrules_for tail rname) (OptionType.some RecRules rules) -> \
-             Eq Bool (rec_env_closed_b tail) Bool.true -> \
-             Eq Bool (rec_rules_closed_b rules) Bool.true) \
-             (hlk : Eq (OptionType RecRules) (recrules_for (RecEnv.addRec tail rn mta rls) rname) (OptionType.some RecRules rules)) \
-             (hb : Eq Bool (rec_env_closed_b (RecEnv.addRec tail rn mta rls)) Bool.true) => \
+             (ih : @Eq (OptionType RecRules) (recrules_for tail rname) (@OptionType.some RecRules rules) -> \
+             @Eq Bool (rec_env_closed_b tail) Bool.true -> \
+             @Eq Bool (rec_rules_closed_b rules) Bool.true) \
+             (hlk : @Eq (OptionType RecRules) (recrules_for (RecEnv.addRec tail rn mta rls) rname) (@OptionType.some RecRules rules)) \
+             (hb : @Eq Bool (rec_env_closed_b (RecEnv.addRec tail rn mta rls)) Bool.true) => \
              opt_pick_some_inv RecRules (name_eqb rn rname) rls \
              (recrules_for tail rname) rules \
-             (Eq Bool (rec_rules_closed_b rules) Bool.true) hlk \
-             (fun (_ht : Eq Bool (name_eqb rn rname) Bool.true) \
-             (hval : Eq RecRules rls rules) => \
-             Eq.subst RecRules \
-             (fun (z : RecRules) => Eq Bool (rec_rules_closed_b z) Bool.true) \
+             (@Eq Bool (rec_rules_closed_b rules) Bool.true) hlk \
+             (fun (_ht : @Eq Bool (name_eqb rn rname) Bool.true) \
+             (hval : @Eq RecRules rls rules) => \
+             @Eq.subst RecRules \
+             (fun (z : RecRules) => @Eq Bool (rec_rules_closed_b z) Bool.true) \
              rls rules hval \
              (band_eq_true_left (rec_rules_closed_b rls) (rec_env_closed_b tail) hb)) \
-             (fun (_hf : Eq Bool (name_eqb rn rname) Bool.false) \
-             (htail : Eq (OptionType RecRules) (recrules_for tail rname) (OptionType.some RecRules rules)) => \
+             (fun (_hf : @Eq Bool (name_eqb rn rname) Bool.false) \
+             (htail : @Eq (OptionType RecRules) (recrules_for tail rname) (@OptionType.some RecRules rules)) => \
              ih htail \
              (band_eq_true_right (rec_rules_closed_b rls) (rec_env_closed_b tail) hb))) \
              env",
@@ -324,36 +324,36 @@ impl Specification {
         self.add_definition(Self::ecc_lemma(
             "def_env_closed_b_sound",
             "forall (env : DefEnv) (dname : Name) (defval : KExpr), \
-             Eq (OptionType KExpr) (defval_for env dname) (OptionType.some KExpr defval) -> \
-             Eq Bool (def_env_closed_b env) Bool.true -> \
-             Eq Bool (nat_eqb (bvar_ceiling defval) Nat.zero) Bool.true",
+             @Eq (OptionType KExpr) (defval_for env dname) (@OptionType.some KExpr defval) -> \
+             @Eq Bool (def_env_closed_b env) Bool.true -> \
+             @Eq Bool (nat_eqb (bvar_ceiling defval) Nat.zero) Bool.true",
             "fun (env : DefEnv) (dname : Name) (defval : KExpr) => \
-             DefEnv.rec \
+             @DefEnv.rec \
              (fun (e : DefEnv) => \
-             Eq (OptionType KExpr) (defval_for e dname) (OptionType.some KExpr defval) -> \
-             Eq Bool (def_env_closed_b e) Bool.true -> \
-             Eq Bool (nat_eqb (bvar_ceiling defval) Nat.zero) Bool.true) \
-             (fun (hlk : Eq (OptionType KExpr) (defval_for DefEnv.empty dname) (OptionType.some KExpr defval)) \
-             (_hb : Eq Bool (def_env_closed_b DefEnv.empty) Bool.true) => \
+             @Eq (OptionType KExpr) (defval_for e dname) (@OptionType.some KExpr defval) -> \
+             @Eq Bool (def_env_closed_b e) Bool.true -> \
+             @Eq Bool (nat_eqb (bvar_ceiling defval) Nat.zero) Bool.true) \
+             (fun (hlk : @Eq (OptionType KExpr) (defval_for DefEnv.empty dname) (@OptionType.some KExpr defval)) \
+             (_hb : @Eq Bool (def_env_closed_b DefEnv.empty) Bool.true) => \
              option_none_ne_some KExpr defval \
-             (Eq Bool (nat_eqb (bvar_ceiling defval) Nat.zero) Bool.true) hlk) \
+             (@Eq Bool (nat_eqb (bvar_ceiling defval) Nat.zero) Bool.true) hlk) \
              (fun (tail : DefEnv) (dn : Name) (defn : KDefSig) \
-             (ih : Eq (OptionType KExpr) (defval_for tail dname) (OptionType.some KExpr defval) -> \
-             Eq Bool (def_env_closed_b tail) Bool.true -> \
-             Eq Bool (nat_eqb (bvar_ceiling defval) Nat.zero) Bool.true) \
-             (hlk : Eq (OptionType KExpr) (defval_for (DefEnv.addDef tail dn defn) dname) (OptionType.some KExpr defval)) \
-             (hb : Eq Bool (def_env_closed_b (DefEnv.addDef tail dn defn)) Bool.true) => \
+             (ih : @Eq (OptionType KExpr) (defval_for tail dname) (@OptionType.some KExpr defval) -> \
+             @Eq Bool (def_env_closed_b tail) Bool.true -> \
+             @Eq Bool (nat_eqb (bvar_ceiling defval) Nat.zero) Bool.true) \
+             (hlk : @Eq (OptionType KExpr) (defval_for (DefEnv.addDef tail dn defn) dname) (@OptionType.some KExpr defval)) \
+             (hb : @Eq Bool (def_env_closed_b (DefEnv.addDef tail dn defn)) Bool.true) => \
              opt_pick_some_inv KExpr (name_eqb dn dname) (kdef_value defn) \
              (defval_for tail dname) defval \
-             (Eq Bool (nat_eqb (bvar_ceiling defval) Nat.zero) Bool.true) hlk \
-             (fun (_ht : Eq Bool (name_eqb dn dname) Bool.true) \
-             (hval : Eq KExpr (kdef_value defn) defval) => \
-             Eq.subst KExpr \
-             (fun (z : KExpr) => Eq Bool (nat_eqb (bvar_ceiling z) Nat.zero) Bool.true) \
+             (@Eq Bool (nat_eqb (bvar_ceiling defval) Nat.zero) Bool.true) hlk \
+             (fun (_ht : @Eq Bool (name_eqb dn dname) Bool.true) \
+             (hval : @Eq KExpr (kdef_value defn) defval) => \
+             @Eq.subst KExpr \
+             (fun (z : KExpr) => @Eq Bool (nat_eqb (bvar_ceiling z) Nat.zero) Bool.true) \
              (kdef_value defn) defval hval \
              (band_eq_true_left (nat_eqb (bvar_ceiling (kdef_value defn)) Nat.zero) (def_env_closed_b tail) hb)) \
-             (fun (_hf : Eq Bool (name_eqb dn dname) Bool.false) \
-             (htail : Eq (OptionType KExpr) (defval_for tail dname) (OptionType.some KExpr defval)) => \
+             (fun (_hf : @Eq Bool (name_eqb dn dname) Bool.false) \
+             (htail : @Eq (OptionType KExpr) (defval_for tail dname) (@OptionType.some KExpr defval)) => \
              ih htail \
              (band_eq_true_right (nat_eqb (bvar_ceiling (kdef_value defn)) Nat.zero) (def_env_closed_b tail) hb))) \
              env",
@@ -388,40 +388,40 @@ impl Specification {
     fn add_env_closed_generic_discharge(&mut self) -> Result<(), SpecError> {
         self.add_recursive_def(
             r"def ceiling_zero_is_closed_at (e : KExpr)
-(h : Eq Nat (bvar_ceiling e) Nat.zero) (d : Nat) : is_closed_at e d :=
-KExpr.rec (fun (e0 : KExpr) => Eq Nat (bvar_ceiling e0) Nat.zero -> forall (d0 : Nat), is_closed_at e0 d0)
-  (fun (u : Level) (_h : Eq Nat (bvar_ceiling (KExpr.sort u)) Nat.zero) (d0 : Nat) => is_closed_at.sort u d0)
-  (fun (i : Nat) (hi : Eq Nat (bvar_ceiling (KExpr.bvar i)) Nat.zero) (d0 : Nat) =>
-    Empty.rec (fun (_ : Empty) => is_closed_at (KExpr.bvar i) d0)
-      (Eq.substType Nat (fun (z : Nat) => Nat.rec (fun (_ : Nat) => Type) Nat (fun (_ : Nat) (_ : Type) => Empty) z)
-        Nat.zero (Nat.succ i) (Eq.symm Nat (Nat.succ i) Nat.zero hi) Nat.zero))
+(h : @Eq Nat (bvar_ceiling e) Nat.zero) (d : Nat) : is_closed_at e d :=
+@KExpr.rec (fun (e0 : KExpr) => @Eq Nat (bvar_ceiling e0) Nat.zero -> forall (d0 : Nat), is_closed_at e0 d0)
+  (fun (u : Level) (_h : @Eq Nat (bvar_ceiling (KExpr.sort u)) Nat.zero) (d0 : Nat) => is_closed_at.sort u d0)
+  (fun (i : Nat) (hi : @Eq Nat (bvar_ceiling (KExpr.bvar i)) Nat.zero) (d0 : Nat) =>
+    @Empty.rec (fun (_ : Empty) => is_closed_at (KExpr.bvar i) d0)
+      (@Eq.substType Nat (fun (z : Nat) => @Nat.rec (fun (_ : Nat) => Type) Nat (fun (_ : Nat) (_ : Type) => Empty) z)
+        Nat.zero (Nat.succ i) (@Eq.symm Nat (Nat.succ i) Nat.zero hi) Nat.zero))
   (fun (f : KExpr) (a : KExpr)
-    (ihf : Eq Nat (bvar_ceiling f) Nat.zero -> forall (d0 : Nat), is_closed_at f d0)
-    (iha : Eq Nat (bvar_ceiling a) Nat.zero -> forall (d0 : Nat), is_closed_at a d0)
-    (ha : Eq Nat (bvar_ceiling (KExpr.app f a)) Nat.zero) (d0 : Nat) =>
+    (ihf : @Eq Nat (bvar_ceiling f) Nat.zero -> forall (d0 : Nat), is_closed_at f d0)
+    (iha : @Eq Nat (bvar_ceiling a) Nat.zero -> forall (d0 : Nat), is_closed_at a d0)
+    (ha : @Eq Nat (bvar_ceiling (KExpr.app f a)) Nat.zero) (d0 : Nat) =>
     is_closed_at.app f a d0
       (ihf (nat_add_eq_zero_left (bvar_ceiling f) (bvar_ceiling a) ha) d0)
       (iha (nat_add_eq_zero_right (bvar_ceiling f) (bvar_ceiling a) ha) d0))
   (fun (A : KExpr) (b : KExpr)
-    (ihA : Eq Nat (bvar_ceiling A) Nat.zero -> forall (d0 : Nat), is_closed_at A d0)
-    (ihb : Eq Nat (bvar_ceiling b) Nat.zero -> forall (d0 : Nat), is_closed_at b d0)
-    (hb : Eq Nat (bvar_ceiling (KExpr.lam A b)) Nat.zero) (d0 : Nat) =>
+    (ihA : @Eq Nat (bvar_ceiling A) Nat.zero -> forall (d0 : Nat), is_closed_at A d0)
+    (ihb : @Eq Nat (bvar_ceiling b) Nat.zero -> forall (d0 : Nat), is_closed_at b d0)
+    (hb : @Eq Nat (bvar_ceiling (KExpr.lam A b)) Nat.zero) (d0 : Nat) =>
     is_closed_at.lam A b d0
       (ihA (nat_add_eq_zero_left (bvar_ceiling A) (bvar_ceiling b) hb) d0)
       (ihb (nat_add_eq_zero_right (bvar_ceiling A) (bvar_ceiling b) hb) (Nat.succ d0)))
   (fun (A : KExpr) (b : KExpr)
-    (ihA : Eq Nat (bvar_ceiling A) Nat.zero -> forall (d0 : Nat), is_closed_at A d0)
-    (ihb : Eq Nat (bvar_ceiling b) Nat.zero -> forall (d0 : Nat), is_closed_at b d0)
-    (hb : Eq Nat (bvar_ceiling (KExpr.pi A b)) Nat.zero) (d0 : Nat) =>
+    (ihA : @Eq Nat (bvar_ceiling A) Nat.zero -> forall (d0 : Nat), is_closed_at A d0)
+    (ihb : @Eq Nat (bvar_ceiling b) Nat.zero -> forall (d0 : Nat), is_closed_at b d0)
+    (hb : @Eq Nat (bvar_ceiling (KExpr.pi A b)) Nat.zero) (d0 : Nat) =>
     is_closed_at.pi A b d0
       (ihA (nat_add_eq_zero_left (bvar_ceiling A) (bvar_ceiling b) hb) d0)
       (ihb (nat_add_eq_zero_right (bvar_ceiling A) (bvar_ceiling b) hb) (Nat.succ d0)))
-  (fun (n : Name) (us : ListType Level) (_h : Eq Nat (bvar_ceiling (KExpr.const n us)) Nat.zero) (d0 : Nat) => is_closed_at.const n us d0)
+  (fun (n : Name) (us : ListType Level) (_h : @Eq Nat (bvar_ceiling (KExpr.const n us)) Nat.zero) (d0 : Nat) => is_closed_at.const n us d0)
   (fun (A : KExpr) (v : KExpr) (b : KExpr)
-    (ihA : Eq Nat (bvar_ceiling A) Nat.zero -> forall (d0 : Nat), is_closed_at A d0)
-    (ihv : Eq Nat (bvar_ceiling v) Nat.zero -> forall (d0 : Nat), is_closed_at v d0)
-    (ihb : Eq Nat (bvar_ceiling b) Nat.zero -> forall (d0 : Nat), is_closed_at b d0)
-    (hb : Eq Nat (bvar_ceiling (KExpr.let_ A v b)) Nat.zero) (d0 : Nat) =>
+    (ihA : @Eq Nat (bvar_ceiling A) Nat.zero -> forall (d0 : Nat), is_closed_at A d0)
+    (ihv : @Eq Nat (bvar_ceiling v) Nat.zero -> forall (d0 : Nat), is_closed_at v d0)
+    (ihb : @Eq Nat (bvar_ceiling b) Nat.zero -> forall (d0 : Nat), is_closed_at b d0)
+    (hb : @Eq Nat (bvar_ceiling (KExpr.let_ A v b)) Nat.zero) (d0 : Nat) =>
     is_closed_at.let_ A v b d0
       (ihA (nat_add_eq_zero_left (bvar_ceiling A) (Nat.add (bvar_ceiling v) (bvar_ceiling b)) hb) d0)
       (ihv (nat_add_eq_zero_left (bvar_ceiling v) (bvar_ceiling b)
@@ -429,9 +429,9 @@ KExpr.rec (fun (e0 : KExpr) => Eq Nat (bvar_ceiling e0) Nat.zero -> forall (d0 :
       (ihb (nat_add_eq_zero_right (bvar_ceiling v) (bvar_ceiling b)
         (nat_add_eq_zero_right (bvar_ceiling A) (Nat.add (bvar_ceiling v) (bvar_ceiling b)) hb)) (Nat.succ d0)))
   (fun (sn : Name) (i : Nat) (sub : KExpr)
-    (ih : Eq Nat (bvar_ceiling sub) Nat.zero -> forall (d0 : Nat), is_closed_at sub d0)
-    (hs : Eq Nat (bvar_ceiling (KExpr.proj sn i sub)) Nat.zero) (d0 : Nat) => is_closed_at.proj sn i sub d0 (ih hs d0))
-  (fun (i : Nat) (_h : Eq Nat (bvar_ceiling (KExpr.lit i)) Nat.zero) (d0 : Nat) => is_closed_at.lit i d0)
+    (ih : @Eq Nat (bvar_ceiling sub) Nat.zero -> forall (d0 : Nat), is_closed_at sub d0)
+    (hs : @Eq Nat (bvar_ceiling (KExpr.proj sn i sub)) Nat.zero) (d0 : Nat) => is_closed_at.proj sn i sub d0 (ih hs d0))
+  (fun (i : Nat) (_h : @Eq Nat (bvar_ceiling (KExpr.lit i)) Nat.zero) (d0 : Nat) => is_closed_at.lit i d0)
   e h d",
             "The existing additive ceiling-zero checker implies actual structural closedness at every depth. Binder arms use the stronger induction hypothesis at successor depth; no instantiated-body condition is assumed.",
         )?;
@@ -450,17 +450,17 @@ KExpr.rec (fun (e0 : KExpr) => Eq Nat (bvar_ceiling e0) Nat.zero -> forall (d0 :
         self.add_definition(Self::ecc_lemma(
             "rec_env_closed_of_b",
             "forall (env : RecEnv), \
-             Eq Bool (rec_env_closed_b env) Bool.true -> RecEnvClosed env",
-            "fun (env : RecEnv) (hb : Eq Bool (rec_env_closed_b env) Bool.true) => \
-             RecEnvClosed.mk env \
+             @Eq Bool (rec_env_closed_b env) Bool.true -> RecEnvClosed env",
+            "fun (env : RecEnv) (hb : @Eq Bool (rec_env_closed_b env) Bool.true) => \
+             @RecEnvClosed.mk env \
              (fun (rname : Name) (cname : Name) (rule : RecRule) \
-             (hlk : Eq (OptionType RecRule) (recrule_for env rname cname) (OptionType.some RecRule rule)) => \
+             (hlk : @Eq (OptionType RecRule) (recrule_for env rname cname) (@OptionType.some RecRule rule)) => \
              opt_bind_some_inv_type RecRules RecRule (recrules_for env rname) \
              (fun (rules : RecRules) => recrule_in_rules rules cname) rule \
              (is_closed_at (recrule_rhs rule) Nat.zero) hlk \
              (fun (rules : RecRules) \
-             (hrules : Eq (OptionType RecRules) (recrules_for env rname) (OptionType.some RecRules rules)) \
-             (hin : Eq (OptionType RecRule) (recrule_in_rules rules cname) (OptionType.some RecRule rule)) => \
+             (hrules : @Eq (OptionType RecRules) (recrules_for env rname) (@OptionType.some RecRules rules)) \
+             (hin : @Eq (OptionType RecRule) (recrule_in_rules rules cname) (@OptionType.some RecRule rule)) => \
              ceiling_zero_is_closed_at (recrule_rhs rule) \
              (nat_eqb_eq (bvar_ceiling (recrule_rhs rule)) Nat.zero \
              (rec_rules_closed_b_sound rules cname rule hin \
@@ -499,17 +499,17 @@ KExpr.rec (fun (e0 : KExpr) => Eq Nat (bvar_ceiling e0) Nat.zero -> forall (d0 :
         self.add_definition(Self::ecc_lemma(
             "rec_env_lift_closed_of_b",
             "forall (env : RecEnv), \
-             Eq Bool (rec_env_lift_closed_b env) Bool.true -> RecEnvLiftClosed env",
-            "fun (env : RecEnv) (hb : Eq Bool (rec_env_lift_closed_b env) Bool.true) => \
-             RecEnvLiftClosed.mk env \
+             @Eq Bool (rec_env_lift_closed_b env) Bool.true -> RecEnvLiftClosed env",
+            "fun (env : RecEnv) (hb : @Eq Bool (rec_env_lift_closed_b env) Bool.true) => \
+             @RecEnvLiftClosed.mk env \
              (fun (rname : Name) (cname : Name) (rule : RecRule) \
-             (hlk : Eq (OptionType RecRule) (recrule_for env rname cname) (OptionType.some RecRule rule)) => \
+             (hlk : @Eq (OptionType RecRule) (recrule_for env rname cname) (@OptionType.some RecRule rule)) => \
              opt_bind_some_inv_type RecRules RecRule (recrules_for env rname) \
              (fun (rules : RecRules) => recrule_in_rules rules cname) rule \
              (is_closed_at (recrule_rhs rule) Nat.zero) hlk \
              (fun (rules : RecRules) \
-             (hrules : Eq (OptionType RecRules) (recrules_for env rname) (OptionType.some RecRules rules)) \
-             (hin : Eq (OptionType RecRule) (recrule_in_rules rules cname) (OptionType.some RecRule rule)) => \
+             (hrules : @Eq (OptionType RecRules) (recrules_for env rname) (@OptionType.some RecRules rules)) \
+             (hin : @Eq (OptionType RecRule) (recrule_in_rules rules cname) (@OptionType.some RecRule rule)) => \
              ceiling_zero_is_closed_at (recrule_rhs rule) \
              (nat_eqb_eq (bvar_ceiling (recrule_rhs rule)) Nat.zero \
              (rec_rules_closed_b_sound rules cname rule hin \
@@ -542,11 +542,11 @@ KExpr.rec (fun (e0 : KExpr) => Eq Nat (bvar_ceiling e0) Nat.zero -> forall (d0 :
         self.add_definition(Self::ecc_lemma(
             "def_env_closed_of_b",
             "forall (env : DefEnv), \
-             Eq Bool (def_env_closed_b env) Bool.true -> DefEnvClosed env",
-            "fun (env : DefEnv) (hb : Eq Bool (def_env_closed_b env) Bool.true) => \
-             DefEnvClosed.mk env \
+             @Eq Bool (def_env_closed_b env) Bool.true -> DefEnvClosed env",
+            "fun (env : DefEnv) (hb : @Eq Bool (def_env_closed_b env) Bool.true) => \
+             @DefEnvClosed.mk env \
              (fun (dname : Name) (defval : KExpr) \
-             (hlk : Eq (OptionType KExpr) (defval_for env dname) (OptionType.some KExpr defval)) => \
+             (hlk : @Eq (OptionType KExpr) (defval_for env dname) (@OptionType.some KExpr defval)) => \
              ceiling_zero_is_closed_at defval \
              (nat_eqb_eq (bvar_ceiling defval) Nat.zero \
              (def_env_closed_b_sound env dname defval hlk hb)) Nat.zero)",
@@ -571,11 +571,11 @@ KExpr.rec (fun (e0 : KExpr) => Eq Nat (bvar_ceiling e0) Nat.zero -> forall (d0 :
         self.add_definition(Self::ecc_lemma(
             "def_env_lift_closed_of_b",
             "forall (env : DefEnv), \
-             Eq Bool (def_env_lift_closed_b env) Bool.true -> DefEnvLiftClosed env",
-            "fun (env : DefEnv) (hb : Eq Bool (def_env_lift_closed_b env) Bool.true) => \
-             DefEnvLiftClosed.mk env \
+             @Eq Bool (def_env_lift_closed_b env) Bool.true -> DefEnvLiftClosed env",
+            "fun (env : DefEnv) (hb : @Eq Bool (def_env_lift_closed_b env) Bool.true) => \
+             @DefEnvLiftClosed.mk env \
              (fun (dname : Name) (defval : KExpr) \
-             (hlk : Eq (OptionType KExpr) (defval_for env dname) (OptionType.some KExpr defval)) => \
+             (hlk : @Eq (OptionType KExpr) (defval_for env dname) (@OptionType.some KExpr defval)) => \
              ceiling_zero_is_closed_at defval \
              (nat_eqb_eq (bvar_ceiling defval) Nat.zero \
              (def_env_closed_b_sound env dname defval hlk hb)) Nat.zero)",
@@ -620,25 +620,25 @@ KExpr.rec (fun (e0 : KExpr) => Eq Nat (bvar_ceiling e0) Nat.zero -> forall (d0 :
             (
                 "faithful_red_env_rec_closed_via_checker",
                 "RecEnvClosed (red_rec faithful_red_env)".to_string(),
-                "rec_env_closed_of_b (red_rec faithful_red_env) (Eq.refl Bool Bool.true)",
+                "rec_env_closed_of_b (red_rec faithful_red_env) (@Eq.refl Bool Bool.true)",
                 "faithful_red_env (closed-lambda rule rhs)",
             ),
             (
                 "faithful_red_env_rec_lift_closed_via_checker",
                 "RecEnvLiftClosed (red_rec faithful_red_env)".to_string(),
-                "rec_env_lift_closed_of_b (red_rec faithful_red_env) (Eq.refl Bool Bool.true)",
+                "rec_env_lift_closed_of_b (red_rec faithful_red_env) (@Eq.refl Bool Bool.true)",
                 "faithful_red_env (closed-lambda rule rhs)",
             ),
             (
                 "faithful_red_env_def_closed_via_checker",
                 "DefEnvClosed (red_def faithful_red_env)".to_string(),
-                "def_env_closed_of_b (red_def faithful_red_env) (Eq.refl Bool Bool.true)",
+                "def_env_closed_of_b (red_def faithful_red_env) (@Eq.refl Bool Bool.true)",
                 "faithful_red_env (closed-lambda def value)",
             ),
             (
                 "faithful_red_env_def_lift_closed_via_checker",
                 "DefEnvLiftClosed (red_def faithful_red_env)".to_string(),
-                "def_env_lift_closed_of_b (red_def faithful_red_env) (Eq.refl Bool Bool.true)",
+                "def_env_lift_closed_of_b (red_def faithful_red_env) (@Eq.refl Bool Bool.true)",
                 "faithful_red_env (closed-lambda def value)",
             ),
         ];
@@ -781,7 +781,7 @@ mod tests {
                 .as_deref()
                 .unwrap_or_else(|| panic!("{name} must carry a proof term"));
             assert!(
-                value.contains("(Eq.refl Bool Bool.true)"),
+                value.contains("(@Eq.refl Bool Bool.true)"),
                 "{name} must be the single-rfl checker route, got: {value}"
             );
             spec.verify_definition(name)

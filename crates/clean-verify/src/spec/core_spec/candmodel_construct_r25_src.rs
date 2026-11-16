@@ -71,7 +71,7 @@ pub(super) fn ty_red_app() -> String {
 
 pub(super) fn val_red_app() -> String {
     let xl = xval_lifted();
-    format!("fun (D : Nat -> Sk) (A : KExpr) (B : KExpr) (hA : WKC D A Sk.ty) (hB : WKC D B Sk.ty) (r : VEnvD D) (f : KExpr) (a : KExpr) (hf : r24_RedAt D (r25_arrow A B) (r25_arrowWkc D A B hA hB) r f) (ha : r24_RedAt D A hA r a) => Eq.substType (VD Sk.ty) (fun (qv : VD Sk.ty) => qv (KExpr.app f a)) {xl} (xval D B Sk.ty hB r) (r20_xval_lift0 D B Sk.ty hB Sk.ty (junkD Sk.ty) r) (hf a ha)")
+    format!("fun (D : Nat -> Sk) (A : KExpr) (B : KExpr) (hA : WKC D A Sk.ty) (hB : WKC D B Sk.ty) (r : VEnvD D) (f : KExpr) (a : KExpr) (hf : r24_RedAt D (r25_arrow A B) (r25_arrowWkc D A B hA hB) r f) (ha : r24_RedAt D A hA r a) => @Eq.substType (VD Sk.ty) (fun (qv : VD Sk.ty) => qv (KExpr.app f a)) {xl} (xval D B Sk.ty hB r) (r20_xval_lift0 D B Sk.ty hB Sk.ty (junkD Sk.ty) r) (hf a ha)")
 }
 
 /// **`r25_red_lam` — THE INTRODUCTION RULE**, and the `lam` case.
@@ -91,7 +91,7 @@ pub(super) fn ty_red_lam() -> String {
 pub(super) fn val_red_lam() -> String {
     let xl = xval_lifted();
     let redex = "(KExpr.app (KExpr.lam ann b) a)";
-    format!("fun (D : Nat -> Sk) (A : KExpr) (B : KExpr) (hA : WKC D A Sk.ty) (hB : WKC D B Sk.ty) (r : VEnvD D) (hr : GoodEnvD D r) (ann : KExpr) (hann : whnf_acc ann) (b : KExpr) (hb : whnf_acc b) (hfam : forall (b2 : KExpr), betaStar b b2 -> forall (a2 : KExpr), r24_RedAt D A hA r a2 -> r24_RedAt D B hB r (instantiate b2 a2)) (a : KExpr) (ha : r24_RedAt D A hA r a) => Eq.substType (VD Sk.ty) (fun (qv : VD Sk.ty) => qv {redex}) (xval D B Sk.ty hB r) {xl} (Eq.symm (VD Sk.ty) {xl} (xval D B Sk.ty hB r) (r20_xval_lift0 D B Sk.ty hB Sk.ty (junkD Sk.ty) r)) (r24_red_beta_expand D A B hA hB r hr ann hann b hb hfam a ha)")
+    format!("fun (D : Nat -> Sk) (A : KExpr) (B : KExpr) (hA : WKC D A Sk.ty) (hB : WKC D B Sk.ty) (r : VEnvD D) (hr : GoodEnvD D r) (ann : KExpr) (hann : whnf_acc ann) (b : KExpr) (hb : whnf_acc b) (hfam : forall (b2 : KExpr), betaStar b b2 -> forall (a2 : KExpr), r24_RedAt D A hA r a2 -> r24_RedAt D B hB r (instantiate b2 a2)) (a : KExpr) (ha : r24_RedAt D A hA r a) => @Eq.substType (VD Sk.ty) (fun (qv : VD Sk.ty) => qv {redex}) (xval D B Sk.ty hB r) {xl} (@Eq.symm (VD Sk.ty) {xl} (xval D B Sk.ty hB r) (r20_xval_lift0 D B Sk.ty hB Sk.ty (junkD Sk.ty) r)) (r24_red_beta_expand D A B hA hB r hr ann hann b hb hfam a ha)")
 }
 
 /// **`r25_red_arrow_is_the_function_space`** — the membership at an arrow type
@@ -105,12 +105,12 @@ pub(super) fn val_red_lam() -> String {
 /// `B`.
 pub(super) fn ty_red_arrow_unfolds() -> String {
     let xl = xval_lifted();
-    format!("forall (D : Nat -> Sk) (A : KExpr) (B : KExpr) (hA : WKC D A Sk.ty) (hB : WKC D B Sk.ty) (r : VEnvD D) (t : KExpr), Eq Type (r24_RedAt D (r25_arrow A B) (r25_arrowWkc D A B hA hB) r t) (forall (qa : KExpr), r24_RedAt D A hA r qa -> {xl} (KExpr.app t qa))")
+    format!("forall (D : Nat -> Sk) (A : KExpr) (B : KExpr) (hA : WKC D A Sk.ty) (hB : WKC D B Sk.ty) (r : VEnvD D) (t : KExpr), @Eq Type (r24_RedAt D (r25_arrow A B) (r25_arrowWkc D A B hA hB) r t) (forall (qa : KExpr), r24_RedAt D A hA r qa -> {xl} (KExpr.app t qa))")
 }
 
 pub(super) fn val_red_arrow_unfolds() -> String {
     let xl = xval_lifted();
-    format!("fun (D : Nat -> Sk) (A : KExpr) (B : KExpr) (hA : WKC D A Sk.ty) (hB : WKC D B Sk.ty) (r : VEnvD D) (t : KExpr) => Eq.refl Type (forall (qa : KExpr), r24_RedAt D A hA r qa -> {xl} (KExpr.app t qa))")
+    format!("fun (D : Nat -> Sk) (A : KExpr) (B : KExpr) (hA : WKC D A Sk.ty) (hB : WKC D B Sk.ty) (r : VEnvD D) (t : KExpr) => @Eq.refl Type (forall (qa : KExpr), r24_RedAt D A hA r qa -> {xl} (KExpr.app t qa))")
 }
 
 /// **`r25_red_arrow_members_sn`** — a term reducible at a function type

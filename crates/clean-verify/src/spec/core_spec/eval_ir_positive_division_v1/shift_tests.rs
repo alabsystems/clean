@@ -146,7 +146,7 @@ fn known_false_endpoints_fill_opcode_fuel_amount_and_width_have_unspent_type_mis
             "Nat.add ({q}) (Nat.sub ({fill_q}) (ir_nat_pow2 64))"
         ));
         let reversed_branch = scalar_result(&format!(
-            "Bool.rec (fun (_ : Bool) => Nat) (Nat.add ({q}) (Nat.sub (ir_nat_pow2 64) ({fill_q}))) ({q}) (ir_sign_bit 64 {minimum})"
+            "@Bool.rec (fun (_ : Bool) => Nat) (Nat.add ({q}) (Nat.sub (ir_nat_pow2 64) ({fill_q}))) ({q}) (ir_sign_bit 64 {minimum})"
         ));
         // Every mutant keeps the generic bridge first, so only the bounded
         // restoring side is normalized at large words. Amount/width mutations
@@ -257,7 +257,7 @@ fn known_false_endpoints_fill_opcode_fuel_amount_and_width_have_unspent_type_mis
                     &mut spec,
                     &valid,
                     &format!(
-                        "def {valid} : Eq IRStepResult ({actual}) (IRStepResult.value (IRScalar.int_ 0)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ 0))"
+                        "def {valid} : @Eq IRStepResult ({actual}) (IRStepResult.value (IRScalar.int_ 0)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ 0))"
                     ),
                 );
             } else {
@@ -337,7 +337,7 @@ fn eleventh_false_shift_source_rolls_back_the_entire_extension() {
         let mut rows = shifts::LAWS.to_vec();
         assert_eq!(rows.len(), 11);
         assert_eq!(rows[10].0, "ir_byte_ashr_i64_min_by_three_v1");
-        rows[10].1 = "def ir_byte_ashr_i64_min_by_three_v1 : Eq Nat Nat.zero (Nat.succ Nat.zero) := Eq.refl Nat (Nat.succ Nat.zero)";
+        rows[10].1 = "def ir_byte_ashr_i64_min_by_three_v1 : @Eq Nat Nat.zero (Nat.succ Nat.zero) := @Eq.refl Nat (Nat.succ Nat.zero)";
         let error = install_shift_transactionally(&mut spec, rows.into_iter())
             .expect_err("last false shift source must refuse after ten registrations");
         let detail = match error {

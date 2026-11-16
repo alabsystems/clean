@@ -367,7 +367,7 @@ fn last_false_arithmetic_row_rolls_back_all_preceding_rows() {
         assert_eq!(rows.len(), 49);
         let last = rows.last_mut().expect("fixed nonempty catalog");
         assert_eq!(last.0, "ir_rem_agrees_at_fuel");
-        last.1 = "def ir_rem_agrees_at_fuel : Eq Nat Nat.zero (Nat.succ Nat.zero) := Eq.refl Nat (Nat.succ Nat.zero)";
+        last.1 = "def ir_rem_agrees_at_fuel : @Eq Nat Nat.zero (Nat.succ Nat.zero) := @Eq.refl Nat (Nat.succ Nat.zero)";
         let error = install_transactionally(&mut spec, rows.into_iter())
             .expect_err("last false arithmetic claim must fail after earlier rows register");
         let detail = error.to_string();

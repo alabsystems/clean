@@ -837,10 +837,10 @@ where
             .map(|tag| format!("kcre_name_{tag}"))
             .map_err(|e| format!("{name}: {e}"))
     };
-    let mut params = String::from("(ListType.nil Name)");
+    let mut params = String::from("(@ListType.nil Name)");
     for param in info.level_params.iter().rev() {
         params = format!(
-            "(ListType.cons Name {} {params})",
+            "(@ListType.cons Name {} {params})",
             render_name(&param.to_string())?
         );
     }
@@ -904,9 +904,9 @@ fn render_kernel_expr(
             let _ = write!(out, "(KExpr.sort {})", lvl(l, rn)?);
         }
         ExprKind::Const(n, ls) => {
-            let mut levels = String::from("(ListType.nil Level)");
+            let mut levels = String::from("(@ListType.nil Level)");
             for l in ls.iter().rev() {
-                levels = format!("(ListType.cons Level {} {levels})", lvl(l, rn)?);
+                levels = format!("(@ListType.cons Level {} {levels})", lvl(l, rn)?);
             }
             let _ = write!(out, "(KExpr.const {} {levels})", rn(&n.to_string())?);
         }
@@ -966,9 +966,9 @@ pub(crate) fn render_literal(lit: &clean_kernel::Literal) -> String {
     match lit {
         clean_kernel::Literal::Nat(n) => format!("(literal_nat {})", bignat_decimal(n)),
         clean_kernel::Literal::String(s) => {
-            let mut list = String::from("(ListType.nil Nat)");
+            let mut list = String::from("(@ListType.nil Nat)");
             for c in s.chars().rev() {
-                list = format!("(ListType.cons Nat {} {list})", u32::from(c));
+                list = format!("(@ListType.cons Nat {} {list})", u32::from(c));
             }
             format!("(literal_string (string_lit_code {list}))")
         }
@@ -1066,9 +1066,9 @@ where
             .map(|tag| format!("kcre_name_{tag}"))
             .map_err(|e| format!("{name}: {e}"))
     };
-    let mut params = String::from("(ListType.nil Name)");
+    let mut params = String::from("(@ListType.nil Name)");
     for param in rec.level_params.iter().rev() {
-        params = format!("(ListType.cons Name {} {params})", render_name(param)?);
+        params = format!("(@ListType.cons Name {} {params})", render_name(param)?);
     }
     let meta = format!(
         "RecMeta.mk {} {} {} {} {} (KConstSig.mk {params} {}) {}",
@@ -1125,9 +1125,9 @@ fn render_image(
                 let _ = write!(out, "(KExpr.bvar {})", nat_atom(u64::from(*i)));
             }
             SpecExpr::Const(n, ls) => {
-                let mut levels = String::from("(ListType.nil Level)");
+                let mut levels = String::from("(@ListType.nil Level)");
                 for l in ls.iter().rev() {
-                    levels = format!("(ListType.cons Level {} {levels})", level(l, rn)?);
+                    levels = format!("(@ListType.cons Level {} {levels})", level(l, rn)?);
                 }
                 let _ = write!(out, "(KExpr.const {} {levels})", rn(n)?);
             }
@@ -2522,17 +2522,17 @@ impl Reflection {
     }
 
     fn render_levels(&self, ls: &[SpecLevel]) -> Result<String, ReflectError> {
-        let mut out = String::from("(ListType.nil Level)");
+        let mut out = String::from("(@ListType.nil Level)");
         for l in ls.iter().rev() {
-            out = format!("(ListType.cons Level {} {})", self.render_level(l)?, out);
+            out = format!("(@ListType.cons Level {} {})", self.render_level(l)?, out);
         }
         Ok(out)
     }
 
     fn render_params(&self, params: &[String]) -> Result<String, ReflectError> {
-        let mut out = String::from("(ListType.nil Name)");
+        let mut out = String::from("(@ListType.nil Name)");
         for param in params.iter().rev() {
-            out = format!("(ListType.cons Name {} {})", self.render_name(param)?, out);
+            out = format!("(@ListType.cons Name {} {})", self.render_name(param)?, out);
         }
         Ok(out)
     }
@@ -2590,7 +2590,7 @@ impl Reflection {
             };
             let _ = writeln!(out, "def {atom} : KConstSig := {value}");
         }
-        let mut lookup = "(OptionType.none KConstSig)".to_string();
+        let mut lookup = "(@OptionType.none KConstSig)".to_string();
         for (signature, atom) in self.nat_signatures.iter().zip(NAT_SIGNATURE_ATOMS).rev() {
             lookup = format!(
                 "(opt_pick KConstSig (name_eqb nm {}) {atom} {lookup})",
@@ -2618,7 +2618,7 @@ impl Reflection {
             out,
             "def kcre_ind_ctor_env_0 : IndCtorEnv := IndCtorEnv.empty"
         );
-        let mut lookup = "(OptionType.none KConstSig)".to_string();
+        let mut lookup = "(@OptionType.none KConstSig)".to_string();
         for ind in &self.inductives {
             let signature = self.metadata_atom(&ind.signature.name, "ind", "signature")?;
             let meta = self.metadata_atom(&ind.signature.name, "ind", "meta")?;
@@ -3029,11 +3029,11 @@ impl Reflection {
         let mut rhs = String::new();
         self.render_expr(&nat_zero.rhs, &mut rhs)?;
         let _ = writeln!(out, "def kcre_witness_nat_zero_rhs : KExpr := {rhs}");
-        let mut prefix = String::from("(ListType.nil KExpr)");
+        let mut prefix = String::from("(@ListType.nil KExpr)");
         for argument in nat_zero.prefix.iter().rev() {
             let mut rendered = String::new();
             self.render_expr(argument, &mut rendered)?;
-            prefix = format!("(ListType.cons KExpr {rendered} {prefix})");
+            prefix = format!("(@ListType.cons KExpr {rendered} {prefix})");
         }
         let _ = writeln!(out,
             "def kcre_witness_nat_zero_reduct : KExpr := apply_spine {prefix} (recursor_rhs_instance (recmeta_signature fixture_nat_rec_meta) kcre_witness_nat_zero_rhs kcre_witness_rec_levels)"
@@ -3402,13 +3402,13 @@ mod tests {
         let s = clean_kernel::Literal::String(std::sync::Arc::from("h\u{e9}\u{1f600}"));
         assert_eq!(
             render_literal(&s),
-            "(literal_string (string_lit_code (ListType.cons Nat 104 (ListType.cons Nat 233 \
-             (ListType.cons Nat 128512 (ListType.nil Nat))))))"
+            "(literal_string (string_lit_code (@ListType.cons Nat 104 (@ListType.cons Nat 233 \
+             (@ListType.cons Nat 128512 (@ListType.nil Nat))))))"
         );
         let empty = clean_kernel::Literal::String(std::sync::Arc::from(""));
         assert_eq!(
             render_literal(&empty),
-            "(literal_string (string_lit_code (ListType.nil Nat)))"
+            "(literal_string (string_lit_code (@ListType.nil Nat)))"
         );
         let small = clean_kernel::Literal::Nat(clean_kernel::BigNat::from_u64(55296));
         assert_eq!(render_literal(&small), "(literal_nat 55296)");
@@ -3736,7 +3736,7 @@ mod tests {
             .render_recursor_signature(rec)
             .expect("faithful signature");
         assert!(signature.starts_with(&format!(
-            "(KConstSig.mk (ListType.cons Name {z} (ListType.cons Name {a} (ListType.nil Name))) "
+            "(KConstSig.mk (@ListType.cons Name {z} (@ListType.cons Name {a} (@ListType.nil Name))) "
         )));
         assert!(signature.contains("Level.imax"));
         assert!(signature.contains("Level.max"));
@@ -3953,7 +3953,7 @@ mod tests {
                 format!("(KExpr.sort {expected_level})"),
                 Expr::app(Expr::const_str("KExpr.sort"), expected_term.clone())),
             (Expr::const_str_levels("Head", vec![level]), SpecExpr::Const("Head".to_string(), vec![expected]),
-                format!("(KExpr.const kcre_name_2 (ListType.cons Level {expected_level} (ListType.nil Level)))"),
+                format!("(KExpr.const kcre_name_2 (@ListType.cons Level {expected_level} (@ListType.nil Level)))"),
                 Expr::apps(Expr::const_str("KExpr.const"), [
                     Expr::const_str("kcre_name_2"),
                     Expr::apps(Expr::const_str("ListType.cons"), [
@@ -4290,7 +4290,7 @@ mod tests {
         assert_eq!(
             reflection.render_definition(&reflection.defs[0]).expect("record rendering"),
             format!(
-                "(KDefSig.mk (KConstSig.mk (ListType.cons Name {z} (ListType.cons Name {a} (ListType.nil Name))) (KExpr.const {type_name} (ListType.cons Level (Level.param {z}) (ListType.nil Level)))) (KExpr.const {value_name} (ListType.cons Level (Level.param {a}) (ListType.nil Level))))"
+                "(KDefSig.mk (KConstSig.mk (@ListType.cons Name {z} (@ListType.cons Name {a} (@ListType.nil Name))) (KExpr.const {type_name} (@ListType.cons Level (Level.param {z}) (@ListType.nil Level)))) (KExpr.const {value_name} (@ListType.cons Level (Level.param {a}) (@ListType.nil Level))))"
             ),
             "one signature owns the original ordered params and type; value is separate"
         );
@@ -5006,7 +5006,7 @@ mod tests {
         for line in script.lines() {
             clean_parser::parse_decl(line).expect("each rendered witness definition parses");
         }
-        assert!(script.contains("def kcre_witness_rec_levels : ListType Level := (ListType.cons Level Level.zero (ListType.nil Level))"));
+        assert!(script.contains("def kcre_witness_rec_levels : ListType Level := (@ListType.cons Level Level.zero (@ListType.nil Level))"));
         assert!(script.contains("recursor_rhs_instance (recmeta_signature fixture_nat_rec_meta) kcre_witness_nat_zero_rhs kcre_witness_rec_levels"));
         let error = reflection
             .def_script()

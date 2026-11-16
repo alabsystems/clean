@@ -7,21 +7,21 @@ use crate::test_utils::{build_spec_with_stack, run_with_stack};
 use clean_kernel::{ConstantKind, ExprKind, Name};
 
 const NEGATIVE_CONTROLS: &[&str] = &[
-    r"def projection_metadata_forged_bound_success : Eq (OptionType ProjectionMetadataResult)
+    r"def projection_metadata_forged_bound_success : @Eq (OptionType ProjectionMetadataResult)
  (projection_resolve projection_metadata_control_env (Nat.succ Nat.zero) Name.anonymous (Nat.succ Nat.zero) projection_metadata_control_type)
- (OptionType.some ProjectionMetadataResult projection_metadata_control_result) := Eq.refl (OptionType ProjectionMetadataResult) (OptionType.some ProjectionMetadataResult projection_metadata_control_result)",
-    r"def projection_metadata_forged_universe_success : Eq (OptionType ProjectionMetadataResult)
- (projection_resolve projection_metadata_control_env (Nat.succ Nat.zero) Name.anonymous Nat.zero (KExpr.const Name.anonymous (ListType.cons Level Level.zero (ListType.nil Level))))
- (OptionType.some ProjectionMetadataResult projection_metadata_control_result) := Eq.refl (OptionType ProjectionMetadataResult) (OptionType.some ProjectionMetadataResult projection_metadata_control_result)",
+ (@OptionType.some ProjectionMetadataResult projection_metadata_control_result) := @Eq.refl (OptionType ProjectionMetadataResult) (@OptionType.some ProjectionMetadataResult projection_metadata_control_result)",
+    r"def projection_metadata_forged_universe_success : @Eq (OptionType ProjectionMetadataResult)
+ (projection_resolve projection_metadata_control_env (Nat.succ Nat.zero) Name.anonymous Nat.zero (KExpr.const Name.anonymous (@ListType.cons Level Level.zero (@ListType.nil Level))))
+ (@OptionType.some ProjectionMetadataResult projection_metadata_control_result) := @Eq.refl (OptionType ProjectionMetadataResult) (@OptionType.some ProjectionMetadataResult projection_metadata_control_result)",
     r"def projection_metadata_forged_parent_agreement : ProjectionMetadataAgreement projection_metadata_control_tenv Name.anonymous projection_metadata_wrong_parent_result :=
- ProjectionMetadataAgreement.mk projection_metadata_control_tenv Name.anonymous projection_metadata_wrong_parent_result
- (Eq.refl (OptionType KConstSig) (OptionType.some KConstSig (kind_sig projection_metadata_control_ind)))
- (Eq.refl (OptionType KConstSig) (OptionType.some KConstSig projection_metadata_control_sig))
- (Eq.refl (ListType Name) (ListType.nil Name)) (Eq.refl Name Name.anonymous) (Eq.refl Nat Nat.zero) (Eq.refl Nat Nat.zero)",
+ @ProjectionMetadataAgreement.mk projection_metadata_control_tenv Name.anonymous projection_metadata_wrong_parent_result
+ (@Eq.refl (OptionType KConstSig) (@OptionType.some KConstSig (kind_sig projection_metadata_control_ind)))
+ (@Eq.refl (OptionType KConstSig) (@OptionType.some KConstSig projection_metadata_control_sig))
+ (@Eq.refl (ListType Name) (@ListType.nil Name)) (@Eq.refl Name Name.anonymous) (@Eq.refl Nat Nat.zero) (@Eq.refl Nat Nat.zero)",
     r"def projection_metadata_forged_order_agreement : ProjectionUniverseCoherence
- (ListType.cons Name Name.anonymous (ListType.cons Name projection_metadata_control_cn (ListType.nil Name)))
- (KConstSig.mk (ListType.cons Name projection_metadata_control_cn (ListType.cons Name Name.anonymous (ListType.nil Name))) (KExpr.sort Level.zero)) :=
- Eq.refl (ListType Name) (ListType.cons Name Name.anonymous (ListType.cons Name projection_metadata_control_cn (ListType.nil Name)))",
+ (@ListType.cons Name Name.anonymous (@ListType.cons Name projection_metadata_control_cn (@ListType.nil Name)))
+ (KConstSig.mk (@ListType.cons Name projection_metadata_control_cn (@ListType.cons Name Name.anonymous (@ListType.nil Name))) (KExpr.sort Level.zero)) :=
+ @Eq.refl (ListType Name) (@ListType.cons Name Name.anonymous (@ListType.cons Name projection_metadata_control_cn (@ListType.nil Name)))",
 ];
 
 #[test]

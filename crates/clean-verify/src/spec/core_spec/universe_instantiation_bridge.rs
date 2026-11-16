@@ -48,13 +48,13 @@ impl Specification {
             "universe_bridge_congr2",
             r"forall (A : Type) (B : Type) (C : Type) (f : A -> B -> C)
     (a : A) (a2 : A) (b : B) (b2 : B)
-    (ha : Eq A a a2) (hb : Eq B b b2), Eq C (f a b) (f a2 b2)",
+    (ha : @Eq A a a2) (hb : @Eq B b b2), @Eq C (f a b) (f a2 b2)",
             r"fun (A : Type) (B : Type) (C : Type) (f : A -> B -> C)
     (a : A) (a2 : A) (b : B) (b2 : B)
-    (ha : Eq A a a2) (hb : Eq B b b2) =>
-  Eq.trans C (f a b) (f a2 b) (f a2 b2)
-    (Eq.cong A C (fun (x : A) => f x b) a a2 ha)
-    (Eq.cong B C (fun (y : B) => f a2 y) b b2 hb)",
+    (ha : @Eq A a a2) (hb : @Eq B b b2) =>
+  @Eq.trans C (f a b) (f a2 b) (f a2 b2)
+    (@Eq.cong A C (fun (x : A) => f x b) a a2 ha)
+    (@Eq.cong B C (fun (y : B) => f a2 y) b b2 hb)",
             "Two-argument congruence for the level, list and expression constructors in the raw instantiation bridge.",
         )?;
         Ok(())
@@ -66,26 +66,26 @@ impl Specification {
             self,
             "level_subst_eq_substL",
             r"forall (ps : ListType Name) (us : ListType Level)
-    (arity : Eq Nat (name_list_len ps) (level_list_len us)) (l : Level),
-    Eq Level (level_subst ps us l) (substL (paramSubstN ps us) l)",
+    (arity : @Eq Nat (name_list_len ps) (level_list_len us)) (l : Level),
+    @Eq Level (level_subst ps us l) (substL (paramSubstN ps us) l)",
             r"fun (ps : ListType Name) (us : ListType Level)
-    (arity : Eq Nat (name_list_len ps) (level_list_len us)) (l : Level) =>
-  Level.rec (fun (l0 : Level) =>
-    Eq Level (level_subst ps us l0) (substL (paramSubstN ps us) l0))
-    (Eq.refl Level Level.zero)
+    (arity : @Eq Nat (name_list_len ps) (level_list_len us)) (l : Level) =>
+  @Level.rec (fun (l0 : Level) =>
+    @Eq Level (level_subst ps us l0) (substL (paramSubstN ps us) l0))
+    (@Eq.refl Level Level.zero)
     (fun (u : Level)
-      (ih : Eq Level (level_subst ps us u) (substL (paramSubstN ps us) u)) =>
+      (ih : @Eq Level (level_subst ps us u) (substL (paramSubstN ps us) u)) =>
         Eq.cong Level Level Level.succ
           (level_subst ps us u) (substL (paramSubstN ps us) u) ih)
     (fun (u : Level) (v : Level)
-      (ihu : Eq Level (level_subst ps us u) (substL (paramSubstN ps us) u))
-      (ihv : Eq Level (level_subst ps us v) (substL (paramSubstN ps us) v)) =>
+      (ihu : @Eq Level (level_subst ps us u) (substL (paramSubstN ps us) u))
+      (ihv : @Eq Level (level_subst ps us v) (substL (paramSubstN ps us) v)) =>
         universe_bridge_congr2 Level Level Level Level.max
           (level_subst ps us u) (substL (paramSubstN ps us) u)
           (level_subst ps us v) (substL (paramSubstN ps us) v) ihu ihv)
     (fun (u : Level) (v : Level)
-      (ihu : Eq Level (level_subst ps us u) (substL (paramSubstN ps us) u))
-      (ihv : Eq Level (level_subst ps us v) (substL (paramSubstN ps us) v)) =>
+      (ihu : @Eq Level (level_subst ps us u) (substL (paramSubstN ps us) u))
+      (ihv : @Eq Level (level_subst ps us v) (substL (paramSubstN ps us) v)) =>
         universe_bridge_congr2 Level Level Level Level.imax
           (level_subst ps us u) (substL (paramSubstN ps us) u)
           (level_subst ps us v) (substL (paramSubstN ps us) v) ihu ihv)
@@ -99,20 +99,20 @@ impl Specification {
             self,
             "impl_inst_levels_list_eq_mapLL",
             r"forall (ps : ListType Name) (us : ListType Level)
-    (arity : Eq Nat (name_list_len ps) (level_list_len us)) (vs : ListType Level),
-    Eq (ListType Level) (impl_inst_levels_list ps us vs)
+    (arity : @Eq Nat (name_list_len ps) (level_list_len us)) (vs : ListType Level),
+    @Eq (ListType Level) (impl_inst_levels_list ps us vs)
       (mapLL (substL (paramSubstN ps us)) vs)",
             r"fun (ps : ListType Name) (us : ListType Level)
-    (arity : Eq Nat (name_list_len ps) (level_list_len us)) (vs : ListType Level) =>
-  ListType.rec Level (fun (vs0 : ListType Level) =>
-      Eq (ListType Level) (impl_inst_levels_list ps us vs0)
+    (arity : @Eq Nat (name_list_len ps) (level_list_len us)) (vs : ListType Level) =>
+  @ListType.rec Level (fun (vs0 : ListType Level) =>
+      @Eq (ListType Level) (impl_inst_levels_list ps us vs0)
         (mapLL (substL (paramSubstN ps us)) vs0))
-    (Eq.refl (ListType Level) (ListType.nil Level))
+    (@Eq.refl (ListType Level) (@ListType.nil Level))
     (fun (v : Level) (rest : ListType Level)
-      (ih : Eq (ListType Level) (impl_inst_levels_list ps us rest)
+      (ih : @Eq (ListType Level) (impl_inst_levels_list ps us rest)
         (mapLL (substL (paramSubstN ps us)) rest)) =>
       universe_bridge_congr2 Level (ListType Level) (ListType Level)
-        (fun (head : Level) (tail : ListType Level) => ListType.cons Level head tail)
+        (fun (head : Level) (tail : ListType Level) => @ListType.cons Level head tail)
         (level_subst ps us v) (substL (paramSubstN ps us) v)
         (impl_inst_levels_list ps us rest) (mapLL (substL (paramSubstN ps us)) rest)
         (level_subst_eq_substL ps us arity v) ih) vs",
@@ -123,12 +123,12 @@ impl Specification {
             self,
             "instL_preserves_impl_literal",
             r"forall (s : Name -> Level) (lt : ImplLit),
-    Eq KExpr (impl_lit_to_kexpr lt) (instL s (impl_lit_to_kexpr lt))",
+    @Eq KExpr (impl_lit_to_kexpr lt) (instL s (impl_lit_to_kexpr lt))",
             r"fun (s : Name -> Level) (lt : ImplLit) =>
-  ImplLit.rec (fun (lt0 : ImplLit) =>
-      Eq KExpr (impl_lit_to_kexpr lt0) (instL s (impl_lit_to_kexpr lt0)))
-    (fun (n : Nat) => Eq.refl KExpr (literal_nat n))
-    (fun (n : Nat) => Eq.refl KExpr (literal_string n)) lt",
+  @ImplLit.rec (fun (lt0 : ImplLit) =>
+      @Eq KExpr (impl_lit_to_kexpr lt0) (instL s (impl_lit_to_kexpr lt0)))
+    (fun (n : Nat) => @Eq.refl KExpr (literal_nat n))
+    (fun (n : Nat) => @Eq.refl KExpr (literal_string n)) lt",
             "Raw universe substitution leaves both tagged model literal kinds unchanged, for every payload.",
         )?;
 
@@ -139,7 +139,7 @@ impl Specification {
         let rhs = |e: &str, d: &str| format!("(instLevels ps (to_kexpr_at {e} rho {d}) us)");
         let ih = |e: &str| {
             format!(
-                "forall (rho : ListType Nat) (d : Nat), Eq KExpr {} {}",
+                "forall (rho : ListType Nat) (d : Nat), @Eq KExpr {} {}",
                 lhs(e, "d"),
                 rhs(e, "d")
             )
@@ -162,12 +162,12 @@ impl Specification {
         };
         let value = format!(
             r"fun (ps : ListType Name) (us : ListType Level)
-    (arity : Eq Nat (name_list_len ps) (level_list_len us)) (e : ImplExpr)
+    (arity : @Eq Nat (name_list_len ps) (level_list_len us)) (e : ImplExpr)
     (rho : ListType Nat) (d : Nat) =>
-  ImplExpr.rec (fun (e0 : ImplExpr) => {motive})
-    (fun (i : Nat) (_rho : ListType Nat) (_d : Nat) => Eq.refl KExpr (KExpr.bvar i))
+  @ImplExpr.rec (fun (e0 : ImplExpr) => {motive})
+    (fun (i : Nat) (_rho : ListType Nat) (_d : Nat) => @Eq.refl KExpr (KExpr.bvar i))
     (fun (y : Nat) (rho : ListType Nat) (d : Nat) =>
-      Eq.refl KExpr (KExpr.bvar (Nat.add (rho_index rho y) d)))
+      @Eq.refl KExpr (KExpr.bvar (Nat.add (rho_index rho y) d)))
     (fun (l : Level) (_rho : ListType Nat) (_d : Nat) =>
       Eq.cong Level KExpr KExpr.sort (level_subst ps us l) (substL (paramSubstN ps us) l)
         (level_subst_eq_substL ps us arity l))
@@ -206,9 +206,9 @@ impl Specification {
             self,
             "to_kexpr_at_impl_inst_levels",
             r"forall (ps : ListType Name) (us : ListType Level)
-    (arity : Eq Nat (name_list_len ps) (level_list_len us)) (e : ImplExpr)
+    (arity : @Eq Nat (name_list_len ps) (level_list_len us)) (e : ImplExpr)
     (rho : ListType Nat) (d : Nat),
-    Eq KExpr (to_kexpr_at (impl_inst_levels ps us e) rho d)
+    @Eq KExpr (to_kexpr_at (impl_inst_levels ps us e) rho d)
       (instLevels ps (to_kexpr_at e rho d) us)",
             &value,
             "Translation commutes with raw model universe instantiation, at every renaming and binder depth, under checked arity. All ten current ImplExpr constructors are covered. This does not connect the actual Rust substitution implementation.",
@@ -218,12 +218,12 @@ impl Specification {
             self,
             "to_kexpr_impl_inst_levels",
             r"forall (ps : ListType Name) (us : ListType Level)
-    (arity : Eq Nat (name_list_len ps) (level_list_len us)) (e : ImplExpr)
+    (arity : @Eq Nat (name_list_len ps) (level_list_len us)) (e : ImplExpr)
     (rho : ListType Nat),
-    Eq KExpr (to_kexpr (impl_inst_levels ps us e) rho)
+    @Eq KExpr (to_kexpr (impl_inst_levels ps us e) rho)
       (instLevels ps (to_kexpr e rho) us)",
             r"fun (ps : ListType Name) (us : ListType Level)
-    (arity : Eq Nat (name_list_len ps) (level_list_len us)) (e : ImplExpr)
+    (arity : @Eq Nat (name_list_len ps) (level_list_len us)) (e : ImplExpr)
     (rho : ListType Nat) =>
   to_kexpr_at_impl_inst_levels ps us arity e rho Nat.zero",
             "Depth-zero raw instantiation/translation equation for the constant-inference bridge; universe arity is a required premise.",
@@ -232,21 +232,21 @@ impl Specification {
         instantiation_theorem(
             self,
             "to_kexpr_instantiated_binder_witness",
-            r"Eq KExpr
+            r"@Eq KExpr
     (to_kexpr
-      (impl_inst_levels (ListType.cons Name Name.anonymous (ListType.nil Name))
-        (ListType.cons Level (Level.succ Level.zero) (ListType.nil Level))
+      (impl_inst_levels (@ListType.cons Name Name.anonymous (@ListType.nil Name))
+        (@ListType.cons Level (Level.succ Level.zero) (@ListType.nil Level))
         (ImplExpr.lam (BinderData.mk BinderInfo.default Multiplicity.many)
           (ImplExpr.sort (Level.param Name.anonymous))
-          (ImplExpr.mdata (ImplExpr.bvar Nat.zero)))) (ListType.nil Nat))
+          (ImplExpr.mdata (ImplExpr.bvar Nat.zero)))) (@ListType.nil Nat))
     (KExpr.lam (KExpr.sort (Level.succ Level.zero)) (KExpr.bvar Nat.zero))",
             r"to_kexpr_impl_inst_levels
-    (ListType.cons Name Name.anonymous (ListType.nil Name))
-    (ListType.cons Level (Level.succ Level.zero) (ListType.nil Level))
-    (Eq.refl Nat (Nat.succ Nat.zero))
+    (@ListType.cons Name Name.anonymous (@ListType.nil Name))
+    (@ListType.cons Level (Level.succ Level.zero) (@ListType.nil Level))
+    (@Eq.refl Nat (Nat.succ Nat.zero))
     (ImplExpr.lam (BinderData.mk BinderInfo.default Multiplicity.many)
       (ImplExpr.sort (Level.param Name.anonymous))
-      (ImplExpr.mdata (ImplExpr.bvar Nat.zero))) (ListType.nil Nat)",
+      (ImplExpr.mdata (ImplExpr.bvar Nat.zero))) (@ListType.nil Nat)",
             "Nonempty universe-argument witness using the assembled commuting theorem: the lambda domain is instantiated, its bound variable survives, and metadata is erased.",
         )?;
         Ok(())
@@ -292,8 +292,8 @@ mod tests {
                 instantiation_theorem(
                     &mut spec,
                     "univ_inst_false_arity_must_fail",
-                    "Eq Nat (name_list_len (ListType.cons Name Name.anonymous (ListType.nil Name))) (level_list_len (ListType.nil Level))",
-                    "Eq.refl Nat Nat.zero",
+                    "@Eq Nat (name_list_len (@ListType.cons Name Name.anonymous (@ListType.nil Name))) (level_list_len (@ListType.nil Level))",
+                    "@Eq.refl Nat Nat.zero",
                     "Negative control: a missing universe argument does not satisfy the bridge's arity premise.",
                 )
                 .is_err(),
@@ -303,8 +303,8 @@ mod tests {
                 instantiation_theorem(
                     &mut spec,
                     "univ_inst_unchanged_sort_must_fail",
-                    "Eq KExpr (instLevels (ListType.cons Name Name.anonymous (ListType.nil Name)) (KExpr.sort (Level.param Name.anonymous)) (ListType.cons Level (Level.succ Level.zero) (ListType.nil Level))) (KExpr.sort (Level.param Name.anonymous))",
-                    "Eq.refl KExpr (KExpr.sort (Level.param Name.anonymous))",
+                    "@Eq KExpr (instLevels (@ListType.cons Name Name.anonymous (@ListType.nil Name)) (KExpr.sort (Level.param Name.anonymous)) (@ListType.cons Level (Level.succ Level.zero) (@ListType.nil Level))) (KExpr.sort (Level.param Name.anonymous))",
+                    "@Eq.refl KExpr (KExpr.sort (Level.param Name.anonymous))",
                     "Negative control: the nonempty polymorphic type is not universe-independent.",
                 )
                 .is_err(),

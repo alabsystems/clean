@@ -118,7 +118,7 @@ impl Specification {
     fn add_faithful_checker_defs(&mut self) -> Result<(), SpecError> {
         // opt_isnone: Bool "is none" test on OptionType (no in-tree twin).
         self.add_recursive_def(
-            r"def opt_isnone (alpha : Type) (o : OptionType alpha) : Bool := OptionType.rec alpha (fun (_ : OptionType alpha) => Bool) Bool.true (fun (_ : alpha) => Bool.false) o",
+            r"def opt_isnone (alpha : Type) (o : OptionType alpha) : Bool := @OptionType.rec alpha (fun (_ : OptionType alpha) => Bool) Bool.true (fun (_ : alpha) => Bool.false) o",
             "Bool none-test on OptionType: true iff the option is none. The per-element test of \
              the faithful-interface checkers (i1/i2/i7/i8). Kernel-evaluable. Front #1 Stage 3/4 \
              (faithful checkers).",
@@ -128,15 +128,15 @@ impl Specification {
         self.add_definition(Self::fchk_lemma(
             "opt_isnone_eq_none",
             "forall (alpha : Type) (o : OptionType alpha), \
-             Eq Bool (opt_isnone alpha o) Bool.true -> Eq (OptionType alpha) o (OptionType.none alpha)",
+             @Eq Bool (opt_isnone alpha o) Bool.true -> @Eq (OptionType alpha) o (@OptionType.none alpha)",
             "fun (alpha : Type) (o : OptionType alpha) => \
-             OptionType.rec alpha \
+             @OptionType.rec alpha \
              (fun (z : OptionType alpha) => \
-             Eq Bool (opt_isnone alpha z) Bool.true -> Eq (OptionType alpha) z (OptionType.none alpha)) \
-             (fun (_ : Eq Bool (opt_isnone alpha (OptionType.none alpha)) Bool.true) => \
-             Eq.refl (OptionType alpha) (OptionType.none alpha)) \
-             (fun (a : alpha) (h : Eq Bool (opt_isnone alpha (OptionType.some alpha a)) Bool.true) => \
-             bool_false_ne_true (Eq (OptionType alpha) (OptionType.some alpha a) (OptionType.none alpha)) h) \
+             @Eq Bool (opt_isnone alpha z) Bool.true -> @Eq (OptionType alpha) z (@OptionType.none alpha)) \
+             (fun (_ : @Eq Bool (opt_isnone alpha (@OptionType.none alpha)) Bool.true) => \
+             @Eq.refl (OptionType alpha) (@OptionType.none alpha)) \
+             (fun (a : alpha) (h : @Eq Bool (opt_isnone alpha (@OptionType.some alpha a)) Bool.true) => \
+             bool_false_ne_true (@Eq (OptionType alpha) (@OptionType.some alpha a) (@OptionType.none alpha)) h) \
              o",
             "opt_isnone inversion: opt_isnone o = true -> o = none. OptionType.rec; the some arm \
              is absurd (the checker whnf-evaluates to false; bool_false_ne_true). DerivedProved, \
@@ -167,14 +167,14 @@ impl Specification {
 
         // i2 folds (env0-carrying; explicit recursor style, nat_lt_b precedent).
         self.add_recursive_def(
-            r"def rec_rules_no_recmeta_b (env0 : RecEnv) (rs : RecRules) : Bool := RecRules.rec (fun (_ : RecRules) => Bool) Bool.true (fun (r : RecRule) (rest : RecRules) (ih : Bool) => Bool.and (opt_isnone RecMeta (recmeta_for env0 (recrule_ctor_name r))) ih) rs",
+            r"def rec_rules_no_recmeta_b (env0 : RecEnv) (rs : RecRules) : Bool := @RecRules.rec (fun (_ : RecRules) => Bool) Bool.true (fun (r : RecRule) (rest : RecRules) (ih : Bool) => Bool.and (opt_isnone RecMeta (recmeta_for env0 (recrule_ctor_name r))) ih) rs",
             "i2 checker (rules leg, lookup context env0 carried): every rule's constructor name \
              carries no recursor metadata in env0. Kernel-evaluable fold (explicit RecRules.rec). \
              Front #1 Stage 3/4 (faithful checkers).",
         )?;
 
         self.add_recursive_def(
-            r"def rec_env_no_recmeta_go_b (env0 : RecEnv) (env : RecEnv) : Bool := RecEnv.rec (fun (_ : RecEnv) => Bool) Bool.true (fun (tail : RecEnv) (rname : Name) (mta : RecMeta) (rules : RecRules) (ih : Bool) => Bool.and (rec_rules_no_recmeta_b env0 rules) ih) env",
+            r"def rec_env_no_recmeta_go_b (env0 : RecEnv) (env : RecEnv) : Bool := @RecEnv.rec (fun (_ : RecEnv) => Bool) Bool.true (fun (tail : RecEnv) (rname : Name) (mta : RecMeta) (rules : RecRules) (ih : Bool) => Bool.and (rec_rules_no_recmeta_b env0 rules) ih) env",
             "i2 checker (env leg): every registered rule list passes rec_rules_no_recmeta_b, with \
              the lookup context env0 fixed. Front #1 Stage 3/4 (faithful checkers).",
         )?;
@@ -189,7 +189,7 @@ impl Specification {
 
         // i7 fold (RecEnv lookup context carried).
         self.add_recursive_def(
-            r"def def_env_no_recmeta_b (renv : RecEnv) (denv : DefEnv) : Bool := DefEnv.rec (fun (_ : DefEnv) => Bool) Bool.true (fun (tail : DefEnv) (dname : Name) (defn : KDefSig) (ih : Bool) => Bool.and (opt_isnone RecMeta (recmeta_for renv dname)) ih) denv",
+            r"def def_env_no_recmeta_b (renv : RecEnv) (denv : DefEnv) : Bool := @DefEnv.rec (fun (_ : DefEnv) => Bool) Bool.true (fun (tail : DefEnv) (dname : Name) (defn : KDefSig) (ih : Bool) => Bool.and (opt_isnone RecMeta (recmeta_for renv dname)) ih) denv",
             "i7 checker (def-env leg, RecEnv lookup context carried): every defined name carries \
              no recursor metadata. Front #1 Stage 3/4 (faithful checkers).",
         )?;
@@ -203,13 +203,13 @@ impl Specification {
 
         // i8 folds (DefEnv lookup context carried).
         self.add_recursive_def(
-            r"def rec_rules_no_defval_b (denv : DefEnv) (rs : RecRules) : Bool := RecRules.rec (fun (_ : RecRules) => Bool) Bool.true (fun (r : RecRule) (rest : RecRules) (ih : Bool) => Bool.and (opt_isnone KExpr (defval_for denv (recrule_ctor_name r))) ih) rs",
+            r"def rec_rules_no_defval_b (denv : DefEnv) (rs : RecRules) : Bool := @RecRules.rec (fun (_ : RecRules) => Bool) Bool.true (fun (r : RecRule) (rest : RecRules) (ih : Bool) => Bool.and (opt_isnone KExpr (defval_for denv (recrule_ctor_name r))) ih) rs",
             "i8 checker (rules leg, DefEnv lookup context carried): every rule's constructor name \
              carries no def value. Front #1 Stage 3/4 (faithful checkers).",
         )?;
 
         self.add_recursive_def(
-            r"def rec_env_no_defval_go_b (denv : DefEnv) (env : RecEnv) : Bool := RecEnv.rec (fun (_ : RecEnv) => Bool) Bool.true (fun (tail : RecEnv) (rname : Name) (mta : RecMeta) (rules : RecRules) (ih : Bool) => Bool.and (rec_rules_no_defval_b denv rules) ih) env",
+            r"def rec_env_no_defval_go_b (denv : DefEnv) (env : RecEnv) : Bool := @RecEnv.rec (fun (_ : RecEnv) => Bool) Bool.true (fun (tail : RecEnv) (rname : Name) (mta : RecMeta) (rules : RecRules) (ih : Bool) => Bool.and (rec_rules_no_defval_b denv rules) ih) env",
             "i8 checker (env leg): every registered rule list passes rec_rules_no_defval_b, with \
              the DefEnv lookup context fixed. Front #1 Stage 3/4 (faithful checkers).",
         )?;
@@ -228,7 +228,7 @@ impl Specification {
     /// and the GENERIC discharge `rec_env_reduct_not_redex_of_b`.
     fn add_faithful_checker_i1_soundness(&mut self) -> Result<(), SpecError> {
         const RNR: &str =
-            "Eq (OptionType Name) (kexpr_const_name (kapp_fn (recrule_rhs rule))) (OptionType.none Name)";
+            "@Eq (OptionType Name) (kexpr_const_name (kapp_fn (recrule_rhs rule))) (@OptionType.none Name)";
 
         // rec_rules_rnr_b_sound: rules-level fold membership (conclusion keyed
         // on the returned rule, so the fire branch transports along r = rule).
@@ -236,34 +236,34 @@ impl Specification {
             "rec_rules_rnr_b_sound",
             &format!(
                 "forall (rs : RecRules) (cname : Name) (rule : RecRule), \
-                 Eq (OptionType RecRule) (recrule_in_rules rs cname) (OptionType.some RecRule rule) -> \
-                 Eq Bool (rec_rules_rnr_b rs) Bool.true -> {RNR}"
+                 @Eq (OptionType RecRule) (recrule_in_rules rs cname) (@OptionType.some RecRule rule) -> \
+                 @Eq Bool (rec_rules_rnr_b rs) Bool.true -> {RNR}"
             ),
             &format!(
                 "fun (rs : RecRules) (cname : Name) (rule : RecRule) => \
-                 RecRules.rec \
+                 @RecRules.rec \
                  (fun (l : RecRules) => \
-                 Eq (OptionType RecRule) (recrule_in_rules l cname) (OptionType.some RecRule rule) -> \
-                 Eq Bool (rec_rules_rnr_b l) Bool.true -> {RNR}) \
-                 (fun (hlk : Eq (OptionType RecRule) (recrule_in_rules RecRules.nil cname) (OptionType.some RecRule rule)) \
-                 (_hb : Eq Bool (rec_rules_rnr_b RecRules.nil) Bool.true) => \
+                 @Eq (OptionType RecRule) (recrule_in_rules l cname) (@OptionType.some RecRule rule) -> \
+                 @Eq Bool (rec_rules_rnr_b l) Bool.true -> {RNR}) \
+                 (fun (hlk : @Eq (OptionType RecRule) (recrule_in_rules RecRules.nil cname) (@OptionType.some RecRule rule)) \
+                 (_hb : @Eq Bool (rec_rules_rnr_b RecRules.nil) Bool.true) => \
                  option_none_ne_some RecRule rule ({RNR}) hlk) \
                  (fun (r : RecRule) (rest : RecRules) \
-                 (ih : Eq (OptionType RecRule) (recrule_in_rules rest cname) (OptionType.some RecRule rule) -> \
-                 Eq Bool (rec_rules_rnr_b rest) Bool.true -> {RNR}) \
-                 (hlk : Eq (OptionType RecRule) (recrule_in_rules (RecRules.cons r rest) cname) (OptionType.some RecRule rule)) \
-                 (hb : Eq Bool (rec_rules_rnr_b (RecRules.cons r rest)) Bool.true) => \
+                 (ih : @Eq (OptionType RecRule) (recrule_in_rules rest cname) (@OptionType.some RecRule rule) -> \
+                 @Eq Bool (rec_rules_rnr_b rest) Bool.true -> {RNR}) \
+                 (hlk : @Eq (OptionType RecRule) (recrule_in_rules (RecRules.cons r rest) cname) (@OptionType.some RecRule rule)) \
+                 (hb : @Eq Bool (rec_rules_rnr_b (RecRules.cons r rest)) Bool.true) => \
                  opt_pick_some_inv RecRule (name_eqb (recrule_ctor_name r) cname) r \
                  (recrule_in_rules rest cname) rule ({RNR}) hlk \
-                 (fun (_ht : Eq Bool (name_eqb (recrule_ctor_name r) cname) Bool.true) \
-                 (hval : Eq RecRule r rule) => \
-                 Eq.subst RecRule \
-                 (fun (z : RecRule) => Eq (OptionType Name) (kexpr_const_name (kapp_fn (recrule_rhs z))) (OptionType.none Name)) \
+                 (fun (_ht : @Eq Bool (name_eqb (recrule_ctor_name r) cname) Bool.true) \
+                 (hval : @Eq RecRule r rule) => \
+                 @Eq.subst RecRule \
+                 (fun (z : RecRule) => @Eq (OptionType Name) (kexpr_const_name (kapp_fn (recrule_rhs z))) (@OptionType.none Name)) \
                  r rule hval \
                  (opt_isnone_eq_none Name (kexpr_const_name (kapp_fn (recrule_rhs r))) \
                  (band_eq_true_left (opt_isnone Name (kexpr_const_name (kapp_fn (recrule_rhs r)))) (rec_rules_rnr_b rest) hb))) \
-                 (fun (_hf : Eq Bool (name_eqb (recrule_ctor_name r) cname) Bool.false) \
-                 (hrest : Eq (OptionType RecRule) (recrule_in_rules rest cname) (OptionType.some RecRule rule)) => \
+                 (fun (_hf : @Eq Bool (name_eqb (recrule_ctor_name r) cname) Bool.false) \
+                 (hrest : @Eq (OptionType RecRule) (recrule_in_rules rest cname) (@OptionType.some RecRule rule)) => \
                  ih hrest \
                  (band_eq_true_right (opt_isnone Name (kexpr_const_name (kapp_fn (recrule_rhs r)))) (rec_rules_rnr_b rest) hb))) \
                  rs"
@@ -297,36 +297,36 @@ impl Specification {
         self.add_definition(Self::fchk_lemma(
             "rec_env_rnr_b_sound",
             "forall (env : RecEnv) (rname : Name) (rules : RecRules), \
-             Eq (OptionType RecRules) (recrules_for env rname) (OptionType.some RecRules rules) -> \
-             Eq Bool (rec_env_rnr_b env) Bool.true -> \
-             Eq Bool (rec_rules_rnr_b rules) Bool.true",
+             @Eq (OptionType RecRules) (recrules_for env rname) (@OptionType.some RecRules rules) -> \
+             @Eq Bool (rec_env_rnr_b env) Bool.true -> \
+             @Eq Bool (rec_rules_rnr_b rules) Bool.true",
             "fun (env : RecEnv) (rname : Name) (rules : RecRules) => \
-             RecEnv.rec \
+             @RecEnv.rec \
              (fun (e : RecEnv) => \
-             Eq (OptionType RecRules) (recrules_for e rname) (OptionType.some RecRules rules) -> \
-             Eq Bool (rec_env_rnr_b e) Bool.true -> \
-             Eq Bool (rec_rules_rnr_b rules) Bool.true) \
-             (fun (hlk : Eq (OptionType RecRules) (recrules_for RecEnv.empty rname) (OptionType.some RecRules rules)) \
-             (_hb : Eq Bool (rec_env_rnr_b RecEnv.empty) Bool.true) => \
+             @Eq (OptionType RecRules) (recrules_for e rname) (@OptionType.some RecRules rules) -> \
+             @Eq Bool (rec_env_rnr_b e) Bool.true -> \
+             @Eq Bool (rec_rules_rnr_b rules) Bool.true) \
+             (fun (hlk : @Eq (OptionType RecRules) (recrules_for RecEnv.empty rname) (@OptionType.some RecRules rules)) \
+             (_hb : @Eq Bool (rec_env_rnr_b RecEnv.empty) Bool.true) => \
              option_none_ne_some RecRules rules \
-             (Eq Bool (rec_rules_rnr_b rules) Bool.true) hlk) \
+             (@Eq Bool (rec_rules_rnr_b rules) Bool.true) hlk) \
              (fun (tail : RecEnv) (rn : Name) (mta : RecMeta) (rls : RecRules) \
-             (ih : Eq (OptionType RecRules) (recrules_for tail rname) (OptionType.some RecRules rules) -> \
-             Eq Bool (rec_env_rnr_b tail) Bool.true -> \
-             Eq Bool (rec_rules_rnr_b rules) Bool.true) \
-             (hlk : Eq (OptionType RecRules) (recrules_for (RecEnv.addRec tail rn mta rls) rname) (OptionType.some RecRules rules)) \
-             (hb : Eq Bool (rec_env_rnr_b (RecEnv.addRec tail rn mta rls)) Bool.true) => \
+             (ih : @Eq (OptionType RecRules) (recrules_for tail rname) (@OptionType.some RecRules rules) -> \
+             @Eq Bool (rec_env_rnr_b tail) Bool.true -> \
+             @Eq Bool (rec_rules_rnr_b rules) Bool.true) \
+             (hlk : @Eq (OptionType RecRules) (recrules_for (RecEnv.addRec tail rn mta rls) rname) (@OptionType.some RecRules rules)) \
+             (hb : @Eq Bool (rec_env_rnr_b (RecEnv.addRec tail rn mta rls)) Bool.true) => \
              opt_pick_some_inv RecRules (name_eqb rn rname) rls \
              (recrules_for tail rname) rules \
-             (Eq Bool (rec_rules_rnr_b rules) Bool.true) hlk \
-             (fun (_ht : Eq Bool (name_eqb rn rname) Bool.true) \
-             (hval : Eq RecRules rls rules) => \
-             Eq.subst RecRules \
-             (fun (z : RecRules) => Eq Bool (rec_rules_rnr_b z) Bool.true) \
+             (@Eq Bool (rec_rules_rnr_b rules) Bool.true) hlk \
+             (fun (_ht : @Eq Bool (name_eqb rn rname) Bool.true) \
+             (hval : @Eq RecRules rls rules) => \
+             @Eq.subst RecRules \
+             (fun (z : RecRules) => @Eq Bool (rec_rules_rnr_b z) Bool.true) \
              rls rules hval \
              (band_eq_true_left (rec_rules_rnr_b rls) (rec_env_rnr_b tail) hb)) \
-             (fun (_hf : Eq Bool (name_eqb rn rname) Bool.false) \
-             (htail : Eq (OptionType RecRules) (recrules_for tail rname) (OptionType.some RecRules rules)) => \
+             (fun (_hf : @Eq Bool (name_eqb rn rname) Bool.false) \
+             (htail : @Eq (OptionType RecRules) (recrules_for tail rname) (@OptionType.some RecRules rules)) => \
              ih htail \
              (band_eq_true_right (rec_rules_rnr_b rls) (rec_env_rnr_b tail) hb))) \
              env",
@@ -353,18 +353,18 @@ impl Specification {
             "recrule_for_rnr",
             &format!(
                 "forall (env : RecEnv) (recname : Name) (cname : Name) (rule : RecRule), \
-                 Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule) -> \
-                 Eq Bool (rec_env_rnr_b env) Bool.true -> {RNR}"
+                 @Eq (OptionType RecRule) (recrule_for env recname cname) (@OptionType.some RecRule rule) -> \
+                 @Eq Bool (rec_env_rnr_b env) Bool.true -> {RNR}"
             ),
             &format!(
                 "fun (env : RecEnv) (recname : Name) (cname : Name) (rule : RecRule) \
-                 (hlk : Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule)) \
-                 (hb : Eq Bool (rec_env_rnr_b env) Bool.true) => \
+                 (hlk : @Eq (OptionType RecRule) (recrule_for env recname cname) (@OptionType.some RecRule rule)) \
+                 (hb : @Eq Bool (rec_env_rnr_b env) Bool.true) => \
                  opt_bind_some_inv RecRules RecRule (recrules_for env recname) \
                  (fun (rules : RecRules) => recrule_in_rules rules cname) rule ({RNR}) hlk \
                  (fun (rules : RecRules) \
-                 (hrules : Eq (OptionType RecRules) (recrules_for env recname) (OptionType.some RecRules rules)) \
-                 (hin : Eq (OptionType RecRule) (recrule_in_rules rules cname) (OptionType.some RecRule rule)) => \
+                 (hrules : @Eq (OptionType RecRules) (recrules_for env recname) (@OptionType.some RecRules rules)) \
+                 (hin : @Eq (OptionType RecRule) (recrule_in_rules rules cname) (@OptionType.some RecRule rule)) => \
                  rec_rules_rnr_b_sound rules cname rule hin \
                  (rec_env_rnr_b_sound env recname rules hrules hb))"
             ),
@@ -399,44 +399,44 @@ impl Specification {
         // Strip the three apply_spine layers to the instantiated RHS head.
         // Universe instantiation preserves its name view, not its full level list.
         let kfreduct_eq = format!(
-            "(Eq.trans KExpr (kapp_fn {reduct_e}) (kapp_fn {inner2}) (kapp_fn {rhs_instance}) \
+            "(@Eq.trans KExpr (kapp_fn {reduct_e}) (kapp_fn {inner2}) (kapp_fn {rhs_instance}) \
              (kapp_fn_apply_spine {extras_e} {inner2}) \
-             (Eq.trans KExpr (kapp_fn {inner2}) (kapp_fn {inner3}) (kapp_fn {rhs_instance}) \
+             (@Eq.trans KExpr (kapp_fn {inner2}) (kapp_fn {inner3}) (kapp_fn {rhs_instance}) \
              (kapp_fn_apply_spine {fields_e} {inner3}) \
              (kapp_fn_apply_spine {prefix_e} {rhs_instance})))"
         );
         // kexpr_const_name (kapp_fn REDUCT) = none, via the checker chain.
         let head_none = format!(
-            "(Eq.trans (OptionType Name) (kexpr_const_name (kapp_fn {reduct_e})) \
-             (kexpr_const_name (kapp_fn {rhs_instance})) (OptionType.none Name) \
-             (Eq.cong KExpr (OptionType Name) kexpr_const_name (kapp_fn {reduct_e}) (kapp_fn {rhs_instance}) {kfreduct_eq}) \
-             (Eq.trans (OptionType Name) (kexpr_const_name (kapp_fn {rhs_instance})) \
-              (kexpr_const_name (kapp_fn (recrule_rhs rule))) (OptionType.none Name) \
+            "(@Eq.trans (OptionType Name) (kexpr_const_name (kapp_fn {reduct_e})) \
+             (kexpr_const_name (kapp_fn {rhs_instance})) (@OptionType.none Name) \
+             (@Eq.cong KExpr (OptionType Name) kexpr_const_name (kapp_fn {reduct_e}) (kapp_fn {rhs_instance}) {kfreduct_eq}) \
+             (@Eq.trans (OptionType Name) (kexpr_const_name (kapp_fn {rhs_instance})) \
+              (kexpr_const_name (kapp_fn (recrule_rhs rule))) (@OptionType.none Name) \
               (delta_head_name_instL {rhs_subst} (recrule_rhs rule)) \
               (recrule_for_rnr env recname cname rule h5 hb)))"
         );
         let i1_value = format!(
-            "fun (env : RecEnv) (hb : Eq Bool (rec_env_rnr_b env) Bool.true) => \
-             RecEnvReductNotRedex.mk env \
-             (fun (e : KExpr) (r : KExpr) (hyp : Eq (OptionType KExpr) (iota_reduct env e) (OptionType.some KExpr r)) => \
+            "fun (env : RecEnv) (hb : @Eq Bool (rec_env_rnr_b env) Bool.true) => \
+             @RecEnvReductNotRedex.mk env \
+             (fun (e : KExpr) (r : KExpr) (hyp : @Eq (OptionType KExpr) (iota_reduct env e) (@OptionType.some KExpr r)) => \
              iota_reduct_some_inv env e r \
-             (Eq (OptionType KExpr) (iota_reduct env r) (OptionType.none KExpr)) hyp \
+             (@Eq (OptionType KExpr) (iota_reduct env r) (@OptionType.none KExpr)) hyp \
              (fun (recname : Name) (meta : RecMeta) (major : KExpr) (cname : Name) (rule : RecRule) \
-             (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name recname)) \
-             (h2 : Eq (OptionType RecMeta) (recmeta_for env recname) (OptionType.some RecMeta meta)) \
-             (h3 : Eq (OptionType KExpr) (list_head (list_drop {major_idx} (kapp_args e))) (OptionType.some KExpr major)) \
-             (h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname)) \
-             (h5 : Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule)) \
-             (h5r : Eq (OptionType KExpr) (OptionType.some KExpr {reduct_e}) (OptionType.some KExpr r)) => \
-             Eq.substType KExpr \
-             (fun (x : KExpr) => Eq (OptionType KExpr) (iota_reduct env x) (OptionType.none KExpr)) \
+             (h1 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (@OptionType.some Name recname)) \
+             (h2 : @Eq (OptionType RecMeta) (recmeta_for env recname) (@OptionType.some RecMeta meta)) \
+             (h3 : @Eq (OptionType KExpr) (list_head (list_drop {major_idx} (kapp_args e))) (@OptionType.some KExpr major)) \
+             (h4 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (@OptionType.some Name cname)) \
+             (h5 : @Eq (OptionType RecRule) (recrule_for env recname cname) (@OptionType.some RecRule rule)) \
+             (h5r : @Eq (OptionType KExpr) (@OptionType.some KExpr {reduct_e}) (@OptionType.some KExpr r)) => \
+             @Eq.substType KExpr \
+             (fun (x : KExpr) => @Eq (OptionType KExpr) (iota_reduct env x) (@OptionType.none KExpr)) \
              {reduct_e} r (option_some_inj KExpr {reduct_e} r h5r) \
              (iota_reduct_head_none env {reduct_e} {head_none})))"
         );
         self.add_definition(Self::fchk_lemma(
             "rec_env_reduct_not_redex_of_b",
             "forall (env : RecEnv), \
-             Eq Bool (rec_env_rnr_b env) Bool.true -> RecEnvReductNotRedex env",
+             @Eq Bool (rec_env_rnr_b env) Bool.true -> RecEnvReductNotRedex env",
             &i1_value,
             "GENERIC i1 discharge: rec_env_rnr_b env = true -> RecEnvReductNotRedex env, for ANY \
              env. Invert the fired redex (iota_reduct_some_inv) to expose REDUCT = apply_spine .. \
@@ -477,40 +477,40 @@ impl Specification {
     /// the LOOKED-UP name via name_eqb_eq) + the generic discharge.
     fn add_faithful_checker_i2_soundness(&mut self) -> Result<(), SpecError> {
         const NOMETA: &str =
-            "Eq (OptionType RecMeta) (recmeta_for env0 cname) (OptionType.none RecMeta)";
+            "@Eq (OptionType RecMeta) (recmeta_for env0 cname) (@OptionType.none RecMeta)";
 
         self.add_definition(Self::fchk_lemma(
             "rec_rules_no_recmeta_b_sound",
             &format!(
                 "forall (env0 : RecEnv) (rs : RecRules) (cname : Name) (rule : RecRule), \
-                 Eq (OptionType RecRule) (recrule_in_rules rs cname) (OptionType.some RecRule rule) -> \
-                 Eq Bool (rec_rules_no_recmeta_b env0 rs) Bool.true -> {NOMETA}"
+                 @Eq (OptionType RecRule) (recrule_in_rules rs cname) (@OptionType.some RecRule rule) -> \
+                 @Eq Bool (rec_rules_no_recmeta_b env0 rs) Bool.true -> {NOMETA}"
             ),
             &format!(
                 "fun (env0 : RecEnv) (rs : RecRules) (cname : Name) (rule : RecRule) => \
-                 RecRules.rec \
+                 @RecRules.rec \
                  (fun (l : RecRules) => \
-                 Eq (OptionType RecRule) (recrule_in_rules l cname) (OptionType.some RecRule rule) -> \
-                 Eq Bool (rec_rules_no_recmeta_b env0 l) Bool.true -> {NOMETA}) \
-                 (fun (hlk : Eq (OptionType RecRule) (recrule_in_rules RecRules.nil cname) (OptionType.some RecRule rule)) \
-                 (_hb : Eq Bool (rec_rules_no_recmeta_b env0 RecRules.nil) Bool.true) => \
+                 @Eq (OptionType RecRule) (recrule_in_rules l cname) (@OptionType.some RecRule rule) -> \
+                 @Eq Bool (rec_rules_no_recmeta_b env0 l) Bool.true -> {NOMETA}) \
+                 (fun (hlk : @Eq (OptionType RecRule) (recrule_in_rules RecRules.nil cname) (@OptionType.some RecRule rule)) \
+                 (_hb : @Eq Bool (rec_rules_no_recmeta_b env0 RecRules.nil) Bool.true) => \
                  option_none_ne_some RecRule rule ({NOMETA}) hlk) \
                  (fun (r : RecRule) (rest : RecRules) \
-                 (ih : Eq (OptionType RecRule) (recrule_in_rules rest cname) (OptionType.some RecRule rule) -> \
-                 Eq Bool (rec_rules_no_recmeta_b env0 rest) Bool.true -> {NOMETA}) \
-                 (hlk : Eq (OptionType RecRule) (recrule_in_rules (RecRules.cons r rest) cname) (OptionType.some RecRule rule)) \
-                 (hb : Eq Bool (rec_rules_no_recmeta_b env0 (RecRules.cons r rest)) Bool.true) => \
+                 (ih : @Eq (OptionType RecRule) (recrule_in_rules rest cname) (@OptionType.some RecRule rule) -> \
+                 @Eq Bool (rec_rules_no_recmeta_b env0 rest) Bool.true -> {NOMETA}) \
+                 (hlk : @Eq (OptionType RecRule) (recrule_in_rules (RecRules.cons r rest) cname) (@OptionType.some RecRule rule)) \
+                 (hb : @Eq Bool (rec_rules_no_recmeta_b env0 (RecRules.cons r rest)) Bool.true) => \
                  opt_pick_some_inv RecRule (name_eqb (recrule_ctor_name r) cname) r \
                  (recrule_in_rules rest cname) rule ({NOMETA}) hlk \
-                 (fun (ht : Eq Bool (name_eqb (recrule_ctor_name r) cname) Bool.true) \
-                 (_hval : Eq RecRule r rule) => \
-                 Eq.subst Name \
-                 (fun (z : Name) => Eq (OptionType RecMeta) (recmeta_for env0 z) (OptionType.none RecMeta)) \
+                 (fun (ht : @Eq Bool (name_eqb (recrule_ctor_name r) cname) Bool.true) \
+                 (_hval : @Eq RecRule r rule) => \
+                 @Eq.subst Name \
+                 (fun (z : Name) => @Eq (OptionType RecMeta) (recmeta_for env0 z) (@OptionType.none RecMeta)) \
                  (recrule_ctor_name r) cname (name_eqb_eq (recrule_ctor_name r) cname ht) \
                  (opt_isnone_eq_none RecMeta (recmeta_for env0 (recrule_ctor_name r)) \
                  (band_eq_true_left (opt_isnone RecMeta (recmeta_for env0 (recrule_ctor_name r))) (rec_rules_no_recmeta_b env0 rest) hb))) \
-                 (fun (_hf : Eq Bool (name_eqb (recrule_ctor_name r) cname) Bool.false) \
-                 (hrest : Eq (OptionType RecRule) (recrule_in_rules rest cname) (OptionType.some RecRule rule)) => \
+                 (fun (_hf : @Eq Bool (name_eqb (recrule_ctor_name r) cname) Bool.false) \
+                 (hrest : @Eq (OptionType RecRule) (recrule_in_rules rest cname) (@OptionType.some RecRule rule)) => \
                  ih hrest \
                  (band_eq_true_right (opt_isnone RecMeta (recmeta_for env0 (recrule_ctor_name r))) (rec_rules_no_recmeta_b env0 rest) hb))) \
                  rs"
@@ -541,36 +541,36 @@ impl Specification {
         self.add_definition(Self::fchk_lemma(
             "rec_env_no_recmeta_go_b_sound",
             "forall (env0 : RecEnv) (env : RecEnv) (rname : Name) (rules : RecRules), \
-             Eq (OptionType RecRules) (recrules_for env rname) (OptionType.some RecRules rules) -> \
-             Eq Bool (rec_env_no_recmeta_go_b env0 env) Bool.true -> \
-             Eq Bool (rec_rules_no_recmeta_b env0 rules) Bool.true",
+             @Eq (OptionType RecRules) (recrules_for env rname) (@OptionType.some RecRules rules) -> \
+             @Eq Bool (rec_env_no_recmeta_go_b env0 env) Bool.true -> \
+             @Eq Bool (rec_rules_no_recmeta_b env0 rules) Bool.true",
             "fun (env0 : RecEnv) (env : RecEnv) (rname : Name) (rules : RecRules) => \
-             RecEnv.rec \
+             @RecEnv.rec \
              (fun (e : RecEnv) => \
-             Eq (OptionType RecRules) (recrules_for e rname) (OptionType.some RecRules rules) -> \
-             Eq Bool (rec_env_no_recmeta_go_b env0 e) Bool.true -> \
-             Eq Bool (rec_rules_no_recmeta_b env0 rules) Bool.true) \
-             (fun (hlk : Eq (OptionType RecRules) (recrules_for RecEnv.empty rname) (OptionType.some RecRules rules)) \
-             (_hb : Eq Bool (rec_env_no_recmeta_go_b env0 RecEnv.empty) Bool.true) => \
+             @Eq (OptionType RecRules) (recrules_for e rname) (@OptionType.some RecRules rules) -> \
+             @Eq Bool (rec_env_no_recmeta_go_b env0 e) Bool.true -> \
+             @Eq Bool (rec_rules_no_recmeta_b env0 rules) Bool.true) \
+             (fun (hlk : @Eq (OptionType RecRules) (recrules_for RecEnv.empty rname) (@OptionType.some RecRules rules)) \
+             (_hb : @Eq Bool (rec_env_no_recmeta_go_b env0 RecEnv.empty) Bool.true) => \
              option_none_ne_some RecRules rules \
-             (Eq Bool (rec_rules_no_recmeta_b env0 rules) Bool.true) hlk) \
+             (@Eq Bool (rec_rules_no_recmeta_b env0 rules) Bool.true) hlk) \
              (fun (tail : RecEnv) (rn : Name) (mta : RecMeta) (rls : RecRules) \
-             (ih : Eq (OptionType RecRules) (recrules_for tail rname) (OptionType.some RecRules rules) -> \
-             Eq Bool (rec_env_no_recmeta_go_b env0 tail) Bool.true -> \
-             Eq Bool (rec_rules_no_recmeta_b env0 rules) Bool.true) \
-             (hlk : Eq (OptionType RecRules) (recrules_for (RecEnv.addRec tail rn mta rls) rname) (OptionType.some RecRules rules)) \
-             (hb : Eq Bool (rec_env_no_recmeta_go_b env0 (RecEnv.addRec tail rn mta rls)) Bool.true) => \
+             (ih : @Eq (OptionType RecRules) (recrules_for tail rname) (@OptionType.some RecRules rules) -> \
+             @Eq Bool (rec_env_no_recmeta_go_b env0 tail) Bool.true -> \
+             @Eq Bool (rec_rules_no_recmeta_b env0 rules) Bool.true) \
+             (hlk : @Eq (OptionType RecRules) (recrules_for (RecEnv.addRec tail rn mta rls) rname) (@OptionType.some RecRules rules)) \
+             (hb : @Eq Bool (rec_env_no_recmeta_go_b env0 (RecEnv.addRec tail rn mta rls)) Bool.true) => \
              opt_pick_some_inv RecRules (name_eqb rn rname) rls \
              (recrules_for tail rname) rules \
-             (Eq Bool (rec_rules_no_recmeta_b env0 rules) Bool.true) hlk \
-             (fun (_ht : Eq Bool (name_eqb rn rname) Bool.true) \
-             (hval : Eq RecRules rls rules) => \
-             Eq.subst RecRules \
-             (fun (z : RecRules) => Eq Bool (rec_rules_no_recmeta_b env0 z) Bool.true) \
+             (@Eq Bool (rec_rules_no_recmeta_b env0 rules) Bool.true) hlk \
+             (fun (_ht : @Eq Bool (name_eqb rn rname) Bool.true) \
+             (hval : @Eq RecRules rls rules) => \
+             @Eq.subst RecRules \
+             (fun (z : RecRules) => @Eq Bool (rec_rules_no_recmeta_b env0 z) Bool.true) \
              rls rules hval \
              (band_eq_true_left (rec_rules_no_recmeta_b env0 rls) (rec_env_no_recmeta_go_b env0 tail) hb)) \
-             (fun (_hf : Eq Bool (name_eqb rn rname) Bool.false) \
-             (htail : Eq (OptionType RecRules) (recrules_for tail rname) (OptionType.some RecRules rules)) => \
+             (fun (_hf : @Eq Bool (name_eqb rn rname) Bool.false) \
+             (htail : @Eq (OptionType RecRules) (recrules_for tail rname) (@OptionType.some RecRules rules)) => \
              ih htail \
              (band_eq_true_right (rec_rules_no_recmeta_b env0 rls) (rec_env_no_recmeta_go_b env0 tail) hb))) \
              env",
@@ -595,18 +595,18 @@ impl Specification {
         self.add_definition(Self::fchk_lemma(
             "rec_env_ctor_no_recmeta_of_b",
             "forall (env : RecEnv), \
-             Eq Bool (rec_env_ctor_no_recmeta_b env) Bool.true -> RecEnvCtorNoRecMeta env",
-            "fun (env : RecEnv) (hb : Eq Bool (rec_env_ctor_no_recmeta_b env) Bool.true) => \
-             RecEnvCtorNoRecMeta.mk env \
+             @Eq Bool (rec_env_ctor_no_recmeta_b env) Bool.true -> RecEnvCtorNoRecMeta env",
+            "fun (env : RecEnv) (hb : @Eq Bool (rec_env_ctor_no_recmeta_b env) Bool.true) => \
+             @RecEnvCtorNoRecMeta.mk env \
              (fun (recname : Name) (cname : Name) (rule : RecRule) (major : KExpr) \
-             (_hhead : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname)) \
-             (hrule : Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule)) => \
+             (_hhead : @Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (@OptionType.some Name cname)) \
+             (hrule : @Eq (OptionType RecRule) (recrule_for env recname cname) (@OptionType.some RecRule rule)) => \
              opt_bind_some_inv RecRules RecRule (recrules_for env recname) \
              (fun (rules : RecRules) => recrule_in_rules rules cname) rule \
-             (Eq (OptionType RecMeta) (recmeta_for env cname) (OptionType.none RecMeta)) hrule \
+             (@Eq (OptionType RecMeta) (recmeta_for env cname) (@OptionType.none RecMeta)) hrule \
              (fun (rules : RecRules) \
-             (hrules : Eq (OptionType RecRules) (recrules_for env recname) (OptionType.some RecRules rules)) \
-             (hin : Eq (OptionType RecRule) (recrule_in_rules rules cname) (OptionType.some RecRule rule)) => \
+             (hrules : @Eq (OptionType RecRules) (recrules_for env recname) (@OptionType.some RecRules rules)) \
+             (hin : @Eq (OptionType RecRule) (recrule_in_rules rules cname) (@OptionType.some RecRule rule)) => \
              rec_rules_no_recmeta_b_sound env rules cname rule hin \
              (rec_env_no_recmeta_go_b_sound env env recname rules hrules hb)))",
             "GENERIC i2 discharge: rec_env_ctor_no_recmeta_b env = true -> RecEnvCtorNoRecMeta \
@@ -637,40 +637,40 @@ impl Specification {
     /// i7 soundness: def-env fold membership + the generic discharge.
     fn add_faithful_checker_i7_soundness(&mut self) -> Result<(), SpecError> {
         const NOMETA_D: &str =
-            "Eq (OptionType RecMeta) (recmeta_for renv dname) (OptionType.none RecMeta)";
+            "@Eq (OptionType RecMeta) (recmeta_for renv dname) (@OptionType.none RecMeta)";
 
         self.add_definition(Self::fchk_lemma(
             "def_env_no_recmeta_b_sound",
             &format!(
                 "forall (renv : RecEnv) (denv : DefEnv) (dname : Name) (val : KExpr), \
-                 Eq (OptionType KExpr) (defval_for denv dname) (OptionType.some KExpr val) -> \
-                 Eq Bool (def_env_no_recmeta_b renv denv) Bool.true -> {NOMETA_D}"
+                 @Eq (OptionType KExpr) (defval_for denv dname) (@OptionType.some KExpr val) -> \
+                 @Eq Bool (def_env_no_recmeta_b renv denv) Bool.true -> {NOMETA_D}"
             ),
             &format!(
                 "fun (renv : RecEnv) (denv : DefEnv) (dname : Name) (val : KExpr) => \
-                 DefEnv.rec \
+                 @DefEnv.rec \
                  (fun (e : DefEnv) => \
-                 Eq (OptionType KExpr) (defval_for e dname) (OptionType.some KExpr val) -> \
-                 Eq Bool (def_env_no_recmeta_b renv e) Bool.true -> {NOMETA_D}) \
-                 (fun (hlk : Eq (OptionType KExpr) (defval_for DefEnv.empty dname) (OptionType.some KExpr val)) \
-                 (_hb : Eq Bool (def_env_no_recmeta_b renv DefEnv.empty) Bool.true) => \
+                 @Eq (OptionType KExpr) (defval_for e dname) (@OptionType.some KExpr val) -> \
+                 @Eq Bool (def_env_no_recmeta_b renv e) Bool.true -> {NOMETA_D}) \
+                 (fun (hlk : @Eq (OptionType KExpr) (defval_for DefEnv.empty dname) (@OptionType.some KExpr val)) \
+                 (_hb : @Eq Bool (def_env_no_recmeta_b renv DefEnv.empty) Bool.true) => \
                  option_none_ne_some KExpr val ({NOMETA_D}) hlk) \
                  (fun (tail : DefEnv) (dn : Name) (defn : KDefSig) \
-                 (ih : Eq (OptionType KExpr) (defval_for tail dname) (OptionType.some KExpr val) -> \
-                 Eq Bool (def_env_no_recmeta_b renv tail) Bool.true -> {NOMETA_D}) \
-                 (hlk : Eq (OptionType KExpr) (defval_for (DefEnv.addDef tail dn defn) dname) (OptionType.some KExpr val)) \
-                 (hb : Eq Bool (def_env_no_recmeta_b renv (DefEnv.addDef tail dn defn)) Bool.true) => \
+                 (ih : @Eq (OptionType KExpr) (defval_for tail dname) (@OptionType.some KExpr val) -> \
+                 @Eq Bool (def_env_no_recmeta_b renv tail) Bool.true -> {NOMETA_D}) \
+                 (hlk : @Eq (OptionType KExpr) (defval_for (DefEnv.addDef tail dn defn) dname) (@OptionType.some KExpr val)) \
+                 (hb : @Eq Bool (def_env_no_recmeta_b renv (DefEnv.addDef tail dn defn)) Bool.true) => \
                  opt_pick_some_inv KExpr (name_eqb dn dname) (kdef_value defn) \
                  (defval_for tail dname) val ({NOMETA_D}) hlk \
-                 (fun (ht : Eq Bool (name_eqb dn dname) Bool.true) \
-                 (_hval : Eq KExpr (kdef_value defn) val) => \
-                 Eq.subst Name \
-                 (fun (z : Name) => Eq (OptionType RecMeta) (recmeta_for renv z) (OptionType.none RecMeta)) \
+                 (fun (ht : @Eq Bool (name_eqb dn dname) Bool.true) \
+                 (_hval : @Eq KExpr (kdef_value defn) val) => \
+                 @Eq.subst Name \
+                 (fun (z : Name) => @Eq (OptionType RecMeta) (recmeta_for renv z) (@OptionType.none RecMeta)) \
                  dn dname (name_eqb_eq dn dname ht) \
                  (opt_isnone_eq_none RecMeta (recmeta_for renv dn) \
                  (band_eq_true_left (opt_isnone RecMeta (recmeta_for renv dn)) (def_env_no_recmeta_b renv tail) hb))) \
-                 (fun (_hf : Eq Bool (name_eqb dn dname) Bool.false) \
-                 (htail : Eq (OptionType KExpr) (defval_for tail dname) (OptionType.some KExpr val)) => \
+                 (fun (_hf : @Eq Bool (name_eqb dn dname) Bool.false) \
+                 (htail : @Eq (OptionType KExpr) (defval_for tail dname) (@OptionType.some KExpr val)) => \
                  ih htail \
                  (band_eq_true_right (opt_isnone RecMeta (recmeta_for renv dn)) (def_env_no_recmeta_b renv tail) hb))) \
                  denv"
@@ -699,11 +699,11 @@ impl Specification {
         self.add_definition(Self::fchk_lemma(
             "red_env_disjoint_of_b",
             "forall (env : RedEnv), \
-             Eq Bool (red_env_disjoint_b env) Bool.true -> RecEnvDefEnvDisjoint env",
-            "fun (env : RedEnv) (hb : Eq Bool (red_env_disjoint_b env) Bool.true) => \
-             RecEnvDefEnvDisjoint.mk env \
+             @Eq Bool (red_env_disjoint_b env) Bool.true -> RecEnvDefEnvDisjoint env",
+            "fun (env : RedEnv) (hb : @Eq Bool (red_env_disjoint_b env) Bool.true) => \
+             @RecEnvDefEnvDisjoint.mk env \
              (fun (dname : Name) (val : KExpr) \
-             (hdv : Eq (OptionType KExpr) (defval_for (red_def env) dname) (OptionType.some KExpr val)) => \
+             (hdv : @Eq (OptionType KExpr) (defval_for (red_def env) dname) (@OptionType.some KExpr val)) => \
              def_env_no_recmeta_b_sound (red_rec env) (red_def env) dname val hdv hb)",
             "GENERIC i7 discharge: red_env_disjoint_b env = true -> RecEnvDefEnvDisjoint env, for \
              ANY env (the checker alias unfolds definitionally onto the def-env fold). A concrete \
@@ -726,40 +726,41 @@ impl Specification {
     /// i8 soundness: mirrors i2 with the per-element slot swapped to
     /// `defval_for denv` + the generic discharge.
     fn add_faithful_checker_i8_soundness(&mut self) -> Result<(), SpecError> {
-        const NODEF: &str = "Eq (OptionType KExpr) (defval_for denv cname) (OptionType.none KExpr)";
+        const NODEF: &str =
+            "@Eq (OptionType KExpr) (defval_for denv cname) (@OptionType.none KExpr)";
 
         self.add_definition(Self::fchk_lemma(
             "rec_rules_no_defval_b_sound",
             &format!(
                 "forall (denv : DefEnv) (rs : RecRules) (cname : Name) (rule : RecRule), \
-                 Eq (OptionType RecRule) (recrule_in_rules rs cname) (OptionType.some RecRule rule) -> \
-                 Eq Bool (rec_rules_no_defval_b denv rs) Bool.true -> {NODEF}"
+                 @Eq (OptionType RecRule) (recrule_in_rules rs cname) (@OptionType.some RecRule rule) -> \
+                 @Eq Bool (rec_rules_no_defval_b denv rs) Bool.true -> {NODEF}"
             ),
             &format!(
                 "fun (denv : DefEnv) (rs : RecRules) (cname : Name) (rule : RecRule) => \
-                 RecRules.rec \
+                 @RecRules.rec \
                  (fun (l : RecRules) => \
-                 Eq (OptionType RecRule) (recrule_in_rules l cname) (OptionType.some RecRule rule) -> \
-                 Eq Bool (rec_rules_no_defval_b denv l) Bool.true -> {NODEF}) \
-                 (fun (hlk : Eq (OptionType RecRule) (recrule_in_rules RecRules.nil cname) (OptionType.some RecRule rule)) \
-                 (_hb : Eq Bool (rec_rules_no_defval_b denv RecRules.nil) Bool.true) => \
+                 @Eq (OptionType RecRule) (recrule_in_rules l cname) (@OptionType.some RecRule rule) -> \
+                 @Eq Bool (rec_rules_no_defval_b denv l) Bool.true -> {NODEF}) \
+                 (fun (hlk : @Eq (OptionType RecRule) (recrule_in_rules RecRules.nil cname) (@OptionType.some RecRule rule)) \
+                 (_hb : @Eq Bool (rec_rules_no_defval_b denv RecRules.nil) Bool.true) => \
                  option_none_ne_some RecRule rule ({NODEF}) hlk) \
                  (fun (r : RecRule) (rest : RecRules) \
-                 (ih : Eq (OptionType RecRule) (recrule_in_rules rest cname) (OptionType.some RecRule rule) -> \
-                 Eq Bool (rec_rules_no_defval_b denv rest) Bool.true -> {NODEF}) \
-                 (hlk : Eq (OptionType RecRule) (recrule_in_rules (RecRules.cons r rest) cname) (OptionType.some RecRule rule)) \
-                 (hb : Eq Bool (rec_rules_no_defval_b denv (RecRules.cons r rest)) Bool.true) => \
+                 (ih : @Eq (OptionType RecRule) (recrule_in_rules rest cname) (@OptionType.some RecRule rule) -> \
+                 @Eq Bool (rec_rules_no_defval_b denv rest) Bool.true -> {NODEF}) \
+                 (hlk : @Eq (OptionType RecRule) (recrule_in_rules (RecRules.cons r rest) cname) (@OptionType.some RecRule rule)) \
+                 (hb : @Eq Bool (rec_rules_no_defval_b denv (RecRules.cons r rest)) Bool.true) => \
                  opt_pick_some_inv RecRule (name_eqb (recrule_ctor_name r) cname) r \
                  (recrule_in_rules rest cname) rule ({NODEF}) hlk \
-                 (fun (ht : Eq Bool (name_eqb (recrule_ctor_name r) cname) Bool.true) \
-                 (_hval : Eq RecRule r rule) => \
-                 Eq.subst Name \
-                 (fun (z : Name) => Eq (OptionType KExpr) (defval_for denv z) (OptionType.none KExpr)) \
+                 (fun (ht : @Eq Bool (name_eqb (recrule_ctor_name r) cname) Bool.true) \
+                 (_hval : @Eq RecRule r rule) => \
+                 @Eq.subst Name \
+                 (fun (z : Name) => @Eq (OptionType KExpr) (defval_for denv z) (@OptionType.none KExpr)) \
                  (recrule_ctor_name r) cname (name_eqb_eq (recrule_ctor_name r) cname ht) \
                  (opt_isnone_eq_none KExpr (defval_for denv (recrule_ctor_name r)) \
                  (band_eq_true_left (opt_isnone KExpr (defval_for denv (recrule_ctor_name r))) (rec_rules_no_defval_b denv rest) hb))) \
-                 (fun (_hf : Eq Bool (name_eqb (recrule_ctor_name r) cname) Bool.false) \
-                 (hrest : Eq (OptionType RecRule) (recrule_in_rules rest cname) (OptionType.some RecRule rule)) => \
+                 (fun (_hf : @Eq Bool (name_eqb (recrule_ctor_name r) cname) Bool.false) \
+                 (hrest : @Eq (OptionType RecRule) (recrule_in_rules rest cname) (@OptionType.some RecRule rule)) => \
                  ih hrest \
                  (band_eq_true_right (opt_isnone KExpr (defval_for denv (recrule_ctor_name r))) (rec_rules_no_defval_b denv rest) hb))) \
                  rs"
@@ -788,36 +789,36 @@ impl Specification {
         self.add_definition(Self::fchk_lemma(
             "rec_env_no_defval_go_b_sound",
             "forall (denv : DefEnv) (env : RecEnv) (rname : Name) (rules : RecRules), \
-             Eq (OptionType RecRules) (recrules_for env rname) (OptionType.some RecRules rules) -> \
-             Eq Bool (rec_env_no_defval_go_b denv env) Bool.true -> \
-             Eq Bool (rec_rules_no_defval_b denv rules) Bool.true",
+             @Eq (OptionType RecRules) (recrules_for env rname) (@OptionType.some RecRules rules) -> \
+             @Eq Bool (rec_env_no_defval_go_b denv env) Bool.true -> \
+             @Eq Bool (rec_rules_no_defval_b denv rules) Bool.true",
             "fun (denv : DefEnv) (env : RecEnv) (rname : Name) (rules : RecRules) => \
-             RecEnv.rec \
+             @RecEnv.rec \
              (fun (e : RecEnv) => \
-             Eq (OptionType RecRules) (recrules_for e rname) (OptionType.some RecRules rules) -> \
-             Eq Bool (rec_env_no_defval_go_b denv e) Bool.true -> \
-             Eq Bool (rec_rules_no_defval_b denv rules) Bool.true) \
-             (fun (hlk : Eq (OptionType RecRules) (recrules_for RecEnv.empty rname) (OptionType.some RecRules rules)) \
-             (_hb : Eq Bool (rec_env_no_defval_go_b denv RecEnv.empty) Bool.true) => \
+             @Eq (OptionType RecRules) (recrules_for e rname) (@OptionType.some RecRules rules) -> \
+             @Eq Bool (rec_env_no_defval_go_b denv e) Bool.true -> \
+             @Eq Bool (rec_rules_no_defval_b denv rules) Bool.true) \
+             (fun (hlk : @Eq (OptionType RecRules) (recrules_for RecEnv.empty rname) (@OptionType.some RecRules rules)) \
+             (_hb : @Eq Bool (rec_env_no_defval_go_b denv RecEnv.empty) Bool.true) => \
              option_none_ne_some RecRules rules \
-             (Eq Bool (rec_rules_no_defval_b denv rules) Bool.true) hlk) \
+             (@Eq Bool (rec_rules_no_defval_b denv rules) Bool.true) hlk) \
              (fun (tail : RecEnv) (rn : Name) (mta : RecMeta) (rls : RecRules) \
-             (ih : Eq (OptionType RecRules) (recrules_for tail rname) (OptionType.some RecRules rules) -> \
-             Eq Bool (rec_env_no_defval_go_b denv tail) Bool.true -> \
-             Eq Bool (rec_rules_no_defval_b denv rules) Bool.true) \
-             (hlk : Eq (OptionType RecRules) (recrules_for (RecEnv.addRec tail rn mta rls) rname) (OptionType.some RecRules rules)) \
-             (hb : Eq Bool (rec_env_no_defval_go_b denv (RecEnv.addRec tail rn mta rls)) Bool.true) => \
+             (ih : @Eq (OptionType RecRules) (recrules_for tail rname) (@OptionType.some RecRules rules) -> \
+             @Eq Bool (rec_env_no_defval_go_b denv tail) Bool.true -> \
+             @Eq Bool (rec_rules_no_defval_b denv rules) Bool.true) \
+             (hlk : @Eq (OptionType RecRules) (recrules_for (RecEnv.addRec tail rn mta rls) rname) (@OptionType.some RecRules rules)) \
+             (hb : @Eq Bool (rec_env_no_defval_go_b denv (RecEnv.addRec tail rn mta rls)) Bool.true) => \
              opt_pick_some_inv RecRules (name_eqb rn rname) rls \
              (recrules_for tail rname) rules \
-             (Eq Bool (rec_rules_no_defval_b denv rules) Bool.true) hlk \
-             (fun (_ht : Eq Bool (name_eqb rn rname) Bool.true) \
-             (hval : Eq RecRules rls rules) => \
-             Eq.subst RecRules \
-             (fun (z : RecRules) => Eq Bool (rec_rules_no_defval_b denv z) Bool.true) \
+             (@Eq Bool (rec_rules_no_defval_b denv rules) Bool.true) hlk \
+             (fun (_ht : @Eq Bool (name_eqb rn rname) Bool.true) \
+             (hval : @Eq RecRules rls rules) => \
+             @Eq.subst RecRules \
+             (fun (z : RecRules) => @Eq Bool (rec_rules_no_defval_b denv z) Bool.true) \
              rls rules hval \
              (band_eq_true_left (rec_rules_no_defval_b denv rls) (rec_env_no_defval_go_b denv tail) hb)) \
-             (fun (_hf : Eq Bool (name_eqb rn rname) Bool.false) \
-             (htail : Eq (OptionType RecRules) (recrules_for tail rname) (OptionType.some RecRules rules)) => \
+             (fun (_hf : @Eq Bool (name_eqb rn rname) Bool.false) \
+             (htail : @Eq (OptionType RecRules) (recrules_for tail rname) (@OptionType.some RecRules rules)) => \
              ih htail \
              (band_eq_true_right (rec_rules_no_defval_b denv rls) (rec_env_no_defval_go_b denv tail) hb))) \
              env",
@@ -840,18 +841,18 @@ impl Specification {
         self.add_definition(Self::fchk_lemma(
             "red_env_ctor_no_defval_of_b",
             "forall (env : RedEnv), \
-             Eq Bool (red_env_ctor_no_defval_b env) Bool.true -> RecEnvCtorNoDefVal env",
-            "fun (env : RedEnv) (hb : Eq Bool (red_env_ctor_no_defval_b env) Bool.true) => \
-             RecEnvCtorNoDefVal.mk env \
+             @Eq Bool (red_env_ctor_no_defval_b env) Bool.true -> RecEnvCtorNoDefVal env",
+            "fun (env : RedEnv) (hb : @Eq Bool (red_env_ctor_no_defval_b env) Bool.true) => \
+             @RecEnvCtorNoDefVal.mk env \
              (fun (recname : Name) (cname : Name) (rule : RecRule) (major : KExpr) \
-             (_hhead : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname)) \
-             (hrule : Eq (OptionType RecRule) (recrule_for (red_rec env) recname cname) (OptionType.some RecRule rule)) => \
+             (_hhead : @Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (@OptionType.some Name cname)) \
+             (hrule : @Eq (OptionType RecRule) (recrule_for (red_rec env) recname cname) (@OptionType.some RecRule rule)) => \
              opt_bind_some_inv RecRules RecRule (recrules_for (red_rec env) recname) \
              (fun (rules : RecRules) => recrule_in_rules rules cname) rule \
-             (Eq (OptionType KExpr) (defval_for (red_def env) cname) (OptionType.none KExpr)) hrule \
+             (@Eq (OptionType KExpr) (defval_for (red_def env) cname) (@OptionType.none KExpr)) hrule \
              (fun (rules : RecRules) \
-             (hrules : Eq (OptionType RecRules) (recrules_for (red_rec env) recname) (OptionType.some RecRules rules)) \
-             (hin : Eq (OptionType RecRule) (recrule_in_rules rules cname) (OptionType.some RecRule rule)) => \
+             (hrules : @Eq (OptionType RecRules) (recrules_for (red_rec env) recname) (@OptionType.some RecRules rules)) \
+             (hin : @Eq (OptionType RecRule) (recrule_in_rules rules cname) (@OptionType.some RecRule rule)) => \
              rec_rules_no_defval_b_sound (red_def env) rules cname rule hin \
              (rec_env_no_defval_go_b_sound (red_def env) (red_rec env) recname rules hrules hb)))",
             "GENERIC i8 discharge: red_env_ctor_no_defval_b env = true -> RecEnvCtorNoDefVal env, \
@@ -887,22 +888,22 @@ impl Specification {
             (
                 "faithful_red_env_reduct_not_redex_via_checker",
                 "RecEnvReductNotRedex (red_rec faithful_red_env)".to_string(),
-                "rec_env_reduct_not_redex_of_b (red_rec faithful_red_env) (Eq.refl Bool Bool.true)",
+                "rec_env_reduct_not_redex_of_b (red_rec faithful_red_env) (@Eq.refl Bool Bool.true)",
             ),
             (
                 "faithful_red_env_ctor_no_recmeta_via_checker",
                 "RecEnvCtorNoRecMeta (red_rec faithful_red_env)".to_string(),
-                "rec_env_ctor_no_recmeta_of_b (red_rec faithful_red_env) (Eq.refl Bool Bool.true)",
+                "rec_env_ctor_no_recmeta_of_b (red_rec faithful_red_env) (@Eq.refl Bool Bool.true)",
             ),
             (
                 "faithful_red_env_defenv_disjoint_via_checker",
                 "RecEnvDefEnvDisjoint faithful_red_env".to_string(),
-                "red_env_disjoint_of_b faithful_red_env (Eq.refl Bool Bool.true)",
+                "red_env_disjoint_of_b faithful_red_env (@Eq.refl Bool Bool.true)",
             ),
             (
                 "faithful_red_env_ctor_no_defval_via_checker",
                 "RecEnvCtorNoDefVal faithful_red_env".to_string(),
-                "red_env_ctor_no_defval_of_b faithful_red_env (Eq.refl Bool Bool.true)",
+                "red_env_ctor_no_defval_of_b faithful_red_env (@Eq.refl Bool Bool.true)",
             ),
         ];
 
@@ -943,42 +944,42 @@ impl Specification {
             (
                 "the_red_env_reduct_not_redex_via_checker",
                 "RecEnvReductNotRedex (red_rec the_red_env)".to_string(),
-                "rec_env_reduct_not_redex_of_b (red_rec the_red_env) (Eq.refl Bool Bool.true)",
+                "rec_env_reduct_not_redex_of_b (red_rec the_red_env) (@Eq.refl Bool Bool.true)",
             ),
             (
                 "the_red_env_ctor_no_recmeta_via_checker",
                 "RecEnvCtorNoRecMeta (red_rec the_red_env)".to_string(),
-                "rec_env_ctor_no_recmeta_of_b (red_rec the_red_env) (Eq.refl Bool Bool.true)",
+                "rec_env_ctor_no_recmeta_of_b (red_rec the_red_env) (@Eq.refl Bool Bool.true)",
             ),
             (
                 "the_red_env_rec_closed_via_checker_b2",
                 "RecEnvClosed (red_rec the_red_env)".to_string(),
-                "rec_env_closed_of_b2 (red_rec the_red_env) (Eq.refl Bool Bool.true)",
+                "rec_env_closed_of_b2 (red_rec the_red_env) (@Eq.refl Bool Bool.true)",
             ),
             (
                 "the_red_env_rec_lift_closed_via_checker_b2",
                 "RecEnvLiftClosed (red_rec the_red_env)".to_string(),
-                "rec_env_lift_closed_of_b2 (red_rec the_red_env) (Eq.refl Bool Bool.true)",
+                "rec_env_lift_closed_of_b2 (red_rec the_red_env) (@Eq.refl Bool Bool.true)",
             ),
             (
                 "the_red_env_def_closed_via_checker_b2",
                 "DefEnvClosed (red_def the_red_env)".to_string(),
-                "def_env_closed_of_b2 (red_def the_red_env) (Eq.refl Bool Bool.true)",
+                "def_env_closed_of_b2 (red_def the_red_env) (@Eq.refl Bool Bool.true)",
             ),
             (
                 "the_red_env_def_lift_closed_via_checker_b2",
                 "DefEnvLiftClosed (red_def the_red_env)".to_string(),
-                "def_env_lift_closed_of_b2 (red_def the_red_env) (Eq.refl Bool Bool.true)",
+                "def_env_lift_closed_of_b2 (red_def the_red_env) (@Eq.refl Bool Bool.true)",
             ),
             (
                 "the_red_env_defenv_disjoint_via_checker",
                 "RecEnvDefEnvDisjoint the_red_env".to_string(),
-                "red_env_disjoint_of_b the_red_env (Eq.refl Bool Bool.true)",
+                "red_env_disjoint_of_b the_red_env (@Eq.refl Bool Bool.true)",
             ),
             (
                 "the_red_env_ctor_no_defval_via_checker",
                 "RecEnvCtorNoDefVal the_red_env".to_string(),
-                "red_env_ctor_no_defval_of_b the_red_env (Eq.refl Bool Bool.true)",
+                "red_env_ctor_no_defval_of_b the_red_env (@Eq.refl Bool Bool.true)",
             ),
         ];
 
@@ -1009,7 +1010,7 @@ impl Specification {
         self.add_definition(Self::fchk_lemma(
             "the_red_env_faithful",
             "RedEnvFaithful the_red_env",
-            "RedEnvFaithful.mk the_red_env \
+            "@RedEnvFaithful.mk the_red_env \
              the_red_env_reduct_not_redex_via_checker \
              the_red_env_ctor_no_recmeta_via_checker \
              the_red_env_rec_closed_via_checker_b2 \
@@ -1193,7 +1194,7 @@ mod tests {
                 .as_deref()
                 .unwrap_or_else(|| panic!("{name} must carry a proof term"));
             assert!(
-                value.contains("(Eq.refl Bool Bool.true)"),
+                value.contains("(@Eq.refl Bool Bool.true)"),
                 "{name} must be the single-rfl checker route, got: {value}"
             );
             spec.verify_definition(name)

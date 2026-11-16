@@ -61,9 +61,9 @@ pub(crate) fn ir_fng_module_defs() -> &'static [&'static str] {
 //   -1.0 = 0xBFF0000000000000 = 13830554455654793216
 //   +0.0 = 0
 //   -0.0 = 0x8000000000000000 = 9223372036854775808
-const SRC_W_ONE: &str = "def ir_fng_negates_one : Eq IROutcome (ir_eval ir_d2 ir_fng_module ir_d0 (ir_vl2 IRScalar.undef_ (IRScalar.float_ 4607182418800017408)) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 (IRScalar.float_ 13830554455654793216))) := Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.float_ 13830554455654793216)))";
-const SRC_W_PZERO: &str = "def ir_fng_negates_positive_zero_to_negative_zero : Eq IROutcome (ir_eval ir_d2 ir_fng_module ir_d0 (ir_vl2 IRScalar.undef_ (IRScalar.float_ 0)) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 (IRScalar.float_ 9223372036854775808))) := Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.float_ 9223372036854775808)))";
-const SRC_W_NZERO: &str = "def ir_fng_negates_negative_zero_to_positive_zero : Eq IROutcome (ir_eval ir_d2 ir_fng_module ir_d0 (ir_vl2 IRScalar.undef_ (IRScalar.float_ 9223372036854775808)) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 (IRScalar.float_ 0))) := Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.float_ 0)))";
+const SRC_W_ONE: &str = "def ir_fng_negates_one : @Eq IROutcome (ir_eval ir_d2 ir_fng_module ir_d0 (ir_vl2 IRScalar.undef_ (IRScalar.float_ 4607182418800017408)) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 (IRScalar.float_ 13830554455654793216))) := @Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.float_ 13830554455654793216)))";
+const SRC_W_PZERO: &str = "def ir_fng_negates_positive_zero_to_negative_zero : @Eq IROutcome (ir_eval ir_d2 ir_fng_module ir_d0 (ir_vl2 IRScalar.undef_ (IRScalar.float_ 0)) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 (IRScalar.float_ 9223372036854775808))) := @Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.float_ 9223372036854775808)))";
+const SRC_W_NZERO: &str = "def ir_fng_negates_negative_zero_to_positive_zero : @Eq IROutcome (ir_eval ir_d2 ir_fng_module ir_d0 (ir_vl2 IRScalar.undef_ (IRScalar.float_ 9223372036854775808)) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 (IRScalar.float_ 0))) := @Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.float_ 0)))";
 
 impl Specification {
     /// Register the minted `unop fneg` module and its executed witnesses.

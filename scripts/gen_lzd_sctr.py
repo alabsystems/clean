@@ -57,6 +57,13 @@ USAGE
     python3 scripts/gen_lzd_sctr.py --check      # byte-compare with the tree
     python3 scripts/gen_lzd_sctr.py --self-test  # pinned digests + coverage
     python3 scripts/gen_lzd_sctr.py --pin        # re-pin (only after the kernel accepted)
+
+The obligations are built without explicit prefixes; that is the shape
+`--self-test` and `--pin` digest. What the tree registers is that text printed
+by `scripts/explicit_prefix.py` (through gen_lzd_activation, which loads it) with
+`@` before the heads in `EXPLICIT_HEADS`, less those a const keeps bare
+(`KEPT_BARE`); `--print`, `--emit` and `--check` speak the printed text, except
+`--legacy`, which prints the 2026-09-24 nested form as it was accepted.
 """
 
 from __future__ import annotations
@@ -69,17 +76,32 @@ import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
+
+ANSWERS_PINNED_INPUTS = True
+HELPER_INPUTS = ('scripts/test_generator_source_helpers.py', 'scripts/resource_transport.py', 'scripts/gen_lzd_activation.py', 'scripts/explicit_prefix.py', 'crates/clean-verify/src/spec/core_spec/eval_ir_lzd_sctr.rs', 'crates/clean-verify/src/spec/core_spec/eval_ir_lzd_pc.rs')
+
+
+def _source_module(name, path):
+    """Execute pinned source bytes; an accepted pyc is not a declared input."""
+    spec = importlib.util.spec_from_file_location(name, path)
+    if spec is None or spec.loader is None:
+        raise ValueError('source helper unavailable: ' + str(path))
+    module = importlib.util.module_from_spec(spec)
+    exec(compile(path.read_bytes(), str(path), 'exec', dont_inherit=True), module.__dict__)
+    return module
+
+
+def _helper_source_controls():
+    controls = _source_module('generator_source_controls', REPO / 'scripts/test_generator_source_helpers.py')
+    controls.run_generator_controls(Path(__file__).name)
+
 SCTR_RS = REPO / "crates/clean-verify/src/spec/core_spec/eval_ir_lzd_sctr.rs"
 
 # The exact-chain generator is the single source of the segment vocabulary:
 # the module, the heap state, the deref's framing, the hypotheses a segment
 # takes. Importing it (rather than copying) is what keeps the step-indexed
 # obligations reading the SAME bodies the exact A4 read.
-_spec = importlib.util.spec_from_file_location(
-    "gen_lzd_activation", REPO / "scripts/gen_lzd_activation.py")
-_act = importlib.util.module_from_spec(_spec)
-assert _spec.loader is not None
-_spec.loader.exec_module(_act)
+_act = _source_module("gen_lzd_activation", REPO / "scripts/gen_lzd_activation.py")
 
 M = _act.M
 SLOT_TY = _act.SLOT_TY
@@ -629,6 +651,26 @@ def legacy() -> dict:
         SEGMENTED = keep
 
 
+# The heads the committed consts name with an explicit `@` (the spelling the
+# explicit-prefix EvalIR commits, 1b6b65dc83 and after, gave them), and the one
+# const whose committed source keeps a head bare. Recorded, not chosen: making
+# it uniform is a source change the EvalIR initializer would have to accept.
+XP = _act.XP
+EXPLICIT_HEADS = frozenset({
+    "Bool.rec", "EncodesLevelArcD.rec", "EncodesLiveLevelRefD.rec", "Eq", "Eq.refl",
+    "Eq.subst", "Eq.symm", "Eq.trans", "IRList.nil", "IRLzdIn.rec", "IROption.some",
+    "MemExt.refl",
+})
+KEPT_BARE = {
+    "SRC_IR_LZD_LOCAL": frozenset({"Eq.subst"}),
+}
+
+
+def spell(name: str, term: str) -> str:
+    """One built obligation as the tree registers it."""
+    return XP.respell(term, EXPLICIT_HEADS - KEPT_BARE.get(name, frozenset()))
+
+
 def committed() -> dict:
     found = {}
     for f in TARGETS:
@@ -692,14 +734,21 @@ def main() -> int:
     ap.add_argument("--pin", action="store_true")
     ap.add_argument("--legacy", action="store_true",
                     help="with --print: the nested 2026-09-24 form")
+    ap.add_argument("--pinned-inputs", action="store_true", help="list exact source/control inputs")
     a = ap.parse_args()
+    if a.pinned_inputs:
+        if any(value for key, value in vars(a).items() if key != "pinned_inputs"):
+            ap.error("--pinned-inputs cannot be combined with another action")
+        print("\n".join(HELPER_INPUTS))
+        return 0
     built = legacy() if a.legacy else minted()
+    printed = built if a.legacy else {k: spell(k, v) for k, v in built.items()}
     if a.name:
         key = a.name if a.name.startswith("SRC_") else "SRC_" + a.name.upper()
-        print(built[key])
+        print(printed[key])
         return 0
     if a.emit:
-        bad = _ascii_balanced(built)
+        bad = _ascii_balanced(printed)
         for line in bad:
             print(line)
         if bad:
@@ -707,14 +756,14 @@ def main() -> int:
         n = 0
         for f in TARGETS:
             src = f.read_text()
-            for k, v in built.items():
+            for k, v in printed.items():
                 pat = re.compile(r'const %s: &str = ".*?";\n' % k, re.S)
                 if pat.search(src):
                     src = pat.sub(lambda _m, k=k, v=v: f'const {k}: &str = "{v}";\n', src)
                     n += 1
             f.write_text(src)
         print(f"emitted {n} terms")
-        return 0 if n == len(built) else 1
+        return 0 if n == len(printed) else 1
     if a.pin:
         body = "PINNED_DIGESTS: dict = {\n" + "".join(
             f'    "{k}": "{v}",\n' for k, v in sorted(digests(built).items())) + "}"
@@ -728,7 +777,8 @@ def main() -> int:
         bad = [k for k, v in PINNED_DIGESTS.items() if have.get(k) != v]
         old = digests(legacy())
         moved = [k for k, v in LEGACY_DIGESTS.items() if old.get(k) != v]
-        drift = _coverage_invariant(built) + _ascii_balanced(built)
+        drift = _coverage_invariant(built) + _ascii_balanced(built) + XP.self_test()
+        drift += [f"KEPT_BARE: {k} is not a minted const" for k in sorted(set(KEPT_BARE) - set(built))]
         for k in bad:
             print(f"DIGEST MOVED: {k}")
         for k in moved:
@@ -736,14 +786,16 @@ def main() -> int:
         for line in drift:
             print(line)
         ok = not bad and not moved and not drift
+        if ok:
+            _helper_source_controls()
         print("gen_lzd_sctr --self-test: " + ("OK" if ok else "FAILED"))
         return 0 if ok else 1
     if a.check:
         have = committed()
-        bad = [k for k in built if have.get(k) != built[k]]
+        bad = [k for k in printed if have.get(k) != printed[k]]
         for k in bad:
             print(f"DIFFERS: {k}")
-        order = registration_order(built)
+        order = registration_order(printed)
         for line in order:
             print(line)
         print("gen_lzd_sctr: " + ("OK" if not bad and not order else f"{len(bad) + len(order)} differ"))

@@ -59,7 +59,7 @@ impl ProofLibrary {
             ProofTerm::new(
                 "interp_i01_craig_existence",
                 "fun (nv : Nat) (node : InterpNode nv) => \
-                 InterpNode.rec nv \
+                 @InterpNode.rec nv \
                    (fun (n : InterpNode nv) => CraigWitness nv n) \
                    (fun (clause_idx : Nat) => CraigWitness.a_input nv clause_idx) \
                    (fun (clause_idx : Nat) => CraigWitness.b_input nv clause_idx) \
@@ -108,7 +108,7 @@ impl ProofLibrary {
             ProofTerm::new(
                 "interp_i02_mcmillan_extraction",
                 "fun (nv : Nat) (node : InterpNode nv) => \
-                 InterpNode.rec nv \
+                 @InterpNode.rec nv \
                    (fun (n : InterpNode nv) => McMillanExtracted nv n) \
                    (fun (clause_idx : Nat) => McMillanExtracted.a_input nv clause_idx) \
                    (fun (clause_idx : Nat) => McMillanExtracted.b_input nv clause_idx) \
@@ -157,7 +157,7 @@ impl ProofLibrary {
             ProofTerm::new(
                 "interp_i03_shared_variables",
                 "fun (nv : Nat) (node : InterpNode nv) => \
-                 InterpNode.rec nv \
+                 @InterpNode.rec nv \
                    (fun (n : InterpNode nv) => SharedVarsWitness nv n) \
                    (fun (clause_idx : Nat) => SharedVarsWitness.a_input nv clause_idx) \
                    (fun (clause_idx : Nat) => SharedVarsWitness.b_input nv clause_idx) \
@@ -208,7 +208,7 @@ impl ProofLibrary {
             ProofTerm::new(
                 "interp_i04_pudlak_rule",
                 "fun (nv : Nat) (node : InterpNode nv) => \
-                 InterpNode.rec nv \
+                 @InterpNode.rec nv \
                    (fun (n : InterpNode nv) => PudlakWitness nv n) \
                    (fun (clause_idx : Nat) => PudlakWitness.a_input nv clause_idx) \
                    (fun (clause_idx : Nat) => PudlakWitness.b_input nv clause_idx) \

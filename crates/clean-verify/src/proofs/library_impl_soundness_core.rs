@@ -19,7 +19,7 @@ impl ProofLibrary {
             "KernelStateEnvValid".to_string(),
             ProofTerm::new(
                 "KernelStateEnvValid",
-                "fun (st : KernelState) => KernelState.rec (fun (_ : KernelState) => Type) (fun (env : KEnv) (_ctx : KernelLocalCtx) => KernelEnvValid env) st",
+                "fun (st : KernelState) => @KernelState.rec (fun (_ : KernelState) => Type) (fun (env : KEnv) (_ctx : KernelLocalCtx) => KernelEnvValid env) st",
                 "Semireducible state-indexed environment-validity predicate via KernelState.rec.",
             ),
         );
@@ -29,7 +29,7 @@ impl ProofLibrary {
             "KernelStateLocalCtxWellFormed".to_string(),
             ProofTerm::new(
                 "KernelStateLocalCtxWellFormed",
-                "fun (st : KernelState) => KernelState.rec (fun (_ : KernelState) => Type) (fun (env : KEnv) (ctx : KernelLocalCtx) => KernelLocalCtxWellFormed env ctx) st",
+                "fun (st : KernelState) => @KernelState.rec (fun (_ : KernelState) => Type) (fun (env : KEnv) (ctx : KernelLocalCtx) => KernelLocalCtxWellFormed env ctx) st",
                 "Semireducible state-indexed local-context well-formedness predicate via KernelState.rec.",
             ),
         );
@@ -49,7 +49,7 @@ impl ProofLibrary {
             "KernelStateMatchesSpec.mk".to_string(),
             ProofTerm::new(
                 "KernelStateMatchesSpec.mk",
-                "fun (st : KernelState) (henv : KernelStateEnvValid st) (hctx : KernelStateLocalCtxWellFormed st) => AndType.intro (KernelStateEnvValid st) (KernelStateLocalCtxWellFormed st) henv hctx",
+                "fun (st : KernelState) (henv : KernelStateEnvValid st) (hctx : KernelStateLocalCtxWellFormed st) => @AndType.intro (KernelStateEnvValid st) (KernelStateLocalCtxWellFormed st) henv hctx",
                 "Build summary implementation/spec correspondence from split bridge predicates via AndType.intro.",
             ),
         );
@@ -233,15 +233,15 @@ impl ProofLibrary {
                     "fun (env : KEnv) (env' : KEnv) (ctx : KernelLocalCtx) ",
                     "(hctx : KernelLocalCtxWellFormed env ctx) ",
                     "(_hadd : KernelAddDeclAccepts env env') => ",
-                    "KernelLocalCtxWellFormed.rec env ",
+                    "@KernelLocalCtxWellFormed.rec env ",
                     "(fun (c : KernelLocalCtx) (_h : KernelLocalCtxWellFormed env c) => ",
                     "KernelLocalCtxWellFormed env' c) ",
-                    "(KernelLocalCtxWellFormed.nil env') ",
+                    "(@KernelLocalCtxWellFormed.nil env') ",
                     "(fun (id : Nat) (ty : KExpr) (u : Level) (rest : KernelLocalCtx) ",
                     "(hty : Typing ty (KExpr.sort u)) ",
                     "(_hrest : KernelLocalCtxWellFormed env rest) ",
                     "(ih : KernelLocalCtxWellFormed env' rest) => ",
-                    "KernelLocalCtxWellFormed.cons env' id ty u rest hty ih) ",
+                    "@KernelLocalCtxWellFormed.cons env' id ty u rest hty ih) ",
                     "ctx hctx"
                 ),
                 "Raw local-context preservation via KernelLocalCtxWellFormed.rec env-transport replay: nil rebuilds as nil env', cons rebuilds as cons env' reusing the env-free Typing derivation and the transported tail. The KernelAddDeclAccepts hypothesis is unused; env transport is purely structural.",
@@ -311,7 +311,7 @@ impl ProofLibrary {
                     "(hmatch : KernelStateMatchesSpec (KernelState.mk env ctx)) ",
                     "(hsound : EnvSound env) ",
                     "(hadd : KernelAddDeclAccepts env env') => ",
-                    "ProdType.mk ",
+                    "@ProdType.mk ",
                     "(KernelStateMatchesSpec (KernelState.mk env' ctx)) ",
                     "(EnvSound env') ",
                     "(KernelAddDeclPreservesState env env' ctx hmatch hadd) ",
@@ -340,7 +340,7 @@ impl ProofLibrary {
                     "(hchain : KernelAddDeclChain env env') ",
                     "(hmatch : KernelStateMatchesSpec (KernelState.mk env ctx)) ",
                     "(hsound : EnvSound env) => ",
-                    "KernelAddDeclChain.rec env ",
+                    "@KernelAddDeclChain.rec env ",
                     "(fun (dst_env : KEnv) (_hstep : KernelAddDeclChain env dst_env) => ",
                     "forall (ctx : KernelLocalCtx), ",
                     "KernelStateMatchesSpec (KernelState.mk env ctx) -> ",
@@ -349,7 +349,7 @@ impl ProofLibrary {
                     "(fun (ctx : KernelLocalCtx) ",
                     "(base_match : KernelStateMatchesSpec (KernelState.mk env ctx)) ",
                     "(base_sound : EnvSound env) => ",
-                    "ProdType.mk ",
+                    "@ProdType.mk ",
                     "(KernelStateMatchesSpec (KernelState.mk env ctx)) ",
                     "(EnvSound env) ",
                     "base_match base_sound) ",

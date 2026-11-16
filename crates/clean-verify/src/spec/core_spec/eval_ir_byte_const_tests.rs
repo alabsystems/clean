@@ -22,7 +22,7 @@ const BAD: &str = "IRStepResult.fault (IROutcome.type_error IRFault.bad_field)";
 const NOT_INT: &str = "IRStepResult.fault (IROutcome.type_error IRFault.not_int)";
 const ZERO_FAT: &str =
     "IRConst.aggv (IRConst.vcons (IRConst.int_ 0) (IRConst.vcons (IRConst.int_ 0) IRConst.vnil))";
-const PROGRAM: &str = "IRModule.mk (IRList.nil IRFunc) (IRList.nil IRGlobal)";
+const PROGRAM: &str = "IRModule.mk (@IRList.nil IRFunc) (@IRList.nil IRGlobal)";
 
 fn specification() -> Specification {
     crate::eval_ir::build_byte_prelude_spec_v1_with_stack().expect("public Byte vocabulary")
@@ -46,7 +46,7 @@ fn add(spec: &mut Specification, source: &str) {
 fn equality(spec: &mut Specification, name: &str, ty: &str, actual: &str, expected: &str) {
     add(
         spec,
-        &format!("def {name} : Eq ({ty}) ({actual}) ({expected}) := Eq.refl ({ty}) ({expected})"),
+        &format!("def {name} : @Eq ({ty}) ({actual}) ({expected}) := @Eq.refl ({ty}) ({expected})"),
     );
 }
 
@@ -71,8 +71,8 @@ fn list(ty: &str, values: &[&str]) -> String {
     values
         .iter()
         .rev()
-        .fold(format!("IRList.nil {ty}"), |tail, value| {
-            format!("IRList.cons {ty} ({value}) ({tail})")
+        .fold(format!("@IRList.nil {ty}"), |tail, value| {
+            format!("@IRList.cons {ty} ({value}) ({tail})")
         })
 }
 
@@ -88,7 +88,7 @@ fn aggregate(ty: &str, values: &[&str]) -> String {
 
 fn layout(id: u64, fields: &[&str]) -> String {
     format!(
-        "IRByteLayoutV1.mk (IRTy.struct_ {id}) 32 8 ({}) (IRList.nil Nat)",
+        "IRByteLayoutV1.mk (IRTy.struct_ {id}) 32 8 ({}) (@IRList.nil Nat)",
         list("IRTy", fields)
     )
 }
@@ -107,7 +107,7 @@ fn schema(id: u64, tag: u64, fields: &[&str]) -> String {
 }
 
 fn context(layouts: &[&str], enums: &[&str], functions: &[&str]) -> String {
-    format!("(IRByteContextV1.mke ({PROGRAM}) ({}) (IRList.nil IRByteSignatureV1) ({}) (IRList.nil IRByteSiteV1) ({}))", list("IRByteLayoutV1", layouts), list("IRByteFunctionV1", functions), list("IRByteEnumV1", enums))
+    format!("(IRByteContextV1.mke ({PROGRAM}) ({}) (@IRList.nil IRByteSignatureV1) ({}) (@IRList.nil IRByteSiteV1) ({}))", list("IRByteLayoutV1", layouts), list("IRByteFunctionV1", functions), list("IRByteEnumV1", enums))
 }
 
 fn rejected(spec: &mut Specification, name: &str, source: &str) {
@@ -340,7 +340,7 @@ fn byte_const_context_checks_complete_spines_and_unwrapped_selected_tags() {
                 BAD,
             );
         }
-        let old = format!("(IRByteContextV1.mk ({PROGRAM}) (IRList.nil IRByteLayoutV1) (IRList.nil IRByteSignatureV1) (IRList.nil IRByteFunctionV1) (IRList.nil IRByteSiteV1))");
+        let old = format!("(IRByteContextV1.mk ({PROGRAM}) (@IRList.nil IRByteLayoutV1) (@IRList.nil IRByteSignatureV1) (@IRList.nil IRByteFunctionV1) (@IRList.nil IRByteSiteV1))");
         result(
             &mut spec,
             "const_old_enum_refused",
@@ -367,8 +367,8 @@ fn byte_const_context_recursive_schema_and_scalar_bit_patterns_stay_bounded() {
         let mut spec = specification();
         let recursive =
             format!("IRByteEnumV1.mk 7 (IRTy.uint_ 8) ({})", list("IRByteEnumVariantV1", &[
-            "IRByteEnumVariantV1.mk 3 (IRList.nil IRTy)",
-            "IRByteEnumVariantV1.mk 19 (IRList.cons IRTy (IRTy.enum_ 7) (IRList.nil IRTy))",
+            "IRByteEnumVariantV1.mk 3 (@IRList.nil IRTy)",
+            "IRByteEnumVariantV1.mk 19 (@IRList.cons IRTy (IRTy.enum_ 7) (@IRList.nil IRTy))",
         ]));
         let ctx = context(&[], &[&recursive], &[]);
         let leaf = aggregate("IRConst", &["IRConst.int_ 3"]);

@@ -55,11 +55,11 @@ use crate::Specification;
 /// The empty constant environment, spelled inline everywhere (a named
 /// definition would risk an opaque-unfolding wall in the witness types; the
 /// `kernelinfers_sort_witness` precedent inlines its `tenv` the same way).
-const EMPTY_TENV: &str = "(fun (nm : Name) => OptionType.none ImplConstInfo)";
+const EMPTY_TENV: &str = "(fun (nm : Name) => @OptionType.none ImplConstInfo)";
 
 /// No declared universe parameters — so `check_level` demands every level be
 /// param-free, which is exactly the situation for a closed `Sort` term.
-const NO_LPS: &str = "(ListType.nil Name)";
+const NO_LPS: &str = "(@ListType.nil Name)";
 
 /// `BinderData { info: Default, mult: Many }` — what `BinderInfo::Default.into()`
 /// produces, and what `ctx_push_let` (`tc/config.rs:48`) stores through
@@ -87,8 +87,8 @@ impl Specification {
                  (ImplExpr.sort Level.zero) (ImplExpr.sort (Level.succ Level.zero)) Nat.zero"
             ),
             value_src: Some(format!(
-                "ImplInfer.sort {EMPTY_TENV} {NO_LPS} Nat.zero LCtx.nil Level.zero \
-                 (Eq.refl Bool Bool.true)"
+                "@ImplInfer.sort {EMPTY_TENV} {NO_LPS} Nat.zero LCtx.nil Level.zero \
+                 (@Eq.refl Bool Bool.true)"
             )),
             is_axiom: false,
             description: "Non-vacuity witness for the sort rule: (Prop : Type) in the empty \
@@ -115,7 +115,7 @@ impl Specification {
         // and TypingCtxConv.var both apply lift_at A 0 (succ i)).
         let g1 = format!(
             "(LCtx.snoc LCtx.nil (LocalDecl.mk Nat.zero (ImplExpr.sort Level.zero) \
-             (OptionType.none ImplExpr) {BD}))"
+             (@OptionType.none ImplExpr) {BD}))"
         );
         self.add_definition(SpecDefinition {
             name: "implinfer_fvar_witness".to_string(),
@@ -124,9 +124,9 @@ impl Specification {
                  (ImplExpr.fvar Nat.zero) (ImplExpr.sort Level.zero) (Nat.succ Nat.zero)"
             ),
             value_src: Some(format!(
-                "ImplInfer.fvar {EMPTY_TENV} {NO_LPS} (Nat.succ Nat.zero) {g1} Nat.zero \
+                "@ImplInfer.fvar {EMPTY_TENV} {NO_LPS} (Nat.succ Nat.zero) {g1} Nat.zero \
                  (ImplExpr.sort Level.zero) \
-                 (Eq.refl (OptionType ImplExpr) (OptionType.some ImplExpr (ImplExpr.sort Level.zero)))"
+                 (@Eq.refl (OptionType ImplExpr) (@OptionType.some ImplExpr (ImplExpr.sort Level.zero)))"
             )),
             is_axiom: false,
             description: "Non-vacuity witness for the fvar rule: FVar(0) in the one-entry \
@@ -155,24 +155,24 @@ impl Specification {
         // computation: env lookup, level arity, per-level check_level, the
         // unsafe gate, the partial gate. Model B's const arm models ZERO of
         // these — this witness is the direct measure of the difference.
-        let ci = "(ImplConstInfo.mk (ListType.nil Name) (ImplExpr.sort Level.zero) Bool.false Bool.false)";
-        let tenv1 = format!("(fun (nm : Name) => OptionType.some ImplConstInfo {ci})");
+        let ci = "(ImplConstInfo.mk (@ListType.nil Name) (ImplExpr.sort Level.zero) Bool.false Bool.false)";
+        let tenv1 = format!("(fun (nm : Name) => @OptionType.some ImplConstInfo {ci})");
         self.add_definition(SpecDefinition {
             name: "implinfer_const_witness".to_string(),
             type_src: format!(
                 "ImplInfer {tenv1} {NO_LPS} Nat.zero LCtx.nil \
-                 (ImplExpr.const Name.anonymous (ListType.nil Level)) \
-                 (impl_inst_levels (impl_const_lps {ci}) (ListType.nil Level) (impl_const_type {ci})) \
+                 (ImplExpr.const Name.anonymous (@ListType.nil Level)) \
+                 (impl_inst_levels (impl_const_lps {ci}) (@ListType.nil Level) (impl_const_type {ci})) \
                  Nat.zero"
             ),
             value_src: Some(format!(
-                "ImplInfer.const {tenv1} {NO_LPS} Nat.zero LCtx.nil Name.anonymous \
-                 (ListType.nil Level) {ci} \
-                 (Eq.refl (OptionType ImplConstInfo) (OptionType.some ImplConstInfo {ci})) \
-                 (Eq.refl Nat Nat.zero) \
-                 (Eq.refl Bool Bool.true) \
-                 (Eq.refl Bool Bool.false) \
-                 (Eq.refl Bool Bool.false)"
+                "@ImplInfer.const {tenv1} {NO_LPS} Nat.zero LCtx.nil Name.anonymous \
+                 (@ListType.nil Level) {ci} \
+                 (@Eq.refl (OptionType ImplConstInfo) (@OptionType.some ImplConstInfo {ci})) \
+                 (@Eq.refl Nat Nat.zero) \
+                 (@Eq.refl Bool Bool.true) \
+                 (@Eq.refl Bool Bool.false) \
+                 (@Eq.refl Bool Bool.false)"
             )),
             is_axiom: false,
             description: "Non-vacuity witness for the const rule, exercising ALL FIVE \
@@ -222,7 +222,7 @@ impl Specification {
                      (ImplExpr.lit {ctor}) (impl_lit_type {ctor}) Nat.zero"
                 ),
                 value_src: Some(format!(
-                    "ImplInfer.lit {EMPTY_TENV} {NO_LPS} Nat.zero LCtx.nil {ctor}"
+                    "@ImplInfer.lit {EMPTY_TENV} {NO_LPS} Nat.zero LCtx.nil {ctor}"
                 )),
                 is_axiom: false,
                 description: format!(
@@ -254,7 +254,7 @@ impl Specification {
                  (ImplExpr.sort (Level.succ Level.zero)) Nat.zero"
             ),
             value_src: Some(format!(
-                "ImplInfer.mdata {EMPTY_TENV} {NO_LPS} Nat.zero Nat.zero LCtx.nil \
+                "@ImplInfer.mdata {EMPTY_TENV} {NO_LPS} Nat.zero Nat.zero LCtx.nil \
                  (ImplExpr.sort Level.zero) (ImplExpr.sort (Level.succ Level.zero)) \
                  implinfer_sort_witness"
             )),
@@ -284,7 +284,7 @@ impl Specification {
     fn add_impl_witness_binders(&mut self) -> Result<(), SpecError> {
         let g1 = format!(
             "(LCtx.snoc LCtx.nil (LocalDecl.mk Nat.zero (ImplExpr.sort Level.zero) \
-             (OptionType.none ImplExpr) {BD}))"
+             (@OptionType.none ImplExpr) {BD}))"
         );
 
         // ── lam: THE FLAGSHIP — λ(x : Prop). x ──────────────────────────────
@@ -302,15 +302,15 @@ impl Specification {
                  (Nat.succ Nat.zero)"
             ),
             value_src: Some(format!(
-                "ImplInfer.lam {EMPTY_TENV} {NO_LPS} Nat.zero Nat.zero (Nat.succ Nat.zero) \
+                "@ImplInfer.lam {EMPTY_TENV} {NO_LPS} Nat.zero Nat.zero (Nat.succ Nat.zero) \
                  LCtx.nil {BD} (ImplExpr.sort Level.zero) (ImplExpr.bvar Nat.zero) \
                  (ImplExpr.sort (Level.succ Level.zero)) (Level.succ Level.zero) \
                  (ImplExpr.sort Level.zero) \
                  implinfer_sort_witness \
                  (ImplWhnfTo.done (ImplExpr.sort (Level.succ Level.zero))) \
-                 (ImplInfer.fvar {EMPTY_TENV} {NO_LPS} (Nat.succ Nat.zero) {g1} Nat.zero \
+                 (@ImplInfer.fvar {EMPTY_TENV} {NO_LPS} (Nat.succ Nat.zero) {g1} Nat.zero \
                  (ImplExpr.sort Level.zero) \
-                 (Eq.refl (OptionType ImplExpr) (OptionType.some ImplExpr (ImplExpr.sort Level.zero))))"
+                 (@Eq.refl (OptionType ImplExpr) (@OptionType.some ImplExpr (ImplExpr.sort Level.zero))))"
             )),
             is_axiom: false,
             description: "FLAGSHIP non-vacuity witness: the identity lambda on Prop, \
@@ -353,14 +353,14 @@ impl Specification {
                  (Nat.succ Nat.zero)"
             ),
             value_src: Some(format!(
-                "ImplInfer.pi {EMPTY_TENV} {NO_LPS} Nat.zero Nat.zero (Nat.succ Nat.zero) \
+                "@ImplInfer.pi {EMPTY_TENV} {NO_LPS} Nat.zero Nat.zero (Nat.succ Nat.zero) \
                  LCtx.nil {BD} (ImplExpr.sort Level.zero) (ImplExpr.sort Level.zero) \
                  (ImplExpr.sort (Level.succ Level.zero)) (ImplExpr.sort (Level.succ Level.zero)) \
                  (Level.succ Level.zero) (Level.succ Level.zero) \
                  implinfer_sort_witness \
                  (ImplWhnfTo.done (ImplExpr.sort (Level.succ Level.zero))) \
-                 (ImplInfer.sort {EMPTY_TENV} {NO_LPS} (Nat.succ Nat.zero) {g1} Level.zero \
-                 (Eq.refl Bool Bool.true)) \
+                 (@ImplInfer.sort {EMPTY_TENV} {NO_LPS} (Nat.succ Nat.zero) {g1} Level.zero \
+                 (@Eq.refl Bool Bool.true)) \
                  (ImplWhnfTo.done (ImplExpr.sort (Level.succ Level.zero)))"
             )),
             is_axiom: false,
@@ -391,20 +391,20 @@ impl Specification {
         let ident_ty = "(ImplExpr.lam (BinderData.mk BinderInfo.default Multiplicity.many) (ImplExpr.sort (Level.succ Level.zero)) (ImplExpr.bvar Nat.zero))";
         let g_ty = format!(
             "(LCtx.snoc LCtx.nil (LocalDecl.mk Nat.zero (ImplExpr.sort (Level.succ Level.zero)) \
-             (OptionType.none ImplExpr) {BD}))"
+             (@OptionType.none ImplExpr) {BD}))"
         );
         let ident_ty_deriv = format!(
-            "(ImplInfer.lam {EMPTY_TENV} {NO_LPS} Nat.zero Nat.zero (Nat.succ Nat.zero) \
+            "(@ImplInfer.lam {EMPTY_TENV} {NO_LPS} Nat.zero Nat.zero (Nat.succ Nat.zero) \
              LCtx.nil {BD} (ImplExpr.sort (Level.succ Level.zero)) (ImplExpr.bvar Nat.zero) \
              (ImplExpr.sort (Level.succ (Level.succ Level.zero))) \
              (Level.succ (Level.succ Level.zero)) (ImplExpr.sort (Level.succ Level.zero)) \
-             (ImplInfer.sort {EMPTY_TENV} {NO_LPS} Nat.zero LCtx.nil (Level.succ Level.zero) \
-             (Eq.refl Bool Bool.true)) \
+             (@ImplInfer.sort {EMPTY_TENV} {NO_LPS} Nat.zero LCtx.nil (Level.succ Level.zero) \
+             (@Eq.refl Bool Bool.true)) \
              (ImplWhnfTo.done (ImplExpr.sort (Level.succ (Level.succ Level.zero)))) \
-             (ImplInfer.fvar {EMPTY_TENV} {NO_LPS} (Nat.succ Nat.zero) {g_ty} Nat.zero \
+             (@ImplInfer.fvar {EMPTY_TENV} {NO_LPS} (Nat.succ Nat.zero) {g_ty} Nat.zero \
              (ImplExpr.sort (Level.succ Level.zero)) \
-             (Eq.refl (OptionType ImplExpr) \
-             (OptionType.some ImplExpr (ImplExpr.sort (Level.succ Level.zero))))))"
+             (@Eq.refl (OptionType ImplExpr) \
+             (@OptionType.some ImplExpr (ImplExpr.sort (Level.succ Level.zero))))))"
         );
         self.add_definition(SpecDefinition {
             name: "implinfer_app_witness".to_string(),
@@ -414,7 +414,7 @@ impl Specification {
                  (ImplExpr.sort (Level.succ Level.zero)) (Nat.succ Nat.zero)"
             ),
             value_src: Some(format!(
-                "ImplInfer.app {EMPTY_TENV} {NO_LPS} Nat.zero (Nat.succ Nat.zero) \
+                "@ImplInfer.app {EMPTY_TENV} {NO_LPS} Nat.zero (Nat.succ Nat.zero) \
                  (Nat.succ Nat.zero) LCtx.nil {ident_ty} (ImplExpr.sort Level.zero) \
                  (ImplExpr.pi {BD} (ImplExpr.sort (Level.succ Level.zero)) \
                  (ImplExpr.sort (Level.succ Level.zero))) \
@@ -424,8 +424,8 @@ impl Specification {
                  {ident_ty_deriv} \
                  (ImplWhnfTo.done (ImplExpr.pi {BD} (ImplExpr.sort (Level.succ Level.zero)) \
                  (ImplExpr.sort (Level.succ Level.zero)))) \
-                 (ImplInfer.sort {EMPTY_TENV} {NO_LPS} (Nat.succ Nat.zero) LCtx.nil Level.zero \
-                 (Eq.refl Bool Bool.true)) \
+                 (@ImplInfer.sort {EMPTY_TENV} {NO_LPS} (Nat.succ Nat.zero) LCtx.nil Level.zero \
+                 (@Eq.refl Bool Bool.true)) \
                  (ImplIsLe.refl (ImplExpr.sort (Level.succ Level.zero)))"
             )),
             is_axiom: false,
@@ -457,7 +457,7 @@ impl Specification {
         // subst_fvar — zeta DIRECTLY, not instantiate.
         let g_let = format!(
             "(LCtx.snoc LCtx.nil (LocalDecl.mk Nat.zero (ImplExpr.sort (Level.succ Level.zero)) \
-             (OptionType.some ImplExpr (ImplExpr.sort Level.zero)) {BD}))"
+             (@OptionType.some ImplExpr (ImplExpr.sort Level.zero)) {BD}))"
         );
         self.add_definition(SpecDefinition {
             name: "implinfer_let_witness".to_string(),
@@ -468,7 +468,7 @@ impl Specification {
                  (ImplExpr.sort (Level.succ Level.zero)) (Nat.succ Nat.zero)"
             ),
             value_src: Some(format!(
-                "ImplInfer.let_ {EMPTY_TENV} {NO_LPS} Nat.zero Nat.zero Nat.zero \
+                "@ImplInfer.let_ {EMPTY_TENV} {NO_LPS} Nat.zero Nat.zero Nat.zero \
                  (Nat.succ Nat.zero) LCtx.nil Name.anonymous \
                  (ImplExpr.sort (Level.succ Level.zero)) (ImplExpr.sort Level.zero) \
                  (ImplExpr.bvar Nat.zero) \
@@ -476,16 +476,16 @@ impl Specification {
                  (Level.succ (Level.succ Level.zero)) \
                  (ImplExpr.sort (Level.succ Level.zero)) \
                  (ImplExpr.sort (Level.succ Level.zero)) \
-                 (ImplInfer.sort {EMPTY_TENV} {NO_LPS} Nat.zero LCtx.nil (Level.succ Level.zero) \
-                 (Eq.refl Bool Bool.true)) \
+                 (@ImplInfer.sort {EMPTY_TENV} {NO_LPS} Nat.zero LCtx.nil (Level.succ Level.zero) \
+                 (@Eq.refl Bool Bool.true)) \
                  (ImplWhnfTo.done (ImplExpr.sort (Level.succ (Level.succ Level.zero)))) \
-                 (ImplInfer.sort {EMPTY_TENV} {NO_LPS} Nat.zero LCtx.nil Level.zero \
-                 (Eq.refl Bool Bool.true)) \
+                 (@ImplInfer.sort {EMPTY_TENV} {NO_LPS} Nat.zero LCtx.nil Level.zero \
+                 (@Eq.refl Bool Bool.true)) \
                  (ImplIsLe.refl (ImplExpr.sort (Level.succ Level.zero))) \
-                 (ImplInfer.fvar {EMPTY_TENV} {NO_LPS} (Nat.succ Nat.zero) {g_let} Nat.zero \
+                 (@ImplInfer.fvar {EMPTY_TENV} {NO_LPS} (Nat.succ Nat.zero) {g_let} Nat.zero \
                  (ImplExpr.sort (Level.succ Level.zero)) \
-                 (Eq.refl (OptionType ImplExpr) \
-                 (OptionType.some ImplExpr (ImplExpr.sort (Level.succ Level.zero)))))"
+                 (@Eq.refl (OptionType ImplExpr) \
+                 (@OptionType.some ImplExpr (ImplExpr.sort (Level.succ Level.zero)))))"
             )),
             is_axiom: false,
             description: "Non-vacuity witness for the let_ rule: \

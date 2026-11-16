@@ -21,9 +21,9 @@
 //! agree with its definition three ways is pinned `fold`, a row a `fold` row
 //! needs is pinned `definition`, the rest are unpinned. The battery fails when
 //! a fresh reviewed mint and the pinned rows disagree, and
-//! `CLEAN_NATIVE_FOLD_REPIN=1` rebuilds the spec under the kernel's mint
-//! bypass (folds by name, as before authority), reviews it the same way,
-//! rewrites this world's rows and then FAILS: the table is `include_str!`'d, so
+//! `CLEAN_NATIVE_FOLD_REPIN=1` first builds the ordinary full spec. Only
+//! the untrusted row review then uses the kernel's mint bypass, without its
+//! production leg. It rewrites this world's rows and then FAILS: the table is `include_str!`'d, so
 //! the re-pinning binary cannot check the rows it wrote, and a re-pin run is
 //! never a verdict. Rebuild and rerun without the variable.
 
@@ -89,8 +89,8 @@ fn repin(rows: &[Row]) {
 #[test]
 fn test_spec_fold_digests_are_pinned() {
     if repinning() {
-        let spec = native_fold_mint_bypass::run(|| {
-            run_with_stack(|| Specification::new().expect("the spec builds under the mint bypass"))
+        let spec = run_with_stack(|| {
+            Specification::new().expect("ordinary full spec builds before pin authoring")
         });
         let rows = mint(spec.env(), true);
         repin(&rows);

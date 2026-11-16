@@ -45,12 +45,12 @@ impl Specification {
         ] {
             self.add_recursive_def(
                 &format!(
-                    "def {name} (C : {univ}) (m : Nat) (n : Nat) (h : Eq Nat m n) \
-                     (hne : Eq Bool (nat_eqb m n) Bool.false) : C := \
+                    "def {name} (C : {univ}) (m : Nat) (n : Nat) (h : @Eq Nat m n) \
+                     (hne : @Eq Bool (nat_eqb m n) Bool.false) : C := \
                      {absurd} C \
                      (Eq.trans Bool Bool.false (nat_eqb m n) Bool.true \
                      (Eq.symm Bool (nat_eqb m n) Bool.false hne) \
-                     (Eq.substType Nat (fun (z : Nat) => Eq Bool (nat_eqb m z) Bool.true) \
+                     (Eq.substType Nat (fun (z : Nat) => @Eq Bool (nat_eqb m z) Bool.true) \
                      m n h (nat_eqb_refl m)))"
                 ),
                 &format!(
@@ -71,7 +71,7 @@ impl Specification {
             "def rigid_join_same_tag (env : RedEnv) (na : KExpr) (nb : KExpr) (w : KExpr) \
              (hra : rigid_app_head na) (hrb : rigid_app_head nb) \
              (hsa : par_reduces_cd_star env na w) (hsb : par_reduces_cd_star env nb w) : \
-             Eq Nat (kexpr_tag na) (kexpr_tag nb) := \
+             @Eq Nat (kexpr_tag na) (kexpr_tag nb) := \
              Eq.trans Nat (kexpr_tag na) (kexpr_tag w) (kexpr_tag nb) \
              (rigid_app_head_star_preserves_tag env na hra w hsa) \
              (Eq.symm Nat (kexpr_tag nb) (kexpr_tag w) \

@@ -52,7 +52,7 @@ const DB: &str = "(skcons (domSk qsA) qD)";
 /// `r17_shapeOf_agrees_on_wk`, which said the same thing one level down about
 /// SHAPES; it is what makes R12-R16's semantic lineage a statement about
 /// `xval`, not merely about the system `xval` extends.
-pub(super) const TY_XVAL_SVAL: &str = "forall (D : Nat -> Sk) (e : KExpr) (s : Sk) (h : WK D e s) (r : VEnvD D), Eq (VD s) (xval D e s (r17_wk_wkc D e s h) r) (sval D e s h r)";
+pub(super) const TY_XVAL_SVAL: &str = "forall (D : Nat -> Sk) (e : KExpr) (s : Sk) (h : WK D e s) (r : VEnvD D), @Eq (VD s) (xval D e s (r17_wk_wkc D e s h) r) (sval D e s h r)";
 
 /// The transfer's proof term: `WK.rec` at five arms.
 ///
@@ -73,18 +73,19 @@ pub(super) const TY_XVAL_SVAL: &str = "forall (D : Nat -> Sk) (e : KExpr) (s : S
 /// machinery, only the machinery R13/R14 built for the corpus's `val_lift`.
 #[allow(clippy::too_many_lines)]
 pub(super) fn val_xval_sval() -> String {
-    let motive = "(fun (qD : Nat -> Sk) (qe : KExpr) (qs : Sk) (qh : WK qD qe qs) => forall (qr : VEnvD qD), Eq (VD qs) (xval qD qe qs (r17_wk_wkc qD qe qs qh) qr) (sval qD qe qs qh qr))";
+    let motive = "(fun (qD : Nat -> Sk) (qe : KExpr) (qs : Sk) (qh : WK qD qe qs) => forall (qr : VEnvD qD), @Eq (VD qs) (xval qD qe qs (r17_wk_wkc qD qe qs qh) qr) (sval qD qe qs qh qr))";
 
-    let m_var = "(fun (qD : Nat -> Sk) (qi : Nat) (qr : VEnvD qD) => Eq.refl (VD (qD qi)) (qr qi))";
-    let m_sort = "(fun (qD : Nat -> Sk) (qn : Level) (qr : VEnvD qD) => Eq.refl (VD (Sk.kd Sk.ty)) (fun (qe2 : KExpr) => whnf_acc qe2))";
+    let m_var =
+        "(fun (qD : Nat -> Sk) (qi : Nat) (qr : VEnvD qD) => @Eq.refl (VD (qD qi)) (qr qi))";
+    let m_sort = "(fun (qD : Nat -> Sk) (qn : Level) (qr : VEnvD qD) => @Eq.refl (VD (Sk.kd Sk.ty)) (fun (qe2 : KExpr) => whnf_acc qe2))";
 
     // The annotation hypothesis, shared by `pi` and `lam`.
-    let ih_a = "(qihA : forall (qr : VEnvD qD), Eq (VD qsA) (xval qD qA qsA (r17_wk_wkc qD qA qsA qhA) qr) (sval qD qA qsA qhA qr))";
+    let ih_a = "(qihA : forall (qr : VEnvD qD), @Eq (VD qsA) (xval qD qA qsA (r17_wk_wkc qD qA qsA qhA) qr) (sval qD qA qsA qhA qr))";
     let xa = "(xval qD qA qsA (r17_wk_wkc qD qA qsA qhA) qr)";
     let sa = "(sval qD qA qsA qhA qr)";
 
     // --- pi ---
-    let ih_pb = format!("(qihB : forall (qr : VEnvD {DB}), Eq (VD qsB) (xval {DB} qB qsB (r17_wk_wkc {DB} qB qsB qhB) qr) (sval {DB} qB qsB qhB qr))");
+    let ih_pb = format!("(qihB : forall (qr : VEnvD {DB}), @Eq (VD qsB) (xval {DB} qB qsB (r17_wk_wkc {DB} qB qsB qhB) qr) (sval {DB} qB qsB qhB qr))");
     let jr = "(vconsD (domSk qsA) qD (junkD (domSk qsA)) qr)";
     let xb = format!("(xval {DB} qB qsB (r17_wk_wkc {DB} qB qsB qhB) {jr})");
     let sb = format!("(sval {DB} qB qsB qhB {jr})");
@@ -93,7 +94,7 @@ pub(super) fn val_xval_sval() -> String {
     );
 
     // --- lam ---
-    let ih_lb = format!("(qihb : forall (qr : VEnvD {DB}), Eq (VD qc) (xval {DB} qb qc (r17_wk_wkc {DB} qb qc qhb) qr) (sval {DB} qb qc qhb qr))");
+    let ih_lb = format!("(qihb : forall (qr : VEnvD {DB}), @Eq (VD qc) (xval {DB} qb qc (r17_wk_wkc {DB} qb qc qhb) qr) (sval {DB} qb qc qhb qr))");
     let lam_t = "(KExpr.lam qA qb)";
     let lam_s = "(Sk.arr (domSk qsA) qc)";
     let lam_d = "(WK.lam qD qA qb qsA qc qhA qhb)";
@@ -106,8 +107,8 @@ pub(super) fn val_xval_sval() -> String {
 
     // --- app ---
     let arr = "(Sk.arr qd qcc)";
-    let ih_f = format!("(qihf : forall (qr : VEnvD qD), Eq (VD {arr}) (xval qD qf {arr} (r17_wk_wkc qD qf {arr} qhf) qr) (sval qD qf {arr} qhf qr))");
-    let ih_ar = "(qiha : forall (qr : VEnvD qD), Eq (VD qd) (xval qD qa qd (r17_wk_wkc qD qa qd qha) qr) (sval qD qa qd qha qr))";
+    let ih_f = format!("(qihf : forall (qr : VEnvD qD), @Eq (VD {arr}) (xval qD qf {arr} (r17_wk_wkc qD qf {arr} qhf) qr) (sval qD qf {arr} qhf qr))");
+    let ih_ar = "(qiha : forall (qr : VEnvD qD), @Eq (VD qd) (xval qD qa qd (r17_wk_wkc qD qa qd qha) qr) (sval qD qa qd qha qr))";
     let xf = format!("(xval qD qf {arr} (r17_wk_wkc qD qf {arr} qhf) qr)");
     let sf = format!("(sval qD qf {arr} qhf qr)");
     let xarg = "(xval qD qa qd (r17_wk_wkc qD qa qd qha) qr)";
@@ -116,7 +117,7 @@ pub(super) fn val_xval_sval() -> String {
         "(fun (qD : Nat -> Sk) (qf : KExpr) (qa : KExpr) (qd : Sk) (qcc : Sk) (qhf : WK qD qf {arr}) (qha : WK qD qa qd) {ih_f} {ih_ar} (qr : VEnvD qD) => r14_vapply_congr qd qcc {xf} {sf} {xarg} {sarg} (qihf qr) (qiha qr))"
     );
 
-    format!("fun (D : Nat -> Sk) (e : KExpr) (s : Sk) (h : WK D e s) => WK.rec {motive} {m_var} {m_sort} {m_pi} {m_lam} {m_app} D e s h")
+    format!("fun (D : Nat -> Sk) (e : KExpr) (s : Sk) (h : WK D e s) => @WK.rec {motive} {m_var} {m_sort} {m_pi} {m_lam} {m_app} D e s h")
 }
 
 // ================================================================
@@ -134,9 +135,9 @@ pub(super) fn val_xval_sval() -> String {
 /// `r13_venvD_funext` to turn pointwise agreement into an equality of
 /// valuations, one `Eq.cong` to push it through. Nothing about the derivation
 /// is inspected, which is precisely why the new constructors cost nothing here.
-pub(super) const TY_XVAL_ENV_CONGR: &str = "forall (D : Nat -> Sk) (e : KExpr) (s : Sk) (hw : WKC D e s) (r : VEnvD D) (r2 : VEnvD D), (forall (i : Nat), Eq (VD (D i)) (r i) (r2 i)) -> Eq (VD s) (xval D e s hw r) (xval D e s hw r2)";
+pub(super) const TY_XVAL_ENV_CONGR: &str = "forall (D : Nat -> Sk) (e : KExpr) (s : Sk) (hw : WKC D e s) (r : VEnvD D) (r2 : VEnvD D), (forall (i : Nat), @Eq (VD (D i)) (r i) (r2 i)) -> @Eq (VD s) (xval D e s hw r) (xval D e s hw r2)";
 
-pub(super) const VAL_XVAL_ENV_CONGR: &str = "fun (D : Nat -> Sk) (e : KExpr) (s : Sk) (hw : WKC D e s) (r : VEnvD D) (r2 : VEnvD D) (h : forall (i : Nat), Eq (VD (D i)) (r i) (r2 i)) => Eq.cong (VEnvD D) (VD s) (fun (qr : VEnvD D) => xval D e s hw qr) r r2 (r13_venvD_funext D r r2 h)";
+pub(super) const VAL_XVAL_ENV_CONGR: &str = "fun (D : Nat -> Sk) (e : KExpr) (s : Sk) (hw : WKC D e s) (r : VEnvD D) (r2 : VEnvD D) (h : forall (i : Nat), @Eq (VD (D i)) (r i) (r2 i)) => @Eq.cong (VEnvD D) (VD s) (fun (qr : VEnvD D) => xval D e s hw qr) r r2 (r13_venvD_funext D r r2 h)";
 
 // ================================================================
 // Group C — the SEMANTIC STACK, transferred.
@@ -150,14 +151,14 @@ pub(super) const VAL_XVAL_ENV_CONGR: &str = "fun (D : Nat -> Sk) (e : KExpr) (s 
 // ================================================================
 
 /// **`r18_xval_step`** — R16's ∀-form `val_step`, on the `xval` side.
-pub(super) const TY_XVAL_STEP: &str = "forall (D : Nat -> Sk) (e : KExpr) (s : Sk) (h : WK D e s) (e2 : KExpr) (st : whnf_step e e2) (h2 : WK D e2 s) (r : VEnvD D), Eq (VD s) (xval D e2 s (r17_wk_wkc D e2 s h2) r) (xval D e s (r17_wk_wkc D e s h) r)";
+pub(super) const TY_XVAL_STEP: &str = "forall (D : Nat -> Sk) (e : KExpr) (s : Sk) (h : WK D e s) (e2 : KExpr) (st : whnf_step e e2) (h2 : WK D e2 s) (r : VEnvD D), @Eq (VD s) (xval D e2 s (r17_wk_wkc D e2 s h2) r) (xval D e s (r17_wk_wkc D e s h) r)";
 
-pub(super) const VAL_XVAL_STEP: &str = "fun (D : Nat -> Sk) (e : KExpr) (s : Sk) (h : WK D e s) (e2 : KExpr) (st : whnf_step e e2) (h2 : WK D e2 s) (r : VEnvD D) => Eq.trans (VD s) (xval D e2 s (r17_wk_wkc D e2 s h2) r) (sval D e2 s h2 r) (xval D e s (r17_wk_wkc D e s h) r) (r18_xval_sval D e2 s h2 r) (Eq.trans (VD s) (sval D e2 s h2 r) (sval D e s h r) (xval D e s (r17_wk_wkc D e s h) r) (r16_val_step D e s h e2 st h2 r) (Eq.symm (VD s) (xval D e s (r17_wk_wkc D e s h) r) (sval D e s h r) (r18_xval_sval D e s h r)))";
+pub(super) const VAL_XVAL_STEP: &str = "fun (D : Nat -> Sk) (e : KExpr) (s : Sk) (h : WK D e s) (e2 : KExpr) (st : whnf_step e e2) (h2 : WK D e2 s) (r : VEnvD D) => @Eq.trans (VD s) (xval D e2 s (r17_wk_wkc D e2 s h2) r) (sval D e2 s h2 r) (xval D e s (r17_wk_wkc D e s h) r) (r18_xval_sval D e2 s h2 r) (@Eq.trans (VD s) (sval D e2 s h2 r) (sval D e s h r) (xval D e s (r17_wk_wkc D e s h) r) (r16_val_step D e s h e2 st h2 r) (@Eq.symm (VD s) (xval D e s (r17_wk_wkc D e s h) r) (sval D e s h r) (r18_xval_sval D e s h r)))";
 
 /// **`r18_xval_step_star`** — the same along a whole reduction SEQUENCE.
-pub(super) const TY_XVAL_STEP_STAR: &str = "forall (D : Nat -> Sk) (e : KExpr) (w : KExpr) (hstar : whnfStar e w) (s : Sk) (h : WK D e s) (hw : WK D w s) (r : VEnvD D), Eq (VD s) (xval D w s (r17_wk_wkc D w s hw) r) (xval D e s (r17_wk_wkc D e s h) r)";
+pub(super) const TY_XVAL_STEP_STAR: &str = "forall (D : Nat -> Sk) (e : KExpr) (w : KExpr) (hstar : whnfStar e w) (s : Sk) (h : WK D e s) (hw : WK D w s) (r : VEnvD D), @Eq (VD s) (xval D w s (r17_wk_wkc D w s hw) r) (xval D e s (r17_wk_wkc D e s h) r)";
 
-pub(super) const VAL_XVAL_STEP_STAR: &str = "fun (D : Nat -> Sk) (e : KExpr) (w : KExpr) (hstar : whnfStar e w) (s : Sk) (h : WK D e s) (hw : WK D w s) (r : VEnvD D) => Eq.trans (VD s) (xval D w s (r17_wk_wkc D w s hw) r) (sval D w s hw r) (xval D e s (r17_wk_wkc D e s h) r) (r18_xval_sval D w s hw r) (Eq.trans (VD s) (sval D w s hw r) (sval D e s h r) (xval D e s (r17_wk_wkc D e s h) r) (r16_val_step_star D e w hstar s h hw r) (Eq.symm (VD s) (xval D e s (r17_wk_wkc D e s h) r) (sval D e s h r) (r18_xval_sval D e s h r)))";
+pub(super) const VAL_XVAL_STEP_STAR: &str = "fun (D : Nat -> Sk) (e : KExpr) (w : KExpr) (hstar : whnfStar e w) (s : Sk) (h : WK D e s) (hw : WK D w s) (r : VEnvD D) => @Eq.trans (VD s) (xval D w s (r17_wk_wkc D w s hw) r) (sval D w s hw r) (xval D e s (r17_wk_wkc D e s h) r) (r18_xval_sval D w s hw r) (@Eq.trans (VD s) (sval D w s hw r) (sval D e s h r) (xval D e s (r17_wk_wkc D e s h) r) (r16_val_step_star D e w hstar s h hw r) (@Eq.symm (VD s) (xval D e s (r17_wk_wkc D e s h) r) (sval D e s h r) (r18_xval_sval D e s h r)))";
 
 /// **`r18_xval_conv`** — R16's unconditional `val_conv`, on the `xval` side.
 ///
@@ -166,7 +167,7 @@ pub(super) const VAL_XVAL_STEP_STAR: &str = "fun (D : Nat -> Sk) (e : KExpr) (w 
 /// directions instead of `Eq.trans`.
 pub(super) const TY_XVAL_CONV: &str = "forall (D : Nat -> Sk) (e1 : KExpr) (e2 : KExpr) (w : KExpr) (s : Sk) (h1 : WK D e1 s) (h2 : WK D e2 s) (r : VEnvD D) (t : KExpr), whnfStar e1 w -> whnfStar e2 w -> vcarD s (xval D e1 s (r17_wk_wkc D e1 s h1) r) t -> vcarD s (xval D e2 s (r17_wk_wkc D e2 s h2) r) t";
 
-pub(super) const VAL_XVAL_CONV: &str = "fun (D : Nat -> Sk) (e1 : KExpr) (e2 : KExpr) (w : KExpr) (s : Sk) (h1 : WK D e1 s) (h2 : WK D e2 s) (r : VEnvD D) (t : KExpr) (st1 : whnfStar e1 w) (st2 : whnfStar e2 w) (hm : vcarD s (xval D e1 s (r17_wk_wkc D e1 s h1) r) t) => Eq.substType (VD s) (fun (qv : VD s) => vcarD s qv t) (sval D e2 s h2 r) (xval D e2 s (r17_wk_wkc D e2 s h2) r) (Eq.symm (VD s) (xval D e2 s (r17_wk_wkc D e2 s h2) r) (sval D e2 s h2 r) (r18_xval_sval D e2 s h2 r)) (r16_val_conv D e1 e2 w s h1 h2 r t st1 st2 (Eq.substType (VD s) (fun (qv : VD s) => vcarD s qv t) (xval D e1 s (r17_wk_wkc D e1 s h1) r) (sval D e1 s h1 r) (r18_xval_sval D e1 s h1 r) hm))";
+pub(super) const VAL_XVAL_CONV: &str = "fun (D : Nat -> Sk) (e1 : KExpr) (e2 : KExpr) (w : KExpr) (s : Sk) (h1 : WK D e1 s) (h2 : WK D e2 s) (r : VEnvD D) (t : KExpr) (st1 : whnfStar e1 w) (st2 : whnfStar e2 w) (hm : vcarD s (xval D e1 s (r17_wk_wkc D e1 s h1) r) t) => @Eq.substType (VD s) (fun (qv : VD s) => vcarD s qv t) (sval D e2 s h2 r) (xval D e2 s (r17_wk_wkc D e2 s h2) r) (@Eq.symm (VD s) (xval D e2 s (r17_wk_wkc D e2 s h2) r) (sval D e2 s h2 r) (r18_xval_sval D e2 s h2 r)) (r16_val_conv D e1 e2 w s h1 h2 r t st1 st2 (@Eq.substType (VD s) (fun (qv : VD s) => vcarD s qv t) (xval D e1 s (r17_wk_wkc D e1 s h1) r) (sval D e1 s h1 r) (r18_xval_sval D e1 s h1 r) hm))";
 
 /// **`r18_xval_lift` — THE SEMANTIC WEAKENING LEMMA, ON R17'S OWN OPERATION.**
 ///
@@ -182,7 +183,7 @@ pub(super) const VAL_XVAL_CONV: &str = "fun (D : Nat -> Sk) (e1 : KExpr) (e2 : K
 /// the reason a subsingleton was worth keeping when the conversion rule would
 /// have cost it (`r17_conv_verdict`).
 pub(super) fn ty_xval_lift() -> String {
-    format!("forall (D : Nat -> Sk) (e : KExpr) (s : Sk) (h : WK D e s) (k : Nat) (t : Sk) (r : VEnvD (skins k t D)), Eq (VD s) (xval (skins k t D) (lift_at e k {ONE}) s (wkc_lift D e s (r17_wk_wkc D e s h) k t) r) (xval D e s (r17_wk_wkc D e s h) (venvLiftD k t D r))")
+    format!("forall (D : Nat -> Sk) (e : KExpr) (s : Sk) (h : WK D e s) (k : Nat) (t : Sk) (r : VEnvD (skins k t D)), @Eq (VD s) (xval (skins k t D) (lift_at e k {ONE}) s (wkc_lift D e s (r17_wk_wkc D e s h) k t) r) (xval D e s (r17_wk_wkc D e s h) (venvLiftD k t D r))")
 }
 
 pub(super) fn val_xval_lift() -> String {
@@ -194,7 +195,7 @@ pub(super) fn val_xval_lift() -> String {
     let c = format!("(sval {ek} {le} s {wlift_w} r)");
     let dd = "(sval D e s h (venvLiftD k t D r))";
     let ee = "(xval D e s (r17_wk_wkc D e s h) (venvLiftD k t D r))";
-    format!("fun (D : Nat -> Sk) (e : KExpr) (s : Sk) (h : WK D e s) (k : Nat) (t : Sk) (r : VEnvD {ek}) => Eq.trans (VD s) {a} {c} {ee} (Eq.trans (VD s) {a} {b} {c} (r17_xval_irrel {ek} {le} s (wkc_lift D e s (r17_wk_wkc D e s h) k t) (r17_wk_wkc {ek} {le} s {wlift_w}) r) (r18_xval_sval {ek} {le} s {wlift_w} r)) (Eq.trans (VD s) {c} {dd} {ee} (r14_val_lift D e s h k t r) (Eq.symm (VD s) {ee} {dd} (r18_xval_sval D e s h (venvLiftD k t D r))))")
+    format!("fun (D : Nat -> Sk) (e : KExpr) (s : Sk) (h : WK D e s) (k : Nat) (t : Sk) (r : VEnvD {ek}) => @Eq.trans (VD s) {a} {c} {ee} (@Eq.trans (VD s) {a} {b} {c} (r17_xval_irrel {ek} {le} s (wkc_lift D e s (r17_wk_wkc D e s h) k t) (r17_wk_wkc {ek} {le} s {wlift_w}) r) (r18_xval_sval {ek} {le} s {wlift_w} r)) (@Eq.trans (VD s) {c} {dd} {ee} (r14_val_lift D e s h k t r) (@Eq.symm (VD s) {ee} {dd} (r18_xval_sval D e s h (venvLiftD k t D r))))")
 }
 
 /// **`r18_xval_psub`** — R14's semantic substitution lemma, on `wkc_psub`.
@@ -209,7 +210,7 @@ pub(super) fn val_xval_lift() -> String {
 /// deliberate: a `WKC`-indexed valuation construction is a DEFINITION, not a
 /// corollary of this rung, and inventing one here would put an unproved
 /// `xval`-side object into a theorem that is otherwise pure transport.
-pub(super) const TY_XVAL_PSUB: &str = "forall (Dp : Nat -> Sk) (e : KExpr) (s : Sk) (h : WK Dp e s) (sg : Nat -> KExpr) (D : Nat -> Sk) (hsg : forall (qi : Nat), WK D (sg qi) (Dp qi)) (r : VEnvD D), Eq (VD s) (xval D (psubst sg e) s (wkc_psub Dp e s (r17_wk_wkc Dp e s h) sg D (fun (qi : Nat) => r17_wk_wkc D (sg qi) (Dp qi) (hsg qi))) r) (xval Dp e s (r17_wk_wkc Dp e s h) (venvSubD sg D Dp hsg r))";
+pub(super) const TY_XVAL_PSUB: &str = "forall (Dp : Nat -> Sk) (e : KExpr) (s : Sk) (h : WK Dp e s) (sg : Nat -> KExpr) (D : Nat -> Sk) (hsg : forall (qi : Nat), WK D (sg qi) (Dp qi)) (r : VEnvD D), @Eq (VD s) (xval D (psubst sg e) s (wkc_psub Dp e s (r17_wk_wkc Dp e s h) sg D (fun (qi : Nat) => r17_wk_wkc D (sg qi) (Dp qi) (hsg qi))) r) (xval Dp e s (r17_wk_wkc Dp e s h) (venvSubD sg D Dp hsg r))";
 
 pub(super) fn val_xval_psub() -> String {
     let pe = "(psubst sg e)";
@@ -223,7 +224,7 @@ pub(super) fn val_xval_psub() -> String {
     let c = format!("(sval D {pe} s {wpw_wk} r)");
     let dd = format!("(sval Dp e s h {rs})");
     let ee = format!("(xval Dp e s (r17_wk_wkc Dp e s h) {rs})");
-    format!("fun (Dp : Nat -> Sk) (e : KExpr) (s : Sk) (h : WK Dp e s) (sg : Nat -> KExpr) (D : Nat -> Sk) (hsg : forall (qi : Nat), WK D (sg qi) (Dp qi)) (r : VEnvD D) => Eq.trans (VD s) {a} {c} {ee} (Eq.trans (VD s) {a} {b} {c} (r17_xval_irrel D {pe} s {wpc} {wpw} r) (r18_xval_sval D {pe} s {wpw_wk} r)) (Eq.trans (VD s) {c} {dd} {ee} (r14_val_psub Dp e s h sg D hsg r) (Eq.symm (VD s) {ee} {dd} (r18_xval_sval Dp e s h {rs})))")
+    format!("fun (Dp : Nat -> Sk) (e : KExpr) (s : Sk) (h : WK Dp e s) (sg : Nat -> KExpr) (D : Nat -> Sk) (hsg : forall (qi : Nat), WK D (sg qi) (Dp qi)) (r : VEnvD D) => @Eq.trans (VD s) {a} {c} {ee} (@Eq.trans (VD s) {a} {b} {c} (r17_xval_irrel D {pe} s {wpc} {wpw} r) (r18_xval_sval D {pe} s {wpw_wk} r)) (@Eq.trans (VD s) {c} {dd} {ee} (r14_val_psub Dp e s h sg D hsg r) (@Eq.symm (VD s) {ee} {dd} (r18_xval_sval Dp e s h {rs})))")
 }
 
 /// **`r18_xval_inst`** — R14's instantiation lemma, on `wkc_inst`.
@@ -234,7 +235,7 @@ pub(super) fn val_xval_psub() -> String {
 /// spent a THIRD time, under `vconsD`, through one `Eq.cong` in the extension
 /// value. That is the only place in this rung where the transfer is used other
 /// than at the theorem's own subject.
-pub(super) const TY_XVAL_INST: &str = "forall (D : Nat -> Sk) (b : KExpr) (a : KExpr) (d : Sk) (c : Sk) (hb : WK (skcons d D) b c) (ha : WK D a d) (r : VEnvD D), Eq (VD c) (xval D (instantiate b a) c (wkc_inst D b a d c (r17_wk_wkc (skcons d D) b c hb) (r17_wk_wkc D a d ha)) r) (xval (skcons d D) b c (r17_wk_wkc (skcons d D) b c hb) (vconsD d D (xval D a d (r17_wk_wkc D a d ha) r) r))";
+pub(super) const TY_XVAL_INST: &str = "forall (D : Nat -> Sk) (b : KExpr) (a : KExpr) (d : Sk) (c : Sk) (hb : WK (skcons d D) b c) (ha : WK D a d) (r : VEnvD D), @Eq (VD c) (xval D (instantiate b a) c (wkc_inst D b a d c (r17_wk_wkc (skcons d D) b c hb) (r17_wk_wkc D a d ha)) r) (xval (skcons d D) b c (r17_wk_wkc (skcons d D) b c hb) (vconsD d D (xval D a d (r17_wk_wkc D a d ha) r) r))";
 
 pub(super) fn val_xval_inst() -> String {
     let dd_ = "(skcons d D)";
@@ -252,10 +253,10 @@ pub(super) fn val_xval_inst() -> String {
     let ee = format!("(sval {dd_} b c hb (vconsD d D {sa} r))");
     let ff = format!("(xval {dd_} b c {hbc} (vconsD d D {sa} r))");
     let gg = format!("(xval {dd_} b c {hbc} (vconsD d D {xa} r))");
-    let step_cong = format!("(Eq.cong (VD d) (VD c) (fun (qv : VD d) => xval {dd_} b c {hbc} (vconsD d D qv r)) {sa} {xa} (Eq.symm (VD d) {xa} {sa} (r18_xval_sval D a d ha r)))");
+    let step_cong = format!("(@Eq.cong (VD d) (VD c) (fun (qv : VD d) => xval {dd_} b c {hbc} (vconsD d D qv r)) {sa} {xa} (@Eq.symm (VD d) {xa} {sa} (r18_xval_sval D a d ha r)))");
     let step_ef =
-        format!("(Eq.symm (VD c) {ff} {ee} (r18_xval_sval {dd_} b c hb (vconsD d D {sa} r)))");
-    format!("fun (D : Nat -> Sk) (b : KExpr) (a : KExpr) (d : Sk) (c : Sk) (hb : WK {dd_} b c) (ha : WK D a d) (r : VEnvD D) => Eq.trans (VD c) {a} {cc} {gg} (Eq.trans (VD c) {a} {b} {cc} (r17_xval_irrel D {ib} c {wic} {wiw} r) (r18_xval_sval D {ib} c {wiw_wk} r)) (Eq.trans (VD c) {cc} {ee} {gg} (r14_val_inst D b a d c hb ha r) (Eq.trans (VD c) {ee} {ff} {gg} {step_ef} {step_cong}))")
+        format!("(@Eq.symm (VD c) {ff} {ee} (r18_xval_sval {dd_} b c hb (vconsD d D {sa} r)))");
+    format!("fun (D : Nat -> Sk) (b : KExpr) (a : KExpr) (d : Sk) (c : Sk) (hb : WK {dd_} b c) (ha : WK D a d) (r : VEnvD D) => @Eq.trans (VD c) {a} {cc} {gg} (@Eq.trans (VD c) {a} {b} {cc} (r17_xval_irrel D {ib} c {wic} {wiw} r) (r18_xval_sval D {ib} c {wiw_wk} r)) (@Eq.trans (VD c) {cc} {ee} {gg} (r14_val_inst D b a d c hb ha r) (@Eq.trans (VD c) {ee} {ff} {gg} {step_ef} {step_cong}))")
 }
 
 // ================================================================
@@ -265,7 +266,7 @@ pub(super) fn val_xval_inst() -> String {
 /// The transfer at R12's registered β redex and its derivation — a real
 /// application of a real lambda, under the all-junk valuation.
 pub(super) fn ty_transfer_witness() -> String {
-    format!("Eq (VD {KDTY}) (xval r12_betaEnv r12_betaRedex {KDTY} (r17_wk_wkc r12_betaEnv r12_betaRedex {KDTY} r12_betaDeriv) r12_betaJunkEnv) (sval r12_betaEnv r12_betaRedex {KDTY} r12_betaDeriv r12_betaJunkEnv)")
+    format!("@Eq (VD {KDTY}) (xval r12_betaEnv r12_betaRedex {KDTY} (r17_wk_wkc r12_betaEnv r12_betaRedex {KDTY} r12_betaDeriv) r12_betaJunkEnv) (sval r12_betaEnv r12_betaRedex {KDTY} r12_betaDeriv r12_betaJunkEnv)")
 }
 
 pub(super) fn val_transfer_witness() -> String {
@@ -275,7 +276,7 @@ pub(super) fn val_transfer_witness() -> String {
 /// `r18_xval_step` COMPUTED at R12's redex and its contractum — R16's
 /// `r16_val_step_witness` with both interpretations moved to `xval`.
 pub(super) fn ty_xval_step_witness() -> String {
-    format!("Eq (VD {KDTY}) (xval r12_betaEnv {INST0} {KDTY} (r17_wk_wkc r12_betaEnv {INST0} {KDTY} r15_instDeriv) r12_betaJunkEnv) (xval r12_betaEnv r12_betaRedex {KDTY} (r17_wk_wkc r12_betaEnv r12_betaRedex {KDTY} r12_betaDeriv) r12_betaJunkEnv)")
+    format!("@Eq (VD {KDTY}) (xval r12_betaEnv {INST0} {KDTY} (r17_wk_wkc r12_betaEnv {INST0} {KDTY} r15_instDeriv) r12_betaJunkEnv) (xval r12_betaEnv r12_betaRedex {KDTY} (r17_wk_wkc r12_betaEnv r12_betaRedex {KDTY} r12_betaDeriv) r12_betaJunkEnv)")
 }
 
 pub(super) fn val_xval_step_witness() -> String {
@@ -294,7 +295,7 @@ pub(super) fn val_xval_step_witness() -> String {
 #[cfg(test)]
 pub(super) fn probe_transfer_refl() -> String {
     format!(
-        "def r18_transfer_refl_probe : {TY_XVAL_SVAL} := fun (D : Nat -> Sk) (e : KExpr) (s : Sk) (h : WK D e s) (r : VEnvD D) => Eq.refl (VD s) (xval D e s (r17_wk_wkc D e s h) r)"
+        "def r18_transfer_refl_probe : {TY_XVAL_SVAL} := fun (D : Nat -> Sk) (e : KExpr) (s : Sk) (h : WK D e s) (r : VEnvD D) => @Eq.refl (VD s) (xval D e s (r17_wk_wkc D e s h) r)"
     )
 }
 
@@ -305,7 +306,7 @@ pub(super) fn probe_transfer_refl() -> String {
 #[cfg(test)]
 pub(super) fn probe_lift_at_wkc() -> String {
     format!(
-        "def r18_lift_at_wkc_probe : forall (D : Nat -> Sk) (e : KExpr) (s : Sk) (hw : WKC D e s) (k : Nat) (t : Sk) (r : VEnvD (skins k t D)), Eq (VD s) (xval (skins k t D) (lift_at e k {ONE}) s (wkc_lift D e s hw k t) r) (xval D e s hw (venvLiftD k t D r)) := {}",
+        "def r18_lift_at_wkc_probe : forall (D : Nat -> Sk) (e : KExpr) (s : Sk) (hw : WKC D e s) (k : Nat) (t : Sk) (r : VEnvD (skins k t D)), @Eq (VD s) (xval (skins k t D) (lift_at e k {ONE}) s (wkc_lift D e s hw k t) r) (xval D e s hw (venvLiftD k t D r)) := {}",
         val_xval_lift()
     )
 }

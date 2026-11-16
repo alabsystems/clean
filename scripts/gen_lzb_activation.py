@@ -43,6 +43,13 @@ The final segment is discharged by `Eq.refl`: the machine computes it.
 The frame stack each callee sits on is never written out — it is named
 `ir_frames_tail (ir_config_frames <the config so far>)`, exact by construction.
 
+THE SPELLING
+------------
+The lemmas are built without explicit prefixes; that is the shape the self-test
+pins. What the tree registers is that text printed by `scripts/explicit_prefix.py`
+with `@` before every head in `EXPLICIT_HEADS` (the spelling 1b6b65dc83 gave
+these consts), and `--print`, `--emit` and `--check` speak the printed text.
+
 USAGE
 -----
     python3 scripts/gen_lzb_activation.py --check   # byte-compare with the tree
@@ -53,12 +60,34 @@ USAGE
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import re
 import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
+
+ANSWERS_PINNED_INPUTS = True
+HELPER_INPUTS = ('scripts/test_generator_source_helpers.py', 'scripts/resource_transport.py', 'scripts/explicit_prefix.py', 'crates/clean-verify/src/spec/core_spec/eval_ir_lzb_activation.rs')
+
+
+def _source_module(name, path):
+    """Execute pinned source bytes; an accepted pyc is not a declared input."""
+    spec = importlib.util.spec_from_file_location(name, path)
+    if spec is None or spec.loader is None:
+        raise ValueError('source helper unavailable: ' + str(path))
+    module = importlib.util.module_from_spec(spec)
+    exec(compile(path.read_bytes(), str(path), 'exec', dont_inherit=True), module.__dict__)
+    return module
+
+
+def _helper_source_controls():
+    controls = _source_module('generator_source_controls', REPO / 'scripts/test_generator_source_helpers.py')
+    controls.run_generator_controls(Path(__file__).name)
+
 ACTIVATION_RS = REPO / "crates/clean-verify/src/spec/core_spec/eval_ir_lzb_activation.rs"
+
+XP = _source_module("explicit_prefix", REPO / "scripts/explicit_prefix.py")
 
 M = "ir_lzb_module"
 SLOT_TY = "(IROption IRMemSlot)"
@@ -384,6 +413,14 @@ LEMMAS = {
     "SRC_IR_LZB_IMAX_SEG": imax_seg,
 }
 
+# The heads the committed consts name with an explicit `@`, in every const.
+EXPLICIT_HEADS = frozenset({"Eq", "Eq.refl", "Eq.subst", "Eq.symm", "Eq.trans", "IROption.some"})
+
+
+def spelled() -> dict:
+    """Every lemma as the tree registers it: the built term, printed with its prefixes."""
+    return {name: XP.respell(fn(), EXPLICIT_HEADS) for name, fn in LEMMAS.items()}
+
 
 def committed() -> dict:
     src = ACTIVATION_RS.read_text()
@@ -426,10 +463,13 @@ def self_test() -> int:
             else:
                 print(f"FAIL {name}: legacy shape is {got[:12]}…, pinned {want[:12]}…")
                 bad += 1
-        if bad:
+        printer = XP.self_test()
+        for line in printer:
+            print(f"FAIL {line}")
+        if bad or printer:
             print(
                 "gen_lzb_activation: the emitter no longer reproduces the "
-                "kernel-checked 2026-08-26 terms",
+                "kernel-checked 2026-08-26 terms, or its printer fails its arms",
                 file=sys.stderr,
             )
             return 1
@@ -446,12 +486,21 @@ def main(argv=None) -> int:
     ap.add_argument("--emit", action="store_true", help="rewrite the consts in place")
     ap.add_argument("--self-test", action="store_true",
                     help="reproduce the pre-strengthening terms the kernel accepted")
+    ap.add_argument("--pinned-inputs", action="store_true", help="list exact source/control inputs")
     args = ap.parse_args(argv)
+    if args.pinned_inputs:
+        if any(value for key, value in vars(args).items() if key != "pinned_inputs"):
+            ap.error("--pinned-inputs cannot be combined with another action")
+        print("\n".join(HELPER_INPUTS))
+        return 0
 
     if args.self_test:
-        return self_test()
+        code = self_test()
+        if code == 0:
+            _helper_source_controls()
+        return code
 
-    minted = {name: fn() for name, fn in LEMMAS.items()}
+    minted = spelled()
 
     if args.show:
         print(minted[args.show])

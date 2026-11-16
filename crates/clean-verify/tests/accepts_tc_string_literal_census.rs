@@ -33,8 +33,8 @@ const ENV: &str = "accepts_tc_string_env";
 fn list(cs: &[u32]) -> String {
     cs.iter()
         .rev()
-        .fold("(ListType.nil Nat)".to_string(), |acc, c| {
-            format!("(ListType.cons Nat {c} {acc})")
+        .fold("(@ListType.nil Nat)".to_string(), |acc, c| {
+            format!("(@ListType.cons Nat {c} {acc})")
         })
 }
 
@@ -51,15 +51,15 @@ fn string_literal_rules_register_axiom_free_and_say_what_they_claim() {
     // The decoding is a bijection, both round trips stated exactly.
     assert_eq!(
         type_src(&spec, "string_lit_code_chars"),
-        "forall (n : Nat), Eq Nat (string_lit_code (string_lit_chars n)) n"
+        "forall (n : Nat), @Eq Nat (string_lit_code (string_lit_chars n)) n"
     );
     assert_eq!(
         type_src(&spec, "string_lit_chars_code"),
-        "forall (cs : ListType Nat), Eq (ListType Nat) (string_lit_chars (string_lit_code cs)) cs"
+        "forall (cs : ListType Nat), @Eq (ListType Nat) (string_lit_chars (string_lit_code cs)) cs"
     );
     assert_eq!(
         type_src(&spec, "string_lit_code_injective"),
-        "forall (a : ListType Nat) (b : ListType Nat), Eq Nat (string_lit_code a) (string_lit_code b) -> Eq (ListType Nat) a b"
+        "forall (a : ListType Nat) (b : ListType Nat), @Eq Nat (string_lit_code a) (string_lit_code b) -> @Eq (ListType Nat) a b"
     );
     // Every derived branch holds at every environment carrying the admission
     // fact; the every-payload lemma covers ANY literal leaf, not only codes.
@@ -91,7 +91,7 @@ fn string_literal_rules_register_axiom_free_and_say_what_they_claim() {
         ),
         (
             "kernel_accepts_tc_in_string_lit_constructor",
-            format!("(literal_string (string_lit_code {ab})) (KExpr.app (KExpr.const accepts_tc_string_mk_name (ListType.nil Level)) (string_lit_char_list {ab}))"),
+            format!("(literal_string (string_lit_code {ab})) (KExpr.app (KExpr.const accepts_tc_string_mk_name (@ListType.nil Level)) (string_lit_char_list {ab}))"),
         ),
         (
             "kernel_accepts_tc_in_string_lit_proj",
@@ -99,7 +99,7 @@ fn string_literal_rules_register_axiom_free_and_say_what_they_claim() {
         ),
         (
             "kernel_accepts_tc_in_lit_string_empty",
-            "(literal_string Nat.zero) (string_lit_expansion (ListType.nil Nat))".to_string(),
+            "(literal_string Nat.zero) (string_lit_expansion (@ListType.nil Nat))".to_string(),
         ),
     ] {
         let src = type_src(&spec, witness);
@@ -113,7 +113,7 @@ fn string_literal_rules_register_axiom_free_and_say_what_they_claim() {
         assert!(!src.contains("the_red_env"), "{witness} must not be seed-pinned");
     }
     assert!(type_src(&spec, "kernel_accepts_tc_in_string_lit_iota")
-        .contains("(literal_string (string_lit_code (ListType.cons Nat 97"));
+        .contains("(literal_string (string_lit_code (@ListType.cons Nat 97"));
     assert_eq!(
         type_src(&spec, "accepts_tc_string_admit"),
         format!("StringLitAdmitIn {ENV}")
@@ -143,7 +143,7 @@ fn string_literal_rules_register_axiom_free_and_say_what_they_claim() {
         .and_then(|d| d.value_src.clone())
         .expect("the canonical String.ofList body is registered");
     assert!(
-        of_list_body.contains(&format!("(KExpr.const {mk_atom} (ListType.nil Level))")),
+        of_list_body.contains(&format!("(KExpr.const {mk_atom} (@ListType.nil Level))")),
         "the canonical String.ofList body must build String.mk: {of_list_body}"
     );
     for inductive in ["StringLitAdmitIn", "KernelAcceptsTcIn", "TypingTcIn"] {
@@ -183,22 +183,22 @@ fn forged() -> Vec<(String, String)> {
     let fun = "fun (tenv : KDeclEnv) (G : ListType CtxEntryIn)";
     let arm = |cs: &str| {
         format!(
-            "(KernelAcceptsTcIn.lit_string_expand {ENV} tenv G {cs} accepts_tc_string_admit (Eq.refl Bool Bool.true))"
+            "(@KernelAcceptsTcIn.lit_string_expand {ENV} tenv G {cs} accepts_tc_string_admit (@Eq.refl Bool Bool.true))"
         )
     };
-    let mk = "(KExpr.const accepts_tc_string_mk_name (ListType.nil Level))";
+    let mk = "(KExpr.const accepts_tc_string_mk_name (@ListType.nil Level))";
     let proj =
         |subject: &str| format!("(KExpr.proj literal_builtin_string_name Nat.zero {subject})");
-    let motive = "(KExpr.lam (KExpr.const literal_builtin_string_name (ListType.nil Level)) (KExpr.app (KExpr.const accepts_tc_list_name (ListType.cons Level Level.zero (ListType.nil Level))) (KExpr.const accepts_tc_char_name (ListType.nil Level))))";
+    let motive = "(KExpr.lam (KExpr.const literal_builtin_string_name (@ListType.nil Level)) (KExpr.app (KExpr.const accepts_tc_list_name (@ListType.cons Level Level.zero (@ListType.nil Level))) (KExpr.const accepts_tc_char_name (@ListType.nil Level))))";
     let minor = "(KExpr.lam accepts_tc_string_of_list_dom (KExpr.bvar Nat.zero))";
-    let us = "(ListType.cons Level (Level.succ Level.zero) (ListType.nil Level))";
+    let us = "(@ListType.cons Level (Level.succ Level.zero) (@ListType.nil Level))";
     let rec_f = format!(
         "(KExpr.app (KExpr.app (KExpr.const accepts_tc_string_rec_name {us}) {motive}) {minor})"
     );
     let contractum = |cs: &str| {
         format!("(KExpr.app (KExpr.app (KExpr.app (recursor_rhs_instance (recmeta_signature accepts_tc_string_rec_meta) (recrule_rhs accepts_tc_string_rec_mk_rule) {us}) {motive}) {minor}) (string_lit_char_list {cs}))")
     };
-    let admit_premises = "(Eq.refl (OptionType KDefSig) (OptionType.some KDefSig accepts_tc_string_of_list_def)) (Eq.refl (OptionType KDefSig) (OptionType.some KDefSig accepts_tc_char_of_nat_def)) (Eq.refl (OptionType KCtorMeta) (OptionType.some KCtorMeta accepts_tc_string_mk_meta))";
+    let admit_premises = "(@Eq.refl (OptionType KDefSig) (@OptionType.some KDefSig accepts_tc_string_of_list_def)) (@Eq.refl (OptionType KDefSig) (@OptionType.some KDefSig accepts_tc_char_of_nat_def)) (@Eq.refl (OptionType KCtorMeta) (@OptionType.some KCtorMeta accepts_tc_string_mk_meta))";
     let identity_env = format!(
         "(RedEnv.mk (red_rec {ENV}) (DefEnv.addDef (red_def {ENV}) accepts_tc_string_of_list_name (KDefSig.mk (kdef_signature accepts_tc_string_of_list_def) (KExpr.lam accepts_tc_string_of_list_dom (KExpr.bvar Nat.zero)))) (red_ind_ctor {ENV}))"
     );
@@ -233,18 +233,18 @@ fn forged() -> Vec<(String, String)> {
         (
             "accepts_tc_forged_string_admit_seed",
             "StringLitAdmitIn kernel_core_red_env".to_string(),
-            format!("StringLitAdmitIn.mk kernel_core_red_env {admit_premises}"),
+            format!("@StringLitAdmitIn.mk kernel_core_red_env {admit_premises}"),
         ),
         (
             "accepts_tc_forged_string_admit_identity_of_list",
             format!("StringLitAdmitIn {identity_env}"),
-            format!("StringLitAdmitIn.mk {identity_env} {admit_premises}"),
+            format!("@StringLitAdmitIn.mk {identity_env} {admit_premises}"),
         ),
         // The decoding: two lists never share a payload.
         (
             "accepts_tc_forged_string_code_collision",
-            format!("Eq Nat (string_lit_code {}) (string_lit_code {})", list(&[1]), list(&[0, 0])),
-            format!("Eq.refl Nat (string_lit_code {})", list(&[1])),
+            format!("@Eq Nat (string_lit_code {}) (string_lit_code {})", list(&[1]), list(&[0, 0])),
+            format!("@Eq.refl Nat (string_lit_code {})", list(&[1])),
         ),
         // The derived branches, each at its witness: a constructor form with the
         // characters swapped, a projection with a character dropped.

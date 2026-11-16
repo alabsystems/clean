@@ -55,7 +55,7 @@ use crate::spec::Specification;
 fn kexpr_not_inline(target_app: bool, target_lam: bool, target_pi: bool) -> String {
     let arm = |is_target: bool| if is_target { "Empty" } else { "Nat" };
     format!(
-        "(KExpr.rec (fun (_ : KExpr) => Type) \
+        "(@KExpr.rec (fun (_ : KExpr) => Type) \
          (fun (_ : Level) => Nat) \
          (fun (_ : Nat) => Nat) \
          (fun (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) => {app}) \
@@ -254,8 +254,8 @@ impl Specification {
             let type_src = format!(
                 "forall (env : RedEnv) (s0 : KExpr) (s1 : KExpr) (r : KExpr) (C : Type), \
                  delta_cong env ({head} s0 s1) r -> \
-                 (forall (b0 : KExpr), delta_cong env s0 b0 -> Eq KExpr r ({head} b0 s1) -> C) -> \
-                 (forall (b1 : KExpr), delta_cong env s1 b1 -> Eq KExpr r ({head} s0 b1) -> C) -> \
+                 (forall (b0 : KExpr), delta_cong env s0 b0 -> @Eq KExpr r ({head} b0 s1) -> C) -> \
+                 (forall (b1 : KExpr), delta_cong env s1 b1 -> @Eq KExpr r ({head} s0 b1) -> C) -> \
                  C"
             );
             self.add_definition(SpecDefinition {
@@ -333,9 +333,9 @@ impl Specification {
             type_src: concat!(
                 "forall (env : RedEnv) (s0 : KExpr) (s1 : KExpr) (s2 : KExpr) (r : KExpr) (C : Type), ",
                 "delta_cong env (KExpr.let_ s0 s1 s2) r -> ",
-                "(forall (b0 : KExpr), delta_cong env s0 b0 -> Eq KExpr r (KExpr.let_ b0 s1 s2) -> C) -> ",
-                "(forall (b1 : KExpr), delta_cong env s1 b1 -> Eq KExpr r (KExpr.let_ s0 b1 s2) -> C) -> ",
-                "(forall (b2 : KExpr), delta_cong env s2 b2 -> Eq KExpr r (KExpr.let_ s0 s1 b2) -> C) -> ",
+                "(forall (b0 : KExpr), delta_cong env s0 b0 -> @Eq KExpr r (KExpr.let_ b0 s1 s2) -> C) -> ",
+                "(forall (b1 : KExpr), delta_cong env s1 b1 -> @Eq KExpr r (KExpr.let_ s0 b1 s2) -> C) -> ",
+                "(forall (b2 : KExpr), delta_cong env s2 b2 -> @Eq KExpr r (KExpr.let_ s0 s1 b2) -> C) -> ",
                 "C"
             )
             .to_string(),
@@ -432,7 +432,7 @@ impl Specification {
             type_src: concat!(
                 "forall (env : RedEnv) (s : Name) (i : Nat) (sub : KExpr) (r : KExpr) (C : Type), ",
                 "delta_cong env (KExpr.proj s i sub) r -> ",
-                "(forall (sub' : KExpr), delta_cong env sub sub' -> Eq KExpr r (KExpr.proj s i sub') -> C) -> ",
+                "(forall (sub' : KExpr), delta_cong env sub sub' -> @Eq KExpr r (KExpr.proj s i sub') -> C) -> ",
                 "C"
             )
             .to_string(),
@@ -565,13 +565,13 @@ impl Specification {
                 let name = format!("{lhs_name}_ne_{head_label}");
                 let type_src = format!(
                     "forall {lhs_binders} {head_binders} (R : Type), \
-                     Eq KExpr {lhs_term} {head_term} -> R"
+                     @Eq KExpr {lhs_term} {head_term} -> R"
                 );
                 let value_src = format!(
                     "fun {lhs_binders} {head_binders} (R : Type) \
-                     (h : Eq KExpr {lhs_term} {head_term}) => \
-                     Empty.rec (fun (_ : Empty) => R) \
-                     (Eq.substType KExpr {discr} {lhs_term} {head_term} h Nat.zero)"
+                     (h : @Eq KExpr {lhs_term} {head_term}) => \
+                     @Empty.rec (fun (_ : Empty) => R) \
+                     (@Eq.substType KExpr {discr} {lhs_term} {head_term} h Nat.zero)"
                 );
                 self.add_definition(SpecDefinition {
                     name,
@@ -613,35 +613,35 @@ impl Specification {
         // delta_reduct_some_inv_type: Type-valued sibling of delta_reduct_some_inv.
         {
             let reduct = "(apply_spine (kapp_args e) val)";
-            let l3 = format!("(fun (val : KExpr) => OptionType.some KExpr {reduct})");
+            let l3 = format!("(fun (val : KExpr) => @OptionType.some KExpr {reduct})");
             let l2 =
                 format!("(fun (dname : Name) => opt_bind KExpr KExpr (kdef_value_at env dname (kexpr_const_levels (kapp_fn e))) {l3})");
             let kont = format!(
                 "(forall (dname : Name) (val : KExpr), \
-                 Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name dname) -> \
-                 Eq (OptionType KExpr) (kdef_value_at env dname (kexpr_const_levels (kapp_fn e))) (OptionType.some KExpr val) -> \
-                 Eq (OptionType KExpr) (OptionType.some KExpr {reduct}) (OptionType.some KExpr e') -> \
+                 @Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (@OptionType.some Name dname) -> \
+                 @Eq (OptionType KExpr) (kdef_value_at env dname (kexpr_const_levels (kapp_fn e))) (@OptionType.some KExpr val) -> \
+                 @Eq (OptionType KExpr) (@OptionType.some KExpr {reduct}) (@OptionType.some KExpr e') -> \
                  C)"
             );
             let value = format!(
                 "fun (env : DefEnv) (e : KExpr) (e' : KExpr) (C : Type) \
-                 (h : Eq (OptionType KExpr) (delta_reduct env e) (OptionType.some KExpr e')) \
+                 (h : @Eq (OptionType KExpr) (delta_reduct env e) (@OptionType.some KExpr e')) \
                  (k : {kont}) => \
                  opt_bind_some_inv_type Name KExpr (kexpr_const_name (kapp_fn e)) {l2} e' C h \
                  (fun (dname : Name) \
-                 (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name dname)) \
-                 (h1r : Eq (OptionType KExpr) ({l2} dname) (OptionType.some KExpr e')) => \
+                 (h1 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (@OptionType.some Name dname)) \
+                 (h1r : @Eq (OptionType KExpr) ({l2} dname) (@OptionType.some KExpr e')) => \
                  opt_bind_some_inv_type KExpr KExpr (kdef_value_at env dname (kexpr_const_levels (kapp_fn e))) {l3} e' C h1r \
                  (fun (val : KExpr) \
-                 (h2 : Eq (OptionType KExpr) (kdef_value_at env dname (kexpr_const_levels (kapp_fn e))) (OptionType.some KExpr val)) \
-                 (h2r : Eq (OptionType KExpr) ({l3} val) (OptionType.some KExpr e')) => \
+                 (h2 : @Eq (OptionType KExpr) (kdef_value_at env dname (kexpr_const_levels (kapp_fn e))) (@OptionType.some KExpr val)) \
+                 (h2r : @Eq (OptionType KExpr) ({l3} val) (@OptionType.some KExpr e')) => \
                  k dname val h1 h2 h2r))"
             );
             self.add_definition(SpecDefinition {
                 name: "delta_reduct_some_inv_type".to_string(),
                 type_src: format!(
                     "forall (env : DefEnv) (e : KExpr) (e' : KExpr) (C : Type), \
-                     Eq (OptionType KExpr) (delta_reduct env e) (OptionType.some KExpr e') -> {kont} -> C"
+                     @Eq (OptionType KExpr) (delta_reduct env e) (@OptionType.some KExpr e') -> {kont} -> C"
                 ),
                 value_src: Some(value),
                 is_axiom: false,
@@ -675,23 +675,23 @@ impl Specification {
             name: "delta_step_head_none_absurd_type".to_string(),
             type_src: concat!(
                 "forall (env : DefEnv) (e : KExpr) (e' : KExpr) (C : Type), ",
-                "Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.none Name) -> ",
+                "@Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (@OptionType.none Name) -> ",
                 "delta_step env e e' -> C"
             )
             .to_string(),
             value_src: Some(
                 concat!(
                     "fun (env : DefEnv) (e : KExpr) (e' : KExpr) (C : Type) ",
-                    "(hnone : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.none Name)) ",
-                    "(h : Eq (OptionType KExpr) (delta_reduct env e) (OptionType.some KExpr e')) => ",
+                    "(hnone : @Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (@OptionType.none Name)) ",
+                    "(h : @Eq (OptionType KExpr) (delta_reduct env e) (@OptionType.some KExpr e')) => ",
                     "delta_reduct_some_inv_type env e e' C h ",
                     "(fun (dname : Name) (val : KExpr) ",
-                    "(h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name dname)) ",
-                    "(h2 : Eq (OptionType KExpr) (kdef_value_at env dname (kexpr_const_levels (kapp_fn e))) (OptionType.some KExpr val)) ",
-                    "(h2r : Eq (OptionType KExpr) (OptionType.some KExpr (apply_spine (kapp_args e) val)) (OptionType.some KExpr e')) => ",
+                    "(h1 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (@OptionType.some Name dname)) ",
+                    "(h2 : @Eq (OptionType KExpr) (kdef_value_at env dname (kexpr_const_levels (kapp_fn e))) (@OptionType.some KExpr val)) ",
+                    "(h2r : @Eq (OptionType KExpr) (@OptionType.some KExpr (apply_spine (kapp_args e) val)) (@OptionType.some KExpr e')) => ",
                     "option_none_ne_some_type Name dname C ",
-                    "(Eq.trans (OptionType Name) (OptionType.none Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name dname) ",
-                    "(Eq.symm (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.none Name) hnone) h1))"
+                    "(@Eq.trans (OptionType Name) (@OptionType.none Name) (kexpr_const_name (kapp_fn e)) (@OptionType.some Name dname) ",
+                    "(@Eq.symm (OptionType Name) (kexpr_const_name (kapp_fn e)) (@OptionType.none Name) hnone) h1))"
                 )
                 .to_string(),
             ),
@@ -726,39 +726,39 @@ impl Specification {
             let afa = "(KExpr.app f arg)";
             let f0v = "(apply_spine (kapp_args f) val)";
             let f2f =
-                "(fun (val : KExpr) => OptionType.some KExpr (apply_spine (kapp_args f) val))"
+                "(fun (val : KExpr) => @OptionType.some KExpr (apply_spine (kapp_args f) val))"
                     .to_string();
             let f1f = format!(
                 "(fun (dname : Name) => opt_bind KExpr KExpr (kdef_value_at env dname (kexpr_const_levels (kapp_fn f))) {f2f})"
             );
             let h1f = format!(
-                "(Eq.trans (OptionType Name) (kexpr_const_name (kapp_fn f)) (kexpr_const_name (kapp_fn {afa})) (OptionType.some Name dname) \
-                 (Eq.cong KExpr (OptionType Name) (fun (H : KExpr) => kexpr_const_name H) (kapp_fn f) (kapp_fn {afa}) \
-                 (Eq.symm KExpr (kapp_fn {afa}) (kapp_fn f) (kapp_fn_app f arg))) \
+                "(@Eq.trans (OptionType Name) (kexpr_const_name (kapp_fn f)) (kexpr_const_name (kapp_fn {afa})) (@OptionType.some Name dname) \
+                 (@Eq.cong KExpr (OptionType Name) (fun (H : KExpr) => kexpr_const_name H) (kapp_fn f) (kapp_fn {afa}) \
+                 (@Eq.symm KExpr (kapp_fn {afa}) (kapp_fn f) (kapp_fn_app f arg))) \
                  h1)"
             );
-            let hf2f = format!("(Eq.refl (OptionType KExpr) (OptionType.some KExpr {f0v}))");
+            let hf2f = format!("(@Eq.refl (OptionType KExpr) (@OptionType.some KExpr {f0v}))");
             let reduct_f = format!(
                 "opt_bind_some_intro Name KExpr (kexpr_const_name (kapp_fn f)) {f1f} dname {f0v} {h1f} \
                  (opt_bind_some_intro KExpr KExpr (kdef_value_at env dname (kexpr_const_levels (kapp_fn f))) {f2f} val {f0v} h2 {hf2f})"
             );
             let beq = format!(
-                "(Eq.trans KExpr b (apply_spine (kapp_args {afa}) val) (KExpr.app {f0v} arg) \
-                 (Eq.symm KExpr (apply_spine (kapp_args {afa}) val) b \
+                "(@Eq.trans KExpr b (apply_spine (kapp_args {afa}) val) (KExpr.app {f0v} arg) \
+                 (@Eq.symm KExpr (apply_spine (kapp_args {afa}) val) b \
                  (option_some_inj KExpr (apply_spine (kapp_args {afa}) val) b h2r)) \
                  (delta_reduct_app_eq f arg val))"
             );
             let kont = format!(
                 "(fun (dname : Name) (val : KExpr) \
-                 (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn {afa})) (OptionType.some Name dname)) \
-                 (h2 : Eq (OptionType KExpr) (kdef_value_at env dname (kexpr_const_levels (kapp_fn f))) (OptionType.some KExpr val)) \
-                 (h2r : Eq (OptionType KExpr) (OptionType.some KExpr (apply_spine (kapp_args {afa}) val)) (OptionType.some KExpr b)) => \
+                 (h1 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn {afa})) (@OptionType.some Name dname)) \
+                 (h2 : @Eq (OptionType KExpr) (kdef_value_at env dname (kexpr_const_levels (kapp_fn f))) (@OptionType.some KExpr val)) \
+                 (h2r : @Eq (OptionType KExpr) (@OptionType.some KExpr (apply_spine (kapp_args {afa}) val)) (@OptionType.some KExpr b)) => \
                  k {f0v} ({reduct_f}) ({beq}))"
             );
             let value = format!(
                 "fun (env : DefEnv) (f : KExpr) (arg : KExpr) (b : KExpr) (C : Type) \
-                 (h : Eq (OptionType KExpr) (delta_reduct env {afa}) (OptionType.some KExpr b)) \
-                 (k : forall (f0 : KExpr), delta_step env f f0 -> Eq KExpr b (KExpr.app f0 arg) -> C) => \
+                 (h : @Eq (OptionType KExpr) (delta_reduct env {afa}) (@OptionType.some KExpr b)) \
+                 (k : forall (f0 : KExpr), delta_step env f f0 -> @Eq KExpr b (KExpr.app f0 arg) -> C) => \
                  delta_reduct_some_inv_type env {afa} b C h {kont}"
             );
             self.add_definition(SpecDefinition {
@@ -766,7 +766,7 @@ impl Specification {
                 type_src: concat!(
                     "forall (env : DefEnv) (f : KExpr) (arg : KExpr) (b : KExpr) (C : Type), ",
                     "delta_step env (KExpr.app f arg) b -> ",
-                    "(forall (f0 : KExpr), delta_step env f f0 -> Eq KExpr b (KExpr.app f0 arg) -> C) -> C"
+                    "(forall (f0 : KExpr), delta_step env f f0 -> @Eq KExpr b (KExpr.app f0 arg) -> C) -> C"
                 )
                 .to_string(),
                 value_src: Some(value),
@@ -851,7 +851,7 @@ const DELTA_CONG_LET_ARMS: [(&str, &str, &str, &str); 3] = [
 /// `bvar_ne_let` / `const_ne_let` globals exist; the inline form keeps the
 /// refutation self-contained).
 fn kexpr_not_let_inline() -> String {
-    "(KExpr.rec (fun (_ : KExpr) => Type) \
+    "(@KExpr.rec (fun (_ : KExpr) => Type) \
      (fun (_ : Level) => Nat) \
      (fun (_ : Nat) => Nat) \
      (fun (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) => Nat) \
@@ -868,7 +868,7 @@ fn kexpr_not_let_inline() -> String {
 /// Used to refute a proj-vs-leaf equation in the delta_cong leaf-absurd proof
 /// (proj/lit fragment rung), mirroring kexpr_not_let_inline for the let arm.
 fn kexpr_not_proj_inline() -> String {
-    "(KExpr.rec (fun (_ : KExpr) => Type) \
+    "(@KExpr.rec (fun (_ : KExpr) => Type) \
      (fun (_ : Level) => Nat) \
      (fun (_ : Nat) => Nat) \
      (fun (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) => Nat) \
@@ -973,15 +973,19 @@ fn compound_inv_proof(target: &str) -> String {
     };
     // Continuation type strings at a given rhs term.
     let contl = |rhs: &str| {
-        format!("(forall (b0 : KExpr), delta_cong env s0 b0 -> Eq KExpr {rhs} ({head} b0 s1) -> C)")
+        format!(
+            "(forall (b0 : KExpr), delta_cong env s0 b0 -> @Eq KExpr {rhs} ({head} b0 s1) -> C)"
+        )
     };
     let contr = |rhs: &str| {
-        format!("(forall (b1 : KExpr), delta_cong env s1 b1 -> Eq KExpr {rhs} ({head} s0 b1) -> C)")
+        format!(
+            "(forall (b1 : KExpr), delta_cong env s1 b1 -> @Eq KExpr {rhs} ({head} s0 b1) -> C)"
+        )
     };
 
     let motive = format!(
         "(fun (lhs : KExpr) (rhs : KExpr) (_d : delta_cong env lhs rhs) => \
-         Eq KExpr lhs ({head} s0 s1) -> {cl} -> {cr} -> C)",
+         @Eq KExpr lhs ({head} s0 s1) -> {cl} -> {cr} -> C)",
         cl = contl("rhs"),
         cr = contr("rhs"),
     );
@@ -991,21 +995,21 @@ fn compound_inv_proof(target: &str) -> String {
     let here_arm = if target == "app" {
         format!(
             "(fun (e0 : KExpr) (e1 : KExpr) (hstep : delta_step (red_def env) e0 e1) \
-             (heq : Eq KExpr e0 ({head} s0 s1)) (kl : {cl}) (kr : {cr}) => \
+             (heq : @Eq KExpr e0 ({head} s0 s1)) (kl : {cl}) (kr : {cr}) => \
              delta_step_app_inv_type (red_def env) s0 s1 e1 C \
-             (Eq.subst KExpr (fun (z : KExpr) => delta_step (red_def env) z e1) e0 ({head} s0 s1) heq hstep) \
-             (fun (f0 : KExpr) (hf0 : delta_step (red_def env) s0 f0) (heqr : Eq KExpr e1 ({head} f0 s1)) => \
-             kl f0 (delta_cong.here env s0 f0 hf0) heqr))",
+             (@Eq.subst KExpr (fun (z : KExpr) => delta_step (red_def env) z e1) e0 ({head} s0 s1) heq hstep) \
+             (fun (f0 : KExpr) (hf0 : delta_step (red_def env) s0 f0) (heqr : @Eq KExpr e1 ({head} f0 s1)) => \
+             kl f0 (@delta_cong.here env s0 f0 hf0) heqr))",
             cl = contl("e1"),
             cr = contr("e1"),
         )
     } else {
         format!(
             "(fun (e0 : KExpr) (e1 : KExpr) (hstep : delta_step (red_def env) e0 e1) \
-             (heq : Eq KExpr e0 ({head} s0 s1)) (kl : {cl}) (kr : {cr}) => \
+             (heq : @Eq KExpr e0 ({head} s0 s1)) (kl : {cl}) (kr : {cr}) => \
              delta_step_head_none_absurd_type (red_def env) ({head} s0 s1) e1 C \
-             (Eq.refl (OptionType Name) (OptionType.none Name)) \
-             (Eq.subst KExpr (fun (z : KExpr) => delta_step (red_def env) z e1) e0 ({head} s0 s1) heq hstep))",
+             (@Eq.refl (OptionType Name) (@OptionType.none Name)) \
+             (@Eq.subst KExpr (fun (z : KExpr) => delta_step (red_def env) z e1) e0 ({head} s0 s1) heq hstep))",
             cl = contl("e1"),
             cr = contr("e1"),
         )
@@ -1022,7 +1026,7 @@ fn compound_inv_proof(target: &str) -> String {
             format!("({cur_head} {slot_a} {prhs})")
         };
         let ih_ty = format!(
-            "Eq KExpr {plhs} ({head} s0 s1) -> {cl} -> {cr} -> C",
+            "@Eq KExpr {plhs} ({head} s0 s1) -> {cl} -> {cr} -> C",
             cl = contl(prhs),
             cr = contr(prhs),
         );
@@ -1031,17 +1035,17 @@ fn compound_inv_proof(target: &str) -> String {
             if reduces_first {
                 format!(
                     "kl {prhs} \
-                     (Eq.substType KExpr (fun (z : KExpr) => delta_cong env z {prhs}) {plhs} s0 \
+                     (@Eq.substType KExpr (fun (z : KExpr) => delta_cong env z {prhs}) {plhs} s0 \
                      ({inj_fst} {slot_a} {slot_b} s0 s1 heq) hsub) \
-                     (Eq.cong KExpr KExpr (fun (z : KExpr) => {head} {prhs} z) {slot_b} s1 \
+                     (@Eq.cong KExpr KExpr (fun (z : KExpr) => {head} {prhs} z) {slot_b} s1 \
                      ({inj_snd} {slot_a} {slot_b} s0 s1 heq))"
                 )
             } else {
                 format!(
                     "kr {prhs} \
-                     (Eq.substType KExpr (fun (z : KExpr) => delta_cong env z {prhs}) {plhs} s1 \
+                     (@Eq.substType KExpr (fun (z : KExpr) => delta_cong env z {prhs}) {plhs} s1 \
                      ({inj_snd} {slot_a} {slot_b} s0 s1 heq) hsub) \
-                     (Eq.cong KExpr KExpr (fun (z : KExpr) => {head} z {prhs}) {slot_a} s0 \
+                     (@Eq.cong KExpr KExpr (fun (z : KExpr) => {head} z {prhs}) {slot_a} s0 \
                      ({inj_fst} {slot_a} {slot_b} s0 s1 heq))"
                 )
             }
@@ -1052,7 +1056,7 @@ fn compound_inv_proof(target: &str) -> String {
         cong_arms.push_str(&format!(
             "(fun ({b0} : KExpr) ({b1} : KExpr) ({b2} : KExpr) \
              (hsub : delta_cong env {plhs} {prhs}) (_ih : {ih_ty}) \
-             (heq : Eq KExpr {lhs_term} ({head} s0 s1)) (kl : {cl}) (kr : {cr}) => {body}) ",
+             (heq : @Eq KExpr {lhs_term} ({head} s0 s1)) (kl : {cl}) (kr : {cr}) => {body}) ",
             cl = contl(&rhs_term),
             cr = contr(&rhs_term),
         ));
@@ -1062,14 +1066,14 @@ fn compound_inv_proof(target: &str) -> String {
     // equals an app/lam/pi node), refuted by let_ne_{target} directly on heq.
     for (binders, plhs, prhs, rhs_term) in DELTA_CONG_LET_ARMS {
         let ih_ty = format!(
-            "Eq KExpr {plhs} ({head} s0 s1) -> {cl} -> {cr} -> C",
+            "@Eq KExpr {plhs} ({head} s0 s1) -> {cl} -> {cr} -> C",
             cl = contl(prhs),
             cr = contr(prhs),
         );
         cong_arms.push_str(&format!(
             "(fun {binders} \
              (hsub : delta_cong env {plhs} {prhs}) (_ih : {ih_ty}) \
-             (heq : Eq KExpr (KExpr.let_ t v b) ({head} s0 s1)) (kl : {cl}) (kr : {cr}) => \
+             (heq : @Eq KExpr (KExpr.let_ t v b) ({head} s0 s1)) (kl : {cl}) (kr : {cr}) => \
              let_ne_{target} t v b s0 s1 C heq) ",
             cl = contl(rhs_term),
             cr = contr(rhs_term),
@@ -1083,14 +1087,14 @@ fn compound_inv_proof(target: &str) -> String {
         let proj_rhs = "(KExpr.proj ps pidx psub')";
         // IH is the motive at the SCRUTINEE (psub, psub'), not at the proj node.
         let ih_ty = format!(
-            "Eq KExpr psub ({head} s0 s1) -> {cl} -> {cr} -> C",
+            "@Eq KExpr psub ({head} s0 s1) -> {cl} -> {cr} -> C",
             cl = contl("psub'"),
             cr = contr("psub'"),
         );
         cong_arms.push_str(&format!(
             "(fun (ps : Name) (pidx : Nat) (psub : KExpr) (psub' : KExpr) \
              (hsub : delta_cong env psub psub') (_ih : {ih_ty}) \
-             (heq : Eq KExpr {proj_lhs} ({head} s0 s1)) (kl : {cl}) (kr : {cr}) => \
+             (heq : @Eq KExpr {proj_lhs} ({head} s0 s1)) (kl : {cl}) (kr : {cr}) => \
              proj_ne_{target} ps pidx psub s0 s1 C heq) ",
             cl = contl(proj_rhs),
             cr = contr(proj_rhs),
@@ -1100,8 +1104,8 @@ fn compound_inv_proof(target: &str) -> String {
     format!(
         "fun (env : RedEnv) (s0 : KExpr) (s1 : KExpr) (r : KExpr) (C : Type) \
          (h : delta_cong env ({head} s0 s1) r) (kl : {cl}) (kr : {cr}) => \
-         delta_cong.rec env {motive} {here_arm} {cong_arms} ({head} s0 s1) r h \
-         (Eq.refl KExpr ({head} s0 s1)) kl kr",
+         @delta_cong.rec env {motive} {here_arm} {cong_arms} ({head} s0 s1) r h \
+         (@Eq.refl KExpr ({head} s0 s1)) kl kr",
         cl = contl("r"),
         cr = contr("r"),
     )
@@ -1113,14 +1117,14 @@ fn compound_inv_proof(target: &str) -> String {
 /// non-const head (`delta_step_head_none_absurd_type`).
 fn leaf_absurd_proof(leaf: &str, binders: &str, term: &str, ctor_arg: &str) -> String {
     let motive = format!(
-        "(fun (lhs : KExpr) (rhs : KExpr) (_d : delta_cong env lhs rhs) => Eq KExpr lhs {term} -> C)"
+        "(fun (lhs : KExpr) (rhs : KExpr) (_d : delta_cong env lhs rhs) => @Eq KExpr lhs {term} -> C)"
     );
     let here_arm = format!(
         "(fun (e0 : KExpr) (e1 : KExpr) (hstep : delta_step (red_def env) e0 e1) \
-         (heq : Eq KExpr e0 {term}) => \
+         (heq : @Eq KExpr e0 {term}) => \
          delta_step_head_none_absurd_type (red_def env) {term} e1 C \
-         (Eq.refl (OptionType Name) (OptionType.none Name)) \
-         (Eq.subst KExpr (fun (z : KExpr) => delta_step (red_def env) z e1) e0 {term} heq hstep))"
+         (@Eq.refl (OptionType Name) (@OptionType.none Name)) \
+         (@Eq.subst KExpr (fun (z : KExpr) => delta_step (red_def env) z e1) e0 {term} heq hstep))"
     );
     let mut cong_arms = String::new();
     for (ctor_head, b0, b1, b2, plhs, prhs, slot_a, slot_b, _reduces_first) in DELTA_CONG_CONG_ARMS
@@ -1129,10 +1133,10 @@ fn leaf_absurd_proof(leaf: &str, binders: &str, term: &str, ctor_arg: &str) -> S
         let lhs_term = format!("({cur_head} {slot_a} {slot_b})");
         cong_arms.push_str(&format!(
             "(fun ({b0} : KExpr) ({b1} : KExpr) ({b2} : KExpr) \
-             (hsub : delta_cong env {plhs} {prhs}) (_ih : Eq KExpr {plhs} {term} -> C) \
-             (heq : Eq KExpr {lhs_term} {term}) => \
+             (hsub : delta_cong env {plhs} {prhs}) (_ih : @Eq KExpr {plhs} {term} -> C) \
+             (heq : @Eq KExpr {lhs_term} {term}) => \
              {leaf}_ne_{ctor_head} {ctor_arg} {slot_a} {slot_b} C \
-             (Eq.symm KExpr {lhs_term} {term} heq)) "
+             (@Eq.symm KExpr {lhs_term} {term} heq)) "
         ));
     }
     // The three trailing let-congruence arms: off-shape (a let_ never equals a
@@ -1142,11 +1146,11 @@ fn leaf_absurd_proof(leaf: &str, binders: &str, term: &str, ctor_arg: &str) -> S
     for (lbinders, plhs, prhs, _rhs_term) in DELTA_CONG_LET_ARMS {
         cong_arms.push_str(&format!(
             "(fun {lbinders} \
-             (hsub : delta_cong env {plhs} {prhs}) (_ih : Eq KExpr {plhs} {term} -> C) \
-             (heq : Eq KExpr (KExpr.let_ t v b) {term}) => \
-             Empty.rec (fun (_ : Empty) => C) \
-             (Eq.substType KExpr {let_discr} {term} (KExpr.let_ t v b) \
-             (Eq.symm KExpr (KExpr.let_ t v b) {term} heq) Nat.zero)) "
+             (hsub : delta_cong env {plhs} {prhs}) (_ih : @Eq KExpr {plhs} {term} -> C) \
+             (heq : @Eq KExpr (KExpr.let_ t v b) {term}) => \
+             @Empty.rec (fun (_ : Empty) => C) \
+             (@Eq.substType KExpr {let_discr} {term} (KExpr.let_ t v b) \
+             (@Eq.symm KExpr (KExpr.let_ t v b) {term} heq) Nat.zero)) "
         ));
     }
     // The trailing proj_s congruence arm: off-shape (a proj never equals a leaf),
@@ -1155,16 +1159,16 @@ fn leaf_absurd_proof(leaf: &str, binders: &str, term: &str, ctor_arg: &str) -> S
         let proj_discr = kexpr_not_proj_inline();
         cong_arms.push_str(&format!(
             "(fun (ps : Name) (pidx : Nat) (psub : KExpr) (psub' : KExpr) \
-             (hsub : delta_cong env psub psub') (_ih : Eq KExpr psub {term} -> C) \
-             (heq : Eq KExpr (KExpr.proj ps pidx psub) {term}) => \
-             Empty.rec (fun (_ : Empty) => C) \
-             (Eq.substType KExpr {proj_discr} {term} (KExpr.proj ps pidx psub) \
-             (Eq.symm KExpr (KExpr.proj ps pidx psub) {term} heq) Nat.zero)) "
+             (hsub : delta_cong env psub psub') (_ih : @Eq KExpr psub {term} -> C) \
+             (heq : @Eq KExpr (KExpr.proj ps pidx psub) {term}) => \
+             @Empty.rec (fun (_ : Empty) => C) \
+             (@Eq.substType KExpr {proj_discr} {term} (KExpr.proj ps pidx psub) \
+             (@Eq.symm KExpr (KExpr.proj ps pidx psub) {term} heq) Nat.zero)) "
         ));
     }
     format!(
         "fun (env : RedEnv) {binders} (r : KExpr) (C : Type) (h : delta_cong env {term} r) => \
-         delta_cong.rec env {motive} {here_arm} {cong_arms} {term} r h (Eq.refl KExpr {term})"
+         @delta_cong.rec env {motive} {here_arm} {cong_arms} {term} r h (@Eq.refl KExpr {term})"
     )
 }
 
@@ -1180,23 +1184,23 @@ fn let_inv_proof() -> String {
     // Continuation type strings at a given rhs term.
     let contt = |rhs: &str| {
         format!(
-            "(forall (b0 : KExpr), delta_cong env s0 b0 -> Eq KExpr {rhs} (KExpr.let_ b0 s1 s2) -> C)"
+            "(forall (b0 : KExpr), delta_cong env s0 b0 -> @Eq KExpr {rhs} (KExpr.let_ b0 s1 s2) -> C)"
         )
     };
     let contv = |rhs: &str| {
         format!(
-            "(forall (b1 : KExpr), delta_cong env s1 b1 -> Eq KExpr {rhs} (KExpr.let_ s0 b1 s2) -> C)"
+            "(forall (b1 : KExpr), delta_cong env s1 b1 -> @Eq KExpr {rhs} (KExpr.let_ s0 b1 s2) -> C)"
         )
     };
     let contb = |rhs: &str| {
         format!(
-            "(forall (b2 : KExpr), delta_cong env s2 b2 -> Eq KExpr {rhs} (KExpr.let_ s0 s1 b2) -> C)"
+            "(forall (b2 : KExpr), delta_cong env s2 b2 -> @Eq KExpr {rhs} (KExpr.let_ s0 s1 b2) -> C)"
         )
     };
 
     let motive = format!(
         "(fun (lhs : KExpr) (rhs : KExpr) (_d : delta_cong env lhs rhs) => \
-         Eq KExpr lhs {src} -> {ct} -> {cv} -> {cb} -> C)",
+         @Eq KExpr lhs {src} -> {ct} -> {cv} -> {cb} -> C)",
         ct = contt("rhs"),
         cv = contv("rhs"),
         cb = contb("rhs"),
@@ -1205,10 +1209,10 @@ fn let_inv_proof() -> String {
     // here arm: a let_ is never a δ-redex (own spine head, kexpr_const_name none).
     let here_arm = format!(
         "(fun (e0 : KExpr) (e1 : KExpr) (hstep : delta_step (red_def env) e0 e1) \
-         (heq : Eq KExpr e0 {src}) (kt : {ct}) (kv : {cv}) (kb : {cb}) => \
+         (heq : @Eq KExpr e0 {src}) (kt : {ct}) (kv : {cv}) (kb : {cb}) => \
          delta_step_head_none_absurd_type (red_def env) {src} e1 C \
-         (Eq.refl (OptionType Name) (OptionType.none Name)) \
-         (Eq.subst KExpr (fun (z : KExpr) => delta_step (red_def env) z e1) e0 {src} heq hstep))",
+         (@Eq.refl (OptionType Name) (@OptionType.none Name)) \
+         (@Eq.subst KExpr (fun (z : KExpr) => delta_step (red_def env) z e1) e0 {src} heq hstep))",
         ct = contt("e1"),
         cv = contv("e1"),
         cb = contb("e1"),
@@ -1225,7 +1229,7 @@ fn let_inv_proof() -> String {
             format!("({cur_head} {slot_a} {prhs})")
         };
         let ih_ty = format!(
-            "Eq KExpr {plhs} {src} -> {ct} -> {cv} -> {cb} -> C",
+            "@Eq KExpr {plhs} {src} -> {ct} -> {cv} -> {cb} -> C",
             ct = contt(prhs),
             cv = contv(prhs),
             cb = contb(prhs),
@@ -1233,7 +1237,7 @@ fn let_inv_proof() -> String {
         cong_arms.push_str(&format!(
             "(fun ({b0} : KExpr) ({b1} : KExpr) ({b2} : KExpr) \
              (hsub : delta_cong env {plhs} {prhs}) (_ih : {ih_ty}) \
-             (heq : Eq KExpr {lhs_term} {src}) (kt : {ct}) (kv : {cv}) (kb : {cb}) => \
+             (heq : @Eq KExpr {lhs_term} {src}) (kt : {ct}) (kv : {cv}) (kb : {cb}) => \
              {ctor_head}_ne_let {slot_a} {slot_b} s0 s1 s2 C heq) ",
             ct = contt(&rhs_term),
             cv = contv(&rhs_term),
@@ -1249,10 +1253,10 @@ fn let_inv_proof() -> String {
         // let_t (binders t t' v b; rhs (let_ t' v b)): slot 0 varies.
         format!(
             "kt t' \
-             (Eq.substType KExpr (fun (z : KExpr) => delta_cong env z t') t s0 {ifst} hsub) \
-             (Eq.trans KExpr (KExpr.let_ t' v b) (KExpr.let_ t' s1 b) (KExpr.let_ t' s1 s2) \
-             (Eq.cong KExpr KExpr (fun (z : KExpr) => KExpr.let_ t' z b) v s1 {isnd}) \
-             (Eq.cong KExpr KExpr (fun (z : KExpr) => KExpr.let_ t' s1 z) b s2 {ithd}))",
+             (@Eq.substType KExpr (fun (z : KExpr) => delta_cong env z t') t s0 {ifst} hsub) \
+             (@Eq.trans KExpr (KExpr.let_ t' v b) (KExpr.let_ t' s1 b) (KExpr.let_ t' s1 s2) \
+             (@Eq.cong KExpr KExpr (fun (z : KExpr) => KExpr.let_ t' z b) v s1 {isnd}) \
+             (@Eq.cong KExpr KExpr (fun (z : KExpr) => KExpr.let_ t' s1 z) b s2 {ithd}))",
             ifst = inj("fst"),
             isnd = inj("snd"),
             ithd = inj("thd"),
@@ -1260,10 +1264,10 @@ fn let_inv_proof() -> String {
         // let_v (binders t v v' b; rhs (let_ t v' b)): slot 1 varies.
         format!(
             "kv v' \
-             (Eq.substType KExpr (fun (z : KExpr) => delta_cong env z v') v s1 {isnd} hsub) \
-             (Eq.trans KExpr (KExpr.let_ t v' b) (KExpr.let_ s0 v' b) (KExpr.let_ s0 v' s2) \
-             (Eq.cong KExpr KExpr (fun (z : KExpr) => KExpr.let_ z v' b) t s0 {ifst}) \
-             (Eq.cong KExpr KExpr (fun (z : KExpr) => KExpr.let_ s0 v' z) b s2 {ithd}))",
+             (@Eq.substType KExpr (fun (z : KExpr) => delta_cong env z v') v s1 {isnd} hsub) \
+             (@Eq.trans KExpr (KExpr.let_ t v' b) (KExpr.let_ s0 v' b) (KExpr.let_ s0 v' s2) \
+             (@Eq.cong KExpr KExpr (fun (z : KExpr) => KExpr.let_ z v' b) t s0 {ifst}) \
+             (@Eq.cong KExpr KExpr (fun (z : KExpr) => KExpr.let_ s0 v' z) b s2 {ithd}))",
             ifst = inj("fst"),
             isnd = inj("snd"),
             ithd = inj("thd"),
@@ -1271,10 +1275,10 @@ fn let_inv_proof() -> String {
         // let_b (binders t v b b'; rhs (let_ t v b')): slot 2 varies.
         format!(
             "kb b' \
-             (Eq.substType KExpr (fun (z : KExpr) => delta_cong env z b') b s2 {ithd} hsub) \
-             (Eq.trans KExpr (KExpr.let_ t v b') (KExpr.let_ s0 v b') (KExpr.let_ s0 s1 b') \
-             (Eq.cong KExpr KExpr (fun (z : KExpr) => KExpr.let_ z v b') t s0 {ifst}) \
-             (Eq.cong KExpr KExpr (fun (z : KExpr) => KExpr.let_ s0 z b') v s1 {isnd}))",
+             (@Eq.substType KExpr (fun (z : KExpr) => delta_cong env z b') b s2 {ithd} hsub) \
+             (@Eq.trans KExpr (KExpr.let_ t v b') (KExpr.let_ s0 v b') (KExpr.let_ s0 s1 b') \
+             (@Eq.cong KExpr KExpr (fun (z : KExpr) => KExpr.let_ z v b') t s0 {ifst}) \
+             (@Eq.cong KExpr KExpr (fun (z : KExpr) => KExpr.let_ s0 z b') v s1 {isnd}))",
             ifst = inj("fst"),
             isnd = inj("snd"),
             ithd = inj("thd"),
@@ -1284,7 +1288,7 @@ fn let_inv_proof() -> String {
         DELTA_CONG_LET_ARMS.iter().zip(let_arm_bodies.iter())
     {
         let ih_ty = format!(
-            "Eq KExpr {plhs} {src} -> {ct} -> {cv} -> {cb} -> C",
+            "@Eq KExpr {plhs} {src} -> {ct} -> {cv} -> {cb} -> C",
             ct = contt(prhs),
             cv = contv(prhs),
             cb = contb(prhs),
@@ -1292,7 +1296,7 @@ fn let_inv_proof() -> String {
         cong_arms.push_str(&format!(
             "(fun {lbinders} \
              (hsub : delta_cong env {plhs} {prhs}) (_ih : {ih_ty}) \
-             (heq : Eq KExpr (KExpr.let_ t v b) {src}) (kt : {ct}) (kv : {cv}) (kb : {cb}) => \
+             (heq : @Eq KExpr (KExpr.let_ t v b) {src}) (kt : {ct}) (kv : {cv}) (kb : {cb}) => \
              {body}) ",
             ct = contt(rhs_term),
             cv = contv(rhs_term),
@@ -1305,7 +1309,7 @@ fn let_inv_proof() -> String {
     {
         let proj_rhs = "(KExpr.proj ps pidx psub')";
         let ih_ty = format!(
-            "Eq KExpr psub {src} -> {ct} -> {cv} -> {cb} -> C",
+            "@Eq KExpr psub {src} -> {ct} -> {cv} -> {cb} -> C",
             ct = contt("psub'"),
             cv = contv("psub'"),
             cb = contb("psub'"),
@@ -1313,7 +1317,7 @@ fn let_inv_proof() -> String {
         cong_arms.push_str(&format!(
             "(fun (ps : Name) (pidx : Nat) (psub : KExpr) (psub' : KExpr) \
              (hsub : delta_cong env psub psub') (_ih : {ih_ty}) \
-             (heq : Eq KExpr (KExpr.proj ps pidx psub) {src}) (kt : {ct}) (kv : {cv}) (kb : {cb}) => \
+             (heq : @Eq KExpr (KExpr.proj ps pidx psub) {src}) (kt : {ct}) (kv : {cv}) (kb : {cb}) => \
              proj_ne_let ps pidx psub s0 s1 s2 C heq) ",
             ct = contt(proj_rhs),
             cv = contv(proj_rhs),
@@ -1324,8 +1328,8 @@ fn let_inv_proof() -> String {
     format!(
         "fun (env : RedEnv) (s0 : KExpr) (s1 : KExpr) (s2 : KExpr) (r : KExpr) (C : Type) \
          (h : delta_cong env {src} r) (kt : {ct}) (kv : {cv}) (kb : {cb}) => \
-         delta_cong.rec env {motive} {here_arm} {cong_arms} {src} r h \
-         (Eq.refl KExpr {src}) kt kv kb",
+         @delta_cong.rec env {motive} {here_arm} {cong_arms} {src} r h \
+         (@Eq.refl KExpr {src}) kt kv kb",
         ct = contt("r"),
         cv = contv("r"),
         cb = contb("r"),
@@ -1340,13 +1344,13 @@ fn delta_cong_const_inv_proof() -> String {
     let kty = |rhs: &str| format!("(delta_step (red_def env) {cst} {rhs} -> C)");
     let motive = format!(
         "(fun (lhs : KExpr) (rhs : KExpr) (_d : delta_cong env lhs rhs) => \
-         Eq KExpr lhs {cst} -> {k} -> C)",
+         @Eq KExpr lhs {cst} -> {k} -> C)",
         k = kty("rhs"),
     );
     let here_arm = format!(
         "(fun (e0 : KExpr) (e1 : KExpr) (hstep : delta_step (red_def env) e0 e1) \
-         (heq : Eq KExpr e0 {cst}) (k : {k}) => \
-         k (Eq.subst KExpr (fun (z : KExpr) => delta_step (red_def env) z e1) e0 {cst} heq hstep))",
+         (heq : @Eq KExpr e0 {cst}) (k : {k}) => \
+         k (@Eq.subst KExpr (fun (z : KExpr) => delta_step (red_def env) z e1) e0 {cst} heq hstep))",
         k = kty("e1"),
     );
     let mut cong_arms = String::new();
@@ -1361,9 +1365,9 @@ fn delta_cong_const_inv_proof() -> String {
         cong_arms.push_str(&format!(
             "(fun ({b0} : KExpr) ({b1} : KExpr) ({b2} : KExpr) \
              (hsub : delta_cong env {plhs} {prhs}) \
-             (_ih : Eq KExpr {plhs} {cst} -> {ihk} -> C) \
-             (heq : Eq KExpr {lhs_term} {cst}) (k : {curk}) => \
-             const_ne_{ctor_head} nm us {slot_a} {slot_b} C (Eq.symm KExpr {lhs_term} {cst} heq)) ",
+             (_ih : @Eq KExpr {plhs} {cst} -> {ihk} -> C) \
+             (heq : @Eq KExpr {lhs_term} {cst}) (k : {curk}) => \
+             const_ne_{ctor_head} nm us {slot_a} {slot_b} C (@Eq.symm KExpr {lhs_term} {cst} heq)) ",
             ihk = kty(prhs),
             curk = kty(&rhs_term),
         ));
@@ -1375,11 +1379,11 @@ fn delta_cong_const_inv_proof() -> String {
         cong_arms.push_str(&format!(
             "(fun {lbinders} \
              (hsub : delta_cong env {plhs} {prhs}) \
-             (_ih : Eq KExpr {plhs} {cst} -> {ihk} -> C) \
-             (heq : Eq KExpr (KExpr.let_ t v b) {cst}) (k : {curk}) => \
-             Empty.rec (fun (_ : Empty) => C) \
-             (Eq.substType KExpr {let_discr} {cst} (KExpr.let_ t v b) \
-             (Eq.symm KExpr (KExpr.let_ t v b) {cst} heq) Nat.zero)) ",
+             (_ih : @Eq KExpr {plhs} {cst} -> {ihk} -> C) \
+             (heq : @Eq KExpr (KExpr.let_ t v b) {cst}) (k : {curk}) => \
+             @Empty.rec (fun (_ : Empty) => C) \
+             (@Eq.substType KExpr {let_discr} {cst} (KExpr.let_ t v b) \
+             (@Eq.symm KExpr (KExpr.let_ t v b) {cst} heq) Nat.zero)) ",
             ihk = kty(prhs),
             curk = kty(rhs_term),
         ));
@@ -1391,11 +1395,11 @@ fn delta_cong_const_inv_proof() -> String {
         cong_arms.push_str(&format!(
             "(fun (ps : Name) (pidx : Nat) (psub : KExpr) (psub' : KExpr) \
              (hsub : delta_cong env psub psub') \
-             (_ih : Eq KExpr psub {cst} -> {ihk} -> C) \
-             (heq : Eq KExpr (KExpr.proj ps pidx psub) {cst}) (k : {curk}) => \
-             Empty.rec (fun (_ : Empty) => C) \
-             (Eq.substType KExpr {proj_discr} {cst} (KExpr.proj ps pidx psub) \
-             (Eq.symm KExpr (KExpr.proj ps pidx psub) {cst} heq) Nat.zero)) ",
+             (_ih : @Eq KExpr psub {cst} -> {ihk} -> C) \
+             (heq : @Eq KExpr (KExpr.proj ps pidx psub) {cst}) (k : {curk}) => \
+             @Empty.rec (fun (_ : Empty) => C) \
+             (@Eq.substType KExpr {proj_discr} {cst} (KExpr.proj ps pidx psub) \
+             (@Eq.symm KExpr (KExpr.proj ps pidx psub) {cst} heq) Nat.zero)) ",
             ihk = kty("psub'"),
             curk = kty("(KExpr.proj ps pidx psub')"),
         ));
@@ -1403,7 +1407,7 @@ fn delta_cong_const_inv_proof() -> String {
     format!(
         "fun (env : RedEnv) (nm : Name) (us : ListType Level) (r : KExpr) (C : Type) \
          (h : delta_cong env {cst} r) (k : {k}) => \
-         delta_cong.rec env {motive} {here_arm} {cong_arms} {cst} r h (Eq.refl KExpr {cst}) k",
+         @delta_cong.rec env {motive} {here_arm} {cong_arms} {cst} r h (@Eq.refl KExpr {cst}) k",
         k = kty("r"),
     )
 }
@@ -1413,7 +1417,7 @@ fn delta_cong_const_inv_proof() -> String {
 /// (a lit is never the source of any delta_cong constructor). Part of the
 /// proj/lit fragment rung; mirrors `kexpr_not_proj_inline` for the lit slot.
 fn kexpr_not_lit_inline() -> String {
-    "(KExpr.rec (fun (_ : KExpr) => Type) \
+    "(@KExpr.rec (fun (_ : KExpr) => Type) \
      (fun (_ : Level) => Nat) \
      (fun (_ : Nat) => Nat) \
      (fun (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) => Nat) \
@@ -1436,20 +1440,20 @@ fn delta_cong_proj_inv_proof() -> String {
     let src = "(KExpr.proj s i sub)";
     let cont = |rhs: &str| {
         format!(
-            "(forall (sub' : KExpr), delta_cong env sub sub' -> Eq KExpr {rhs} (KExpr.proj s i sub') -> C)"
+            "(forall (sub' : KExpr), delta_cong env sub sub' -> @Eq KExpr {rhs} (KExpr.proj s i sub') -> C)"
         )
     };
     let motive = format!(
         "(fun (lhs : KExpr) (rhs : KExpr) (_d : delta_cong env lhs rhs) => \
-         Eq KExpr lhs {src} -> {k} -> C)",
+         @Eq KExpr lhs {src} -> {k} -> C)",
         k = cont("rhs"),
     );
     let here_arm = format!(
         "(fun (e0 : KExpr) (e1 : KExpr) (hstep : delta_step (red_def env) e0 e1) \
-         (heq : Eq KExpr e0 {src}) (k : {k}) => \
+         (heq : @Eq KExpr e0 {src}) (k : {k}) => \
          delta_step_head_none_absurd_type (red_def env) {src} e1 C \
-         (Eq.refl (OptionType Name) (OptionType.none Name)) \
-         (Eq.subst KExpr (fun (z : KExpr) => delta_step (red_def env) z e1) e0 {src} heq hstep))",
+         (@Eq.refl (OptionType Name) (@OptionType.none Name)) \
+         (@Eq.subst KExpr (fun (z : KExpr) => delta_step (red_def env) z e1) e0 {src} heq hstep))",
         k = cont("e1"),
     );
     let mut cong_arms = String::new();
@@ -1462,40 +1466,40 @@ fn delta_cong_proj_inv_proof() -> String {
         } else {
             format!("({cur_head} {slot_a} {prhs})")
         };
-        let ih_ty = format!("Eq KExpr {plhs} {src} -> {ihk} -> C", ihk = cont(prhs));
+        let ih_ty = format!("@Eq KExpr {plhs} {src} -> {ihk} -> C", ihk = cont(prhs));
         cong_arms.push_str(&format!(
             "(fun ({b0} : KExpr) ({b1} : KExpr) ({b2} : KExpr) \
              (hsub : delta_cong env {plhs} {prhs}) (_ih : {ih_ty}) \
-             (heq : Eq KExpr {lhs_term} {src}) (k : {curk}) => \
+             (heq : @Eq KExpr {lhs_term} {src}) (k : {curk}) => \
              {ctor_head}_ne_proj {slot_a} {slot_b} s i sub C heq) ",
             curk = cont(&rhs_term),
         ));
     }
     // The three trailing let-congruence arms: off-shape (let_ne_proj on heq).
     for (binders, plhs, prhs, rhs_term) in DELTA_CONG_LET_ARMS {
-        let ih_ty = format!("Eq KExpr {plhs} {src} -> {ihk} -> C", ihk = cont(prhs));
+        let ih_ty = format!("@Eq KExpr {plhs} {src} -> {ihk} -> C", ihk = cont(prhs));
         cong_arms.push_str(&format!(
             "(fun {binders} \
              (hsub : delta_cong env {plhs} {prhs}) (_ih : {ih_ty}) \
-             (heq : Eq KExpr (KExpr.let_ t v b) {src}) (k : {curk}) => \
+             (heq : @Eq KExpr (KExpr.let_ t v b) {src}) (k : {curk}) => \
              let_ne_proj t v b s i sub C heq) ",
             curk = cont(rhs_term),
         ));
     }
     // The live proj_s arm: recover s/i/sub via proj_inj_{name,idx,sub}, feed k.
     {
-        let ih_ty = format!("Eq KExpr psub {src} -> {ihk} -> C", ihk = cont("psub'"));
+        let ih_ty = format!("@Eq KExpr psub {src} -> {ihk} -> C", ihk = cont("psub'"));
         cong_arms.push_str(&format!(
             "(fun (ps : Name) (pidx : Nat) (psub : KExpr) (psub' : KExpr) \
              (hsub : delta_cong env psub psub') (_ih : {ih_ty}) \
-             (heq : Eq KExpr (KExpr.proj ps pidx psub) {src}) (k : {curk}) => \
+             (heq : @Eq KExpr (KExpr.proj ps pidx psub) {src}) (k : {curk}) => \
              k psub' \
-             (Eq.substType KExpr (fun (z : KExpr) => delta_cong env z psub') psub sub \
+             (@Eq.substType KExpr (fun (z : KExpr) => delta_cong env z psub') psub sub \
              (proj_inj_sub ps pidx psub s i sub heq) hsub) \
-             (Eq.trans KExpr (KExpr.proj ps pidx psub') (KExpr.proj s pidx psub') (KExpr.proj s i psub') \
-             (Eq.cong Name KExpr (fun (z : Name) => KExpr.proj z pidx psub') ps s \
+             (@Eq.trans KExpr (KExpr.proj ps pidx psub') (KExpr.proj s pidx psub') (KExpr.proj s i psub') \
+             (@Eq.cong Name KExpr (fun (z : Name) => KExpr.proj z pidx psub') ps s \
              (proj_inj_name ps pidx psub s i sub heq)) \
-             (Eq.cong Nat KExpr (fun (z : Nat) => KExpr.proj s z psub') pidx i \
+             (@Eq.cong Nat KExpr (fun (z : Nat) => KExpr.proj s z psub') pidx i \
              (proj_inj_idx ps pidx psub s i sub heq)))) ",
             curk = cont("(KExpr.proj ps pidx psub')"),
         ));
@@ -1503,8 +1507,8 @@ fn delta_cong_proj_inv_proof() -> String {
     format!(
         "fun (env : RedEnv) (s : Name) (i : Nat) (sub : KExpr) (r : KExpr) (C : Type) \
          (h : delta_cong env {src} r) (k : {k}) => \
-         delta_cong.rec env {motive} {here_arm} {cong_arms} {src} r h \
-         (Eq.refl KExpr {src}) k",
+         @delta_cong.rec env {motive} {here_arm} {cong_arms} {src} r h \
+         (@Eq.refl KExpr {src}) k",
         k = cont("r"),
     )
 }
@@ -1518,14 +1522,14 @@ fn delta_cong_lit_absurd_proof() -> String {
     let term = "(KExpr.lit litv)";
     let lit_discr = kexpr_not_lit_inline();
     let motive = format!(
-        "(fun (lhs : KExpr) (rhs : KExpr) (_d : delta_cong env lhs rhs) => Eq KExpr lhs {term} -> C)"
+        "(fun (lhs : KExpr) (rhs : KExpr) (_d : delta_cong env lhs rhs) => @Eq KExpr lhs {term} -> C)"
     );
     let here_arm = format!(
         "(fun (e0 : KExpr) (e1 : KExpr) (hstep : delta_step (red_def env) e0 e1) \
-         (heq : Eq KExpr e0 {term}) => \
+         (heq : @Eq KExpr e0 {term}) => \
          delta_step_head_none_absurd_type (red_def env) {term} e1 C \
-         (Eq.refl (OptionType Name) (OptionType.none Name)) \
-         (Eq.subst KExpr (fun (z : KExpr) => delta_step (red_def env) z e1) e0 {term} heq hstep))"
+         (@Eq.refl (OptionType Name) (@OptionType.none Name)) \
+         (@Eq.subst KExpr (fun (z : KExpr) => delta_step (red_def env) z e1) e0 {term} heq hstep))"
     );
     let mut cong_arms = String::new();
     // The six app/lam/pi congruence arms: off-shape (source is not a lit), refuted by
@@ -1537,33 +1541,33 @@ fn delta_cong_lit_absurd_proof() -> String {
         let lhs_term = format!("({cur_head} {slot_a} {slot_b})");
         cong_arms.push_str(&format!(
             "(fun ({b0} : KExpr) ({b1} : KExpr) ({b2} : KExpr) \
-             (hsub : delta_cong env {plhs} {prhs}) (_ih : Eq KExpr {plhs} {term} -> C) \
-             (heq : Eq KExpr {lhs_term} {term}) => \
-             Empty.rec (fun (_ : Empty) => C) \
-             (Eq.substType KExpr {lit_discr} {lhs_term} {term} heq Nat.zero)) "
+             (hsub : delta_cong env {plhs} {prhs}) (_ih : @Eq KExpr {plhs} {term} -> C) \
+             (heq : @Eq KExpr {lhs_term} {term}) => \
+             @Empty.rec (fun (_ : Empty) => C) \
+             (@Eq.substType KExpr {lit_discr} {lhs_term} {term} heq Nat.zero)) "
         ));
     }
     // The three trailing let-congruence arms: off-shape, same inline refutation.
     for (lbinders, plhs, prhs, _rhs_term) in DELTA_CONG_LET_ARMS {
         cong_arms.push_str(&format!(
             "(fun {lbinders} \
-             (hsub : delta_cong env {plhs} {prhs}) (_ih : Eq KExpr {plhs} {term} -> C) \
-             (heq : Eq KExpr (KExpr.let_ t v b) {term}) => \
-             Empty.rec (fun (_ : Empty) => C) \
-             (Eq.substType KExpr {lit_discr} (KExpr.let_ t v b) {term} heq Nat.zero)) "
+             (hsub : delta_cong env {plhs} {prhs}) (_ih : @Eq KExpr {plhs} {term} -> C) \
+             (heq : @Eq KExpr (KExpr.let_ t v b) {term}) => \
+             @Empty.rec (fun (_ : Empty) => C) \
+             (@Eq.substType KExpr {lit_discr} (KExpr.let_ t v b) {term} heq Nat.zero)) "
         ));
     }
     // The trailing proj_s congruence arm: off-shape, same inline refutation.
     cong_arms.push_str(&format!(
         "(fun (ps : Name) (pidx : Nat) (psub : KExpr) (psub' : KExpr) \
-         (hsub : delta_cong env psub psub') (_ih : Eq KExpr psub {term} -> C) \
-         (heq : Eq KExpr (KExpr.proj ps pidx psub) {term}) => \
-         Empty.rec (fun (_ : Empty) => C) \
-         (Eq.substType KExpr {lit_discr} (KExpr.proj ps pidx psub) {term} heq Nat.zero)) "
+         (hsub : delta_cong env psub psub') (_ih : @Eq KExpr psub {term} -> C) \
+         (heq : @Eq KExpr (KExpr.proj ps pidx psub) {term}) => \
+         @Empty.rec (fun (_ : Empty) => C) \
+         (@Eq.substType KExpr {lit_discr} (KExpr.proj ps pidx psub) {term} heq Nat.zero)) "
     ));
     format!(
         "fun (env : RedEnv) (litv : Nat) (r : KExpr) (C : Type) (h : delta_cong env {term} r) => \
-         delta_cong.rec env {motive} {here_arm} {cong_arms} {term} r h (Eq.refl KExpr {term})"
+         @delta_cong.rec env {motive} {here_arm} {cong_arms} {term} r h (@Eq.refl KExpr {term})"
     )
 }
 
@@ -1602,10 +1606,10 @@ fn compound_diamond_case(target: &str) -> String {
     // transport PSJ env bcanon ccanon to PSJ env b0 c0 (eb : Eq b0 bcanon, ec : Eq c0 ccanon).
     let transport = |bcanon: &str, ccanon: &str, eb: &str, ec: &str, join: &str| {
         format!(
-            "(Eq.substType KExpr (fun (z : KExpr) => par_strong_join_d env z c0) {bcanon} b0 \
-             (Eq.symm KExpr b0 {bcanon} {eb}) \
-             (Eq.substType KExpr (fun (z : KExpr) => par_strong_join_d env {bcanon} z) {ccanon} c0 \
-             (Eq.symm KExpr c0 {ccanon} {ec}) {join}))"
+            "(@Eq.substType KExpr (fun (z : KExpr) => par_strong_join_d env z c0) {bcanon} b0 \
+             (@Eq.symm KExpr b0 {bcanon} {eb}) \
+             (@Eq.substType KExpr (fun (z : KExpr) => par_strong_join_d env {bcanon} z) {ccanon} c0 \
+             (@Eq.symm KExpr c0 {ccanon} {ec}) {join}))"
         )
     };
 
@@ -1619,9 +1623,9 @@ fn compound_diamond_case(target: &str) -> String {
     );
     // (L,R): b reduced first slot, c reduced second; orthogonal one-join at HEAD bL cR.
     let lr_join = format!(
-        "(par_strong_join_d.one env ({head} bL s1) ({head} s0 cR) ({head} bL cR) \
-         (delta_cong_subsumes_star env ({head} bL s1) ({head} bL cR) ({cong_r} env bL s1 cR hcR)) \
-         ({cong_l} env s0 bL cR hbL))"
+        "(@par_strong_join_d.one env ({head} bL s1) ({head} s0 cR) ({head} bL cR) \
+         (delta_cong_subsumes_star env ({head} bL s1) ({head} bL cR) (@{cong_r} env bL s1 cR hcR)) \
+         (@{cong_l} env s0 bL cR hbL))"
     );
     let lr = transport(
         &format!("({head} bL s1)"),
@@ -1632,9 +1636,9 @@ fn compound_diamond_case(target: &str) -> String {
     );
     // (R,L): b reduced second slot, c reduced first; orthogonal one-join at HEAD cL bR.
     let rl_join = format!(
-        "(par_strong_join_d.one env ({head} s0 bR) ({head} cL s1) ({head} cL bR) \
-         (delta_cong_subsumes_star env ({head} s0 bR) ({head} cL bR) ({cong_l} env s0 cL bR hcL)) \
-         ({cong_r} env cL s1 bR hbR))"
+        "(@par_strong_join_d.one env ({head} s0 bR) ({head} cL s1) ({head} cL bR) \
+         (delta_cong_subsumes_star env ({head} s0 bR) ({head} cL bR) (@{cong_l} env s0 cL bR hcL)) \
+         (@{cong_r} env cL s1 bR hbR))"
     );
     let rl = transport(
         &format!("({head} s0 bR)"),
@@ -1658,14 +1662,14 @@ fn compound_diamond_case(target: &str) -> String {
          fun (b0 : KExpr) (c0 : KExpr) \
          (hb : delta_cong env ({head} s0 s1) b0) (hc : delta_cong env ({head} s0 s1) c0) => \
          {inv} env s0 s1 b0 {psj_bc} hb \
-         (fun (bL : KExpr) (hbL : delta_cong env s0 bL) (ebL : Eq KExpr b0 ({head} bL s1)) => \
+         (fun (bL : KExpr) (hbL : delta_cong env s0 bL) (ebL : @Eq KExpr b0 ({head} bL s1)) => \
          {inv} env s0 s1 c0 {psj_bc} hc \
-         (fun (cL : KExpr) (hcL : delta_cong env s0 cL) (ecL : Eq KExpr c0 ({head} cL s1)) => {ll}) \
-         (fun (cR : KExpr) (hcR : delta_cong env s1 cR) (ecR : Eq KExpr c0 ({head} s0 cR)) => {lr})) \
-         (fun (bR : KExpr) (hbR : delta_cong env s1 bR) (ebR : Eq KExpr b0 ({head} s0 bR)) => \
+         (fun (cL : KExpr) (hcL : delta_cong env s0 cL) (ecL : @Eq KExpr c0 ({head} cL s1)) => {ll}) \
+         (fun (cR : KExpr) (hcR : delta_cong env s1 cR) (ecR : @Eq KExpr c0 ({head} s0 cR)) => {lr})) \
+         (fun (bR : KExpr) (hbR : delta_cong env s1 bR) (ebR : @Eq KExpr b0 ({head} s0 bR)) => \
          {inv} env s0 s1 c0 {psj_bc} hc \
-         (fun (cL : KExpr) (hcL : delta_cong env s0 cL) (ecL : Eq KExpr c0 ({head} cL s1)) => {rl}) \
-         (fun (cR : KExpr) (hcR : delta_cong env s1 cR) (ecR : Eq KExpr c0 ({head} s0 cR)) => {rr})))",
+         (fun (cL : KExpr) (hcL : delta_cong env s0 cL) (ecL : @Eq KExpr c0 ({head} cL s1)) => {rl}) \
+         (fun (cR : KExpr) (hcR : delta_cong env s1 cR) (ecR : @Eq KExpr c0 ({head} s0 cR)) => {rr})))",
         p0 = p_of("s0"),
         p1 = p_of("s1"),
     )
@@ -1689,16 +1693,16 @@ fn let_diamond_case() -> String {
     // transport PSJ env bcanon ccanon to PSJ env b0 c0 (eb : Eq b0 bcanon, ec : Eq c0 ccanon).
     let transport = |bcanon: &str, ccanon: &str, eb: &str, ec: &str, join: &str| {
         format!(
-            "(Eq.substType KExpr (fun (z : KExpr) => par_strong_join_d env z c0) {bcanon} b0 \
-             (Eq.symm KExpr b0 {bcanon} {eb}) \
-             (Eq.substType KExpr (fun (z : KExpr) => par_strong_join_d env {bcanon} z) {ccanon} c0 \
-             (Eq.symm KExpr c0 {ccanon} {ec}) {join}))"
+            "(@Eq.substType KExpr (fun (z : KExpr) => par_strong_join_d env z c0) {bcanon} b0 \
+             (@Eq.symm KExpr b0 {bcanon} {eb}) \
+             (@Eq.substType KExpr (fun (z : KExpr) => par_strong_join_d env {bcanon} z) {ccanon} c0 \
+             (@Eq.symm KExpr c0 {ccanon} {ec}) {join}))"
         )
     };
     // Orthogonal one-step join: b-leg B ⇒ M (subsumed to star), c-leg C ⇒ M (single).
     let one_join = |bterm: &str, cterm: &str, mterm: &str, bstep: &str, cstep: &str| {
         format!(
-            "(par_strong_join_d.one env {bterm} {cterm} {mterm} \
+            "(@par_strong_join_d.one env {bterm} {cterm} {mterm} \
              (delta_cong_subsumes_star env {bterm} {mterm} {bstep}) \
              {cstep})"
         )
@@ -1737,8 +1741,8 @@ fn let_diamond_case() -> String {
             "(KExpr.let_ bT s1 s2)",
             "(KExpr.let_ s0 cV s2)",
             "(KExpr.let_ bT cV s2)",
-            "(delta_cong.let_v env bT s1 cV s2 hcV)",
-            "(delta_cong.let_t env s0 bT cV s2 hbT)",
+            "(@delta_cong.let_v env bT s1 cV s2 hcV)",
+            "(@delta_cong.let_t env s0 bT cV s2 hbT)",
         ),
     );
     let tb = transport(
@@ -1750,8 +1754,8 @@ fn let_diamond_case() -> String {
             "(KExpr.let_ bT s1 s2)",
             "(KExpr.let_ s0 s1 cB)",
             "(KExpr.let_ bT s1 cB)",
-            "(delta_cong.let_b env bT s1 s2 cB hcB)",
-            "(delta_cong.let_t env s0 bT s1 cB hbT)",
+            "(@delta_cong.let_b env bT s1 s2 cB hcB)",
+            "(@delta_cong.let_t env s0 bT s1 cB hbT)",
         ),
     );
     let vt = transport(
@@ -1763,8 +1767,8 @@ fn let_diamond_case() -> String {
             "(KExpr.let_ s0 bV s2)",
             "(KExpr.let_ cT s1 s2)",
             "(KExpr.let_ cT bV s2)",
-            "(delta_cong.let_t env s0 cT bV s2 hcT)",
-            "(delta_cong.let_v env cT s1 bV s2 hbV)",
+            "(@delta_cong.let_t env s0 cT bV s2 hcT)",
+            "(@delta_cong.let_v env cT s1 bV s2 hbV)",
         ),
     );
     let vb = transport(
@@ -1776,8 +1780,8 @@ fn let_diamond_case() -> String {
             "(KExpr.let_ s0 bV s2)",
             "(KExpr.let_ s0 s1 cB)",
             "(KExpr.let_ s0 bV cB)",
-            "(delta_cong.let_b env s0 bV s2 cB hcB)",
-            "(delta_cong.let_v env s0 s1 bV cB hbV)",
+            "(@delta_cong.let_b env s0 bV s2 cB hcB)",
+            "(@delta_cong.let_v env s0 s1 bV cB hbV)",
         ),
     );
     let bt = transport(
@@ -1789,8 +1793,8 @@ fn let_diamond_case() -> String {
             "(KExpr.let_ s0 s1 bB)",
             "(KExpr.let_ cT s1 s2)",
             "(KExpr.let_ cT s1 bB)",
-            "(delta_cong.let_t env s0 cT s1 bB hcT)",
-            "(delta_cong.let_b env cT s1 s2 bB hbB)",
+            "(@delta_cong.let_t env s0 cT s1 bB hcT)",
+            "(@delta_cong.let_b env cT s1 s2 bB hbB)",
         ),
     );
     let bv = transport(
@@ -1802,8 +1806,8 @@ fn let_diamond_case() -> String {
             "(KExpr.let_ s0 s1 bB)",
             "(KExpr.let_ s0 cV s2)",
             "(KExpr.let_ s0 cV bB)",
-            "(delta_cong.let_v env s0 s1 cV bB hcV)",
-            "(delta_cong.let_b env s0 cV s2 bB hbB)",
+            "(@delta_cong.let_v env s0 s1 cV bB hcV)",
+            "(@delta_cong.let_b env s0 cV s2 bB hbB)",
         ),
     );
 
@@ -1813,21 +1817,21 @@ fn let_diamond_case() -> String {
          fun (b0 : KExpr) (c0 : KExpr) \
          (hb : delta_cong env (KExpr.let_ s0 s1 s2) b0) (hc : delta_cong env (KExpr.let_ s0 s1 s2) c0) => \
          delta_cong_let_inv env s0 s1 s2 b0 {psj_bc} hb \
-         (fun (bT : KExpr) (hbT : delta_cong env s0 bT) (ebT : Eq KExpr b0 (KExpr.let_ bT s1 s2)) => \
+         (fun (bT : KExpr) (hbT : delta_cong env s0 bT) (ebT : @Eq KExpr b0 (KExpr.let_ bT s1 s2)) => \
          delta_cong_let_inv env s0 s1 s2 c0 {psj_bc} hc \
-         (fun (cT : KExpr) (hcT : delta_cong env s0 cT) (ecT : Eq KExpr c0 (KExpr.let_ cT s1 s2)) => {tt}) \
-         (fun (cV : KExpr) (hcV : delta_cong env s1 cV) (ecV : Eq KExpr c0 (KExpr.let_ s0 cV s2)) => {tv}) \
-         (fun (cB : KExpr) (hcB : delta_cong env s2 cB) (ecB : Eq KExpr c0 (KExpr.let_ s0 s1 cB)) => {tb})) \
-         (fun (bV : KExpr) (hbV : delta_cong env s1 bV) (ebV : Eq KExpr b0 (KExpr.let_ s0 bV s2)) => \
+         (fun (cT : KExpr) (hcT : delta_cong env s0 cT) (ecT : @Eq KExpr c0 (KExpr.let_ cT s1 s2)) => {tt}) \
+         (fun (cV : KExpr) (hcV : delta_cong env s1 cV) (ecV : @Eq KExpr c0 (KExpr.let_ s0 cV s2)) => {tv}) \
+         (fun (cB : KExpr) (hcB : delta_cong env s2 cB) (ecB : @Eq KExpr c0 (KExpr.let_ s0 s1 cB)) => {tb})) \
+         (fun (bV : KExpr) (hbV : delta_cong env s1 bV) (ebV : @Eq KExpr b0 (KExpr.let_ s0 bV s2)) => \
          delta_cong_let_inv env s0 s1 s2 c0 {psj_bc} hc \
-         (fun (cT : KExpr) (hcT : delta_cong env s0 cT) (ecT : Eq KExpr c0 (KExpr.let_ cT s1 s2)) => {vt}) \
-         (fun (cV : KExpr) (hcV : delta_cong env s1 cV) (ecV : Eq KExpr c0 (KExpr.let_ s0 cV s2)) => {vv}) \
-         (fun (cB : KExpr) (hcB : delta_cong env s2 cB) (ecB : Eq KExpr c0 (KExpr.let_ s0 s1 cB)) => {vb})) \
-         (fun (bB : KExpr) (hbB : delta_cong env s2 bB) (ebB : Eq KExpr b0 (KExpr.let_ s0 s1 bB)) => \
+         (fun (cT : KExpr) (hcT : delta_cong env s0 cT) (ecT : @Eq KExpr c0 (KExpr.let_ cT s1 s2)) => {vt}) \
+         (fun (cV : KExpr) (hcV : delta_cong env s1 cV) (ecV : @Eq KExpr c0 (KExpr.let_ s0 cV s2)) => {vv}) \
+         (fun (cB : KExpr) (hcB : delta_cong env s2 cB) (ecB : @Eq KExpr c0 (KExpr.let_ s0 s1 cB)) => {vb})) \
+         (fun (bB : KExpr) (hbB : delta_cong env s2 bB) (ebB : @Eq KExpr b0 (KExpr.let_ s0 s1 bB)) => \
          delta_cong_let_inv env s0 s1 s2 c0 {psj_bc} hc \
-         (fun (cT : KExpr) (hcT : delta_cong env s0 cT) (ecT : Eq KExpr c0 (KExpr.let_ cT s1 s2)) => {bt}) \
-         (fun (cV : KExpr) (hcV : delta_cong env s1 cV) (ecV : Eq KExpr c0 (KExpr.let_ s0 cV s2)) => {bv}) \
-         (fun (cB : KExpr) (hcB : delta_cong env s2 cB) (ecB : Eq KExpr c0 (KExpr.let_ s0 s1 cB)) => {bb})))",
+         (fun (cT : KExpr) (hcT : delta_cong env s0 cT) (ecT : @Eq KExpr c0 (KExpr.let_ cT s1 s2)) => {bt}) \
+         (fun (cV : KExpr) (hcV : delta_cong env s1 cV) (ecV : @Eq KExpr c0 (KExpr.let_ s0 cV s2)) => {bv}) \
+         (fun (cB : KExpr) (hcB : delta_cong env s2 cB) (ecB : @Eq KExpr c0 (KExpr.let_ s0 s1 cB)) => {bb})))",
         p0 = p_of("s0"),
         p1 = p_of("s1"),
         p2 = p_of("s2"),
@@ -1852,10 +1856,10 @@ fn delta_cong_diamond_proof() -> String {
          (fun (sb : delta_step (red_def env) (KExpr.const nm us) b0) => \
          delta_cong_const_inv env nm us c0 (par_strong_join_d env b0 c0) hc \
          (fun (sc : delta_step (red_def env) (KExpr.const nm us) c0) => \
-         par_strong_join_d.zero env b0 c0 \
-         (Eq.substType KExpr (fun (z : KExpr) => delta_cong_star env b0 z) b0 c0 \
+         @par_strong_join_d.zero env b0 c0 \
+         (@Eq.substType KExpr (fun (z : KExpr) => delta_cong_star env b0 z) b0 c0 \
          (delta_step_deterministic (red_def env) (KExpr.const nm us) b0 c0 sb sc) \
-         (delta_cong_star.refl env b0)))))";
+         (@delta_cong_star.refl env b0)))))";
     let app_case = compound_diamond_case("app");
     let lam_case = compound_diamond_case("lam");
     let pi_case = compound_diamond_case("pi");
@@ -1867,7 +1871,7 @@ fn delta_cong_diamond_proof() -> String {
     // proj_ (genuine 8th ctor): a SINGLE-hole diamond. Invert both steps into the
     // scrutinee via delta_cong_proj_inv, join via the scrutinee IH lifted by
     // par_strong_join_d_proj, transport back along the two reduct equations.
-    let proj_case = "(fun (s : Name) (i : Nat) (sub : KExpr) (ihsub : forall (bi : KExpr) (ci : KExpr), delta_cong env sub bi -> delta_cong env sub ci -> par_strong_join_d env bi ci) => fun (b0 : KExpr) (c0 : KExpr) (hb : delta_cong env (KExpr.proj s i sub) b0) (hc : delta_cong env (KExpr.proj s i sub) c0) => delta_cong_proj_inv env s i sub b0 (par_strong_join_d env b0 c0) hb (fun (bS : KExpr) (hbS : delta_cong env sub bS) (ebS : Eq KExpr b0 (KExpr.proj s i bS)) => delta_cong_proj_inv env s i sub c0 (par_strong_join_d env b0 c0) hc (fun (cS : KExpr) (hcS : delta_cong env sub cS) (ecS : Eq KExpr c0 (KExpr.proj s i cS)) => Eq.substType KExpr (fun (z : KExpr) => par_strong_join_d env z c0) (KExpr.proj s i bS) b0 (Eq.symm KExpr b0 (KExpr.proj s i bS) ebS) (Eq.substType KExpr (fun (z : KExpr) => par_strong_join_d env (KExpr.proj s i bS) z) (KExpr.proj s i cS) c0 (Eq.symm KExpr c0 (KExpr.proj s i cS) ecS) (par_strong_join_d_proj env s i bS cS (ihsub bS cS hbS hcS))))))";
+    let proj_case = "(fun (s : Name) (i : Nat) (sub : KExpr) (ihsub : forall (bi : KExpr) (ci : KExpr), delta_cong env sub bi -> delta_cong env sub ci -> par_strong_join_d env bi ci) => fun (b0 : KExpr) (c0 : KExpr) (hb : delta_cong env (KExpr.proj s i sub) b0) (hc : delta_cong env (KExpr.proj s i sub) c0) => delta_cong_proj_inv env s i sub b0 (par_strong_join_d env b0 c0) hb (fun (bS : KExpr) (hbS : delta_cong env sub bS) (ebS : @Eq KExpr b0 (KExpr.proj s i bS)) => delta_cong_proj_inv env s i sub c0 (par_strong_join_d env b0 c0) hc (fun (cS : KExpr) (hcS : delta_cong env sub cS) (ecS : @Eq KExpr c0 (KExpr.proj s i cS)) => @Eq.substType KExpr (fun (z : KExpr) => par_strong_join_d env z c0) (KExpr.proj s i bS) b0 (@Eq.symm KExpr b0 (KExpr.proj s i bS) ebS) (@Eq.substType KExpr (fun (z : KExpr) => par_strong_join_d env (KExpr.proj s i bS) z) (KExpr.proj s i cS) c0 (@Eq.symm KExpr c0 (KExpr.proj s i cS) ecS) (par_strong_join_d_proj env s i bS cS (ihsub bS cS hbS hcS))))))";
     // lit (genuine 9th ctor): a leaf — no live congruence arm, not const-headed, so
     // both delta_cong steps are impossible (delta_cong_lit_absurd delivers the join).
     let lit_case = "(fun (v : Nat) => fun (b0 : KExpr) (c0 : KExpr) \
@@ -1876,7 +1880,7 @@ fn delta_cong_diamond_proof() -> String {
     format!(
         "fun (env : RedEnv) (a : KExpr) (b : KExpr) (c : KExpr) \
          (hab : delta_cong env a b) (hac : delta_cong env a c) => \
-         KExpr.rec {motive} {sort_case} {bvar_case} {app_case} {lam_case} {pi_case} {const_case} {let_case} \
+         @KExpr.rec {motive} {sort_case} {bvar_case} {app_case} {lam_case} {pi_case} {const_case} {let_case} \
          {proj_case} {lit_case} \
          a b c hab hac"
     )

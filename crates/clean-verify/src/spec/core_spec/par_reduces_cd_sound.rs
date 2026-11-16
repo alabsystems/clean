@@ -99,7 +99,7 @@ impl Specification {
                 type_src: format!("forall (env : RedEnv), RedEnvFaithful env -> {iface}"),
                 value_src: Some(format!(
                     "fun (env : RedEnv) (h : RedEnvFaithful env) => \
-                     RedEnvFaithful.rec env \
+                     @RedEnvFaithful.rec env \
                      (fun (_ : RedEnvFaithful env) => {iface}) \
                      (fun {binders} => a{n}) h"
                 )),
@@ -139,7 +139,7 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (e0 : KExpr) (e0' : KExpr) (h0 : par_reduces_cd the_red_env e0 e0') => ",
-                    "par_reduces_cd.rec the_red_env ",
+                    "@par_reduces_cd.rec the_red_env ",
                     "(fun (x : KExpr) (y : KExpr) (_h : par_reduces_cd the_red_env x y) => DefEq x y) ",
                     // refl
                     "(fun (e : KExpr) => DefEq.refl e) ",
@@ -268,7 +268,7 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (e0 : KExpr) (e0' : KExpr) (h0 : par_reduces_cd_star the_red_env e0 e0') => ",
-                    "par_reduces_cd_star.rec the_red_env ",
+                    "@par_reduces_cd_star.rec the_red_env ",
                     "(fun (x : KExpr) (y : KExpr) (_h : par_reduces_cd_star the_red_env x y) => DefEq x y) ",
                     // refl
                     "(fun (e : KExpr) => DefEq.refl e) ",

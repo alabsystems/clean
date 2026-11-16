@@ -52,7 +52,7 @@ impl ProofLibrary {
             ProofTerm::new(
                 "pc01_resolution_soundness",
                 "fun (nc : Nat) (step : ResolvStep nc) => \
-                 ResolvStep.rec nc \
+                 @ResolvStep.rec nc \
                    (fun (s : ResolvStep nc) => ResolvSound nc s) \
                    (fun (idx : Nat) => ResolvSound.input nc idx) \
                    (fun (pivot : Nat) (left : ResolvStep nc) (right : ResolvStep nc) \
@@ -135,7 +135,7 @@ impl ProofLibrary {
             ProofTerm::new(
                 "pc03_cp_soundness",
                 "fun (ni : Nat) (step : CPStep ni) => \
-                 CPStep.rec ni \
+                 @CPStep.rec ni \
                    (fun (s : CPStep ni) => CPSound ni s) \
                    (fun (idx : Nat) => CPSound.input ni idx) \
                    (fun (left : CPStep ni) (right : CPStep ni) \
@@ -180,7 +180,7 @@ impl ProofLibrary {
             ProofTerm::new(
                 "pc04_cp_subsumes_resolution",
                 "fun (nc : Nat) (step : CPSimResolvStep nc) => \
-                 CPSimResolvStep.rec nc \
+                 @CPSimResolvStep.rec nc \
                    (fun (s : CPSimResolvStep nc) => CPSimResolvSound nc s) \
                    (fun (idx : Nat) => CPSimResolvSound.encode_clause nc idx) \
                    (fun (pivot : Nat) (left : CPSimResolvStep nc) (right : CPSimResolvStep nc) \

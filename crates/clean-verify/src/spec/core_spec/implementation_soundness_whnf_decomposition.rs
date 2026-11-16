@@ -75,7 +75,7 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (e : KExpr) (e' : KExpr) (h : beta_reduces e e') => ",
-                    "beta_reduces.rec ",
+                    "@beta_reduces.rec ",
                     "beta_reduces_def_eq_goal ",
                     // beta: (λA.b) a ≡ b[a/0] via UNTYPED DefEq.beta
                     "(fun (A : KExpr) (b : KExpr) (a : KExpr) => DefEq.beta A b a) ",
@@ -256,7 +256,7 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (e : KExpr) (e' : KExpr) (h : whnf_step e e') => ",
-                    "whnf_step.rec e e' ",
+                    "@whnf_step.rec e e' ",
                     "(whnf_step_def_eq_goal e e') ",
                     "(whnf_step_beta_sound e e') ",
                     "(whnf_step_delta_sound e e') ",
@@ -308,7 +308,7 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (e : KExpr) (e' : KExpr) (h : whnf_to e e') => ",
-                    "whnf_to.rec ",
+                    "@whnf_to.rec ",
                     "whnf_to_def_eq_goal ",
                     "(fun (e0 : KExpr) (_hwhnf : is_whnf e0) => DefEq.refl e0) ",
                     "(fun (e0 : KExpr) (e1 : KExpr) (v : KExpr) ",
@@ -368,7 +368,7 @@ impl Specification {
                     "(_hctx : KernelStateLocalCtxWellFormed st) ",
                     "(_hin : KernelInputAdmissible st e) ",
                     "(haccept : KernelWhnfAccepts st e e') => ",
-                    "KernelWhnfAccepts.rec st ",
+                    "@KernelWhnfAccepts.rec st ",
                     "(fun (x : KExpr) (y : KExpr) (_h : KernelWhnfAccepts st x y) => whnf_to x y) ",
                     // refl arm: is_whnf a -> whnf_to a a
                     "(fun (a : KExpr) (hw : is_whnf a) => whnf_to.refl a hw) ",
@@ -518,7 +518,7 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (e : KExpr) (v : KExpr) (h : whnf_to e v) => ",
-                    "whnf_to.rec ",
+                    "@whnf_to.rec ",
                     "whnf_to_is_whnf_goal ",
                     "(fun (_e0 : KExpr) (hwhnf : is_whnf _e0) => hwhnf) ",
                     "(fun (_e0 : KExpr) (_e1 : KExpr) (_v : KExpr) ",

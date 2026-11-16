@@ -21,7 +21,7 @@ fn consuming_environment_preserves_actual_declarations_options_and_authority() {
         model_unit_source: ModelUnitSource::default(),
     };
     spec.add_recursive_def(
-        "def transfer_boolean_refl : Eq Bool Bool.true Bool.true := Eq.refl Bool Bool.true",
+        "def transfer_boolean_refl : @Eq Bool Bool.true Bool.true := @Eq.refl Bool Bool.true",
         "Ownership transfer retains the actual checked declaration",
     )
     .expect("checked definition");
@@ -114,8 +114,8 @@ fn checked_eq_cong_keeps_domain_and_codomain_universes_distinct() {
         let type_src = "forall (α : Sort u) (β : Sort v) (f : α -> β) (a : α) (b : α), Eq α a b -> Eq β (f a) (f b)";
         let value_src =
             "fun (α : Sort u) (β : Sort v) (f : α -> β) (a : α) (b : α) (h : Eq α a b) => \
-             Eq.rec α a (fun (x : α) (_h : Eq α a x) => Eq β (f a) (f x)) \
-             (Eq.refl β (f a)) b h";
+             @Eq.rec α a (fun (x : α) (_h : Eq α a x) => Eq β (f a) (f x)) \
+             (@Eq.refl β (f a)) b h";
         spec.add_definition_checked(SpecDefinition {
             name: "Eq.cong".to_string(),
             type_src: type_src.to_string(),
@@ -530,9 +530,9 @@ fn test_eq_inductive_nat_add_zero_value_821() {
 
         // Value elaboration (THIS WAS FAILING with NotAFunction before fix).
         let nat_add_zero_value = concat!(
-            "fun (n : Nat) => Nat.rec ",
+            "fun (n : Nat) => @Nat.rec ",
             "(fun (k : Nat) => Eq Nat (Nat.add k Nat.zero) k) ",
-            "(Eq.refl Nat Nat.zero) ",
+            "(@Eq.refl Nat Nat.zero) ",
             "(fun (p : Nat) (ih : Eq Nat (Nat.add p Nat.zero) p) => ",
             "Eq.cong Nat Nat Nat.succ (Nat.add p Nat.zero) p ih) ",
             "n"

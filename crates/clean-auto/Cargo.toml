@@ -144,14 +144,14 @@ ay-lean-bridge.workspace = true
 # gate. So the two move together, in one transaction, through
 # scripts/bump-trust-ir-pin.sh. The `rev` fields below are the pin; a comment
 # that restates one is refused by that gate (`trust_ir_pin_legs.restated_pins`).
-trust-cg-lower = { git = "https://github.com/alabsystems/trust-cg.git", rev = "be463238a2c9888d5204c3ecf730d3a3fa2ff66d" }
-trust-cg-ir = { git = "https://github.com/alabsystems/trust-cg.git", rev = "be463238a2c9888d5204c3ecf730d3a3fa2ff66d" }
+trust-cg-lower = { git = "https://github.com/alabsystems/trust-cg.git", rev = "bea55c6c3b6d586c129ab9ac3a4e1be016ad4bd9" }
+trust-cg-ir = { git = "https://github.com/alabsystems/trust-cg.git", rev = "bea55c6c3b6d586c129ab9ac3a4e1be016ad4bd9" }
 # `tests_criterion2_gvn_lowering` RUNS the real trust-cg GlobalValueNumbering pass
 # (commutative-operand canonicalization) and extracts the structurally-distinct
 # machine-form-vs-ir-op identity it relies on, then routes it through the clean
 # NON-REFLEXIVE lowering bridge. Dev-dep only; clean-auto/src never depends on it.
-trust-cg-opt = { git = "https://github.com/alabsystems/trust-cg.git", rev = "be463238a2c9888d5204c3ecf730d3a3fa2ff66d" }
-trust-ir = { git = "https://github.com/alabsystems/trust-ir.git", rev = "a98dfbbe7f0b7ee8c60f2ee7c2cfd641ba850b87", features = ["serde"] }
+trust-cg-opt = { git = "https://github.com/alabsystems/trust-cg.git", rev = "bea55c6c3b6d586c129ab9ac3a4e1be016ad4bd9" }
+trust-ir = { git = "https://github.com/alabsystems/trust-ir.git", rev = "8bae728257b123d6394b2dc049b3573ad885049f", features = ["serde"] }
 
 [[bench]]
 name = "smt_fast_path"

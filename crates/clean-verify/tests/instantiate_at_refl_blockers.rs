@@ -20,17 +20,17 @@ fn instantiate_at_shape_equalities_reject_direct_eq_refl() {
         (
             "instantiate_at_app_eq_refl_attempt",
             "forall (f : KExpr) (a : KExpr) (val : KExpr) (depth : Nat), Eq KExpr (instantiate_at (KExpr.app f a) val depth) (KExpr.app (instantiate_at f val depth) (instantiate_at a val depth))",
-            "fun (f : KExpr) (a : KExpr) (val : KExpr) (depth : Nat) => Eq.refl KExpr (KExpr.app (instantiate_at f val depth) (instantiate_at a val depth))",
+            "fun (f : KExpr) (a : KExpr) (val : KExpr) (depth : Nat) => @Eq.refl KExpr (KExpr.app (instantiate_at f val depth) (instantiate_at a val depth))",
         ),
         (
             "instantiate_at_lam_eq_refl_attempt",
             "forall (ty : KExpr) (b : KExpr) (val : KExpr) (depth : Nat), Eq KExpr (instantiate_at (KExpr.lam ty b) val depth) (KExpr.lam (instantiate_at ty val depth) (instantiate_at b val (Nat.succ depth)))",
-            "fun (ty : KExpr) (b : KExpr) (val : KExpr) (depth : Nat) => Eq.refl KExpr (KExpr.lam (instantiate_at ty val depth) (instantiate_at b val (Nat.succ depth)))",
+            "fun (ty : KExpr) (b : KExpr) (val : KExpr) (depth : Nat) => @Eq.refl KExpr (KExpr.lam (instantiate_at ty val depth) (instantiate_at b val (Nat.succ depth)))",
         ),
         (
             "instantiate_at_pi_eq_refl_attempt",
             "forall (ty : KExpr) (b : KExpr) (val : KExpr) (depth : Nat), Eq KExpr (instantiate_at (KExpr.pi ty b) val depth) (KExpr.pi (instantiate_at ty val depth) (instantiate_at b val (Nat.succ depth)))",
-            "fun (ty : KExpr) (b : KExpr) (val : KExpr) (depth : Nat) => Eq.refl KExpr (KExpr.pi (instantiate_at ty val depth) (instantiate_at b val (Nat.succ depth)))",
+            "fun (ty : KExpr) (b : KExpr) (val : KExpr) (depth : Nat) => @Eq.refl KExpr (KExpr.pi (instantiate_at ty val depth) (instantiate_at b val (Nat.succ depth)))",
         ),
     ] {
         let err = spec.add_definition(SpecDefinition {

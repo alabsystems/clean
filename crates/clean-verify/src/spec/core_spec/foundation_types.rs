@@ -204,16 +204,16 @@ impl Specification {
         // provable all along — was a value-less FoundationalRule axiom.
         self.add_definition_checked(SpecDefinition {
             name: "Eq.symm".to_string(),
-            type_src: "forall (α : Sort u) (a : α) (b : α), Eq α a b -> Eq α b a".to_string(),
+            type_src: "forall (α : Sort u) (a : α) (b : α), @Eq α a b -> @Eq α b a".to_string(),
             value_src: Some(
-                "fun (α : Sort u) (a : α) (b : α) (h : Eq α a b) => \
-                 @Eq.rec α a (fun (b1 : α) (_h : Eq α a b1) => Eq α b1 a) \
+                "fun (α : Sort u) (a : α) (b : α) (h : @Eq α a b) => \
+                 @Eq.rec α a (fun (b1 : α) (_h : @Eq α a b1) => @Eq α b1 a) \
                  (@Eq.refl α a) b h"
                     .to_string(),
             ),
             is_axiom: false,
-            description: "Symmetry of equality: if a = b then b = a. PROVED via based Eq.rec \
-                          (Martin-Löf J): motive (fun b1 _ => Eq α b1 a), refl minor Eq.refl α a. \
+            description: "Symmetry of equality: if a = b then b = a. PROVED via based @Eq.rec \
+                          (Martin-Löf J): motive (fun b1 _ => @Eq α b1 a), refl minor @Eq.refl α a. \
                           Zero axiom_deps."
                 .to_string(),
             category: AxiomCategory::DerivedLemma,
@@ -236,16 +236,16 @@ impl Specification {
         self.add_definition_checked(SpecDefinition {
             name: "Eq.trans".to_string(),
             type_src:
-                "forall (α : Sort u) (a : α) (b : α) (c : α), Eq α a b -> Eq α b c -> Eq α a c"
+                "forall (α : Sort u) (a : α) (b : α) (c : α), @Eq α a b -> @Eq α b c -> @Eq α a c"
                     .to_string(),
             value_src: Some(
-                "fun (α : Sort u) (a : α) (b : α) (c : α) (hab : Eq α a b) (hbc : Eq α b c) => \
-                 @Eq.rec α b (fun (x : α) (_h : Eq α b x) => Eq α a x) hab c hbc"
+                "fun (α : Sort u) (a : α) (b : α) (c : α) (hab : @Eq α a b) (hbc : @Eq α b c) => \
+                 @Eq.rec α b (fun (x : α) (_h : @Eq α b x) => @Eq α a x) hab c hbc"
                     .to_string(),
             ),
             is_axiom: false,
             description: "Transitivity of equality: if a = b and b = c then a = c. PROVED via \
-                          based Eq.rec (Martin-Löf J) on hbc: motive (fun x _ => Eq α a x), refl \
+                          based @Eq.rec (Martin-Löf J) on hbc: motive (fun x _ => @Eq α a x), refl \
                           minor hab. Zero axiom_deps."
                 .to_string(),
             category: AxiomCategory::DerivedLemma,
@@ -262,17 +262,17 @@ impl Specification {
         // so Eq.rec α a M (Eq.refl β (f a)) b h : Eq β (f a) (f b). Zero axiom_deps.
         self.add_definition_checked(SpecDefinition {
             name: "Eq.cong".to_string(),
-            type_src: "forall (α : Sort u) (β : Sort v) (f : α -> β) (a : α) (b : α), Eq α a b -> Eq β (f a) (f b)".to_string(),
+            type_src: "forall (α : Sort u) (β : Sort v) (f : α -> β) (a : α) (b : α), @Eq α a b -> @Eq β (f a) (f b)".to_string(),
             value_src: Some(
-                "fun (α : Sort u) (β : Sort v) (f : α -> β) (a : α) (b : α) (h : Eq α a b) => \
-                 @Eq.rec α a (fun (x : α) (_h : Eq α a x) => Eq β (f a) (f x)) \
+                "fun (α : Sort u) (β : Sort v) (f : α -> β) (a : α) (b : α) (h : @Eq α a b) => \
+                 @Eq.rec α a (fun (x : α) (_h : @Eq α a x) => @Eq β (f a) (f x)) \
                  (@Eq.refl β (f a)) b h"
                     .to_string(),
             ),
             is_axiom: false,
-            description: "Congruence: if a = b then f(a) = f(b). PROVED via based Eq.rec \
-                          (Martin-Löf J): motive (fun x _ => Eq β (f a) (f x)), refl minor \
-                          Eq.refl β (f a). Zero axiom_deps."
+            description: "Congruence: if a = b then f(a) = f(b). PROVED via based @Eq.rec \
+                          (Martin-Löf J): motive (fun x _ => @Eq β (f a) (f x)), refl minor \
+                          @Eq.refl β (f a). Zero axiom_deps."
                 .to_string(),
             category: AxiomCategory::DerivedLemma,
             proof_status: ProofStatus::DerivedProved,
@@ -305,15 +305,16 @@ impl Specification {
         // axiom_deps.
         self.add_definition_checked(SpecDefinition {
             name: "Eq.subst".to_string(),
-            type_src: "forall (α : Sort u) (P : α -> Prop) (a : α) (b : α), Eq α a b -> P a -> P b"
-                .to_string(),
+            type_src:
+                "forall (α : Sort u) (P : α -> Prop) (a : α) (b : α), @Eq α a b -> P a -> P b"
+                    .to_string(),
             value_src: Some(
-                "fun (α : Sort u) (P : α -> Prop) (a : α) (b : α) (h : Eq α a b) (pa : P a) => \
-                 @Eq.rec α a (fun (x : α) (_h : Eq α a x) => P x) pa b h"
+                "fun (α : Sort u) (P : α -> Prop) (a : α) (b : α) (h : @Eq α a b) (pa : P a) => \
+                 @Eq.rec α a (fun (x : α) (_h : @Eq α a x) => P x) pa b h"
                     .to_string(),
             ),
             is_axiom: false,
-            description: "Substitution: if a = b and P(a), then P(b). PROVED via based Eq.rec \
+            description: "Substitution: if a = b and P(a), then P(b). PROVED via based @Eq.rec \
                           (Martin-Löf J): transport motive (fun x _ => P x), refl minor pa. \
                           Prop motive. Zero axiom_deps."
                 .to_string(),
@@ -346,17 +347,17 @@ impl Specification {
         self.add_definition_checked(SpecDefinition {
             name: "Eq.substType".to_string(),
             type_src:
-                "forall (α : Sort u) (P : α -> Sort w) (a : α) (b : α), Eq α a b -> P a -> P b"
+                "forall (α : Sort u) (P : α -> Sort w) (a : α) (b : α), @Eq α a b -> P a -> P b"
                     .to_string(),
             value_src: Some(
-                "fun (α : Sort u) (P : α -> Sort w) (a : α) (b : α) (h : Eq α a b) (pa : P a) => \
-                 @Eq.rec α a (fun (x : α) (_h : Eq α a x) => P x) pa b h"
+                "fun (α : Sort u) (P : α -> Sort w) (a : α) (b : α) (h : @Eq α a b) (pa : P a) => \
+                 @Eq.rec α a (fun (x : α) (_h : @Eq α a x) => P x) pa b h"
                     .to_string(),
             ),
             is_axiom: false,
             description:
                 "Large-elimination substitution (Type motive): if a = b and P(a), then P(b). \
-                 PROVED via based Eq.rec (Martin-Löf J) with a Sort w motive (fun x _ => P x); \
+                 PROVED via based @Eq.rec (Martin-Löf J) with a Sort w motive (fun x _ => P x); \
                  Eq's recursor is large-eliminating (subsingleton). Zero axiom_deps."
                     .to_string(),
             category: AxiomCategory::DerivedLemma,
@@ -462,13 +463,13 @@ impl Specification {
         // sides are definitionally equal and Eq.refl α a checks. Zero axiom_deps.
         self.add_definition(SpecDefinition {
             name: "ProdType.fst_beta".to_string(),
-            type_src: "forall (α : Type) (β : Type) (a : α) (b : β), Eq α (ProdType.fst α β (@ProdType.mk α β a b)) a".to_string(),
+            type_src: "forall (α : Type) (β : Type) (a : α) (b : β), @Eq α (ProdType.fst α β (@ProdType.mk α β a b)) a".to_string(),
             value_src: Some(
                 "fun (α : Type) (β : Type) (a : α) (b : β) => @Eq.refl α a".to_string(),
             ),
             is_axiom: false,
             description: "fst (mk a b) = a. PROVED via Eq.refl: ProdType.fst iota-reduces on \
-                          ProdType.mk to the first field. Zero axiom_deps."
+                          @ProdType.mk to the first field. Zero axiom_deps."
                 .to_string(),
             category: AxiomCategory::DerivedLemma,
             proof_status: ProofStatus::DerivedProved,
@@ -486,13 +487,13 @@ impl Specification {
         // fst_beta via Eq.refl (ProdType.snd iota-reduces on mk to the second field).
         self.add_definition(SpecDefinition {
             name: "ProdType.snd_beta".to_string(),
-            type_src: "forall (α : Type) (β : Type) (a : α) (b : β), Eq β (ProdType.snd α β (@ProdType.mk α β a b)) b".to_string(),
+            type_src: "forall (α : Type) (β : Type) (a : α) (b : β), @Eq β (ProdType.snd α β (@ProdType.mk α β a b)) b".to_string(),
             value_src: Some(
                 "fun (α : Type) (β : Type) (a : α) (b : β) => @Eq.refl β b".to_string(),
             ),
             is_axiom: false,
             description: "snd (mk a b) = b. PROVED via Eq.refl: ProdType.snd iota-reduces on \
-                          ProdType.mk to the second field. Zero axiom_deps."
+                          @ProdType.mk to the second field. Zero axiom_deps."
                 .to_string(),
             category: AxiomCategory::DerivedLemma,
             proof_status: ProofStatus::DerivedProved,
@@ -520,9 +521,9 @@ impl Specification {
         // involves iota reductions the kernel's defEq checker cannot reduce.
         self.add_definition_structural(SpecDefinition {
             name: "nat_add_zero".to_string(),
-            type_src: "forall (n : Nat), Eq Nat (Nat.add Nat.zero n) n".to_string(),
+            type_src: "forall (n : Nat), @Eq Nat (Nat.add Nat.zero n) n".to_string(),
             value_src: Some(
-                "fun (n : Nat) => @Nat.rec (fun (m : Nat) => Eq Nat (Nat.add Nat.zero m) m) (@Eq.refl Nat Nat.zero) (fun (m : Nat) (ih : Eq Nat (Nat.add Nat.zero m) m) => Eq.cong Nat Nat Nat.succ (Nat.add Nat.zero m) m ih) n"
+                "fun (n : Nat) => @Nat.rec (fun (m : Nat) => @Eq Nat (Nat.add Nat.zero m) m) (@Eq.refl Nat Nat.zero) (fun (m : Nat) (ih : @Eq Nat (Nat.add Nat.zero m) m) => @Eq.cong Nat Nat Nat.succ (Nat.add Nat.zero m) m ih) n"
                     .to_string(),
             ),
             is_axiom: false,
@@ -546,13 +547,13 @@ impl Specification {
         // Part of #461, #464.
         self.add_definition_structural(SpecDefinition {
             name: "nat_sub_succ_succ".to_string(),
-            type_src: "forall (a : Nat) (b : Nat), Eq Nat (Nat.sub (Nat.succ a) (Nat.succ b)) (Nat.sub a b)".to_string(),
+            type_src: "forall (a : Nat) (b : Nat), @Eq Nat (Nat.sub (Nat.succ a) (Nat.succ b)) (Nat.sub a b)".to_string(),
             value_src: Some(concat!(
                 "fun (a : Nat) (b : Nat) => @Nat.rec ",
-                "(fun (k : Nat) => Eq Nat (Nat.sub (Nat.succ a) (Nat.succ k)) (Nat.sub a k)) ",
+                "(fun (k : Nat) => @Eq Nat (Nat.sub (Nat.succ a) (Nat.succ k)) (Nat.sub a k)) ",
                 "(@Eq.refl Nat a) ",
-                "(fun (k : Nat) (ih : Eq Nat (Nat.sub (Nat.succ a) (Nat.succ k)) (Nat.sub a k)) => ",
-                "Eq.cong Nat Nat Nat.pred ",
+                "(fun (k : Nat) (ih : @Eq Nat (Nat.sub (Nat.succ a) (Nat.succ k)) (Nat.sub a k)) => ",
+                "@Eq.cong Nat Nat Nat.pred ",
                 "(Nat.sub (Nat.succ a) (Nat.succ k)) ",
                 "(Nat.sub a k) ",
                 "ih) ",
@@ -560,7 +561,7 @@ impl Specification {
             )
             .to_string()),
             is_axiom: false,
-            description: "Nat.sub (succ a) (succ b) = Nat.sub a b. DerivedProved via Nat.rec on b and Eq.cong Nat.pred. Part of #461, #464.".to_string(),
+            description: "Nat.sub (succ a) (succ b) = Nat.sub a b. DerivedProved via @Nat.rec on b and @Eq.cong Nat.pred. Part of #461, #464.".to_string(),
             category: AxiomCategory::DerivedLemma,
             proof_status: ProofStatus::DerivedProved,
             elaborated_type: None,
@@ -582,13 +583,13 @@ impl Specification {
         // Part of #461, #464.
         self.add_definition_structural(SpecDefinition {
             name: "nat_sub_self".to_string(),
-            type_src: "forall (a : Nat), Eq Nat (Nat.sub a a) Nat.zero".to_string(),
+            type_src: "forall (a : Nat), @Eq Nat (Nat.sub a a) Nat.zero".to_string(),
             value_src: Some(concat!(
                 "fun (a : Nat) => @Nat.rec ",
-                "(fun (n : Nat) => Eq Nat (Nat.sub n n) Nat.zero) ",
+                "(fun (n : Nat) => @Eq Nat (Nat.sub n n) Nat.zero) ",
                 "(@Eq.refl Nat Nat.zero) ",
-                "(fun (n : Nat) (ih : Eq Nat (Nat.sub n n) Nat.zero) => ",
-                "Eq.trans Nat ",
+                "(fun (n : Nat) (ih : @Eq Nat (Nat.sub n n) Nat.zero) => ",
+                "@Eq.trans Nat ",
                 "(Nat.sub (Nat.succ n) (Nat.succ n)) ",
                 "(Nat.sub n n) ",
                 "Nat.zero ",
@@ -597,7 +598,7 @@ impl Specification {
                 "a",
             ).to_string()),
             is_axiom: false,
-            description: "n - n = 0, by Nat.rec induction + nat_sub_succ_succ transport. DerivedProved. Part of #461, #464.".to_string(),
+            description: "n - n = 0, by @Nat.rec induction + nat_sub_succ_succ transport. DerivedProved. Part of #461, #464.".to_string(),
             category: AxiomCategory::DerivedLemma,
             proof_status: ProofStatus::DerivedProved,
             elaborated_type: None,

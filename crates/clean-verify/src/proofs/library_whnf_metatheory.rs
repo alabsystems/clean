@@ -58,7 +58,7 @@ impl ProofLibrary {
                 "whnf_step_preserves_def_eq",
                 concat!(
                     "fun (e : KExpr) (e' : KExpr) (h : whnf_step e e') => ",
-                    "whnf_step.rec e e' ",
+                    "@whnf_step.rec e e' ",
                     "(whnf_step_def_eq_goal e e') ",
                     "(whnf_step_beta_sound e e') ",
                     "(whnf_step_delta_sound e e') ",
@@ -96,7 +96,7 @@ impl ProofLibrary {
                 "whnf_to_target_is_whnf",
                 concat!(
                     "fun (e : KExpr) (v : KExpr) (h : whnf_to e v) => ",
-                    "whnf_to.rec ",
+                    "@whnf_to.rec ",
                     "whnf_to_is_whnf_goal ",
                     "(fun (_e0 : KExpr) (hwhnf : is_whnf _e0) => hwhnf) ",
                     "(fun (_e0 : KExpr) (_e1 : KExpr) (_v : KExpr) ",
@@ -116,7 +116,7 @@ impl ProofLibrary {
             "instantiate_at_sort".to_string(),
             ProofTerm::new(
                 "instantiate_at_sort",
-                "fun (n : Level) (val : KExpr) (depth : Nat) => Eq.refl KExpr (KExpr.sort n)",
+                "fun (n : Level) (val : KExpr) (depth : Nat) => @Eq.refl KExpr (KExpr.sort n)",
                 "instantiate_at distributes trivially over sort (DerivedProved via Eq.refl)",
             ),
         );
@@ -126,7 +126,7 @@ impl ProofLibrary {
             "instantiate_at_const".to_string(),
             ProofTerm::new(
                 "instantiate_at_const",
-                "fun (n : Name) (us : ListType Level) (val : KExpr) (depth : Nat) => Eq.refl KExpr (KExpr.const n us)",
+                "fun (n : Name) (us : ListType Level) (val : KExpr) (depth : Nat) => @Eq.refl KExpr (KExpr.const n us)",
                 "instantiate_at distributes trivially over const (DerivedProved via Eq.refl)",
             ),
         );
@@ -136,7 +136,7 @@ impl ProofLibrary {
             "instantiate_at_app".to_string(),
             ProofTerm::new(
                 "instantiate_at_app",
-                "fun (f : KExpr) (a : KExpr) (val : KExpr) (depth : Nat) => Eq.refl KExpr (KExpr.app (instantiate_at f val depth) (instantiate_at a val depth))",
+                "fun (f : KExpr) (a : KExpr) (val : KExpr) (depth : Nat) => @Eq.refl KExpr (KExpr.app (instantiate_at f val depth) (instantiate_at a val depth))",
                 "instantiate_at distributes over app (DerivedProved via Eq.refl + structural registration)",
             ),
         );
@@ -146,7 +146,7 @@ impl ProofLibrary {
             "instantiate_at_lam".to_string(),
             ProofTerm::new(
                 "instantiate_at_lam",
-                "fun (ty : KExpr) (b : KExpr) (val : KExpr) (depth : Nat) => Eq.refl KExpr (KExpr.lam (instantiate_at ty val depth) (instantiate_at b val (Nat.succ depth)))",
+                "fun (ty : KExpr) (b : KExpr) (val : KExpr) (depth : Nat) => @Eq.refl KExpr (KExpr.lam (instantiate_at ty val depth) (instantiate_at b val (Nat.succ depth)))",
                 "instantiate_at distributes over lam with depth increment (DerivedProved via Eq.refl + structural registration)",
             ),
         );
@@ -156,7 +156,7 @@ impl ProofLibrary {
             "instantiate_at_pi".to_string(),
             ProofTerm::new(
                 "instantiate_at_pi",
-                "fun (ty : KExpr) (b : KExpr) (val : KExpr) (depth : Nat) => Eq.refl KExpr (KExpr.pi (instantiate_at ty val depth) (instantiate_at b val (Nat.succ depth)))",
+                "fun (ty : KExpr) (b : KExpr) (val : KExpr) (depth : Nat) => @Eq.refl KExpr (KExpr.pi (instantiate_at ty val depth) (instantiate_at b val (Nat.succ depth)))",
                 "instantiate_at distributes over pi with depth increment (DerivedProved via Eq.refl + structural registration)",
             ),
         );
@@ -166,7 +166,7 @@ impl ProofLibrary {
             "instantiate_const".to_string(),
             ProofTerm::new(
                 "instantiate_const",
-                "fun (n : Name) (us : ListType Level) (val : KExpr) => Eq.refl KExpr (KExpr.const n us)",
+                "fun (n : Name) (us : ListType Level) (val : KExpr) => @Eq.refl KExpr (KExpr.const n us)",
                 "instantiate on const is identity (DerivedProved via Eq.refl)",
             ),
         );
@@ -178,7 +178,7 @@ impl ProofLibrary {
                 "value_is_whnf",
                 concat!(
                     "fun (e : KExpr) (h : is_value e) => ",
-                    "is_value.rec ",
+                    "@is_value.rec ",
                     "(fun (e0 : KExpr) (_ : is_value e0) => is_whnf e0) ",
                     "(fun (n : Level) => is_whnf.sort n) ",
                     "(fun (ty : KExpr) (body : KExpr) => is_whnf.lam ty body) ",

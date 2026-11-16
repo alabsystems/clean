@@ -1,0 +1,7 @@
+# The meaning digest's mutation controls (crates/clean-olean/tests/meaning_digest.rs):
+# a base module and three mutations of it. None imports another, so each loads
+# alone and the four declare the same names.
+MeaningDigestBase
+MeaningDigestBody
+MeaningDigestMention
+MeaningDigestProof

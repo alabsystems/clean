@@ -52,26 +52,26 @@ impl Specification {
     pub(super) fn kernel_infers_sound_src() -> String {
         let motive = "(fun (G0 : ListType KExpr) (e0 : KExpr) (T0 : KExpr) \
                       (_h : KernelInfers tenv G0 e0 T0) => TypingCtxConv tenv G0 e0 T0)";
-        let cons_a = "(ListType.cons KExpr A G0)";
+        let cons_a = "(@ListType.cons KExpr A G0)";
         format!(
             "def kernel_infers_sound (tenv : KDeclEnv) (G : ListType KExpr) \
              (e : KExpr) (T : KExpr) (h : KernelInfers tenv G e T) : \
              TypingCtxConv tenv G e T := \
-             KernelInfers.rec tenv {motive} \
-             (fun (G0 : ListType KExpr) (n : Level) => TypingCtxConv.sort tenv G0 n) \
+             @KernelInfers.rec tenv {motive} \
+             (fun (G0 : ListType KExpr) (n : Level) => @TypingCtxConv.sort tenv G0 n) \
              (fun (G0 : ListType KExpr) (i : Nat) (A : KExpr) \
-             (get : Eq (OptionType KExpr) (ctx_lookup G0 i) (OptionType.some KExpr A)) => \
-             TypingCtxConv.var tenv G0 i A get) \
+             (get : @Eq (OptionType KExpr) (ctx_lookup G0 i) (@OptionType.some KExpr A)) => \
+             @TypingCtxConv.var tenv G0 i A get) \
              (fun (G0 : ListType KExpr) (A : KExpr) (B : KExpr) (SA : KExpr) (n : Level) \
              (SB : KExpr) (m : Level) \
              (_hA : KernelInfers tenv G0 A SA) (hwa : whnf_to SA (KExpr.sort n)) \
              (_hB : KernelInfers tenv {cons_a} B SB) (hwb : whnf_to SB (KExpr.sort m)) \
              (ihA : TypingCtxConv tenv G0 A SA) \
              (ihB : TypingCtxConv tenv {cons_a} B SB) => \
-             TypingCtxConv.pi tenv G0 A B n m \
-             (TypingCtxConv.conv tenv G0 A SA (KExpr.sort n) ihA \
+             @TypingCtxConv.pi tenv G0 A B n m \
+             (@TypingCtxConv.conv tenv G0 A SA (KExpr.sort n) ihA \
              (whnf_to_preserves_def_eq SA (KExpr.sort n) hwa)) \
-             (TypingCtxConv.conv tenv {cons_a} B SB (KExpr.sort m) ihB \
+             (@TypingCtxConv.conv tenv {cons_a} B SB (KExpr.sort m) ihB \
              (whnf_to_preserves_def_eq SB (KExpr.sort m) hwb))) \
              (fun (G0 : ListType KExpr) (A : KExpr) (b : KExpr) (B : KExpr) (SA : KExpr) \
              (u : Level) \
@@ -79,36 +79,36 @@ impl Specification {
              (_hb : KernelInfers tenv {cons_a} b B) \
              (ihA : TypingCtxConv tenv G0 A SA) \
              (ihb : TypingCtxConv tenv {cons_a} b B) => \
-             TypingCtxConv.lam tenv G0 A b B u \
-             (TypingCtxConv.conv tenv G0 A SA (KExpr.sort u) ihA \
+             @TypingCtxConv.lam tenv G0 A b B u \
+             (@TypingCtxConv.conv tenv G0 A SA (KExpr.sort u) ihA \
              (whnf_to_preserves_def_eq SA (KExpr.sort u) hwa)) ihb) \
              (fun (G0 : ListType KExpr) (nm : Name) (us : ListType Level) (A : KExpr) \
-             (get : Eq (OptionType KExpr) (kdecl_type_at tenv nm us) \
-             (OptionType.some KExpr A)) => TypingCtxConv.const tenv G0 nm us A get) \
+             (get : @Eq (OptionType KExpr) (kdecl_type_at tenv nm us) \
+             (@OptionType.some KExpr A)) => @TypingCtxConv.const tenv G0 nm us A get) \
              (fun (G0 : ListType KExpr) (f : KExpr) (a : KExpr) (F : KExpr) (A : KExpr) \
              (B : KExpr) (A2 : KExpr) \
              (_hf : KernelInfers tenv G0 f F) (hwF : whnf_to F (KExpr.pi A B)) \
              (_ha : KernelInfers tenv G0 a A2) (hde : DefEq A2 A) \
              (ihf : TypingCtxConv tenv G0 f F) \
              (iha : TypingCtxConv tenv G0 a A2) => \
-             TypingCtxConv.app tenv G0 f a A B \
-             (TypingCtxConv.conv tenv G0 f F (KExpr.pi A B) ihf \
+             @TypingCtxConv.app tenv G0 f a A B \
+             (@TypingCtxConv.conv tenv G0 f F (KExpr.pi A B) ihf \
              (whnf_to_preserves_def_eq F (KExpr.pi A B) hwF)) \
-             (TypingCtxConv.conv tenv G0 a A2 A iha hde)) \
+             (@TypingCtxConv.conv tenv G0 a A2 A iha hde)) \
              (fun (G0 : ListType KExpr) (ty : KExpr) (v : KExpr) (b : KExpr) (Ty : KExpr) \
              (u : Level) (Tv : KExpr) (B : KExpr) \
              (_hty : KernelInfers tenv G0 ty Ty) (hwTy : whnf_to Ty (KExpr.sort u)) \
              (_hv : KernelInfers tenv G0 v Tv) (hdev : DefEq Tv ty) \
-             (_hb : KernelInfers tenv (ListType.cons KExpr ty G0) b B) \
+             (_hb : KernelInfers tenv (@ListType.cons KExpr ty G0) b B) \
              (ihty : TypingCtxConv tenv G0 ty Ty) \
              (ihv : TypingCtxConv tenv G0 v Tv) \
-             (ihb : TypingCtxConv tenv (ListType.cons KExpr ty G0) b B) => \
-             TypingCtxConv.let_ tenv G0 ty v b B u \
-             (TypingCtxConv.conv tenv G0 ty Ty (KExpr.sort u) ihty \
+             (ihb : TypingCtxConv tenv (@ListType.cons KExpr ty G0) b B) => \
+             @TypingCtxConv.let_ tenv G0 ty v b B u \
+             (@TypingCtxConv.conv tenv G0 ty Ty (KExpr.sort u) ihty \
              (whnf_to_preserves_def_eq Ty (KExpr.sort u) hwTy)) \
-             (TypingCtxConv.conv tenv G0 v Tv ty ihv hdev) ihb) \
-             (fun (G0 : ListType KExpr) (n : Nat) => TypingCtxConv.lit_nat tenv G0 n) \
-             (fun (G0 : ListType KExpr) (n : Nat) => TypingCtxConv.lit_string tenv G0 n) \
+             (@TypingCtxConv.conv tenv G0 v Tv ty ihv hdev) ihb) \
+             (fun (G0 : ListType KExpr) (n : Nat) => @TypingCtxConv.lit_nat tenv G0 n) \
+             (fun (G0 : ListType KExpr) (n : Nat) => @TypingCtxConv.lit_string tenv G0 n) \
              G e T h"
         )
     }
@@ -134,18 +134,18 @@ impl Specification {
     /// DERIVATION via `ImplInfer.rec`, so it ι-reduces only against a literal
     /// constructor application.
     pub(super) fn impl_infer_kinfers_sound_witness_src() -> String {
-        let tenv = "(fun (nm : Name) => OptionType.none ImplConstInfo)";
-        let tenvk = "(fun (nm : Name) => OptionType.none KConstSig)";
+        let tenv = "(fun (nm : Name) => @OptionType.none ImplConstInfo)";
+        let tenvk = "(fun (nm : Name) => @OptionType.none KConstSig)";
         format!(
             "def impl_infer_kinfers_sound_witness : \
-             KernelInfers {tenvk} (ListType.nil KExpr) (KExpr.sort Level.zero) \
+             KernelInfers {tenvk} (@ListType.nil KExpr) (KExpr.sort Level.zero) \
              (KExpr.sort (Level.succ Level.zero)) := \
-             impl_infer_kinfers_sound {tenv} {tenvk} (ListType.nil Name) tenvrepc_empty \
+             impl_infer_kinfers_sound {tenv} {tenvk} (@ListType.nil Name) tenvrepc_empty \
              Nat.zero LCtx.nil (ImplExpr.sort Level.zero) \
              (ImplExpr.sort (Level.succ Level.zero)) Nat.zero \
-             (ImplInfer.sort {tenv} (ListType.nil Name) Nat.zero LCtx.nil Level.zero \
-             (Eq.refl Bool Bool.true)) \
-             impl_sound_guard_witness (ListType.nil Nat) (ListType.nil KExpr) \
+             (@ImplInfer.sort {tenv} (@ListType.nil Name) Nat.zero LCtx.nil Level.zero \
+             (@Eq.refl Bool Bool.true)) \
+             impl_sound_guard_witness (@ListType.nil Nat) (@ListType.nil KExpr) \
              ctx_rep_nil_witness"
         )
     }

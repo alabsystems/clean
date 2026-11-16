@@ -77,25 +77,15 @@ def subst (s : Tm) : Nat → Tm → Tm
   | k, succ a => succ (subst s k a)
   | k, add a b => add (subst s k a) (subst s k b)
 
-def isLit : Tm → Bool
-  | lit _ => true
-  | _ => false
-
-/--
-`true` when no rule applies anywhere in the term.
-
-The `succ` redex is tested through `isLit` and not by the nested pattern
-`succ (lit _)` that the `app` and `add` rows use: both native lanes refuse
-that row today (gap `rc-linearity-nested-pattern-under-unary-ctor` in
-`data/kcheck_execution_gaps.json`, probe `c03_nested_overlapping_patterns`).
--/
+/-- `true` when no rule applies anywhere in the term. -/
 def isNormal : Tm → Bool
   | var _ => true
   | app (lam _) _ => false
   | app f a => isNormal f && isNormal a
   | lam b => isNormal b
   | lit _ => true
-  | succ a => !a.isLit && isNormal a
+  | succ (lit _) => false
+  | succ a => isNormal a
   | add (lit _) (lit _) => false
   | add a b => isNormal a && isNormal b
 

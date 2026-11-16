@@ -135,8 +135,8 @@ const NF_LEAVES: [(&str, &str, &str, &str); 9] = [
         "const",
         "(cn : Name) (cus : ListType Level)",
         "(KExpr.const cn cus)",
-        "(_hdd : Eq (OptionType KExpr) \
-         (delta_reduct (red_def the_red_env) (KExpr.const cn cus)) (OptionType.none KExpr)) ",
+        "(_hdd : @Eq (OptionType KExpr) \
+         (delta_reduct (red_def the_red_env) (KExpr.const cn cus)) (@OptionType.none KExpr)) ",
     ),
     ("bvar", "(bi : Nat)", "(KExpr.bvar bi)", ""),
 ];
@@ -154,7 +154,7 @@ impl Specification {
             self.add_inductive(
                 &format!(
                     "inductive {witness} (x : KExpr) : Type\n\
-                     | mk : forall {binders}, Eq KExpr x {form} -> {witness} x"
+                     | mk : forall {binders}, @Eq KExpr x {form} -> {witness} x"
                 ),
                 &format!(
                     "{witness} x: x IS a {name}, with its payload packaged. A \
@@ -173,7 +173,7 @@ impl Specification {
     fn tag_forces_shape_src(target: usize) -> String {
         let (name, witness, binders, form) = SHAPES[target];
         let goal = |x: &str| format!("{witness} {x}");
-        let hyp = |x: &str| format!("Eq Nat (kexpr_tag {form}) (kexpr_tag {x})");
+        let hyp = |x: &str| format!("@Eq Nat (kexpr_tag {form}) (kexpr_tag {x})");
 
         let leaf = |leaf_idx: usize| {
             let (leaf_name, leaf_binders, leaf_form, _extra) = NF_LEAVES[leaf_idx];
@@ -190,11 +190,11 @@ impl Specification {
                     })
                     .collect::<Vec<_>>()
                     .join(" ");
-                format!("{witness}.mk {leaf_form} {args} (Eq.refl KExpr {leaf_form})")
+                format!("@{witness}.mk {leaf_form} {args} (@Eq.refl KExpr {leaf_form})")
             } else {
                 format!(
                     "nat_discr_t ({g}) (kexpr_tag {form}) (kexpr_tag {leaf_form}) htag \
-                     (Eq.refl Bool Bool.false)",
+                     (@Eq.refl Bool Bool.false)",
                     g = goal(leaf_form)
                 )
             }
@@ -236,10 +236,10 @@ impl Specification {
         format!(
             "def nf_tag_forces_{name} {binders} (x : KExpr) (hn : nf_head x) \
              (htag : {top_hyp}) : {top_goal} := \
-             nf_head.rec (fun (z : KExpr) (_h : nf_head z) => {motive}) \
+             @nf_head.rec (fun (z : KExpr) (_h : nf_head z) => {motive}) \
              {lam_arm}\
              (fun (e0 : KExpr) (hr : rigid_app_head e0) => \
-             rigid_app_head.rec (fun (z : KExpr) (_h : rigid_app_head z) => {motive}) \
+             @rigid_app_head.rec (fun (z : KExpr) (_h : rigid_app_head z) => {motive}) \
              {rigid_arms}e0 hr) \
              {neutral_arm}{const_arm}{bvar_arm}x hn htag",
             top_hyp = hyp("x"),

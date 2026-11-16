@@ -335,7 +335,7 @@ impl Specification {
         ] {
             self.add_recursive_def(
                 &format!(
-                    "def {name} : Eq (IROption IRFunc) (ir_func_find (ir_mod_funcs ir_lzd_module) {idx}) {tgt} := @Eq.refl (IROption IRFunc) {tgt}"
+                    "def {name} : @Eq (IROption IRFunc) (ir_func_find (ir_mod_funcs ir_lzd_module) {idx}) {tgt} := @Eq.refl (IROption IRFunc) {tgt}"
                 ),
                 doc,
             )?;
@@ -381,7 +381,7 @@ impl Specification {
         ] {
             self.add_recursive_def(
                 &format!(
-                    "def {name} : Eq IROutcome (ir_config_outcome (ir_steps {n} ir_lzd_module {init})) {running} := @Eq.refl IROutcome {running}"
+                    "def {name} : @Eq IROutcome (ir_config_outcome (ir_steps {n} ir_lzd_module {init})) {running} := @Eq.refl IROutcome {running}"
                 ),
                 doc,
             )?;
@@ -404,19 +404,19 @@ impl Specification {
         // A row that does not fire is indistinguishable from no row at all
         // unless something states the image, so these state it.
         self.add_recursive_def(
-            "def ir_lzd_view_nonnull (b : Nat) : Eq IRStepResult (ir_load_view (ir_mod_encs ir_lzd_module) ir_lzd_tnonnull (IRStepResult.value (IRScalar.ptr_ (Nat.succ b)))) (IRStepResult.value (IRScalar.aggv (IRScalar.vcons (IRScalar.ptr_ (Nat.succ b)) IRScalar.vnil))) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.aggv (IRScalar.vcons (IRScalar.ptr_ (Nat.succ b)) IRScalar.vnil)))",
+            "def ir_lzd_view_nonnull (b : Nat) : @Eq IRStepResult (ir_load_view (ir_mod_encs ir_lzd_module) ir_lzd_tnonnull (IRStepResult.value (IRScalar.ptr_ (Nat.succ b)))) (IRStepResult.value (IRScalar.aggv (IRScalar.vcons (IRScalar.ptr_ (Nat.succ b)) IRScalar.vnil))) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.aggv (IRScalar.vcons (IRScalar.ptr_ (Nat.succ b)) IRScalar.vnil)))",
             "ir_lzd_view_nonnull: `core::ptr::NonNull` is ONE field and repr(transparent), so its byte image is the pointer word itself and its VIEW is that word at slot 0 of a one-field spine. Stated at an abstract SUCCESSOR base, because a represented Arc is never the zero word -- that is what NonNull means, and the derived chain's relation carries it structurally rather than as a side condition. DerivedProved, zero axiom_deps.",
         )?;
         self.add_recursive_def(
-            "def ir_lzd_view_arc (b : Nat) : Eq IRStepResult (ir_load_view (ir_mod_encs ir_lzd_module) ir_lzd_tarc (IRStepResult.value (IRScalar.ptr_ (Nat.succ b)))) (IRStepResult.value (IRScalar.aggv (IRScalar.vcons (IRScalar.aggv (IRScalar.vcons (IRScalar.ptr_ (Nat.succ b)) IRScalar.vnil)) (IRScalar.vcons (IRScalar.aggv IRScalar.vnil) (IRScalar.vcons (IRScalar.aggv IRScalar.vnil) IRScalar.vnil))))) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.aggv (IRScalar.vcons (IRScalar.aggv (IRScalar.vcons (IRScalar.ptr_ (Nat.succ b)) IRScalar.vnil)) (IRScalar.vcons (IRScalar.aggv IRScalar.vnil) (IRScalar.vcons (IRScalar.aggv IRScalar.vnil) IRScalar.vnil)))))",
+            "def ir_lzd_view_arc (b : Nat) : @Eq IRStepResult (ir_load_view (ir_mod_encs ir_lzd_module) ir_lzd_tarc (IRStepResult.value (IRScalar.ptr_ (Nat.succ b)))) (IRStepResult.value (IRScalar.aggv (IRScalar.vcons (IRScalar.aggv (IRScalar.vcons (IRScalar.ptr_ (Nat.succ b)) IRScalar.vnil)) (IRScalar.vcons (IRScalar.aggv IRScalar.vnil) (IRScalar.vcons (IRScalar.aggv IRScalar.vnil) IRScalar.vnil))))) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.aggv (IRScalar.vcons (IRScalar.aggv (IRScalar.vcons (IRScalar.ptr_ (Nat.succ b)) IRScalar.vnil)) (IRScalar.vcons (IRScalar.aggv IRScalar.vnil) (IRScalar.vcons (IRScalar.aggv IRScalar.vnil) IRScalar.vnil)))))",
             "ir_lzd_view_arc: *** THE ROW THAT MADE THE DERIVED PATH EXECUTABLE. *** `alloc::sync::Arc` is three fields of which only slot 0 is non-ZST, so one stored pointer word images as a three-slot aggregate whose slot 0 is the NonNull view and whose other two slots are `aggv vnil`, the model's ZST. Without it `<Arc<Level>>::deref`'s first `extractfield` faults `not_agg` -- measured, at step 24 of the Max(Zero,Zero) run, before this row existed. DerivedProved, zero axiom_deps.",
         )?;
         self.add_recursive_def(
-            "def ir_lzd_view_optref (b : Nat) : Eq IRStepResult (ir_load_view (ir_mod_encs ir_lzd_module) ir_lzd_topt_ref (IRStepResult.value (IRScalar.ptr_ (Nat.succ b)))) (IRStepResult.value (IRScalar.aggv (IRScalar.vcons (IRScalar.int_ ir_d1) (IRScalar.vcons (IRScalar.ptr_ (Nat.succ b)) IRScalar.vnil)))) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.aggv (IRScalar.vcons (IRScalar.int_ ir_d1) (IRScalar.vcons (IRScalar.ptr_ (Nat.succ b)) IRScalar.vnil))))",
+            "def ir_lzd_view_optref (b : Nat) : @Eq IRStepResult (ir_load_view (ir_mod_encs ir_lzd_module) ir_lzd_topt_ref (IRStepResult.value (IRScalar.ptr_ (Nat.succ b)))) (IRStepResult.value (IRScalar.aggv (IRScalar.vcons (IRScalar.int_ ir_d1) (IRScalar.vcons (IRScalar.ptr_ (Nat.succ b)) IRScalar.vnil)))) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.aggv (IRScalar.vcons (IRScalar.int_ ir_d1) (IRScalar.vcons (IRScalar.ptr_ (Nat.succ b)) IRScalar.vnil))))",
             "ir_lzd_view_optref: `Option<&Level>` niche-encoded -- a non-zero word is Some at tag 1 carrying the pointer. This is the type `as_deref` RETURNS and `expect` consumes. DerivedProved, zero axiom_deps.",
         )?;
         self.add_recursive_def(
-            "def ir_lzd_view_optarc (b : Nat) : Eq IRStepResult (ir_load_view (ir_mod_encs ir_lzd_module) ir_lzd_topt_arc (IRStepResult.value (IRScalar.ptr_ (Nat.succ b)))) (IRStepResult.value (IRScalar.aggv (IRScalar.vcons (IRScalar.int_ ir_d1) (IRScalar.vcons (IRScalar.aggv (IRScalar.vcons (IRScalar.aggv (IRScalar.vcons (IRScalar.ptr_ (Nat.succ b)) IRScalar.vnil)) (IRScalar.vcons (IRScalar.aggv IRScalar.vnil) (IRScalar.vcons (IRScalar.aggv IRScalar.vnil) IRScalar.vnil)))) IRScalar.vnil)))) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.aggv (IRScalar.vcons (IRScalar.int_ ir_d1) (IRScalar.vcons (IRScalar.aggv (IRScalar.vcons (IRScalar.aggv (IRScalar.vcons (IRScalar.ptr_ (Nat.succ b)) IRScalar.vnil)) (IRScalar.vcons (IRScalar.aggv IRScalar.vnil) (IRScalar.vcons (IRScalar.aggv IRScalar.vnil) IRScalar.vnil)))) IRScalar.vnil))))",
+            "def ir_lzd_view_optarc (b : Nat) : @Eq IRStepResult (ir_load_view (ir_mod_encs ir_lzd_module) ir_lzd_topt_arc (IRStepResult.value (IRScalar.ptr_ (Nat.succ b)))) (IRStepResult.value (IRScalar.aggv (IRScalar.vcons (IRScalar.int_ ir_d1) (IRScalar.vcons (IRScalar.aggv (IRScalar.vcons (IRScalar.aggv (IRScalar.vcons (IRScalar.ptr_ (Nat.succ b)) IRScalar.vnil)) (IRScalar.vcons (IRScalar.aggv IRScalar.vnil) (IRScalar.vcons (IRScalar.aggv IRScalar.vnil) IRScalar.vnil)))) IRScalar.vnil)))) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.aggv (IRScalar.vcons (IRScalar.int_ ir_d1) (IRScalar.vcons (IRScalar.aggv (IRScalar.vcons (IRScalar.aggv (IRScalar.vcons (IRScalar.ptr_ (Nat.succ b)) IRScalar.vnil)) (IRScalar.vcons (IRScalar.aggv IRScalar.vnil) (IRScalar.vcons (IRScalar.aggv IRScalar.vnil) IRScalar.vnil)))) IRScalar.vnil))))",
             "ir_lzd_view_optarc: *** THE THREE-DEEP CHAIN, IN ONE LOAD. *** `Option<Arc<Level>>` niche-encoded over an Arc payload: the same word is the discriminant AND the Arc, so its Some payload is that word imaged at the Arc's own row, which images it at NonNull's, which bottoms out at the pointer. Three rows deep against a table of four, so `ir_view_ty`'s fuel -- the row COUNT -- is spent to three and never falls back to the identity. A table with fewer rows than its own nesting depth would read as the identity here and the machine would then fault, which is why the fuel is the length and not a constant. DerivedProved, zero axiom_deps.",
         )?;
         // ── THE WHOLE PROGRAM, EXECUTED ──────────────────────────────────
@@ -425,14 +425,14 @@ impl Specification {
         // it DOES.
         self.add_recursive_def(
             &format!(
-                "def ir_lzd_max_zz_returns_true_at_107 : Eq IROutcome (ir_config_outcome (ir_steps {} ir_lzd_module {init})) (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.true))) := @Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.true)))",
+                "def ir_lzd_max_zz_returns_true_at_107 : @Eq IROutcome (ir_config_outcome (ir_steps {} ir_lzd_module {init})) (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.true))) := @Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.true)))",
                 numeral(107)
             ),
             "ir_lzd_max_zz_returns_true_at_107: *** THE FIRST TIME `Level::is_zero` HAS BEEN EXECUTED END TO END WITH NO AUTHORED FUNCTION ANYWHERE IN THE MODULE. *** On Max(Zero, Zero) the derived five-body module returns `true` -- the answer `level_is_zero (Level.max Level.zero Level.zero)` computes -- in exactly 107 steps, through the compiler's own emitted bodies for the deref, `as_deref`, `expect` and `<Arc<Level>>::deref`, and through the module's derived encodings table, which is what makes the ONE pointer word at the child field readable first as an `Option<Arc<Level>>` and then as an `Arc`. ir_lz halted `stuck no_func` at the deref; ir_lzc one call deeper at `as_deref`; ir_lzb needed an AUTHORED deref to get here. This module needs none. The number is computed by the kernel, so an off-by-one is a build failure, and 106 is still running -- the two beside it pin the depth from below. WHAT THIS IS NOT: it is one witness, not A4. A4 quantifies over every represented Level and is not proved in this file. DerivedProved, zero axiom_deps.",
         )?;
         self.add_recursive_def(
             &format!(
-                "def ir_lzd_max_zz_running_at_106 : Eq IROutcome (ir_config_outcome (ir_steps {} ir_lzd_module {init})) IROutcome.fuel_out := @Eq.refl IROutcome IROutcome.fuel_out",
+                "def ir_lzd_max_zz_running_at_106 : @Eq IROutcome (ir_config_outcome (ir_steps {} ir_lzd_module {init})) IROutcome.fuel_out := @Eq.refl IROutcome IROutcome.fuel_out",
                 numeral(106)
             ),
             "ir_lzd_max_zz_running_at_106: and 107 is EXACT -- one step earlier the machine is still running. Registered beside the return because a halted configuration is a fixed point of `ir_steps`, so the `= ret` equation alone would hold at every larger count and pin nothing. Together they say the run takes 107 steps and not fewer. DerivedProved, zero axiom_deps.",
@@ -443,14 +443,14 @@ impl Specification {
             );
             self.add_recursive_def(
                 &format!(
-                    "def ir_lzd_imax_zz_at_55 : Eq IROutcome (ir_config_outcome (ir_steps {} ir_lzd_module {init})) (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.true))) := @Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.true)))",
+                    "def ir_lzd_imax_zz_at_55 : @Eq IROutcome (ir_config_outcome (ir_steps {} ir_lzd_module {init})) (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.true))) := @Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.true)))",
                     numeral(55)
                 ),
                 "ir_lzd_imax_zz_returns_true_at_55: IMax(Zero, Zero) through the switch DEFAULT edge, which geps to offset 16 ONLY -- the first operand is bound in the cell and never read. One derived deref, 55 steps. Together with the Max witnesses this SOLVES the derived deref's cost: 55 = 7 + D + 6 and 107 = 11 + 2D + 6 + 6 both give D = 42, from two independent runs with different arm counts. The authored model cost 7. DerivedProved, zero axiom_deps.",
             )?;
             self.add_recursive_def(
                 &format!(
-                    "def ir_lzd_imax_zz_running_at_54 : Eq IROutcome (ir_config_outcome (ir_steps {} ir_lzd_module {init})) IROutcome.fuel_out := @Eq.refl IROutcome IROutcome.fuel_out",
+                    "def ir_lzd_imax_zz_running_at_54 : @Eq IROutcome (ir_config_outcome (ir_steps {} ir_lzd_module {init})) IROutcome.fuel_out := @Eq.refl IROutcome IROutcome.fuel_out",
                     numeral(54)
                 ),
                 "ir_lzd_imax_zz_running_at_54: and the count above is EXACT -- one step earlier the machine is still running. DerivedProved, zero axiom_deps.",
@@ -462,14 +462,14 @@ impl Specification {
             );
             self.add_recursive_def(
                 &format!(
-                    "def ir_lzd_max_sz_at_60 : Eq IROutcome (ir_config_outcome (ir_steps {} ir_lzd_module {init})) (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.false))) := @Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.false)))",
+                    "def ir_lzd_max_sz_at_60 : @Eq IROutcome (ir_config_outcome (ir_steps {} ir_lzd_module {init})) (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.false))) := @Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.false)))",
                     numeral(60)
                 ),
                 "ir_lzd_max_sz_returns_false_at_60: *** THE DERIVED MODULE SHORT-CIRCUITS. *** Max(Succ(Zero), Zero): the first child is not zero, so the answer is false and the SECOND child is never read -- one derived deref, not two, and 60 = 12 + D + 6 with the same D = 42. A module that evaluated both operands would take 42 steps longer and would still answer false, so the count is the only thing that distinguishes them and it is the kernel that computes it. DerivedProved, zero axiom_deps.",
             )?;
             self.add_recursive_def(
                 &format!(
-                    "def ir_lzd_max_sz_running_at_59 : Eq IROutcome (ir_config_outcome (ir_steps {} ir_lzd_module {init})) IROutcome.fuel_out := @Eq.refl IROutcome IROutcome.fuel_out",
+                    "def ir_lzd_max_sz_running_at_59 : @Eq IROutcome (ir_config_outcome (ir_steps {} ir_lzd_module {init})) IROutcome.fuel_out := @Eq.refl IROutcome IROutcome.fuel_out",
                     numeral(59)
                 ),
                 "ir_lzd_max_sz_running_at_59: and the count above is EXACT -- one step earlier the machine is still running. DerivedProved, zero axiom_deps.",

@@ -38,7 +38,7 @@ use clean_mathverse::types::{ImportConfidence, SourceSystem};
 
 use crate::mathverse_lazy::{MATHVERSE_ARMED_OPTION, MATHVERSE_LAZY_LOAD_BUDGET};
 use crate::mathverse_term_resolution_tests::install_library_with_rows;
-use crate::tactic::mathverse_use::{clear_mathverse_library, set_mathverse_library};
+use crate::tactic::mathverse_use::clear_mathverse_library;
 use crate::{ElabError, ElabResult};
 
 // ---------------------------------------------------------------------------
@@ -383,11 +383,7 @@ fn test_lazy_resolution_absent_name_terminates_with_the_ordinary_error() {
         "theorem absent_dotted_use (q : Prop) (hq : q) : q := NoSuch.lazy_name q hq",
     )
     .expect_err("an absent dotted name must still fail");
-    assert!(
-        !err.to_string().contains("Mathverse"),
-        "got: {}",
-        err.to_string()
-    );
+    assert!(!err.to_string().contains("Mathverse"), "got: {}", err);
 }
 
 /// Exactly [`MATHVERSE_LAZY_LOAD_BUDGET`] lazily-resolved constants in one
@@ -507,6 +503,6 @@ fn test_lazy_resolution_cannot_reach_the_relaxed_trust_gate() {
     assert!(
         err.to_string().contains("not available from source"),
         "got: {}",
-        err.to_string()
+        err
     );
 }

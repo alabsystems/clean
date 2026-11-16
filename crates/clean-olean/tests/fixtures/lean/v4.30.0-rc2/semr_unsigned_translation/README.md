@@ -28,3 +28,18 @@ Prop whose only field is the unchanged `originalWpTranslation` proof. Its exact
 input indices let the kernel reject a different question without expanding the
 whole semantic proposition; `certificate_sound` extracts that proposition and
 is separately included in the closed replay. The heartbeat budget is unchanged.
+
+`root-unsigned-select-checked.json` preserves the exact subject exported after
+Root's real MC-to-WP route accepted its native evidence. Its complete module
+retains the canonical public obligation identity, rather than using a hash of
+the formula payload. `SemRRootUnsignedPacket` proves that exact question through
+`SemRNativeUnsignedFamily.select_return_original_translation` and composes its
+actual emitted VC with the original execution goal. The family quantifies over
+the full blob and decoded canonical module; checked decoder, function lookup,
+signature, target, entry-body and claim-codec equalities supply every premise.
+Metadata and sibling tables remain in the indexed bytes. There is no caller
+translation-soundness premise, alternate interpreter or question constructor.
+The supported contract and emitted VC fragment keeps the existing typed names
+and Bool × U64 × U64 domain. Source authenticity and general translation remain
+separate obligations. The Root consumer must still match its own checked
+subject; the unbound mathematics alone grants no authority.

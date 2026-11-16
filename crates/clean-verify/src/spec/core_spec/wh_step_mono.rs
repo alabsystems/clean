@@ -53,11 +53,11 @@ const O: &str = "OptionType KExpr";
 const RR: &str = "(red_rec the_red_env)";
 
 fn head_is(x: &str) -> String {
-    format!("Eq (OptionType Name) (kexpr_const_name (kapp_fn {x})) (OptionType.some Name nm)")
+    format!("@Eq (OptionType Name) (kexpr_const_name (kapp_fn {x})) (@OptionType.some Name nm)")
 }
 
 fn head_none(x: &str) -> String {
-    format!("Eq (OptionType Name) (kexpr_const_name (kapp_fn {x})) (OptionType.none Name)")
+    format!("@Eq (OptionType Name) (kexpr_const_name (kapp_fn {x})) (@OptionType.none Name)")
 }
 
 fn ilift(w: &str, x: &str, o: &str) -> String {
@@ -97,10 +97,10 @@ impl Specification {
                 "opt_app_ilift_no_major_congr",
                 " (nm : Name) (meta : RecMeta)".to_string(),
                 format!(
-                    "(hh : {hh}) (hrm : Eq (OptionType RecMeta) (recmeta_for {RR} nm) \
-                     (OptionType.some RecMeta meta)) (hno : Eq ({O}) \
+                    "(hh : {hh}) (hrm : @Eq (OptionType RecMeta) (recmeta_for {RR} nm) \
+                     (@OptionType.some RecMeta meta)) (hno : @Eq ({O}) \
                      (list_head (list_drop {MAJOR_IDX} (kapp_args (KExpr.app f a)))) \
-                     (OptionType.none KExpr))",
+                     (@OptionType.none KExpr))",
                     hh = head_is("(KExpr.app f a)"),
                 ),
                 |w: &str| {
@@ -112,13 +112,18 @@ impl Specification {
                 "the spine is one argument short, so iota stops at level three",
             ),
         ] {
-            let goal =
-                |o: &str| format!("Eq ({O}) {} {}", ilift("wh1", "f", o), ilift("wh2", "f", o));
+            let goal = |o: &str| {
+                format!(
+                    "@Eq ({O}) {} {}",
+                    ilift("wh1", "f", o),
+                    ilift("wh2", "f", o)
+                )
+            };
             let none_arm = format!(
-                "(Eq.trans ({O}) {l1} (OptionType.none KExpr) {l2} {e1} \
-                 (Eq.symm ({O}) {l2} (OptionType.none KExpr) {e2}))",
-                l1 = ilift("wh1", "f", "(OptionType.none KExpr)"),
-                l2 = ilift("wh2", "f", "(OptionType.none KExpr)"),
+                "(Eq.trans ({O}) {l1} (@OptionType.none KExpr) {l2} {e1} \
+                 (Eq.symm ({O}) {l2} (@OptionType.none KExpr) {e2}))",
+                l1 = ilift("wh1", "f", "(@OptionType.none KExpr)"),
+                l2 = ilift("wh2", "f", "(@OptionType.none KExpr)"),
                 e1 = exit("wh1"),
                 e2 = exit("wh2"),
             );
@@ -126,8 +131,8 @@ impl Specification {
                 "def {name} (wh1 : KExpr -> OptionType KExpr) \
                  (wh2 : KExpr -> OptionType KExpr){extra} (f : KExpr) (a : KExpr) {hyp} \
                  (o : {O}) : {g} := \
-                 OptionType.rec KExpr (fun (z : {O}) => {gz}) {none_arm} \
-                 (fun (f2 : KExpr) => Eq.refl ({O}) (OptionType.some KExpr (KExpr.app f2 a))) o",
+                 @OptionType.rec KExpr (fun (z : {O}) => {gz}) {none_arm} \
+                 (fun (f2 : KExpr) => @Eq.refl ({O}) (@OptionType.some KExpr (KExpr.app f2 a))) o",
                 g = goal("o"),
                 gz = goal("z"),
             );
@@ -150,7 +155,7 @@ impl Specification {
     fn add_no_name_indep(&mut self) -> Result<(), SpecError> {
         let goal = |x: &str| {
             format!(
-                "Eq ({O}) (reduce_app_head_red_wh the_red_env wh1 a {x} cf) \
+                "@Eq ({O}) (reduce_app_head_red_wh the_red_env wh1 a {x} cf) \
                  (reduce_app_head_red_wh the_red_env wh2 a {x} cf)"
             )
         };
@@ -176,7 +181,7 @@ impl Specification {
             // Beta, not iota: this arm ignores cf and wh together.
             format!(
                 "(fun (ty : KExpr) (b : KExpr) (_c1 : {mty}) (_c2 : {mb}) (_h : {hl}) => \
-                 Eq.refl ({O}) (OptionType.some KExpr (instantiate b a)))",
+                 @Eq.refl ({O}) (@OptionType.some KExpr (instantiate b a)))",
                 mty = mot("ty"),
                 mb = mot("b"),
                 hl = head_none("(KExpr.lam ty b)"),
@@ -193,7 +198,7 @@ impl Specification {
             format!(
                 "(fun (cn : Name) (us : ListType Level) (h : {hc}) => \
                  option_none_ne_some Name cn ({g}) \
-                 (Eq.symm (OptionType Name) (OptionType.some Name cn) (OptionType.none Name) h))",
+                 (Eq.symm (OptionType Name) (@OptionType.some Name cn) (@OptionType.none Name) h))",
                 hc = head_none("(KExpr.const cn us)"),
                 g = goal("(KExpr.const cn us)"),
             ),
@@ -215,7 +220,7 @@ impl Specification {
         let src = format!(
             "def reduce_app_head_no_name_wh_indep (wh1 : KExpr -> OptionType KExpr) \
              (wh2 : KExpr -> OptionType KExpr) (a : KExpr) (cf : {O}) (f : KExpr) : {motf} := \
-             KExpr.rec (fun (x : KExpr) => {motx}) {arms} f",
+             @KExpr.rec (fun (x : KExpr) => {motx}) {arms} f",
             motf = mot("f"),
             motx = mot("x"),
             arms = arms.join(" "),
@@ -238,17 +243,17 @@ impl Specification {
 
     /// A const spine one argument short: the step is budget-independent.
     fn add_under_applied_congr(&mut self) -> Result<(), SpecError> {
-        let congr = |x: &str| format!("Eq ({O}) {} {}", step("wh1", x), step("wh2", x));
+        let congr = |x: &str| format!("@Eq ({O}) {} {}", step("wh1", x), step("wh2", x));
         let bound = |x: &str| format!("Le (list_length (kapp_args {x})) {MAJOR_IDX}");
         let mot = |x: &str| format!("({} -> {} -> {})", head_is(x), bound(x), congr(x));
         let refl = |binders: &str, val: &str, term: &str| {
             format!(
-                "(fun {binders} (_h : {h}) (_hl : {b}) => Eq.refl ({O}) {val})",
+                "(fun {binders} (_h : {h}) (_hl : {b}) => @Eq.refl ({O}) {val})",
                 h = head_is(term),
                 b = bound(term),
             )
         };
-        let none = "(OptionType.none KExpr)";
+        let none = "(@OptionType.none KExpr)";
         let lenf = "(list_length (kapp_args f))";
         // The bound descends to the head: one more argument is one more length.
         let hlf = format!(
@@ -315,7 +320,7 @@ impl Specification {
                     mot("v"),
                     mot("b")
                 ),
-                "(OptionType.some KExpr (instantiate b v))",
+                "(@OptionType.some KExpr (instantiate b v))",
                 "(KExpr.let_ ty v b)",
             ),
             // A projection carries no head name, so this branch is impossible.
@@ -332,9 +337,9 @@ impl Specification {
         let src = format!(
             "def under_applied_step_congr (wh1 : KExpr -> OptionType KExpr) \
              (wh2 : KExpr -> OptionType KExpr) (nm : Name) (meta : RecMeta) \
-             (hrm : Eq (OptionType RecMeta) (recmeta_for {RR} nm) \
-             (OptionType.some RecMeta meta)) (e : KExpr) : {mote} := \
-             KExpr.rec (fun (x : KExpr) => {motx}) {arms} e",
+             (hrm : @Eq (OptionType RecMeta) (recmeta_for {RR} nm) \
+             (@OptionType.some RecMeta meta)) (e : KExpr) : {mote} := \
+             @KExpr.rec (fun (x : KExpr) => {motx}) {arms} e",
             mote = mot("e"),
             motx = mot("x"),
             arms = arms.join(" "),

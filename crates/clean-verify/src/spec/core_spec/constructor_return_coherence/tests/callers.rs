@@ -10,7 +10,7 @@ const TWO: &str = "(Nat.succ (Nat.succ Nat.zero))";
 const THREE: &str = "(Nat.succ (Nat.succ (Nat.succ Nat.zero)))";
 const FOUR: &str = "(Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero))))";
 const S1: &str = "(KExpr.sort (Level.succ Level.zero))";
-const FAMILY: &str = "(KExpr.const kcre_prod_type_name (ListType.nil Level))";
+const FAMILY: &str = "(KExpr.const kcre_prod_type_name (@ListType.nil Level))";
 
 fn named_return() -> String {
     format!("(KExpr.app (KExpr.app {FAMILY} (KExpr.bvar {THREE})) (KExpr.bvar {TWO}))")
@@ -41,19 +41,19 @@ fn constructor_return_coherence_actual_admission_and_selected_spine() {
             ("rpa_env_sound", "EnvSound rpa_env"),
             (
                 "ac_existing_admitted_caller",
-                "Eq Bool (return_args_wf_from Nat.zero Nat.zero (KExpr.bvar Nat.zero)) Bool.true",
+                "@Eq Bool (return_args_wf_from Nat.zero Nat.zero (KExpr.bvar Nat.zero)) Bool.true",
             ),
         ] {
             checks::caller(spec, value, ty);
         }
-        let found = "(Eq.refl (OptionType CtorDecl) (OptionType.some CtorDecl (CtorDecl.mk rpa_one rpa_ctor_ty)))";
+        let found = "(@Eq.refl (OptionType CtorDecl) (@OptionType.some CtorDecl (CtorDecl.mk rpa_one rpa_ctor_ty)))";
         let selected = format!("KEnv.empty Nat.zero rpa_two rpa_ind_ty rpa_ctors rpa_well_formed Nat.zero rpa_one rpa_ctor_ty {found}");
         checks::caller(
             spec,
             &format!("arc_admitted_selected_arity {selected}"),
             &format!("Le {TWO} {FOUR}"),
         );
-        let shape = "Eq KExpr (return_type rpa_ctor_ty) (arc_return_spine rpa_four rpa_two)";
+        let shape = "@Eq KExpr (return_type rpa_ctor_ty) (arc_return_spine rpa_four rpa_two)";
         checks::caller(
             spec,
             &format!("arc_admitted_selected_spine {selected}"),
@@ -70,12 +70,12 @@ fn constructor_return_coherence_actual_admission_and_selected_spine() {
         checks::computes(
             spec,
             "ac_ctor_at rpa_ctors Nat.zero",
-            "OptionType.some CtorDecl (CtorDecl.mk rpa_one rpa_ctor_ty)",
+            "@OptionType.some CtorDecl (CtorDecl.mk rpa_one rpa_ctor_ty)",
         );
         checks::computes(
             spec,
             &format!("ac_ctor_at rpa_ctors {ONE}"),
-            "OptionType.none CtorDecl",
+            "@OptionType.none CtorDecl",
         );
     });
 }
@@ -106,17 +106,17 @@ fn constructor_return_coherence_full_underflow_guard_refuses() {
         checks::caller(
             spec,
             "arc_raw_underflow_guard_passes",
-            &format!("Eq Bool (return_args_wf_from Nat.zero {ONE} {raw}) Bool.true"),
+            &format!("@Eq Bool (return_args_wf_from Nat.zero {ONE} {raw}) Bool.true"),
         );
         checks::caller(
             spec,
             "arc_underflow_arity_refuses",
-            &format!("Eq Bool (nat_leb {ONE} Nat.zero) Bool.false"),
+            &format!("@Eq Bool (nat_leb {ONE} Nat.zero) Bool.false"),
         );
         checks::caller(
             spec,
             &format!("arc_return_guard_spine Nat.zero {ONE} {raw} arc_raw_underflow_guard_passes"),
-            &format!("Eq KExpr {raw} {raw}"),
+            &format!("@Eq KExpr {raw} {raw}"),
         );
         checks::computes(spec, "ac_env_returns_b ac_bad_env", "Bool.false");
         checks::computes(
@@ -167,25 +167,25 @@ fn constructor_return_coherence_emitted_prod_closes_self_at_depth_four() {
             FAMILY,
         );
         checks::computes(spec, "kapp_args (return_type (kconst_type kcre_prod_mk_signature))",
-            &format!("ListType.cons KExpr (KExpr.bvar {THREE}) (ListType.cons KExpr (KExpr.bvar {TWO}) (ListType.nil KExpr))"));
+            &format!("@ListType.cons KExpr (KExpr.bvar {THREE}) (@ListType.cons KExpr (KExpr.bvar {TWO}) (@ListType.nil KExpr))"));
         checks::caller(
             spec,
             "rpa_close_self",
             &format!(
-                "Eq KExpr (instantiate rpa_ctor_ty {FAMILY}) (kconst_type kcre_prod_mk_signature)"
+                "@Eq KExpr (instantiate rpa_ctor_ty {FAMILY}) (kconst_type kcre_prod_mk_signature)"
             ),
         );
         checks::caller(
             spec,
             "arc_prod_close_canonical",
             &format!(
-                "Eq KExpr (instantiate_at (return_type rpa_ctor_ty) {FAMILY} {FOUR}) {result}"
+                "@Eq KExpr (instantiate_at (return_type rpa_ctor_ty) {FAMILY} {FOUR}) {result}"
             ),
         );
         checks::caller(
             spec,
             "arc_prod_source_return",
-            &format!("Eq KExpr (return_type (kconst_type kcre_prod_mk_signature)) {result}"),
+            &format!("@Eq KExpr (return_type (kconst_type kcre_prod_mk_signature)) {result}"),
         );
         checks::not_def_eq(
             spec,
@@ -195,7 +195,7 @@ fn constructor_return_coherence_emitted_prod_closes_self_at_depth_four() {
         checks::not_def_eq(
             spec,
             FAMILY,
-            "KExpr.const kcre_prod_mk_name (ListType.nil Level)",
+            "KExpr.const kcre_prod_mk_name (@ListType.nil Level)",
         );
     });
 }
@@ -213,15 +213,15 @@ fn constructor_return_coherence_actual_names_signatures_and_metadata() {
             ),
             (
                 "kconst_params kcre_prod_type_signature",
-                "ListType.nil Name",
+                "@ListType.nil Name",
             ),
-            ("kconst_params kcre_prod_mk_signature", "ListType.nil Name"),
+            ("kconst_params kcre_prod_mk_signature", "@ListType.nil Name"),
             ("kind_sig kcre_prod_ind_meta", "kcre_prod_type_signature"),
             ("kind_num_params kcre_prod_ind_meta", TWO),
             ("kind_num_indices kcre_prod_ind_meta", "Nat.zero"),
             (
                 "kind_ctor_names kcre_prod_ind_meta",
-                "ListType.cons Name kcre_prod_mk_name (ListType.nil Name)",
+                "@ListType.cons Name kcre_prod_mk_name (@ListType.nil Name)",
             ),
             ("kctor_sig kcre_prod_ctor_meta", "kcre_prod_mk_signature"),
             ("kctor_parent kcre_prod_ctor_meta", "kcre_prod_type_name"),
@@ -230,33 +230,33 @@ fn constructor_return_coherence_actual_names_signatures_and_metadata() {
             ("kctor_index kcre_prod_ctor_meta", "Nat.zero"),
             (
                 "kind_for kcre_ind_ctor_env kcre_prod_type_name",
-                "OptionType.some KIndMeta kcre_prod_ind_meta",
+                "@OptionType.some KIndMeta kcre_prod_ind_meta",
             ),
             (
                 "kctor_for kcre_ind_ctor_env kcre_prod_mk_name",
-                "OptionType.some KCtorMeta kcre_prod_ctor_meta",
+                "@OptionType.some KCtorMeta kcre_prod_ctor_meta",
             ),
             (
                 "kind_for kcre_ind_ctor_env kcre_prod_mk_name",
-                "OptionType.none KIndMeta",
+                "@OptionType.none KIndMeta",
             ),
             (
                 "kctor_for kcre_ind_ctor_env kcre_prod_type_name",
-                "OptionType.none KCtorMeta",
+                "@OptionType.none KCtorMeta",
             ),
             (
                 "kcre_ind_ctor_tenv kcre_prod_type_name",
-                "OptionType.some KConstSig kcre_prod_type_signature",
+                "@OptionType.some KConstSig kcre_prod_type_signature",
             ),
             (
                 "kcre_ind_ctor_tenv kcre_prod_mk_name",
-                "OptionType.some KConstSig kcre_prod_mk_signature",
+                "@OptionType.some KConstSig kcre_prod_mk_signature",
             ),
         ] {
             checks::computes(spec, source, expected);
         }
         checks::caller(spec, "rpa_ctor_signature",
-            &format!("Eq KConstSig (KConstSig.mk (ListType.nil Name) (instantiate rpa_ctor_ty {FAMILY})) (kctor_sig kcre_prod_ctor_meta)"));
+            &format!("@Eq KConstSig (KConstSig.mk (@ListType.nil Name) (instantiate rpa_ctor_ty {FAMILY})) (kctor_sig kcre_prod_ctor_meta)"));
         checks::not_def_eq(spec, "kcre_prod_type_name", "kcre_prod_mk_name");
     });
 }
@@ -270,9 +270,9 @@ fn constructor_return_coherence_connected_consumer_uses_admission() {
         let source = format!(
             "rpa_connected_admission (EnvSound rpa_env) \
              (fun (sound : EnvSound rpa_env) \
-              (_guard : Eq Bool (return_args_wf_from (count_pi rpa_ctor_ty) rpa_two (return_type rpa_ctor_ty)) Bool.true) \
-              (_signature : Eq KConstSig (KConstSig.mk (ListType.nil Name) (instantiate rpa_ctor_ty {FAMILY})) (kctor_sig kcre_prod_ctor_meta)) \
-              (_lookup : Eq (OptionType KCtorMeta) (kctor_for kcre_ind_ctor_env kcre_prod_mk_name) (OptionType.some KCtorMeta kcre_prod_ctor_meta)) => sound)"
+              (_guard : @Eq Bool (return_args_wf_from (count_pi rpa_ctor_ty) rpa_two (return_type rpa_ctor_ty)) Bool.true) \
+              (_signature : @Eq KConstSig (KConstSig.mk (@ListType.nil Name) (instantiate rpa_ctor_ty {FAMILY})) (kctor_sig kcre_prod_ctor_meta)) \
+              (_lookup : @Eq (OptionType KCtorMeta) (kctor_for kcre_ind_ctor_env kcre_prod_mk_name) (@OptionType.some KCtorMeta kcre_prod_ctor_meta)) => sound)"
         );
         checks::caller(spec, &source, "EnvSound rpa_env");
     });

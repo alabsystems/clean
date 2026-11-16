@@ -9,46 +9,46 @@ fn fixture() -> Specification {
     let mut spec = super::super::fixture();
     for source in [
         r"def scalar_cmp_block (op : IRICmpOp) (ty : IRTy) (left right dest : Nat) : IRBlock :=
-IRBlock.mk 7 (IRList.nil Nat)
-  (IRList.cons IRNode (IRNode.mk (IRInst.icmp op ty left right)
-    (IRList.cons Nat dest (IRList.nil Nat)))
-    (IRList.cons IRNode (IRNode.mk (IRInst.ret (IRList.cons Nat 99 (IRList.nil Nat)))
-      (IRList.nil Nat)) (IRList.nil IRNode)))",
+IRBlock.mk 7 (@IRList.nil Nat)
+  (@IRList.cons IRNode (IRNode.mk (IRInst.icmp op ty left right)
+    (@IRList.cons Nat dest (@IRList.nil Nat)))
+    (@IRList.cons IRNode (IRNode.mk (IRInst.ret (@IRList.cons Nat 99 (@IRList.nil Nat)))
+      (@IRList.nil Nat)) (@IRList.nil IRNode)))",
         r"def scalar_cmp_context (op : IRICmpOp) (ty : IRTy)
   (left right dest sitePc : Nat) (resultTy : IRTy) : IRByteContextV1 :=
 IRByteContextV1.mk
-  (IRModule.mk (IRList.cons IRFunc
-    (IRFunc.mk 9 (IRList.cons Nat 40 (IRList.cons Nat 78 (IRList.nil Nat))) 7
-      (IRList.cons IRBlock (scalar_cmp_block op ty left right dest) (IRList.nil IRBlock)))
-    (IRList.nil IRFunc)) (IRList.nil IRGlobal))
-  (IRList.nil IRByteLayoutV1)
-  (IRList.cons IRByteSignatureV1 (IRByteSignatureV1.mk 0
-    (IRList.cons IRTy ty (IRList.cons IRTy ty (IRList.nil IRTy)))
-    (IRList.cons IRTy IRTy.bool_ (IRList.nil IRTy)) Bool.false)
-    (IRList.nil IRByteSignatureV1))
-  (IRList.cons IRByteFunctionV1 (IRByteFunctionV1.mk 9 0 4096 1 Bool.false)
-    (IRList.nil IRByteFunctionV1))
-  (IRList.cons IRByteSiteV1 (IRByteSiteV1.mk 9 7 sitePc 1 1
-    (IRList.cons IRTy resultTy (IRList.nil IRTy)))
-    (IRList.cons IRByteSiteV1 (IRByteSiteV1.mk 9 7 1 1 1 (IRList.nil IRTy))
-      (IRList.nil IRByteSiteV1)))",
+  (IRModule.mk (@IRList.cons IRFunc
+    (IRFunc.mk 9 (@IRList.cons Nat 40 (@IRList.cons Nat 78 (@IRList.nil Nat))) 7
+      (@IRList.cons IRBlock (scalar_cmp_block op ty left right dest) (@IRList.nil IRBlock)))
+    (@IRList.nil IRFunc)) (@IRList.nil IRGlobal))
+  (@IRList.nil IRByteLayoutV1)
+  (@IRList.cons IRByteSignatureV1 (IRByteSignatureV1.mk 0
+    (@IRList.cons IRTy ty (@IRList.cons IRTy ty (@IRList.nil IRTy)))
+    (@IRList.cons IRTy IRTy.bool_ (@IRList.nil IRTy)) Bool.false)
+    (@IRList.nil IRByteSignatureV1))
+  (@IRList.cons IRByteFunctionV1 (IRByteFunctionV1.mk 9 0 4096 1 Bool.false)
+    (@IRList.nil IRByteFunctionV1))
+  (@IRList.cons IRByteSiteV1 (IRByteSiteV1.mk 9 7 sitePc 1 1
+    (@IRList.cons IRTy resultTy (@IRList.nil IRTy)))
+    (@IRList.cons IRByteSiteV1 (IRByteSiteV1.mk 9 7 1 1 1 (@IRList.nil IRTy))
+      (@IRList.nil IRByteSiteV1)))",
         r"def scalar_cmp_frame (left right : IRScalar) : IRFrame :=
-IRFrame.mk 9 7 0 (IRList.cons IRBinding (IRBinding.mk 40 left)
-  (IRList.cons IRBinding (IRBinding.mk 78 right) (IRList.nil IRBinding))) (IRList.nil Nat)",
+IRFrame.mk 9 7 0 (@IRList.cons IRBinding (IRBinding.mk 40 left)
+  (@IRList.cons IRBinding (IRBinding.mk 78 right) (@IRList.nil IRBinding))) (@IRList.nil Nat)",
         r"def scalar_cmp_machine (frame : IRFrame) : IRMachine :=
-IRMachine.mk (IRList.cons IRFrame frame (IRList.nil IRFrame)) (IRList.nil IRMemSlot) 0",
+IRMachine.mk (@IRList.cons IRFrame frame (@IRList.nil IRFrame)) (@IRList.nil IRMemSlot) 0",
         r"def scalar_cmp_memory : IRByteMemoryV1 := IRByteMemoryV1.mk
-(IRList.cons IRByteAllocationV1 (IRByteAllocationV1.mk 16 8 0 Bool.true)
-  (IRList.cons IRByteAllocationV1 (IRByteAllocationV1.mk 64 8 7 Bool.false)
-    (IRList.nil IRByteAllocationV1)))
-(fun (_ : Nat) => IROption.some Nat 173) 128",
-        r"def scalar_cmp_world : IRByteWorldV1 Nat := IRByteWorldV1.mk Nat
-scalar_cmp_memory 123 (IRList.cons Nat 8 (IRList.nil Nat)) 9",
-        r"def scalar_cmp_done : IRByteWorldV1 Nat := IRByteWorldV1.mk Nat
-scalar_cmp_memory 123 (IRList.nil Nat) 9",
+(@IRList.cons IRByteAllocationV1 (IRByteAllocationV1.mk 16 8 0 Bool.true)
+  (@IRList.cons IRByteAllocationV1 (IRByteAllocationV1.mk 64 8 7 Bool.false)
+    (@IRList.nil IRByteAllocationV1)))
+(fun (_ : Nat) => @IROption.some Nat 173) 128",
+        r"def scalar_cmp_world : IRByteWorldV1 Nat := @IRByteWorldV1.mk Nat
+scalar_cmp_memory 123 (@IRList.cons Nat 8 (@IRList.nil Nat)) 9",
+        r"def scalar_cmp_done : IRByteWorldV1 Nat := @IRByteWorldV1.mk Nat
+scalar_cmp_memory 123 (@IRList.nil Nat) 9",
         r"def scalar_cmp_providers : IRByteProvidersV1 Nat :=
 fun (_ : Nat) (_ : IRList IRScalar) (memory : IRByteMemoryV1) (host : Nat) =>
-IRByteImportResultV1.mk Nat (IROutcome.stuck IRFault.no_func) memory host",
+@IRByteImportResultV1.mk Nat (IROutcome.stuck IRFault.no_func) memory host",
     ] {
         register(&mut spec, source);
     }
@@ -61,15 +61,15 @@ fn context(op: &str, ty: &str) -> String {
 
 fn step(ctx: &str, left: &str, right: &str) -> String {
     format!("ir_byte_step_v1 Nat ({ctx}) scalar_cmp_providers
-(IRByteConfigV1.running Nat (scalar_cmp_machine (scalar_cmp_frame ({left}) ({right}))) scalar_cmp_world)")
+(@IRByteConfigV1.running Nat (scalar_cmp_machine (scalar_cmp_frame ({left}) ({right}))) scalar_cmp_world)")
 }
 
 fn stepped(left: &str, right: &str, value: bool) -> String {
     format!(
-        "IRByteConfigV1.running Nat (scalar_cmp_machine
+        "@IRByteConfigV1.running Nat (scalar_cmp_machine
 (ir_frame_advance (ir_frame_set_many (scalar_cmp_frame ({left}) ({right}))
-  (IRList.cons Nat 99 (IRList.nil Nat))
-  (IRList.cons IRScalar ({}) (IRList.nil IRScalar))))) scalar_cmp_world",
+  (@IRList.cons Nat 99 (@IRList.nil Nat))
+  (@IRList.cons IRScalar ({}) (@IRList.nil IRScalar))))) scalar_cmp_world",
         boolean(value)
     )
 }
@@ -78,15 +78,15 @@ fn run(ctx: &str, left: &str, right: &str) -> String {
     format!(
         "ir_byte_run_v1 Nat ({ctx}) scalar_cmp_providers 2
 (ir_byte_init_v1 Nat ({ctx}) 9
-  (IRList.cons IRScalar ({left}) (IRList.cons IRScalar ({right}) (IRList.nil IRScalar)))
+  (@IRList.cons IRScalar ({left}) (@IRList.cons IRScalar ({right}) (@IRList.nil IRScalar)))
   scalar_cmp_memory 123)"
     )
 }
 
 fn returned(value: bool) -> String {
     format!(
-        "IRByteConfigV1.halted Nat
-(IROutcome.ret (IRList.cons IRScalar ({}) (IRList.nil IRScalar))) scalar_cmp_done",
+        "@IRByteConfigV1.halted Nat
+(IROutcome.ret (@IRList.cons IRScalar ({}) (@IRList.nil IRScalar))) scalar_cmp_done",
         boolean(value)
     )
 }
@@ -254,23 +254,23 @@ fn byte_scalar_icmp_fetched_mutations_and_typed_refusals_are_observable() {
             for (suffix, world) in [
                 (
                     "host",
-                    "IRByteWorldV1.mk Nat scalar_cmp_memory 124 (IRList.nil Nat) 9",
+                    "@IRByteWorldV1.mk Nat scalar_cmp_memory 124 (@IRList.nil Nat) 9",
                 ),
                 (
                     "owners",
-                    "IRByteWorldV1.mk Nat scalar_cmp_memory 123 (IRList.cons Nat 8 (IRList.nil Nat)) 9",
+                    "@IRByteWorldV1.mk Nat scalar_cmp_memory 123 (@IRList.cons Nat 8 (@IRList.nil Nat)) 9",
                 ),
                 (
                     "next_owner",
-                    "IRByteWorldV1.mk Nat scalar_cmp_memory 123 (IRList.nil Nat) 10",
+                    "@IRByteWorldV1.mk Nat scalar_cmp_memory 123 (@IRList.nil Nat) 10",
                 ),
                 (
                     "cursor",
-                    "IRByteWorldV1.mk Nat (IRByteMemoryV1.mk (ir_byte_mem_allocs_v1 scalar_cmp_memory) (fun (_ : Nat) => IROption.some Nat 173) 129) 123 (IRList.nil Nat) 9",
+                    "@IRByteWorldV1.mk Nat (IRByteMemoryV1.mk (ir_byte_mem_allocs_v1 scalar_cmp_memory) (fun (_ : Nat) => @IROption.some Nat 173) 129) 123 (@IRList.nil Nat) 9",
                 ),
                 (
                     "bytes",
-                    "IRByteWorldV1.mk Nat (IRByteMemoryV1.mk (ir_byte_mem_allocs_v1 scalar_cmp_memory) (fun (_ : Nat) => IROption.none Nat) 128) 123 (IRList.nil Nat) 9",
+                    "@IRByteWorldV1.mk Nat (IRByteMemoryV1.mk (ir_byte_mem_allocs_v1 scalar_cmp_memory) (fun (_ : Nat) => @IROption.none Nat) 128) 123 (@IRList.nil Nat) 9",
                 ),
             ] {
                 reject(
@@ -298,7 +298,7 @@ fn byte_scalar_icmp_fetched_mutations_and_typed_refusals_are_observable() {
                         &format!("scalar_machine_refusal_{label}_{index}_{side}"),
                         CONFIG,
                         &step(&original, a, b),
-                        "IRByteConfigV1.halted Nat (IROutcome.type_error IRFault.bad_field) scalar_cmp_world",
+                        "@IRByteConfigV1.halted Nat (IROutcome.type_error IRFault.bad_field) scalar_cmp_world",
                     );
                 }
             }

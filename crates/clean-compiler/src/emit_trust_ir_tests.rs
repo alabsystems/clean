@@ -4672,7 +4672,7 @@ fn test_emit_trust_ir_dialect_mode_fails_handoff_subset_gate() {
             version,
             violations,
         } => {
-            assert_eq!(version, 5, "checked against the re-audited subset v5");
+            assert_eq!(version, 6, "checked against the re-audited subset v6");
             assert!(!violations.is_empty(), "expected at least one violation");
         }
         other => panic!("expected TrustIrError::OutOfLoweringSubset, got: {other}"),
@@ -4700,7 +4700,7 @@ fn test_emit_trust_ir_extern_calls_passes_handoff_subset_gate() {
 
 // ---------------------------------------------------------------------------
 // Lowering-target conformance subset self-gate (trust-ir
-// `lowering-target-subset.md` v5, `trust_ir_conformance::subset`).
+// `lowering-target-subset.md` v6, `trust_ir_conformance::subset`).
 //
 // Mirrors trust-ir's own `lowering_subset.rs` gate, two-sided:
 //   1. every ExternCalls (handoff-mode) emission is subset-CLEAN — zero
@@ -4713,7 +4713,7 @@ fn test_emit_trust_ir_extern_calls_passes_handoff_subset_gate() {
 use trust_ir_conformance::subset::{module_subset_violations, SUBSET_VERSION};
 
 #[test]
-fn test_trust_ir_lowering_subset_version_is_the_audited_v5() {
+fn test_trust_ir_lowering_subset_version_is_the_audited_v6() {
     // Audit trail: the 2026-07-04 promotion audit ratified subset v1
     // (`clean.*` ops refused admission; ExternCalls self-gates on the
     // versioned subset). 2026-07-21 re-audit: trust-ir bumped to v2
@@ -4745,11 +4745,17 @@ fn test_trust_ir_lowering_subset_version_is_the_audited_v5() {
     // guard pins 8-byte pointers; the corpus below retains its no-native-B1
     // inventory and exact subset/dialect-free checks. This audit does not
     // claim Clean emits the newly admitted wasm32 model.
+    // Forward E197 re-audit: v6 adds nominal FnItem types/constants and
+    // authenticates their module-owned target. Inst/CastOp/dialect/proof
+    // allowlists alias v5, target rules are unchanged, and BoxDeref remains
+    // excluded. This producer emits no FnItem; the shared-type inventory
+    // below pins that absence even in unused/nested tables and resolved
+    // results. Existing Func carriers are not relabelled as nominal items.
     // The exact three clean.* dialect violations remain refusals. A future
     // bump invalidates THIS
     // audit — the pin makes it loud so the producer audit is re-run.
     assert_eq!(
-        SUBSET_VERSION, 5,
+        SUBSET_VERSION, 6,
         "trust-ir bumped its lowering-target subset version: re-run the Clean \
          producer audit (docs/lowering-target-subset.md Producer notes) and \
          update this suite's known-violation expectations"
@@ -4760,10 +4766,10 @@ fn test_trust_ir_lowering_subset_version_is_the_audited_v5() {
 /// aggregate members, signatures, captures, globals, parameters, instruction
 /// types and inline children. Also inspect resolved SSA result types: calls
 /// and similar instructions obtain theirs indirectly from module tables.
-fn v4_b1_type_occurrences(module: &Module) -> Vec<String> {
+fn unemitted_subset_type_occurrences(module: &Module) -> Vec<String> {
     let mut found = Vec::new();
     let mut record = |ty: &Ty| {
-        if matches!(ty, Ty::Char | Ty::Isize | Ty::Usize) {
+        if matches!(ty, Ty::Char | Ty::Isize | Ty::Usize | Ty::FnItem(_)) {
             found.push(format!("{ty:?}"));
         }
     };
@@ -4777,18 +4783,18 @@ fn v4_b1_type_occurrences(module: &Module) -> Vec<String> {
 }
 
 #[test]
-fn test_emit_trust_ir_v4_audit_sees_nested_tables_and_result_types() {
+fn test_emit_trust_ir_subset_audit_sees_nested_tables_and_result_types() {
     use trust_ir::Inst;
 
     let base = emit_trust_ir(&arith_decls()).expect("real producer baseline");
-    assert!(v4_b1_type_occurrences(&base).is_empty());
+    assert!(unemitted_subset_type_occurrences(&base).is_empty());
 
     // Diagnostic mutations exercise the inventory, not executable authority.
     let mut table = base.clone();
     table
         .types
         .push(Ty::Tuple(vec![Ty::PtrConst(Box::new(Ty::Char))]));
-    assert_eq!(v4_b1_type_occurrences(&table), ["Char"]);
+    assert_eq!(unemitted_subset_type_occurrences(&table), ["Char"]);
 
     let mut member = base.clone();
     member.structs.push(trust_ir::ty::StructDef {
@@ -4804,11 +4810,20 @@ fn test_emit_trust_ir_v4_audit_sees_nested_tables_and_result_types() {
         repr: trust_ir::ty::StructRepr::Rust,
         origin: None,
     });
-    assert_eq!(v4_b1_type_occurrences(&member), ["Char"]);
+    assert_eq!(unemitted_subset_type_occurrences(&member), ["Char"]);
 
     let mut signature = base.clone();
     signature.func_types[0].returns = vec![Ty::Usize];
-    assert!(v4_b1_type_occurrences(&signature).contains(&"Usize".into()));
+    assert!(unemitted_subset_type_occurrences(&signature).contains(&"Usize".into()));
+
+    // v6's new nominal type must also invalidate the unchanged-producer
+    // audit when buried in an otherwise unused aggregate type table.
+    let mut item = base.clone();
+    item.types
+        .push(Ty::Tuple(vec![Ty::FnItem(item.functions[0].id)]));
+    let item_types = unemitted_subset_type_occurrences(&item);
+    assert_eq!(item_types.len(), 1);
+    assert!(item_types[0].starts_with("FnItem("));
 
     let mut instruction = base.clone();
     let node = instruction.functions[1].blocks[0]
@@ -4819,8 +4834,11 @@ fn test_emit_trust_ir_v4_audit_sees_nested_tables_and_result_types() {
     if let Inst::Const { ty, .. } = &mut node.inst {
         *ty = Ty::Tuple(vec![Ty::Isize]);
     }
-    assert_eq!(v4_b1_type_occurrences(&instruction), ["Isize", "Isize"]);
-    assert!(v4_b1_type_occurrences(&base).is_empty());
+    assert_eq!(
+        unemitted_subset_type_occurrences(&instruction),
+        ["Isize", "Isize"]
+    );
+    assert!(unemitted_subset_type_occurrences(&base).is_empty());
 }
 
 /// Every ExternCalls corpus program (the full lowering surface this suite
@@ -4847,8 +4865,8 @@ fn test_emit_trust_ir_extern_calls_corpus_is_subset_clean() {
         });
         let violations = module_subset_violations(&module);
         assert!(
-            v4_b1_type_occurrences(&module).is_empty(),
-            "`{label}` newly emits native B1 types; re-audit v4 Char origins and target widths"
+            unemitted_subset_type_occurrences(&module).is_empty(),
+            "`{label}` newly emits a B1 scalar or FnItem; re-audit origins, targets and nominal identity"
         );
         assert!(
             violations.is_empty(),
@@ -5029,17 +5047,17 @@ fn test_emit_trust_ir_dialect_mode_has_exactly_the_known_violations() {
     // produce EXACTLY these violations. A new violation means an emission
     // path leaked a new out-of-subset construct; a missing one means the
     // expectation (or trust-ir's checker) drifted — both must be looked at.
-    // The strings deliberately pin trust-ir's v5 message format; they break
+    // The strings deliberately pin trust-ir's v6 message format; they break
     // loudly (together with the SUBSET_VERSION pin) on any subset revision.
     let expected = vec![
         "fn `dialect_probe` bb0 inst #0: dialect op `clean.obj.set_tag` is outside \
-         lowering-target subset v5 (no proven lowering)"
+         lowering-target subset v6 (no proven lowering)"
             .to_string(),
         "fn `dialect_probe` bb0 inst #1: dialect op `clean.str.const` is outside \
-         lowering-target subset v5 (no proven lowering)"
+         lowering-target subset v6 (no proven lowering)"
             .to_string(),
         "fn `dialect_probe` bb0 inst #2: dialect op `clean.obj.tag` is outside \
-         lowering-target subset v5 (no proven lowering)"
+         lowering-target subset v6 (no proven lowering)"
             .to_string(),
     ];
 

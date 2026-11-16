@@ -83,7 +83,7 @@ pub enum BinOp {
 
 impl BinOp {
     /// Check if this is an assignment operator
-    pub fn is_assignment(&self) -> bool {
+    pub(crate) fn is_assignment(&self) -> bool {
         matches!(
             self,
             BinOp::Assign
@@ -109,7 +109,7 @@ impl BinOp {
     }
 
     /// Check if this is a logical operator (short-circuit)
-    pub fn is_logical(&self) -> bool {
+    pub(crate) fn is_logical(&self) -> bool {
         matches!(self, BinOp::LogAnd | BinOp::LogOr)
     }
 
@@ -164,7 +164,7 @@ impl UnaryOp {
     }
 
     /// Check if this operator is an increment/decrement
-    pub fn is_inc_dec(&self) -> bool {
+    pub(crate) fn is_inc_dec(&self) -> bool {
         matches!(
             self,
             UnaryOp::PreInc | UnaryOp::PreDec | UnaryOp::PostInc | UnaryOp::PostDec
@@ -576,7 +576,7 @@ impl ExprResult {
     }
 
     /// Create an lvalue result naming a bit-field.
-    pub fn lvalue_bitfield(ptr: Pointer, ty: CType, bitfield: BitFieldRef) -> Self {
+    pub(crate) fn lvalue_bitfield(ptr: Pointer, ty: CType, bitfield: BitFieldRef) -> Self {
         ExprResult::LValue(LValue::bitfield(ptr, ty, bitfield))
     }
 

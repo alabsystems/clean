@@ -516,7 +516,7 @@ impl VCGen {
     }
 
     /// Generate VCs for a function
-    pub fn gen_function(&mut self, func: &FuncDef, spec: &FuncSpec) -> Vec<VC> {
+    pub(crate) fn gen_function(&mut self, func: &FuncDef, spec: &FuncSpec) -> Vec<VC> {
         self.vcs.clear();
         self.path_condition.clear();
         self.prepare_function_objects(func);

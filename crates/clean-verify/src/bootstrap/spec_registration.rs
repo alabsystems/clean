@@ -142,16 +142,16 @@ impl Specification {
                 concat!(
                     "fun (tenv : KDeclEnv) (G : ListType KExpr) (e : KExpr) (T : KExpr) ",
                     "(h : KernelInfers tenv G e T) => ",
-                    "KernelInfers.rec tenv ",
+                    "@KernelInfers.rec tenv ",
                     // motive: fun G0 e0 T0 (_ : KernelInfers tenv G0 e0 T0) => TypingCtxConv tenv G0 e0 T0
                     "(fun (G0 : ListType KExpr) (e0 : KExpr) (T0 : KExpr) (h0 : KernelInfers tenv G0 e0 T0) => ",
                     "TypingCtxConv tenv G0 e0 T0) ",
                     // sort arm
-                    "(fun (G0 : ListType KExpr) (n : Level) => TypingCtxConv.sort tenv G0 n) ",
+                    "(fun (G0 : ListType KExpr) (n : Level) => @TypingCtxConv.sort tenv G0 n) ",
                     // bvar arm
                     "(fun (G0 : ListType KExpr) (i : Nat) (A : KExpr) ",
-                    "(hlk : Eq (OptionType KExpr) (ctx_lookup G0 i) (OptionType.some KExpr A)) => ",
-                    "TypingCtxConv.var tenv G0 i A hlk) ",
+                    "(hlk : @Eq (OptionType KExpr) (ctx_lookup G0 i) (@OptionType.some KExpr A)) => ",
+                    "@TypingCtxConv.var tenv G0 i A hlk) ",
                     // pi arm (fields hA hwA hB hwB, then IHs ihA ihB).
                     //
                     // The two whnf premises are the arms' 2026-08-08 repair: the
@@ -166,14 +166,14 @@ impl Specification {
                     "(SA : KExpr) (n : Level) (SB : KExpr) (m : Level) ",
                     "(hA : KernelInfers tenv G0 A SA) ",
                     "(hwA : whnf_to SA (KExpr.sort n)) ",
-                    "(hB : KernelInfers tenv (ListType.cons KExpr A G0) B SB) ",
+                    "(hB : KernelInfers tenv (@ListType.cons KExpr A G0) B SB) ",
                     "(hwB : whnf_to SB (KExpr.sort m)) ",
                     "(ihA : TypingCtxConv tenv G0 A SA) ",
-                    "(ihB : TypingCtxConv tenv (ListType.cons KExpr A G0) B SB) => ",
-                    "TypingCtxConv.pi tenv G0 A B n m ",
-                    "(TypingCtxConv.conv tenv G0 A SA (KExpr.sort n) ihA ",
+                    "(ihB : TypingCtxConv tenv (@ListType.cons KExpr A G0) B SB) => ",
+                    "@TypingCtxConv.pi tenv G0 A B n m ",
+                    "(@TypingCtxConv.conv tenv G0 A SA (KExpr.sort n) ihA ",
                     "(whnf_to_preserves_def_eq SA (KExpr.sort n) hwA)) ",
-                    "(TypingCtxConv.conv tenv (ListType.cons KExpr A G0) B SB (KExpr.sort m) ihB ",
+                    "(@TypingCtxConv.conv tenv (@ListType.cons KExpr A G0) B SB (KExpr.sort m) ihB ",
                     "(whnf_to_preserves_def_eq SB (KExpr.sort m) hwB))) ",
                     // lam arm (fields hA hwA hb, then IHs ihA ihb). ONE whnf
                     // premise, not two: the deployed Lam arm whnf's the domain's
@@ -183,17 +183,17 @@ impl Specification {
                     "(SA : KExpr) (u : Level) ",
                     "(hA : KernelInfers tenv G0 A SA) ",
                     "(hwA : whnf_to SA (KExpr.sort u)) ",
-                    "(hb : KernelInfers tenv (ListType.cons KExpr A G0) b B) ",
+                    "(hb : KernelInfers tenv (@ListType.cons KExpr A G0) b B) ",
                     "(ihA : TypingCtxConv tenv G0 A SA) ",
-                    "(ihb : TypingCtxConv tenv (ListType.cons KExpr A G0) b B) => ",
-                    "TypingCtxConv.lam tenv G0 A b B u ",
-                    "(TypingCtxConv.conv tenv G0 A SA (KExpr.sort u) ihA ",
+                    "(ihb : TypingCtxConv tenv (@ListType.cons KExpr A G0) b B) => ",
+                    "@TypingCtxConv.lam tenv G0 A b B u ",
+                    "(@TypingCtxConv.conv tenv G0 A SA (KExpr.sort u) ihA ",
                     "(whnf_to_preserves_def_eq SA (KExpr.sort u) hwA)) ",
                     "ihb) ",
                     // const arm
                     "(fun (G0 : ListType KExpr) (nm : Name) (us : ListType Level) (A : KExpr) ",
-                    "(ht : Eq (OptionType KExpr) (kdecl_type_at tenv nm us) (OptionType.some KExpr A)) => ",
-                    "TypingCtxConv.const tenv G0 nm us A ht) ",
+                    "(ht : @Eq (OptionType KExpr) (kdecl_type_at tenv nm us) (@OptionType.some KExpr A)) => ",
+                    "@TypingCtxConv.const tenv G0 nm us A ht) ",
                     // app arm (fields hf hwF ha hAA, then IHs ihf iha) — the load-bearing conv step
                     "(fun (G0 : ListType KExpr) (ff : KExpr) (aa : KExpr) (F : KExpr) (A : KExpr) (B : KExpr) (Ap : KExpr) ",
                     "(hf : KernelInfers tenv G0 ff F) ",
@@ -202,10 +202,10 @@ impl Specification {
                     "(hAA : DefEq Ap A) ",
                     "(ihf : TypingCtxConv tenv G0 ff F) ",
                     "(iha : TypingCtxConv tenv G0 aa Ap) => ",
-                    "TypingCtxConv.app tenv G0 ff aa A B ",
-                    "(TypingCtxConv.conv tenv G0 ff F (KExpr.pi A B) ihf ",
+                    "@TypingCtxConv.app tenv G0 ff aa A B ",
+                    "(@TypingCtxConv.conv tenv G0 ff F (KExpr.pi A B) ihf ",
                     "(whnf_to_preserves_def_eq F (KExpr.pi A B) hwF)) ",
-                    "(TypingCtxConv.conv tenv G0 aa Ap A iha hAA)) ",
+                    "(@TypingCtxConv.conv tenv G0 aa Ap A iha hAA)) ",
                     // let_ arm (fields hty hwTy hv hTv hb, then IHs ihty ihv ihb) — the
                     // 7-shape closure: same conv machinery as the app arm, twice —
                     // annotation's inferred type whnf's to a sort (conv along
@@ -216,20 +216,20 @@ impl Specification {
                     "(hwTy : whnf_to Ty (KExpr.sort u)) ",
                     "(hv : KernelInfers tenv G0 lv Tv) ",
                     "(hTv : DefEq Tv lty) ",
-                    "(hb : KernelInfers tenv (ListType.cons KExpr lty G0) lb B) ",
+                    "(hb : KernelInfers tenv (@ListType.cons KExpr lty G0) lb B) ",
                     "(ihty : TypingCtxConv tenv G0 lty Ty) ",
                     "(ihv : TypingCtxConv tenv G0 lv Tv) ",
-                    "(ihb : TypingCtxConv tenv (ListType.cons KExpr lty G0) lb B) => ",
-                    "TypingCtxConv.let_ tenv G0 lty lv lb B u ",
-                    "(TypingCtxConv.conv tenv G0 lty Ty (KExpr.sort u) ihty ",
+                    "(ihb : TypingCtxConv tenv (@ListType.cons KExpr lty G0) lb B) => ",
+                    "@TypingCtxConv.let_ tenv G0 lty lv lb B u ",
+                    "(@TypingCtxConv.conv tenv G0 lty Ty (KExpr.sort u) ihty ",
                     "(whnf_to_preserves_def_eq Ty (KExpr.sort u) hwTy)) ",
-                    "(TypingCtxConv.conv tenv G0 lv Tv lty ihv hTv) ",
+                    "(@TypingCtxConv.conv tenv G0 lv Tv lty ihv hTv) ",
                     "ihb) ",
                     // The literal branches apply to both payload kinds. Their
                     // representations and result types are shared with the
                     // implementation bridge, rather than excluded by a guard.
-                    "(fun (G0 : ListType KExpr) (n : Nat) => TypingCtxConv.lit_nat tenv G0 n) ",
-                    "(fun (G0 : ListType KExpr) (n : Nat) => TypingCtxConv.lit_string tenv G0 n) ",
+                    "(fun (G0 : ListType KExpr) (n : Nat) => @TypingCtxConv.lit_nat tenv G0 n) ",
+                    "(fun (G0 : ListType KExpr) (n : Nat) => @TypingCtxConv.lit_string tenv G0 n) ",
                     // indices + major
                     "G e T h",
                 )

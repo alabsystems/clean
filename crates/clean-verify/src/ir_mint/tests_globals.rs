@@ -46,6 +46,9 @@ fn one_global_tags() -> tags::Tags {
 /// INDEX is structural (`ir_d0`), its initializer bytes are data (`ir_d8` for
 /// 8, the literal `108` for 108), the `IRGlobal` line lands after the aliases
 /// and before the first block, and the module line carries the cons list.
+/// The same module without a global uses `(@IRList.nil IRGlobal)` and no `_g`
+/// line; M3 checks the current explicit-telescope source byte for byte.
+///
 /// The same module without a global keeps the literal `(@IRList.nil IRGlobal)`
 /// and no `_g` line. M3 judges this explicit spelling and its decoded module.
 #[test]
@@ -77,7 +80,7 @@ fn mint_a_module_with_one_global_states_the_numeral_policy() {
     assert!(bare.lines.iter().all(|l| !l.contains("IRGlobal.mk")));
     assert!(
         bare.lines[2].ends_with(" (@IRList.nil IRGlobal)"),
-        "the empty global list must retain its explicit type argument:\n{}",
+        "the empty global list retains its explicit element type and type argument:\n{}",
         bare.lines[2]
     );
     assert_eq!(

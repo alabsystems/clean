@@ -13,7 +13,7 @@ impl ProofLibrary {
             "TypePreservation".to_string(),
             ProofTerm::new(
                 "TypePreservation",
-                "fun (e : KExpr) (T : KExpr) (e' : KExpr) (wd : DefEnvWellformed the_red_env) (wr : RecEnvWellformed (red_rec the_red_env)) (ht : has_type e T) (heq : typing_is_def_eq e e') => def_eq_preserves_typing e e' T wd wr ht heq",
+                "fun (hf : RedEnvFaithful the_red_env) (e : KExpr) (T : KExpr) (e' : KExpr) (wd : DefEnvWellformed the_red_env) (wr : RecEnvWellformed (red_rec the_red_env)) (ht : has_type e T) (heq : typing_is_def_eq e e') => def_eq_preserves_typing hf e e' T wd wr ht heq",
                 "Type preservation: typing is preserved across typed definitional equality.",
             ),
         );

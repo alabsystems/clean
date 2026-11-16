@@ -105,7 +105,7 @@ impl Specification {
         self.add_definition_reducible(SpecDefinition {
             name: "KernelStateEnvValid".to_string(),
             type_src: "KernelState -> Type".to_string(),
-            value_src: Some("fun (st : KernelState) => KernelState.rec (fun (_ : KernelState) => Type) (fun (env : KEnv) (_ctx : KernelLocalCtx) => KernelEnvValid env) st".to_string()),
+            value_src: Some("fun (st : KernelState) => @KernelState.rec (fun (_ : KernelState) => Type) (fun (env : KEnv) (_ctx : KernelLocalCtx) => KernelEnvValid env) st".to_string()),
             is_axiom: false,
             description: "Semireducible state-indexed environment-validity predicate. This pulls the environment side of the implementation/spec bridge out of the summary alias while still unfolding to KernelEnvValid env during declaration checking.".to_string(),
             category: AxiomCategory::DerivedLemma,
@@ -123,7 +123,7 @@ impl Specification {
         self.add_definition_reducible(SpecDefinition {
             name: "KernelStateLocalCtxWellFormed".to_string(),
             type_src: "KernelState -> Type".to_string(),
-            value_src: Some("fun (st : KernelState) => KernelState.rec (fun (_ : KernelState) => Type) (fun (env : KEnv) (ctx : KernelLocalCtx) => KernelLocalCtxWellFormed env ctx) st".to_string()),
+            value_src: Some("fun (st : KernelState) => @KernelState.rec (fun (_ : KernelState) => Type) (fun (env : KEnv) (ctx : KernelLocalCtx) => KernelLocalCtxWellFormed env ctx) st".to_string()),
             is_axiom: false,
             description: "Semireducible state-indexed local-context well-formedness predicate. This keeps the local-context side of the state bridge explicit while still unfolding to KernelLocalCtxWellFormed env ctx during declaration checking.".to_string(),
             category: AxiomCategory::DerivedLemma,
@@ -163,7 +163,7 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "KernelStateMatchesSpec.mk".to_string(),
             type_src: "forall (st : KernelState), KernelStateEnvValid st -> KernelStateLocalCtxWellFormed st -> KernelStateMatchesSpec st".to_string(),
-            value_src: Some("fun (st : KernelState) (henv : KernelStateEnvValid st) (hctx : KernelStateLocalCtxWellFormed st) => AndType.intro (KernelStateEnvValid st) (KernelStateLocalCtxWellFormed st) henv hctx".to_string()),
+            value_src: Some("fun (st : KernelState) (henv : KernelStateEnvValid st) (hctx : KernelStateLocalCtxWellFormed st) => @AndType.intro (KernelStateEnvValid st) (KernelStateLocalCtxWellFormed st) henv hctx".to_string()),
             is_axiom: false,
             description: "Build the summary implementation/spec correspondence from the split bridge predicates. DerivedPending because the bridge is constructive, but its state predicates still depend on implementation-side invariants.".to_string(),
             category: AxiomCategory::DerivedLemma,
@@ -428,7 +428,7 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "kernel_empty_ctx_well_formed".to_string(),
             type_src: "KernelLocalCtxWellFormed KEnv.empty KernelLocalCtx.nil".to_string(),
-            value_src: Some("KernelLocalCtxWellFormed.nil KEnv.empty".to_string()),
+            value_src: Some("@KernelLocalCtxWellFormed.nil KEnv.empty".to_string()),
             is_axiom: false,
             description: "The empty local context is well-formed in the empty environment. PROVED: KernelLocalCtxWellFormed KEnv.empty KernelLocalCtx.nil is inhabited by the nil constructor applied to KEnv.empty — an empty context has no declaration whose domain type could fail the per-binder Sort check. This is the base case for the inductive chain.".to_string(),
             category: AxiomCategory::DerivedLemma,

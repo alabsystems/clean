@@ -51,6 +51,8 @@ pub use core_spec::{
     STACK_AXES_WITNESS_NAMES, STACK_MINTED_NAMES, STACK_SPLIT_NAMES, STACK_THEOREM_NAMES,
     STK_WITNESS_NAMES, STRING_LITERAL_PROOF_NAMES, STRING_LIT_CODEC_PROOF_NAMES,
 };
+#[cfg(test)]
+mod bmem_source_admission_tests;
 pub(crate) mod decl_budget;
 mod declaration_registration;
 mod definition;
@@ -58,6 +60,8 @@ mod definition_registration;
 mod error;
 mod model_units;
 mod reducible;
+#[cfg(test)]
+mod source_admission_trace;
 mod tc_spec;
 #[cfg(test)]
 mod tests;

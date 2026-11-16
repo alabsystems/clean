@@ -21,13 +21,13 @@ impl Specification {
 | succ : forall (u : Level), LevelParamSupport ps u -> LevelParamSupport ps (Level.succ u)
 | max : forall (u : Level) (v : Level), LevelParamSupport ps u -> LevelParamSupport ps v -> LevelParamSupport ps (Level.max u v)
 | imax : forall (u : Level) (v : Level), LevelParamSupport ps u -> LevelParamSupport ps v -> LevelParamSupport ps (Level.imax u v)
-| param : forall (n : Name) (i : Nat), Eq (OptionType Nat) (nameIdx ps n) (OptionType.some Nat i) -> LevelParamSupport ps (Level.param n)",
+| param : forall (n : Name) (i : Nat), @Eq (OptionType Nat) (nameIdx ps n) (@OptionType.some Nat i) -> LevelParamSupport ps (Level.param n)",
             "Every universe parameter of a raw Level has an actual first-match index in the declared parameter list. No arity or uniqueness assumption is added.",
         )?;
         self.add_inductive(
             r"inductive LevelListParamSupport (ps : ListType Name) : ListType Level -> Prop
-| nil : LevelListParamSupport ps (ListType.nil Level)
-| cons : forall (u : Level) (us : ListType Level), LevelParamSupport ps u -> LevelListParamSupport ps us -> LevelListParamSupport ps (ListType.cons Level u us)",
+| nil : LevelListParamSupport ps (@ListType.nil Level)
+| cons : forall (u : Level) (us : ListType Level), LevelParamSupport ps u -> LevelListParamSupport ps us -> LevelListParamSupport ps (@ListType.cons Level u us)",
             "Parameter support traverses every level in a constant's level argument list, including nested max/imax/succ structure.",
         )?;
         self.add_inductive(
@@ -85,20 +85,20 @@ mod tests {
                     "support must not depend on {later}"
                 );
             }
-            let ps = "(ListType.nil Name)";
+            let ps = "(@ListType.nil Name)";
             let z = "(KExpr.sort Level.zero)";
             let hz =
-                format!("(KExprParamSupport.sort {ps} Level.zero (LevelParamSupport.zero {ps}))");
+                format!("(@KExprParamSupport.sort {ps} Level.zero (@LevelParamSupport.zero {ps}))");
             for (suffix, expression, proof) in [
                 ("sort", z.to_string(), hz.clone()),
-                ("bvar", "(KExpr.bvar Nat.zero)".to_string(), format!("KExprParamSupport.bvar {ps} Nat.zero")),
-                ("app", format!("(KExpr.app {z} {z})"), format!("KExprParamSupport.app {ps} {z} {z} {hz} {hz}")),
-                ("lam", format!("(KExpr.lam {z} {z})"), format!("KExprParamSupport.lam {ps} {z} {z} {hz} {hz}")),
-                ("pi", format!("(KExpr.pi {z} {z})"), format!("KExprParamSupport.pi {ps} {z} {z} {hz} {hz}")),
-                ("const", "(KExpr.const Name.anonymous (ListType.nil Level))".to_string(), format!("KExprParamSupport.const {ps} Name.anonymous (ListType.nil Level) (LevelListParamSupport.nil {ps})")),
-                ("let", format!("(KExpr.let_ {z} {z} {z})"), format!("KExprParamSupport.let_ {ps} {z} {z} {z} {hz} {hz} {hz}")),
-                ("proj", format!("(KExpr.proj Name.anonymous Nat.zero {z})"), format!("KExprParamSupport.proj {ps} Name.anonymous Nat.zero {z} {hz}")),
-                ("lit", "(KExpr.lit (Nat.succ Nat.zero))".to_string(), format!("KExprParamSupport.lit {ps} (Nat.succ Nat.zero)")),
+                ("bvar", "(KExpr.bvar Nat.zero)".to_string(), format!("@KExprParamSupport.bvar {ps} Nat.zero")),
+                ("app", format!("(KExpr.app {z} {z})"), format!("@KExprParamSupport.app {ps} {z} {z} {hz} {hz}")),
+                ("lam", format!("(KExpr.lam {z} {z})"), format!("@KExprParamSupport.lam {ps} {z} {z} {hz} {hz}")),
+                ("pi", format!("(KExpr.pi {z} {z})"), format!("@KExprParamSupport.pi {ps} {z} {z} {hz} {hz}")),
+                ("const", "(KExpr.const Name.anonymous (@ListType.nil Level))".to_string(), format!("@KExprParamSupport.const {ps} Name.anonymous (@ListType.nil Level) (@LevelListParamSupport.nil {ps})")),
+                ("let", format!("(KExpr.let_ {z} {z} {z})"), format!("@KExprParamSupport.let_ {ps} {z} {z} {z} {hz} {hz} {hz}")),
+                ("proj", format!("(KExpr.proj Name.anonymous Nat.zero {z})"), format!("@KExprParamSupport.proj {ps} Name.anonymous Nat.zero {z} {hz}")),
+                ("lit", "(KExpr.lit (Nat.succ Nat.zero))".to_string(), format!("@KExprParamSupport.lit {ps} (Nat.succ Nat.zero)")),
             ] {
                 let name = format!("support_early_{suffix}_witness");
                 spec.add_recursive_def(
@@ -108,7 +108,7 @@ mod tests {
                 assert!(crate::spec_axiom_closure::computed_axiom_closure(&spec, &name).is_empty());
             }
             assert!(spec.add_recursive_def(
-                "def support_missing_member_must_fail : LevelParamSupport (ListType.nil Name) (Level.param Name.anonymous) := LevelParamSupport.param (ListType.nil Name) Name.anonymous Nat.zero (Eq.refl (OptionType Nat) (OptionType.some Nat Nat.zero))",
+                "def support_missing_member_must_fail : LevelParamSupport (@ListType.nil Name) (Level.param Name.anonymous) := @LevelParamSupport.param (@ListType.nil Name) Name.anonymous Nat.zero (@Eq.refl (OptionType Nat) (@OptionType.some Nat Nat.zero))",
                 "Negative control: unknown parameters do not acquire a fabricated membership witness.",
             ).is_err());
         });

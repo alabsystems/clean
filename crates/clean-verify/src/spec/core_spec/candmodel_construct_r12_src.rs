@@ -49,12 +49,12 @@ pub(super) const SRC_SK: &str = "inductive Sk : Type
 | arr : Sk -> Sk -> Sk";
 
 /// The shape of the inhabitants of a kind; junk (`ty`) off the kinds.
-pub(super) const SRC_DOM_SK: &str = "def domSk (s : Sk) : Sk := Sk.rec (fun (qs : Sk) => Sk) Sk.ty (fun (qs1 : Sk) (qih : Sk) => qs1) (fun (qd : Sk) (qc : Sk) (qihd : Sk) (qihc : Sk) => Sk.ty) s";
+pub(super) const SRC_DOM_SK: &str = "def domSk (s : Sk) : Sk := @Sk.rec (fun (qs : Sk) => Sk) Sk.ty (fun (qs1 : Sk) (qih : Sk) => qs1) (fun (qd : Sk) (qc : Sk) (qihd : Sk) (qihc : Sk) => Sk.ty) s";
 
 /// The shape of a Pi: a Pi of kinds is a kind, anything else is a type. Corpus
 /// `piShape` (FInterp.lean:57). A DOUBLE `Sk.rec`, because the outer recursion
 /// leaves `piShape (kd s1) t` stuck on a variable `t`.
-pub(super) const SRC_PI_SHAPE: &str = "def piShape (s : Sk) (t : Sk) : Sk := Sk.rec (fun (qs : Sk) => Sk -> Sk) (fun (qt : Sk) => Sk.ty) (fun (qs1 : Sk) (qih : Sk -> Sk) (qt1 : Sk) => Sk.rec (fun (qt2 : Sk) => Sk) Sk.ty (fun (qs2 : Sk) (qih2 : Sk) => Sk.kd (Sk.arr qs1 qs2)) (fun (qd : Sk) (qc : Sk) (qa : Sk) (qb : Sk) => Sk.ty) qt1) (fun (qd : Sk) (qc : Sk) (qa : Sk -> Sk) (qb : Sk -> Sk) (qt : Sk) => Sk.ty) s t";
+pub(super) const SRC_PI_SHAPE: &str = "def piShape (s : Sk) (t : Sk) : Sk := @Sk.rec (fun (qs : Sk) => Sk -> Sk) (fun (qt : Sk) => Sk.ty) (fun (qs1 : Sk) (qih : Sk -> Sk) (qt1 : Sk) => @Sk.rec (fun (qt2 : Sk) => Sk) Sk.ty (fun (qs2 : Sk) (qih2 : Sk) => Sk.kd (Sk.arr qs1 qs2)) (fun (qd : Sk) (qc : Sk) (qa : Sk) (qb : Sk) => Sk.ty) qt1) (fun (qd : Sk) (qc : Sk) (qa : Sk -> Sk) (qb : Sk -> Sk) (qt : Sk) => Sk.ty) s t";
 
 /// **THE LARGE ELIMINATION.** The domain of values of a shape: a type and a
 /// kind both carry a candidate, a constructor carries a FUNCTION between value
@@ -67,23 +67,23 @@ pub(super) const SRC_PI_SHAPE: &str = "def piShape (s : Sk) (t : Sk) : Sk := Sk.
 /// because `whnf_acc` is `Acc`-shaped), so `VD s : Type 1` where the corpus's is
 /// `Type 0` (its candidates are `Tm -> Prop`). That one-universe offset is the
 /// whole content of R12's first obstruction — see `SRC_PI_CAND_V`.
-pub(super) const SRC_VD: &str = "def VD (s : Sk) : Type 1 := Sk.rec (fun (qs : Sk) => Type 1) (KExpr -> Type) (fun (qs1 : Sk) (qih : Type 1) => KExpr -> Type) (fun (qd : Sk) (qc : Sk) (qX : Type 1) (qY : Type 1) => qX -> qY) s";
+pub(super) const SRC_VD: &str = "def VD (s : Sk) : Type 1 := @Sk.rec (fun (qs : Sk) => Type 1) (KExpr -> Type) (fun (qs1 : Sk) (qih : Type 1) => KExpr -> Type) (fun (qd : Sk) (qc : Sk) (qX : Type 1) (qY : Type 1) => qX -> qY) s";
 
 /// The candidate a value denotes: itself at a type or a kind, the top candidate
 /// at a constructor. Corpus `vcar` (Shapes.lean:161), indexed rather than
 /// packaged.
-pub(super) const SRC_VCAR_D: &str = "def vcarD (s : Sk) (v : VD s) : KExpr -> Type := Sk.rec (fun (qs : Sk) => VD qs -> KExpr -> Type) (fun (qC : VD Sk.ty) => qC) (fun (qs1 : Sk) (qih : VD qs1 -> KExpr -> Type) (qC : VD (Sk.kd qs1)) => qC) (fun (qd : Sk) (qc : Sk) (qihd : VD qd -> KExpr -> Type) (qihc : VD qc -> KExpr -> Type) (qf : VD (Sk.arr qd qc)) (qe : KExpr) => whnf_acc qe) s v";
+pub(super) const SRC_VCAR_D: &str = "def vcarD (s : Sk) (v : VD s) : KExpr -> Type := @Sk.rec (fun (qs : Sk) => VD qs -> KExpr -> Type) (fun (qC : VD Sk.ty) => qC) (fun (qs1 : Sk) (qih : VD qs1 -> KExpr -> Type) (qC : VD (Sk.kd qs1)) => qC) (fun (qd : Sk) (qc : Sk) (qihd : VD qd -> KExpr -> Type) (qihc : VD qc -> KExpr -> Type) (qf : VD (Sk.arr qd qc)) (qe : KExpr) => whnf_acc qe) s v";
 
 /// Package a candidate at a Pi-shape. Corpus `mkTy` (Shapes.lean:91) with the
 /// shape taken from the two shape-typing premises instead of from a junk probe:
 /// the derivation-indexed interpretation already knows both shapes, so the
 /// corpus's `G (junkV (domSk sA))` probe is not needed.
-pub(super) const SRC_MK_TY_D: &str = "def mkTyD (s : Sk) (t : Sk) (C : KExpr -> Type) : VD (piShape s t) := Sk.rec (fun (qs : Sk) => forall (qt : Sk), (KExpr -> Type) -> VD (piShape qs qt)) (fun (qt : Sk) (qC : KExpr -> Type) => qC) (fun (qs1 : Sk) (qih : forall (qt : Sk), (KExpr -> Type) -> VD (piShape qs1 qt)) => Sk.rec (fun (qt : Sk) => (KExpr -> Type) -> VD (piShape (Sk.kd qs1) qt)) (fun (qC : KExpr -> Type) => qC) (fun (qs2 : Sk) (qa : (KExpr -> Type) -> VD (piShape (Sk.kd qs1) qs2)) (qC : KExpr -> Type) => qC) (fun (qd : Sk) (qc : Sk) (qa : (KExpr -> Type) -> VD (piShape (Sk.kd qs1) qd)) (qb : (KExpr -> Type) -> VD (piShape (Sk.kd qs1) qc)) (qC : KExpr -> Type) => qC)) (fun (qd : Sk) (qc : Sk) (qa : forall (qt : Sk), (KExpr -> Type) -> VD (piShape qd qt)) (qb : forall (qt : Sk), (KExpr -> Type) -> VD (piShape qc qt)) (qt : Sk) (qC : KExpr -> Type) => qC) s t C";
+pub(super) const SRC_MK_TY_D: &str = "def mkTyD (s : Sk) (t : Sk) (C : KExpr -> Type) : VD (piShape s t) := @Sk.rec (fun (qs : Sk) => forall (qt : Sk), (KExpr -> Type) -> VD (piShape qs qt)) (fun (qt : Sk) (qC : KExpr -> Type) => qC) (fun (qs1 : Sk) (qih : forall (qt : Sk), (KExpr -> Type) -> VD (piShape qs1 qt)) => @Sk.rec (fun (qt : Sk) => (KExpr -> Type) -> VD (piShape (Sk.kd qs1) qt)) (fun (qC : KExpr -> Type) => qC) (fun (qs2 : Sk) (qa : (KExpr -> Type) -> VD (piShape (Sk.kd qs1) qs2)) (qC : KExpr -> Type) => qC) (fun (qd : Sk) (qc : Sk) (qa : (KExpr -> Type) -> VD (piShape (Sk.kd qs1) qd)) (qb : (KExpr -> Type) -> VD (piShape (Sk.kd qs1) qc)) (qC : KExpr -> Type) => qC)) (fun (qd : Sk) (qc : Sk) (qa : forall (qt : Sk), (KExpr -> Type) -> VD (piShape qd qt)) (qb : forall (qt : Sk), (KExpr -> Type) -> VD (piShape qc qt)) (qt : Sk) (qC : KExpr -> Type) => qC) s t C";
 
 /// The junk value of each shape. Corpus `junkD` (Shapes.lean:67) with `SN`
 /// replaced by the spec's `whnf_acc`. Its existence is what makes `GoodD`
 /// inhabited at EVERY shape, which the dependent Pi-candidate's cr1 needs.
-pub(super) const SRC_JUNK_D: &str = "def junkD (s : Sk) : VD s := Sk.rec (fun (qs : Sk) => VD qs) (fun (qe : KExpr) => whnf_acc qe) (fun (qs1 : Sk) (qih : VD qs1) (qe : KExpr) => whnf_acc qe) (fun (qd : Sk) (qc : Sk) (qihd : VD qd) (qihc : VD qc) (qx : VD qd) => qihc) s";
+pub(super) const SRC_JUNK_D: &str = "def junkD (s : Sk) : VD s := @Sk.rec (fun (qs : Sk) => VD qs) (fun (qe : KExpr) => whnf_acc qe) (fun (qs1 : Sk) (qih : VD qs1) (qe : KExpr) => whnf_acc qe) (fun (qd : Sk) (qc : Sk) (qihd : VD qd) (qihc : VD qc) (qx : VD qd) => qihc) s";
 
 /// The `Type 1` lift of R10's candidate interface, with NO new inductive: a
 /// constant function out of a `Sort 2` domain IS a universe lift. `GoodD` must
@@ -97,7 +97,7 @@ pub(super) const SRC_GOOD_SET: &str =
 /// `GoodD` (Shapes.lean:126) at R10's HEAD-INERT candidate interface — not at
 /// the unrestricted one, because R10 proved unrestricted cr3 false for the
 /// Pi-candidate over the real reflected environment.
-pub(super) const SRC_GOOD_D: &str = "def GoodD (s : Sk) (v : VD s) : Type 1 := Sk.rec (fun (qs : Sk) => VD qs -> Type 1) (fun (qC : VD Sk.ty) => GoodSet qC) (fun (qs1 : Sk) (qih : VD qs1 -> Type 1) (qC : VD (Sk.kd qs1)) => GoodSet qC) (fun (qd : Sk) (qc : Sk) (qihd : VD qd -> Type 1) (qihc : VD qc -> Type 1) (qf : VD (Sk.arr qd qc)) => forall (qx : VD qd), qihd qx -> qihc (qf qx)) s v";
+pub(super) const SRC_GOOD_D: &str = "def GoodD (s : Sk) (v : VD s) : Type 1 := @Sk.rec (fun (qs : Sk) => VD qs -> Type 1) (fun (qC : VD Sk.ty) => GoodSet qC) (fun (qs1 : Sk) (qih : VD qs1 -> Type 1) (qC : VD (Sk.kd qs1)) => GoodSet qC) (fun (qd : Sk) (qc : Sk) (qihd : VD qd -> Type 1) (qihc : VD qc -> Type 1) (qf : VD (Sk.arr qd qc)) => forall (qx : VD qd), qihd qx -> qihc (qf qx)) s v";
 
 /// THE PACKAGED VALUE TYPE. Corpus `Val := Sigma s : Sk, VD s`
 /// (Shapes.lean:64) as a one-constructor inductive, since the spec has no sigma.
@@ -107,11 +107,11 @@ pub(super) const SRC_VAL: &str = "inductive Val : Type 1
 
 /// The shape of a packaged value (corpus `.1`).
 pub(super) const SRC_VAL_S: &str =
-    "def valS (v : Val) : Sk := Val.rec (fun (qv : Val) => Sk) (fun (qs : Sk) (qx : VD qs) => qs) v";
+    "def valS (v : Val) : Sk := @Val.rec (fun (qv : Val) => Sk) (fun (qs : Sk) (qx : VD qs) => qs) v";
 
 /// The payload of a packaged value (corpus `.2`) — a DEPENDENT projection, so
 /// its motive is `fun qv => VD (valS qv)`.
-pub(super) const SRC_VAL_D: &str = "def valD (v : Val) : VD (valS v) := Val.rec (fun (qv : Val) => VD (valS qv)) (fun (qs : Sk) (qx : VD qs) => qx) v";
+pub(super) const SRC_VAL_D: &str = "def valD (v : Val) : VD (valS v) := @Val.rec (fun (qv : Val) => VD (valS qv)) (fun (qs : Sk) (qx : VD qs) => qx) v";
 
 /// The candidate a packaged value denotes (corpus `vcar`).
 pub(super) const SRC_VAL_CAR: &str =
@@ -121,7 +121,7 @@ pub(super) const SRC_VAL_CAR: &str =
 pub(super) const SRC_VAL_GOOD: &str = "def valGood (v : Val) : Type 1 := GoodD (valS v) (valD v)";
 
 /// The junk value of a shape, packaged (corpus `junkV`).
-pub(super) const SRC_VAL_JUNK: &str = "def valJunk (s : Sk) : Val := Val.mk s (junkD s)";
+pub(super) const SRC_VAL_JUNK: &str = "def valJunk (s : Sk) : Val := @Val.mk s (junkD s)";
 
 // ================================================================
 // Group B — shape environments, shape typing, and the interpretation.
@@ -130,7 +130,7 @@ pub(super) const SRC_VAL_JUNK: &str = "def valJunk (s : Sk) : Val := Val.mk s (j
 // ================================================================
 
 /// Extending a shape environment under a binder. Corpus `skcons` (FWK.lean:33).
-pub(super) const SRC_SKCONS: &str = "def skcons (s : Sk) (D : Nat -> Sk) (i : Nat) : Sk := Nat.rec (fun (qi : Nat) => Sk) s (fun (qn : Nat) (qih : Sk) => D qn) i";
+pub(super) const SRC_SKCONS: &str = "def skcons (s : Sk) (D : Nat -> Sk) (i : Nat) : Sk := @Nat.rec (fun (qi : Nat) => Sk) s (fun (qn : Nat) (qih : Sk) => D qn) i";
 
 /// A DEPENDENT valuation: a value of the RIGHT SHAPE for every de Bruijn index.
 /// Corpus `VEnv` (FInterp.lean:36) is untyped and needs `MatchEnv`
@@ -143,7 +143,7 @@ pub(super) const SRC_VENV_D: &str =
 
 /// Extending a dependent valuation. Corpus `vcons` (FInterp.lean:39), with the
 /// `Nat.rec` motive carrying the shape so both branches typecheck.
-pub(super) const SRC_VCONS_D: &str = "def vconsD (s : Sk) (D : Nat -> Sk) (v : VD s) (r : VEnvD D) (i : Nat) : VD (skcons s D i) := Nat.rec (fun (qi : Nat) => VD (skcons s D qi)) v (fun (qn : Nat) (qih : VD (skcons s D qn)) => r qn) i";
+pub(super) const SRC_VCONS_D: &str = "def vconsD (s : Sk) (D : Nat -> Sk) (v : VD s) (r : VEnvD D) (i : Nat) : VD (skcons s D i) := @Nat.rec (fun (qi : Nat) => VD (skcons s D qi)) v (fun (qn : Nat) (qih : VD (skcons s D qn)) => r qn) i";
 
 /// A valuation is good when all its values are. Corpus `GoodEnv`
 /// (FInterp.lean:45).
@@ -184,7 +184,7 @@ pub(super) fn src_sval() -> String {
     let m_lam = "(fun (qD : Nat -> Sk) (qA : KExpr) (qb : KExpr) (qsA : Sk) (qc : Sk) (qhA : WK qD qA qsA) (qhb : WK (skcons (domSk qsA) qD) qb qc) (qihA : VEnvD qD -> VD qsA) (qihb : VEnvD (skcons (domSk qsA) qD) -> VD qc) (qr : VEnvD qD) (qx : VD (domSk qsA)) => qihb (vconsD (domSk qsA) qD qx qr))";
     let m_app = "(fun (qD : Nat -> Sk) (qf : KExpr) (qa : KExpr) (qd : Sk) (qc : Sk) (qhf : WK qD qf (Sk.arr qd qc)) (qha : WK qD qa qd) (qihf : VEnvD qD -> VD (Sk.arr qd qc)) (qiha : VEnvD qD -> VD qd) (qr : VEnvD qD) => qihf qr (qiha qr))";
     format!(
-        "def sval (D : Nat -> Sk) (e : KExpr) (s : Sk) (h : WK D e s) (r : VEnvD D) : VD s := WK.rec {motive} {m_var} {m_sort} {m_pi} {m_lam} {m_app} D e s h r"
+        "def sval (D : Nat -> Sk) (e : KExpr) (s : Sk) (h : WK D e s) (r : VEnvD D) : VD s := @WK.rec {motive} {m_var} {m_sort} {m_pi} {m_lam} {m_app} D e s h r"
     )
 }
 
@@ -288,22 +288,22 @@ pub(super) fn val_goodset_whnfacc() -> String {
     format!("goodSet_up {TOPSET} isCandHI_whnfAcc")
 }
 
-pub(super) const TY_VCARD_MKTYD: &str = "forall (s : Sk) (t : Sk) (C : KExpr -> Type), Eq (KExpr -> Type) (vcarD (piShape s t) (mkTyD s t C)) C";
-pub(super) const VAL_VCARD_MKTYD: &str = "fun (s : Sk) (t : Sk) (C : KExpr -> Type) => Sk.rec (fun (qs : Sk) => forall (qt : Sk), Eq (KExpr -> Type) (vcarD (piShape qs qt) (mkTyD qs qt C)) C) (fun (qt : Sk) => Eq.refl (KExpr -> Type) C) (fun (qs1 : Sk) (qih : forall (qt : Sk), Eq (KExpr -> Type) (vcarD (piShape qs1 qt) (mkTyD qs1 qt C)) C) => Sk.rec (fun (qt : Sk) => Eq (KExpr -> Type) (vcarD (piShape (Sk.kd qs1) qt) (mkTyD (Sk.kd qs1) qt C)) C) (Eq.refl (KExpr -> Type) C) (fun (qs2 : Sk) (qa : Eq (KExpr -> Type) (vcarD (piShape (Sk.kd qs1) qs2) (mkTyD (Sk.kd qs1) qs2 C)) C) => Eq.refl (KExpr -> Type) C) (fun (qd : Sk) (qc : Sk) (qa : Eq (KExpr -> Type) (vcarD (piShape (Sk.kd qs1) qd) (mkTyD (Sk.kd qs1) qd C)) C) (qb : Eq (KExpr -> Type) (vcarD (piShape (Sk.kd qs1) qc) (mkTyD (Sk.kd qs1) qc C)) C) => Eq.refl (KExpr -> Type) C)) (fun (qd : Sk) (qc : Sk) (qa : forall (qt : Sk), Eq (KExpr -> Type) (vcarD (piShape qd qt) (mkTyD qd qt C)) C) (qb : forall (qt : Sk), Eq (KExpr -> Type) (vcarD (piShape qc qt) (mkTyD qc qt C)) C) (qt : Sk) => Eq.refl (KExpr -> Type) C) s t";
+pub(super) const TY_VCARD_MKTYD: &str = "forall (s : Sk) (t : Sk) (C : KExpr -> Type), @Eq (KExpr -> Type) (vcarD (piShape s t) (mkTyD s t C)) C";
+pub(super) const VAL_VCARD_MKTYD: &str = "fun (s : Sk) (t : Sk) (C : KExpr -> Type) => @Sk.rec (fun (qs : Sk) => forall (qt : Sk), @Eq (KExpr -> Type) (vcarD (piShape qs qt) (mkTyD qs qt C)) C) (fun (qt : Sk) => @Eq.refl (KExpr -> Type) C) (fun (qs1 : Sk) (qih : forall (qt : Sk), @Eq (KExpr -> Type) (vcarD (piShape qs1 qt) (mkTyD qs1 qt C)) C) => @Sk.rec (fun (qt : Sk) => @Eq (KExpr -> Type) (vcarD (piShape (Sk.kd qs1) qt) (mkTyD (Sk.kd qs1) qt C)) C) (@Eq.refl (KExpr -> Type) C) (fun (qs2 : Sk) (qa : @Eq (KExpr -> Type) (vcarD (piShape (Sk.kd qs1) qs2) (mkTyD (Sk.kd qs1) qs2 C)) C) => @Eq.refl (KExpr -> Type) C) (fun (qd : Sk) (qc : Sk) (qa : @Eq (KExpr -> Type) (vcarD (piShape (Sk.kd qs1) qd) (mkTyD (Sk.kd qs1) qd C)) C) (qb : @Eq (KExpr -> Type) (vcarD (piShape (Sk.kd qs1) qc) (mkTyD (Sk.kd qs1) qc C)) C) => @Eq.refl (KExpr -> Type) C)) (fun (qd : Sk) (qc : Sk) (qa : forall (qt : Sk), @Eq (KExpr -> Type) (vcarD (piShape qd qt) (mkTyD qd qt C)) C) (qb : forall (qt : Sk), @Eq (KExpr -> Type) (vcarD (piShape qc qt) (mkTyD qc qt C)) C) (qt : Sk) => @Eq.refl (KExpr -> Type) C) s t";
 
 pub(super) const TY_GOODD_MKTYD: &str =
     "forall (s : Sk) (t : Sk) (C : KExpr -> Type), IsCandHI C -> GoodD (piShape s t) (mkTyD s t C)";
-pub(super) const VAL_GOODD_MKTYD: &str = "fun (s : Sk) (t : Sk) (C : KExpr -> Type) (h : IsCandHI C) => Sk.rec (fun (qs : Sk) => forall (qt : Sk), GoodD (piShape qs qt) (mkTyD qs qt C)) (fun (qt : Sk) => goodSet_up C h) (fun (qs1 : Sk) (qih : forall (qt : Sk), GoodD (piShape qs1 qt) (mkTyD qs1 qt C)) => Sk.rec (fun (qt : Sk) => GoodD (piShape (Sk.kd qs1) qt) (mkTyD (Sk.kd qs1) qt C)) (goodSet_up C h) (fun (qs2 : Sk) (qa : GoodD (piShape (Sk.kd qs1) qs2) (mkTyD (Sk.kd qs1) qs2 C)) => goodSet_up C h) (fun (qd : Sk) (qc : Sk) (qa : GoodD (piShape (Sk.kd qs1) qd) (mkTyD (Sk.kd qs1) qd C)) (qb : GoodD (piShape (Sk.kd qs1) qc) (mkTyD (Sk.kd qs1) qc C)) => goodSet_up C h)) (fun (qd : Sk) (qc : Sk) (qa : forall (qt : Sk), GoodD (piShape qd qt) (mkTyD qd qt C)) (qb : forall (qt : Sk), GoodD (piShape qc qt) (mkTyD qc qt C)) (qt : Sk) => goodSet_up C h) s t";
+pub(super) const VAL_GOODD_MKTYD: &str = "fun (s : Sk) (t : Sk) (C : KExpr -> Type) (h : IsCandHI C) => @Sk.rec (fun (qs : Sk) => forall (qt : Sk), GoodD (piShape qs qt) (mkTyD qs qt C)) (fun (qt : Sk) => goodSet_up C h) (fun (qs1 : Sk) (qih : forall (qt : Sk), GoodD (piShape qs1 qt) (mkTyD qs1 qt C)) => @Sk.rec (fun (qt : Sk) => GoodD (piShape (Sk.kd qs1) qt) (mkTyD (Sk.kd qs1) qt C)) (goodSet_up C h) (fun (qs2 : Sk) (qa : GoodD (piShape (Sk.kd qs1) qs2) (mkTyD (Sk.kd qs1) qs2 C)) => goodSet_up C h) (fun (qd : Sk) (qc : Sk) (qa : GoodD (piShape (Sk.kd qs1) qd) (mkTyD (Sk.kd qs1) qd C)) (qb : GoodD (piShape (Sk.kd qs1) qc) (mkTyD (Sk.kd qs1) qc C)) => goodSet_up C h)) (fun (qd : Sk) (qc : Sk) (qa : forall (qt : Sk), GoodD (piShape qd qt) (mkTyD qd qt C)) (qb : forall (qt : Sk), GoodD (piShape qc qt) (mkTyD qc qt C)) (qt : Sk) => goodSet_up C h) s t";
 
 pub(super) const TY_GOODD_JUNKD: &str = "forall (s : Sk), GoodD s (junkD s)";
-pub(super) const VAL_GOODD_JUNKD: &str = "fun (s : Sk) => Sk.rec (fun (qs : Sk) => GoodD qs (junkD qs)) goodSet_whnfAcc (fun (qs1 : Sk) (qih : GoodD qs1 (junkD qs1)) => goodSet_whnfAcc) (fun (qd : Sk) (qc : Sk) (qihd : GoodD qd (junkD qd)) (qihc : GoodD qc (junkD qc)) (qx : VD qd) (qhx : GoodD qd qx) => qihc) s";
+pub(super) const VAL_GOODD_JUNKD: &str = "fun (s : Sk) => @Sk.rec (fun (qs : Sk) => GoodD qs (junkD qs)) goodSet_whnfAcc (fun (qs1 : Sk) (qih : GoodD qs1 (junkD qs1)) => goodSet_whnfAcc) (fun (qd : Sk) (qc : Sk) (qihd : GoodD qd (junkD qd)) (qihc : GoodD qc (junkD qc)) (qx : VD qd) (qhx : GoodD qd qx) => qihc) s";
 
 pub(super) const TY_ISCANDHI_VCARD: &str =
     "forall (s : Sk) (v : VD s), GoodD s v -> IsCandHI (vcarD s v)";
-pub(super) const VAL_ISCANDHI_VCARD: &str = "fun (s : Sk) (v : VD s) (h : GoodD s v) => Sk.rec (fun (qs : Sk) => forall (qv : VD qs), GoodD qs qv -> IsCandHI (vcarD qs qv)) (fun (qC : VD Sk.ty) (qh : GoodD Sk.ty qC) => goodSet_down qC qh) (fun (qs1 : Sk) (qih : forall (qv : VD qs1), GoodD qs1 qv -> IsCandHI (vcarD qs1 qv)) (qC : VD (Sk.kd qs1)) (qh : GoodD (Sk.kd qs1) qC) => goodSet_down qC qh) (fun (qd : Sk) (qc : Sk) (qa : forall (qv : VD qd), GoodD qd qv -> IsCandHI (vcarD qd qv)) (qb : forall (qv : VD qc), GoodD qc qv -> IsCandHI (vcarD qc qv)) (qf : VD (Sk.arr qd qc)) (qh : GoodD (Sk.arr qd qc) qf) => isCandHI_whnfAcc) s v h";
+pub(super) const VAL_ISCANDHI_VCARD: &str = "fun (s : Sk) (v : VD s) (h : GoodD s v) => @Sk.rec (fun (qs : Sk) => forall (qv : VD qs), GoodD qs qv -> IsCandHI (vcarD qs qv)) (fun (qC : VD Sk.ty) (qh : GoodD Sk.ty qC) => goodSet_down qC qh) (fun (qs1 : Sk) (qih : forall (qv : VD qs1), GoodD qs1 qv -> IsCandHI (vcarD qs1 qv)) (qC : VD (Sk.kd qs1)) (qh : GoodD (Sk.kd qs1) qC) => goodSet_down qC qh) (fun (qd : Sk) (qc : Sk) (qa : forall (qv : VD qd), GoodD qd qv -> IsCandHI (vcarD qd qv)) (qb : forall (qv : VD qc), GoodD qc qv -> IsCandHI (vcarD qc qv)) (qf : VD (Sk.arr qd qc)) (qh : GoodD (Sk.arr qd qc) qf) => isCandHI_whnfAcc) s v h";
 
 pub(super) const TY_GOODENVD_VCONSD: &str = "forall (s : Sk) (D : Nat -> Sk) (v : VD s) (r : VEnvD D), GoodD s v -> GoodEnvD D r -> GoodEnvD (skcons s D) (vconsD s D v r)";
-pub(super) const VAL_GOODENVD_VCONSD: &str = "fun (s : Sk) (D : Nat -> Sk) (v : VD s) (r : VEnvD D) (hv : GoodD s v) (hr : GoodEnvD D r) (i : Nat) => Nat.rec (fun (qi : Nat) => GoodD (skcons s D qi) (vconsD s D v r qi)) hv (fun (qn : Nat) (qih : GoodD (skcons s D qn) (vconsD s D v r qn)) => hr qn) i";
+pub(super) const VAL_GOODENVD_VCONSD: &str = "fun (s : Sk) (D : Nat -> Sk) (v : VD s) (r : VEnvD D) (hv : GoodD s v) (hr : GoodEnvD D r) (i : Nat) => @Nat.rec (fun (qi : Nat) => GoodD (skcons s D qi) (vconsD s D v r qi)) hv (fun (qn : Nat) (qih : GoodD (skcons s D qn) (vconsD s D v r qn)) => hr qn) i";
 
 pub(super) const TY_GOODENVD_JUNK: &str =
     "forall (D : Nat -> Sk), GoodEnvD D (fun (qi : Nat) => junkD (D qi))";
@@ -360,7 +360,7 @@ pub(super) fn val_sval_good() -> String {
     );
 
     format!(
-        "fun (D : Nat -> Sk) (e : KExpr) (s : Sk) (h : WK D e s) => WK.rec {motive} {m_var} {m_sort} {m_pi} {m_lam} {m_app} D e s h"
+        "fun (D : Nat -> Sk) (e : KExpr) (s : Sk) (h : WK D e s) => @WK.rec {motive} {m_var} {m_sort} {m_pi} {m_lam} {m_app} D e s h"
     )
 }
 
@@ -375,8 +375,8 @@ pub(super) const VAL_SVAL_EXCLUDES_OMEGA: &str = "fun (D : Nat -> Sk) (e : KExpr
 
 // --- the semantic beta law: R11's wall, crossed --------------------------
 
-pub(super) const TY_SVAL_BETA: &str = "forall (D : Nat -> Sk) (A : KExpr) (b : KExpr) (a : KExpr) (sA : Sk) (c : Sk) (hA : WK D A sA) (hb : WK (skcons (domSk sA) D) b c) (ha : WK D a (domSk sA)) (r : VEnvD D), Eq (VD c) (sval D (KExpr.app (KExpr.lam A b) a) c (WK.app D (KExpr.lam A b) a (domSk sA) c (WK.lam D A b sA c hA hb) ha) r) (sval (skcons (domSk sA) D) b c hb (vconsD (domSk sA) D (sval D a (domSk sA) ha r) r))";
-pub(super) const VAL_SVAL_BETA: &str = "fun (D : Nat -> Sk) (A : KExpr) (b : KExpr) (a : KExpr) (sA : Sk) (c : Sk) (hA : WK D A sA) (hb : WK (skcons (domSk sA) D) b c) (ha : WK D a (domSk sA)) (r : VEnvD D) => Eq.refl (VD c) (sval (skcons (domSk sA) D) b c hb (vconsD (domSk sA) D (sval D a (domSk sA) ha r) r))";
+pub(super) const TY_SVAL_BETA: &str = "forall (D : Nat -> Sk) (A : KExpr) (b : KExpr) (a : KExpr) (sA : Sk) (c : Sk) (hA : WK D A sA) (hb : WK (skcons (domSk sA) D) b c) (ha : WK D a (domSk sA)) (r : VEnvD D), @Eq (VD c) (sval D (KExpr.app (KExpr.lam A b) a) c (WK.app D (KExpr.lam A b) a (domSk sA) c (WK.lam D A b sA c hA hb) ha) r) (sval (skcons (domSk sA) D) b c hb (vconsD (domSk sA) D (sval D a (domSk sA) ha r) r))";
+pub(super) const VAL_SVAL_BETA: &str = "fun (D : Nat -> Sk) (A : KExpr) (b : KExpr) (a : KExpr) (sA : Sk) (c : Sk) (hA : WK D A sA) (hb : WK (skcons (domSk sA) D) b c) (ha : WK D a (domSk sA)) (r : VEnvD D) => @Eq.refl (VD c) (sval (skcons (domSk sA) D) b c hb (vconsD (domSk sA) D (sval D a (domSk sA) ha r) r))";
 
 /// `instantiate (bvar 0) a` IS `a`, at an arbitrary `a`. Not `Eq.refl`:
 /// `instantiate_bvar_geq` substitutes the LIFTED value, so the redex's
@@ -384,14 +384,14 @@ pub(super) const VAL_SVAL_BETA: &str = "fun (D : Nat -> Sk) (A : KExpr) (b : KEx
 /// `lift_zero_identity` is exactly that lemma, and it is what turns the head
 /// beta step below into a step to `a` itself.
 pub(super) const TY_BETA_CONTRACTUM_IS_ARG: &str =
-    "forall (a : KExpr), Eq KExpr (instantiate (KExpr.bvar Nat.zero) a) a";
+    "forall (a : KExpr), @Eq KExpr (instantiate (KExpr.bvar Nat.zero) a) a";
 pub(super) const VAL_BETA_CONTRACTUM_IS_ARG: &str = "fun (a : KExpr) => lift_zero_identity a";
 
 /// The head beta step of the identity redex, at an ARBITRARY annotation and an
 /// ARBITRARY argument, stated at the contractum `a` itself.
 pub(super) const TY_BETA_STEP_GENERAL: &str =
     "forall (A : KExpr) (a : KExpr), whnf_step (KExpr.app (KExpr.lam A (KExpr.bvar Nat.zero)) a) a";
-pub(super) const VAL_BETA_STEP_GENERAL: &str = "fun (A : KExpr) (a : KExpr) => Eq.substType KExpr (fun (qz : KExpr) => whnf_step (KExpr.app (KExpr.lam A (KExpr.bvar Nat.zero)) a) qz) (instantiate (KExpr.bvar Nat.zero) a) a (r12_beta_contractum_is_arg a) (whnf_step.beta (KExpr.app (KExpr.lam A (KExpr.bvar Nat.zero)) a) (instantiate (KExpr.bvar Nat.zero) a) (beta_reduces.beta A (KExpr.bvar Nat.zero) a))";
+pub(super) const VAL_BETA_STEP_GENERAL: &str = "fun (A : KExpr) (a : KExpr) => @Eq.substType KExpr (fun (qz : KExpr) => whnf_step (KExpr.app (KExpr.lam A (KExpr.bvar Nat.zero)) a) qz) (instantiate (KExpr.bvar Nat.zero) a) a (r12_beta_contractum_is_arg a) (whnf_step.beta (KExpr.app (KExpr.lam A (KExpr.bvar Nat.zero)) a) (instantiate (KExpr.bvar Nat.zero) a) (beta_reduces.beta A (KExpr.bvar Nat.zero) a))";
 
 /// **THE GENERAL CONVERSION-INVARIANCE STATEMENT.** Paired with
 /// `r12_beta_step_general`, which says the LHS's subject takes a real
@@ -399,8 +399,8 @@ pub(super) const VAL_BETA_STEP_GENERAL: &str = "fun (A : KExpr) (a : KExpr) => E
 /// `r11_candInterp_step_conv_refuted` refutes for `candInterp` — at an
 /// ARBITRARY shape environment, annotation, argument and valuation, not at one
 /// exhibit.
-pub(super) const TY_SVAL_BETA_CONTRACTUM: &str = "forall (D : Nat -> Sk) (A : KExpr) (a : KExpr) (sA : Sk) (hA : WK D A sA) (ha : WK D a (domSk sA)) (r : VEnvD D), Eq (VD (domSk sA)) (sval D (KExpr.app (KExpr.lam A (KExpr.bvar Nat.zero)) a) (domSk sA) (WK.app D (KExpr.lam A (KExpr.bvar Nat.zero)) a (domSk sA) (domSk sA) (WK.lam D A (KExpr.bvar Nat.zero) sA (domSk sA) hA (WK.var (skcons (domSk sA) D) Nat.zero)) ha) r) (sval D a (domSk sA) ha r)";
-pub(super) const VAL_SVAL_BETA_CONTRACTUM: &str = "fun (D : Nat -> Sk) (A : KExpr) (a : KExpr) (sA : Sk) (hA : WK D A sA) (ha : WK D a (domSk sA)) (r : VEnvD D) => Eq.refl (VD (domSk sA)) (sval D a (domSk sA) ha r)";
+pub(super) const TY_SVAL_BETA_CONTRACTUM: &str = "forall (D : Nat -> Sk) (A : KExpr) (a : KExpr) (sA : Sk) (hA : WK D A sA) (ha : WK D a (domSk sA)) (r : VEnvD D), @Eq (VD (domSk sA)) (sval D (KExpr.app (KExpr.lam A (KExpr.bvar Nat.zero)) a) (domSk sA) (WK.app D (KExpr.lam A (KExpr.bvar Nat.zero)) a (domSk sA) (domSk sA) (WK.lam D A (KExpr.bvar Nat.zero) sA (domSk sA) hA (WK.var (skcons (domSk sA) D) Nat.zero)) ha) r) (sval D a (domSk sA) ha r)";
+pub(super) const VAL_SVAL_BETA_CONTRACTUM: &str = "fun (D : Nat -> Sk) (A : KExpr) (a : KExpr) (sA : Sk) (hA : WK D A sA) (ha : WK D a (domSk sA)) (r : VEnvD D) => @Eq.refl (VD (domSk sA)) (sval D a (domSk sA) ha r)";
 
 pub(super) fn ty_beta_step_witness() -> String {
     format!("whnf_step r12_betaRedex {S0}")
@@ -410,10 +410,10 @@ pub(super) fn val_beta_step_witness() -> String {
 }
 
 pub(super) fn ty_sval_beta_transports() -> String {
-    format!("forall (r : VEnvD r12_betaEnv), Eq (VD {KDTY}) (sval r12_betaEnv r12_betaRedex {KDTY} r12_betaDeriv r) (sval r12_betaEnv {S0} {KDTY} (WK.sort r12_betaEnv Level.zero) r)")
+    format!("forall (r : VEnvD r12_betaEnv), @Eq (VD {KDTY}) (sval r12_betaEnv r12_betaRedex {KDTY} r12_betaDeriv r) (sval r12_betaEnv {S0} {KDTY} (WK.sort r12_betaEnv Level.zero) r)")
 }
 pub(super) fn val_sval_beta_transports() -> String {
-    format!("fun (r : VEnvD r12_betaEnv) => Eq.refl (VD {KDTY}) (sval r12_betaEnv {S0} {KDTY} (WK.sort r12_betaEnv Level.zero) r)")
+    format!("fun (r : VEnvD r12_betaEnv) => @Eq.refl (VD {KDTY}) (sval r12_betaEnv {S0} {KDTY} (WK.sort r12_betaEnv Level.zero) r)")
 }
 
 /// THE CONTRAST, in one kernel-checked constant: R11's refutation of one
@@ -422,13 +422,13 @@ pub(super) fn val_sval_beta_transports() -> String {
 pub(super) const TY_CONV_CONTRAST: &str =
     "AndType (r12_candInterpStepConv -> Empty) r12_svalTransportsBeta";
 pub(super) fn val_conv_contrast() -> String {
-    format!("AndType.intro (r12_candInterpStepConv -> Empty) r12_svalTransportsBeta r11_candInterp_step_conv_refuted (fun (qe : KExpr) (qh : vcarD {KDTY} (sval r12_betaEnv r12_betaRedex {KDTY} r12_betaDeriv r12_betaJunkEnv) qe) => qh)")
+    format!("@AndType.intro (r12_candInterpStepConv -> Empty) r12_svalTransportsBeta r11_candInterp_step_conv_refuted (fun (qe : KExpr) (qh : vcarD {KDTY} (sval r12_betaEnv r12_betaRedex {KDTY} r12_betaDeriv r12_betaJunkEnv) qe) => qh)")
 }
 
 // --- the dependent Pi candidate -----------------------------------------
 
 pub(super) const TY_PICODDEP_INTRO: &str = "forall (D : Nat -> Sk) (d : Sk) (sB : Sk) (GB : VD d -> VD sB) (r : VEnvD D) (w : KExpr), vcarD sB (GB (junkD d)) w -> piCodDepIdx D d sB GB r w -> piCodDep D d sB GB r w";
-pub(super) const VAL_PICODDEP_INTRO: &str = "fun (D : Nat -> Sk) (d : Sk) (sB : Sk) (GB : VD d -> VD sB) (r : VEnvD D) (w : KExpr) (hj : vcarD sB (GB (junkD d)) w) (hd : piCodDepIdx D d sB GB r w) => AndType.intro (vcarD sB (GB (junkD d)) w) (piCodDepIdx D d sB GB r w) hj hd";
+pub(super) const VAL_PICODDEP_INTRO: &str = "fun (D : Nat -> Sk) (d : Sk) (sB : Sk) (GB : VD d -> VD sB) (r : VEnvD D) (w : KExpr) (hj : vcarD sB (GB (junkD d)) w) (hd : piCodDepIdx D d sB GB r w) => @AndType.intro (vcarD sB (GB (junkD d)) w) (piCodDepIdx D d sB GB r w) hj hd";
 
 pub(super) const TY_ISCANDHI_PICODDEP: &str = "forall (D : Nat -> Sk) (d : Sk) (sB : Sk) (GB : VD d -> VD sB) (r : VEnvD D), GoodEnvD D r -> GoodD (Sk.arr d sB) GB -> IsCandHI (piCodDep D d sB GB r)";
 
@@ -446,14 +446,14 @@ pub(super) fn val_iscandhi_picoddep() -> String {
         left("qw")
     );
     let f_cr2 = format!(
-        "(fun (qw : KExpr) (qw2 : KExpr) (qh : piCodDep D d sB GB r qw) (qs : whnf_step qw qw2) => AndType.intro {} {} (isCandHI_cr2 {jset} {hj} qw qw2 ({} qh) qs) (fun (qy : KExpr) (qhy : WK D qy d) => isCandHI_cr2 {yset} {hy} qw qw2 ({} qh qy qhy) qs))",
+        "(fun (qw : KExpr) (qw2 : KExpr) (qh : piCodDep D d sB GB r qw) (qs : whnf_step qw qw2) => @AndType.intro {} {} (isCandHI_cr2 {jset} {hj} qw qw2 ({} qh) qs) (fun (qy : KExpr) (qhy : WK D qy d) => isCandHI_cr2 {yset} {hy} qw qw2 ({} qh qy qhy) qs))",
         jc("qw2"),
         ix("qw2"),
         left("qw"),
         right("qw")
     );
     let f_cr3 = format!(
-        "(fun (qw : KExpr) (qhi : HeadInert qw) (qhn : Neutral qw) (qhred : forall (qw3 : KExpr), whnf_step qw qw3 -> piCodDep D d sB GB r qw3) => AndType.intro {} {} (isCandHI_cr3 {jset} {hj} qw qhi qhn (fun (qw2 : KExpr) (qs : whnf_step qw qw2) => {} (qhred qw2 qs))) (fun (qy : KExpr) (qhy : WK D qy d) => isCandHI_cr3 {yset} {hy} qw qhi qhn (fun (qw2 : KExpr) (qs : whnf_step qw qw2) => {} (qhred qw2 qs) qy qhy)))",
+        "(fun (qw : KExpr) (qhi : HeadInert qw) (qhn : Neutral qw) (qhred : forall (qw3 : KExpr), whnf_step qw qw3 -> piCodDep D d sB GB r qw3) => @AndType.intro {} {} (isCandHI_cr3 {jset} {hj} qw qhi qhn (fun (qw2 : KExpr) (qs : whnf_step qw qw2) => {} (qhred qw2 qs))) (fun (qy : KExpr) (qhy : WK D qy d) => isCandHI_cr3 {yset} {hy} qw qhi qhn (fun (qw2 : KExpr) (qs : whnf_step qw qw2) => {} (qhred qw2 qs) qy qhy)))",
         jc("qw"),
         ix("qw"),
         left("qw2"),

@@ -8,6 +8,35 @@
 use super::*;
 use crate::test_utils::parse_check;
 
+// The actual elaborator reports the local function variables in this error.
+// Bind their equality relation, without depending on their allocated numbers.
+fn assert_pointwise_reflexivity_mismatch(error: &SpecError) {
+    let SpecError::ElabError(message) = error else {
+        panic!("expected the original elaborated equality mismatch, got {error:?}");
+    };
+    let rest = message
+        .strip_prefix("Failed to elaborate def (negative control): Type mismatch: expected fvar#")
+        .expect("the source must reach the pointwise equality mismatch");
+    let (left, rest) = rest.split_once(" = fvar#").expect("expected equality lhs");
+    let (right, rest) = rest
+        .split_once(", got fvar#")
+        .expect("expected equality rhs");
+    let (got_left, got_right) = rest.split_once(" = fvar#").expect("inferred equality");
+    let ids = [left, right, got_left, got_right].map(|id| {
+        id.parse::<u64>()
+            .expect("only a complete local variable id")
+    });
+    assert_ne!(
+        ids[0], ids[1],
+        "the goal must compare the two distinct functions"
+    );
+    assert_eq!(
+        (ids[2], ids[3]),
+        (ids[0], ids[0]),
+        "reflexivity must infer f=f where the original goal requires f=g"
+    );
+}
+
 /// Register R13 into a freshly-built substitution spec if the bundle stage has
 /// not already done it. Lets every test below run identically before and after
 /// the stage is wired into `bundles.rs`.
@@ -262,6 +291,14 @@ fn test_candmodel_r13_reflexivity_is_refused_at_the_witness() {
         "Eq.refl closed the funext witness — the two functions are definitionally equal after \
          all, and spec_funext_witness is not a non-vacuity witness"
     );
+    let Err(SpecError::TypeError(message)) = &refused else {
+        panic!("expected the original kernel equality mismatch, got {refused:?}");
+    };
+    assert!(
+        message.starts_with("add_decl r13_refl_probe: Type check error in declaration r13_refl_probe: ")
+            && message.contains("Type mismatch: expected (fun (n : Nat) => Nat.add Nat.zero n) = (fun (n : Nat) => n), got (fun (n : Nat) => Nat.add Nat.zero n) = (fun (n : Nat) => Nat.add Nat.zero n) (heads: Eq vs Eq)"),
+        "the original reflexive proof must fail at its unequal function goal: {message}"
+    );
 }
 
 /// MEASUREMENT. The general statement, with the pointwise hypothesis IN HAND,
@@ -272,6 +309,7 @@ fn test_candmodel_r13_pointwise_does_not_substitute() {
     let mut spec = r13_spec();
     assert!(
         spec.add_recursive_def(&probe_pointwise_refl(), "negative control")
+            .inspect_err(assert_pointwise_reflexivity_mismatch)
             .is_err(),
         "the pointwise hypothesis substituted definitionally — R12's stated obstruction is not \
          real and R13's derivation is unnecessary"

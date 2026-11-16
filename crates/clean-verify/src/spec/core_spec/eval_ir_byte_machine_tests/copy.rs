@@ -8,11 +8,11 @@
 use super::{check, context, machine_spec, register, returned, run, Function, Node};
 
 fn halted(value: &str, host: u64) -> String {
-    format!("IRByteConfigV1.halted Nat ({}) (IRByteWorldV1.mk Nat (ir_byte_retire_v1 1 byte_machine_external_mem) {host} (IRList.nil Nat) 2)", returned(&[value]))
+    format!("@IRByteConfigV1.halted Nat ({}) (@IRByteWorldV1.mk Nat (ir_byte_retire_v1 1 byte_machine_external_mem) {host} (@IRList.nil Nat) 2)", returned(&[value]))
 }
 
 fn fault(host: u64) -> String {
-    format!("IRByteConfigV1.halted Nat (IROutcome.type_error IRFault.bad_field) (IRByteWorldV1.mk Nat byte_machine_external_mem {host} (IRList.cons Nat 1 (IRList.nil Nat)) 2)")
+    format!("@IRByteConfigV1.halted Nat (IROutcome.type_error IRFault.bad_field) (@IRByteWorldV1.mk Nat byte_machine_external_mem {host} (@IRList.cons Nat 1 (@IRList.nil Nat)) 2)")
 }
 
 #[test]
@@ -180,7 +180,7 @@ fn byte_copy_machine_advances_once_and_rejects_stale_whole_claims() {
             &resumed,
             &halted("IRScalar.int_ 7", 37),
         );
-        register(&mut spec, "def byte_copy_direct_valid : Eq (IRStepResult) (ir_byte_copy_eval_v1 byte_copy_resume_ctx (IRTy.uint_ 64) (IRScalar.int_ 7)) (IRStepResult.value (IRScalar.int_ 7)) := Eq.refl (IRStepResult) (IRStepResult.value (IRScalar.int_ 7))");
+        register(&mut spec, "def byte_copy_direct_valid : @Eq (IRStepResult) (ir_byte_copy_eval_v1 byte_copy_resume_ctx (IRTy.uint_ 64) (IRScalar.int_ 7)) (IRStepResult.value (IRScalar.int_ 7)) := @Eq.refl (IRStepResult) (IRStepResult.value (IRScalar.int_ 7))");
         for (case, expected) in [
             halted("IRScalar.int_ 3", 37),
             halted("IRScalar.int_ 7", 38),
@@ -190,7 +190,7 @@ fn byte_copy_machine_advances_once_and_rejects_stale_whole_claims() {
         .enumerate()
         {
             let result = spec.add_recursive_def(
-                &format!("def byte_copy_stale_{case} : Eq (IRByteConfigV1 Nat) ({resumed}) ({expected}) := byte_copy_resumed_whole"),
+                &format!("def byte_copy_stale_{case} : @Eq (IRByteConfigV1 Nat) ({resumed}) ({expected}) := byte_copy_resumed_whole"),
                 "Deliberately stale Copy proof must not establish changed complete endpoints");
             let error = result
                 .expect_err("stale whole-claim proof must fail")

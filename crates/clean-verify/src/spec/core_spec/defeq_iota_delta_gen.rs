@@ -60,7 +60,7 @@ const DEF_WF_BWD: &str = "forall (e : KExpr) (e' : KExpr), delta_step (red_def e
 /// Identical for ι and δ: the only difference (the step proof `s`'s type) is
 /// absorbed by `hs`, which already has the matching shape in each interface.
 const TRANSPORT_BODY: &str = concat!(
-    "Eq.substType KExpr ",
+    "@Eq.substType KExpr ",
     "(fun (x : KExpr) => DefEq x e') ",
     "(instantiate_at e (KExpr.sort Level.zero) (Nat.add (bvar_ceiling e) (bvar_ceiling e'))) ",
     "e ",
@@ -69,7 +69,7 @@ const TRANSPORT_BODY: &str = concat!(
     "(Nat.add (bvar_ceiling e) (bvar_ceiling e')) ",
     "(le_add_self_left (bvar_ceiling e) (bvar_ceiling e'))) ",
     // inner transport: DefEq (inst e v d) (inst e' v d) -> DefEq (inst e v d) e'
-    "(Eq.substType KExpr ",
+    "(@Eq.substType KExpr ",
     "(fun (y : KExpr) => DefEq ",
     "(instantiate_at e (KExpr.sort Level.zero) (Nat.add (bvar_ceiling e) (bvar_ceiling e'))) y) ",
     "(instantiate_at e' (KExpr.sort Level.zero) (Nat.add (bvar_ceiling e) (bvar_ceiling e'))) ",
@@ -106,7 +106,7 @@ impl Specification {
                 concat!(
                     "fun (env : RecEnv) (w : RecEnvWellformed env) ",
                     "(e : KExpr) (e' : KExpr) (s : iota_step env e e') => ",
-                    "RecEnvWellformed.rec env ",
+                    "@RecEnvWellformed.rec env ",
                     "(fun (_ : RecEnvWellformed env) => DefEq e e') ",
                     "(fun (hs : {SUBST}) (hf : {FWD}) (hb : {BWD}) => {BODY}) ",
                     "w"
@@ -158,7 +158,7 @@ impl Specification {
                 concat!(
                     "fun (env : RedEnv) (w : DefEnvWellformed env) ",
                     "(e : KExpr) (e' : KExpr) (s : delta_step (red_def env) e e') => ",
-                    "DefEnvWellformed.rec env ",
+                    "@DefEnvWellformed.rec env ",
                     "(fun (_ : DefEnvWellformed env) => DefEq e e') ",
                     "(fun (hs : {SUBST}) (hf : {FWD}) (hb : {BWD}) => {BODY}) ",
                     "w"

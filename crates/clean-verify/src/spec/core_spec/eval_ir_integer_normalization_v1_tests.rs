@@ -96,15 +96,15 @@ fn integer_normalization_quantified_product_and_residue_have_no_answer_premises(
         let spec = normalized();
         for (claim, proof) in [
             (
-                "forall (a b : Nat), Eq Nat (ir_nat_mul a b) (Nat.mul a b)",
+                "forall (a b : Nat), @Eq Nat (ir_nat_mul a b) (Nat.mul a b)",
                 "fun (a b : Nat) => ir_nat_mul_canonical_agrees_v1 a b",
             ),
             (
-                "forall (a b divisor : Nat), Eq Nat (ir_nat_rem (ir_nat_mul a b) divisor) (ir_nat_rem_total_v1 (Nat.mul a b) divisor)",
+                "forall (a b divisor : Nat), @Eq Nat (ir_nat_rem (ir_nat_mul a b) divisor) (ir_nat_rem_total_v1 (Nat.mul a b) divisor)",
                 "fun (a b divisor : Nat) => ir_nat_mul_rem_total_agrees_v1 a b divisor",
             ),
             (
-                "forall (width a b : Nat), Eq Nat (ir_wrap width (ir_nat_mul a b)) (ir_nat_rem_total_v1 (Nat.mul a b) (ir_nat_pow2 width))",
+                "forall (width a b : Nat), @Eq Nat (ir_wrap width (ir_nat_mul a b)) (ir_nat_rem_total_v1 (Nat.mul a b) (ir_nat_pow2 width))",
                 "fun (width a b : Nat) => ir_wrap_mul_total_agrees_v1 width a b",
             ),
         ] {
@@ -331,7 +331,7 @@ fn integer_normalization_late_false_proof_does_not_publish_a_partial_package() {
             RESIDUES[0],
             (
                 RESIDUE_ROOTS[1],
-                "def ir_wrap_mul_total_agrees_v1 (width a b : Nat) : Eq Nat 0 1 := Eq.refl Nat 0",
+                "def ir_wrap_mul_total_agrees_v1 (width a b : Nat) : @Eq Nat 0 1 := @Eq.refl Nat 0",
             ),
         ];
         let error = install_residues_transactionally(&mut owner, rows.into_iter()).unwrap_err();

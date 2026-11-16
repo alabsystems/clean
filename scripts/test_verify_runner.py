@@ -12,6 +12,7 @@ Run: python3 scripts/test_verify_runner.py
 from __future__ import annotations
 
 import atexit
+import ast
 import json
 import math
 import os
@@ -39,7 +40,8 @@ _SANDBOX = _SANDBOX_OWNER.name
 os.environ["VERIFY_RUNNER_STATE_DIR"] = os.path.join(_SANDBOX, "state")
 os.environ["VERIFY_RUNNER_TARGET_DIR"] = os.path.join(_SANDBOX, "target")
 # Metadata queries invoke Cargo directly, outside run_one's environment setup.
-os.environ["CARGO_TARGET_DIR"] = os.environ["VERIFY_RUNNER_TARGET_DIR"]
+os.environ["CARGO_TARGET_DIR"] = os.path.join(
+    os.environ["VERIFY_RUNNER_TARGET_DIR"], "cargo-output")
 # THREE writable locations, not two. The journal is the third, and it was
 # missed on the first pass: every `write_record` in this file appended to the
 # real ~/.local/state/clean/suite-journal/ until this line existed, which is the
@@ -118,6 +120,33 @@ class _FakePath(str):
 
 
 class SandboxLifetime(unittest.TestCase):
+    def test_default_target_dir_is_canonical(self):
+        script = """
+from pathlib import Path
+import sys
+sys.path.insert(0, sys.argv[1])
+import verify_runner
+print(verify_runner.target_dir())
+print(verify_runner.compiler_query_target_dir())
+print(verify_runner.RUN_DIR)
+"""
+        env = dict(os.environ)
+        env.pop("VERIFY_RUNNER_TARGET_DIR", None)
+        proc = subprocess.run(
+            [sys.executable, "-c", script, str(Path(__file__).resolve().parent)],
+            env=env, capture_output=True, text=True, timeout=30)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        expected = ((Path(__file__).resolve().parent.parent
+                     / "target" / "verify-runner-managed").resolve()
+                    / "cargo-output")
+        measured, probe, run = (Path(line) for line in proc.stdout.splitlines())
+        self.assertEqual(measured, expected)
+        self.assertEqual(probe, expected.parent / "compiler-query-cargo-output")
+        self.assertEqual(run, expected.parent / "suite-runner")
+        self.assertEqual(len({measured, probe, run}), 3)
+        for path in (measured, probe, run):
+            self.assertEqual(path, path.resolve())
+
     def test_real_cargo_metadata_uses_the_owned_sandbox(self):
         script = """
 from pathlib import Path
@@ -141,7 +170,7 @@ print(json.dumps({"sandbox": subject._SANDBOX,
             observed = json.loads(proc.stdout)
             sandbox = Path(observed["sandbox"])
             self.assertEqual(sandbox.parent.resolve(), Path(holder).resolve())
-            wanted = sandbox / "target"
+            wanted = sandbox / "target" / "cargo-output"
             self.assertEqual(Path(observed["configured_target"]), wanted, observed)
             self.assertEqual(Path(observed["metadata_target"]), wanted, observed)
             self.assertFalse(sandbox.exists(), "metadata output outlived its sandbox owner")
@@ -472,6 +501,158 @@ class TestCompilerEnvironmentRoutes(unittest.TestCase):
                 expected = vr.toolchain_id(fresh=True)
             with mock.patch.dict(os.environ, {"RUSTC_WRAPPER": "", "RUSTC_WORKSPACE_WRAPPER": ""}, clear=True):
                 self.assertEqual(vr.toolchain_id(fresh=True), expected)
+
+    def test_inherited_custody_refusal_uses_targo_for_identity(self):
+        refusal = "error: " + vr._INHERITED_COMPILER_CUSTODY_UNAVAILABLE + "\n"
+        with mock.patch.dict(os.environ, {}, clear=True), \
+                mock.patch.object(vr, "_TOOLCHAIN_CACHE", None), \
+                mock.patch.object(vr, "_gate_acquire",
+                                  return_value=("probe-token", True, False)) as acquire, \
+                mock.patch.object(vr, "_gate_release") as release, \
+                mock.patch.object(vr, "run_capture", side_effect=[
+                    (75, refusal),
+                    (0, "warning: unverified fixture\n"
+                        "rustc fallback\ncommit-hash: fallback\nhost: fixture\n"),
+                ]) as capture:
+            self.assertEqual(
+                vr.toolchain_id(fresh=True),
+                "rustc fallback|commit-hash: fallback|host: fixture",
+            )
+        self.assertEqual(capture.call_args_list[0], mock.call(["trustc", "-vV"]))
+        fallback = capture.call_args_list[1]
+        self.assertEqual(fallback.args[0], [
+            "targo", "--unverified", "rustc", "--locked",
+            "-p", "clean-runtime", "--lib", "--", "-vV",
+        ])
+        self.assertEqual(fallback.kwargs["timeout"], 600)
+        self.assertEqual(fallback.kwargs["env"]["CARGO_TARGET_DIR"],
+                         str(vr.compiler_query_target_dir()))
+        self.assertEqual(fallback.kwargs["env"]["CARGO_TERM_COLOR"], "never")
+        acquire.assert_called_once_with(vr._COMPILER_QUERY_GATE_GB,
+                                        vr._COMPILER_QUERY_GATE_LABEL)
+        release.assert_called_once_with("probe-token")
+
+    def test_inherited_custody_refusal_uses_targo_for_cfg_only(self):
+        refusal = "error: " + vr._INHERITED_COMPILER_CUSTODY_UNAVAILABLE + "\n"
+        fallback = """warning: unverified fixture
+debug_assertions
+feature=\"default\"
+target_arch=\"aarch64\"
+unix
+    Finished fixture
+"""
+        with mock.patch.dict(os.environ, {}, clear=True), \
+                mock.patch.object(vr, "_LANE_CFG_CACHE", {}), \
+                mock.patch.object(vr, "_config_rustflags", return_value=[]), \
+                mock.patch.object(vr, "_gate_acquire",
+                                  return_value=("probe-token", True, False)) as acquire, \
+                mock.patch.object(vr, "_gate_release") as release, \
+                mock.patch.object(vr, "run_capture", side_effect=[
+                    (75, refusal), (0, fallback),
+                ]) as capture:
+            facts = vr.lane_cfg_facts(vr.PROFILE_DEV)
+        self.assertIsNotNone(facts)
+        self.assertTrue(facts["debug_assertions"])
+        self.assertTrue(facts["unix"])
+        self.assertEqual(facts["target_arch"], frozenset({"aarch64"}))
+        self.assertNotIn("feature", facts)
+        self.assertEqual(capture.call_args_list[0], mock.call([
+            "trustc", "-Ztrust-verify=off", "-C", "debug-assertions=on",
+            "--print", "cfg",
+        ]))
+        fallback_call = capture.call_args_list[1]
+        self.assertEqual(fallback_call.args[0], [
+            "targo", "--unverified", "rustc", "--locked",
+            "-p", "clean-runtime", "--lib", "--",
+            "-C", "debug-assertions=on", "--print", "cfg",
+        ])
+        self.assertEqual(fallback_call.kwargs["env"]["CARGO_TARGET_DIR"],
+                         str(vr.compiler_query_target_dir()))
+        acquire.assert_called_once_with(vr._COMPILER_QUERY_GATE_GB,
+                                        vr._COMPILER_QUERY_GATE_LABEL)
+        release.assert_called_once_with("probe-token")
+
+    def test_other_exit_75_does_not_use_the_targo_fallback(self):
+        with mock.patch.dict(os.environ, {}, clear=True), \
+                mock.patch.object(vr, "_LANE_CFG_CACHE", {}), \
+                mock.patch.object(vr, "_config_rustflags", return_value=[]), \
+                mock.patch.object(vr, "_gate_acquire") as acquire, \
+                mock.patch.object(vr, "run_capture", return_value=(75, "unrelated refusal\n")) as capture:
+            self.assertIsNone(vr.lane_cfg_facts(vr.PROFILE_DEV))
+        capture.assert_called_once_with([
+            "trustc", "-Ztrust-verify=off", "-C", "debug-assertions=on", "--print", "cfg",
+        ])
+        acquire.assert_not_called()
+
+    def test_compiler_fallback_requires_real_memory_admission(self):
+        refusal = "error: " + vr._INHERITED_COMPILER_CUSTODY_UNAVAILABLE + "\n"
+        for gate_answer in ((None, False, True), (None, False, False)):
+            with self.subTest(gate_answer=gate_answer), \
+                    mock.patch.dict(os.environ, {}, clear=True), \
+                    mock.patch.object(vr, "_TOOLCHAIN_CACHE", None), \
+                    mock.patch.object(vr, "_gate_acquire", return_value=gate_answer), \
+                    mock.patch.object(vr, "_gate_release") as release, \
+                    mock.patch.object(vr, "run_capture", return_value=(75, refusal)) as capture:
+                self.assertEqual(vr.toolchain_id(fresh=True), "rustc-unavailable")
+            capture.assert_called_once_with(["trustc", "-vV"])
+            release.assert_not_called()
+
+    def test_compiler_fallback_refuses_nested_heavy_gate(self):
+        refusal = "error: " + vr._INHERITED_COMPILER_CUSTODY_UNAVAILABLE + "\n"
+        with mock.patch.dict(os.environ, {"HEAVY_GATE_HELD": "11:outer"}, clear=True), \
+                mock.patch.object(vr, "_TOOLCHAIN_CACHE", None), \
+                mock.patch.object(vr, "_gate_acquire") as acquire, \
+                mock.patch.object(vr, "run_capture", return_value=(75, refusal)) as capture:
+            self.assertEqual(vr.toolchain_id(fresh=True), "rustc-unavailable")
+        capture.assert_called_once_with(["trustc", "-vV"])
+        acquire.assert_not_called()
+
+    def test_compiler_fallback_releases_admission_after_timeout(self):
+        refusal = "error: " + vr._INHERITED_COMPILER_CUSTODY_UNAVAILABLE + "\n"
+        timeout = subprocess.TimeoutExpired(["targo"], 600)
+        with mock.patch.dict(os.environ, {}, clear=True), \
+                mock.patch.object(vr, "_TOOLCHAIN_CACHE", None), \
+                mock.patch.object(vr, "_gate_acquire",
+                                  return_value=("probe-token", True, False)), \
+                mock.patch.object(vr, "_gate_release") as release, \
+                mock.patch.object(vr, "run_capture", side_effect=[(75, refusal), timeout]):
+            self.assertEqual(vr.toolchain_id(fresh=True), "rustc-unavailable")
+        release.assert_called_once_with("probe-token")
+
+    def test_direct_and_cargo_cfg_outputs_normalize_identically(self):
+        direct_dev = ("debug_assertions\noverflow_checks\npanic=\"unwind\"\n"
+                      "target_arch=\"aarch64\"\nunix\n")
+        cargo_dev = ("warning: unverified fixture\ndebug_assertions\n"
+                     "feature=\"default\"\noverflow_checks\npanic=\"unwind\"\n"
+                     "target_arch=\"aarch64\"\nunix\nFinished fixture\n")
+        direct_release = "panic=\"unwind\"\ntarget_arch=\"aarch64\"\nunix\n"
+        cargo_release = ("feature=\"default\"\noverflow_checks\npanic=\"abort\"\n"
+                         "target_arch=\"aarch64\"\nunix\n")
+        self.assertEqual(vr._parse_lane_cfg_facts(direct_dev, vr.PROFILE_DEV),
+                         vr._parse_lane_cfg_facts(cargo_dev, vr.PROFILE_DEV))
+        self.assertEqual(vr._parse_lane_cfg_facts(direct_release, vr.PROFILE_RELEASE),
+                         vr._parse_lane_cfg_facts(cargo_release, vr.PROFILE_RELEASE))
+
+    def test_cfg_parser_refuses_wrong_debug_assertion_profile(self):
+        self.assertIsNone(vr._parse_lane_cfg_facts("unix\n", vr.PROFILE_DEV))
+        self.assertIsNone(vr._parse_lane_cfg_facts(
+            "debug_assertions\nunix\n", vr.PROFILE_RELEASE))
+
+    def test_cfg_affecting_environment_precedes_cached_facts(self):
+        keys = (
+            "RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS", "CARGO_BUILD_RUSTFLAGS",
+            "CARGO_BUILD_TARGET", "CARGO_PROFILE_RELEASE_PANIC",
+            "CARGO_TARGET_AARCH64_APPLE_DARWIN_RUSTFLAGS",
+        )
+        for key in keys:
+            for value in ("fixture", ""):
+                with self.subTest(key=key, value=value), \
+                        mock.patch.dict(os.environ, {key: value}, clear=True), \
+                        mock.patch.object(vr, "_LANE_CFG_CACHE",
+                                          {vr.PROFILE_DEV: {"cached": True}}), \
+                        mock.patch.object(vr, "run_capture") as capture:
+                    self.assertIsNone(vr.lane_cfg_facts(vr.PROFILE_DEV))
+                capture.assert_not_called()
 
 
 class TestBuildEnvironmentInputs(unittest.TestCase):
@@ -4448,6 +4629,16 @@ class CheckerQualificationInputs(unittest.TestCase):
     VF5_F1 = "clean-olean::test::vf5_f1_reference"
     NDJSON_WRITER = "clean-olean::test::ndjson_export_writer"
 
+    def test_target_input_bindings_cannot_be_shadowed(self):
+        tree = ast.parse(Path(vr.__file__).read_text())
+        table = next(node.value for node in tree.body
+                     if isinstance(node, ast.AnnAssign)
+                     and isinstance(node.target, ast.Name)
+                     and node.target.id == "TARGET_EXTRA_PATHS")
+        keys = [ast.literal_eval(key) for key in table.keys]
+        self.assertEqual(len(keys), len(set(keys)), "duplicate target silently shadows its inputs")
+        self.assertEqual(ast.literal_eval(table), vr.TARGET_EXTRA_PATHS)
+
     def test_compiled_package_closures_are_declared(self):
         core = set(vr.TARGET_EXTRA_PATHS.get(self.CORE, ()))
         spec = set(vr.TARGET_EXTRA_PATHS.get(self.SPEC, ()))
@@ -4483,10 +4674,19 @@ class CheckerQualificationInputs(unittest.TestCase):
             "chk_lia_f1": (self.CHK_LIA_F1, self.CHK_LIA_QUORUM),
             "cic_l_base_bridge": ("clean-olean::test::cic_l_base_bridge",),
             "cic_l_level": ("clean-olean::lib", "clean-olean::test::cic_l_level", self.NDJSON_WRITER),
+            "cic_l_level_order": ("clean-olean::test::cic_l_level_order",),
+            "cic_l_level_scope": ("clean-olean::test::cic_l_level_scope",),
             "cic_l_model": ("clean-olean::test::cic_l_model",),
+            "cic_l_nat_literals": ("clean-olean::test::cic_l_nat_literals",),
             "cic_l_nat_model": ("clean-olean::test::cic_l_nat_model",),
+            "cic_l_universe_translation": ("clean-olean::test::cic_l_universe_translation",),
+            "cic_l_universe_zero": ("clean-olean::test::cic_l_universe_zero",),
             "kcheck_core": (self.CORE,),
+            "kcheck_framed_run": ("clean-olean::test::kcheck_framed_run",),
             "kcheck_labelled": ("clean-olean::test::kcheck_labelled",),
+            "kcheck_inference_complete": ("clean-olean::test::kcheck_inference_complete",),
+            "kcheck_static_complete": ("clean-olean::test::kcheck_static_complete",),
+            "kcheck_nat_acceptance": ("clean-olean::test::kcheck_nat_acceptance",),
             "kcheck_sort_bounds": ("clean-olean::test::kcheck_sort_bounds",),
             "kcheck_soundness": ("clean-olean::test::kcheck_labelled",),
             "kcheck_spec": (self.SPEC,),

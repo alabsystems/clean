@@ -351,15 +351,13 @@ fn parse_terms(
         match token {
             Token::Plus => {
                 if !current_tokens.is_empty() {
-                    segments.push((current_sign, current_tokens));
-                    current_tokens = Vec::new();
+                    segments.push((current_sign, std::mem::take(&mut current_tokens)));
                 }
                 current_sign = 1;
             }
             Token::Minus => {
                 if !current_tokens.is_empty() {
-                    segments.push((current_sign, current_tokens));
-                    current_tokens = Vec::new();
+                    segments.push((current_sign, std::mem::take(&mut current_tokens)));
                 }
                 current_sign = -1;
             }
@@ -395,8 +393,7 @@ fn parse_product(
         match tok {
             Token::Star => {
                 if !current.is_empty() {
-                    factors.push(current);
-                    current = Vec::new();
+                    factors.push(std::mem::take(&mut current));
                 }
             }
             _ => current.push(tok),

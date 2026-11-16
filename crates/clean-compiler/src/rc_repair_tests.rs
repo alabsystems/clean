@@ -805,3 +805,6 @@ mod end_to_end;
 
 #[path = "rc_repair_tests_review.rs"]
 mod review;
+
+#[path = "rc_repair_tests_nested.rs"]
+mod nested_patterns;

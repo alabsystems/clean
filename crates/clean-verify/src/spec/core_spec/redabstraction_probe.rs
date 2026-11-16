@@ -78,21 +78,21 @@ impl Specification {
              (A : KExpr) (hA : whnf_acc A) : \
              forall (aa : KExpr), whnf_acc aa -> forall (bb : KExpr), whnf_acc bb -> \
              ({hyp_bb}) -> whnf_acc {redex_A} := \
-             whnf_acc.rec {m_ty} \
+             @whnf_acc.rec {m_ty} \
              (fun (AA : KExpr) \
              (fA : forall (A2 : KExpr), whnf_step AA A2 -> whnf_acc A2) \
              (ihA : forall (A2 : KExpr) (_s : whnf_step AA A2), \
              forall (aa : KExpr), whnf_acc aa -> forall (bb : KExpr), whnf_acc bb -> \
              ({hyp_bb}) -> whnf_acc {redex_A2}) \
              (a0 : KExpr) (ha0 : whnf_acc a0) => \
-             whnf_acc.rec {m_a} \
+             @whnf_acc.rec {m_a} \
              (fun (aa : KExpr) \
              (fa : forall (a2 : KExpr), whnf_step aa a2 -> whnf_acc a2) \
              (iha : forall (a2 : KExpr) (_s : whnf_step aa a2), \
              forall (bb : KExpr), whnf_acc bb -> ({hyp_bb}) -> \
              whnf_acc {redex_a2}) \
              (b0 : KExpr) (hb0 : whnf_acc b0) => \
-             whnf_acc.rec {m_b} \
+             @whnf_acc.rec {m_b} \
              (fun (bb : KExpr) \
              (fb : forall (b2 : KExpr), whnf_step bb b2 -> whnf_acc b2) \
              (ihb : forall (b2 : KExpr) (_s : whnf_step bb b2), \

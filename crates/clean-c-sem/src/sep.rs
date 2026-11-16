@@ -286,7 +286,7 @@ impl SepAssertion {
     }
 
     /// Data-at assertion
-    pub fn data_at(ptr: CExpr, ty: CType, value: Spec, share: Share) -> Self {
+    pub(crate) fn data_at(ptr: CExpr, ty: CType, value: Spec, share: Share) -> Self {
         SepAssertion::DataAt {
             ptr,
             ty,
@@ -320,7 +320,7 @@ impl SepAssertion {
     }
 
     /// Separating conjunction
-    pub fn sep_conj(p: SepAssertion, q: SepAssertion) -> Self {
+    pub(crate) fn sep_conj(p: SepAssertion, q: SepAssertion) -> Self {
         match (&p, &q) {
             (SepAssertion::Emp, _) => q,
             (_, SepAssertion::Emp) => p,
@@ -748,7 +748,7 @@ impl From<SepAssertion> for Spec {
 
 /// List segment predicate: lseg(head, tail, contents)
 /// A singly-linked list from head to tail containing contents
-pub fn lseg(head: CExpr, tail: CExpr, contents: Vec<Spec>) -> SepAssertion {
+pub(crate) fn lseg(head: CExpr, tail: CExpr, contents: Vec<Spec>) -> SepAssertion {
     if contents.is_empty() {
         // Empty list: head == tail
         SepAssertion::pure(Spec::eq(Spec::Expr(head), Spec::Expr(tail)))

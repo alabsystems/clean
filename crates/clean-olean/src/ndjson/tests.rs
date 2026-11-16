@@ -169,3 +169,13 @@ fn test_ndjson_rule_sets_name_the_r81_oracle_world() {
         assert_eq!(world, oracle.world, "{}: its rule set's world", row.version);
     }
 }
+
+#[test]
+fn test_lean_foundational_axioms_are_kernel_foundational() {
+    for axiom in super::LEAN_FOUNDATIONAL_AXIOMS {
+        assert!(
+            clean_kernel::is_foundational_axiom(&clean_kernel::name::Name::from_string(axiom)),
+            "`{axiom}` is permitted in an export but is not foundational in Clean's kernel"
+        );
+    }
+}

@@ -58,8 +58,8 @@ use crate::spec::Specification;
 /// CHAIN to a single fire (so `topIotaStar = opt_default ∘ iota_reduct`).
 const REDUCT_NOT_REDEX_FACT: &str = concat!(
     "forall (e : KExpr) (r : KExpr), ",
-    "Eq (OptionType KExpr) (iota_reduct env e) (OptionType.some KExpr r) -> ",
-    "Eq (OptionType KExpr) (iota_reduct env r) (OptionType.none KExpr)"
+    "@Eq (OptionType KExpr) (iota_reduct env e) (@OptionType.some KExpr r) -> ",
+    "@Eq (OptionType KExpr) (iota_reduct env r) (@OptionType.none KExpr)"
 );
 
 impl Specification {
@@ -99,16 +99,16 @@ impl Specification {
             name: "recenv_reduct_not_redex_fact".to_string(),
             type_src: "forall (env : RecEnv) (e : KExpr) (r : KExpr), \
                  RecEnvReductNotRedex env -> \
-                 Eq (OptionType KExpr) (iota_reduct env e) (OptionType.some KExpr r) -> \
-                 Eq (OptionType KExpr) (iota_reduct env r) (OptionType.none KExpr)"
+                 @Eq (OptionType KExpr) (iota_reduct env e) (@OptionType.some KExpr r) -> \
+                 @Eq (OptionType KExpr) (iota_reduct env r) (@OptionType.none KExpr)"
                 .to_string(),
             value_src: Some(format!(
                 "fun (env : RecEnv) (e : KExpr) (r : KExpr) \
                  (w : RecEnvReductNotRedex env) \
-                 (heq : Eq (OptionType KExpr) (iota_reduct env e) (OptionType.some KExpr r)) => \
-                 RecEnvReductNotRedex.rec env \
+                 (heq : @Eq (OptionType KExpr) (iota_reduct env e) (@OptionType.some KExpr r)) => \
+                 @RecEnvReductNotRedex.rec env \
                  (fun (_ : RecEnvReductNotRedex env) => \
-                 Eq (OptionType KExpr) (iota_reduct env r) (OptionType.none KExpr)) \
+                 @Eq (OptionType KExpr) (iota_reduct env r) (@OptionType.none KExpr)) \
                  (fun (hc : {REDUCT_NOT_REDEX_FACT}) => hc e r heq) \
                  w"
             )),
@@ -147,17 +147,17 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (env : RecEnv) (e : KExpr) (t : KExpr) (h : par_reduces_p env e t) => ",
-                    "OptionType.rec KExpr ",
+                    "@OptionType.rec KExpr ",
                     "(fun (o : OptionType KExpr) => ",
-                    "Eq (OptionType KExpr) (iota_reduct env t) o -> ",
+                    "@Eq (OptionType KExpr) (iota_reduct env t) o -> ",
                     "par_reduces_p env e (opt_default o t)) ",
                     // none arm: opt_default none t = t, return h
-                    "(fun (_eqn : Eq (OptionType KExpr) (iota_reduct env t) (OptionType.none KExpr)) => h) ",
+                    "(fun (_eqn : @Eq (OptionType KExpr) (iota_reduct env t) (@OptionType.none KExpr)) => h) ",
                     // some arm: opt_default (some r) t = r, fire iota_p
-                    "(fun (r : KExpr) (eqn : Eq (OptionType KExpr) (iota_reduct env t) (OptionType.some KExpr r)) => ",
-                    "par_reduces_p.iota_p env e t r h eqn) ",
+                    "(fun (r : KExpr) (eqn : @Eq (OptionType KExpr) (iota_reduct env t) (@OptionType.some KExpr r)) => ",
+                    "@par_reduces_p.iota_p env e t r h eqn) ",
                     "(iota_reduct env t) ",
-                    "(Eq.refl (OptionType KExpr) (iota_reduct env t))"
+                    "(@Eq.refl (OptionType KExpr) (iota_reduct env t))"
                 )
                 .to_string(),
             ),
@@ -197,23 +197,23 @@ impl Specification {
             type_src: concat!(
                 "forall (env : RecEnv) (t : KExpr), ",
                 "RecEnvReductNotRedex env -> ",
-                "Eq (OptionType KExpr) (iota_reduct env (topIotaStar env t)) (OptionType.none KExpr)"
+                "@Eq (OptionType KExpr) (iota_reduct env (topIotaStar env t)) (@OptionType.none KExpr)"
             )
             .to_string(),
             value_src: Some(
                 concat!(
                     "fun (env : RecEnv) (t : KExpr) (w : RecEnvReductNotRedex env) => ",
-                    "OptionType.rec KExpr ",
+                    "@OptionType.rec KExpr ",
                     "(fun (o : OptionType KExpr) => ",
-                    "Eq (OptionType KExpr) (iota_reduct env t) o -> ",
-                    "Eq (OptionType KExpr) (iota_reduct env (opt_default o t)) (OptionType.none KExpr)) ",
+                    "@Eq (OptionType KExpr) (iota_reduct env t) o -> ",
+                    "@Eq (OptionType KExpr) (iota_reduct env (opt_default o t)) (@OptionType.none KExpr)) ",
                     // none arm: opt_default none t = t, goal iota_reduct env t = none = eqn
-                    "(fun (eqn : Eq (OptionType KExpr) (iota_reduct env t) (OptionType.none KExpr)) => eqn) ",
+                    "(fun (eqn : @Eq (OptionType KExpr) (iota_reduct env t) (@OptionType.none KExpr)) => eqn) ",
                     // some arm: opt_default (some r) t = r, goal iota_reduct env r = none from interface
-                    "(fun (r : KExpr) (eqn : Eq (OptionType KExpr) (iota_reduct env t) (OptionType.some KExpr r)) => ",
+                    "(fun (r : KExpr) (eqn : @Eq (OptionType KExpr) (iota_reduct env t) (@OptionType.some KExpr r)) => ",
                     "recenv_reduct_not_redex_fact env t r w eqn) ",
                     "(iota_reduct env t) ",
-                    "(Eq.refl (OptionType KExpr) (iota_reduct env t))"
+                    "(@Eq.refl (OptionType KExpr) (iota_reduct env t))"
                 )
                 .to_string(),
             ),
@@ -252,7 +252,7 @@ impl Specification {
                 "forall (env : RecEnv) (e3 : KExpr) (t : KExpr), ",
                 "RecEnvReductNotRedex env -> ",
                 "iota_step env e3 t -> ",
-                "Eq KExpr (topIotaStar env e3) (topIotaStar env t)"
+                "@Eq KExpr (topIotaStar env e3) (topIotaStar env t)"
             )
             .to_string(),
             value_src: Some(
@@ -262,17 +262,17 @@ impl Specification {
                     // step1 : topIotaStar e3 (= opt_default (iota_reduct e3) e3) = t
                     //   via cong (fun o => opt_default o e3) on hi : iota_reduct e3 = some t
                     //   (RHS opt_default (some t) e3 reduces to t).
-                    "Eq.trans KExpr (topIotaStar env e3) t (topIotaStar env t) ",
-                    "(Eq.cong (OptionType KExpr) KExpr ",
+                    "@Eq.trans KExpr (topIotaStar env e3) t (topIotaStar env t) ",
+                    "(@Eq.cong (OptionType KExpr) KExpr ",
                     "(fun (o : OptionType KExpr) => opt_default o e3) ",
-                    "(iota_reduct env e3) (OptionType.some KExpr t) hi) ",
+                    "(iota_reduct env e3) (@OptionType.some KExpr t) hi) ",
                     // step2 : t (= opt_default none t) = topIotaStar t (= opt_default (iota_reduct t) t)
                     //   via cong (fun o => opt_default o t) on (symm of) the interface fact
                     //   recenv_reduct_not_redex_fact env e3 t w hi : iota_reduct t = none.
-                    "(Eq.cong (OptionType KExpr) KExpr ",
+                    "(@Eq.cong (OptionType KExpr) KExpr ",
                     "(fun (o : OptionType KExpr) => opt_default o t) ",
-                    "(OptionType.none KExpr) (iota_reduct env t) ",
-                    "(Eq.symm (OptionType KExpr) (iota_reduct env t) (OptionType.none KExpr) ",
+                    "(@OptionType.none KExpr) (iota_reduct env t) ",
+                    "(@Eq.symm (OptionType KExpr) (iota_reduct env t) (@OptionType.none KExpr) ",
                     "(recenv_reduct_not_redex_fact env e3 t w hi)))"
                 )
                 .to_string(),
@@ -314,17 +314,17 @@ impl Specification {
             name: "topIotaStar_fix".to_string(),
             type_src: concat!(
                 "forall (env : RecEnv) (t : KExpr), ",
-                "Eq (OptionType KExpr) (iota_reduct env t) (OptionType.none KExpr) -> ",
-                "Eq KExpr (topIotaStar env t) t"
+                "@Eq (OptionType KExpr) (iota_reduct env t) (@OptionType.none KExpr) -> ",
+                "@Eq KExpr (topIotaStar env t) t"
             )
             .to_string(),
             value_src: Some(
                 concat!(
                     "fun (env : RecEnv) (t : KExpr) ",
-                    "(h : Eq (OptionType KExpr) (iota_reduct env t) (OptionType.none KExpr)) => ",
-                    "Eq.cong (OptionType KExpr) KExpr ",
+                    "(h : @Eq (OptionType KExpr) (iota_reduct env t) (@OptionType.none KExpr)) => ",
+                    "@Eq.cong (OptionType KExpr) KExpr ",
                     "(fun (o : OptionType KExpr) => opt_default o t) ",
-                    "(iota_reduct env t) (OptionType.none KExpr) h"
+                    "(iota_reduct env t) (@OptionType.none KExpr) h"
                 )
                 .to_string(),
             ),
@@ -636,7 +636,7 @@ impl Specification {
         // (app (dev f)(dev a)). sort/bvar/const fixed; lam/pi recurse. let_ arm: fire
         // zeta on the developed body/value -> topIotaStar env (instantiate (dev b)(dev v)).
         self.add_recursive_def(
-            r"def dev (env : RecEnv) (e : KExpr) : KExpr := KExpr.rec (fun (_ : KExpr) => KExpr) (fun (n : Level) => KExpr.sort n) (fun (i : Nat) => KExpr.bvar i) (fun (f : KExpr) (a : KExpr) (df : KExpr) (da : KExpr) => Bool.rec (fun (_ : Bool) => KExpr) (topIotaStar env (KExpr.app df da)) (topIotaStar env (instantiate (kexpr_lam_body df) da)) (kexpr_is_lam f)) (fun (ty : KExpr) (b : KExpr) (dty : KExpr) (db : KExpr) => KExpr.lam dty db) (fun (ty : KExpr) (b : KExpr) (dty : KExpr) (db : KExpr) => KExpr.pi dty db) (fun (nm : Name) (us : ListType Level) => KExpr.const nm us) (fun (lt : KExpr) (lv : KExpr) (lb : KExpr) (dlt : KExpr) (dlv : KExpr) (dlb : KExpr) => topIotaStar env (instantiate dlb dlv)) (fun (s : Name) (i : Nat) (sub : KExpr) (dsub : KExpr) => KExpr.proj s i dsub) (fun (v : Nat) => KExpr.lit v) e",
+            r"def dev (env : RecEnv) (e : KExpr) : KExpr := @KExpr.rec (fun (_ : KExpr) => KExpr) (fun (n : Level) => KExpr.sort n) (fun (i : Nat) => KExpr.bvar i) (fun (f : KExpr) (a : KExpr) (df : KExpr) (da : KExpr) => @Bool.rec (fun (_ : Bool) => KExpr) (topIotaStar env (KExpr.app df da)) (topIotaStar env (instantiate (kexpr_lam_body df) da)) (kexpr_is_lam f)) (fun (ty : KExpr) (b : KExpr) (dty : KExpr) (db : KExpr) => KExpr.lam dty db) (fun (ty : KExpr) (b : KExpr) (dty : KExpr) (db : KExpr) => KExpr.pi dty db) (fun (nm : Name) (us : ListType Level) => KExpr.const nm us) (fun (lt : KExpr) (lv : KExpr) (lb : KExpr) (dlt : KExpr) (dlv : KExpr) (dlb : KExpr) => topIotaStar env (instantiate dlb dlv)) (fun (s : Name) (i : Nat) (sub : KExpr) (dsub : KExpr) => KExpr.proj s i dsub) (fun (v : Nat) => KExpr.lit v) e",
             "The blueprint's single-fire complete development dev env e: develop subterms then topIotaStar the \
              node. STRUCTURAL KExpr.rec (7 minors). app arm: if the original head f is a lam (beta present) -> \
              topIotaStar env (instantiate (kexpr_lam_body (dev f)) (dev a)); else -> topIotaStar env (app (dev \
@@ -652,11 +652,11 @@ impl Specification {
                 name: name.to_string(),
                 type_src: format!(
                     "forall (env : RecEnv) (ty : KExpr) (b : KExpr), \
-                     Eq KExpr (dev env ({head} ty b)) ({head} (dev env ty) (dev env b))"
+                     @Eq KExpr (dev env ({head} ty b)) ({head} (dev env ty) (dev env b))"
                 ),
                 value_src: Some(format!(
                     "fun (env : RecEnv) (ty : KExpr) (b : KExpr) => \
-                     Eq.refl KExpr (dev env ({head} ty b))"
+                     @Eq.refl KExpr (dev env ({head} ty b))"
                 )),
                 is_axiom: false,
                 description: format!(
@@ -676,15 +676,15 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "dev_app".to_string(),
             type_src: "forall (env : RecEnv) (f : KExpr) (a : KExpr), \
-                 Eq KExpr (dev env (KExpr.app f a)) \
-                 (Bool.rec (fun (_ : Bool) => KExpr) \
+                 @Eq KExpr (dev env (KExpr.app f a)) \
+                 (@Bool.rec (fun (_ : Bool) => KExpr) \
                  (topIotaStar env (KExpr.app (dev env f) (dev env a))) \
                  (topIotaStar env (instantiate (kexpr_lam_body (dev env f)) (dev env a))) \
                  (kexpr_is_lam f))"
                 .to_string(),
             value_src: Some(
                 "fun (env : RecEnv) (f : KExpr) (a : KExpr) => \
-                 Eq.refl KExpr (dev env (KExpr.app f a))"
+                 @Eq.refl KExpr (dev env (KExpr.app f a))"
                     .to_string(),
             ),
             is_axiom: false,
@@ -710,11 +710,11 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "dev_app_lam".to_string(),
             type_src: "forall (env : RecEnv) (A : KExpr) (b : KExpr) (a : KExpr), \
-                 Eq KExpr (dev env (KExpr.app (KExpr.lam A b) a)) (topIotaStar env (instantiate (dev env b) (dev env a)))"
+                 @Eq KExpr (dev env (KExpr.app (KExpr.lam A b) a)) (topIotaStar env (instantiate (dev env b) (dev env a)))"
                 .to_string(),
             value_src: Some(
                 "fun (env : RecEnv) (A : KExpr) (b : KExpr) (a : KExpr) => \
-                 Eq.refl KExpr (dev env (KExpr.app (KExpr.lam A b) a))"
+                 @Eq.refl KExpr (dev env (KExpr.app (KExpr.lam A b) a))"
                     .to_string(),
             ),
             is_axiom: false,
@@ -739,11 +739,11 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "dev_let".to_string(),
             type_src: "forall (env : RecEnv) (ty : KExpr) (val : KExpr) (body : KExpr), \
-                 Eq KExpr (dev env (KExpr.let_ ty val body)) (topIotaStar env (instantiate (dev env body) (dev env val)))"
+                 @Eq KExpr (dev env (KExpr.let_ ty val body)) (topIotaStar env (instantiate (dev env body) (dev env val)))"
                 .to_string(),
             value_src: Some(
                 "fun (env : RecEnv) (ty : KExpr) (val : KExpr) (body : KExpr) => \
-                 Eq.refl KExpr (dev env (KExpr.let_ ty val body))"
+                 @Eq.refl KExpr (dev env (KExpr.let_ ty val body))"
                     .to_string(),
             ),
             is_axiom: false,
@@ -788,41 +788,41 @@ impl Specification {
         );
         // nilhead : list_head (list_drop major_idx (kapp_args (const nm us))) = none.
         let nilhead = format!(
-            "(Eq.trans (OptionType KExpr) \
+            "(@Eq.trans (OptionType KExpr) \
              (list_head (list_drop {major_idx} (kapp_args (KExpr.const nm us)))) \
-             (list_head (ListType.nil KExpr)) (OptionType.none KExpr) \
-             (Eq.cong (ListType KExpr) (OptionType KExpr) (fun (L : ListType KExpr) => list_head L) \
-             (list_drop {major_idx} (kapp_args (KExpr.const nm us))) (ListType.nil KExpr) (list_drop_nil {major_idx})) \
+             (list_head (@ListType.nil KExpr)) (@OptionType.none KExpr) \
+             (@Eq.cong (ListType KExpr) (OptionType KExpr) (fun (L : ListType KExpr) => list_head L) \
+             (list_drop {major_idx} (kapp_args (KExpr.const nm us))) (@ListType.nil KExpr) (list_drop_nil {major_idx})) \
              list_head_nil)"
         );
         let goal_none =
-            "Eq (OptionType KExpr) (iota_reduct env (KExpr.const nm us)) (OptionType.none KExpr)";
+            "@Eq (OptionType KExpr) (iota_reduct env (KExpr.const nm us)) (@OptionType.none KExpr)";
         let const_none_value = format!(
             "fun (env : RecEnv) (nm : Name) (us : ListType Level) => \
-             OptionType.rec KExpr \
-             (fun (o : OptionType KExpr) => Eq (OptionType KExpr) (iota_reduct env (KExpr.const nm us)) o -> {goal_none}) \
+             @OptionType.rec KExpr \
+             (fun (o : OptionType KExpr) => @Eq (OptionType KExpr) (iota_reduct env (KExpr.const nm us)) o -> {goal_none}) \
              (fun (heq : {goal_none}) => heq) \
-             (fun (e2 : KExpr) (heq : Eq (OptionType KExpr) (iota_reduct env (KExpr.const nm us)) (OptionType.some KExpr e2)) => \
+             (fun (e2 : KExpr) (heq : @Eq (OptionType KExpr) (iota_reduct env (KExpr.const nm us)) (@OptionType.some KExpr e2)) => \
              iota_reduct_some_inv env (KExpr.const nm us) e2 ({goal_none}) heq \
              (fun (recname : Name) (meta : RecMeta) (major : KExpr) (cname : Name) (rule : RecRule) \
-             (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.const nm us))) (OptionType.some Name recname)) \
-             (h2 : Eq (OptionType RecMeta) (recmeta_for env recname) (OptionType.some RecMeta meta)) \
-             (h3 : Eq (OptionType KExpr) (list_head (list_drop {major_idx} (kapp_args (KExpr.const nm us)))) (OptionType.some KExpr major)) \
-             (h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname)) \
-             (h5 : Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule)) \
-             (h5r : Eq (OptionType KExpr) (OptionType.some KExpr {reduct}) (OptionType.some KExpr e2)) => \
+             (h1 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.const nm us))) (@OptionType.some Name recname)) \
+             (h2 : @Eq (OptionType RecMeta) (recmeta_for env recname) (@OptionType.some RecMeta meta)) \
+             (h3 : @Eq (OptionType KExpr) (list_head (list_drop {major_idx} (kapp_args (KExpr.const nm us)))) (@OptionType.some KExpr major)) \
+             (h4 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (@OptionType.some Name cname)) \
+             (h5 : @Eq (OptionType RecRule) (recrule_for env recname cname) (@OptionType.some RecRule rule)) \
+             (h5r : @Eq (OptionType KExpr) (@OptionType.some KExpr {reduct}) (@OptionType.some KExpr e2)) => \
              option_none_ne_some KExpr major ({goal_none}) \
-             (Eq.trans (OptionType KExpr) (OptionType.none KExpr) \
-             (list_head (list_drop {major_idx} (kapp_args (KExpr.const nm us)))) (OptionType.some KExpr major) \
-             (Eq.symm (OptionType KExpr) (list_head (list_drop {major_idx} (kapp_args (KExpr.const nm us)))) (OptionType.none KExpr) {nilhead}) \
+             (@Eq.trans (OptionType KExpr) (@OptionType.none KExpr) \
+             (list_head (list_drop {major_idx} (kapp_args (KExpr.const nm us)))) (@OptionType.some KExpr major) \
+             (@Eq.symm (OptionType KExpr) (list_head (list_drop {major_idx} (kapp_args (KExpr.const nm us)))) (@OptionType.none KExpr) {nilhead}) \
              h3))) \
              (iota_reduct env (KExpr.const nm us)) \
-             (Eq.refl (OptionType KExpr) (iota_reduct env (KExpr.const nm us)))"
+             (@Eq.refl (OptionType KExpr) (iota_reduct env (KExpr.const nm us)))"
         );
         self.add_definition(SpecDefinition {
             name: "iota_reduct_const_none".to_string(),
             type_src: "forall (env : RecEnv) (nm : Name) (us : ListType Level), \
-                 Eq (OptionType KExpr) (iota_reduct env (KExpr.const nm us)) (OptionType.none KExpr)"
+                 @Eq (OptionType KExpr) (iota_reduct env (KExpr.const nm us)) (@OptionType.none KExpr)"
                 .to_string(),
             value_src: Some(const_none_value),
             is_axiom: false,
@@ -864,37 +864,37 @@ impl Specification {
         // topIotaStar_no_redex (interface) gives none; the let_ arm is topIotaStar-wrapped
         // too (dev of a let_ = topIotaStar (instantiate (dev b)(dev v))), so
         // topIotaStar_no_redex (interface) again gives none.
-        let m_motive = "(fun (x : KExpr) => Eq (OptionType KExpr) (iota_reduct env (dev env x)) (OptionType.none KExpr))";
-        let refl_none = "(Eq.refl (OptionType KExpr) (OptionType.none KExpr))";
+        let m_motive = "(fun (x : KExpr) => @Eq (OptionType KExpr) (iota_reduct env (dev env x)) (@OptionType.none KExpr))";
+        let refl_none = "(@Eq.refl (OptionType KExpr) (@OptionType.none KExpr))";
         let app_arm = "(fun (f : KExpr) (a : KExpr) \
-             (_ihf : Eq (OptionType KExpr) (iota_reduct env (dev env f)) (OptionType.none KExpr)) \
-             (_iha : Eq (OptionType KExpr) (iota_reduct env (dev env a)) (OptionType.none KExpr)) => \
-             Bool.rec \
-             (fun (bcond : Bool) => Eq (OptionType KExpr) (iota_reduct env (Bool.rec (fun (_ : Bool) => KExpr) \
+             (_ihf : @Eq (OptionType KExpr) (iota_reduct env (dev env f)) (@OptionType.none KExpr)) \
+             (_iha : @Eq (OptionType KExpr) (iota_reduct env (dev env a)) (@OptionType.none KExpr)) => \
+             @Bool.rec \
+             (fun (bcond : Bool) => @Eq (OptionType KExpr) (iota_reduct env (@Bool.rec (fun (_ : Bool) => KExpr) \
              (topIotaStar env (KExpr.app (dev env f) (dev env a))) \
-             (topIotaStar env (instantiate (kexpr_lam_body (dev env f)) (dev env a))) bcond)) (OptionType.none KExpr)) \
+             (topIotaStar env (instantiate (kexpr_lam_body (dev env f)) (dev env a))) bcond)) (@OptionType.none KExpr)) \
              (topIotaStar_no_redex env (KExpr.app (dev env f) (dev env a)) w) \
              (topIotaStar_no_redex env (instantiate (kexpr_lam_body (dev env f)) (dev env a)) w) \
              (kexpr_is_lam f))"
             .to_string();
         let binder_arm = format!(
             "(fun (ty : KExpr) (b : KExpr) \
-             (_ihty : Eq (OptionType KExpr) (iota_reduct env (dev env ty)) (OptionType.none KExpr)) \
-             (_ihb : Eq (OptionType KExpr) (iota_reduct env (dev env b)) (OptionType.none KExpr)) => {refl_none})"
+             (_ihty : @Eq (OptionType KExpr) (iota_reduct env (dev env ty)) (@OptionType.none KExpr)) \
+             (_ihb : @Eq (OptionType KExpr) (iota_reduct env (dev env b)) (@OptionType.none KExpr)) => {refl_none})"
         );
         // let_ arm: dev env (let_ lt lv lb) = topIotaStar env (instantiate (dev lb)(dev lv))
         // (topIotaStar-wrapped like the app arm), so it is never a top iota redex —
         // topIotaStar_no_redex (RecEnvReductNotRedex interface) gives none.
         let let_none_arm =
             "(fun (lt : KExpr) (lv : KExpr) (lb : KExpr) \
-             (_ihlt : Eq (OptionType KExpr) (iota_reduct env (dev env lt)) (OptionType.none KExpr)) \
-             (_ihlv : Eq (OptionType KExpr) (iota_reduct env (dev env lv)) (OptionType.none KExpr)) \
-             (_ihlb : Eq (OptionType KExpr) (iota_reduct env (dev env lb)) (OptionType.none KExpr)) => \
+             (_ihlt : @Eq (OptionType KExpr) (iota_reduct env (dev env lt)) (@OptionType.none KExpr)) \
+             (_ihlv : @Eq (OptionType KExpr) (iota_reduct env (dev env lv)) (@OptionType.none KExpr)) \
+             (_ihlb : @Eq (OptionType KExpr) (iota_reduct env (dev env lb)) (@OptionType.none KExpr)) => \
              topIotaStar_no_redex env (instantiate (dev env lb) (dev env lv)) w)"
                 .to_string();
         let dev_none_value = format!(
             "fun (env : RecEnv) (e : KExpr) (w : RecEnvReductNotRedex env) => \
-             KExpr.rec {m_motive} \
+             @KExpr.rec {m_motive} \
              (fun (n : Level) => {refl_none}) \
              (fun (i : Nat) => {refl_none}) \
              {app_arm} \
@@ -902,7 +902,7 @@ impl Specification {
              {binder_arm} \
              (fun (nm : Name) (us : ListType Level) => iota_reduct_const_none env nm us) \
              {let_none_arm} \
-             (fun (s : Name) (i : Nat) (sub : KExpr) (_ihsub : Eq (OptionType KExpr) (iota_reduct env (dev env sub)) (OptionType.none KExpr)) => {refl_none}) \
+             (fun (s : Name) (i : Nat) (sub : KExpr) (_ihsub : @Eq (OptionType KExpr) (iota_reduct env (dev env sub)) (@OptionType.none KExpr)) => {refl_none}) \
              (fun (v : Nat) => {refl_none}) \
              e"
         );
@@ -910,7 +910,7 @@ impl Specification {
             name: "dev_iotaReduct_none".to_string(),
             type_src: "forall (env : RecEnv) (e : KExpr), \
                  RecEnvReductNotRedex env -> \
-                 Eq (OptionType KExpr) (iota_reduct env (dev env e)) (OptionType.none KExpr)"
+                 @Eq (OptionType KExpr) (iota_reduct env (dev env e)) (@OptionType.none KExpr)"
                 .to_string(),
             value_src: Some(dev_none_value),
             is_axiom: false,
@@ -950,7 +950,7 @@ impl Specification {
             name: "topIotaStar_dev".to_string(),
             type_src: "forall (env : RecEnv) (e : KExpr), \
                  RecEnvReductNotRedex env -> \
-                 Eq KExpr (topIotaStar env (dev env e)) (dev env e)"
+                 @Eq KExpr (topIotaStar env (dev env e)) (dev env e)"
                 .to_string(),
             value_src: Some(
                 "fun (env : RecEnv) (e : KExpr) (w : RecEnvReductNotRedex env) => \
@@ -1072,10 +1072,10 @@ impl Specification {
             type_src: concat!(
                 "forall (env : RecEnv) (f : KExpr) (f' : KExpr) (a : KExpr) (a' : KExpr) (r : KExpr), ",
                 "RecEnvCtorNoRecMeta env -> ",
-                "(forall (rf : KExpr), Eq (OptionType KExpr) (iota_reduct env f) (OptionType.some KExpr rf) -> ",
+                "(forall (rf : KExpr), @Eq (OptionType KExpr) (iota_reduct env f) (@OptionType.some KExpr rf) -> ",
                 "par_reduces_p env rf (topIotaStar env f')) -> ",
                 "par_reduces_p env f f' -> par_reduces_p env a a' -> ",
-                "Eq (OptionType KExpr) (iota_reduct env (KExpr.app f a)) (OptionType.some KExpr r) -> ",
+                "@Eq (OptionType KExpr) (iota_reduct env (KExpr.app f a)) (@OptionType.some KExpr r) -> ",
                 "par_reduces_p env r (topIotaStar env (KExpr.app f' a'))"
             )
             .to_string(),
@@ -1162,7 +1162,7 @@ impl Specification {
                 "forall (env : RecEnv) (X : KExpr) (t : KExpr), ",
                 "RecEnvReductNotRedex env -> RecEnvCtorNoRecMeta env -> ",
                 "par_reduces_p env X t -> ",
-                "forall (r : KExpr), Eq (OptionType KExpr) (iota_reduct env X) (OptionType.some KExpr r) -> ",
+                "forall (r : KExpr), @Eq (OptionType KExpr) (iota_reduct env X) (@OptionType.some KExpr r) -> ",
                 "par_reduces_p env r (topIotaStar env t)"
             )
             .to_string(),
@@ -1507,14 +1507,14 @@ fn par_reduces_c_star_subsumes_par_p_star_proof() -> String {
     concat!(
         "fun (env : RecEnv) (e : KExpr) (e' : KExpr) ",
         "(h : par_reduces_c_star env e e') => ",
-        "par_reduces_c_star.rec env ",
+        "@par_reduces_c_star.rec env ",
         "(fun (a : KExpr) (b : KExpr) (_ : par_reduces_c_star env a b) => ",
         "par_reduces_p_star env a b) ",
-        "(fun (s : KExpr) => par_reduces_p_star.refl env s) ",
+        "(fun (s : KExpr) => @par_reduces_p_star.refl env s) ",
         "(fun (s : KExpr) (s' : KExpr) (s'' : KExpr) ",
         "(hstep : par_reduces_c env s s') (_htail : par_reduces_c_star env s' s'') ",
         "(ih : par_reduces_p_star env s' s'') => ",
-        "par_reduces_p_star.step env s s' s'' ",
+        "@par_reduces_p_star.step env s s' s'' ",
         "(par_reduces_c_subsumes_par_p env s s' hstep) ih) ",
         "e e' h"
     )
@@ -1529,10 +1529,10 @@ fn par_reduces_p_star_subsumes_par_c_star_proof() -> String {
     concat!(
         "fun (env : RecEnv) (e : KExpr) (e' : KExpr) ",
         "(h : par_reduces_p_star env e e') => ",
-        "par_reduces_p_star.rec env ",
+        "@par_reduces_p_star.rec env ",
         "(fun (a : KExpr) (b : KExpr) (_ : par_reduces_p_star env a b) => ",
         "par_reduces_c_star env a b) ",
-        "(fun (s : KExpr) => par_reduces_c_star.refl env s) ",
+        "(fun (s : KExpr) => @par_reduces_c_star.refl env s) ",
         "(fun (s : KExpr) (s' : KExpr) (s'' : KExpr) ",
         "(hstep : par_reduces_p env s s') (_htail : par_reduces_p_star env s' s'') ",
         "(ih : par_reduces_c_star env s' s'') => ",
@@ -1561,9 +1561,9 @@ fn par_strips_p_star_strip_proof() -> String {
     let refl_arm = concat!(
         "(fun (e0 : KExpr) => ",
         "fun (x2 : KExpr) (hx2 : par_reduces_p env e0 x2) => ",
-        "par_strips_witness_p_star.intro env e0 x2 x2 ",
+        "@par_strips_witness_p_star.intro env e0 x2 x2 ",
         "(par_subsumes_par_p_star env e0 x2 hx2) ",
-        "(par_reduces_p_star.refl env x2))"
+        "(@par_reduces_p_star.refl env x2))"
     );
     // step arm: hstep : e0 ⇒_p e0', _htail : e0' ⇒_p* e0'', ih : forall x,
     //   par_reduces_p env e0' x -> par_strips_witness_p_star env e0'' x. Goal: forall
@@ -1578,7 +1578,7 @@ fn par_strips_p_star_strip_proof() -> String {
         "par_strips_witness_p_star env e0'' x2) ",
         "(fun (e3 : KExpr) ",
         "(pe2e3 : par_reduces_p_star env e0'' e3) (pme3 : par_reduces_p_star env m e3) => ",
-        "par_strips_witness_p_star.intro env e0'' x2 e3 pe2e3 ",
+        "@par_strips_witness_p_star.intro env e0'' x2 e3 pe2e3 ",
         "(par_reduces_p_star_trans env x2 m e3 ",
         "(par_subsumes_par_p_star env x2 m pe2m) pme3)) ",
         "(ih m pe1m))"
@@ -1610,7 +1610,7 @@ fn par_strips_p_star_strip_proof() -> String {
             "(w : RecEnvReductNotRedex env) (disjoint : RecEnvCtorNoRecMeta env) ",
             "(closed : RecEnvClosed env) (liftclosed : RecEnvLiftClosed env) ",
             "(h1 : par_reduces_p_star env e e1) (h2 : par_reduces_p env e e2) => ",
-            "par_reduces_p_star.rec env {motive} {refl_arm} {step_arm} ",
+            "@par_reduces_p_star.rec env {motive} {refl_arm} {step_arm} ",
             "e e1 h1 e2 h2"
         ),
         motive = motive,
@@ -1636,8 +1636,8 @@ fn par_reduces_p_star_diamond_proof() -> String {
     let refl_arm = concat!(
         "(fun (e0 : KExpr) => ",
         "fun (x2 : KExpr) (hx2 : par_reduces_p_star env e0 x2) => ",
-        "par_strips_witness_p_star.intro env e0 x2 x2 hx2 ",
-        "(par_reduces_p_star.refl env x2))"
+        "@par_strips_witness_p_star.intro env e0 x2 x2 hx2 ",
+        "(@par_reduces_p_star.refl env x2))"
     );
     // step arm: hstep : e0 ⇒_p e0', _htail : e0' ⇒_p* e0'', ih : forall x,
     //   par_reduces_p_star env e0' x -> par_strips_witness_p_star env e0'' x. Goal:
@@ -1652,7 +1652,7 @@ fn par_reduces_p_star_diamond_proof() -> String {
         "par_strips_witness_p_star env e0'' x2) ",
         "(fun (e3 : KExpr) ",
         "(pe2e3 : par_reduces_p_star env e0'' e3) (pme3 : par_reduces_p_star env m e3) => ",
-        "par_strips_witness_p_star.intro env e0'' x2 e3 pe2e3 ",
+        "@par_strips_witness_p_star.intro env e0'' x2 e3 pe2e3 ",
         "(par_reduces_p_star_trans env x2 m e3 pe2m pme3)) ",
         "(ih m pe1m))"
     );
@@ -1687,7 +1687,7 @@ fn par_reduces_p_star_diamond_proof() -> String {
             "(w : RecEnvReductNotRedex env) (disjoint : RecEnvCtorNoRecMeta env) ",
             "(closed : RecEnvClosed env) (liftclosed : RecEnvLiftClosed env) ",
             "(h1 : par_reduces_p_star env e e1) (h2 : par_reduces_p_star env e e2) => ",
-            "par_reduces_p_star.rec env {motive} {refl_arm} {step_arm} ",
+            "@par_reduces_p_star.rec env {motive} {refl_arm} {step_arm} ",
             "e e1 h1 e2 h2"
         ),
         motive = motive,
@@ -1712,7 +1712,7 @@ fn par_reduces_c_star_diamond_proof() -> String {
         "(fun (_w : par_strips_witness_p_star env e1 e2) => par_strips_witness_c_star env e1 e2) ",
         "(fun (e3 : KExpr) ",
         "(l1 : par_reduces_p_star env e1 e3) (l2 : par_reduces_p_star env e2 e3) => ",
-        "par_strips_witness_c_star.intro env e1 e2 e3 ",
+        "@par_strips_witness_c_star.intro env e1 e2 e3 ",
         "(par_reduces_p_star_subsumes_par_c_star env e1 e3 l1) ",
         "(par_reduces_p_star_subsumes_par_c_star env e2 e3 l2)) ",
         "(par_reduces_p_star_diamond env e e1 e2 w disjoint closed liftclosed ",
@@ -1754,10 +1754,10 @@ fn dev_triangle_proof() -> String {
         "(fun (ty : KExpr) (typ : KExpr) (body : KExpr) (bodyp : KExpr) \
          (hty : par_reduces_p env ty typ) (hbody : par_reduces_p env body bodyp) \
          (ihty : {mty}) (ihbody : {mbody}) => \
-         Eq.substType KExpr (fun (x : KExpr) => par_reduces_p env (KExpr.lam typ bodyp) x) \
+         @Eq.substType KExpr (fun (x : KExpr) => par_reduces_p env (KExpr.lam typ bodyp) x) \
          (KExpr.lam (dev env ty) (dev env body)) (dev env (KExpr.lam ty body)) \
-         (Eq.symm KExpr (dev env (KExpr.lam ty body)) (KExpr.lam (dev env ty) (dev env body)) (dev_lam env ty body)) \
-         (par_reduces_p.lam env typ (dev env ty) bodyp (dev env body) ihty ihbody))",
+         (@Eq.symm KExpr (dev env (KExpr.lam ty body)) (KExpr.lam (dev env ty) (dev env body)) (dev_lam env ty body)) \
+         (@par_reduces_p.lam env typ (dev env ty) bodyp (dev env body) ihty ihbody))",
         mty = m_at("ty", "typ"),
         mbody = m_at("body", "bodyp"),
     );
@@ -1766,10 +1766,10 @@ fn dev_triangle_proof() -> String {
         "(fun (dom : KExpr) (domp : KExpr) (body : KExpr) (bodyp : KExpr) \
          (hd : par_reduces_p env dom domp) (hbody : par_reduces_p env body bodyp) \
          (ihd : {md}) (ihbody : {mbody}) => \
-         Eq.substType KExpr (fun (x : KExpr) => par_reduces_p env (KExpr.pi domp bodyp) x) \
+         @Eq.substType KExpr (fun (x : KExpr) => par_reduces_p env (KExpr.pi domp bodyp) x) \
          (KExpr.pi (dev env dom) (dev env body)) (dev env (KExpr.pi dom body)) \
-         (Eq.symm KExpr (dev env (KExpr.pi dom body)) (KExpr.pi (dev env dom) (dev env body)) (dev_pi env dom body)) \
-         (par_reduces_p.pi env domp (dev env dom) bodyp (dev env body) ihd ihbody))",
+         (@Eq.symm KExpr (dev env (KExpr.pi dom body)) (KExpr.pi (dev env dom) (dev env body)) (dev_pi env dom body)) \
+         (@par_reduces_p.pi env domp (dev env dom) bodyp (dev env body) ihd ihbody))",
         md = m_at("dom", "domp"),
         mbody = m_at("body", "bodyp"),
     );
@@ -1778,7 +1778,7 @@ fn dev_triangle_proof() -> String {
         "(fun (dom : KExpr) (domp : KExpr) (body : KExpr) (bodyp : KExpr) \
          (hd : par_reduces_p env dom domp) (hbody : par_reduces_p env body bodyp) \
          (ihd : {md}) (ihbody : {mbody}) => \
-         par_reduces_p.forall_ env domp (dev env dom) bodyp (dev env body) ihd ihbody)",
+         @par_reduces_p.forall_ env domp (dev env dom) bodyp (dev env body) ihd ihbody)",
         md = m_at("dom", "domp"),
         mbody = m_at("body", "bodyp"),
     );
@@ -1793,9 +1793,9 @@ fn dev_triangle_proof() -> String {
         "(fun (lt : KExpr) (ltp : KExpr) (lv : KExpr) (lvp : KExpr) (lb : KExpr) (lbp : KExpr) \
          (hlt : par_reduces_p env lt ltp) (hlv : par_reduces_p env lv lvp) (hlb : par_reduces_p env lb lbp) \
          (ihlt : {mlt}) (ihlv : {mlv}) (ihlb : {mlb}) => \
-         Eq.substType KExpr (fun (x : KExpr) => par_reduces_p env (instantiate lbp lvp) x) \
+         @Eq.substType KExpr (fun (x : KExpr) => par_reduces_p env (instantiate lbp lvp) x) \
          (topIotaStar env (instantiate (dev env lb) (dev env lv))) (dev env (KExpr.let_ lt lv lb)) \
-         (Eq.symm KExpr (dev env (KExpr.let_ lt lv lb)) (topIotaStar env (instantiate (dev env lb) (dev env lv))) (dev_let env lt lv lb)) \
+         (@Eq.symm KExpr (dev env (KExpr.let_ lt lv lb)) (topIotaStar env (instantiate (dev env lb) (dev env lv))) (dev_let env lt lv lb)) \
          (par_topIotaStar env (instantiate lbp lvp) (instantiate (dev env lb) (dev env lv)) \
          (par_subst_p env lbp (dev env lb) lvp (dev env lv) Nat.zero ihlb ihlv closed liftclosed)))",
         mlt = m_at("lt", "ltp"),
@@ -1812,11 +1812,11 @@ fn dev_triangle_proof() -> String {
         "(fun (lt : KExpr) (ltp : KExpr) (lv : KExpr) (lvp : KExpr) (lb : KExpr) (lbp : KExpr) \
          (hlt : par_reduces_p env lt ltp) (hlv : par_reduces_p env lv lvp) (hlb : par_reduces_p env lb lbp) \
          (ihlt : {mlt}) (ihlv : {mlv}) (ihlb : {mlb}) => \
-         Eq.substType KExpr (fun (x : KExpr) => par_reduces_p env (KExpr.let_ ltp lvp lbp) x) \
+         @Eq.substType KExpr (fun (x : KExpr) => par_reduces_p env (KExpr.let_ ltp lvp lbp) x) \
          (topIotaStar env (instantiate (dev env lb) (dev env lv))) (dev env (KExpr.let_ lt lv lb)) \
-         (Eq.symm KExpr (dev env (KExpr.let_ lt lv lb)) (topIotaStar env (instantiate (dev env lb) (dev env lv))) (dev_let env lt lv lb)) \
+         (@Eq.symm KExpr (dev env (KExpr.let_ lt lv lb)) (topIotaStar env (instantiate (dev env lb) (dev env lv))) (dev_let env lt lv lb)) \
          (par_topIotaStar env (KExpr.let_ ltp lvp lbp) (instantiate (dev env lb) (dev env lv)) \
-         (par_reduces_p.let_ env ltp (dev env lt) lvp (dev env lv) lbp (dev env lb) ihlt ihlv ihlb)))",
+         (@par_reduces_p.let_ env ltp (dev env lt) lvp (dev env lv) lbp (dev env lb) ihlt ihlv ihlb)))",
         mlt = m_at("lt", "ltp"),
         mlv = m_at("lv", "lvp"),
         mlb = m_at("lb", "lbp"),
@@ -1826,7 +1826,7 @@ fn dev_triangle_proof() -> String {
         "(fun (e : KExpr) (e2 : KExpr) (tf : KExpr) \
          (he : par_reduces_p env e e2) (hi : iota_step env e2 tf) \
          (ihe : {me}) => \
-         Eq.substType KExpr (fun (Z : KExpr) => par_reduces_p env tf Z) \
+         @Eq.substType KExpr (fun (Z : KExpr) => par_reduces_p env tf Z) \
          (topIotaStar env (dev env e)) (dev env e) (topIotaStar_dev env e w) \
          (iota_redex_tri env e2 tf (dev env e) w disjoint hi ihe))",
         me = m_at("e", "e2"),
@@ -1837,7 +1837,7 @@ fn dev_triangle_proof() -> String {
     let proj_arm = format!(
         "(fun (s : Name) (i : Nat) (sub : KExpr) (subp : KExpr) \
          (hsub : par_reduces_p env sub subp) (ihsub : {msub}) => \
-         par_reduces_p.proj env s i subp (dev env sub) ihsub)",
+         @par_reduces_p.proj env s i subp (dev env sub) ihsub)",
         msub = m_at("sub", "subp"),
     );
 
@@ -1846,7 +1846,7 @@ fn dev_triangle_proof() -> String {
          (w : RecEnvReductNotRedex env) (disjoint : RecEnvCtorNoRecMeta env) \
          (closed : RecEnvClosed env) (liftclosed : RecEnvLiftClosed env) \
          (hpar : par_reduces_p env E0 A0) => \
-         par_reduces_p.rec env {motive} \
+         @par_reduces_p.rec env {motive} \
          {refl_arm} {beta_arm} {app_arm} {lam_arm} {pi_arm} {forall_arm} {let_arm} {iota_arm} {let_cong_arm} {proj_arm} \
          E0 A0 hpar"
     )
@@ -1858,9 +1858,9 @@ fn dev_kbeta_proof() -> String {
     "fun (env : RecEnv) (A : KExpr) (body : KExpr) (a : KExpr) (body' : KExpr) (arg' : KExpr) \
      (hbody : par_reduces_p env body' (dev env body)) (harg : par_reduces_p env arg' (dev env a)) \
      (closed : RecEnvClosed env) (liftclosed : RecEnvLiftClosed env) => \
-     Eq.substType KExpr (fun (x : KExpr) => par_reduces_p env (instantiate body' arg') x) \
+     @Eq.substType KExpr (fun (x : KExpr) => par_reduces_p env (instantiate body' arg') x) \
      (topIotaStar env (instantiate (dev env body) (dev env a))) (dev env (KExpr.app (KExpr.lam A body) a)) \
-     (Eq.symm KExpr (dev env (KExpr.app (KExpr.lam A body) a)) (topIotaStar env (instantiate (dev env body) (dev env a))) (dev_app_lam env A body a)) \
+     (@Eq.symm KExpr (dev env (KExpr.app (KExpr.lam A body) a)) (topIotaStar env (instantiate (dev env body) (dev env a))) (dev_app_lam env A body a)) \
      (par_topIotaStar env (instantiate body' arg') (instantiate (dev env body) (dev env a)) \
      (par_subst_p env body' (dev env body) arg' (dev env a) Nat.zero hbody harg closed liftclosed))"
         .to_string()
@@ -1870,77 +1870,77 @@ fn dev_kbeta_proof() -> String {
 /// cd -> dev, the false branch using `par_topIotaStar` (no convoy) and the lam branch
 /// `par_topIotaStar`-wrapping the beta + transporting via `dev_app_lam`.
 fn dev_kcong_proof() -> String {
-    let app_cong = "(par_reduces_p.app env f' (dev env f) a' (dev env a) hf' ha')";
+    let app_cong = "(@par_reduces_p.app env f' (dev env f) a' (dev env a) hf' ha')";
 
     // FALSE branch: dev (app f a) = topIotaStar (app (dev f)(dev a)); par_topIotaStar lifts.
     let dev_false_val = "(topIotaStar env (KExpr.app (dev env f) (dev env a)))";
-    let eq_dev_false = "(Eq.subst Bool \
-         (fun (bcond : Bool) => Eq KExpr (dev env (KExpr.app f a)) \
-         (Bool.rec (fun (_ : Bool) => KExpr) \
+    let eq_dev_false = "(@Eq.subst Bool \
+         (fun (bcond : Bool) => @Eq KExpr (dev env (KExpr.app f a)) \
+         (@Bool.rec (fun (_ : Bool) => KExpr) \
          (topIotaStar env (KExpr.app (dev env f) (dev env a))) \
          (topIotaStar env (instantiate (kexpr_lam_body (dev env f)) (dev env a))) bcond)) \
          (kexpr_is_lam f) Bool.false hfalse (dev_app env f a))"
         .to_string();
     let false_branch = format!(
-        "(fun (hfalse : Eq Bool (kexpr_is_lam f) Bool.false) => \
-         Eq.substType KExpr (fun (x : KExpr) => par_reduces_p env (KExpr.app f' a') x) \
+        "(fun (hfalse : @Eq Bool (kexpr_is_lam f) Bool.false) => \
+         @Eq.substType KExpr (fun (x : KExpr) => par_reduces_p env (KExpr.app f' a') x) \
          {dev_false_val} (dev env (KExpr.app f a)) \
-         (Eq.symm KExpr (dev env (KExpr.app f a)) {dev_false_val} {eq_dev_false}) \
+         (@Eq.symm KExpr (dev env (KExpr.app f a)) {dev_false_val} {eq_dev_false}) \
          (par_topIotaStar env (KExpr.app f' a') (KExpr.app (dev env f) (dev env a)) {app_cong}))"
     );
 
     // LAM branch (f = lam A b0): double par_reduces_p_lam_inv (cd -> dev), then
     // par_topIotaStar + dev_app_lam.
-    let hf_lam = "(Eq.substType KExpr (fun (x : KExpr) => par_reduces_p env x f') f (KExpr.lam A b0) hflam hf)";
-    let hf_dev_lam = "(Eq.substType KExpr (fun (x : KExpr) => par_reduces_p env f' x) \
+    let hf_lam = "(@Eq.substType KExpr (fun (x : KExpr) => par_reduces_p env x f') f (KExpr.lam A b0) hflam hf)";
+    let hf_dev_lam = "(@Eq.substType KExpr (fun (x : KExpr) => par_reduces_p env f' x) \
          (dev env f) (KExpr.lam (dev env A) (dev env b0)) \
-         (Eq.substType KExpr (fun (g : KExpr) => Eq KExpr (dev env g) (KExpr.lam (dev env A) (dev env b0))) \
-         (KExpr.lam A b0) f (Eq.symm KExpr f (KExpr.lam A b0) hflam) (dev_lam env A b0)) \
+         (@Eq.substType KExpr (fun (g : KExpr) => @Eq KExpr (dev env g) (KExpr.lam (dev env A) (dev env b0))) \
+         (KExpr.lam A b0) f (@Eq.symm KExpr f (KExpr.lam A b0) hflam) (dev_lam env A b0)) \
          hf')";
     let beta_fire =
-        "(par_reduces_p.beta env A' (dev env A) b0' (dev env b0) a' (dev env a) hA'devA hb0'devb0 ha')";
+        "(@par_reduces_p.beta env A' (dev env A) b0' (dev env b0) a' (dev env a) hA'devA hb0'devb0 ha')";
     let klam2 = format!(
         "(fun (ty2 : KExpr) (body2 : KExpr) \
          (hty2 : par_reduces_p env A' ty2) (hbody2 : par_reduces_p env b0' body2) \
-         (zeq2 : Eq KExpr (KExpr.lam ty2 body2) (KExpr.lam (dev env A) (dev env b0))) => \
+         (zeq2 : @Eq KExpr (KExpr.lam ty2 body2) (KExpr.lam (dev env A) (dev env b0))) => \
          (fun (hA'devA : par_reduces_p env A' (dev env A)) (hb0'devb0 : par_reduces_p env b0' (dev env b0)) => \
          {beta_fire}) \
-         (Eq.substType KExpr (fun (x : KExpr) => par_reduces_p env A' x) ty2 (dev env A) \
+         (@Eq.substType KExpr (fun (x : KExpr) => par_reduces_p env A' x) ty2 (dev env A) \
          (lam_inj_fst ty2 body2 (dev env A) (dev env b0) zeq2) hty2) \
-         (Eq.substType KExpr (fun (x : KExpr) => par_reduces_p env b0' x) body2 (dev env b0) \
+         (@Eq.substType KExpr (fun (x : KExpr) => par_reduces_p env b0' x) body2 (dev env b0) \
          (lam_inj_snd ty2 body2 (dev env A) (dev env b0) zeq2) hbody2))"
     );
     let klam1 = format!(
         "(fun (A' : KExpr) (b0' : KExpr) \
          (hA : par_reduces_p env A A') (hb0 : par_reduces_p env b0 b0') \
-         (zeq1 : Eq KExpr (KExpr.lam A' b0') f') => \
-         Eq.substType KExpr (fun (g : KExpr) => par_reduces_p env (KExpr.app g a') (instantiate (dev env b0) (dev env a))) \
+         (zeq1 : @Eq KExpr (KExpr.lam A' b0') f') => \
+         @Eq.substType KExpr (fun (g : KExpr) => par_reduces_p env (KExpr.app g a') (instantiate (dev env b0) (dev env a))) \
          (KExpr.lam A' b0') f' zeq1 \
          (par_reduces_p_lam_inv env A' b0' (KExpr.lam (dev env A) (dev env b0)) \
-         (fun (z : KExpr) => Eq KExpr z (KExpr.lam (dev env A) (dev env b0)) -> par_reduces_p env (KExpr.app (KExpr.lam A' b0') a') (instantiate (dev env b0) (dev env a))) \
-         (Eq.substType KExpr (fun (x : KExpr) => par_reduces_p env x (KExpr.lam (dev env A) (dev env b0))) \
-         f' (KExpr.lam A' b0') (Eq.symm KExpr (KExpr.lam A' b0') f' zeq1) {hf_dev_lam}) \
+         (fun (z : KExpr) => @Eq KExpr z (KExpr.lam (dev env A) (dev env b0)) -> par_reduces_p env (KExpr.app (KExpr.lam A' b0') a') (instantiate (dev env b0) (dev env a))) \
+         (@Eq.substType KExpr (fun (x : KExpr) => par_reduces_p env x (KExpr.lam (dev env A) (dev env b0))) \
+         f' (KExpr.lam A' b0') (@Eq.symm KExpr (KExpr.lam A' b0') f' zeq1) {hf_dev_lam}) \
          {klam2} \
-         (Eq.refl KExpr (KExpr.lam (dev env A) (dev env b0)))))"
+         (@Eq.refl KExpr (KExpr.lam (dev env A) (dev env b0)))))"
     );
     let beta_goal_proof = format!(
         "(par_reduces_p_lam_inv env A b0 f' \
-         (fun (z : KExpr) => Eq KExpr z f' -> par_reduces_p env (KExpr.app f' a') (instantiate (dev env b0) (dev env a))) \
-         {hf_lam} {klam1} (Eq.refl KExpr f'))"
+         (fun (z : KExpr) => @Eq KExpr z f' -> par_reduces_p env (KExpr.app f' a') (instantiate (dev env b0) (dev env a))) \
+         {hf_lam} {klam1} (@Eq.refl KExpr f'))"
     );
     let p_lam = format!(
-        "(Eq.substType KExpr \
+        "(@Eq.substType KExpr \
          (fun (x : KExpr) => par_reduces_p env (KExpr.app f' a') x) \
          (topIotaStar env (instantiate (dev env b0) (dev env a))) (dev env (KExpr.app (KExpr.lam A b0) a)) \
-         (Eq.symm KExpr (dev env (KExpr.app (KExpr.lam A b0) a)) (topIotaStar env (instantiate (dev env b0) (dev env a))) (dev_app_lam env A b0 a)) \
+         (@Eq.symm KExpr (dev env (KExpr.app (KExpr.lam A b0) a)) (topIotaStar env (instantiate (dev env b0) (dev env a))) (dev_app_lam env A b0 a)) \
          (par_topIotaStar env (KExpr.app f' a') (instantiate (dev env b0) (dev env a)) {beta_goal_proof}))"
     );
     let lam_branch = format!(
-        "(fun (A : KExpr) (b0 : KExpr) (hflam : Eq KExpr f (KExpr.lam A b0)) => \
-         Eq.substType KExpr \
+        "(fun (A : KExpr) (b0 : KExpr) (hflam : @Eq KExpr f (KExpr.lam A b0)) => \
+         @Eq.substType KExpr \
          (fun (g : KExpr) => par_reduces_p env (KExpr.app f' a') (dev env (KExpr.app g a))) \
          (KExpr.lam A b0) f \
-         (Eq.symm KExpr f (KExpr.lam A b0) hflam) \
+         (@Eq.symm KExpr f (KExpr.lam A b0) hflam) \
          {p_lam})"
     );
 
@@ -1958,81 +1958,81 @@ fn dev_kcong_proof() -> String {
 /// the app arm `par_topIotaStar`-wrapped on both branches (dev's extra top fire).
 fn dev_self_proof() -> String {
     let motive = "(fun (e : KExpr) => par_reduces_p env e (dev env e))";
-    let sort_arm = "(fun (n : Level) => par_reduces_p.refl env (KExpr.sort n))";
-    let bvar_arm = "(fun (i : Nat) => par_reduces_p.refl env (KExpr.bvar i))";
+    let sort_arm = "(fun (n : Level) => @par_reduces_p.refl env (KExpr.sort n))";
+    let bvar_arm = "(fun (i : Nat) => @par_reduces_p.refl env (KExpr.bvar i))";
     let const_arm =
-        "(fun (nm : Name) (us : ListType Level) => par_reduces_p.refl env (KExpr.const nm us))";
+        "(fun (nm : Name) (us : ListType Level) => @par_reduces_p.refl env (KExpr.const nm us))";
 
     // lam/pi binder arm: dev env (HEAD ty b) = HEAD (dev ty)(dev b) (dev_lam/dev_pi).
     let binder_arm = |ctor: &str, head: &str, unfold: &str| -> String {
         format!(
             "(fun (ty : KExpr) (b : KExpr) \
              (ihty : par_reduces_p env ty (dev env ty)) (ihb : par_reduces_p env b (dev env b)) => \
-             Eq.substType KExpr \
+             @Eq.substType KExpr \
              (fun (x : KExpr) => par_reduces_p env ({head} ty b) x) \
              ({head} (dev env ty) (dev env b)) (dev env ({head} ty b)) \
-             (Eq.symm KExpr (dev env ({head} ty b)) ({head} (dev env ty) (dev env b)) ({unfold} env ty b)) \
-             ({ctor} env ty (dev env ty) b (dev env b) ihty ihb))"
+             (@Eq.symm KExpr (dev env ({head} ty b)) ({head} (dev env ty) (dev env b)) ({unfold} env ty b)) \
+             (@{ctor} env ty (dev env ty) b (dev env b) ihty ihb))"
         )
     };
 
     // ---- app arm ----
-    let app_cong = "(par_reduces_p.app env f (dev env f) a (dev env a) ihf iha)";
+    let app_cong = "(@par_reduces_p.app env f (dev env f) a (dev env a) ihf iha)";
 
     // FALSE branch: dev (app f a) = topIotaStar (app (dev f)(dev a)) (dev_app + hfalse),
     // then par_topIotaStar of the app congruence.
     let dev_false_val = "(topIotaStar env (KExpr.app (dev env f) (dev env a)))";
-    let eq_dev_false = "(Eq.subst Bool \
-         (fun (bcond : Bool) => Eq KExpr (dev env (KExpr.app f a)) \
-         (Bool.rec (fun (_ : Bool) => KExpr) \
+    let eq_dev_false = "(@Eq.subst Bool \
+         (fun (bcond : Bool) => @Eq KExpr (dev env (KExpr.app f a)) \
+         (@Bool.rec (fun (_ : Bool) => KExpr) \
          (topIotaStar env (KExpr.app (dev env f) (dev env a))) \
          (topIotaStar env (instantiate (kexpr_lam_body (dev env f)) (dev env a))) bcond)) \
          (kexpr_is_lam f) Bool.false hfalse (dev_app env f a))"
         .to_string();
     let false_branch = format!(
-        "(fun (hfalse : Eq Bool (kexpr_is_lam f) Bool.false) => \
-         Eq.substType KExpr (fun (x : KExpr) => par_reduces_p env (KExpr.app f a) x) \
+        "(fun (hfalse : @Eq Bool (kexpr_is_lam f) Bool.false) => \
+         @Eq.substType KExpr (fun (x : KExpr) => par_reduces_p env (KExpr.app f a) x) \
          {dev_false_val} (dev env (KExpr.app f a)) \
-         (Eq.symm KExpr (dev env (KExpr.app f a)) {dev_false_val} {eq_dev_false}) \
+         (@Eq.symm KExpr (dev env (KExpr.app f a)) {dev_false_val} {eq_dev_false}) \
          (par_topIotaStar env (KExpr.app f a) (KExpr.app (dev env f) (dev env a)) {app_cong}))"
     );
 
     // LAM branch (f = lam A b0): build the beta to instantiate (dev b0)(dev a), then
     // par_topIotaStar, transported to dev (app (lam A b0) a) via dev_app_lam.
-    let ihf_lam = "(Eq.substType KExpr (fun (x : KExpr) => par_reduces_p env (KExpr.lam A b0) x) \
+    let ihf_lam = "(@Eq.substType KExpr (fun (x : KExpr) => par_reduces_p env (KExpr.lam A b0) x) \
          (dev env (KExpr.lam A b0)) (KExpr.lam (dev env A) (dev env b0)) (dev_lam env A b0) \
-         (Eq.substType KExpr (fun (g : KExpr) => par_reduces_p env g (dev env g)) f (KExpr.lam A b0) hf ihf))";
+         (@Eq.substType KExpr (fun (g : KExpr) => par_reduces_p env g (dev env g)) f (KExpr.lam A b0) hf ihf))";
     let beta_reduct = "(instantiate (dev env b0) (dev env a))";
     let beta_goal = format!("(par_reduces_p env (KExpr.app (KExpr.lam A b0) a) {beta_reduct})");
     let klam_inv = "(fun (ty2 : KExpr) (body2 : KExpr) \
          (hty2 : par_reduces_p env A ty2) (hbody2 : par_reduces_p env b0 body2) \
-         (zeq : Eq KExpr (KExpr.lam ty2 body2) (KExpr.lam (dev env A) (dev env b0))) => \
-         par_reduces_p.beta env A (dev env A) b0 (dev env b0) a (dev env a) \
-         (Eq.substType KExpr (fun (x : KExpr) => par_reduces_p env A x) ty2 (dev env A) \
+         (zeq : @Eq KExpr (KExpr.lam ty2 body2) (KExpr.lam (dev env A) (dev env b0))) => \
+         @par_reduces_p.beta env A (dev env A) b0 (dev env b0) a (dev env a) \
+         (@Eq.substType KExpr (fun (x : KExpr) => par_reduces_p env A x) ty2 (dev env A) \
          (lam_inj_fst ty2 body2 (dev env A) (dev env b0) zeq) hty2) \
-         (Eq.substType KExpr (fun (x : KExpr) => par_reduces_p env b0 x) body2 (dev env b0) \
+         (@Eq.substType KExpr (fun (x : KExpr) => par_reduces_p env b0 x) body2 (dev env b0) \
          (lam_inj_snd ty2 body2 (dev env A) (dev env b0) zeq) hbody2) \
          iha)";
     let beta_p = format!(
         "(par_reduces_p_lam_inv env A b0 (KExpr.lam (dev env A) (dev env b0)) \
-         (fun (z : KExpr) => Eq KExpr z (KExpr.lam (dev env A) (dev env b0)) -> {beta_goal}) \
+         (fun (z : KExpr) => @Eq KExpr z (KExpr.lam (dev env A) (dev env b0)) -> {beta_goal}) \
          {ihf_lam} {klam_inv} \
-         (Eq.refl KExpr (KExpr.lam (dev env A) (dev env b0))))"
+         (@Eq.refl KExpr (KExpr.lam (dev env A) (dev env b0))))"
     );
     let dev_lam_target = "(topIotaStar env (instantiate (dev env b0) (dev env a)))";
     let p_lam = format!(
-        "(Eq.substType KExpr \
+        "(@Eq.substType KExpr \
          (fun (x : KExpr) => par_reduces_p env (KExpr.app (KExpr.lam A b0) a) x) \
          {dev_lam_target} (dev env (KExpr.app (KExpr.lam A b0) a)) \
-         (Eq.symm KExpr (dev env (KExpr.app (KExpr.lam A b0) a)) {dev_lam_target} (dev_app_lam env A b0 a)) \
+         (@Eq.symm KExpr (dev env (KExpr.app (KExpr.lam A b0) a)) {dev_lam_target} (dev_app_lam env A b0 a)) \
          (par_topIotaStar env (KExpr.app (KExpr.lam A b0) a) {beta_reduct} {beta_p}))"
     );
     let lam_branch = format!(
-        "(fun (A : KExpr) (b0 : KExpr) (hf : Eq KExpr f (KExpr.lam A b0)) => \
-         Eq.substType KExpr \
+        "(fun (A : KExpr) (b0 : KExpr) (hf : @Eq KExpr f (KExpr.lam A b0)) => \
+         @Eq.substType KExpr \
          (fun (g : KExpr) => par_reduces_p env (KExpr.app g a) (dev env (KExpr.app g a))) \
          (KExpr.lam A b0) f \
-         (Eq.symm KExpr f (KExpr.lam A b0) hf) \
+         (@Eq.symm KExpr f (KExpr.lam A b0) hf) \
          {p_lam})"
     );
 
@@ -2050,25 +2050,25 @@ fn dev_self_proof() -> String {
     let let_arm = "(fun (lt : KExpr) (lv : KExpr) (lb : KExpr) \
          (ihlt : par_reduces_p env lt (dev env lt)) (ihlv : par_reduces_p env lv (dev env lv)) \
          (ihlb : par_reduces_p env lb (dev env lb)) => \
-         Eq.substType KExpr \
+         @Eq.substType KExpr \
          (fun (x : KExpr) => par_reduces_p env (KExpr.let_ lt lv lb) x) \
          (topIotaStar env (instantiate (dev env lb) (dev env lv))) (dev env (KExpr.let_ lt lv lb)) \
-         (Eq.symm KExpr (dev env (KExpr.let_ lt lv lb)) (topIotaStar env (instantiate (dev env lb) (dev env lv))) (dev_let env lt lv lb)) \
+         (@Eq.symm KExpr (dev env (KExpr.let_ lt lv lb)) (topIotaStar env (instantiate (dev env lb) (dev env lv))) (dev_let env lt lv lb)) \
          (par_topIotaStar env (KExpr.let_ lt lv lb) (instantiate (dev env lb) (dev env lv)) \
-         (par_reduces_p.let_ env lt (dev env lt) lv (dev env lv) lb (dev env lb) ihlt ihlv ihlb)))"
+         (@par_reduces_p.let_ env lt (dev env lt) lv (dev env lv) lb (dev env lb) ihlt ihlv ihlb)))"
         .to_string();
 
     // proj arm: dev descends into the scrutinee (defeq); congruence via par_reduces_p.proj.
     let proj_arm = "(fun (s : Name) (i : Nat) (sub : KExpr) \
          (ihsub : par_reduces_p env sub (dev env sub)) => \
-         par_reduces_p.proj env s i sub (dev env sub) ihsub)"
+         @par_reduces_p.proj env s i sub (dev env sub) ihsub)"
         .to_string();
     // lit arm: dev env (lit v) = lit v (defeq); reflexive par-step.
-    let lit_arm = "(fun (v : Nat) => par_reduces_p.refl env (KExpr.lit v))".to_string();
+    let lit_arm = "(fun (v : Nat) => @par_reduces_p.refl env (KExpr.lit v))".to_string();
 
     format!(
         "fun (env : RecEnv) (e0 : KExpr) => \
-         KExpr.rec {motive} \
+         @KExpr.rec {motive} \
          {sort_arm} {bvar_arm} {app_arm} \
          {lam_arm} {pi_arm} {const_arm} {let_arm} {proj_arm} {lit_arm} \
          e0",
@@ -2109,26 +2109,26 @@ fn app_redex_tri_proof() -> String {
     let right_recon = "(par_reduces_p_app_redex env f f' a a' recname meta major cname rule \
          disjoint h1 h2 h4 h5 fields arity hbnd hidx hf ha)";
     let minimal_body = format!(
-        "(Eq.substType (OptionType KExpr) \
+        "(@Eq.substType (OptionType KExpr) \
          (fun (o : OptionType KExpr) => par_reduces_p env r (opt_default o (KExpr.app f' a'))) \
-         (OptionType.some KExpr {reduct_m}) (iota_reduct env (KExpr.app f' a')) \
-         (Eq.symm (OptionType KExpr) (iota_reduct env (KExpr.app f' a')) (OptionType.some KExpr {reduct_m}) {right_recon}) \
+         (@OptionType.some KExpr {reduct_m}) (iota_reduct env (KExpr.app f' a')) \
+         (@Eq.symm (OptionType KExpr) (iota_reduct env (KExpr.app f' a')) (@OptionType.some KExpr {reduct_m}) {right_recon}) \
          {left_leg})"
     );
     let none_arm = format!(
-        "(fun (hfnone : Eq (OptionType KExpr) (iota_reduct env f) (OptionType.none KExpr)) => \
+        "(fun (hfnone : @Eq (OptionType KExpr) (iota_reduct env f) (@OptionType.none KExpr)) => \
          iota_reduct_app_minimal_boundary_idx_type env f a r hr hfnone {goal} \
          (fun (recname : Name) (meta : RecMeta) (major : KExpr) (cname : Name) (rule : RecRule) \
-         (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.app f a))) (OptionType.some Name recname)) \
-         (h2 : Eq (OptionType RecMeta) (recmeta_for env recname) (OptionType.some RecMeta meta)) \
-         (h3 : Eq (OptionType KExpr) (list_head (list_drop {major_idx} (kapp_args (KExpr.app f a)))) (OptionType.some KExpr major)) \
-         (h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname)) \
-         (h5 : Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule)) \
-         (fields : Eq Bool (iota_fields_ok rule (kapp_args major)) Bool.true) \
-         (arity : Eq Bool (nat_eqb (name_list_len (kconst_params (recmeta_signature meta))) (level_list_len (kexpr_const_levels (kapp_fn (KExpr.app f a))))) Bool.true) \
-         (h5r : Eq (OptionType KExpr) (OptionType.some KExpr {r_fa}) (OptionType.some KExpr r)) \
-         (hbnd : Eq KExpr major a) \
-         (hidx : Eq Nat {major_idx} (list_length (kapp_args f))) => \
+         (h1 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.app f a))) (@OptionType.some Name recname)) \
+         (h2 : @Eq (OptionType RecMeta) (recmeta_for env recname) (@OptionType.some RecMeta meta)) \
+         (h3 : @Eq (OptionType KExpr) (list_head (list_drop {major_idx} (kapp_args (KExpr.app f a)))) (@OptionType.some KExpr major)) \
+         (h4 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (@OptionType.some Name cname)) \
+         (h5 : @Eq (OptionType RecRule) (recrule_for env recname cname) (@OptionType.some RecRule rule)) \
+         (fields : @Eq Bool (iota_fields_ok rule (kapp_args major)) Bool.true) \
+         (arity : @Eq Bool (nat_eqb (name_list_len (kconst_params (recmeta_signature meta))) (level_list_len (kexpr_const_levels (kapp_fn (KExpr.app f a))))) Bool.true) \
+         (h5r : @Eq (OptionType KExpr) (@OptionType.some KExpr {r_fa}) (@OptionType.some KExpr r)) \
+         (hbnd : @Eq KExpr major a) \
+         (hidx : @Eq Nat {major_idx} (list_length (kapp_args f))) => \
          {minimal_body}))"
     );
 
@@ -2136,61 +2136,61 @@ fn app_redex_tri_proof() -> String {
     let happ_src = "(iota_reduct_app_some env f a f1 hf1)";
     let r_eq = format!(
         "(option_some_inj KExpr (KExpr.app f1 a) r \
-         (Eq.trans (OptionType KExpr) (OptionType.some KExpr (KExpr.app f1 a)) (iota_reduct env (KExpr.app f a)) (OptionType.some KExpr r) \
-         (Eq.symm (OptionType KExpr) (iota_reduct env (KExpr.app f a)) (OptionType.some KExpr (KExpr.app f1 a)) {happ_src}) hr))"
+         (@Eq.trans (OptionType KExpr) (@OptionType.some KExpr (KExpr.app f1 a)) (iota_reduct env (KExpr.app f a)) (@OptionType.some KExpr r) \
+         (@Eq.symm (OptionType KExpr) (iota_reduct env (KExpr.app f a)) (@OptionType.some KExpr (KExpr.app f1 a)) {happ_src}) hr))"
     );
     let ihfres = "(ihf f1 hf1)";
     // none' subcase: iota_reduct f' = none, topIotaStar f' = f', par_topIotaStar absorbs.
     let f1_to_fp = format!(
-        "(Eq.substType KExpr (fun (Z : KExpr) => par_reduces_p env f1 Z) (topIotaStar env f') f' \
+        "(@Eq.substType KExpr (fun (Z : KExpr) => par_reduces_p env f1 Z) (topIotaStar env f') f' \
          (topIotaStar_fix env f' hfpnone) {ihfres})"
     );
-    let appcong_none = format!("(par_reduces_p.app env f1 f' a a' {f1_to_fp} ha)");
+    let appcong_none = format!("(@par_reduces_p.app env f1 f' a a' {f1_to_fp} ha)");
     let lift_none =
         format!("(par_topIotaStar env (KExpr.app f1 a) (KExpr.app f' a') {appcong_none})");
     let nonep_body = format!(
-        "(Eq.substType KExpr (fun (Z : KExpr) => par_reduces_p env Z (topIotaStar env (KExpr.app f' a'))) \
+        "(@Eq.substType KExpr (fun (Z : KExpr) => par_reduces_p env Z (topIotaStar env (KExpr.app f' a'))) \
          (KExpr.app f1 a) r {r_eq} {lift_none})"
     );
     // some' subcase: iota_reduct f' = some f1', topIotaStar (app f' a') = app f1' a'.
-    let eq_tifp = "(Eq.cong (OptionType KExpr) KExpr (fun (o : OptionType KExpr) => opt_default o f') (iota_reduct env f') (OptionType.some KExpr f1p) hf1p)";
+    let eq_tifp = "(@Eq.cong (OptionType KExpr) KExpr (fun (o : OptionType KExpr) => opt_default o f') (iota_reduct env f') (@OptionType.some KExpr f1p) hf1p)";
     let f1_to_f1p = format!(
-        "(Eq.substType KExpr (fun (Z : KExpr) => par_reduces_p env f1 Z) (topIotaStar env f') f1p {eq_tifp} {ihfres})"
+        "(@Eq.substType KExpr (fun (Z : KExpr) => par_reduces_p env f1 Z) (topIotaStar env f') f1p {eq_tifp} {ihfres})"
     );
     let happ_tgt = "(iota_reduct_app_some env f' a' f1p hf1p)";
-    let appcong_some = format!("(par_reduces_p.app env f1 f1p a a' {f1_to_f1p} ha)");
+    let appcong_some = format!("(@par_reduces_p.app env f1 f1p a a' {f1_to_f1p} ha)");
     let r_to_f1p = format!(
-        "(Eq.substType KExpr (fun (Z : KExpr) => par_reduces_p env Z (KExpr.app f1p a')) (KExpr.app f1 a) r {r_eq} {appcong_some})"
+        "(@Eq.substType KExpr (fun (Z : KExpr) => par_reduces_p env Z (KExpr.app f1p a')) (KExpr.app f1 a) r {r_eq} {appcong_some})"
     );
     let somep_body = format!(
-        "(Eq.substType (OptionType KExpr) \
+        "(@Eq.substType (OptionType KExpr) \
          (fun (o : OptionType KExpr) => par_reduces_p env r (opt_default o (KExpr.app f' a'))) \
-         (OptionType.some KExpr (KExpr.app f1p a')) (iota_reduct env (KExpr.app f' a')) \
-         (Eq.symm (OptionType KExpr) (iota_reduct env (KExpr.app f' a')) (OptionType.some KExpr (KExpr.app f1p a')) {happ_tgt}) \
+         (@OptionType.some KExpr (KExpr.app f1p a')) (iota_reduct env (KExpr.app f' a')) \
+         (@Eq.symm (OptionType KExpr) (iota_reduct env (KExpr.app f' a')) (@OptionType.some KExpr (KExpr.app f1p a')) {happ_tgt}) \
          {r_to_f1p})"
     );
     let some_arm = format!(
-        "(fun (f1 : KExpr) (hf1 : Eq (OptionType KExpr) (iota_reduct env f) (OptionType.some KExpr f1)) => \
-         OptionType.rec KExpr \
-         (fun (ofp : OptionType KExpr) => Eq (OptionType KExpr) (iota_reduct env f') ofp -> {goal}) \
-         (fun (hfpnone : Eq (OptionType KExpr) (iota_reduct env f') (OptionType.none KExpr)) => {nonep_body}) \
-         (fun (f1p : KExpr) (hf1p : Eq (OptionType KExpr) (iota_reduct env f') (OptionType.some KExpr f1p)) => {somep_body}) \
+        "(fun (f1 : KExpr) (hf1 : @Eq (OptionType KExpr) (iota_reduct env f) (@OptionType.some KExpr f1)) => \
+         @OptionType.rec KExpr \
+         (fun (ofp : OptionType KExpr) => @Eq (OptionType KExpr) (iota_reduct env f') ofp -> {goal}) \
+         (fun (hfpnone : @Eq (OptionType KExpr) (iota_reduct env f') (@OptionType.none KExpr)) => {nonep_body}) \
+         (fun (f1p : KExpr) (hf1p : @Eq (OptionType KExpr) (iota_reduct env f') (@OptionType.some KExpr f1p)) => {somep_body}) \
          (iota_reduct env f') \
-         (Eq.refl (OptionType KExpr) (iota_reduct env f')))"
+         (@Eq.refl (OptionType KExpr) (iota_reduct env f')))"
     );
 
     format!(
         "fun (env : RecEnv) (f : KExpr) (f' : KExpr) (a : KExpr) (a' : KExpr) (r : KExpr) \
          (disjoint : RecEnvCtorNoRecMeta env) \
-         (ihf : forall (rf : KExpr), Eq (OptionType KExpr) (iota_reduct env f) (OptionType.some KExpr rf) -> par_reduces_p env rf (topIotaStar env f')) \
+         (ihf : forall (rf : KExpr), @Eq (OptionType KExpr) (iota_reduct env f) (@OptionType.some KExpr rf) -> par_reduces_p env rf (topIotaStar env f')) \
          (hf : par_reduces_p env f f') (ha : par_reduces_p env a a') \
-         (hr : Eq (OptionType KExpr) (iota_reduct env (KExpr.app f a)) (OptionType.some KExpr r)) => \
-         OptionType.rec KExpr \
-         (fun (of0 : OptionType KExpr) => Eq (OptionType KExpr) (iota_reduct env f) of0 -> {goal}) \
+         (hr : @Eq (OptionType KExpr) (iota_reduct env (KExpr.app f a)) (@OptionType.some KExpr r)) => \
+         @OptionType.rec KExpr \
+         (fun (of0 : OptionType KExpr) => @Eq (OptionType KExpr) (iota_reduct env f) of0 -> {goal}) \
          {none_arm} \
          {some_arm} \
          (iota_reduct env f) \
-         (Eq.refl (OptionType KExpr) (iota_reduct env f))"
+         (@Eq.refl (OptionType KExpr) (iota_reduct env f))"
     )
 }
 
@@ -2207,28 +2207,28 @@ fn iota_redex_tri_aux_proof() -> String {
     // M X t (applied to endpoints x,y): the per-IH / motive type.
     let m_at = |x: &str, y: &str| -> String {
         format!(
-            "forall (rr : KExpr), Eq (OptionType KExpr) (iota_reduct env {x}) (OptionType.some KExpr rr) -> par_reduces_p env rr (topIotaStar env {y})"
+            "forall (rr : KExpr), @Eq (OptionType KExpr) (iota_reduct env {x}) (@OptionType.some KExpr rr) -> par_reduces_p env rr (topIotaStar env {y})"
         )
     };
-    let motive = "(fun (X : KExpr) (t : KExpr) (_h : par_reduces_p env X t) => forall (rr : KExpr), Eq (OptionType KExpr) (iota_reduct env X) (OptionType.some KExpr rr) -> par_reduces_p env rr (topIotaStar env t))";
+    let motive = "(fun (X : KExpr) (t : KExpr) (_h : par_reduces_p env X t) => forall (rr : KExpr), @Eq (OptionType KExpr) (iota_reduct env X) (@OptionType.some KExpr rr) -> par_reduces_p env rr (topIotaStar env t))";
 
     // Type-valued head-none discharge for a vacuous (non-recursor-headed) source.
     let vacuous = |src: &str, tgt: &str| -> String {
         format!(
-            "(fun (r : KExpr) (hr : Eq (OptionType KExpr) (iota_reduct env {src}) (OptionType.some KExpr r)) => \
+            "(fun (r : KExpr) (hr : @Eq (OptionType KExpr) (iota_reduct env {src}) (@OptionType.some KExpr r)) => \
              iota_step_head_none_absurd_type env {src} r \
              (par_reduces_p env r (topIotaStar env {tgt})) \
-             (Eq.refl (OptionType Name) (OptionType.none Name)) hr)"
+             (@Eq.refl (OptionType Name) (@OptionType.none Name)) hr)"
         )
     };
 
     // refl arm: topIotaStar env e = r (opt_default computation), transport refl r.
     let refl_arm = "(fun (e : KExpr) => \
-         fun (r : KExpr) (hr : Eq (OptionType KExpr) (iota_reduct env e) (OptionType.some KExpr r)) => \
-         Eq.substType KExpr (fun (Z : KExpr) => par_reduces_p env r Z) r (topIotaStar env e) \
-         (Eq.symm KExpr (topIotaStar env e) r \
-         (Eq.cong (OptionType KExpr) KExpr (fun (o : OptionType KExpr) => opt_default o e) (iota_reduct env e) (OptionType.some KExpr r) hr)) \
-         (par_reduces_p.refl env r))";
+         fun (r : KExpr) (hr : @Eq (OptionType KExpr) (iota_reduct env e) (@OptionType.some KExpr r)) => \
+         @Eq.substType KExpr (fun (Z : KExpr) => par_reduces_p env r Z) r (topIotaStar env e) \
+         (@Eq.symm KExpr (topIotaStar env e) r \
+         (@Eq.cong (OptionType KExpr) KExpr (fun (o : OptionType KExpr) => opt_default o e) (iota_reduct env e) (@OptionType.some KExpr r) hr)) \
+         (@par_reduces_p.refl env r))";
 
     // beta arm (vacuous).
     let beta_arm = format!(
@@ -2247,7 +2247,7 @@ fn iota_redex_tri_aux_proof() -> String {
         "(fun (f : KExpr) (fp : KExpr) (a : KExpr) (ap : KExpr) \
          (hf : par_reduces_p env f fp) (ha : par_reduces_p env a ap) \
          (ihf : {mf}) (iha : {ma}) => \
-         fun (r : KExpr) (hr : Eq (OptionType KExpr) (iota_reduct env (KExpr.app f a)) (OptionType.some KExpr r)) => \
+         fun (r : KExpr) (hr : @Eq (OptionType KExpr) (iota_reduct env (KExpr.app f a)) (@OptionType.some KExpr r)) => \
          app_redex_tri env f fp a ap r disjoint ihf hf ha hr)",
         mf = m_at("f", "fp"),
         ma = m_at("a", "ap"),
@@ -2325,8 +2325,8 @@ fn iota_redex_tri_aux_proof() -> String {
         "(fun (e : KExpr) (e2 : KExpr) (tf : KExpr) \
          (he : par_reduces_p env e e2) (hi : iota_step env e2 tf) \
          (ihe : {me}) => \
-         fun (r : KExpr) (hr : Eq (OptionType KExpr) (iota_reduct env e) (OptionType.some KExpr r)) => \
-         Eq.substType KExpr (fun (Z : KExpr) => par_reduces_p env r Z) (topIotaStar env e2) (topIotaStar env tf) \
+         fun (r : KExpr) (hr : @Eq (OptionType KExpr) (iota_reduct env e) (@OptionType.some KExpr r)) => \
+         @Eq.substType KExpr (fun (Z : KExpr) => par_reduces_p env r Z) (topIotaStar env e2) (topIotaStar env tf) \
          (topIotaStar_step env e2 tf w hi) \
          (ihe r hr))",
         me = m_at("e", "e2"),
@@ -2343,7 +2343,7 @@ fn iota_redex_tri_aux_proof() -> String {
 
     format!(
         "fun (env : RecEnv) (X0 : KExpr) (t0 : KExpr) (w : RecEnvReductNotRedex env) (disjoint : RecEnvCtorNoRecMeta env) (hpar : par_reduces_p env X0 t0) => \
-         par_reduces_p.rec env {motive} \
+         @par_reduces_p.rec env {motive} \
          {refl_arm} {beta_arm} {app_arm} {lam_arm} {pi_arm} {forall_arm} {let_arm} {iota_arm} {let_cong_arm} {proj_arm} \
          X0 t0 hpar"
     )

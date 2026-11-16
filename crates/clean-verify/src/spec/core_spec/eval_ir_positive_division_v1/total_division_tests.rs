@@ -121,7 +121,7 @@ fn total_division_symbolic_all_nat_and_explicit_zero_consumers_have_no_answer_pr
                 let claim = elaborate(
                     spec,
                     &format!(
-                        "forall (word divisor : Nat), Eq Nat (ir_nat_{operation} word ({divisor})) (ir_nat_{operation}_total_v1 word ({divisor}))"
+                        "forall (word divisor : Nat), @Eq Nat (ir_nat_{operation} word ({divisor})) (ir_nat_{operation}_total_v1 word ({divisor}))"
                     ),
                 );
                 let proof = elaborate(
@@ -132,9 +132,9 @@ fn total_division_symbolic_all_nat_and_explicit_zero_consumers_have_no_answer_pr
             }
             let claim = elaborate(
                 spec,
-                &format!("forall (word : Nat), Eq Nat (ir_nat_{operation}_total_v1 word 0) word"),
+                &format!("forall (word : Nat), @Eq Nat (ir_nat_{operation}_total_v1 word 0) word"),
             );
-            let proof = elaborate(spec, "fun (word : Nat) => Eq.refl Nat word");
+            let proof = elaborate(spec, "fun (word : Nat) => @Eq.refl Nat word");
             replay(spec, &claim, &proof, true);
         }
     });
@@ -153,7 +153,7 @@ fn total_division_positive_remainder_bounds_are_symbolic_without_an_answer_premi
             let claim = elaborate(
                 spec,
                 &format!(
-                    "forall (word divisor : Nat), Eq Bool (ir_nat_ltb ({operation} word (Nat.succ divisor)) (Nat.succ divisor)) Bool.true"
+                    "forall (word divisor : Nat), @Eq Bool (ir_nat_ltb ({operation} word (Nat.succ divisor)) (Nat.succ divisor)) Bool.true"
                 ),
             );
             let proof = elaborate(
@@ -191,7 +191,7 @@ fn total_division_positive_remainder_bounds_cover_small_and_full64_moduli() {
                 let claim = elaborate(
                     spec,
                     &format!(
-                        "Eq Bool (ir_nat_ltb ({operation} {word} {divisor}) {divisor}) Bool.true"
+                        "@Eq Bool (ir_nat_ltb ({operation} {word} {divisor}) {divisor}) Bool.true"
                     ),
                 );
                 let proof = app(law, [Expr::nat_lit(word), Expr::nat_lit(divisor - 1)]);
@@ -211,7 +211,7 @@ fn total_division_positive_bound_cannot_authorize_zero_smaller_bound_or_quotient
         ] {
             let valid = elaborate(
                 spec,
-                &format!("Eq Bool (ir_nat_ltb ({operation} 1 2) 2) Bool.true"),
+                &format!("@Eq Bool (ir_nat_ltb ({operation} 1 2) 2) Bool.true"),
             );
             let proof = app(law, [Expr::nat_lit(1), Expr::nat_lit(1)]);
             replay(spec, &valid, &proof, true);
@@ -219,7 +219,7 @@ fn total_division_positive_bound_cannot_authorize_zero_smaller_bound_or_quotient
                 let claim = elaborate(
                     spec,
                     &format!(
-                        "Eq Bool (ir_nat_ltb ({operation} {word} {divisor}) {bound}) Bool.true"
+                        "@Eq Bool (ir_nat_ltb ({operation} {word} {divisor}) {bound}) Bool.true"
                     ),
                 );
                 replay(spec, &claim, &proof, false);
@@ -231,7 +231,7 @@ fn total_division_positive_bound_cannot_authorize_zero_smaller_bound_or_quotient
         );
         let quotient = elaborate(
             spec,
-            "Eq Bool (ir_nat_ltb (ir_nat_div_total_v1 17 1) 1) Bool.true",
+            "@Eq Bool (ir_nat_ltb (ir_nat_div_total_v1 17 1) 1) Bool.true",
         );
         replay(spec, &quotient, &proof, false);
     });
@@ -396,7 +396,7 @@ fn total_division_collisions_missing_substrate_and_late_false_source_preserve_th
         let mut spec = base.clone();
         let before = spec.clone();
         let mut corrupted = rows().collect::<Vec<_>>();
-        corrupted[14].1 = "def ir_nat_rem_total_agrees_v1 : Eq Nat 0 1 := Eq.refl Nat 0";
+        corrupted[14].1 = "def ir_nat_rem_total_agrees_v1 : @Eq Nat 0 1 := @Eq.refl Nat 0";
         let error = install_transactionally(&mut spec, corrupted.iter().copied()).unwrap_err();
         assert!(
             matches!(&error, SpecError::TypeError(_) | SpecError::ElabError(_)),

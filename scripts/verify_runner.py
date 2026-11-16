@@ -189,12 +189,28 @@ STATE_DIR = Path(os.environ.get("VERIFY_RUNNER_STATE_DIR", REPO_ROOT / "data" / 
 # a record says what happened when a piece of it ran. They live apart so that
 # nothing walking data/suite_state/ can mistake a plan for a measurement.
 PLAN_DIR = Path(os.environ.get("VERIFY_RUNNER_PLAN_DIR", REPO_ROOT / "data" / "suite_plans"))
-DEFAULT_TARGET_DIR = REPO_ROOT / "target" / "verify-runner"
+# `target` is normally a repository symlink to `target.noindex`.  The original
+# `target/verify-runner` predates Atpkg cache ownership and contains unmanaged
+# Cargo outputs; Atpkg correctly refuses to adopt them.  Use a distinct stable
+# root it can initialize itself, and authenticate it by its canonical parent.
+# Explicit overrides were already resolved below; resolve the default too.
+DEFAULT_TARGET_DIR = (REPO_ROOT / "target" / "verify-runner-managed").resolve()
 # Everything the runner writes lives beside the build it describes, so that
 # overriding VERIFY_RUNNER_TARGET_DIR gives a fully independent runner --
 # separate logs, separate pidfile, no false "a worker is already running".
 _TARGET_DIR = Path(os.environ["VERIFY_RUNNER_TARGET_DIR"]).resolve() \
     if os.environ.get("VERIFY_RUNNER_TARGET_DIR") else DEFAULT_TARGET_DIR
+# Keep runner logs/control files beside, not inside, the Cargo output root.
+# Atpkg must be the first writer in that child so it can establish managed
+# cache ownership; creating `suite-runner` there made a fresh path look like
+# unmanaged build output and correctly produced exit 75 before compilation.
+_CARGO_TARGET_DIR = _TARGET_DIR / "cargo-output"
+# Compiler-identity/cfg fallback probes are real Cargo compilations.  Keep them
+# out of the measured target cache: otherwise a preflight probe can warm a
+# dependency before the build phase whose time and RSS the suite record claims
+# to measure.  Targo, not Python, must be the first writer in this child so
+# Atpkg can establish cache ownership.
+_COMPILER_QUERY_TARGET_DIR = _TARGET_DIR / "compiler-query-cargo-output"
 RUN_DIR = _TARGET_DIR / "suite-runner"
 LOG_DIR = RUN_DIR / "logs"
 WORKER_PIDFILE = RUN_DIR / "worker.pid"
@@ -484,7 +500,8 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def run_capture(argv: list[str], cwd: Path | None = None, timeout: int | None = None) -> tuple[int, str]:
+def run_capture(argv: list[str], cwd: Path | None = None, timeout: int | None = None,
+                env: dict[str, str] | None = None) -> tuple[int, str]:
     proc = subprocess.run(
         argv,
         cwd=str(cwd or REPO_ROOT),
@@ -492,6 +509,7 @@ def run_capture(argv: list[str], cwd: Path | None = None, timeout: int | None = 
         stderr=subprocess.STDOUT,
         text=True,
         timeout=timeout,
+        env=env,
         check=False,
     )
     return proc.returncode, proc.stdout
@@ -508,7 +526,11 @@ def git_tree_dirty() -> bool:
 
 
 def target_dir() -> Path:
-    return _TARGET_DIR
+    return _CARGO_TARGET_DIR
+
+
+def compiler_query_target_dir() -> Path:
+    return _COMPILER_QUERY_TARGET_DIR
 
 
 def safe_name(target_id: str) -> str:
@@ -764,37 +786,151 @@ def _config_rustflags() -> list[str]:
     return [str(f) for f in flags]
 
 
+_INHERITED_COMPILER_CUSTODY_UNAVAILABLE = (
+    "inherited compiler resource custody unavailable: "
+    "native compiler work has no captured inherited GNU scheduler"
+)
+_COMPILER_QUERY_GATE_GB = 14
+_COMPILER_QUERY_GATE_LABEL = "verify-runner compiler-query"
+_COMPILER_QUERY_LOCK = threading.Lock()
+
+
+def _cfg_affecting_cargo_env() -> list[str]:
+    """Environment routes whose cfg effect the direct probe cannot reproduce.
+
+    The values still enter the row's input digest.  Returning no cfg facts is
+    conservative: coverage stays undecided rather than depending on whether
+    this process happened to need the Cargo fallback.
+    """
+    exact = {
+        "RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS", "CARGO_BUILD_RUSTFLAGS",
+        "CARGO_BUILD_TARGET",
+    }
+    return sorted(
+        key for key in os.environ
+        if (
+            key in exact
+            or key.startswith("CARGO_PROFILE_")
+            or (key.startswith("CARGO_TARGET_") and key.endswith("_RUSTFLAGS"))
+        )
+    )
+
+
+def _compiler_query(
+    direct_args: list[str],
+    *,
+    targo_args: list[str] | None = None,
+    profile: str = "dev",
+) -> tuple[int, str]:
+    """Ask the selected compiler, including from inside an admitted CPU lease.
+
+    A direct `trustc` query is the small and normal path.  When `verify_runner`
+    itself is already inside `build-slot`, Trust refuses that bare compiler
+    child with exit 75: only Targo captures the inherited GNU scheduler custody
+    for compiler work.  Retry only that exact refusal through the smallest
+    workspace library.  Every other compiler failure remains a failure, and
+    explicit compiler environment routes are refused before this helper.
+    """
+    code, out = run_capture(["trustc", *direct_args])
+    if code != 75 or _INHERITED_COMPILER_CUSTODY_UNAVAILABLE not in out:
+        return code, out
+    cmd = ["targo", "--unverified", "rustc", "--locked"]
+    if profile == PROFILE_RELEASE:
+        cmd.append("--release")
+    elif profile != PROFILE_DEV:
+        return code, out
+    cmd.extend(["-p", "clean-runtime", "--lib", "--", *(targo_args or direct_args)])
+
+    # An outer heavy_gate reservation cannot be composed safely with this
+    # probe's own 14 GB reservation (11 + 14 already exceeds this host's 24 GB
+    # budget).  The supported composition is the prescribed outer build-slot;
+    # the runner owns memory admission for every compiler child.
+    if os.environ.get("HEAVY_GATE_HELD"):
+        return 75, "compiler query refuses nested HEAVY_GATE_HELD reservation\n"
+
+    with _COMPILER_QUERY_LOCK:
+        token, admitted, refused = _gate_acquire(
+            _COMPILER_QUERY_GATE_GB, _COMPILER_QUERY_GATE_LABEL)
+        # `_gate_acquire` deliberately lets ordinary target rows record and run
+        # after a gate malfunction.  A preflight query has no record field in
+        # which to disclose that, so this caller is stricter: no token, no
+        # compiler evidence and no Cargo process.
+        if not admitted or token is None:
+            why = "refused" if refused else "unavailable"
+            return 75, f"compiler query memory admission {why}; query not run\n"
+        probe_env = dict(os.environ)
+        probe_env["CARGO_TARGET_DIR"] = str(compiler_query_target_dir())
+        probe_env.setdefault("CARGO_TERM_COLOR", "never")
+        try:
+            try:
+                return run_capture(cmd, timeout=600, env=probe_env)
+            except (OSError, subprocess.TimeoutExpired) as exc:
+                return 75, f"compiler query failed: {exc}\n"
+        finally:
+            _gate_release(token)
+
+
+def _parse_lane_cfg_facts(output: str, profile: str) -> dict[str, Any] | None:
+    facts: dict[str, Any] = {name: False for name in TOOL_SET_CFG_NAMES}
+    values: dict[str, set[str]] = {}
+    observed = False
+    for line in output.splitlines():
+        match = re.fullmatch(r'([A-Za-z_][A-Za-z0-9_]*)(?:=("(?:[^"\\]|\\.)*"))?',
+                             line.strip())
+        if not match:
+            continue
+        name, encoded = match.groups()
+        # Cargo's real probe package contributes features that belong only to
+        # clean-runtime.  Cargo profiles also make `panic` and
+        # `overflow_checks` differ from a direct trustc query, and a library
+        # probe is not the row's test compilation shape.  Leave all three
+        # undecided; row features are derived independently from Cargo.
+        if name in {"feature", "panic", "overflow_checks"}:
+            continue
+        observed = True
+        if encoded is not None:
+            try:
+                value = json.loads(encoded)
+            except json.JSONDecodeError:
+                return None
+            values.setdefault(name, set()).add(value)
+        else:
+            facts[name] = True
+    facts.update({name: frozenset(vals) for name, vals in values.items()})
+    expected_debug = profile == PROFILE_DEV
+    if not observed or profile not in (PROFILE_DEV, PROFILE_RELEASE) \
+            or facts.get("debug_assertions") is not expected_debug:
+        return None
+    return facts
+
+
 def lane_cfg_facts(profile: str) -> dict[str, Any] | None:
     """The cfgs `targo --unverified test` compiles a unit with in `profile`,
     from the compiler's own `--print cfg` under the lane's flags
     (`-Ztrust-verify=off`, the config rustflags, the profile's
     debug-assertions); None (nothing decided) when it cannot be asked, when
     RUSTFLAGS could add a `--cfg`, or for an unknown profile."""
-    if _compiler_env_selectors():
+    if _compiler_env_selectors() or _cfg_affecting_cargo_env():
         return None
     if profile in _LANE_CFG_CACHE:
         return _LANE_CFG_CACHE[profile]
-    env_flags = " ".join(os.environ.get(k, "") for k in ("RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS"))
-    if "--cfg" in env_flags or "cfg" in env_flags.split():
-        return None
     if profile == PROFILE_DEV:
         extra = ["-C", "debug-assertions=on"]
     elif profile == PROFILE_RELEASE:
         extra = ["-C", "debug-assertions=off"]
     else:
         return None
-    code, out = run_capture(["trustc", "-Ztrust-verify=off"] + _config_rustflags() + extra
-                            + ["--print", "cfg"])
+    direct_args = ["-Ztrust-verify=off"] + _config_rustflags() + extra + ["--print", "cfg"]
+    code, out = _compiler_query(
+        direct_args,
+        targo_args=extra + ["--print", "cfg"],
+        profile=profile,
+    )
     if code != 0:
         return None
-    facts: dict[str, Any] = {name: False for name in TOOL_SET_CFG_NAMES}
-    values: dict[str, set[str]] = {}
-    for name, eq, value in (line.partition("=") for line in out.split()):
-        if eq:
-            values.setdefault(name, set()).add(value.strip('"'))
-        else:
-            facts[name] = True
-    facts.update({name: frozenset(vals) for name, vals in values.items()})
+    facts = _parse_lane_cfg_facts(out, profile)
+    if facts is None:
+        return None
     _LANE_CFG_CACHE[profile] = facts
     return facts
 
@@ -2033,13 +2169,13 @@ TARGET_EXTRA_PATHS: dict[str, list[str]] = {
         "data/crystal_fixture_rebaseline_2026-10-07_047ebd051.json",
         "data/crystal_fixture_rebaseline_bindings_2026-10-07_047ebd051.json",
         "data/crystal_fixture_freshness_2026-10-07_047ebd051_strict.json",
-        # The 2026-10-28 AT-HEAD record the scope binds (read through the scope
+        # The 2026-11-15 AT-HEAD record the scope binds (read through the scope
         # file's `record` field, so listed by hand like the 2026-09-20 one), the
         # freshness report it was minted from, and the byte-for-byte control it
-        # names (the 2026-10-18 one).
-        "data/crystal_chain_revalidation_2026-10-28_athead_1633a8e20.json",
-        "data/crystal_fixture_freshness_2026-10-28_athead.json",
-        "data/crystal_revalidation_at_head_2026-10-18_r4sweep.json",
+        # names (the 2026-11-14 env-cache one).
+        "data/crystal_chain_revalidation_2026-11-15_athead_35f090bb3.json",
+        "data/crystal_fixture_freshness_2026-11-15_kepd.json",
+        "data/crystal_revalidation_at_head_2026-11-14_env_cache.json",
         "scripts/crystal_chain_revalidation.py",
         "scripts/crystal_fixture_freshness.py",
         "scripts/crystal_fixture_rebaseline.py",
@@ -2209,6 +2345,65 @@ TARGET_EXTRA_PATHS: dict[str, list[str]] = {
         "theories/kcheck_spec",
         "theories/cic_l_nat_model",
     ],
+    "clean-olean::test::cic_l_universe_zero": [
+        "lean-toolchain",
+        "theories/cic_l",
+        "theories/cic_l_universe_zero",
+    ],
+    "clean-olean::test::cic_l_nat_literals": [
+        "lean-toolchain",
+        "theories/cic_l",
+        "theories/cic_l_model",
+        "theories/cic_l_nat_literals",
+    ],
+    "clean-olean::test::kcheck_inference_complete": [
+        "lean-toolchain",
+        "theories/cic_l",
+        "theories/cic_l_model",
+        "theories/kcheck_spec",
+        "theories/kcheck_labelled",
+        "theories/cic_l_nat_literals",
+        "theories/kcheck_nat_acceptance",
+        "theories/kcheck_inference_complete",
+    ],
+
+    "clean-olean::test::kcheck_static_complete": [
+        "lean-toolchain",
+        "theories/cic_l",
+        "theories/cic_l_model",
+        "theories/kcheck_spec",
+        "theories/kcheck_labelled",
+        "theories/cic_l_nat_literals",
+        "theories/kcheck_nat_acceptance",
+        "theories/kcheck_inference_complete",
+        "theories/kcheck_static_complete",
+    ],
+
+    "clean-olean::test::kcheck_nat_acceptance": [
+        "lean-toolchain",
+        "theories/cic_l",
+        "theories/cic_l_model",
+        "theories/kcheck_spec",
+        "theories/kcheck_labelled",
+        "theories/cic_l_nat_literals",
+        "theories/kcheck_nat_acceptance",
+    ],
+    "clean-olean::test::cic_l_level_order": [
+        "lean-toolchain",
+        "theories/cic_l",
+        "theories/cic_l_universe_zero",
+        "theories/cic_l_level_order",
+    ],
+    "clean-olean::test::cic_l_level_scope": [
+        "lean-toolchain",
+        "theories/cic_l",
+        "theories/cic_l_level_scope",
+    ],
+    "clean-olean::test::cic_l_universe_translation": [
+        "lean-toolchain",
+        "theories/cic_l",
+        "theories/cic_l_universe_translation",
+    ],
     # Bounded compiled-byte qualification of `theories/binding_not_review` across
     # pinned Lean, fenced Clean, and the hash-qualified stock ck0 binary.
     "clean-olean::test::binding_not_review": [
@@ -2233,6 +2428,21 @@ TARGET_EXTRA_PATHS: dict[str, list[str]] = {
     ],
     "clean-olean::test::vf4_chk_lia_quorum": ["lean-toolchain", "theories/chk_lia"],
     "clean-olean::test::vf5_f1_reference": ["lean-toolchain", "theories/chk_lia"],
+
+    # C5's fresh proof-only package compiles the adopted checker and its full
+    # specification chain.  Its own pins are package-local and deliberately do
+    # not widen the E7 census.
+    "clean-olean::test::kcheck_framed_run": [
+        "lean-toolchain",
+        "theories/cic_l",
+        "theories/cic_l_model",
+        "theories/kcheck_spec",
+        "theories/kcheck_labelled",
+        "theories/kcheck_framed_run",
+        "theories/kcheck_framed_run/ORDER",
+        "theories/kcheck_framed_run/axiom_closures.json",
+        "theories/kcheck_framed_run/statement_pins.json",
+    ],
     # Parser-only test inputs outside the crate. These are not library inputs:
     # parse_world.rs reads the pin/table under cfg(test), and the grammar tests
     # read the source/corpora. Keep them on the test rows, not PACKAGE_EXTRA_PATHS.
@@ -2456,7 +2666,7 @@ def _rs_stats(dirs: list[Path], files: list[Path]) -> str:
 
 
 def _derivation_cache_path() -> Path:
-    return target_dir() / "suite-runner" / "derivation_cache.json"
+    return RUN_DIR / "derivation_cache.json"
 
 
 def _tool_fingerprint() -> str:
@@ -2799,35 +3009,28 @@ _EXTRA_PATH_SOURCES: tuple[tuple[str, tuple[str, ...], str], ...] = (
     ),
     # The kcheck qualification tests `include_str!` their package's ORDER, pins,
     # closures and (for the checkers) expected output.
-    (
-        "clean-olean::test::kcheck_core",
-        ("@reach:crates/clean-olean/tests/kcheck_core.rs",),
-        r"(?:\.\./)+(theories/[A-Za-z0-9_./-]+|lean-toolchain)",
-    ),
-    (
-        "clean-olean::test::kcheck_spec",
-        ("@reach:crates/clean-olean/tests/kcheck_spec.rs",),
-        r"(?:\.\./)+(theories/[A-Za-z0-9_./-]+|lean-toolchain)",
-    ),
-    (
-        "clean-olean::test::kcheck_sort_bounds",
-        ("@reach:crates/clean-olean/tests/kcheck_sort_bounds.rs",),
-        r"(?:\.\./)+(theories/[A-Za-z0-9_./-]+|lean-toolchain)",
-    ),
-    (
-        "clean-olean::test::kcheck_labelled",
-        ("@reach:crates/clean-olean/tests/kcheck_labelled.rs",),
-        r"(?:\.\./)+(theories/[A-Za-z0-9_./-]+|lean-toolchain)",
-    ),
-    (
-        "clean-olean::test::cic_l_base_bridge",
-        ("@reach:crates/clean-olean/tests/cic_l_base_bridge.rs",),
-        r"(?:\.\./)+(theories/[A-Za-z0-9_./-]+|lean-toolchain)",
-    ),
-    (
-        "clean-olean::test::cic_l_nat_model",
-        ("@reach:crates/clean-olean/tests/cic_l_nat_model.rs",),
-        r"(?:\.\./)+(theories/[A-Za-z0-9_./-]+|lean-toolchain)",
+    *(
+        (
+            f"clean-olean::test::{family}",
+            (f"@reach:crates/clean-olean/tests/{family}.rs",),
+            r"(?:\.\./)+(theories/[A-Za-z0-9_./-]+|lean-toolchain)",
+        )
+        for family in (
+            "kcheck_core",
+            "kcheck_spec",
+            "kcheck_sort_bounds",
+            "kcheck_labelled",
+            "cic_l_base_bridge",
+            "cic_l_nat_model",
+            "cic_l_universe_zero",
+            "cic_l_nat_literals",
+            "kcheck_inference_complete",
+            "kcheck_static_complete",
+            "kcheck_nat_acceptance",
+            "cic_l_level_order",
+            "cic_l_level_scope",
+            "cic_l_universe_translation",
+        )
     ),
     (
         "clean-olean::test::binding_not_review",
@@ -2839,6 +3042,11 @@ _EXTRA_PATH_SOURCES: tuple[tuple[str, tuple[str, ...], str], ...] = (
     ("clean-olean::test::vf4_chk_lia_f1", ("@reach:crates/clean-olean/tests/vf4_chk_lia_f1.rs",), RESOLVE_RELATIVE),
     ("clean-olean::test::vf4_chk_lia_quorum", ("@reach:crates/clean-olean/tests/vf4_chk_lia_quorum.rs",), RESOLVE_RELATIVE),
     ("clean-olean::test::vf5_f1_reference", ("@reach:crates/clean-olean/tests/vf5_f1_reference.rs",), RESOLVE_RELATIVE),
+    (
+        "clean-olean::test::kcheck_framed_run",
+        ("@reach:crates/clean-olean/tests/kcheck_framed_run.rs",),
+        r"(?:\.\./)+(theories/[A-Za-z0-9_./-]+|lean-toolchain)",
+    ),
 )
 
 
@@ -3804,7 +4012,7 @@ def toolchain_id(fresh: bool = False) -> str:
         return "rustc-unavailable"
     if not fresh and _TOOLCHAIN_CACHE is not None:
         return _TOOLCHAIN_CACHE
-    code, out = run_capture(["trustc", "-vV"])
+    code, out = _compiler_query(["-vV"], targo_args=["-vV"])
     keep = [
         line
         for line in out.splitlines()

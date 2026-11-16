@@ -119,7 +119,9 @@ pub(super) fn actual(carrier: &str, width: &str, a: &str, b: &str, op: &str) -> 
 }
 
 pub(super) fn bound(width: &str, word: &str) -> String {
-    format!("ir_byte_separation_lt_of_ltb_v1 {word} (ir_nat_pow2 {width}) (Eq.refl Bool Bool.true)")
+    format!(
+        "ir_byte_separation_lt_of_ltb_v1 {word} (ir_nat_pow2 {width}) (@Eq.refl Bool Bool.true)"
+    )
 }
 
 pub(super) fn elaborate(spec: &Specification, source: &str) -> Expr {

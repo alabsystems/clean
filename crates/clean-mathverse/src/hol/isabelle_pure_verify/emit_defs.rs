@@ -32,23 +32,24 @@
 //!
 //! # Soundness
 //!
-//! Every constant emitted here is read back out of the replay [`Environment`]
-//! **after** the kernel accepted it. The only way an `isabelle.*` constant is
-//! in that environment is `Environment::add_decl`, which runs
-//! `infer_sort(type_)` and `check_type(value, type_)`; there is no
-//! `add_decl_unchecked` / `add_decl_structural` anywhere in the Isabelle lane.
-//! So the [`ImportConfidence::KernelVerified`] stamp means exactly what the
-//! Coq lane's floor requires — *Clean's kernel type-checked this declaration's
-//! value* — and never "the registry said so".
+//! Every value emitted by `emit_synthesized_def_consts` must carry the
+//! kernel's `FullKernelCheck` provenance
+//! and pass a fresh `check_decl_readonly_strict` over its exact stored
+//! declaration before any writer mutation. Namespace, kind and value presence
+//! select candidates; they do not establish verification. Missing provenance,
+//! structural-only residents and a value that no longer checks are not emitted.
+//! The [`ImportConfidence::KernelVerified`] stamp therefore rests on a local
+//! safe, total kernel check as well as the original admission record.
 //!
 //! Two consequences are load-bearing and deliberate:
 //!
 //! * We emit the **kernel's stored** `type_` / `value` / `level_params`, not
 //!   the pre-`add_decl` declaration. What is stamped is byte-identical to what
 //!   was checked.
-//! * A constant the kernel **rejected** is not in the environment, so it cannot
-//!   be emitted. The `accepted`/`is_ok()` guards in [`super::register`] are
-//!   upheld structurally rather than by a parallel code path that could drift.
+//! * A candidate that lacks full admission provenance or fails the fresh
+//!   check is not emitted, even if a structural import left it resident.
+//!   The registration sweeps' original `accepted`/`is_ok()` guards remain;
+//!   this emission boundary also enforces its own check.
 //!
 //! Value-less declarations can never be emitted by
 //! [`emit_synthesized_def_consts`]: `Num` and its constructors/recursor
@@ -60,7 +61,7 @@
 
 use clean_kernel::env::{ConstantInfo, ConstantKind, DeclarationVerification};
 use clean_kernel::name::Name;
-use clean_kernel::Environment;
+use clean_kernel::{Declaration, Environment};
 
 use super::super::isabelle_pure_translate::DATATYPE_INDUCTIVE_ROOTS;
 use super::super::opentheory_shard::lower_kernel_expr;
@@ -142,6 +143,30 @@ pub(super) fn emit_synthesized_def_consts(
             // rather than unwrapping keeps the writer total.
             continue;
         };
+        if env.declaration_verification(&info.name)
+            != Some(DeclarationVerification::FullKernelCheck)
+        {
+            continue;
+        }
+        let declaration = match info.kind {
+            ConstantKind::Definition => Declaration::Definition {
+                name: info.name.clone(),
+                level_params: info.level_params.clone(),
+                type_: info.type_.clone(),
+                value: value.clone(),
+                is_reducible: info.is_reducible,
+            },
+            ConstantKind::Opaque => Declaration::Opaque {
+                name: info.name.clone(),
+                level_params: info.level_params.clone(),
+                type_: info.type_.clone(),
+                value: value.clone(),
+            },
+            _ => continue,
+        };
+        if env.check_decl_readonly_strict(&declaration).is_err() {
+            continue;
+        }
         let name = info.name.to_string();
         let name_idx = writer.add_string(&name);
         let type_idx = lower_kernel_expr(&info.type_, writer);
@@ -163,8 +188,8 @@ pub(super) fn emit_synthesized_def_consts(
             type_idx,
             value_idx,
             source_system: SourceSystem::Isabelle as u8,
-            // EARNED, not asserted: this constant is resident in `env` only
-            // because `Environment::add_decl` type-checked `value : type_`.
+            // The exact stored declaration passed a fresh strict kernel check
+            // above, in addition to its FullKernelCheck admission provenance.
             import_confidence: ImportConfidence::KernelVerified as u8,
             content_domain: ContentDomain::Logic as u8,
             decl_kind: decl_kind as u8,
@@ -308,9 +333,10 @@ fn stage_family<'a>(env: &'a Environment, root_name: &str) -> Option<Vec<FamilyR
             // rather than on the declaration's KIND: `validate_and_stamp_recursor`
             // runs `check_decl_readonly_strict` (a full type check of
             // `value : type_`) before recording `FullKernelCheck`. That is
-            // exactly the standard `emit_synthesized_def_consts` stamps on, and
-            // the consumer re-checks the value anyway. Anything short of it is
-            // the honest `Axiomatized`.
+            // the recorded verdict this family path carries; it does not run
+            // the synthesized-definition emitter's additional fresh check.
+            // The consumer re-checks the value. Anything short of the recorded
+            // full check is the honest `Axiomatized`.
             let confidence = if env.declaration_verification(&aux_name)
                 == Some(DeclarationVerification::FullKernelCheck)
             {
@@ -659,6 +685,187 @@ mod tests {
         assert_eq!(
             out.written_constants[0].confidence,
             ImportConfidence::KernelVerified as u8
+        );
+    }
+
+    /// A synthesized definition decoded from a replay snapshot is resident but
+    /// carries no kernel record (the kernel serde-skips
+    /// `declaration_verification`), so the strict emitter writes no row.
+    /// Residency is not a kernel check.
+    #[test]
+    fn test_emit_decoded_definition_is_not_stamped_kernel_verified() {
+        let name = Name::from_string("isabelle.def.Test.k");
+        let mut env = Environment::with_prelude();
+        env.add_decl(Declaration::Definition {
+            name: name.clone(),
+            level_params: Vec::new(),
+            type_: Expr::prop(),
+            value: Expr::const_str("True"),
+            is_reducible: true,
+        })
+        .expect("definition kernel-checks");
+        assert_eq!(
+            env.declaration_verification(&name),
+            Some(DeclarationVerification::FullKernelCheck)
+        );
+
+        // The snapshot path: the whole environment through bincode, as
+        // `save_snapshot` / `load_snapshot` carry it.
+        let bytes = bincode::serde::encode_to_vec(&env, bincode::config::standard())
+            .expect("environment encodes");
+        let (decoded, _): (Environment, usize) =
+            bincode::serde::decode_from_slice(&bytes, bincode::config::standard())
+                .expect("environment decodes");
+        assert!(
+            decoded.get_const(&name).is_some(),
+            "the definition stays resident"
+        );
+        assert_eq!(decoded.declaration_verification(&name), None);
+
+        let mut writer = ShardWriter::new();
+        let mut out = PureVerifiedImport::default();
+        assert_eq!(
+            emit_synthesized_def_consts(&decoded, &mut writer, &mut out),
+            0,
+            "a decoded definition has no kernel check behind it in this run"
+        );
+        assert!(out.written_constants.is_empty());
+        let mut bytes = Vec::new();
+        writer.write(&mut bytes).expect("shard write");
+        let reader = crate::shard::ShardReader::from_bytes(&bytes).expect("shard read");
+        assert!(
+            reader.lookup_name("isabelle.def.Test.k").is_none(),
+            "no unrecorded definition may enter the emitted shard"
+        );
+
+        // Control: the same environment before the round trip stamps the
+        // kernel's verdict.
+        let mut writer = ShardWriter::new();
+        let mut out = PureVerifiedImport::default();
+        assert_eq!(emit_synthesized_def_consts(&env, &mut writer, &mut out), 1);
+        assert_eq!(
+            out.written_constants[0].confidence,
+            ImportConfidence::KernelVerified as u8
+        );
+    }
+
+    #[test]
+    fn test_emit_rechecks_checked_opaque_values() {
+        let mut env = Environment::with_prelude();
+        let name = Name::from_string("isabelle.def.Test.opaque");
+        env.add_decl(Declaration::Opaque {
+            name: name.clone(),
+            level_params: Vec::new(),
+            type_: Expr::prop(),
+            value: Expr::const_str("True"),
+        })
+        .expect("opaque value kernel-checks");
+        assert_eq!(
+            env.declaration_verification(&name),
+            Some(DeclarationVerification::FullKernelCheck)
+        );
+        let mut writer = ShardWriter::new();
+        let mut out = PureVerifiedImport::default();
+        assert_eq!(emit_synthesized_def_consts(&env, &mut writer, &mut out), 1);
+        let mut bytes = Vec::new();
+        writer.write(&mut bytes).expect("shard write");
+        let reader = crate::shard::ShardReader::from_bytes(&bytes).expect("shard read");
+        let header = &reader.constants[out.written_constants[0].shard_idx as usize];
+        assert_eq!(header.decl_kind, DeclKind::Opaque as u8);
+        assert_eq!(
+            header.import_confidence,
+            ImportConfidence::KernelVerified as u8
+        );
+        assert_ne!(header.value_idx, NO_VALUE);
+    }
+
+    #[test]
+    fn test_emit_does_not_upgrade_structural_definitions() {
+        let mut env = Environment::with_prelude();
+        env.add_decl(Declaration::Definition {
+            name: Name::from_string("isabelle.def.Test.checked"),
+            level_params: Vec::new(),
+            type_: Expr::prop(),
+            value: Expr::const_str("True"),
+            is_reducible: true,
+        })
+        .expect("checked positive registers");
+        for (suffix, value, type_checks) in [
+            ("structural_valid", Expr::const_str("True"), true),
+            ("structural_invalid", Expr::const_str("Nat.zero"), false),
+        ] {
+            let name = Name::from_string(&format!("isabelle.def.Test.{suffix}"));
+            let declaration = Declaration::Definition {
+                name: name.clone(),
+                level_params: Vec::new(),
+                type_: Expr::prop(),
+                value,
+                is_reducible: true,
+            };
+            env.add_decl_structural(declaration.clone())
+                .expect("the genuine structural path admits this fixture");
+            assert_eq!(
+                env.declaration_verification(&name),
+                Some(DeclarationVerification::StructuralOnly)
+            );
+            assert_eq!(
+                env.check_decl_readonly_strict(&declaration).is_ok(),
+                type_checks
+            );
+        }
+        let mut writer = ShardWriter::new();
+        let mut out = PureVerifiedImport::default();
+        assert_eq!(emit_synthesized_def_consts(&env, &mut writer, &mut out), 1);
+        assert_eq!(out.written_constants.len(), 1);
+        assert_eq!(out.written_constants[0].name, "isabelle.def.Test.checked");
+    }
+
+    #[test]
+    fn test_emit_rechecks_a_stale_checked_dependency_context() {
+        let mut env = Environment::with_prelude();
+        let dependency = Name::from_string("EmitterDependency");
+        env.add_decl(Declaration::Definition {
+            name: dependency.clone(),
+            level_params: Vec::new(),
+            type_: Expr::prop(),
+            value: Expr::const_str("True"),
+            is_reducible: true,
+        })
+        .expect("dependency kernel-checks");
+        let name = Name::from_string("isabelle.def.Test.dependent");
+        let declaration = Declaration::Definition {
+            name: name.clone(),
+            level_params: Vec::new(),
+            type_: Expr::prop(),
+            value: Expr::const_(dependency.clone(), Vec::new()),
+            is_reducible: true,
+        };
+        env.add_decl(declaration.clone())
+            .expect("dependent kernel-checks");
+        assert!(env.forget_decl(&dependency));
+        env.add_decl_structural(Declaration::Axiom {
+            name: dependency,
+            level_params: Vec::new(),
+            type_: Expr::const_str("Nat"),
+        })
+        .expect("changed dependency structurally registers");
+        assert_eq!(
+            env.declaration_verification(&name),
+            Some(DeclarationVerification::FullKernelCheck),
+            "the target's actual old admission flag survives dependency replacement"
+        );
+        assert!(env.check_decl_readonly_strict(&declaration).is_err());
+        let mut writer = ShardWriter::new();
+        let mut out = PureVerifiedImport::default();
+        let mut before = Vec::new();
+        writer.write(&mut before).expect("initial writer snapshot");
+        assert_eq!(emit_synthesized_def_consts(&env, &mut writer, &mut out), 0);
+        assert!(out.written_constants.is_empty());
+        let mut after = Vec::new();
+        writer.write(&mut after).expect("final writer snapshot");
+        assert_eq!(
+            before, after,
+            "a rejected candidate must not intern writer data"
         );
     }
 

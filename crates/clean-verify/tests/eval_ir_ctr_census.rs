@@ -171,7 +171,7 @@ fn the_contract_device_and_the_lzd_obligations_register_axiom_free_in_the_evalir
     let adapter = statement(&spec, "ir_ctr_of_exact");
     assert!(
         adapter.contains(
-            "(hex : forall (d : IRList Nat) (r : IRList IRFrame), Eq IRConfig \
+            "(hex : forall (d : IRList Nat) (r : IRList IRFrame), @Eq IRConfig \
              (ir_steps c m (IRConfig.running (E d r))) (ir_ret_to d r mX nX vX))"
         ),
         "the adapter must consume the hc1 shape: {adapter}"

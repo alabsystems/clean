@@ -185,7 +185,7 @@ const PI00: &str = "(KExpr.pi (KExpr.sort Level.zero) (KExpr.sort Level.zero))";
 /// The fragment's identity function, annotated at the base type.
 const IDLAM0: &str = "(KExpr.lam (KExpr.sort Level.zero) (KExpr.bvar Nat.zero))";
 /// The one-entry context `[sort 0]`.
-const CTX1: &str = "(ListType.cons KExpr (KExpr.sort Level.zero) (ListType.nil KExpr))";
+const CTX1: &str = "(@ListType.cons KExpr (KExpr.sort Level.zero) (@ListType.nil KExpr))";
 /// The witness redex `app (lam (sort 0) (bvar 0)) (bvar 0)`.
 const REDEX: &str =
     "(KExpr.app (KExpr.lam (KExpr.sort Level.zero) (KExpr.bvar Nat.zero)) (KExpr.bvar Nat.zero))";
@@ -194,7 +194,7 @@ const REDEX: &str =
 /// awkward.
 const LAM_REDEX: &str = "(KExpr.lam (KExpr.sort Level.zero) (KExpr.app (KExpr.lam (KExpr.sort Level.zero) (KExpr.bvar Nat.zero)) (KExpr.bvar Nat.zero)))";
 /// The empty context.
-const NILCTX: &str = "(ListType.nil KExpr)";
+const NILCTX: &str = "(@ListType.nil KExpr)";
 
 // ================================================================
 // Group A — THE UNLOCK: R2's substitution transports with the RecEnvClosed
@@ -212,7 +212,7 @@ pub(super) const VAL_BETASTAR_INST_TRANSPORT_ENV: &str = "fun (b : KExpr) (b2 : 
 
 pub(super) const TY_CANDINTERP_BETASTAR_CLOSED: &str = "forall (T : KExpr) (e : KExpr) (e2 : KExpr), betaStar e e2 -> candInterp T e -> candInterp T e2";
 
-pub(super) const VAL_CANDINTERP_BETASTAR_CLOSED: &str = "fun (T : KExpr) (e : KExpr) (e2 : KExpr) (hstar : betaStar e e2) => betaStar.rec (fun (qx : KExpr) (qy : KExpr) (_ : betaStar qx qy) => candInterp T qx -> candInterp T qy) (fun (qe : KExpr) (qhx : candInterp T qe) => qhx) (fun (qe : KExpr) (qe2 : KExpr) (qe3 : KExpr) (qhb : beta_reduces qe qe2) (_qrest : betaStar qe2 qe3) (qih : candInterp T qe2 -> candInterp T qe3) (qhx : candInterp T qe) => qih (isCandHF_cr2 (candInterp T) (candInterp_isCandHF T) qe qe2 qhx (whnf_step.beta qe qe2 qhb))) e e2 hstar";
+pub(super) const VAL_CANDINTERP_BETASTAR_CLOSED: &str = "fun (T : KExpr) (e : KExpr) (e2 : KExpr) (hstar : betaStar e e2) => @betaStar.rec (fun (qx : KExpr) (qy : KExpr) (_ : betaStar qx qy) => candInterp T qx -> candInterp T qy) (fun (qe : KExpr) (qhx : candInterp T qe) => qhx) (fun (qe : KExpr) (qe2 : KExpr) (qe3 : KExpr) (qhb : beta_reduces qe qe2) (_qrest : betaStar qe2 qe3) (qih : candInterp T qe2 -> candInterp T qe3) (qhx : candInterp T qe) => qih (isCandHF_cr2 (candInterp T) (candInterp_isCandHF T) qe qe2 qhx (whnf_step.beta qe qe2 qhb))) e e2 hstar";
 
 // ================================================================
 // Group B — the TEXTBOOK judgment.
@@ -221,12 +221,12 @@ pub(super) const VAL_CANDINTERP_BETASTAR_CLOSED: &str = "fun (T : KExpr) (e : KE
 /// The textbook lam rule, spelled once so the inductive source, the recursor
 /// minor and the shape guard cannot drift apart. Note what is NOT here: no
 /// `betaStar`, no `psubst`, no quantification over substitutions.
-const LAM_RULE_TEXTBOOK: &str = "| lam : forall (G : ListType KExpr) (A : KExpr) (B : KExpr) (b : KExpr), SimpleTy A -> SynTyT (ListType.cons KExpr A G) b B -> SynTyT G (KExpr.lam A b) (KExpr.pi A B)";
+const LAM_RULE_TEXTBOOK: &str = "| lam : forall (G : ListType KExpr) (A : KExpr) (B : KExpr) (b : KExpr), SimpleTy A -> SynTyT (@ListType.cons KExpr A G) b B -> SynTyT G (KExpr.lam A b) (KExpr.pi A B)";
 
 pub(super) fn src_syn_ty_t() -> String {
     format!(
         "inductive SynTyT : ListType KExpr -> KExpr -> KExpr -> Type\n\
-         | var : forall (G : ListType KExpr) (i : Nat) (T : KExpr), Eq (OptionType KExpr) (ctx_lookup G i) (OptionType.some KExpr T) -> SynTyT G (KExpr.bvar i) T\n\
+         | var : forall (G : ListType KExpr) (i : Nat) (T : KExpr), @Eq (OptionType KExpr) (ctx_lookup G i) (@OptionType.some KExpr T) -> SynTyT G (KExpr.bvar i) T\n\
          | sort : forall (G : ListType KExpr) (n : Level), SynTyT G (KExpr.sort n) (KExpr.sort (Level.succ n))\n\
          | app : forall (G : ListType KExpr) (A : KExpr) (B : KExpr) (f : KExpr) (a : KExpr), SynTyT G f (KExpr.pi A B) -> SynTyT G a A -> SynTyT G (KExpr.app f a) B\n\
          {LAM_RULE_TEXTBOOK}"
@@ -242,31 +242,31 @@ pub(super) const TY_SYNTYT_FUNDAMENTAL: &str = "forall (G : ListType KExpr) (e :
 pub(super) fn val_syntyt_fundamental() -> String {
     let motive = "(fun (qG : ListType KExpr) (qe : KExpr) (qT : KExpr) (_ : SynTyT qG qe qT) => forall (qs : Nat -> KExpr), SubstOK qs qG -> candInterp qT (psubst qs qe))";
     // var: the SubstOK lookup IS the goal (psubst qs (bvar qi) reduces to qs qi).
-    let m_var = "(fun (qG : ListType KExpr) (qi : Nat) (qT : KExpr) (qhget : Eq (OptionType KExpr) (ctx_lookup qG qi) (OptionType.some KExpr qT)) (qs : Nat -> KExpr) (qhs : SubstOK qs qG) => qhs qi qT qhget)";
+    let m_var = "(fun (qG : ListType KExpr) (qi : Nat) (qT : KExpr) (qhget : @Eq (OptionType KExpr) (ctx_lookup qG qi) (@OptionType.some KExpr qT)) (qs : Nat -> KExpr) (qhs : SubstOK qs qG) => qhs qi qT qhget)";
     // sort: red_sort at the interpretation, with the landed SN of sorts.
     let m_sort = "(fun (qG : ListType KExpr) (qn : Level) (qs : Nat -> KExpr) (_qhs : SubstOK qs qG) => candInterp_sort_mem (Level.succ qn) (KExpr.sort qn) (whnfAcc_sort qn))";
     // app: pi_elim at the interpretation on the two IHs.
     let m_app = "(fun (qG : ListType KExpr) (qA : KExpr) (qB : KExpr) (qf : KExpr) (qa : KExpr) (_qhf : SynTyT qG qf (KExpr.pi qA qB)) (_qha : SynTyT qG qa qA) (qihf : forall (qs : Nat -> KExpr), SubstOK qs qG -> candInterp (KExpr.pi qA qB) (psubst qs qf)) (qiha : forall (qs : Nat -> KExpr), SubstOK qs qG -> candInterp qA (psubst qs qa)) (qs : Nat -> KExpr) (qhs : SubstOK qs qG) => candInterp_app qA qB (psubst qs qf) (psubst qs qa) (qihf qs qhs) (qiha qs qhs))";
     // lam: the substantive case, and the one R6 could not state this way.
-    let ih_ty = "forall (qs2 : Nat -> KExpr), SubstOK qs2 (ListType.cons KExpr qA qG) -> candInterp qB (psubst qs2 qb)";
+    let ih_ty = "forall (qs2 : Nat -> KExpr), SubstOK qs2 (@ListType.cons KExpr qA qG) -> candInterp qB (psubst qs2 qb)";
     // whnf_acc of the substituted annotation, through SimpleTy.
-    let hty = "(Eq.substType KExpr (fun (qw : KExpr) => whnf_acc qw) qA (psubst qs qA) (Eq.symm KExpr (psubst qs qA) qA (simpleTy_psubst qA qhA qs)) (simpleTy_whnfAcc qA qhA))";
+    let hty = "(@Eq.substType KExpr (fun (qw : KExpr) => whnf_acc qw) qA (psubst qs qA) (@Eq.symm KExpr (psubst qs qA) qA (simpleTy_psubst qA qhA qs)) (simpleTy_whnfAcc qA qhA))";
     // whnf_acc of the substituted BODY: the IH at the fresh variable, reshaped
     // by psubst_scons_instantiate and unwound by whnfAcc_of_instantiate_bvar0.
     // This is the landed fundamental_pi idiom, and it is what makes the
     // RecEnvLiftClosed route unnecessary.
-    let hb = "(whnfAcc_of_instantiate_bvar0 (psubst (up qs) qb) (Eq.substType KExpr (fun (qw : KExpr) => whnf_acc qw) (psubst (scons (KExpr.bvar Nat.zero) qs) qb) (instantiate (psubst (up qs) qb) (KExpr.bvar Nat.zero)) (psubst_scons_instantiate qb (KExpr.bvar Nat.zero) qs) (candInterp_cr1 qB (psubst (scons (KExpr.bvar Nat.zero) qs) qb) (qih (scons (KExpr.bvar Nat.zero) qs) (substOK_extend qs qG qA (KExpr.bvar Nat.zero) (candInterp_var qA Nat.zero) qhs)))))";
+    let hb = "(whnfAcc_of_instantiate_bvar0 (psubst (up qs) qb) (@Eq.substType KExpr (fun (qw : KExpr) => whnf_acc qw) (psubst (scons (KExpr.bvar Nat.zero) qs) qb) (instantiate (psubst (up qs) qb) (KExpr.bvar Nat.zero)) (psubst_scons_instantiate qb (KExpr.bvar Nat.zero) qs) (candInterp_cr1 qB (psubst (scons (KExpr.bvar Nat.zero) qs) qb) (qih (scons (KExpr.bvar Nat.zero) qs) (substOK_extend qs qG qA (KExpr.bvar Nat.zero) (candInterp_var qA Nat.zero) qhs)))))";
     // The Tait engine's development family, DERIVED (this is R6's hoisted
     // premise): the IH at scons a qs gives membership at the un-developed
     // body, psubst_scons_instantiate reshapes it to the instantiation, the
     // DISCHARGED transport carries the development through instantiate, and
     // betaStar-closure of the candidate lands it at b2.
-    let hfam = "(fun (qb2 : KExpr) (qstar : betaStar (psubst (up qs) qb) qb2) (qa : KExpr) (qha : candInterp qA qa) => candInterp_betaStar_closed qB (instantiate (psubst (up qs) qb) qa) (instantiate qb2 qa) (betaStar_inst_transport_env (psubst (up qs) qb) qb2 qstar qa) (Eq.substType KExpr (fun (qw : KExpr) => candInterp qB qw) (psubst (scons qa qs) qb) (instantiate (psubst (up qs) qb) qa) (psubst_scons_instantiate qb qa qs) (qih (scons qa qs) (substOK_extend qs qG qA qa qha qhs))))";
+    let hfam = "(fun (qb2 : KExpr) (qstar : betaStar (psubst (up qs) qb) qb2) (qa : KExpr) (qha : candInterp qA qa) => candInterp_betaStar_closed qB (instantiate (psubst (up qs) qb) qa) (instantiate qb2 qa) (betaStar_inst_transport_env (psubst (up qs) qb) qb2 qstar qa) (@Eq.substType KExpr (fun (qw : KExpr) => candInterp qB qw) (psubst (scons qa qs) qb) (instantiate (psubst (up qs) qb) qa) (psubst_scons_instantiate qb qa qs) (qih (scons qa qs) (substOK_extend qs qG qA qa qha qhs))))";
     let m_lam = format!(
-        "(fun (qG : ListType KExpr) (qA : KExpr) (qB : KExpr) (qb : KExpr) (qhA : SimpleTy qA) (_qhb : SynTyT (ListType.cons KExpr qA qG) qb qB) (qih : {ih_ty}) (qs : Nat -> KExpr) (qhs : SubstOK qs qG) => candInterp_lam qA qB (psubst qs qA) (psubst (up qs) qb) {hty} {hb} {hfam})"
+        "(fun (qG : ListType KExpr) (qA : KExpr) (qB : KExpr) (qb : KExpr) (qhA : SimpleTy qA) (_qhb : SynTyT (@ListType.cons KExpr qA qG) qb qB) (qih : {ih_ty}) (qs : Nat -> KExpr) (qhs : SubstOK qs qG) => candInterp_lam qA qB (psubst qs qA) (psubst (up qs) qb) {hty} {hb} {hfam})"
     );
     format!(
-        "fun (G : ListType KExpr) (e : KExpr) (T : KExpr) (h : SynTyT G e T) => SynTyT.rec {motive} {m_var} {m_sort} {m_app} {m_lam} G e T h"
+        "fun (G : ListType KExpr) (e : KExpr) (T : KExpr) (h : SynTyT G e T) => @SynTyT.rec {motive} {m_var} {m_sort} {m_app} {m_lam} G e T h"
     )
 }
 
@@ -277,48 +277,48 @@ pub(super) const VAL_SYNTYT_SN_SUBST: &str = "fun (G : ListType KExpr) (e : KExp
 pub(super) const TY_SYNTYT_SN: &str =
     "forall (G : ListType KExpr) (e : KExpr) (T : KExpr), SynTyT G e T -> whnf_acc e";
 
-pub(super) const VAL_SYNTYT_SN: &str = "fun (G : ListType KExpr) (e : KExpr) (T : KExpr) (h : SynTyT G e T) => Eq.substType KExpr (fun (qw : KExpr) => whnf_acc qw) (psubst idsubst e) e (psubst_id e) (synTyT_sn_subst G e T h idsubst (substOK_idsubst G))";
+pub(super) const VAL_SYNTYT_SN: &str = "fun (G : ListType KExpr) (e : KExpr) (T : KExpr) (h : SynTyT G e T) => @Eq.substType KExpr (fun (qw : KExpr) => whnf_acc qw) (psubst idsubst e) e (psubst_id e) (synTyT_sn_subst G e T h idsubst (substOK_idsubst G))";
 
 pub(super) const TY_SYNTYT_SN_CLOSED: &str =
-    "forall (e : KExpr) (T : KExpr), SynTyT (ListType.nil KExpr) e T -> whnf_acc e";
+    "forall (e : KExpr) (T : KExpr), SynTyT (@ListType.nil KExpr) e T -> whnf_acc e";
 
-pub(super) const VAL_SYNTYT_SN_CLOSED: &str = "fun (e : KExpr) (T : KExpr) (h : SynTyT (ListType.nil KExpr) e T) => synTyT_sn (ListType.nil KExpr) e T h";
+pub(super) const VAL_SYNTYT_SN_CLOSED: &str = "fun (e : KExpr) (T : KExpr) (h : SynTyT (@ListType.nil KExpr) e T) => synTyT_sn (@ListType.nil KExpr) e T h";
 
 pub(super) const TY_SYNTYT_FUNDAMENTAL_TYPESUBST: &str = "forall (G : ListType KExpr) (e : KExpr) (T : KExpr), SynTyT G e T -> SimpleTy T -> forall (s : Nat -> KExpr), SubstOK s G -> candInterp (psubst s T) (psubst s e)";
 
-pub(super) const VAL_SYNTYT_FUNDAMENTAL_TYPESUBST: &str = "fun (G : ListType KExpr) (e : KExpr) (T : KExpr) (h : SynTyT G e T) (hT : SimpleTy T) (s : Nat -> KExpr) (hs : SubstOK s G) => Eq.substType KExpr (fun (qw : KExpr) => candInterp qw (psubst s e)) T (psubst s T) (Eq.symm KExpr (psubst s T) T (simpleTy_psubst T hT s)) (synTyT_fundamental G e T h s hs)";
+pub(super) const VAL_SYNTYT_FUNDAMENTAL_TYPESUBST: &str = "fun (G : ListType KExpr) (e : KExpr) (T : KExpr) (h : SynTyT G e T) (hT : SimpleTy T) (s : Nat -> KExpr) (hs : SubstOK s G) => @Eq.substType KExpr (fun (qw : KExpr) => candInterp qw (psubst s e)) T (psubst s T) (@Eq.symm KExpr (psubst s T) T (simpleTy_psubst T hT s)) (synTyT_fundamental G e T h s hs)";
 
 /// R6's HOISTED PREMISE, now a THEOREM: from the ordinary single-body typing
 /// derivation, the whole development family the Tait engine demands.
-pub(super) const TY_R7_DEV_FAMILY_DERIVED: &str = "forall (G : ListType KExpr) (A : KExpr) (B : KExpr) (b : KExpr), SynTyT (ListType.cons KExpr A G) b B -> forall (s : Nat -> KExpr), SubstOK s G -> forall (b2 : KExpr), betaStar (psubst (up s) b) b2 -> forall (a : KExpr), candInterp A a -> candInterp B (instantiate b2 a)";
+pub(super) const TY_R7_DEV_FAMILY_DERIVED: &str = "forall (G : ListType KExpr) (A : KExpr) (B : KExpr) (b : KExpr), SynTyT (@ListType.cons KExpr A G) b B -> forall (s : Nat -> KExpr), SubstOK s G -> forall (b2 : KExpr), betaStar (psubst (up s) b) b2 -> forall (a : KExpr), candInterp A a -> candInterp B (instantiate b2 a)";
 
-pub(super) const VAL_R7_DEV_FAMILY_DERIVED: &str = "fun (G : ListType KExpr) (A : KExpr) (B : KExpr) (b : KExpr) (hb : SynTyT (ListType.cons KExpr A G) b B) (s : Nat -> KExpr) (hs : SubstOK s G) (b2 : KExpr) (hstar : betaStar (psubst (up s) b) b2) (a : KExpr) (ha : candInterp A a) => candInterp_betaStar_closed B (instantiate (psubst (up s) b) a) (instantiate b2 a) (betaStar_inst_transport_env (psubst (up s) b) b2 hstar a) (Eq.substType KExpr (fun (qw : KExpr) => candInterp B qw) (psubst (scons a s) b) (instantiate (psubst (up s) b) a) (psubst_scons_instantiate b a s) (synTyT_fundamental (ListType.cons KExpr A G) b B hb (scons a s) (substOK_extend s G A a ha hs)))";
+pub(super) const VAL_R7_DEV_FAMILY_DERIVED: &str = "fun (G : ListType KExpr) (A : KExpr) (B : KExpr) (b : KExpr) (hb : SynTyT (@ListType.cons KExpr A G) b B) (s : Nat -> KExpr) (hs : SubstOK s G) (b2 : KExpr) (hstar : betaStar (psubst (up s) b) b2) (a : KExpr) (ha : candInterp A a) => candInterp_betaStar_closed B (instantiate (psubst (up s) b) a) (instantiate b2 a) (betaStar_inst_transport_env (psubst (up s) b) b2 hstar a) (@Eq.substType KExpr (fun (qw : KExpr) => candInterp B qw) (psubst (scons a s) b) (instantiate (psubst (up s) b) a) (psubst_scons_instantiate b a s) (synTyT_fundamental (@ListType.cons KExpr A G) b B hb (scons a s) (substOK_extend s G A a ha hs)))";
 
 // ================================================================
 // Group D — the bridge from R6.
 // ================================================================
 
 pub(super) const TY_PSUBST_UP_IDSUBST: &str =
-    "forall (b : KExpr), Eq KExpr (psubst (up idsubst) b) b";
+    "forall (b : KExpr), @Eq KExpr (psubst (up idsubst) b) b";
 
-pub(super) const VAL_PSUBST_UP_IDSUBST: &str = "fun (b : KExpr) => Eq.trans KExpr (psubst (up idsubst) b) (psubst idsubst b) b (psubst_pointwise b (up idsubst) idsubst up_idsubst) (psubst_id b)";
+pub(super) const VAL_PSUBST_UP_IDSUBST: &str = "fun (b : KExpr) => @Eq.trans KExpr (psubst (up idsubst) b) (psubst idsubst b) b (psubst_pointwise b (up idsubst) idsubst up_idsubst) (psubst_id b)";
 
 pub(super) const TY_SYNTY_TO_SYNTYT: &str =
     "forall (G : ListType KExpr) (e : KExpr) (T : KExpr), SynTy G e T -> SynTyT G e T";
 
 pub(super) fn val_synty_to_syntyt() -> String {
     let motive = "(fun (qG : ListType KExpr) (qe : KExpr) (qT : KExpr) (_ : SynTy qG qe qT) => SynTyT qG qe qT)";
-    let m_var = "(fun (qG : ListType KExpr) (qi : Nat) (qT : KExpr) (qhget : Eq (OptionType KExpr) (ctx_lookup qG qi) (OptionType.some KExpr qT)) => SynTyT.var qG qi qT qhget)";
+    let m_var = "(fun (qG : ListType KExpr) (qi : Nat) (qT : KExpr) (qhget : @Eq (OptionType KExpr) (ctx_lookup qG qi) (@OptionType.some KExpr qT)) => SynTyT.var qG qi qT qhget)";
     let m_sort = "(fun (qG : ListType KExpr) (qn : Level) => SynTyT.sort qG qn)";
     let m_app = "(fun (qG : ListType KExpr) (qA : KExpr) (qB : KExpr) (qf : KExpr) (qa : KExpr) (_qhf : SynTy qG qf (KExpr.pi qA qB)) (_qha : SynTy qG qa qA) (qihf : SynTyT qG qf (KExpr.pi qA qB)) (qiha : SynTyT qG qa qA) => SynTyT.app qG qA qB qf qa qihf qiha)";
-    let dev_ty = "forall (qs0 : Nat -> KExpr) (qb2 : KExpr), betaStar (psubst (up qs0) qb) qb2 -> SynTy (ListType.cons KExpr qA qG) qb2 qB";
-    let ih_ty = "forall (qs0 : Nat -> KExpr) (qb2 : KExpr), betaStar (psubst (up qs0) qb) qb2 -> SynTyT (ListType.cons KExpr qA qG) qb2 qB";
-    let body = "(Eq.substType KExpr (fun (qw : KExpr) => SynTyT (ListType.cons KExpr qA qG) qw qB) (psubst (up idsubst) qb) qb (psubst_up_idsubst qb) (qih idsubst (psubst (up idsubst) qb) (betaStar.refl (psubst (up idsubst) qb))))";
+    let dev_ty = "forall (qs0 : Nat -> KExpr) (qb2 : KExpr), betaStar (psubst (up qs0) qb) qb2 -> SynTy (@ListType.cons KExpr qA qG) qb2 qB";
+    let ih_ty = "forall (qs0 : Nat -> KExpr) (qb2 : KExpr), betaStar (psubst (up qs0) qb) qb2 -> SynTyT (@ListType.cons KExpr qA qG) qb2 qB";
+    let body = "(@Eq.substType KExpr (fun (qw : KExpr) => SynTyT (@ListType.cons KExpr qA qG) qw qB) (psubst (up idsubst) qb) qb (psubst_up_idsubst qb) (qih idsubst (psubst (up idsubst) qb) (betaStar.refl (psubst (up idsubst) qb))))";
     let m_lam = format!(
         "(fun (qG : ListType KExpr) (qA : KExpr) (qB : KExpr) (qb : KExpr) (qhA : SimpleTy qA) (_qhdev : {dev_ty}) (qih : {ih_ty}) => SynTyT.lam qG qA qB qb qhA {body})"
     );
     format!(
-        "fun (G : ListType KExpr) (e : KExpr) (T : KExpr) (h : SynTy G e T) => SynTy.rec {motive} {m_var} {m_sort} {m_app} {m_lam} G e T h"
+        "fun (G : ListType KExpr) (e : KExpr) (T : KExpr) (h : SynTy G e T) => @SynTy.rec {motive} {m_var} {m_sort} {m_app} {m_lam} G e T h"
     )
 }
 
@@ -337,7 +337,7 @@ pub(super) fn ty_syntyt_id() -> String {
 
 pub(super) fn val_syntyt_id() -> String {
     format!(
-        "fun (G : ListType KExpr) => SynTyT.lam G {S0} {S0} {V0} (SimpleTy.base Level.zero) (SynTyT.var (ListType.cons KExpr {S0} G) Nat.zero {S0} (Eq.refl (OptionType KExpr) (OptionType.some KExpr {S0})))"
+        "fun (G : ListType KExpr) => SynTyT.lam G {S0} {S0} {V0} (SimpleTy.base Level.zero) (SynTyT.var (@ListType.cons KExpr {S0} G) Nat.zero {S0} (@Eq.refl (OptionType KExpr) (@OptionType.some KExpr {S0})))"
     )
 }
 
@@ -355,7 +355,7 @@ pub(super) fn ty_syntyt_app_witness() -> String {
 
 pub(super) fn val_syntyt_app_witness() -> String {
     format!(
-        "SynTyT.app {CTX1} {S0} {S0} {IDLAM0} {V0} (synTyT_id {CTX1}) (SynTyT.var {CTX1} Nat.zero {S0} (Eq.refl (OptionType KExpr) (OptionType.some KExpr {S0})))"
+        "SynTyT.app {CTX1} {S0} {S0} {IDLAM0} {V0} (synTyT_id {CTX1}) (SynTyT.var {CTX1} Nat.zero {S0} (@Eq.refl (OptionType KExpr) (@OptionType.some KExpr {S0})))"
     )
 }
 
@@ -384,7 +384,7 @@ pub(super) fn ty_r7_textbook_admits_redex_body() -> String {
 pub(super) fn val_r7_textbook_admits_redex_body() -> String {
     let derivable = format!("(SynTyT {NILCTX} {LAM_REDEX} {PI00})");
     let fires = format!("(beta_reduces {REDEX} (instantiate {V0} {V0}))");
-    format!("AndType.intro {derivable} {fires} synTyT_lam_redex_witness r7_redex_body_fires")
+    format!("@AndType.intro {derivable} {fires} synTyT_lam_redex_witness r7_redex_body_fires")
 }
 
 pub(super) fn ty_syntyt_sn_witness() -> String {
@@ -401,7 +401,7 @@ pub(super) fn ty_syntyt_not_total() -> String {
 
 pub(super) fn val_syntyt_not_total() -> String {
     format!(
-        "fun (G : ListType KExpr) (h : SynTyT G r5_omegaLam {PI00}) => candInterp_pi_not_total (Eq.substType KExpr (fun (qw : KExpr) => candInterp {PI00} qw) (psubst idsubst r5_omegaLam) r5_omegaLam (psubst_id r5_omegaLam) (synTyT_fundamental G r5_omegaLam {PI00} h idsubst (substOK_idsubst G)))"
+        "fun (G : ListType KExpr) (h : SynTyT G r5_omegaLam {PI00}) => candInterp_pi_not_total (@Eq.substType KExpr (fun (qw : KExpr) => candInterp {PI00} qw) (psubst idsubst r5_omegaLam) r5_omegaLam (psubst_id r5_omegaLam) (synTyT_fundamental G r5_omegaLam {PI00} h idsubst (substOK_idsubst G)))"
     )
 }
 

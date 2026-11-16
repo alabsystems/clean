@@ -211,7 +211,7 @@ impl Specification {
         // stored type UNLIFTED — the release FVar arm does `.map(|d|
         // d.type_.clone())` with no de Bruijn adjustment (tc/infer.rs:351-359).
         self.add_recursive_def(
-            r"def lctx_lookup (g : LCtx) : Nat -> OptionType ImplExpr := LCtx.rec (fun (_ : LCtx) => Nat -> OptionType ImplExpr) (fun (_ : Nat) => OptionType.none ImplExpr) (fun (rest : LCtx) (d : LocalDecl) (ih : Nat -> OptionType ImplExpr) => fun (x : Nat) => Bool.rec (fun (_ : Bool) => OptionType ImplExpr) (ih x) (OptionType.some ImplExpr (local_decl_type d)) (nat_eqb (local_decl_id d) x)) g",
+            r"def lctx_lookup (g : LCtx) : Nat -> OptionType ImplExpr := @LCtx.rec (fun (_ : LCtx) => Nat -> OptionType ImplExpr) (fun (_ : Nat) => @OptionType.none ImplExpr) (fun (rest : LCtx) (d : LocalDecl) (ih : Nat -> OptionType ImplExpr) => fun (x : Nat) => @Bool.rec (fun (_ : Bool) => OptionType ImplExpr) (ih x) (@OptionType.some ImplExpr (local_decl_type d)) (nat_eqb (local_decl_id d) x)) g",
             "Local-context lookup BY FVarId (LocalContext::get, tc/local_context.rs). \
              Scans the snoc-list most-recent-first; agrees with production's \
              index_by_id HashMap because push asserts ids are never reused \
@@ -239,7 +239,7 @@ impl Specification {
         // the extra ImplExpr shapes (fvar, mdata, binder-data-carrying lam/pi,
         // named let_, wider lit) are added and the metatheory copies stay put.
         self.add_recursive_def(
-            r"def impl_lift_bvar_at (idx : Nat) (cutoff : Nat) (amount : Nat) : ImplExpr := Nat.rec (fun (_ : Nat) => ImplExpr) (ImplExpr.bvar (Nat.add idx amount)) (fun (k : Nat) (r : ImplExpr) => ImplExpr.bvar idx) (Nat.sub cutoff idx)",
+            r"def impl_lift_bvar_at (idx : Nat) (cutoff : Nat) (amount : Nat) : ImplExpr := @Nat.rec (fun (_ : Nat) => ImplExpr) (ImplExpr.bvar (Nat.add idx amount)) (fun (k : Nat) (r : ImplExpr) => ImplExpr.bvar idx) (Nat.sub cutoff idx)",
             "Compute a lifted bvar on ImplExpr: at idx >= cutoff add amount, else \
              keep. Mirrors lift_bvar_at on KExpr.",
         )?;
@@ -261,12 +261,12 @@ impl Specification {
         )?;
 
         self.add_recursive_def(
-            r"def impl_inst_bvar_geq (idx : Nat) (depth : Nat) (val : ImplExpr) : ImplExpr := Nat.rec (fun (_ : Nat) => ImplExpr) (impl_lift_at val Nat.zero depth) (fun (k : Nat) (r : ImplExpr) => ImplExpr.bvar (Nat.sub idx (Nat.succ Nat.zero))) (Nat.sub idx depth)",
+            r"def impl_inst_bvar_geq (idx : Nat) (depth : Nat) (val : ImplExpr) : ImplExpr := @Nat.rec (fun (_ : Nat) => ImplExpr) (impl_lift_at val Nat.zero depth) (fun (k : Nat) (r : ImplExpr) => ImplExpr.bvar (Nat.sub idx (Nat.succ Nat.zero))) (Nat.sub idx depth)",
             "Helper: at idx == depth substitute the lifted value; at idx > depth \
              decrement. Mirrors instantiate_bvar_geq on KExpr.",
         )?;
         self.add_recursive_def(
-            r"def impl_inst_bvar_at (idx : Nat) (depth : Nat) (val : ImplExpr) : ImplExpr := Nat.rec (fun (_ : Nat) => ImplExpr) (impl_inst_bvar_geq idx depth val) (fun (k : Nat) (r : ImplExpr) => ImplExpr.bvar idx) (Nat.sub depth idx)",
+            r"def impl_inst_bvar_at (idx : Nat) (depth : Nat) (val : ImplExpr) : ImplExpr := @Nat.rec (fun (_ : Nat) => ImplExpr) (impl_inst_bvar_geq idx depth val) (fun (k : Nat) (r : ImplExpr) => ImplExpr.bvar idx) (Nat.sub depth idx)",
             "Helper: three-way comparison idx vs depth for bvar substitution. \
              Mirrors instantiate_bvar_at on KExpr.",
         )?;
@@ -309,7 +309,7 @@ impl Specification {
         // ENSURES "All BVar(i) referring to enclosing binders become BVar(i+1)",
         // :1131-1132). A bvar-as-leaf model is unfaithful on open terms.
         self.add_recursive_def(
-            r"def impl_abstract_bvar (idx : Nat) (depth : Nat) : ImplExpr := Nat.rec (fun (_ : Nat) => ImplExpr) (ImplExpr.bvar (Nat.succ idx)) (fun (k : Nat) (_ : ImplExpr) => ImplExpr.bvar idx) (Nat.sub depth idx)",
+            r"def impl_abstract_bvar (idx : Nat) (depth : Nat) : ImplExpr := @Nat.rec (fun (_ : Nat) => ImplExpr) (ImplExpr.bvar (Nat.succ idx)) (fun (k : Nat) (_ : ImplExpr) => ImplExpr.bvar idx) (Nat.sub depth idx)",
             "Bvar case of impl_abstract_at: idx >= depth (Nat.sub depth idx = 0) \
              shifts up by one for the new binder, idx < depth is kept — \
              Abstractor::fold_bvar_opt (expr/subst.rs:399-409).",
@@ -317,7 +317,7 @@ impl Specification {
         self.add_recursive_def(
             r"def impl_abstract_at (e : ImplExpr) (x : Nat) (depth : Nat) : ImplExpr := match e with
 | ImplExpr.bvar i => impl_abstract_bvar i depth
-| ImplExpr.fvar y => Bool.rec (fun (_ : Bool) => ImplExpr) (ImplExpr.fvar y) (ImplExpr.bvar depth) (nat_eqb y x)
+| ImplExpr.fvar y => @Bool.rec (fun (_ : Bool) => ImplExpr) (ImplExpr.fvar y) (ImplExpr.bvar depth) (nat_eqb y x)
 | ImplExpr.sort l => ImplExpr.sort l
 | ImplExpr.const nm us => ImplExpr.const nm us
 | ImplExpr.app f a => ImplExpr.app (impl_abstract_at f x depth) (impl_abstract_at a x depth)
@@ -347,7 +347,7 @@ impl Specification {
         self.add_recursive_def(
             r"def impl_subst_fvar (e : ImplExpr) (x : Nat) (v : ImplExpr) : ImplExpr := match e with
 | ImplExpr.bvar i => ImplExpr.bvar i
-| ImplExpr.fvar y => Bool.rec (fun (_ : Bool) => ImplExpr) (ImplExpr.fvar y) v (nat_eqb y x)
+| ImplExpr.fvar y => @Bool.rec (fun (_ : Bool) => ImplExpr) (ImplExpr.fvar y) v (nat_eqb y x)
 | ImplExpr.sort l => ImplExpr.sort l
 | ImplExpr.const nm us => ImplExpr.const nm us
 | ImplExpr.app f a => ImplExpr.app (impl_subst_fvar f x v) (impl_subst_fvar a x v)
@@ -436,7 +436,7 @@ impl Specification {
         // every direct call to infer performs. A production correspondence
         // theorem must justify the sort/const rule's premise at its caller.
         self.add_recursive_def(
-            r"def name_list_mem (xs : ListType Name) (n : Name) : Bool := ListType.rec Name (fun (_ : ListType Name) => Bool) Bool.false (fun (y : Name) (rest : ListType Name) (ih : Bool) => Bool.or (name_eqb y n) ih) xs",
+            r"def name_list_mem (xs : ListType Name) (n : Name) : Bool := @ListType.rec Name (fun (_ : ListType Name) => Bool) Bool.false (fun (y : Name) (rest : ListType Name) (ih : Bool) => Bool.or (name_eqb y n) ih) xs",
             "Membership of a Name in a Name list (Bool-valued, decidable).",
         )?;
         self.add_recursive_def(
@@ -462,7 +462,7 @@ impl Specification {
              theorem must establish this model premise from the relevant caller.",
         )?;
         self.add_recursive_def(
-            r"def impl_levels_ok (lps : ListType Name) (us : ListType Level) : Bool := ListType.rec Level (fun (_ : ListType Level) => Bool) Bool.true (fun (u : Level) (rest : ListType Level) (ih : Bool) => Bool.and (level_params_ok lps u) ih) us",
+            r"def impl_levels_ok (lps : ListType Name) (us : ListType Level) : Bool := @ListType.rec Level (fun (_ : ListType Level) => Bool) Bool.true (fun (u : Level) (rest : ListType Level) (ih : Bool) => Bool.and (level_params_ok lps u) ih) us",
             "The declared-level-param discipline applied to every level in a const \
              node's universe-instantiation list. The release Const arm's loop \
              (`for l in levels { self.check_level(l)? }`, tc/infer.rs:397-399) is \
@@ -475,7 +475,7 @@ impl Specification {
         // Written with explicit recursors (not nested `match`) because it walks
         // TWO lists in lockstep.
         self.add_recursive_def(
-            r"def level_lookup (lps : ListType Name) : ListType Level -> Name -> OptionType Level := ListType.rec Name (fun (_ : ListType Name) => ListType Level -> Name -> OptionType Level) (fun (us : ListType Level) (n : Name) => OptionType.none Level) (fun (p : Name) (rest : ListType Name) (ih : ListType Level -> Name -> OptionType Level) => fun (us : ListType Level) (n : Name) => ListType.rec Level (fun (_ : ListType Level) => OptionType Level) (OptionType.none Level) (fun (u : Level) (urest : ListType Level) (r : OptionType Level) => Bool.rec (fun (_ : Bool) => OptionType Level) (ih urest n) (OptionType.some Level u) (name_eqb p n)) us) lps",
+            r"def level_lookup (lps : ListType Name) : ListType Level -> Name -> OptionType Level := @ListType.rec Name (fun (_ : ListType Name) => ListType Level -> Name -> OptionType Level) (fun (us : ListType Level) (n : Name) => @OptionType.none Level) (fun (p : Name) (rest : ListType Name) (ih : ListType Level -> Name -> OptionType Level) => fun (us : ListType Level) (n : Name) => @ListType.rec Level (fun (_ : ListType Level) => OptionType Level) (@OptionType.none Level) (fun (u : Level) (urest : ListType Level) (r : OptionType Level) => @Bool.rec (fun (_ : Bool) => OptionType Level) (ih urest n) (@OptionType.some Level u) (name_eqb p n)) us) lps",
             "Positional level-parameter lookup: walk the declared params and the \
              supplied levels in lockstep (the `zip` in \
              instantiate_level_params_direct, expr/subst.rs:1198). Unequal lengths \
@@ -489,13 +489,13 @@ impl Specification {
 | Level.succ u => Level.succ (level_subst lps us u)
 | Level.max u v => Level.max (level_subst lps us u) (level_subst lps us v)
 | Level.imax u v => Level.imax (level_subst lps us u) (level_subst lps us v)
-| Level.param n => OptionType.rec Level (fun (_ : OptionType Level) => Level) (Level.param n) (fun (u : Level) => u) (level_lookup lps us n)",
+| Level.param n => @OptionType.rec Level (fun (_ : OptionType Level) => Level) (Level.param n) (fun (u : Level) => u) (level_lookup lps us n)",
             "Level-parameter substitution: replace each Level.param bound by the \
              declaration with the supplied level, leaving unbound params alone \
              (Expr::instantiate_level_params contract, expr/subst.rs:1180-1184).",
         )?;
         self.add_recursive_def(
-            r"def impl_inst_levels_list (lps : ListType Name) (us : ListType Level) (vs : ListType Level) : ListType Level := ListType.rec Level (fun (_ : ListType Level) => ListType Level) (ListType.nil Level) (fun (v : Level) (rest : ListType Level) (ih : ListType Level) => ListType.cons Level (level_subst lps us v) ih) vs",
+            r"def impl_inst_levels_list (lps : ListType Name) (us : ListType Level) (vs : ListType Level) : ListType Level := @ListType.rec Level (fun (_ : ListType Level) => ListType Level) (@ListType.nil Level) (fun (v : Level) (rest : ListType Level) (ih : ListType Level) => @ListType.cons Level (level_subst lps us v) ih) vs",
             "Map level_subst over a const node's universe-instantiation list — the \
              ListType Level half of impl_inst_levels.",
         )?;

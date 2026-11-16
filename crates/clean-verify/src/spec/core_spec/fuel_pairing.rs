@@ -56,8 +56,8 @@ impl Specification {
         self.add_inductive(
             "inductive WhnfFuelPair (a : KExpr) (b : KExpr) : Type\n\
              | mk : forall (n : Nat) (ra : KExpr) (rb : KExpr), \
-             Eq (OptionType KExpr) (whnf_fuel_red the_red_env n a) (OptionType.some KExpr ra) -> \
-             Eq (OptionType KExpr) (whnf_fuel_red the_red_env n b) (OptionType.some KExpr rb) -> \
+             @Eq (OptionType KExpr) (whnf_fuel_red the_red_env n a) (@OptionType.some KExpr ra) -> \
+             @Eq (OptionType KExpr) (whnf_fuel_red the_red_env n b) (@OptionType.some KExpr rb) -> \
              WhnfFuelPair a b",
             "WhnfFuelPair a b: ONE fuel at which the executable whnf loop returns on both a and \
              b, with both results. The capstone reduces two terms and needs their loops to \
@@ -68,8 +68,8 @@ impl Specification {
             "inductive DefEqFuelAcceptsPair (x1 : KExpr) (y1 : KExpr) (x2 : KExpr) \
              (y2 : KExpr) : Type\n\
              | mk : forall (n : Nat), \
-             Eq Bool (def_eq_fuel the_red_env n x1 y1) Bool.true -> \
-             Eq Bool (def_eq_fuel the_red_env n x2 y2) Bool.true -> \
+             @Eq Bool (def_eq_fuel the_red_env n x1 y1) Bool.true -> \
+             @Eq Bool (def_eq_fuel the_red_env n x2 y2) Bool.true -> \
              DefEqFuelAcceptsPair x1 y1 x2 y2",
             "DefEqFuelAcceptsPair x1 y1 x2 y2: ONE fuel at which the structural conversion \
              algorithm accepts both pairs. What the capstone needs to combine per-component \
@@ -89,17 +89,17 @@ impl Specification {
             (
                 "def whnf_fuel_pair (a : KExpr) (b : KExpr) (wa : WhnfFuelReaches a) \
                  (wb : WhnfFuelReaches b) : WhnfFuelPair a b := \
-                 WhnfFuelReaches.rec a \
+                 @WhnfFuelReaches.rec a \
                  (fun (_x : WhnfFuelReaches a) => WhnfFuelPair a b) \
                  (fun (na : Nat) (ra : KExpr) \
-                 (hra : Eq (OptionType KExpr) (whnf_fuel_red the_red_env na a) \
-                 (OptionType.some KExpr ra)) => \
-                 WhnfFuelReaches.rec b \
+                 (hra : @Eq (OptionType KExpr) (whnf_fuel_red the_red_env na a) \
+                 (@OptionType.some KExpr ra)) => \
+                 @WhnfFuelReaches.rec b \
                  (fun (_y : WhnfFuelReaches b) => WhnfFuelPair a b) \
                  (fun (nb : Nat) (rb : KExpr) \
-                 (hrb : Eq (OptionType KExpr) (whnf_fuel_red the_red_env nb b) \
-                 (OptionType.some KExpr rb)) => \
-                 WhnfFuelPair.mk a b (Nat.add na nb) ra rb \
+                 (hrb : @Eq (OptionType KExpr) (whnf_fuel_red the_red_env nb b) \
+                 (@OptionType.some KExpr rb)) => \
+                 @WhnfFuelPair.mk a b (Nat.add na nb) ra rb \
                  (whnf_fuel_red_le the_red_env na (Nat.add na nb) \
                  (le_add_self_left na nb) a ra hra) \
                  (whnf_fuel_red_le the_red_env nb (Nat.add na nb) \
@@ -119,13 +119,13 @@ impl Specification {
                 "def def_eq_fuel_accepts_pair (x1 : KExpr) (y1 : KExpr) (x2 : KExpr) \
                  (y2 : KExpr) (w1 : DefEqFuelAccepts x1 y1) (w2 : DefEqFuelAccepts x2 y2) : \
                  DefEqFuelAcceptsPair x1 y1 x2 y2 := \
-                 DefEqFuelAccepts.rec x1 y1 \
+                 @DefEqFuelAccepts.rec x1 y1 \
                  (fun (_a : DefEqFuelAccepts x1 y1) => DefEqFuelAcceptsPair x1 y1 x2 y2) \
-                 (fun (n1 : Nat) (h1 : Eq Bool (def_eq_fuel the_red_env n1 x1 y1) Bool.true) => \
-                 DefEqFuelAccepts.rec x2 y2 \
+                 (fun (n1 : Nat) (h1 : @Eq Bool (def_eq_fuel the_red_env n1 x1 y1) Bool.true) => \
+                 @DefEqFuelAccepts.rec x2 y2 \
                  (fun (_b : DefEqFuelAccepts x2 y2) => DefEqFuelAcceptsPair x1 y1 x2 y2) \
-                 (fun (n2 : Nat) (h2 : Eq Bool (def_eq_fuel the_red_env n2 x2 y2) Bool.true) => \
-                 DefEqFuelAcceptsPair.mk x1 y1 x2 y2 (Nat.add n1 n2) \
+                 (fun (n2 : Nat) (h2 : @Eq Bool (def_eq_fuel the_red_env n2 x2 y2) Bool.true) => \
+                 @DefEqFuelAcceptsPair.mk x1 y1 x2 y2 (Nat.add n1 n2) \
                  (def_eq_fuel_le n1 (Nat.add n1 n2) (le_add_self_left n1 n2) x1 y1 h1) \
                  (def_eq_fuel_le n2 (Nat.add n1 n2) (le_add_self_right n1 n2) x2 y2 h2)) w2) w1"
                     .to_string(),

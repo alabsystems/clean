@@ -244,9 +244,9 @@ fn test_candmodel_r10_inversion_shapes_match_r5() {
     // quantifies over.
     let rendered = conts_at(&hi_conts("e"), "g2", "");
     for frag in [
-        "(kLam : forall (zA : KExpr) (zb : KExpr), Eq KExpr e (KExpr.lam zA zb) -> C)",
-        "(kFn : forall (zy : KExpr), beta_reduces e zy -> Eq KExpr g2 (KExpr.app zy a) -> C)",
-        "(kArg : forall (zy : KExpr), beta_reduces a zy -> Eq KExpr g2 (KExpr.app e zy) -> C)",
+        "(kLam : forall (zA : KExpr) (zb : KExpr), @Eq KExpr e (KExpr.lam zA zb) -> C)",
+        "(kFn : forall (zy : KExpr), beta_reduces e zy -> @Eq KExpr g2 (KExpr.app zy a) -> C)",
+        "(kArg : forall (zy : KExpr), beta_reduces a zy -> @Eq KExpr g2 (KExpr.app e zy) -> C)",
     ] {
         assert!(
             rendered.contains(frag),

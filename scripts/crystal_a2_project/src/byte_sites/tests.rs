@@ -535,6 +535,7 @@ fn byte_sites_exact_type_variant_pairs_name_all_compiled_variants() {
         Ty::Tuple(vec![Ty::Bool, Ty::U64]),
         Ty::Enum(EnumId::new(13)),
         Ty::Func(FuncTyId::new(14)),
+        Ty::FnItem(FuncId::new(14)),
         Ty::Ref(Box::new(Ty::Bool)),
         Ty::RefMut(Box::new(Ty::Bool)),
         Ty::PtrConst(Box::new(Ty::Bool)),
@@ -553,7 +554,7 @@ fn byte_sites_exact_type_variant_pairs_name_all_compiled_variants() {
     assert!(byte_ty(&Module::new("storage"), &storage)
         .unwrap_err()
         .contains("no erasure"));
-    assert_eq!(cases.len(), 41);
+    assert_eq!(cases.len(), 42);
     for (i, a) in cases.iter().enumerate() {
         for (j, b) in cases.iter().enumerate() {
             assert_eq!(
@@ -600,6 +601,7 @@ fn byte_sites_exact_type_payloads_recurse_without_resolving_raw_ids() {
         (Ty::Tuple(vec![Ty::Bool]), Ty::Tuple(vec![Ty::U64])),
         (Ty::Enum(EnumId::new(7)), Ty::Enum(EnumId::new(8))),
         (Ty::Func(FuncTyId::new(7)), Ty::Func(FuncTyId::new(8))),
+        (Ty::FnItem(FuncId::new(7)), Ty::FnItem(FuncId::new(8))),
         (Ty::Ref(Box::new(Ty::Bool)), Ty::Ref(Box::new(Ty::U64))),
         (
             Ty::RefMut(Box::new(Ty::Bool)),
@@ -665,7 +667,7 @@ fn byte_sites_exact_type_payloads_recurse_without_resolving_raw_ids() {
             Ty::Storage(trust_ir::StorageLayout::new(16, 16)),
         ),
     ];
-    assert_eq!(changes.len(), 31);
+    assert_eq!(changes.len(), 32);
     for (a, b) in changes {
         assert!(!super::metadata_eq::ty_matches(&a, &b));
         assert!(!super::metadata_eq::ty_matches(&b, &a));
@@ -855,4 +857,47 @@ fn byte_sites_exact_nested_enum_families_classify_all_variant_pairs() {
             assert_eq!(super::metadata_eq::divergence_matches(a, b), i == j);
         }
     }
+}
+
+#[test]
+fn byte_sites_nominal_function_items_are_not_structural_function_carriers() {
+    let mut m = module(Vec::new(), Vec::new());
+    let signature = m
+        .add_func_type(FuncTy {
+            params: vec![Ty::U64],
+            returns: vec![Ty::U64],
+            is_vararg: false,
+            abi: None,
+        })
+        .expect("structural function signature");
+    assert_eq!(
+        byte_ty(&m, &Ty::Func(signature)).unwrap(),
+        format!("(IRTy.func_ {})", signature.0)
+    );
+    assert_eq!(byte_ty(&m, &Ty::U64).unwrap(), "(IRTy.uint_ 64)");
+
+    // Name a separate resident scalar identity, so refusal cannot be credited to
+    // a missing target or a recursively defined function-item signature.
+    let mut target = Function::new(
+        FuncId::new(72),
+        "nominal-target",
+        signature,
+        BlockId::new(0),
+    );
+    let mut block = Block::new(BlockId::new(0));
+    block.params.push((ValueId::new(0), Ty::U64));
+    block.body.push(InstrNode::new(Inst::Return {
+        values: vec![ValueId::new(0)],
+    }));
+    target.blocks.push(block);
+    m.functions.push(target);
+    let nominal = Ty::FnItem(FuncId::new(72));
+    let refusal = byte_ty(&m, &nominal).expect_err("nominal function item has no ByteTy image");
+    assert!(refusal.contains("FnItem"), "{refusal}");
+    assert!(refusal.contains("no erasure"), "{refusal}");
+    m.func_types[0].params = vec![nominal.clone()];
+    m.functions[0].blocks[0].params = vec![(ValueId::new(403), nominal)];
+    let refusal = reflect(&m, FuncId::new(71)).expect_err("actual metadata row must refuse");
+    assert!(refusal.contains("FnItem"), "{refusal}");
+    assert!(refusal.contains("no erasure"), "{refusal}");
 }

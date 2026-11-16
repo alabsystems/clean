@@ -53,16 +53,16 @@ impl Specification {
                     // infer-soundness needs the lam body's binder-crossing
                     // admissibility (Stage 2 / infer_preserves_closed). Mirrors
                     // kernel_infer_app_sound's AppInferDecomp elimination.
-                    "LamInferDecomp.rec st A body T ",
+                    "@LamInferDecomp.rec st A body T ",
                     "(fun (_d : LamInferDecomp st A body T) => has_type (KExpr.lam A body) T) ",
                     "(fun (bt : KExpr) (hbody_infer : KernelInferAccepts st body bt) ",
                     "(hwit : LamInferWitness A body bt T) => ",
-                    "LamInferWitness.rec A body bt T ",
+                    "@LamInferWitness.rec A body bt T ",
                     "(fun (_w : LamInferWitness A body bt T) => has_type (KExpr.lam A body) T) ",
                     "(fun (dl : Level) ",
                     "(hdom : Typing A (KExpr.sort dl)) ",
                     "(hbody : Typing body bt) ",
-                    "(hresult : Eq KExpr (KExpr.pi A bt) T) => ",
+                    "(hresult : @Eq KExpr (KExpr.pi A bt) T) => ",
                     "raw_type_conversion (KExpr.lam A body) (KExpr.pi A bt) T ",
                     "(Typing.lam A body bt dl hdom hbody) ",
                     "(def_eq_eq_right (KExpr.pi A bt) (KExpr.pi A bt) T ",
@@ -128,12 +128,12 @@ impl Specification {
                     // fields (hdom, hcod, hresult) pin dom/cod to A's/B's actual
                     // sort levels, so sort (imax_nat dom cod) is the genuine Pi
                     // type — not a free level.
-                    "PiInferWitness.rec A B T ",
+                    "@PiInferWitness.rec A B T ",
                     "(fun (_w : PiInferWitness A B T) => has_type (KExpr.pi A B) T) ",
                     "(fun (dom : Level) (cod : Level) ",
                     "(hdom : Typing A (KExpr.sort dom)) ",
                     "(hcod : Typing B (KExpr.sort cod)) ",
-                    "(hresult : Eq KExpr (KExpr.sort (Level.imax dom cod)) T) => ",
+                    "(hresult : @Eq KExpr (KExpr.sort (Level.imax dom cod)) T) => ",
                     "raw_type_conversion (KExpr.pi A B) (KExpr.sort (Level.imax dom cod)) T ",
                     "(Typing.pi A B dom cod hdom hcod) ",
                     "(def_eq_eq_right (KExpr.sort (Level.imax dom cod)) (KExpr.sort (Level.imax dom cod)) T ",

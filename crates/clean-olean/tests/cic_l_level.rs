@@ -8,9 +8,10 @@
 //! What a pass is evidence of is fixed by `cic_l_level/evidence.rs` (plan unit
 //! E2): the targets are the declarations of the theory's own modules, private
 //! ones included; the modules and `lakefile.toml` roots are `ORDER`'s in exact
-//! sequence; every theorem's statement is pinned; every non-theorem target's
-//! full kernel meaning is pinned (`cic_l_level/definition_pins.rs`); and the
-//! axiom closure is the observed one.
+//! sequence; every target is pinned by its meaning digest, the theorems in
+//! `statement_pins.json` and the rest in `definition_pins.json`
+//! (`cic_l_level/definition_pins.rs`); and the axiom closure is the observed
+//! one.
 
 #[path = "cic_l_level/evidence.rs"]
 mod evidence;
@@ -186,6 +187,7 @@ fn forged_row_gaps(wrong: &BTreeSet<String>, rows: &[(&str, &str, &str)]) -> For
 fn rule_witnesses_and_forged_controls(
     loaded: &Environment,
     mut kernel: ReferenceKernel,
+    package: &evidence::meaning_digest::Package,
     inventory: &BTreeMap<String, String>,
     pins: &BTreeMap<String, String>,
 ) {
@@ -484,7 +486,6 @@ fn rule_witnesses_and_forged_controls(
     // reason for none) and the WfContext census, with their planted failures.
     negative_controls::run(env, &checker);
     drop(checker);
-    definition_pins::verify_and_run_controls(kernel.environment(), &compiled, &modules, inventory);
 
     for subject in THEOREMS {
         let closure = evidence::axiom_closure(kernel.environment(), &name(subject))
@@ -500,12 +501,15 @@ fn rule_witnesses_and_forged_controls(
         let c = loaded.get_const(&source).expect("control theorem exists");
         let value = c.value.clone().expect("control has a real proof");
         // The same forgery against the statement pin: this theorem restated
-        // as the wrong proposition is refused as a changed statement.
+        // as the wrong proposition is refused as a changed statement, over the
+        // environment the kernel admitted.
         evidence::forged_statement_refused(
+            &evidence::meaning_digest::MeaningDigests::new(kernel.environment(), package),
             inventory,
             pins,
             &source,
             &c.level_params,
+            &c.type_,
             &Expr::const_(name(&format!("CICL.{module}.{wrong}")), vec![]),
         );
         kernel
@@ -683,8 +687,9 @@ fn drop_last_argument(value: &Expr) -> Expr {
 /// `cic_l_level/compare_pinned_terms.lean` translates each pinned `CICL.Expr` to a
 /// `Lean.Expr`, compares it with `Expr.equal` (binder names and annotations
 /// included) and each descriptor field by field, and must detect its forged
-/// controls. A statement pin binds a theorem's type, not the terms it names; this
-/// binds the terms.
+/// controls. A statement pin binds what a theorem's statement reaches in the
+/// package (its meaning digest), not that the pinned terms are Lean's own; this
+/// binds that.
 #[test]
 fn base_family_terms_equal_pinned_lean() {
     let lib = clean_olean::require_pinned_lean_lib_path()

@@ -61,6 +61,15 @@ _aw "a failed-only history never lowers the fallback (2026-09-29: rc 1 at 0.06 G
 _aw "a killed-only history raises the fallback" 10 auto:c:4 "${L/pct/peak_gb=7.10 pct} rc=130 class=c"
 _aw "a killed-only history never lowers the fallback" 9 auto:c:9 "${L/pct/peak_gb=0.40 pct} rc=130 class=c"
 _aw "the floor holds under a tiny peak" 1 auto:c:12 "${L/pct/peak_gb=0.01 pct} rc=0 class=c"
+# The local gate scopes these existing auto classes to a conservative minimum.
+# Synthetic rows qualify resolver behavior only, never a real workload peak.
+HEAVY_GATE_AUTO_FLOOR_GB=47 _aw "frontend warm run cannot lower the compiler floor" 47 auto:frontend-suite-run:47 \
+  "${L/pct/peak_gb=0.01 pct} rc=0 class=frontend-suite-run"
+HEAVY_GATE_AUTO_FLOOR_GB=47 _aw "frontend high partial peak still raises above47" 65 auto:frontend-suite-run:47 \
+  "${L/pct/peak_gb=3.00 pct} rc=0 class=frontend-suite-run" \
+  "${L/pct/peak_gb=50.00 pct} rc=130 class=frontend-suite-run"
+HEAVY_GATE_AUTO_FLOOR_GB=96 _aw "frontend higher valid auto floor is preserved" 96 auto:frontend-suite-doc:47 \
+  "${L/pct/peak_gb=0.01 pct} rc=0 class=frontend-suite-doc"
 mkdir -p "$td/factor"; printf '%s\n' "${L/pct/peak_gb=7.20 pct} rc=0 class=c" >"$td/factor/peaks.log"
 _fw=$(HEAVY_GATE_DIR="$td/factor" HEAVY_GATE_PHYS_GB=128 HEAVY_GATE_AUTO_FACTOR=0.5 "$GATE" weight auto:c:12 | cut -f1)
 if [ "$_fw" = 8 ]; then echo "  selftest ok: never below an observed peak at factor 0.5 (-> 8 GB)"

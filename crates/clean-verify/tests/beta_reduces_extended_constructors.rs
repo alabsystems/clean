@@ -36,7 +36,7 @@ fn iota_reduct() -> String {
 /// The `iota_step` witness for IOTA_REDEX -> its reduct: pure computation, by refl.
 fn iota_step_refl() -> String {
     format!(
-        "(Eq.refl (OptionType KExpr) (OptionType.some KExpr {}))",
+        "(@Eq.refl (OptionType KExpr) (@OptionType.some KExpr {}))",
         iota_reduct()
     )
 }

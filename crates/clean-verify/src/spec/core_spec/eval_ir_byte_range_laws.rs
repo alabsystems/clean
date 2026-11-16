@@ -82,7 +82,7 @@ Or.rec
   (fun (before : Nat.le (Nat.add readBase readSize) writeBase) =>
     ir_byte_range_before_v1 writeBase writeSize (Nat.add readBase offset)
       (@Nat.le_trans (Nat.succ (Nat.add readBase offset)) (Nat.add readBase readSize) writeBase
-        (Nat.add_lt_add_left offset readSize inside readBase) before))
+        (@Nat.add_lt_add_left offset readSize inside readBase) before))
   (fun (after : Nat.le (Nat.add writeBase writeSize) readBase) =>
     ir_byte_range_after_v1 writeBase writeSize (Nat.add readBase offset)
       (@Nat.le_trans (Nat.add writeBase writeSize) readBase (Nat.add readBase offset)

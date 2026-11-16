@@ -36,7 +36,7 @@ use crate::spec::ProofStatus;
 // historical `nn_verify::e2e_verifier::<name>` paths keep resolving.
 mod types;
 
-pub use types::{E2eVerifyError, LayerVerifyResult, TrustLevel, VerificationResult};
+pub(crate) use types::{E2eVerifyError, LayerVerifyResult, TrustLevel, VerificationResult};
 
 // ---------------------------------------------------------------------------
 // Proof status constants
@@ -75,7 +75,7 @@ pub const T74_INTERFACE_CONSISTENCY: ProofStatus = ProofStatus::DerivedPending;
 /// returned as `Ok(VerificationResult { verified: false, .. })`, not errors.
 /// Errors indicate structural problems that prevent verification from running.
 #[must_use = "verification result should be inspected"]
-pub fn verify_network(cert: &JsonCertificate) -> Result<VerificationResult, E2eVerifyError> {
+pub(crate) fn verify_network(cert: &JsonCertificate) -> Result<VerificationResult, E2eVerifyError> {
     // Step 1-2: Parse and convert to Farkas chain.
     let farkas_chain = json_to_farkas_chain(cert)?;
     let num_layers = farkas_chain.len();
@@ -226,7 +226,7 @@ fn extract_intervals_from_box(
 ///
 /// Returns a vector of `(interface_index, is_consistent)` pairs.
 #[must_use]
-pub fn check_interface_consistency(
+pub(crate) fn check_interface_consistency(
     layers: &[super::e2e_json_parser::JsonLayerCert],
 ) -> Vec<(usize, bool)> {
     let mut results = Vec::with_capacity(layers.len().saturating_sub(1));
@@ -280,7 +280,10 @@ fn compose_farkas_chain(
 /// bounds, `output[true_class] - output[other] >= margin` for all other classes.
 /// This is verified by checking `lower[true_class] - upper[other] >= margin`.
 #[must_use]
-pub fn verify_output_property(output_bounds: &[(f64, f64)], property: &JsonOutputProperty) -> bool {
+pub(crate) fn verify_output_property(
+    output_bounds: &[(f64, f64)],
+    property: &JsonOutputProperty,
+) -> bool {
     if property.property_type != "robust_classification" {
         // Unknown property type: cannot verify.
         return false;

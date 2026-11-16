@@ -1,0 +1,272 @@
+[
+ {
+  "name": "IRBmKV",
+  "kind": "inductive",
+  "source": "inductive IRBmKV (A : Type) : Type\n| mk : Nat \u2192 A \u2192 IRBmKV A"
+ },
+ {
+  "name": "IRBmTrie",
+  "kind": "inductive",
+  "source": "inductive IRBmTrie (A : Type) : Type\n| leaf : IRBmTrie A\n| node : IRList (IRBmKV A) \u2192 IRBmTrie A \u2192 IRBmTrie A \u2192 IRBmTrie A"
+ },
+ {
+  "name": "IRBmAlloc",
+  "kind": "inductive",
+  "source": "inductive IRBmAlloc : Type\n| mk : Nat \u2192 Bool \u2192 IRScalar \u2192 IRBmAlloc"
+ },
+ {
+  "name": "ir_bm_bcase",
+  "kind": "def",
+  "source": "def ir_bm_bcase (b : Bool) (P : Bool -> Prop) (hf : @Eq Bool b Bool.false -> P Bool.false) (ht : @Eq Bool b Bool.true -> P Bool.true) : P b := @Bool.rec (fun (x : Bool) => @Eq Bool b x -> P x) hf ht b (@Eq.refl Bool b)"
+ },
+ {
+  "name": "ir_bt_bget",
+  "kind": "def",
+  "source": "def ir_bt_bget (A : Type) (l : (IRList (IRBmKV A))) (k : Nat) : (IROption A) := @IRList.rec (IRBmKV A) (fun (_ : (IRList (IRBmKV A))) => (IROption A)) (@IROption.none A) (fun (kv : (IRBmKV A)) (_ : (IRList (IRBmKV A))) (ih : (IROption A)) => @IRBmKV.rec A (fun (_ : (IRBmKV A)) => (IROption A)) (fun (k0 : Nat) (v0 : A) => (@Bool.rec (fun (_ : Bool) => (IROption A)) ih (@IROption.some A v0) (ir_nat_eqb k0 k))) kv) l"
+ },
+ {
+  "name": "ir_bt_bset",
+  "kind": "def",
+  "source": "def ir_bt_bset (A : Type) (l : (IRList (IRBmKV A))) (k : Nat) (v : A) : (IRList (IRBmKV A)) := @IRList.rec (IRBmKV A) (fun (_ : (IRList (IRBmKV A))) => (IRList (IRBmKV A))) (@IRList.cons (IRBmKV A) (@IRBmKV.mk A k v) (@IRList.nil (IRBmKV A))) (fun (kv : (IRBmKV A)) (rest : (IRList (IRBmKV A))) (ih : (IRList (IRBmKV A))) => @IRBmKV.rec A (fun (_ : (IRBmKV A)) => (IRList (IRBmKV A))) (fun (k0 : Nat) (v0 : A) => (@Bool.rec (fun (_ : Bool) => (IRList (IRBmKV A))) (@IRList.cons (IRBmKV A) (@IRBmKV.mk A k0 v0) ih) (@IRList.cons (IRBmKV A) (@IRBmKV.mk A k v) rest) (ir_nat_eqb k0 k))) kv) l"
+ },
+ {
+  "name": "ir_bt_bget_bset_same",
+  "kind": "def",
+  "source": "def ir_bt_bget_bset_same (A : Type) (l : (IRList (IRBmKV A))) (k : Nat) (v : A) : @Eq (IROption A) (ir_bt_bget A (ir_bt_bset A l k v) k) (@IROption.some A v) := @IRList.rec (IRBmKV A) (fun (l0 : (IRList (IRBmKV A))) => @Eq (IROption A) (ir_bt_bget A (ir_bt_bset A l0 k v) k) (@IROption.some A v)) (@Eq.subst Bool (fun (c2 : Bool) => @Eq (IROption A) (@Bool.rec (fun (_ : Bool) => (IROption A)) (@IROption.none A) (@IROption.some A v) c2) (@IROption.some A v)) Bool.true (ir_nat_eqb k k) (@Eq.symm Bool (ir_nat_eqb k k) Bool.true (ir_nat_eqb_refl k)) (@Eq.refl (IROption A) (@IROption.some A v))) (fun (kv : (IRBmKV A)) (rest : (IRList (IRBmKV A))) (ih : @Eq (IROption A) (ir_bt_bget A (ir_bt_bset A rest k v) k) (@IROption.some A v)) => @IRBmKV.rec A (fun (kv0 : (IRBmKV A)) => @Eq (IROption A) (ir_bt_bget A (ir_bt_bset A (@IRList.cons (IRBmKV A) kv0 rest) k v) k) (@IROption.some A v)) (fun (k0 : Nat) (v0 : A) => (ir_bm_bcase (ir_nat_eqb k0 k) (fun (c : Bool) => @Eq (IROption A) (ir_bt_bget A (@Bool.rec (fun (_ : Bool) => (IRList (IRBmKV A))) (@IRList.cons (IRBmKV A) (@IRBmKV.mk A k0 v0) (ir_bt_bset A rest k v)) (@IRList.cons (IRBmKV A) (@IRBmKV.mk A k v) rest) c) k) (@IROption.some A v)) (fun (h : @Eq Bool (ir_nat_eqb k0 k) Bool.false) => @Eq.subst Bool (fun (c2 : Bool) => @Eq (IROption A) (@Bool.rec (fun (_ : Bool) => (IROption A)) (ir_bt_bget A (ir_bt_bset A rest k v) k) (@IROption.some A v0) c2) (@IROption.some A v)) Bool.false (ir_nat_eqb k0 k) (@Eq.symm Bool (ir_nat_eqb k0 k) Bool.false h) ih) (fun (_ : @Eq Bool (ir_nat_eqb k0 k) Bool.true) => @Eq.subst Bool (fun (c2 : Bool) => @Eq (IROption A) (@Bool.rec (fun (_ : Bool) => (IROption A)) (ir_bt_bget A rest k) (@IROption.some A v) c2) (@IROption.some A v)) Bool.true (ir_nat_eqb k k) (@Eq.symm Bool (ir_nat_eqb k k) Bool.true (ir_nat_eqb_refl k)) (@Eq.refl (IROption A) (@IROption.some A v))))) kv) l"
+ },
+ {
+  "name": "ir_bt_bget_bset_other",
+  "kind": "def",
+  "source": "def ir_bt_bget_bset_other (A : Type) (l : (IRList (IRBmKV A))) (k1 : Nat) (k2 : Nat) (v : A) (hne : @Eq Bool (ir_nat_eqb k1 k2) Bool.false) : @Eq (IROption A) (ir_bt_bget A (ir_bt_bset A l k1 v) k2) (ir_bt_bget A l k2) := @IRList.rec (IRBmKV A) (fun (l0 : (IRList (IRBmKV A))) => @Eq (IROption A) (ir_bt_bget A (ir_bt_bset A l0 k1 v) k2) (ir_bt_bget A l0 k2)) (@Eq.subst Bool (fun (c2 : Bool) => @Eq (IROption A) (@Bool.rec (fun (_ : Bool) => (IROption A)) (@IROption.none A) (@IROption.some A v) c2) (@IROption.none A)) Bool.false (ir_nat_eqb k1 k2) (@Eq.symm Bool (ir_nat_eqb k1 k2) Bool.false hne) (@Eq.refl (IROption A) (@IROption.none A))) (fun (kv : (IRBmKV A)) (rest : (IRList (IRBmKV A))) (ih : @Eq (IROption A) (ir_bt_bget A (ir_bt_bset A rest k1 v) k2) (ir_bt_bget A rest k2)) => @IRBmKV.rec A (fun (kv0 : (IRBmKV A)) => @Eq (IROption A) (ir_bt_bget A (ir_bt_bset A (@IRList.cons (IRBmKV A) kv0 rest) k1 v) k2) (ir_bt_bget A (@IRList.cons (IRBmKV A) kv0 rest) k2)) (fun (k0 : Nat) (v0 : A) => (ir_bm_bcase (ir_nat_eqb k0 k1) (fun (c : Bool) => @Eq (IROption A) (ir_bt_bget A (@Bool.rec (fun (_ : Bool) => (IRList (IRBmKV A))) (@IRList.cons (IRBmKV A) (@IRBmKV.mk A k0 v0) (ir_bt_bset A rest k1 v)) (@IRList.cons (IRBmKV A) (@IRBmKV.mk A k1 v) rest) c) k2) (ir_bt_bget A (@IRList.cons (IRBmKV A) (@IRBmKV.mk A k0 v0) rest) k2)) (fun (_ : @Eq Bool (ir_nat_eqb k0 k1) Bool.false) => ir_eq_cong (IROption A) (IROption A) (fun (x : (IROption A)) => (@Bool.rec (fun (_ : Bool) => (IROption A)) x (@IROption.some A v0) (ir_nat_eqb k0 k2))) (ir_bt_bget A (ir_bt_bset A rest k1 v) k2) (ir_bt_bget A rest k2) ih) (fun (h : @Eq Bool (ir_nat_eqb k0 k1) Bool.true) => @Eq.subst Bool (fun (c1 : Bool) => @Eq (IROption A) (@Bool.rec (fun (_ : Bool) => (IROption A)) (ir_bt_bget A rest k2) (@IROption.some A v) c1) (@Bool.rec (fun (_ : Bool) => (IROption A)) (ir_bt_bget A rest k2) (@IROption.some A v0) (ir_nat_eqb k0 k2))) Bool.false (ir_nat_eqb k1 k2) (@Eq.symm Bool (ir_nat_eqb k1 k2) Bool.false hne) (@Eq.subst Bool (fun (c2 : Bool) => @Eq (IROption A) (ir_bt_bget A rest k2) (@Bool.rec (fun (_ : Bool) => (IROption A)) (ir_bt_bget A rest k2) (@IROption.some A v0) c2)) Bool.false (ir_nat_eqb k0 k2) (@Eq.symm Bool (ir_nat_eqb k0 k2) Bool.false (ir_nat_eqb_ne_trans k0 k1 k2 h hne)) (@Eq.refl (IROption A) (ir_bt_bget A rest k2)))))) kv) l"
+ },
+ {
+  "name": "ir_bt_get",
+  "kind": "def",
+  "source": "def ir_bt_get (A : Type) (ps : IRList Nat) (t : (IRBmTrie A)) (r : Nat) (k : Nat) : (IROption A) := @IRList.rec Nat (fun (_ : IRList Nat) => IRBmTrie A -> Nat -> IROption A) (fun (t0 : (IRBmTrie A)) (_ : Nat) => @IRBmTrie.rec A (fun (_ : (IRBmTrie A)) => (IROption A)) (@IROption.none A) (fun (b : (IRList (IRBmKV A))) (_ : (IRBmTrie A)) (_ : (IRBmTrie A)) (_ : (IROption A)) (_ : (IROption A)) => ir_bt_bget A b k) t0) (fun (p : Nat) (_ : IRList Nat) (ih : IRBmTrie A -> Nat -> IROption A) => fun (t0 : (IRBmTrie A)) (r0 : Nat) => @IRBmTrie.rec A (fun (_ : (IRBmTrie A)) => (IROption A)) (@IROption.none A) (fun (_ : (IRList (IRBmKV A))) (l : (IRBmTrie A)) (rr : (IRBmTrie A)) (_ : (IROption A)) (_ : (IROption A)) => (@Bool.rec (fun (_ : Bool) => (IROption A)) (ih rr (Nat.sub r0 p)) (ih l r0) (ir_nat_ltb r0 p))) t0) ps t r"
+ },
+ {
+  "name": "ir_bt_set",
+  "kind": "def",
+  "source": "def ir_bt_set (A : Type) (ps : IRList Nat) (t : (IRBmTrie A)) (r : Nat) (k : Nat) (v : A) : (IRBmTrie A) := @IRList.rec Nat (fun (_ : IRList Nat) => IRBmTrie A -> Nat -> IRBmTrie A) (fun (t0 : (IRBmTrie A)) (_ : Nat) => @IRBmTrie.rec A (fun (_ : (IRBmTrie A)) => (IRBmTrie A)) (@IRBmTrie.node A (ir_bt_bset A (@IRList.nil (IRBmKV A)) k v) (@IRBmTrie.leaf A) (@IRBmTrie.leaf A)) (fun (b : (IRList (IRBmKV A))) (l : (IRBmTrie A)) (rr : (IRBmTrie A)) (_ : (IRBmTrie A)) (_ : (IRBmTrie A)) => @IRBmTrie.node A (ir_bt_bset A b k v) l rr) t0) (fun (p : Nat) (_ : IRList Nat) (ih : IRBmTrie A -> Nat -> IRBmTrie A) => fun (t0 : (IRBmTrie A)) (r0 : Nat) => @IRBmTrie.rec A (fun (_ : (IRBmTrie A)) => (IRBmTrie A)) (@Bool.rec (fun (_ : Bool) => (IRBmTrie A)) (@IRBmTrie.node A (@IRList.nil (IRBmKV A)) (@IRBmTrie.leaf A) (ih (@IRBmTrie.leaf A) (Nat.sub r0 p))) (@IRBmTrie.node A (@IRList.nil (IRBmKV A)) (ih (@IRBmTrie.leaf A) r0) (@IRBmTrie.leaf A)) (ir_nat_ltb r0 p)) (fun (b : (IRList (IRBmKV A))) (l : (IRBmTrie A)) (rr : (IRBmTrie A)) (_ : (IRBmTrie A)) (_ : (IRBmTrie A)) => (@Bool.rec (fun (_ : Bool) => (IRBmTrie A)) (@IRBmTrie.node A b l (ih rr (Nat.sub r0 p))) (@IRBmTrie.node A b (ih l r0) rr) (ir_nat_ltb r0 p))) t0) ps t r"
+ },
+ {
+  "name": "ir_bt_get_leaf",
+  "kind": "def",
+  "source": "def ir_bt_get_leaf (A : Type) (ps : IRList Nat) (k : Nat) : forall (r : Nat), @Eq (IROption A) (ir_bt_get A ps (@IRBmTrie.leaf A) r k) (@IROption.none A) := @IRList.rec Nat (fun (ps0 : IRList Nat) => forall (r : Nat), @Eq (IROption A) (ir_bt_get A ps0 (@IRBmTrie.leaf A) r k) (@IROption.none A)) (fun (r : Nat) => @Eq.refl (IROption A) (@IROption.none A)) (fun (p : Nat) (ps1 : IRList Nat) (_ : forall (r : Nat), @Eq (IROption A) (ir_bt_get A ps1 (@IRBmTrie.leaf A) r k) (@IROption.none A)) => fun (r : Nat) => @Eq.refl (IROption A) (@IROption.none A)) ps"
+ },
+ {
+  "name": "ir_bt_get_set_same",
+  "kind": "def",
+  "source": "def ir_bt_get_set_same (A : Type) (ps : IRList Nat) (t : (IRBmTrie A)) (r : Nat) (k : Nat) (v : A) : @Eq (IROption A) (ir_bt_get A ps (ir_bt_set A ps t r k v) r k) (@IROption.some A v) := @IRList.rec Nat (fun (ps0 : IRList Nat) => forall (t0 : (IRBmTrie A)) (r0 : Nat), @Eq (IROption A) (ir_bt_get A ps0 (ir_bt_set A ps0 t0 r0 k v) r0 k) (@IROption.some A v)) (fun (t0 : (IRBmTrie A)) (r0 : Nat) => @IRBmTrie.rec A (fun (t1 : (IRBmTrie A)) => @Eq (IROption A) (ir_bt_get A (@IRList.nil Nat) (ir_bt_set A (@IRList.nil Nat) t1 r0 k v) r0 k) (@IROption.some A v)) (ir_bt_bget_bset_same A (@IRList.nil (IRBmKV A)) k v) (fun (b : (IRList (IRBmKV A))) (l : (IRBmTrie A)) (rr : (IRBmTrie A)) (_ : @Eq (IROption A) (ir_bt_get A (@IRList.nil Nat) (ir_bt_set A (@IRList.nil Nat) l r0 k v) r0 k) (@IROption.some A v)) (_ : @Eq (IROption A) (ir_bt_get A (@IRList.nil Nat) (ir_bt_set A (@IRList.nil Nat) rr r0 k v) r0 k) (@IROption.some A v)) => ir_bt_bget_bset_same A b k v) t0) (fun (p : Nat) (ps1 : IRList Nat) (ih : forall (t0 : (IRBmTrie A)) (r0 : Nat), @Eq (IROption A) (ir_bt_get A ps1 (ir_bt_set A ps1 t0 r0 k v) r0 k) (@IROption.some A v)) => fun (t0 : (IRBmTrie A)) (r0 : Nat) => @IRBmTrie.rec A (fun (t1 : (IRBmTrie A)) => @Eq (IROption A) (ir_bt_get A (@IRList.cons Nat p ps1) (ir_bt_set A (@IRList.cons Nat p ps1) t1 r0 k v) r0 k) (@IROption.some A v)) (ir_bm_bcase (ir_nat_ltb r0 p) (fun (c : Bool) => @Eq (IROption A) (ir_bt_get A (@IRList.cons Nat p ps1) (@Bool.rec (fun (_ : Bool) => (IRBmTrie A)) (@IRBmTrie.node A (@IRList.nil (IRBmKV A)) (@IRBmTrie.leaf A) (ir_bt_set A ps1 (@IRBmTrie.leaf A) (Nat.sub r0 p) k v)) (@IRBmTrie.node A (@IRList.nil (IRBmKV A)) (ir_bt_set A ps1 (@IRBmTrie.leaf A) r0 k v) (@IRBmTrie.leaf A)) c) r0 k) (@IROption.some A v)) (fun (h : @Eq Bool (ir_nat_ltb r0 p) Bool.false) => @Eq.subst Bool (fun (c2 : Bool) => @Eq (IROption A) (@Bool.rec (fun (_ : Bool) => (IROption A)) (ir_bt_get A ps1 (ir_bt_set A ps1 (@IRBmTrie.leaf A) (Nat.sub r0 p) k v) (Nat.sub r0 p) k) (ir_bt_get A ps1 (@IRBmTrie.leaf A) r0 k) c2) (@IROption.some A v)) Bool.false (ir_nat_ltb r0 p) (@Eq.symm Bool (ir_nat_ltb r0 p) Bool.false h) (ih (@IRBmTrie.leaf A) (Nat.sub r0 p))) (fun (h : @Eq Bool (ir_nat_ltb r0 p) Bool.true) => @Eq.subst Bool (fun (c2 : Bool) => @Eq (IROption A) (@Bool.rec (fun (_ : Bool) => (IROption A)) (ir_bt_get A ps1 (@IRBmTrie.leaf A) (Nat.sub r0 p) k) (ir_bt_get A ps1 (ir_bt_set A ps1 (@IRBmTrie.leaf A) r0 k v) r0 k) c2) (@IROption.some A v)) Bool.true (ir_nat_ltb r0 p) (@Eq.symm Bool (ir_nat_ltb r0 p) Bool.true h) (ih (@IRBmTrie.leaf A) r0))) (fun (b : (IRList (IRBmKV A))) (l : (IRBmTrie A)) (rr : (IRBmTrie A)) (_ : @Eq (IROption A) (ir_bt_get A (@IRList.cons Nat p ps1) (ir_bt_set A (@IRList.cons Nat p ps1) l r0 k v) r0 k) (@IROption.some A v)) (_ : @Eq (IROption A) (ir_bt_get A (@IRList.cons Nat p ps1) (ir_bt_set A (@IRList.cons Nat p ps1) rr r0 k v) r0 k) (@IROption.some A v)) => (ir_bm_bcase (ir_nat_ltb r0 p) (fun (c : Bool) => @Eq (IROption A) (ir_bt_get A (@IRList.cons Nat p ps1) (@Bool.rec (fun (_ : Bool) => (IRBmTrie A)) (@IRBmTrie.node A b l (ir_bt_set A ps1 rr (Nat.sub r0 p) k v)) (@IRBmTrie.node A b (ir_bt_set A ps1 l r0 k v) rr) c) r0 k) (@IROption.some A v)) (fun (h : @Eq Bool (ir_nat_ltb r0 p) Bool.false) => @Eq.subst Bool (fun (c2 : Bool) => @Eq (IROption A) (@Bool.rec (fun (_ : Bool) => (IROption A)) (ir_bt_get A ps1 (ir_bt_set A ps1 rr (Nat.sub r0 p) k v) (Nat.sub r0 p) k) (ir_bt_get A ps1 l r0 k) c2) (@IROption.some A v)) Bool.false (ir_nat_ltb r0 p) (@Eq.symm Bool (ir_nat_ltb r0 p) Bool.false h) (ih rr (Nat.sub r0 p))) (fun (h : @Eq Bool (ir_nat_ltb r0 p) Bool.true) => @Eq.subst Bool (fun (c2 : Bool) => @Eq (IROption A) (@Bool.rec (fun (_ : Bool) => (IROption A)) (ir_bt_get A ps1 rr (Nat.sub r0 p) k) (ir_bt_get A ps1 (ir_bt_set A ps1 l r0 k v) r0 k) c2) (@IROption.some A v)) Bool.true (ir_nat_ltb r0 p) (@Eq.symm Bool (ir_nat_ltb r0 p) Bool.true h) (ih l r0)))) t0) ps t r"
+ },
+ {
+  "name": "ir_bt_get_set_other",
+  "kind": "def",
+  "source": "def ir_bt_get_set_other (A : Type) (k1 : Nat) (k2 : Nat) (v : A) (hne : @Eq Bool (ir_nat_eqb k1 k2) Bool.false) (ps : IRList Nat) : forall (t : (IRBmTrie A)) (r1 : Nat) (r2 : Nat), @Eq (IROption A) (ir_bt_get A ps (ir_bt_set A ps t r1 k1 v) r2 k2) (ir_bt_get A ps t r2 k2) := @IRList.rec Nat (fun (ps0 : IRList Nat) => forall (t0 : (IRBmTrie A)) (r1 : Nat) (r2 : Nat), @Eq (IROption A) (ir_bt_get A ps0 (ir_bt_set A ps0 t0 r1 k1 v) r2 k2) (ir_bt_get A ps0 t0 r2 k2)) (fun (t0 : (IRBmTrie A)) (r1 : Nat) (r2 : Nat) => @IRBmTrie.rec A (fun (t1 : (IRBmTrie A)) => @Eq (IROption A) (ir_bt_get A (@IRList.nil Nat) (ir_bt_set A (@IRList.nil Nat) t1 r1 k1 v) r2 k2) (ir_bt_get A (@IRList.nil Nat) t1 r2 k2)) (ir_bt_bget_bset_other A (@IRList.nil (IRBmKV A)) k1 k2 v hne) (fun (b : (IRList (IRBmKV A))) (l : (IRBmTrie A)) (rr : (IRBmTrie A)) (_ : @Eq (IROption A) (ir_bt_get A (@IRList.nil Nat) (ir_bt_set A (@IRList.nil Nat) l r1 k1 v) r2 k2) (ir_bt_get A (@IRList.nil Nat) l r2 k2)) (_ : @Eq (IROption A) (ir_bt_get A (@IRList.nil Nat) (ir_bt_set A (@IRList.nil Nat) rr r1 k1 v) r2 k2) (ir_bt_get A (@IRList.nil Nat) rr r2 k2)) => ir_bt_bget_bset_other A b k1 k2 v hne) t0) (fun (p : Nat) (ps1 : IRList Nat) (ih : forall (t0 : (IRBmTrie A)) (r1 : Nat) (r2 : Nat), @Eq (IROption A) (ir_bt_get A ps1 (ir_bt_set A ps1 t0 r1 k1 v) r2 k2) (ir_bt_get A ps1 t0 r2 k2)) => fun (t0 : (IRBmTrie A)) (r1 : Nat) (r2 : Nat) => @IRBmTrie.rec A (fun (t1 : (IRBmTrie A)) => @Eq (IROption A) (ir_bt_get A (@IRList.cons Nat p ps1) (ir_bt_set A (@IRList.cons Nat p ps1) t1 r1 k1 v) r2 k2) (ir_bt_get A (@IRList.cons Nat p ps1) t1 r2 k2)) (ir_bm_bcase (ir_nat_ltb r1 p) (fun (c : Bool) => @Eq (IROption A) (ir_bt_get A (@IRList.cons Nat p ps1) (@Bool.rec (fun (_ : Bool) => (IRBmTrie A)) (@IRBmTrie.node A (@IRList.nil (IRBmKV A)) (@IRBmTrie.leaf A) (ir_bt_set A ps1 (@IRBmTrie.leaf A) (Nat.sub r1 p) k1 v)) (@IRBmTrie.node A (@IRList.nil (IRBmKV A)) (ir_bt_set A ps1 (@IRBmTrie.leaf A) r1 k1 v) (@IRBmTrie.leaf A)) c) r2 k2) (@IROption.none A)) (fun (_ : @Eq Bool (ir_nat_ltb r1 p) Bool.false) => (ir_bm_bcase (ir_nat_ltb r2 p) (fun (c : Bool) => @Eq (IROption A) (@Bool.rec (fun (_ : Bool) => (IROption A)) (ir_bt_get A ps1 (ir_bt_set A ps1 (@IRBmTrie.leaf A) (Nat.sub r1 p) k1 v) (Nat.sub r2 p) k2) (ir_bt_get A ps1 (@IRBmTrie.leaf A) r2 k2) c) (@IROption.none A)) (fun (_ : @Eq Bool (ir_nat_ltb r2 p) Bool.false) => (@Eq.trans (IROption A) (ir_bt_get A ps1 (ir_bt_set A ps1 (@IRBmTrie.leaf A) (Nat.sub r1 p) k1 v) (Nat.sub r2 p) k2) (ir_bt_get A ps1 (@IRBmTrie.leaf A) (Nat.sub r2 p) k2) (@IROption.none A) (ih (@IRBmTrie.leaf A) (Nat.sub r1 p) (Nat.sub r2 p)) (ir_bt_get_leaf A ps1 k2 (Nat.sub r2 p)))) (fun (_ : @Eq Bool (ir_nat_ltb r2 p) Bool.true) => (ir_bt_get_leaf A ps1 k2 r2)))) (fun (_ : @Eq Bool (ir_nat_ltb r1 p) Bool.true) => (ir_bm_bcase (ir_nat_ltb r2 p) (fun (c : Bool) => @Eq (IROption A) (@Bool.rec (fun (_ : Bool) => (IROption A)) (ir_bt_get A ps1 (@IRBmTrie.leaf A) (Nat.sub r2 p) k2) (ir_bt_get A ps1 (ir_bt_set A ps1 (@IRBmTrie.leaf A) r1 k1 v) r2 k2) c) (@IROption.none A)) (fun (_ : @Eq Bool (ir_nat_ltb r2 p) Bool.false) => (ir_bt_get_leaf A ps1 k2 (Nat.sub r2 p))) (fun (_ : @Eq Bool (ir_nat_ltb r2 p) Bool.true) => (@Eq.trans (IROption A) (ir_bt_get A ps1 (ir_bt_set A ps1 (@IRBmTrie.leaf A) r1 k1 v) r2 k2) (ir_bt_get A ps1 (@IRBmTrie.leaf A) r2 k2) (@IROption.none A) (ih (@IRBmTrie.leaf A) r1 r2) (ir_bt_get_leaf A ps1 k2 r2)))))) (fun (b : (IRList (IRBmKV A))) (l : (IRBmTrie A)) (rr : (IRBmTrie A)) (_ : @Eq (IROption A) (ir_bt_get A (@IRList.cons Nat p ps1) (ir_bt_set A (@IRList.cons Nat p ps1) l r1 k1 v) r2 k2) (ir_bt_get A (@IRList.cons Nat p ps1) l r2 k2)) (_ : @Eq (IROption A) (ir_bt_get A (@IRList.cons Nat p ps1) (ir_bt_set A (@IRList.cons Nat p ps1) rr r1 k1 v) r2 k2) (ir_bt_get A (@IRList.cons Nat p ps1) rr r2 k2)) => (ir_bm_bcase (ir_nat_ltb r1 p) (fun (c : Bool) => @Eq (IROption A) (ir_bt_get A (@IRList.cons Nat p ps1) (@Bool.rec (fun (_ : Bool) => (IRBmTrie A)) (@IRBmTrie.node A b l (ir_bt_set A ps1 rr (Nat.sub r1 p) k1 v)) (@IRBmTrie.node A b (ir_bt_set A ps1 l r1 k1 v) rr) c) r2 k2) (@Bool.rec (fun (_ : Bool) => (IROption A)) (ir_bt_get A ps1 rr (Nat.sub r2 p) k2) (ir_bt_get A ps1 l r2 k2) (ir_nat_ltb r2 p))) (fun (_ : @Eq Bool (ir_nat_ltb r1 p) Bool.false) => (ir_bm_bcase (ir_nat_ltb r2 p) (fun (c : Bool) => @Eq (IROption A) (@Bool.rec (fun (_ : Bool) => (IROption A)) (ir_bt_get A ps1 (ir_bt_set A ps1 rr (Nat.sub r1 p) k1 v) (Nat.sub r2 p) k2) (ir_bt_get A ps1 l r2 k2) c) (@Bool.rec (fun (_ : Bool) => (IROption A)) (ir_bt_get A ps1 rr (Nat.sub r2 p) k2) (ir_bt_get A ps1 l r2 k2) c)) (fun (_ : @Eq Bool (ir_nat_ltb r2 p) Bool.false) => (ih rr (Nat.sub r1 p) (Nat.sub r2 p))) (fun (_ : @Eq Bool (ir_nat_ltb r2 p) Bool.true) => (@Eq.refl (IROption A) (ir_bt_get A ps1 l r2 k2))))) (fun (_ : @Eq Bool (ir_nat_ltb r1 p) Bool.true) => (ir_bm_bcase (ir_nat_ltb r2 p) (fun (c : Bool) => @Eq (IROption A) (@Bool.rec (fun (_ : Bool) => (IROption A)) (ir_bt_get A ps1 rr (Nat.sub r2 p) k2) (ir_bt_get A ps1 (ir_bt_set A ps1 l r1 k1 v) r2 k2) c) (@Bool.rec (fun (_ : Bool) => (IROption A)) (ir_bt_get A ps1 rr (Nat.sub r2 p) k2) (ir_bt_get A ps1 l r2 k2) c)) (fun (_ : @Eq Bool (ir_nat_ltb r2 p) Bool.false) => (@Eq.refl (IROption A) (ir_bt_get A ps1 rr (Nat.sub r2 p) k2))) (fun (_ : @Eq Bool (ir_nat_ltb r2 p) Bool.true) => (ih l r1 r2)))))) t0) ps"
+ },
+ {
+  "name": "ir_bt_get_set",
+  "kind": "def",
+  "source": "def ir_bt_get_set (A : Type) (ps : IRList Nat) (t : (IRBmTrie A)) (k1 : Nat) (k2 : Nat) (v : A) : @Eq (IROption A) (ir_bt_get A ps (ir_bt_set A ps t k1 k1 v) k2 k2) (@Bool.rec (fun (_ : Bool) => (IROption A)) (ir_bt_get A ps t k2 k2) (@IROption.some A v) (ir_nat_eqb k1 k2)) := (ir_bm_bcase (ir_nat_eqb k1 k2) (fun (c : Bool) => @Eq (IROption A) (ir_bt_get A ps (ir_bt_set A ps t k1 k1 v) k2 k2) (@Bool.rec (fun (_ : Bool) => (IROption A)) (ir_bt_get A ps t k2 k2) (@IROption.some A v) c)) (fun (h : @Eq Bool (ir_nat_eqb k1 k2) Bool.false) => ir_bt_get_set_other A k1 k2 v h ps t k1 k2) (fun (h : @Eq Bool (ir_nat_eqb k1 k2) Bool.true) => @Eq.subst Nat (fun (x : Nat) => @Eq (IROption A) (ir_bt_get A ps (ir_bt_set A ps t k1 k1 v) x x) (@IROption.some A v)) k1 k2 (ir_nat_eqb_sound k1 k2 h) (ir_bt_get_set_same A ps t k1 k1 v)))"
+ },
+ {
+  "name": "ir_bm_ladder",
+  "kind": "def",
+  "source": "def ir_bm_ladder : IRList Nat := (@IRList.cons Nat 140737488355328 (@IRList.cons Nat 70368744177664 (@IRList.cons Nat 35184372088832 (@IRList.cons Nat 17592186044416 (@IRList.cons Nat 8796093022208 (@IRList.cons Nat 4398046511104 (@IRList.cons Nat 2199023255552 (@IRList.cons Nat 1099511627776 (@IRList.cons Nat 549755813888 (@IRList.cons Nat 274877906944 (@IRList.cons Nat 137438953472 (@IRList.cons Nat 68719476736 (@IRList.cons Nat 34359738368 (@IRList.cons Nat 17179869184 (@IRList.cons Nat 8589934592 (@IRList.cons Nat 4294967296 (@IRList.nil Nat)))))))))))))))))"
+ },
+ {
+  "name": "ir_bm_find",
+  "kind": "def",
+  "source": "def ir_bm_find (t : (IRBmTrie IRBmAlloc)) (a : Nat) : (IROption IRBmAlloc) := ir_bt_get IRBmAlloc ir_bm_ladder t a a"
+ },
+ {
+  "name": "ir_bm_put",
+  "kind": "def",
+  "source": "def ir_bm_put (t : (IRBmTrie IRBmAlloc)) (a : Nat) (x : IRBmAlloc) : (IRBmTrie IRBmAlloc) := ir_bt_set IRBmAlloc ir_bm_ladder t a a x"
+ },
+ {
+  "name": "ir_bm_load_alloc",
+  "kind": "def",
+  "source": "def ir_bm_load_alloc (k : Nat) (x : IRBmAlloc) : IRStepResult := @IRBmAlloc.rec (fun (_ : IRBmAlloc) => IRStepResult) (fun (k0 : Nat) (lv : Bool) (v : IRScalar) => (@Bool.rec (fun (_ : Bool) => IRStepResult) (IRStepResult.fault (IROutcome.ub IRFault.bad_addr)) (@Bool.rec (fun (_ : Bool) => IRStepResult) (IRStepResult.fault (IROutcome.unmodelled IRFault.width_bounded)) (ir_load_value v) (ir_nat_eqb k0 k)) lv)) x"
+ },
+ {
+  "name": "ir_bm_load",
+  "kind": "def",
+  "source": "def ir_bm_load (t : (IRBmTrie IRBmAlloc)) (k : Nat) (a : Nat) : IRStepResult := @IROption.rec IRBmAlloc (fun (_ : (IROption IRBmAlloc)) => IRStepResult) (IRStepResult.fault (IROutcome.ub IRFault.bad_addr)) (fun (x : IRBmAlloc) => ir_bm_load_alloc k x) (ir_bm_find t a)"
+ },
+ {
+  "name": "ir_bm_store",
+  "kind": "def",
+  "source": "def ir_bm_store (t : (IRBmTrie IRBmAlloc)) (k : Nat) (a : Nat) (v : IRScalar) : (IROption (IRBmTrie IRBmAlloc)) := @IROption.rec IRBmAlloc (fun (_ : (IROption IRBmAlloc)) => (IROption (IRBmTrie IRBmAlloc))) (@IROption.none (IRBmTrie IRBmAlloc)) (fun (x : IRBmAlloc) => @IRBmAlloc.rec (fun (_ : IRBmAlloc) => (IROption (IRBmTrie IRBmAlloc))) (fun (k0 : Nat) (lv : Bool) (_ : IRScalar) => (@Bool.rec (fun (_ : Bool) => (IROption (IRBmTrie IRBmAlloc))) (@IROption.none (IRBmTrie IRBmAlloc)) (@Bool.rec (fun (_ : Bool) => (IROption (IRBmTrie IRBmAlloc))) (@IROption.none (IRBmTrie IRBmAlloc)) (@IROption.some (IRBmTrie IRBmAlloc) (ir_bm_put t a (IRBmAlloc.mk k Bool.true v))) (ir_nat_eqb k0 k)) lv)) x) (ir_bm_find t a)"
+ },
+ {
+  "name": "ir_bm_load_put_same",
+  "kind": "def",
+  "source": "def ir_bm_load_put_same (t : (IRBmTrie IRBmAlloc)) (k : Nat) (a : Nat) (v : IRScalar) : @Eq IRStepResult (ir_bm_load (ir_bm_put t a (IRBmAlloc.mk k Bool.true v)) k a) (ir_load_value v) := @Eq.subst (IROption IRBmAlloc) (fun (o : (IROption IRBmAlloc)) => @Eq IRStepResult (@IROption.rec IRBmAlloc (fun (_ : (IROption IRBmAlloc)) => IRStepResult) (IRStepResult.fault (IROutcome.ub IRFault.bad_addr)) (fun (x : IRBmAlloc) => ir_bm_load_alloc k x) o) (ir_load_value v)) (@IROption.some IRBmAlloc (IRBmAlloc.mk k Bool.true v)) (ir_bm_find (ir_bm_put t a (IRBmAlloc.mk k Bool.true v)) a) (@Eq.symm (IROption IRBmAlloc) (ir_bm_find (ir_bm_put t a (IRBmAlloc.mk k Bool.true v)) a) (@IROption.some IRBmAlloc (IRBmAlloc.mk k Bool.true v)) (ir_bt_get_set_same IRBmAlloc ir_bm_ladder t a a (IRBmAlloc.mk k Bool.true v))) (@Eq.subst Bool (fun (c : Bool) => @Eq IRStepResult (@Bool.rec (fun (_ : Bool) => IRStepResult) (IRStepResult.fault (IROutcome.unmodelled IRFault.width_bounded)) (ir_load_value v) c) (ir_load_value v)) Bool.true (ir_nat_eqb k k) (@Eq.symm Bool (ir_nat_eqb k k) Bool.true (ir_nat_eqb_refl k)) (@Eq.refl IRStepResult (ir_load_value v)))"
+ },
+ {
+  "name": "ir_bm_load_put_other",
+  "kind": "def",
+  "source": "def ir_bm_load_put_other (t : (IRBmTrie IRBmAlloc)) (a1 : Nat) (a2 : Nat) (x : IRBmAlloc) (k : Nat) (hne : @Eq Bool (ir_nat_eqb a1 a2) Bool.false) : @Eq IRStepResult (ir_bm_load (ir_bm_put t a1 x) k a2) (ir_bm_load t k a2) := ir_eq_cong (IROption IRBmAlloc) IRStepResult (fun (o : (IROption IRBmAlloc)) => @IROption.rec IRBmAlloc (fun (_ : (IROption IRBmAlloc)) => IRStepResult) (IRStepResult.fault (IROutcome.ub IRFault.bad_addr)) (fun (y : IRBmAlloc) => ir_bm_load_alloc k y) o) (ir_bm_find (ir_bm_put t a1 x) a2) (ir_bm_find t a2) (ir_bt_get_set_other IRBmAlloc a1 a2 x hne ir_bm_ladder t a1 a2)"
+ },
+ {
+  "name": "IRRfTy",
+  "kind": "inductive",
+  "source": "inductive IRRfTy : Type\n| mk : Nat \u2192 Nat \u2192 IRRfTy"
+ },
+ {
+  "name": "ir_rf_tyof",
+  "kind": "def",
+  "source": "def ir_rf_tyof (g : (IRList IRRfTy)) (a : Nat) : IROption Nat := @IRList.rec IRRfTy (fun (_ : (IRList IRRfTy)) => IROption Nat) (@IROption.none Nat) (fun (e : IRRfTy) (_ : (IRList IRRfTy)) (ih : IROption Nat) => @IRRfTy.rec (fun (_ : IRRfTy) => IROption Nat) (fun (a0 : Nat) (k0 : Nat) => (@Bool.rec (fun (_ : Bool) => (IROption Nat)) ih (@IROption.some Nat k0) (ir_nat_eqb a0 a))) e) g"
+ },
+ {
+  "name": "ir_rf_key",
+  "kind": "def",
+  "source": "def ir_rf_key (g : (IRList IRRfTy)) (a : Nat) : Nat := @IROption.rec Nat (fun (_ : IROption Nat) => Nat) Nat.zero (fun (k : Nat) => k) (ir_rf_tyof g a)"
+ },
+ {
+  "name": "ir_rf_enc",
+  "kind": "def",
+  "source": "def ir_rf_enc (g : (IRList IRRfTy)) (mem : IRList IRMemSlot) : (IRBmTrie IRBmAlloc) := @IRList.rec IRMemSlot (fun (_ : IRList IRMemSlot) => (IRBmTrie IRBmAlloc)) (@IRBmTrie.leaf IRBmAlloc) (fun (s : IRMemSlot) (_ : IRList IRMemSlot) (ih : (IRBmTrie IRBmAlloc)) => @IRMemSlot.rec (fun (_ : IRMemSlot) => (IRBmTrie IRBmAlloc)) (fun (i : Nat) (v : IRScalar) (lv : Bool) => ir_bm_put ih i (IRBmAlloc.mk (ir_rf_key g i) lv v)) s) mem"
+ },
+ {
+  "name": "ir_rf_slot",
+  "kind": "def",
+  "source": "def ir_rf_slot (g : (IRList IRRfTy)) (a : Nat) (o : IROption IRMemSlot) : (IROption IRBmAlloc) := @IROption.rec IRMemSlot (fun (_ : IROption IRMemSlot) => (IROption IRBmAlloc)) (@IROption.none IRBmAlloc) (fun (s : IRMemSlot) => @IRMemSlot.rec (fun (_ : IRMemSlot) => (IROption IRBmAlloc)) (fun (_ : Nat) (v : IRScalar) (lv : Bool) => @IROption.some IRBmAlloc (IRBmAlloc.mk (ir_rf_key g a) lv v)) s) o"
+ },
+ {
+  "name": "ir_rf_find_enc",
+  "kind": "def",
+  "source": "def ir_rf_find_enc (g : (IRList IRRfTy)) (mem : IRList IRMemSlot) (a : Nat) : @Eq (IROption IRBmAlloc) (ir_bm_find (ir_rf_enc g mem) a) (ir_rf_slot g a (ir_mem_lookup mem a)) := @IRList.rec IRMemSlot (fun (m0 : IRList IRMemSlot) => @Eq (IROption IRBmAlloc) (ir_bm_find (ir_rf_enc g m0) a) (ir_rf_slot g a (ir_mem_lookup m0 a))) (ir_bt_get_leaf IRBmAlloc ir_bm_ladder a a) (fun (s : IRMemSlot) (rest : IRList IRMemSlot) (ih : @Eq (IROption IRBmAlloc) (ir_bm_find (ir_rf_enc g rest) a) (ir_rf_slot g a (ir_mem_lookup rest a))) => @IRMemSlot.rec (fun (s0 : IRMemSlot) => @Eq (IROption IRBmAlloc) (ir_bm_find (ir_rf_enc g (@IRList.cons IRMemSlot s0 rest)) a) (ir_rf_slot g a (ir_mem_lookup (@IRList.cons IRMemSlot s0 rest) a))) (fun (i : Nat) (v : IRScalar) (lv : Bool) => @Eq.trans (IROption IRBmAlloc) (ir_bm_find (ir_bm_put (ir_rf_enc g rest) i (IRBmAlloc.mk (ir_rf_key g i) lv v)) a) (@Bool.rec (fun (_ : Bool) => (IROption IRBmAlloc)) (ir_bm_find (ir_rf_enc g rest) a) (@IROption.some IRBmAlloc (IRBmAlloc.mk (ir_rf_key g i) lv v)) (ir_nat_eqb i a)) (ir_rf_slot g a (@Bool.rec (fun (_ : Bool) => (IROption IRMemSlot)) (ir_mem_lookup rest a) (@IROption.some IRMemSlot (IRMemSlot.mk i v lv)) (ir_nat_eqb i a))) (ir_bt_get_set IRBmAlloc ir_bm_ladder (ir_rf_enc g rest) i a (IRBmAlloc.mk (ir_rf_key g i) lv v)) (ir_bm_bcase (ir_nat_eqb i a) (fun (c : Bool) => @Eq (IROption IRBmAlloc) (@Bool.rec (fun (_ : Bool) => (IROption IRBmAlloc)) (ir_bm_find (ir_rf_enc g rest) a) (@IROption.some IRBmAlloc (IRBmAlloc.mk (ir_rf_key g i) lv v)) c) (ir_rf_slot g a (@Bool.rec (fun (_ : Bool) => (IROption IRMemSlot)) (ir_mem_lookup rest a) (@IROption.some IRMemSlot (IRMemSlot.mk i v lv)) c))) (fun (_ : @Eq Bool (ir_nat_eqb i a) Bool.false) => ih) (fun (h : @Eq Bool (ir_nat_eqb i a) Bool.true) => @Eq.subst Nat (fun (x : Nat) => @Eq (IROption IRBmAlloc) (@IROption.some IRBmAlloc (IRBmAlloc.mk (ir_rf_key g x) lv v)) (@IROption.some IRBmAlloc (IRBmAlloc.mk (ir_rf_key g a) lv v))) a i (@Eq.symm Nat i a (ir_nat_eqb_sound i a h)) (@Eq.refl (IROption IRBmAlloc) (@IROption.some IRBmAlloc (IRBmAlloc.mk (ir_rf_key g a) lv v)))))) s) mem"
+ },
+ {
+  "name": "ir_rf_load_value",
+  "kind": "def",
+  "source": "def ir_rf_load_value (g : (IRList IRRfTy)) (mem : IRList IRMemSlot) (a : Nat) (k : Nat) (hk : @Eq (IROption Nat) (ir_rf_tyof g a) (@IROption.some Nat k)) : @Eq IRStepResult (ir_bm_load (ir_rf_enc g mem) k a) (ir_load_slot (ir_mem_lookup mem a)) := @Eq.trans IRStepResult (ir_bm_load (ir_rf_enc g mem) k a) ((fun (o : (IROption IRBmAlloc)) => @IROption.rec IRBmAlloc (fun (_ : (IROption IRBmAlloc)) => IRStepResult) (IRStepResult.fault (IROutcome.ub IRFault.bad_addr)) (fun (x : IRBmAlloc) => ir_bm_load_alloc k x) o) (ir_rf_slot g a (ir_mem_lookup mem a))) (ir_load_slot (ir_mem_lookup mem a)) (ir_eq_cong (IROption IRBmAlloc) IRStepResult (fun (o : (IROption IRBmAlloc)) => @IROption.rec IRBmAlloc (fun (_ : (IROption IRBmAlloc)) => IRStepResult) (IRStepResult.fault (IROutcome.ub IRFault.bad_addr)) (fun (x : IRBmAlloc) => ir_bm_load_alloc k x) o) (ir_bm_find (ir_rf_enc g mem) a) (ir_rf_slot g a (ir_mem_lookup mem a)) (ir_rf_find_enc g mem a)) (@IROption.rec IRMemSlot (fun (o : IROption IRMemSlot) => @Eq IRStepResult ((fun (o : (IROption IRBmAlloc)) => @IROption.rec IRBmAlloc (fun (_ : (IROption IRBmAlloc)) => IRStepResult) (IRStepResult.fault (IROutcome.ub IRFault.bad_addr)) (fun (x : IRBmAlloc) => ir_bm_load_alloc k x) o) (ir_rf_slot g a o)) (ir_load_slot o)) (@Eq.refl IRStepResult (IRStepResult.fault (IROutcome.ub IRFault.bad_addr))) (fun (s : IRMemSlot) => @IRMemSlot.rec (fun (s0 : IRMemSlot) => @Eq IRStepResult ((fun (o : (IROption IRBmAlloc)) => @IROption.rec IRBmAlloc (fun (_ : (IROption IRBmAlloc)) => IRStepResult) (IRStepResult.fault (IROutcome.ub IRFault.bad_addr)) (fun (x : IRBmAlloc) => ir_bm_load_alloc k x) o) (ir_rf_slot g a (@IROption.some IRMemSlot s0))) (ir_load_slot (@IROption.some IRMemSlot s0))) (fun (i : Nat) (v : IRScalar) (lv : Bool) => @Eq.subst (IROption Nat) (fun (o2 : IROption Nat) => @Eq IRStepResult (@Bool.rec (fun (_ : Bool) => IRStepResult) (IRStepResult.fault (IROutcome.ub IRFault.bad_addr)) (@Bool.rec (fun (_ : Bool) => IRStepResult) (IRStepResult.fault (IROutcome.unmodelled IRFault.width_bounded)) (ir_load_value v) (ir_nat_eqb (@IROption.rec Nat (fun (_ : IROption Nat) => Nat) Nat.zero (fun (k1 : Nat) => k1) o2) k)) lv) (@Bool.rec (fun (_ : Bool) => IRStepResult) (IRStepResult.fault (IROutcome.ub IRFault.bad_addr)) (ir_load_value v) lv)) (@IROption.some Nat k) (ir_rf_tyof g a) (@Eq.symm (IROption Nat) (ir_rf_tyof g a) (@IROption.some Nat k) hk) (@Eq.subst Bool (fun (c : Bool) => @Eq IRStepResult (@Bool.rec (fun (_ : Bool) => IRStepResult) (IRStepResult.fault (IROutcome.ub IRFault.bad_addr)) (@Bool.rec (fun (_ : Bool) => IRStepResult) (IRStepResult.fault (IROutcome.unmodelled IRFault.width_bounded)) (ir_load_value v) c) lv) (@Bool.rec (fun (_ : Bool) => IRStepResult) (IRStepResult.fault (IROutcome.ub IRFault.bad_addr)) (ir_load_value v) lv)) Bool.true (ir_nat_eqb k k) (@Eq.symm Bool (ir_nat_eqb k k) Bool.true (ir_nat_eqb_refl k)) (@Eq.refl IRStepResult (@Bool.rec (fun (_ : Bool) => IRStepResult) (IRStepResult.fault (IROutcome.ub IRFault.bad_addr)) (ir_load_value v) lv)))) s) (ir_mem_lookup mem a))"
+ },
+ {
+  "name": "ir_rf_load_arm",
+  "kind": "def",
+  "source": "def ir_rf_load_arm (fs : IRList IRFunc) (gs : IRList IRGlobal) (s : IRMachine) (rs : IRList Nat) (t : IRTy) (g : (IRList IRRfTy)) (a : Nat) (k : Nat) (hk : @Eq (IROption Nat) (ir_rf_tyof g a) (@IROption.some Nat k)) : @Eq IRConfig (ir_bind_result s rs (ir_load_view (ir_mod_encs (IRModule.mk fs gs)) t (ir_load_eval s (IRScalar.ptr_ a)))) (ir_bind_result s rs (ir_bm_load (ir_rf_enc g (ir_mach_mem s)) k a)) := ir_eq_cong IRStepResult IRConfig (fun (r : IRStepResult) => ir_bind_result s rs r) (ir_load_slot (ir_mem_lookup (ir_mach_mem s) a)) (ir_bm_load (ir_rf_enc g (ir_mach_mem s)) k a) (@Eq.symm IRStepResult (ir_bm_load (ir_rf_enc g (ir_mach_mem s)) k a) (ir_load_slot (ir_mem_lookup (ir_mach_mem s) a)) (ir_rf_load_value g (ir_mach_mem s) a k hk))"
+ },
+ {
+  "name": "ir_rf_red_byte_side",
+  "kind": "def",
+  "source": "def ir_rf_red_byte_side : @Eq IRStepResult (ir_bm_load (ir_rf_enc (@IRList.cons IRRfTy (IRRfTy.mk 5 7) (@IRList.nil IRRfTy)) (@IRList.cons IRMemSlot (IRMemSlot.mk 5 (IRScalar.int_ 3) Bool.true) (@IRList.nil IRMemSlot))) 8 5) (IRStepResult.fault (IROutcome.unmodelled IRFault.width_bounded)) := @Eq.refl IRStepResult (IRStepResult.fault (IROutcome.unmodelled IRFault.width_bounded))"
+ },
+ {
+  "name": "ir_rf_red_cell_side",
+  "kind": "def",
+  "source": "def ir_rf_red_cell_side : @Eq IRStepResult (ir_load_slot (ir_mem_lookup (@IRList.cons IRMemSlot (IRMemSlot.mk 5 (IRScalar.int_ 3) Bool.true) (@IRList.nil IRMemSlot)) 5)) (IRStepResult.value (IRScalar.int_ 3)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ 3))"
+ },
+ {
+  "name": "ir_rf_load_value_untyped_RED",
+  "kind": "def",
+  "source": "def ir_rf_load_value_untyped : @Eq IRStepResult (ir_bm_load (ir_rf_enc (@IRList.cons IRRfTy (IRRfTy.mk 5 7) (@IRList.nil IRRfTy)) (@IRList.cons IRMemSlot (IRMemSlot.mk 5 (IRScalar.int_ 3) Bool.true) (@IRList.nil IRMemSlot))) 8 5) (ir_load_slot (ir_mem_lookup (@IRList.cons IRMemSlot (IRMemSlot.mk 5 (IRScalar.int_ 3) Bool.true) (@IRList.nil IRMemSlot)) 5)) := @Eq.refl IRStepResult (ir_load_slot (ir_mem_lookup (@IRList.cons IRMemSlot (IRMemSlot.mk 5 (IRScalar.int_ 3) Bool.true) (@IRList.nil IRMemSlot)) 5))"
+ },
+ {
+  "name": "ir_d20_cell_whole_load_is_stale",
+  "kind": "def",
+  "source": "def ir_d20_cell_whole_load_is_stale : @Eq IRStepResult (ir_load_slot (ir_mem_lookup (ir_mem_update (@IRList.cons IRMemSlot (IRMemSlot.mk 101 (IRScalar.int_ 2) Bool.true) (@IRList.cons IRMemSlot (IRMemSlot.mk 100 (IRScalar.aggv (IRScalar.vcons (IRScalar.int_ 1) (IRScalar.vcons (IRScalar.int_ 2) IRScalar.vnil))) Bool.true) (@IRList.nil IRMemSlot))) 101 (IRScalar.int_ 9)) 100)) (IRStepResult.value (IRScalar.aggv (IRScalar.vcons (IRScalar.int_ 1) (IRScalar.vcons (IRScalar.int_ 2) IRScalar.vnil)))) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.aggv (IRScalar.vcons (IRScalar.int_ 1) (IRScalar.vcons (IRScalar.int_ 2) IRScalar.vnil))))"
+ },
+ {
+  "name": "ir_d20_cell_whole_load_sees_field_RED",
+  "kind": "def",
+  "source": "def ir_d20_cell_whole_load_sees_field : @Eq IRStepResult (ir_load_slot (ir_mem_lookup (ir_mem_update (@IRList.cons IRMemSlot (IRMemSlot.mk 101 (IRScalar.int_ 2) Bool.true) (@IRList.cons IRMemSlot (IRMemSlot.mk 100 (IRScalar.aggv (IRScalar.vcons (IRScalar.int_ 1) (IRScalar.vcons (IRScalar.int_ 2) IRScalar.vnil))) Bool.true) (@IRList.nil IRMemSlot))) 101 (IRScalar.int_ 9)) 100)) (IRStepResult.value (IRScalar.aggv (IRScalar.vcons (IRScalar.int_ 1) (IRScalar.vcons (IRScalar.int_ 9) IRScalar.vnil)))) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.aggv (IRScalar.vcons (IRScalar.int_ 1) (IRScalar.vcons (IRScalar.int_ 9) IRScalar.vnil))))"
+ },
+ {
+  "name": "ir_bm_set_slot",
+  "kind": "def",
+  "source": "def ir_bm_set_slot (v : IRScalar) (i : Nat) (fv : IRScalar) : IRScalar := @IRScalar.rec (fun (_ : IRScalar) => IRScalar) IRScalar.undef_ (fun (b : Bool) => IRScalar.bool_ b) (fun (n : Nat) => IRScalar.int_ n) (fun (n : Nat) => IRScalar.float_ n) IRScalar.unit_ (fun (n : Nat) => IRScalar.ptr_ n) IRScalar.nullptr_ (fun (x : Nat) (y : Nat) => IRScalar.fat_ x y) (fun (f : Nat) => IRScalar.fnptr_ f) (fun (sp : IRScalar) (_ : IRScalar) => IRScalar.aggv (ir_vals_set sp i fv)) IRScalar.vnil (fun (x : IRScalar) (r : IRScalar) (_ : IRScalar) (_ : IRScalar) => IRScalar.vcons x r) v"
+ },
+ {
+  "name": "ir_bm_store_field",
+  "kind": "def",
+  "source": "def ir_bm_store_field (t : (IRBmTrie IRBmAlloc)) (k : Nat) (a : Nat) (i : Nat) (fv : IRScalar) : (IROption (IRBmTrie IRBmAlloc)) := @IROption.rec IRBmAlloc (fun (_ : (IROption IRBmAlloc)) => (IROption (IRBmTrie IRBmAlloc))) (@IROption.none (IRBmTrie IRBmAlloc)) (fun (x : IRBmAlloc) => @IRBmAlloc.rec (fun (_ : IRBmAlloc) => (IROption (IRBmTrie IRBmAlloc))) (fun (k0 : Nat) (lv : Bool) (v : IRScalar) => (@Bool.rec (fun (_ : Bool) => (IROption (IRBmTrie IRBmAlloc))) (@IROption.none (IRBmTrie IRBmAlloc)) (@Bool.rec (fun (_ : Bool) => (IROption (IRBmTrie IRBmAlloc))) (@IROption.none (IRBmTrie IRBmAlloc)) (@IROption.some (IRBmTrie IRBmAlloc) (ir_bm_put t a (IRBmAlloc.mk k Bool.true (ir_bm_set_slot v i fv)))) (ir_nat_eqb k0 k)) lv)) x) (ir_bm_find t a)"
+ },
+ {
+  "name": "ir_d20_byte_whole_load_sees_field",
+  "kind": "def",
+  "source": "def ir_d20_byte_whole_load_sees_field : @Eq IRStepResult (@IROption.rec (IRBmTrie IRBmAlloc) (fun (_ : (IROption (IRBmTrie IRBmAlloc))) => IRStepResult) (IRStepResult.fault (IROutcome.ub IRFault.bad_addr)) (fun (t2 : (IRBmTrie IRBmAlloc)) => ir_bm_load t2 1 100) (ir_bm_store_field (ir_bm_put (@IRBmTrie.leaf IRBmAlloc) 100 (IRBmAlloc.mk 1 Bool.true (IRScalar.aggv (IRScalar.vcons (IRScalar.int_ 1) (IRScalar.vcons (IRScalar.int_ 2) IRScalar.vnil))))) 1 100 1 (IRScalar.int_ 9))) (IRStepResult.value (IRScalar.aggv (IRScalar.vcons (IRScalar.int_ 1) (IRScalar.vcons (IRScalar.int_ 9) IRScalar.vnil)))) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.aggv (IRScalar.vcons (IRScalar.int_ 1) (IRScalar.vcons (IRScalar.int_ 9) IRScalar.vnil))))"
+ },
+ {
+  "name": "ir_bm_fill",
+  "kind": "def",
+  "source": "def ir_bm_fill (n : Nat) : Nat -> IRBmTrie IRBmAlloc -> IRBmTrie IRBmAlloc := @Nat.rec (fun (_ : Nat) => Nat -> IRBmTrie IRBmAlloc -> IRBmTrie IRBmAlloc) (fun (_ : Nat) (t : (IRBmTrie IRBmAlloc)) => t) (fun (_ : Nat) (ih : Nat -> IRBmTrie IRBmAlloc -> IRBmTrie IRBmAlloc) => fun (key : Nat) (t : (IRBmTrie IRBmAlloc)) => ih (Nat.add key 4294967296) (ir_bm_put t key (IRBmAlloc.mk 1 Bool.true (IRScalar.int_ key)))) n"
+ },
+ {
+  "name": "ir_rf_cells",
+  "kind": "def",
+  "source": "def ir_rf_cells (n : Nat) : Nat -> IRList IRMemSlot -> IRList IRMemSlot := @Nat.rec (fun (_ : Nat) => Nat -> IRList IRMemSlot -> IRList IRMemSlot) (fun (_ : Nat) (m : IRList IRMemSlot) => m) (fun (_ : Nat) (ih : Nat -> IRList IRMemSlot -> IRList IRMemSlot) => fun (key : Nat) (m : IRList IRMemSlot) => ih (Nat.add key 4294967296) (@IRList.cons IRMemSlot (IRMemSlot.mk key (IRScalar.int_ key) Bool.true) m)) n"
+ },
+ {
+  "name": "ir_bm_cost_byte_16",
+  "kind": "def",
+  "source": "def ir_bm_cost_byte_16 : @Eq IRStepResult (ir_bm_load (ir_bm_fill 16 4294967296 (@IRBmTrie.leaf IRBmAlloc)) 1 4294967296) (IRStepResult.value (IRScalar.int_ 4294967296)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ 4294967296))"
+ },
+ {
+  "name": "ir_bm_cost_cell_16",
+  "kind": "def",
+  "source": "def ir_bm_cost_cell_16 : @Eq IRStepResult (ir_load_slot (ir_mem_lookup (ir_rf_cells 16 4294967296 (@IRList.nil IRMemSlot)) 4294967296)) (IRStepResult.value (IRScalar.int_ 4294967296)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ 4294967296))"
+ },
+ {
+  "name": "ir_bm_cost_byte_256",
+  "kind": "def",
+  "source": "def ir_bm_cost_byte_256 : @Eq IRStepResult (ir_bm_load (ir_bm_fill 256 4294967296 (@IRBmTrie.leaf IRBmAlloc)) 1 4294967296) (IRStepResult.value (IRScalar.int_ 4294967296)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ 4294967296))"
+ },
+ {
+  "name": "ir_bm_cost_cell_256",
+  "kind": "def",
+  "source": "def ir_bm_cost_cell_256 : @Eq IRStepResult (ir_load_slot (ir_mem_lookup (ir_rf_cells 256 4294967296 (@IRList.nil IRMemSlot)) 4294967296)) (IRStepResult.value (IRScalar.int_ 4294967296)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ 4294967296))"
+ },
+ {
+  "name": "ir_bm_cost_byte_1024",
+  "kind": "def",
+  "source": "def ir_bm_cost_byte_1024 : @Eq IRStepResult (ir_bm_load (ir_bm_fill 1024 4294967296 (@IRBmTrie.leaf IRBmAlloc)) 1 4294967296) (IRStepResult.value (IRScalar.int_ 4294967296)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ 4294967296))"
+ },
+ {
+  "name": "ir_bm_cost_cell_1024",
+  "kind": "def",
+  "source": "def ir_bm_cost_cell_1024 : @Eq IRStepResult (ir_load_slot (ir_mem_lookup (ir_rf_cells 1024 4294967296 (@IRList.nil IRMemSlot)) 4294967296)) (IRStepResult.value (IRScalar.int_ 4294967296)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ 4294967296))"
+ },
+ {
+  "name": "ir_bm_slope_byte_256_x1",
+  "kind": "def",
+  "source": "def ir_bm_slope_byte_256_x1 : @Eq (IRList IRStepResult) (@IRList.cons IRStepResult (ir_bm_load (ir_bm_fill 256 4294967296 (@IRBmTrie.leaf IRBmAlloc)) 1 4294967296) (@IRList.nil IRStepResult)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 4294967296)) (@IRList.nil IRStepResult)) := @Eq.refl (IRList IRStepResult) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 4294967296)) (@IRList.nil IRStepResult))"
+ },
+ {
+  "name": "ir_bm_slope_byte_256_x8",
+  "kind": "def",
+  "source": "def ir_bm_slope_byte_256_x8 : @Eq (IRList IRStepResult) (@IRList.cons IRStepResult (ir_bm_load (ir_bm_fill 256 4294967296 (@IRBmTrie.leaf IRBmAlloc)) 1 4294967296) (@IRList.cons IRStepResult (ir_bm_load (ir_bm_fill 256 4294967296 (@IRBmTrie.leaf IRBmAlloc)) 1 8589934592) (@IRList.cons IRStepResult (ir_bm_load (ir_bm_fill 256 4294967296 (@IRBmTrie.leaf IRBmAlloc)) 1 12884901888) (@IRList.cons IRStepResult (ir_bm_load (ir_bm_fill 256 4294967296 (@IRBmTrie.leaf IRBmAlloc)) 1 17179869184) (@IRList.cons IRStepResult (ir_bm_load (ir_bm_fill 256 4294967296 (@IRBmTrie.leaf IRBmAlloc)) 1 21474836480) (@IRList.cons IRStepResult (ir_bm_load (ir_bm_fill 256 4294967296 (@IRBmTrie.leaf IRBmAlloc)) 1 25769803776) (@IRList.cons IRStepResult (ir_bm_load (ir_bm_fill 256 4294967296 (@IRBmTrie.leaf IRBmAlloc)) 1 30064771072) (@IRList.cons IRStepResult (ir_bm_load (ir_bm_fill 256 4294967296 (@IRBmTrie.leaf IRBmAlloc)) 1 34359738368) (@IRList.nil IRStepResult))))))))) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 4294967296)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 8589934592)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 12884901888)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 17179869184)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 21474836480)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 25769803776)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 30064771072)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 34359738368)) (@IRList.nil IRStepResult))))))))) := @Eq.refl (IRList IRStepResult) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 4294967296)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 8589934592)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 12884901888)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 17179869184)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 21474836480)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 25769803776)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 30064771072)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 34359738368)) (@IRList.nil IRStepResult)))))))))"
+ },
+ {
+  "name": "ir_bm_slope_cell_256_x1",
+  "kind": "def",
+  "source": "def ir_bm_slope_cell_256_x1 : @Eq (IRList IRStepResult) (@IRList.cons IRStepResult (ir_load_slot (ir_mem_lookup (ir_rf_cells 256 4294967296 (@IRList.nil IRMemSlot)) 4294967296)) (@IRList.nil IRStepResult)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 4294967296)) (@IRList.nil IRStepResult)) := @Eq.refl (IRList IRStepResult) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 4294967296)) (@IRList.nil IRStepResult))"
+ },
+ {
+  "name": "ir_bm_slope_cell_256_x8",
+  "kind": "def",
+  "source": "def ir_bm_slope_cell_256_x8 : @Eq (IRList IRStepResult) (@IRList.cons IRStepResult (ir_load_slot (ir_mem_lookup (ir_rf_cells 256 4294967296 (@IRList.nil IRMemSlot)) 4294967296)) (@IRList.cons IRStepResult (ir_load_slot (ir_mem_lookup (ir_rf_cells 256 4294967296 (@IRList.nil IRMemSlot)) 8589934592)) (@IRList.cons IRStepResult (ir_load_slot (ir_mem_lookup (ir_rf_cells 256 4294967296 (@IRList.nil IRMemSlot)) 12884901888)) (@IRList.cons IRStepResult (ir_load_slot (ir_mem_lookup (ir_rf_cells 256 4294967296 (@IRList.nil IRMemSlot)) 17179869184)) (@IRList.cons IRStepResult (ir_load_slot (ir_mem_lookup (ir_rf_cells 256 4294967296 (@IRList.nil IRMemSlot)) 21474836480)) (@IRList.cons IRStepResult (ir_load_slot (ir_mem_lookup (ir_rf_cells 256 4294967296 (@IRList.nil IRMemSlot)) 25769803776)) (@IRList.cons IRStepResult (ir_load_slot (ir_mem_lookup (ir_rf_cells 256 4294967296 (@IRList.nil IRMemSlot)) 30064771072)) (@IRList.cons IRStepResult (ir_load_slot (ir_mem_lookup (ir_rf_cells 256 4294967296 (@IRList.nil IRMemSlot)) 34359738368)) (@IRList.nil IRStepResult))))))))) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 4294967296)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 8589934592)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 12884901888)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 17179869184)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 21474836480)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 25769803776)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 30064771072)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 34359738368)) (@IRList.nil IRStepResult))))))))) := @Eq.refl (IRList IRStepResult) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 4294967296)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 8589934592)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 12884901888)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 17179869184)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 21474836480)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 25769803776)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 30064771072)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 34359738368)) (@IRList.nil IRStepResult)))))))))"
+ },
+ {
+  "name": "ir_bm_slope_byte_1024_x1",
+  "kind": "def",
+  "source": "def ir_bm_slope_byte_1024_x1 : @Eq (IRList IRStepResult) (@IRList.cons IRStepResult (ir_bm_load (ir_bm_fill 1024 4294967296 (@IRBmTrie.leaf IRBmAlloc)) 1 4294967296) (@IRList.nil IRStepResult)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 4294967296)) (@IRList.nil IRStepResult)) := @Eq.refl (IRList IRStepResult) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 4294967296)) (@IRList.nil IRStepResult))"
+ },
+ {
+  "name": "ir_bm_slope_byte_1024_x8",
+  "kind": "def",
+  "source": "def ir_bm_slope_byte_1024_x8 : @Eq (IRList IRStepResult) (@IRList.cons IRStepResult (ir_bm_load (ir_bm_fill 1024 4294967296 (@IRBmTrie.leaf IRBmAlloc)) 1 4294967296) (@IRList.cons IRStepResult (ir_bm_load (ir_bm_fill 1024 4294967296 (@IRBmTrie.leaf IRBmAlloc)) 1 8589934592) (@IRList.cons IRStepResult (ir_bm_load (ir_bm_fill 1024 4294967296 (@IRBmTrie.leaf IRBmAlloc)) 1 12884901888) (@IRList.cons IRStepResult (ir_bm_load (ir_bm_fill 1024 4294967296 (@IRBmTrie.leaf IRBmAlloc)) 1 17179869184) (@IRList.cons IRStepResult (ir_bm_load (ir_bm_fill 1024 4294967296 (@IRBmTrie.leaf IRBmAlloc)) 1 21474836480) (@IRList.cons IRStepResult (ir_bm_load (ir_bm_fill 1024 4294967296 (@IRBmTrie.leaf IRBmAlloc)) 1 25769803776) (@IRList.cons IRStepResult (ir_bm_load (ir_bm_fill 1024 4294967296 (@IRBmTrie.leaf IRBmAlloc)) 1 30064771072) (@IRList.cons IRStepResult (ir_bm_load (ir_bm_fill 1024 4294967296 (@IRBmTrie.leaf IRBmAlloc)) 1 34359738368) (@IRList.nil IRStepResult))))))))) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 4294967296)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 8589934592)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 12884901888)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 17179869184)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 21474836480)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 25769803776)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 30064771072)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 34359738368)) (@IRList.nil IRStepResult))))))))) := @Eq.refl (IRList IRStepResult) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 4294967296)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 8589934592)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 12884901888)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 17179869184)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 21474836480)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 25769803776)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 30064771072)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 34359738368)) (@IRList.nil IRStepResult)))))))))"
+ },
+ {
+  "name": "ir_bm_slope_cell_1024_x1",
+  "kind": "def",
+  "source": "def ir_bm_slope_cell_1024_x1 : @Eq (IRList IRStepResult) (@IRList.cons IRStepResult (ir_load_slot (ir_mem_lookup (ir_rf_cells 1024 4294967296 (@IRList.nil IRMemSlot)) 4294967296)) (@IRList.nil IRStepResult)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 4294967296)) (@IRList.nil IRStepResult)) := @Eq.refl (IRList IRStepResult) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 4294967296)) (@IRList.nil IRStepResult))"
+ },
+ {
+  "name": "ir_bm_slope_cell_1024_x8",
+  "kind": "def",
+  "source": "def ir_bm_slope_cell_1024_x8 : @Eq (IRList IRStepResult) (@IRList.cons IRStepResult (ir_load_slot (ir_mem_lookup (ir_rf_cells 1024 4294967296 (@IRList.nil IRMemSlot)) 4294967296)) (@IRList.cons IRStepResult (ir_load_slot (ir_mem_lookup (ir_rf_cells 1024 4294967296 (@IRList.nil IRMemSlot)) 8589934592)) (@IRList.cons IRStepResult (ir_load_slot (ir_mem_lookup (ir_rf_cells 1024 4294967296 (@IRList.nil IRMemSlot)) 12884901888)) (@IRList.cons IRStepResult (ir_load_slot (ir_mem_lookup (ir_rf_cells 1024 4294967296 (@IRList.nil IRMemSlot)) 17179869184)) (@IRList.cons IRStepResult (ir_load_slot (ir_mem_lookup (ir_rf_cells 1024 4294967296 (@IRList.nil IRMemSlot)) 21474836480)) (@IRList.cons IRStepResult (ir_load_slot (ir_mem_lookup (ir_rf_cells 1024 4294967296 (@IRList.nil IRMemSlot)) 25769803776)) (@IRList.cons IRStepResult (ir_load_slot (ir_mem_lookup (ir_rf_cells 1024 4294967296 (@IRList.nil IRMemSlot)) 30064771072)) (@IRList.cons IRStepResult (ir_load_slot (ir_mem_lookup (ir_rf_cells 1024 4294967296 (@IRList.nil IRMemSlot)) 34359738368)) (@IRList.nil IRStepResult))))))))) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 4294967296)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 8589934592)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 12884901888)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 17179869184)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 21474836480)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 25769803776)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 30064771072)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 34359738368)) (@IRList.nil IRStepResult))))))))) := @Eq.refl (IRList IRStepResult) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 4294967296)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 8589934592)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 12884901888)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 17179869184)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 21474836480)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 25769803776)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 30064771072)) (@IRList.cons IRStepResult (IRStepResult.value (IRScalar.int_ 34359738368)) (@IRList.nil IRStepResult)))))))))"
+ }
+]

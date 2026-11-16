@@ -100,7 +100,7 @@
         {
           "file": "crates/clean-verify/src/spec/core_spec/eval_ir_mode.rs",
           "const": "SRC_CLEAN_MODE_TAG",
-          "must_contain": "def clean_mode_tag (m : CleanModeR) : Nat := CleanModeR.rec (fun (_ : CleanModeR) => Nat) ir_d0 ir_d1 ir_d2 ir_d3 ir_d4 ir_d5 m"
+          "must_contain": "def clean_mode_tag (m : CleanModeR) : Nat := @CleanModeR.rec (fun (_ : CleanModeR) => Nat) ir_d0 ir_d1 ir_d2 ir_d3 ir_d4 ir_d5 m"
         }
       ],
       "artifacts": [
@@ -201,7 +201,7 @@
         {
           "file": "crates/clean-verify/src/spec/core_spec/eval_ir_from_source.rs",
           "const": "SRC_SOURCE_SYSTEM_TAG",
-          "must_contain": "def source_system_tag (s : SourceSystemR) : Nat := SourceSystemR.rec (fun (_ : SourceSystemR) => Nat) ir_d0 ir_d1 ir_d2 ir_d3 ir_d4 ir_d5 ir_d6 ir_d7 ir_d8 ir_d9 ir_d10 ir_d11 s"
+          "must_contain": "def source_system_tag (s : SourceSystemR) : Nat := @SourceSystemR.rec (fun (_ : SourceSystemR) => Nat) ir_d0 ir_d1 ir_d2 ir_d3 ir_d4 ir_d5 ir_d6 ir_d7 ir_d8 ir_d9 ir_d10 ir_d11 s"
         }
       ],
       "artifacts": [
@@ -288,7 +288,7 @@
         {
           "file": "crates/clean-verify/src/spec/core_spec/eval_ir_path_step.rs",
           "const": "SRC_EXPR_PATH_STEP_TAG",
-          "must_contain": "def expr_path_step_tag (s : ExprPathStepR) : Nat := ExprPathStepR.rec (fun (_ : ExprPathStepR) => Nat) ir_d0 ir_d1 ir_d2 ir_d3 ir_d4 ir_d5 ir_d6 ir_d7 ir_d8 ir_d9 ir_d10 s"
+          "must_contain": "def expr_path_step_tag (s : ExprPathStepR) : Nat := @ExprPathStepR.rec (fun (_ : ExprPathStepR) => Nat) ir_d0 ir_d1 ir_d2 ir_d3 ir_d4 ir_d5 ir_d6 ir_d7 ir_d8 ir_d9 ir_d10 s"
         }
       ],
       "artifacts": [
@@ -384,7 +384,7 @@
         {
           "file": "crates/clean-verify/src/spec/core_spec/eval_ir_kind_ord.rs",
           "const": "SRC_LEVEL_KIND_TAG",
-          "must_contain": "def level_kind_tag (l : Level) : Nat := Level.rec (fun (_ : Level) => Nat) ir_d0 (fun (_ : Level) (_ : Nat) => ir_d1) (fun (_ : Level) (_ : Level) (_ : Nat) (_ : Nat) => ir_d2) (fun (_ : Level) (_ : Level) (_ : Nat) (_ : Nat) => ir_d3) (fun (_ : Name) => ir_d4) l"
+          "must_contain": "def level_kind_tag (l : Level) : Nat := @Level.rec (fun (_ : Level) => Nat) ir_d0 (fun (_ : Level) (_ : Nat) => ir_d1) (fun (_ : Level) (_ : Level) (_ : Nat) (_ : Nat) => ir_d2) (fun (_ : Level) (_ : Level) (_ : Nat) (_ : Nat) => ir_d3) (fun (_ : Name) => ir_d4) l"
         }
       ],
       "artifacts": [

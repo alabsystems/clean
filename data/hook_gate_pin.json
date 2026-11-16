@@ -1,7 +1,7 @@
 {
   "_comment": "Digests of scripts/local_gate.sh, split at its GATE-FULL-ONLY markers (comments and blank lines stripped). BOTH halves are pinned: pinning only the fast half meant the single edit that changes a leg's mode -- moving it into a full-only region -- was also the edit that stopped watching its body. Refreshed only by `python3 scripts/check_hook_coverage.py --update`, and only when the leg tables already agree. A moved digest means a leg changed and its classification needs a human.",
-  "fast_region_sha256": "a9d7eda550526eee74a1a1a06dd702dc506e09d88f54f1147aa18d584b1b515a",
-  "full_region_sha256": "9332702f6646f6321a9f468c4207500bf70895b83149fdd5b4959982bea47a16",
+  "fast_region_sha256": "f6cec9d5eacfb03275b953c985bcb91fab09163171f9c76f81802fd45291abdb",
+  "full_region_sha256": "05cc879fe8aaadba4db508f79092af6d5eb6efdea709571c3378df93c432b573",
   "hook_body_sha256": "db42747af0cb6e41032b461db868116609985cfc89c47051b166fdd28ab50c44",
   "fast_leg_ids": [
     "gate-registry",
@@ -88,6 +88,8 @@
     "everyday-battery",
     "a0-census-selftest",
     "kcheck-trusted-rows",
+    "kcheck-coverage",
+    "self-proof-scoreboard",
     "authority-sites",
     "provenance-anchors",
     "census-output-pin",
@@ -163,5 +165,5 @@
     "trust-ir-axes-selftest",
     "upstream-lean-dropin"
   ],
-  "updated_utc_date": "2026-11-14"
+  "updated_utc_date": "2026-11-16"
 }

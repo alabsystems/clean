@@ -119,7 +119,7 @@ pub(super) fn owner_unchanged(before: &Specification, after: &Specification) {
 }
 
 pub(super) fn value(width: &str, a: &str, b: &str) -> String {
-    format!("Bool.rec (fun (_ : Bool) => Nat) (Nat.sub (Nat.add ({a}) ({b})) (ir_nat_pow2 ({width}))) (Nat.add ({a}) ({b})) (ir_nat_ltb (Nat.add ({a}) ({b})) (ir_nat_pow2 ({width})))")
+    format!("@Bool.rec (fun (_ : Bool) => Nat) (Nat.sub (Nat.add ({a}) ({b})) (ir_nat_pow2 ({width}))) (Nat.add ({a}) ({b})) (ir_nat_ltb (Nat.add ({a}) ({b})) (ir_nat_pow2 ({width})))")
 }
 pub(super) fn operation(carrier: &str, width: u64, a: u64, b: u64, opcode: &str) -> String {
     format!("ir_binop_eval IRBinOp.{opcode} (IRTy.{carrier} {width}) (IRScalar.int_ {a}) (IRScalar.int_ {b})")

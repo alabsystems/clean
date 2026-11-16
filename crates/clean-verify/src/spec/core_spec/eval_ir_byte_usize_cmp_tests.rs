@@ -42,13 +42,14 @@ fn register(spec: &mut Specification, source: &str) {
 fn check(spec: &mut Specification, name: &str, ty: &str, actual: &str, expected: &str) {
     register(
         spec,
-        &format!("def {name} : Eq ({ty}) ({actual}) ({expected}) := Eq.refl ({ty}) ({expected})"),
+        &format!("def {name} : @Eq ({ty}) ({actual}) ({expected}) := @Eq.refl ({ty}) ({expected})"),
     );
     checked(spec, name);
 }
 
 fn reject(spec: &mut Specification, name: &str, ty: &str, actual: &str, wrong: &str) {
-    let source = format!("def {name} : Eq ({ty}) ({actual}) ({wrong}) := Eq.refl ({ty}) ({wrong})");
+    let source =
+        format!("def {name} : @Eq ({ty}) ({actual}) ({wrong}) := @Eq.refl ({ty}) ({wrong})");
     let error = spec
         .add_recursive_def(&source, "Deliberately wrong comparison endpoint")
         .expect_err("wrong endpoint must fail");
@@ -113,11 +114,11 @@ fn byte_usize_cmp_canonical_laws_and_strict_boundary_are_kernel_checked() {
                 &actual,
                 &expected,
             );
-            register(&mut spec, &format!("def cmp_{suffix}_ordered_law : Eq IRStepResult ({actual}) ({expected}) :=
-ir_byte_icmp_usize64_ugt_{law}_v1 {old} {MAX} (Eq.refl Bool Bool.true) (Eq.refl Bool Bool.true) ({order_proof})"));
+            register(&mut spec, &format!("def cmp_{suffix}_ordered_law : @Eq IRStepResult ({actual}) ({expected}) :=
+ir_byte_icmp_usize64_ugt_{law}_v1 {old} {MAX} (@Eq.refl Bool Bool.true) (@Eq.refl Bool Bool.true) ({order_proof})"));
             checked(&spec, &format!("cmp_{suffix}_ordered_law"));
-            register(&mut spec, &format!("def cmp_{suffix}_canonical_law : Eq IRStepResult ({actual}) ({expected}) :=
-ir_byte_icmp_usize64_ugt_canonical_v1 {old} {MAX} (Eq.refl Bool Bool.true) (Eq.refl Bool Bool.true)"));
+            register(&mut spec, &format!("def cmp_{suffix}_canonical_law : @Eq IRStepResult ({actual}) ({expected}) :=
+ir_byte_icmp_usize64_ugt_canonical_v1 {old} {MAX} (@Eq.refl Bool Bool.true) (@Eq.refl Bool Bool.true)"));
             checked(&spec, &format!("cmp_{suffix}_canonical_law"));
         }
     });

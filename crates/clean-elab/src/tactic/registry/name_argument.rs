@@ -9,7 +9,7 @@ fn key(suffix: &str) -> Name {
 }
 
 /// Encode an identifier argument separately from elaborated term arguments.
-pub fn encode_name_argument(name: &SurfaceName) -> Expr {
+pub(crate) fn encode_name_argument(name: &SurfaceName) -> Expr {
     let syntax: String = name
         .component_syntax()
         .iter()
@@ -49,7 +49,7 @@ pub fn encode_name_argument(name: &SurfaceName) -> Expr {
 
 /// Read the exact identifier protocol, refusing malformed wrappers.
 /// A raw constant is a legacy generated identifier; an ordinary term returns None.
-pub fn decode_name_argument(expr: &Expr) -> Result<Option<SurfaceName>, TacticError> {
+pub(crate) fn decode_name_argument(expr: &Expr) -> Result<Option<SurfaceName>, TacticError> {
     let invalid =
         || TacticError::TypeCheckFailed("malformed or oversized tactic identifier argument".into());
     match expr.kind() {

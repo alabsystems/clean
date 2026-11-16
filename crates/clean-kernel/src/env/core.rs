@@ -6,6 +6,10 @@
 
 mod trust;
 
+#[cfg(test)]
+#[path = "core/pprod_atomic_tests.rs"]
+mod pprod_atomic_tests;
+
 use super::decl_builder::EnvDeclBuilder;
 use super::*;
 
@@ -378,7 +382,21 @@ impl Environment {
     /// ENSURES: On success, `self.has_pprod() == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())`
     /// ENSURES: Adds PProd, PProd.mk, PProd.fst, PProd.snd, PProd.rec
+    /// ENSURES: On error, the environment is unchanged
     pub fn init_pprod(&mut self) -> Result<(), EnvError> {
+        if self.pprod_init {
+            return Ok(());
+        }
+
+        // Publish the family, projections and readiness flag together. A late
+        // failure must not expose the checked prefix of the initializer.
+        let mut staged = self.clone();
+        staged.init_pprod_staged()?;
+        *self = staged;
+        Ok(())
+    }
+
+    fn init_pprod_staged(&mut self) -> Result<(), EnvError> {
         if self.pprod_init {
             return Ok(());
         }

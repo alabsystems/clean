@@ -39,33 +39,33 @@ fn list(ty: &str, values: &[&str]) -> String {
     values
         .iter()
         .rev()
-        .fold(format!("(IRList.nil {ty})"), |tail, value| {
-            format!("(IRList.cons {ty} {value} {tail})")
+        .fold(format!("(@IRList.nil {ty})"), |tail, value| {
+            format!("(@IRList.cons {ty} {value} {tail})")
         })
 }
 
 const PAIR: &str = "(IRScalar.aggv (IRScalar.vcons (IRScalar.int_ 7)
     (IRScalar.vcons (IRScalar.int_ 0) IRScalar.vnil)))";
 const CURRENT: &str = "(IRFrame.mk 9 7 2
-    (IRList.cons IRBinding (IRBinding.mk 40 (IRScalar.ptr_ 64)) (IRList.nil IRBinding))
-    (IRList.nil Nat))";
-const TAIL: &str = "(IRList.cons IRFrame
-    (IRFrame.mk 3 5 12 (IRList.cons IRBinding (IRBinding.mk 88 (IRScalar.bool_ Bool.false))
-      (IRList.nil IRBinding)) (IRList.nil Nat)) (IRList.nil IRFrame))";
-const LEGACY: &str = "(IRList.nil IRMemSlot)";
-const OWNERS: &str = "(IRList.cons Nat 2 (IRList.cons Nat 1 (IRList.nil Nat)))";
-const ROWS: &str = "(IRList.cons IRByteAllocationV1
-    (IRByteAllocationV1.mk 16 8 1 Bool.true) (IRList.nil IRByteAllocationV1))";
+    (@IRList.cons IRBinding (IRBinding.mk 40 (IRScalar.ptr_ 64)) (@IRList.nil IRBinding))
+    (@IRList.nil Nat))";
+const TAIL: &str = "(@IRList.cons IRFrame
+    (IRFrame.mk 3 5 12 (@IRList.cons IRBinding (IRBinding.mk 88 (IRScalar.bool_ Bool.false))
+      (@IRList.nil IRBinding)) (@IRList.nil Nat)) (@IRList.nil IRFrame))";
+const LEGACY: &str = "(@IRList.nil IRMemSlot)";
+const OWNERS: &str = "(@IRList.cons Nat 2 (@IRList.cons Nat 1 (@IRList.nil Nat)))";
+const ROWS: &str = "(@IRList.cons IRByteAllocationV1
+    (IRByteAllocationV1.mk 16 8 1 Bool.true) (@IRList.nil IRByteAllocationV1))";
 const BINDING: &str = "(IRByteFunctionV1.mk 55 4 4096 0 Bool.true)";
 const SIGNATURE: &str = "(IRByteSignatureV1.mk 4
-    (IRList.cons IRTy IRTy.ptr_ (IRList.nil IRTy))
-    (IRList.cons IRTy (IRTy.struct_ 9) (IRList.nil IRTy)) Bool.false)";
-const TRUE: &str = "(Eq.refl Bool Bool.true)";
+    (@IRList.cons IRTy IRTy.ptr_ (@IRList.nil IRTy))
+    (@IRList.cons IRTy (IRTy.struct_ 9) (@IRList.nil IRTy)) Bool.false)";
+const TRUE: &str = "(@Eq.refl Bool Bool.true)";
 
 fn install_context(spec: &mut Specification) {
     let layout = "(IRByteLayoutV1.mk (IRTy.struct_ 9) 16 8
-      (IRList.cons IRTy (IRTy.uint_ 64) (IRList.cons IRTy (IRTy.int_ 64) (IRList.nil IRTy)))
-      (IRList.cons Nat 0 (IRList.cons Nat 8 (IRList.nil Nat))))";
+      (@IRList.cons IRTy (IRTy.uint_ 64) (@IRList.cons IRTy (IRTy.int_ 64) (@IRList.nil IRTy)))
+      (@IRList.cons Nat 0 (@IRList.cons Nat 8 (@IRList.nil Nat))))";
     // Only helper/call catalogs are exercised: the current frame is not fetched
     // from this empty module, and no global module-validity claim is made.
     add(
@@ -73,8 +73,8 @@ fn install_context(spec: &mut Specification) {
         "import_test_context",
         &format!(
             "def import_test_context : IRByteContextV1 :=
-      IRByteContextV1.mk (IRModule.mk (IRList.nil IRFunc) (IRList.nil IRGlobal))
-        {} {} {} (IRList.nil IRByteSiteV1)",
+      IRByteContextV1.mk (IRModule.mk (@IRList.nil IRFunc) (@IRList.nil IRGlobal))
+        {} {} {} (@IRList.nil IRByteSiteV1)",
             list("IRByteLayoutV1", &[layout]),
             list("IRByteSignatureV1", &[SIGNATURE]),
             list("IRByteFunctionV1", &[BINDING])
@@ -91,11 +91,11 @@ fn changed_memory(bytes: &str) -> String {
 }
 
 fn world(mem: &str, host: &str) -> String {
-    format!("(IRByteWorldV1.mk Nat {mem} {host} {OWNERS} 5)")
+    format!("(@IRByteWorldV1.mk Nat {mem} {host} {OWNERS} 5)")
 }
 
 fn machine() -> String {
-    format!("(IRMachine.mk (IRList.cons IRFrame {CURRENT} {TAIL}) {LEGACY} 1)")
+    format!("(IRMachine.mk (@IRList.cons IRFrame {CURRENT} {TAIL}) {LEGACY} 1)")
 }
 
 fn next_machine(destinations: &str, values: &str, advance: usize) -> String {
@@ -103,13 +103,13 @@ fn next_machine(destinations: &str, values: &str, advance: usize) -> String {
     for _ in 0..advance {
         current = format!("(ir_frame_advance {current})");
     }
-    format!("(IRMachine.mk (IRList.cons IRFrame {current} {TAIL}) {LEGACY} 1)")
+    format!("(IRMachine.mk (@IRList.cons IRFrame {current} {TAIL}) {LEGACY} 1)")
 }
 
 fn import_actual(destinations: &str, types: &str, values: &str, returned_memory: &str) -> String {
     format!(
         "(ir_byte_import_result_v1 Nat import_test_context {} {} {destinations} {types}
-      (IRByteImportResultV1.mk Nat (IROutcome.ret {values}) {returned_memory} (Nat.succ host)))",
+      (@IRByteImportResultV1.mk Nat (IROutcome.ret {values}) {returned_memory} (Nat.succ host)))",
         machine(),
         world(&memory("bytes"), "host")
     )
@@ -138,7 +138,7 @@ fn direct_call_claim(
     let new_memory = changed_memory("bytes");
     let provider = format!(
         "(fun (_ : Nat) (_ : IRList IRScalar) (mem : IRByteMemoryV1) (host : Nat) =>
-      IRByteImportResultV1.mk Nat (IROutcome.ret {values})
+      @IRByteImportResultV1.mk Nat (IROutcome.ret {values})
         (IRByteMemoryV1.mk (ir_byte_mem_allocs_v1 mem)
           (ir_byte_write_word_v1 (ir_byte_mem_bytes_v1 mem) 16 8 99) (ir_byte_mem_next_v1 mem))
         (Nat.succ host))"
@@ -155,12 +155,12 @@ fn direct_call_claim(
     );
     let imported = import_actual(&results, &types, &values, &new_memory);
     let actual_expected = format!(
-        "(IRByteConfigV1.running Nat {} {})",
+        "(@IRByteConfigV1.running Nat {} {})",
         next_machine(&results, &values, 1),
         world(&new_memory, "(Nat.succ host)")
     );
     let claimed = format!(
-        "(IRByteConfigV1.running Nat {} {})",
+        "(@IRByteConfigV1.running Nat {} {})",
         next_machine(&results, &values, advance),
         world(
             &if unchanged_memory {
@@ -177,13 +177,13 @@ fn direct_call_claim(
     );
     format!(
         "def {name} (bytes : Nat -> IROption Nat) (host : Nat) :
-      Eq (IRByteConfigV1 Nat) {actual} {claimed} :=
-      Eq.trans (IRByteConfigV1 Nat) {actual} {middle} {actual_expected}
+      @Eq (IRByteConfigV1 Nat) {actual} {claimed} :=
+      @Eq.trans (IRByteConfigV1 Nat) {actual} {middle} {actual_expected}
         (ir_byte_call_of_catalog_v1 Nat import_test_context {provider} {} {old} {results}
           {site} 55 {args} {BINDING} {SIGNATURE}
-          (Eq.refl (IROption IRByteFunctionV1) (IROption.some IRByteFunctionV1 {BINDING}))
-          (Eq.refl (IROption IRByteSignatureV1) (IROption.some IRByteSignatureV1 {SIGNATURE})))
-        (Eq.trans (IRByteConfigV1 Nat) {middle} {imported} {actual_expected}
+          (@Eq.refl (IROption IRByteFunctionV1) (@IROption.some IRByteFunctionV1 {BINDING}))
+          (@Eq.refl (IROption IRByteSignatureV1) (@IROption.some IRByteSignatureV1 {SIGNATURE})))
+        (@Eq.trans (IRByteConfigV1 Nat) {middle} {imported} {actual_expected}
           (ir_byte_import_call_rule_v1 Nat import_test_context {provider} {} {old} {results}
             {site} {BINDING} {SIGNATURE} (ir_resolve {} {args}) {TRUE} {TRUE})
           {})",
@@ -216,9 +216,9 @@ fn byte_import_aggregate_is_one_result_and_retains_changed_bytes_and_host() {
     let values = list("IRScalar", &[PAIR]);
     let returned_memory = changed_memory("bytes");
     let actual = import_actual(&results, &types, &values, &returned_memory);
-    let predicate = "(fun (c : IRByteConfigV1 Nat) => IRByteConfigV1.rec Nat
+    let predicate = "(fun (c : IRByteConfigV1 Nat) => @IRByteConfigV1.rec Nat
       (fun (_ : IRByteConfigV1 Nat) => Prop)
-      (fun (s : IRMachine) (w : IRByteWorldV1 Nat) => Eq Bool (ir_byte_world_valid_v1 Nat s w) Bool.true)
+      (fun (s : IRMachine) (w : IRByteWorldV1 Nat) => @Eq Bool (ir_byte_world_valid_v1 Nat s w) Bool.true)
       (fun (_ : IROutcome) (_ : IRByteWorldV1 Nat) => False) c)";
     add(&mut spec, "import_pair_world", &format!("def import_pair_world
       (bytes : Nat -> IROption Nat) (host : Nat) : {predicate} {actual} :=
@@ -233,8 +233,8 @@ fn byte_import_aggregate_is_one_result_and_retains_changed_bytes_and_host() {
         &format!(
             "def import_changed_byte
       (bytes : Nat -> IROption Nat) :
-      Eq (IROption Nat) (ir_byte_mem_bytes_v1 {returned_memory} 16) (IROption.some Nat 99) :=
-      Eq.refl (IROption Nat) (IROption.some Nat 99)"
+      @Eq (IROption Nat) (ir_byte_mem_bytes_v1 {returned_memory} 16) (@IROption.some Nat 99) :=
+      @Eq.refl (IROption Nat) (@IROption.some Nat 99)"
         ),
     );
 }
@@ -288,7 +288,7 @@ fn byte_import_actual_arity_type_owner_and_fault_checks_keep_returned_world() {
     ] {
         let actual = import_actual(&rs, &ts, &pair_values, &mem);
         let expected = format!(
-            "(IRByteConfigV1.halted Nat (IROutcome.type_error {fault}) {})",
+            "(@IRByteConfigV1.halted Nat (IROutcome.type_error {fault}) {})",
             world(&mem, "(Nat.succ host)")
         );
         add(
@@ -296,7 +296,7 @@ fn byte_import_actual_arity_type_owner_and_fault_checks_keep_returned_world() {
             name,
             &format!(
                 "def {name} (bytes : Nat -> IROption Nat) (host : Nat) :
-          Eq (IRByteConfigV1 Nat) {actual} {expected} := Eq.refl (IRByteConfigV1 Nat) {expected}"
+          @Eq (IRByteConfigV1 Nat) {actual} {expected} := @Eq.refl (IRByteConfigV1 Nat) {expected}"
             ),
         );
     }
@@ -330,7 +330,7 @@ fn byte_import_actual_arity_type_owner_and_fault_checks_keep_returned_world() {
     ] {
         let actual = import_actual(&rs, &ts, &vs, &mem);
         let expected = format!(
-            "(IRByteConfigV1.running Nat {} {})",
+            "(@IRByteConfigV1.running Nat {} {})",
             next_machine(&rs, &vs, 1),
             world(&mem, "(Nat.succ host)")
         );
@@ -339,14 +339,14 @@ fn byte_import_actual_arity_type_owner_and_fault_checks_keep_returned_world() {
             name,
             &format!(
                 "def {name} (bytes : Nat -> IROption Nat) (host : Nat) :
-          Eq (IRByteConfigV1 Nat) {actual} {expected} := {}",
+          @Eq (IRByteConfigV1 Nat) {actual} {expected} := {}",
                 return_proof(&rs, &ts, &vs, &mem)
             ),
         );
     }
     let fault = "(IROutcome.ub IRFault.null_deref)";
     let expected = format!(
-        "(IRByteConfigV1.halted Nat {fault} {})",
+        "(@IRByteConfigV1.halted Nat {fault} {})",
         world(&changed, "(Nat.succ host)")
     );
     add(
@@ -354,10 +354,10 @@ fn byte_import_actual_arity_type_owner_and_fault_checks_keep_returned_world() {
         "import_fault_world",
         &format!(
             "def import_fault_world
-      (bytes : Nat -> IROption Nat) (host : Nat) : Eq (IRByteConfigV1 Nat)
-      (ir_byte_import_result_v1 Nat import_test_context {} {} (IRList.nil Nat) (IRList.nil IRTy)
-        (IRByteImportResultV1.mk Nat {fault} {changed} (Nat.succ host))) {expected} :=
-      Eq.refl (IRByteConfigV1 Nat) {expected}",
+      (bytes : Nat -> IROption Nat) (host : Nat) : @Eq (IRByteConfigV1 Nat)
+      (ir_byte_import_result_v1 Nat import_test_context {} {} (@IRList.nil Nat) (@IRList.nil IRTy)
+        (@IRByteImportResultV1.mk Nat {fault} {changed} (Nat.succ host))) {expected} :=
+      @Eq.refl (IRByteConfigV1 Nat) {expected}",
             machine(),
             world(&memory("bytes"), "host")
         ),
@@ -386,7 +386,7 @@ fn byte_import_rejects_lost_effects_and_wrong_advancement() {
     let mem = changed_memory("bytes");
     let actual = import_actual(&rs, &types, &values, &mem);
     let expected = format!(
-        "(IRByteConfigV1.running Nat {} {})",
+        "(@IRByteConfigV1.running Nat {} {})",
         next_machine(&rs, &values, 1),
         world(&mem, "(Nat.succ host)")
     );
@@ -395,7 +395,7 @@ fn byte_import_rejects_lost_effects_and_wrong_advancement() {
         "import_bad_pair_as_two_results",
         &format!(
             "def import_bad_pair_as_two_results
-      (bytes : Nat -> IROption Nat) (host : Nat) : Eq (IRByteConfigV1 Nat) {actual} {expected} :=
+      (bytes : Nat -> IROption Nat) (host : Nat) : @Eq (IRByteConfigV1 Nat) {actual} {expected} :=
       {}",
             return_proof(&rs, &types, &values, &mem)
         ),

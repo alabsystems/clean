@@ -32,10 +32,14 @@ fn ind_ctor_table_actual_eq_append_uses_captured_metadata() {
         );
         for env in [ENV, INSTALLED] {
             for (lookup, name, expected) in [
-                ("kind_for", FAMILY, format!("OptionType.some KIndMeta {IM}")),
-                ("kctor_for", CN, format!("OptionType.some KCtorMeta {CM}")),
-                ("kind_for", CN, "OptionType.none KIndMeta".to_owned()),
-                ("kctor_for", FAMILY, "OptionType.none KCtorMeta".to_owned()),
+                (
+                    "kind_for",
+                    FAMILY,
+                    format!("@OptionType.some KIndMeta {IM}"),
+                ),
+                ("kctor_for", CN, format!("@OptionType.some KCtorMeta {CM}")),
+                ("kind_for", CN, "@OptionType.none KIndMeta".to_owned()),
+                ("kctor_for", FAMILY, "@OptionType.none KCtorMeta".to_owned()),
             ] {
                 checks::computes(spec, &format!("{lookup} {env} {name}"), &expected);
             }
@@ -57,19 +61,19 @@ fn ind_ctor_table_actual_eq_append_uses_captured_metadata() {
             (format!("kctor_index {CM}"), "Nat.zero".to_owned()),
             (
                 format!("kind_all_names {IM}"),
-                format!("ListType.cons Name {FAMILY} (ListType.nil Name)"),
+                format!("@ListType.cons Name {FAMILY} (@ListType.nil Name)"),
             ),
             (
                 format!("kind_ctor_names {IM}"),
-                format!("ListType.cons Name {CN} (ListType.nil Name)"),
+                format!("@ListType.cons Name {CN} (@ListType.nil Name)"),
             ),
             (
                 format!("kcre_ind_ctor_tenv {FAMILY}"),
-                "OptionType.some KConstSig kcre_eq_type_signature".to_owned(),
+                "@OptionType.some KConstSig kcre_eq_type_signature".to_owned(),
             ),
             (
                 format!("kcre_ind_ctor_tenv {CN}"),
-                "OptionType.some KConstSig kcre_eq_refl_signature".to_owned(),
+                "@OptionType.some KConstSig kcre_eq_refl_signature".to_owned(),
             ),
         ] {
             checks::computes(spec, &term, &expected);
@@ -78,12 +82,12 @@ fn ind_ctor_table_actual_eq_append_uses_captured_metadata() {
         checks::caller(
             spec,
             &format!("ict_eq_kind {ENV}"),
-            &format!("Eq (OptionType KIndMeta) (kind_for {INSTALLED} {FAMILY}) (OptionType.some KIndMeta {IM})"),
+            &format!("@Eq (OptionType KIndMeta) (kind_for {INSTALLED} {FAMILY}) (@OptionType.some KIndMeta {IM})"),
         );
         checks::caller(
             spec,
             &format!("ict_eq_ctor {ENV}"),
-            &format!("Eq (OptionType KCtorMeta) (kctor_for {INSTALLED} {CN}) (OptionType.some KCtorMeta {CM})"),
+            &format!("@Eq (OptionType KCtorMeta) (kctor_for {INSTALLED} {CN}) (@OptionType.some KCtorMeta {CM})"),
         );
     });
 }
@@ -99,7 +103,7 @@ fn ind_ctor_table_symbolic_unequal_name_callers_and_registration() {
             checks::caller(
                 &spec,
                 &format!("fun (base updates : IndCtorEnv) (q : Name) => ict_{prefix}_append updates base q"),
-                &format!("forall (base updates : IndCtorEnv) (q : Name), Eq (OptionType {meta}) ({lookup} (ict_append base updates) q) (Bool.rec (fun (_b : Bool) => OptionType {meta}) ({lookup} base q) ({lookup} updates q) (ict_has_name_b updates q))"),
+                &format!("forall (base updates : IndCtorEnv) (q : Name), @Eq (OptionType {meta}) ({lookup} (ict_append base updates) q) (@Bool.rec (fun (_b : Bool) => OptionType {meta}) ({lookup} base q) ({lookup} updates q) (ict_has_name_b updates q))"),
             );
             for (insert, suffix, inserted_meta) in [
                 ("addInd", "ind", "KIndMeta"),
@@ -107,8 +111,8 @@ fn ind_ctor_table_symbolic_unequal_name_callers_and_registration() {
             ] {
                 checks::caller(
                     &spec,
-                    &format!("fun (base : IndCtorEnv) (n q : Name) (m : {inserted_meta}) (different : Eq Bool (name_eqb n q) Bool.false) => ict_{prefix}_add_{suffix}_other base n q m different"),
-                    &format!("forall (base : IndCtorEnv) (n q : Name) (m : {inserted_meta}), Eq Bool (name_eqb n q) Bool.false -> Eq (OptionType {meta}) ({lookup} (IndCtorEnv.{insert} base n m) q) ({lookup} base q)"),
+                    &format!("fun (base : IndCtorEnv) (n q : Name) (m : {inserted_meta}) (different : @Eq Bool (name_eqb n q) Bool.false) => ict_{prefix}_add_{suffix}_other base n q m different"),
+                    &format!("forall (base : IndCtorEnv) (n q : Name) (m : {inserted_meta}), @Eq Bool (name_eqb n q) Bool.false -> @Eq (OptionType {meta}) ({lookup} (IndCtorEnv.{insert} base n m) q) ({lookup} base q)"),
                 );
             }
             for (branch, flag, endpoint) in
@@ -116,18 +120,18 @@ fn ind_ctor_table_symbolic_unequal_name_callers_and_registration() {
             {
                 checks::caller(
                     &spec,
-                    &format!("fun (base updates : IndCtorEnv) (q : Name) (h : Eq Bool (ict_has_name_b updates q) Bool.{flag}) => ict_{prefix}_append_{branch} updates base q h"),
-                    &format!("forall (base updates : IndCtorEnv) (q : Name), Eq Bool (ict_has_name_b updates q) Bool.{flag} -> Eq (OptionType {meta}) ({lookup} (ict_append base updates) q) ({lookup} {endpoint} q)"),
+                    &format!("fun (base updates : IndCtorEnv) (q : Name) (h : @Eq Bool (ict_has_name_b updates q) Bool.{flag}) => ict_{prefix}_append_{branch} updates base q h"),
+                    &format!("forall (base updates : IndCtorEnv) (q : Name), @Eq Bool (ict_has_name_b updates q) Bool.{flag} -> @Eq (OptionType {meta}) ({lookup} (ict_append base updates) q) ({lookup} {endpoint} q)"),
                 );
             }
         }
         // Compose both insertion kinds at an unrelated symbolic query. The
         // only assumption concerns names; neither lookup equation is supplied.
         let ty = r"forall (base : IndCtorEnv) (n q : Name) (im : KIndMeta) (cm : KCtorMeta),
- Eq Bool (name_eqb n q) Bool.false ->
- Eq (OptionType KIndMeta) (kind_for (IndCtorEnv.addCtor (IndCtorEnv.addInd base n im) n cm) q) (kind_for base q)";
+ @Eq Bool (name_eqb n q) Bool.false ->
+ @Eq (OptionType KIndMeta) (kind_for (IndCtorEnv.addCtor (IndCtorEnv.addInd base n im) n cm) q) (kind_for base q)";
         let body = r"fun (base : IndCtorEnv) (n q : Name) (im : KIndMeta) (cm : KCtorMeta)
- (different : Eq Bool (name_eqb n q) Bool.false) =>
+ (different : @Eq Bool (name_eqb n q) Bool.false) =>
  Eq.trans (OptionType KIndMeta)
   (kind_for (IndCtorEnv.addCtor (IndCtorEnv.addInd base n im) n cm) q)
   (kind_for (IndCtorEnv.addInd base n im) q) (kind_for base q)
@@ -163,14 +167,14 @@ fn ind_ctor_table_cross_kind_shadowing_and_append_order() {
             (
                 &ctor_last,
                 FAMILY,
-                "OptionType.none KIndMeta".to_owned(),
-                format!("OptionType.some KCtorMeta {CM}"),
+                "@OptionType.none KIndMeta".to_owned(),
+                format!("@OptionType.some KCtorMeta {CM}"),
             ),
             (
                 &ind_last,
                 CN,
-                format!("OptionType.some KIndMeta {IM}"),
-                "OptionType.none KCtorMeta".to_owned(),
+                format!("@OptionType.some KIndMeta {IM}"),
+                "@OptionType.none KCtorMeta".to_owned(),
             ),
         ] {
             let installed = format!("(ict_append {ENV} {updates})");
@@ -185,12 +189,12 @@ fn ind_ctor_table_cross_kind_shadowing_and_append_order() {
         checks::caller(
             spec,
             &format!("ict_eq_ctor_shadows_ind {ENV}"),
-            &format!("Eq (OptionType KIndMeta) (kind_for (ict_append {ENV} {ctor_last}) {FAMILY}) (OptionType.none KIndMeta)"),
+            &format!("@Eq (OptionType KIndMeta) (kind_for (ict_append {ENV} {ctor_last}) {FAMILY}) (@OptionType.none KIndMeta)"),
         );
         checks::caller(
             spec,
             &format!("ict_eq_ind_shadows_ctor {ENV}"),
-            &format!("Eq (OptionType KCtorMeta) (kctor_for (ict_append {ENV} {ind_last}) {CN}) (OptionType.none KCtorMeta)"),
+            &format!("@Eq (OptionType KCtorMeta) (kctor_for (ict_append {ENV} {ind_last}) {CN}) (@OptionType.none KCtorMeta)"),
         );
         let conflict = format!("(IndCtorEnv.addCtor IndCtorEnv.empty {FAMILY} {CM})");
         let eq_last = format!("(ict_append {conflict} ict_eq_updates)");
@@ -198,13 +202,13 @@ fn ind_ctor_table_cross_kind_shadowing_and_append_order() {
         for (table, kind_result, ctor_result) in [
             (
                 &eq_last,
-                format!("OptionType.some KIndMeta {IM}"),
-                "OptionType.none KCtorMeta".to_owned(),
+                format!("@OptionType.some KIndMeta {IM}"),
+                "@OptionType.none KCtorMeta".to_owned(),
             ),
             (
                 &conflict_last,
-                "OptionType.none KIndMeta".to_owned(),
-                format!("OptionType.some KCtorMeta {CM}"),
+                "@OptionType.none KIndMeta".to_owned(),
+                format!("@OptionType.some KCtorMeta {CM}"),
             ),
         ] {
             checks::computes(spec, &format!("kind_for {table} {FAMILY}"), &kind_result);
@@ -256,7 +260,7 @@ fn ind_ctor_table_has_name_tracks_both_kinds() {
             checks::computes(
                 spec,
                 &format!("{lookup} {stream} {name}"),
-                &format!("OptionType.none {result_type}"),
+                &format!("@OptionType.none {result_type}"),
             );
             checks::not_def_eq(
                 spec,
@@ -267,7 +271,7 @@ fn ind_ctor_table_has_name_tracks_both_kinds() {
         checks::caller(
             spec,
             &format!("ict_eq_unrelated_kind {ENV}"),
-            &format!("Eq (OptionType KIndMeta) (kind_for {INSTALLED} Name.anonymous) (kind_for {ENV} Name.anonymous)"),
+            &format!("@Eq (OptionType KIndMeta) (kind_for {INSTALLED} Name.anonymous) (kind_for {ENV} Name.anonymous)"),
         );
     });
 }
@@ -304,13 +308,13 @@ fn ind_ctor_table_eq_append_preserves_actual_prod_entries() {
                 checks::computes(
                     spec,
                     &format!("{lookup} {table} {name}"),
-                    &format!("OptionType.some {meta_type} {meta}"),
+                    &format!("@OptionType.some {meta_type} {meta}"),
                 );
             }
             checks::caller(
                 spec,
-                &format!("ict_{prefix}_append_fresh ict_eq_updates {ENV} {name} (Eq.refl Bool Bool.false)"),
-                &format!("Eq (OptionType {meta_type}) ({lookup} {INSTALLED} {name}) (OptionType.some {meta_type} {meta})"),
+                &format!("ict_{prefix}_append_fresh ict_eq_updates {ENV} {name} (@Eq.refl Bool Bool.false)"),
+                &format!("@Eq (OptionType {meta_type}) ({lookup} {INSTALLED} {name}) (@OptionType.some {meta_type} {meta})"),
             );
         }
         for (source, expected) in [
@@ -322,7 +326,7 @@ fn ind_ctor_table_eq_append_preserves_actual_prod_entries() {
             ("kctor_num_fields kcre_prod_ctor_meta", TWO),
             (
                 "kind_ctor_names kcre_prod_ind_meta",
-                "ListType.cons Name kcre_prod_mk_name (ListType.nil Name)",
+                "@ListType.cons Name kcre_prod_mk_name (@ListType.nil Name)",
             ),
         ] {
             checks::computes(spec, source, expected);
@@ -332,7 +336,7 @@ fn ind_ctor_table_eq_append_preserves_actual_prod_entries() {
         checks::computes(
             spec,
             "kind_for ict_eq_updates kcre_prod_type_name",
-            "OptionType.none KIndMeta",
+            "@OptionType.none KIndMeta",
         );
         checks::not_def_eq(
             spec,

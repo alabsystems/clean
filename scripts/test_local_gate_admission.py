@@ -34,7 +34,7 @@ e = os.environ.copy()
 keys = ("HEAVY_GATE_HELD", "BUILD_SLOT_HELD", "CARGO_BUILD_JOBS", "TARGO_CALLER_JOBS",
         "SYNTHETIC_KEEP", "CLEAN_NATIVE_EXEC_UPDATE", "TRUSTFLAGS", "RUSTFLAGS",
         "RUSTDOCFLAGS", "CARGO_BUILD_RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS",
-        "CARGO_ENCODED_RUSTDOCFLAGS", "CARGO_TARGET_DIR")
+        "CARGO_ENCODED_RUSTDOCFLAGS", "CARGO_TARGET_DIR", "HEAVY_GATE_AUTO_FLOOR_GB")
 def emit(kind, **kw):
     with open(e["TRACE"], "a") as f:
         f.write(json.dumps(dict(kind=kind, role=role, argv=a,
@@ -137,7 +137,7 @@ class AdmissionControls(unittest.TestCase):
             path = self.root / directory / name
             path.write_text("#!" + str(fixture_python) + "\n" + STUB)
             path.chmod(0o755)
-        shutil.copyfile(FRONTEND, self.root / "scripts/frontend_merge_suite.sh")
+        shutil.copy2(FRONTEND, self.root / "scripts/frontend_merge_suite.sh")
         self.env.update(TARGO=str(self.root / "bin/targo"),
             FRONTEND_SUITE_OUT=self.env["OUT"], CARGO_TARGET_DIR=str(self.root / "target with spaces"))
 
@@ -157,12 +157,13 @@ class AdmissionControls(unittest.TestCase):
         r = self.shell('_gate_build 19 2 "label with spaces" payload "$@"', args, PAYLOAD_RC="37")
         self.assertEqual(r.returncode, 37, r.stderr)
         self.assertEqual(r.stdout, "payload-out\n")
-        self.assertEqual(r.stderr, "payload-err\n")
+        self.assertEqual(r.stderr, "local-gate admission: RAISED label with spaces from 19 to 47 GiB (compiler floor)\n"
+                         "payload-err\n")
         e = self.events()
         self.assertEqual([v["kind"] for v in e],
             ["memory-enter", "cpu-enter", "payload", "cpu-release", "memory-release"])
-        self.assertEqual(e[0]["argv"][:4], ["run", "19", "local-gate-label with spaces", "--"])
-        self.assertEqual(e[1]["argv"][:5], ["--cpus", "2", "--mem-gb", "19", "--"])
+        self.assertEqual(e[0]["argv"][:4], ["run", "47", "local-gate-label with spaces", "--"])
+        self.assertEqual(e[1]["argv"][:5], ["--cpus", "2", "--mem-gb", "47", "--"])
         self.assertEqual(e[2]["argv"], list(args))
         self.assertEqual(e[2]["env"]["SYNTHETIC_KEEP"], "unchanged value")
         self.assertEqual(e[2]["env"]["CARGO_BUILD_JOBS"], "2")
@@ -264,6 +265,47 @@ class AdmissionControls(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual([e["kind"] for e in self.events()].count("memory-enter"), 1)
         self.assertEqual([e["kind"] for e in self.events()].count("cpu-enter"), 1)
+
+    def test_compiler_floor_raises_low_requests_and_keeps_higher_requests(self):
+        for requested in (1, 12, 17, 19, 35, 47, 63):
+            with self.subTest(requested=requested):
+                self.trace.unlink(missing_ok=True)
+                r = self.shell(f"_gate_build {requested} 2 floor payload", PAYLOAD_RC="37")
+                self.assertEqual(r.returncode, 37, r.stderr)
+                e = self.events()
+                self.assertEqual([v["kind"] for v in e],
+                    ["memory-enter", "cpu-enter", "payload", "cpu-release", "memory-release"])
+                expected = str(max(requested, 47))
+                self.assertEqual(e[0]["argv"][:4], ["run", expected, "local-gate-floor", "--"])
+                self.assertEqual(e[1]["argv"][:5], ["--cpus", "2", "--mem-gb", expected, "--"])
+                self.assertEqual(e[2]["argv"], [])
+                self.assertEqual("RAISED" in r.stderr, requested < 47)
+
+    def test_frontend_auto_floor_keeps_higher_values_and_refuses_nonnumeric(self):
+        self.assertEqual(self.shell("_gate_frontend_auto_floor").stdout, "47\n")
+        for value, expected in (("0", "47"), ("1", "47"), ("46", "47"), ("47", "47"),
+                                ("96", "96"), ("00096", "96"), ("9" * 24, "9" * 24)):
+            with self.subTest(value=value):
+                r = self.shell("_gate_frontend_auto_floor", HEAVY_GATE_AUTO_FLOOR_GB=value)
+                self.assertEqual(r.returncode, 0, r.stderr)
+                self.assertEqual(r.stdout, expected + "\n")
+        for value in ("-1", "1.5", "47x", " 96", "x[$(touch forbidden)]"):
+            r = self.shell("_gate_frontend_auto_floor", HEAVY_GATE_AUTO_FLOOR_GB=value)
+            self.assertEqual(r.returncode, 75, r.stderr)
+        self.assertEqual(self.events(), [])
+        self.assertFalse((self.root / "forbidden").exists())
+
+    def test_local_frontend_call_preserves_auto_classes_and_scoped_floor(self):
+        body = 'fms_auto_floor="$(_gate_frontend_auto_floor)"\n' + command(
+            '  FRONTEND_SUITE_PYTHON="$GATE_PYTHON" ')
+        r = self.shell(body, GATE_PYTHON=sys.executable, HEAVY_GATE_AUTO_FLOOR_GB="96")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        memory = [v for v in self.events() if v["kind"] == "memory-enter"]
+        self.assertEqual([v["argv"][1] for v in memory],
+                         ["47", "auto:frontend-suite-run:47", "auto:frontend-suite-doc:47"])
+        self.assertTrue(all(v["env"]["HEAVY_GATE_AUTO_FLOOR_GB"] == "96" for v in memory))
+        payloads = [v for v in self.events() if v["kind"] == "payload"]
+        self.assertEqual([v["phase"] for v in payloads], ["build", "run", "doc"])
 
     def test_frontend_three_phases_keep_weights_args_and_timestamp_order(self):
         r = self.frontend()

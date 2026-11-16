@@ -125,9 +125,9 @@ impl Specification {
         // (pred reduces on succ, so pred (succ a) = a definitionally).
         self.add_definition(Self::derived_eq_lemma(
             "nat_succ_inj_beq",
-            "forall (a : Nat) (b : Nat), Eq Nat (Nat.succ a) (Nat.succ b) -> Eq Nat a b",
+            "forall (a : Nat) (b : Nat), @Eq Nat (Nat.succ a) (Nat.succ b) -> @Eq Nat a b",
             concat!(
-                "fun (a : Nat) (b : Nat) (h : Eq Nat (Nat.succ a) (Nat.succ b)) => ",
+                "fun (a : Nat) (b : Nat) (h : @Eq Nat (Nat.succ a) (Nat.succ b)) => ",
                 "Eq.cong Nat Nat (fun (z : Nat) => Nat.pred z) (Nat.succ a) (Nat.succ b) h",
             ),
             "Nat succ injectivity: succ a = succ b -> a = b. Eq.cong with Nat.pred (pred (succ a) \
@@ -139,102 +139,102 @@ impl Specification {
         // level_eqb_eq : level_eqb a b = true -> a = b, by double Level.rec.
         self.add_definition(Self::derived_eq_lemma(
             "level_eqb_eq",
-            "forall (a : Level) (b : Level), Eq Bool (level_eqb a b) Bool.true -> Eq Level a b",
+            "forall (a : Level) (b : Level), @Eq Bool (level_eqb a b) Bool.true -> @Eq Level a b",
             concat!(
-                "fun (a : Level) => Level.rec ",
-                "(fun (za : Level) => forall (b : Level), Eq Bool (level_eqb za b) Bool.true -> Eq Level za b) ",
+                "fun (a : Level) => @Level.rec ",
+                "(fun (za : Level) => forall (b : Level), @Eq Bool (level_eqb za b) Bool.true -> @Eq Level za b) ",
                 // a = zero
-                "(fun (b : Level) => Level.rec ",
-                "(fun (zb : Level) => Eq Bool (level_eqb Level.zero zb) Bool.true -> Eq Level Level.zero zb) ",
-                "(fun (_ : Eq Bool (level_eqb Level.zero Level.zero) Bool.true) => Eq.refl Level Level.zero) ",
-                "(fun (qp : Level) (_ : Eq Bool (level_eqb Level.zero qp) Bool.true -> Eq Level Level.zero qp) => ",
-                "fun (h : Eq Bool (level_eqb Level.zero (Level.succ qp)) Bool.true) => ",
-                "bool_false_ne_true (Eq Level Level.zero (Level.succ qp)) h) ",
-                "(fun (ql : Level) (qr : Level) (_ : Eq Bool (level_eqb Level.zero ql) Bool.true -> Eq Level Level.zero ql) (_ : Eq Bool (level_eqb Level.zero qr) Bool.true -> Eq Level Level.zero qr) => ",
-                "fun (h : Eq Bool (level_eqb Level.zero (Level.max ql qr)) Bool.true) => ",
-                "bool_false_ne_true (Eq Level Level.zero (Level.max ql qr)) h) ",
-                "(fun (ql : Level) (qr : Level) (_ : Eq Bool (level_eqb Level.zero ql) Bool.true -> Eq Level Level.zero ql) (_ : Eq Bool (level_eqb Level.zero qr) Bool.true -> Eq Level Level.zero qr) => ",
-                "fun (h : Eq Bool (level_eqb Level.zero (Level.imax ql qr)) Bool.true) => ",
-                "bool_false_ne_true (Eq Level Level.zero (Level.imax ql qr)) h) ",
-                "(fun (qm : Name) => fun (h : Eq Bool (level_eqb Level.zero (Level.param qm)) Bool.true) => ",
-                "bool_false_ne_true (Eq Level Level.zero (Level.param qm)) h) ",
+                "(fun (b : Level) => @Level.rec ",
+                "(fun (zb : Level) => @Eq Bool (level_eqb Level.zero zb) Bool.true -> @Eq Level Level.zero zb) ",
+                "(fun (_ : @Eq Bool (level_eqb Level.zero Level.zero) Bool.true) => @Eq.refl Level Level.zero) ",
+                "(fun (qp : Level) (_ : @Eq Bool (level_eqb Level.zero qp) Bool.true -> @Eq Level Level.zero qp) => ",
+                "fun (h : @Eq Bool (level_eqb Level.zero (Level.succ qp)) Bool.true) => ",
+                "bool_false_ne_true (@Eq Level Level.zero (Level.succ qp)) h) ",
+                "(fun (ql : Level) (qr : Level) (_ : @Eq Bool (level_eqb Level.zero ql) Bool.true -> @Eq Level Level.zero ql) (_ : @Eq Bool (level_eqb Level.zero qr) Bool.true -> @Eq Level Level.zero qr) => ",
+                "fun (h : @Eq Bool (level_eqb Level.zero (Level.max ql qr)) Bool.true) => ",
+                "bool_false_ne_true (@Eq Level Level.zero (Level.max ql qr)) h) ",
+                "(fun (ql : Level) (qr : Level) (_ : @Eq Bool (level_eqb Level.zero ql) Bool.true -> @Eq Level Level.zero ql) (_ : @Eq Bool (level_eqb Level.zero qr) Bool.true -> @Eq Level Level.zero qr) => ",
+                "fun (h : @Eq Bool (level_eqb Level.zero (Level.imax ql qr)) Bool.true) => ",
+                "bool_false_ne_true (@Eq Level Level.zero (Level.imax ql qr)) h) ",
+                "(fun (qm : Name) => fun (h : @Eq Bool (level_eqb Level.zero (Level.param qm)) Bool.true) => ",
+                "bool_false_ne_true (@Eq Level Level.zero (Level.param qm)) h) ",
                 "b) ",
                 // a = succ p (ih)
-                "(fun (p : Level) (ih : forall (b : Level), Eq Bool (level_eqb p b) Bool.true -> Eq Level p b) => ",
-                "fun (b : Level) => Level.rec ",
-                "(fun (zb : Level) => Eq Bool (level_eqb (Level.succ p) zb) Bool.true -> Eq Level (Level.succ p) zb) ",
-                "(fun (h : Eq Bool (level_eqb (Level.succ p) Level.zero) Bool.true) => ",
-                "bool_false_ne_true (Eq Level (Level.succ p) Level.zero) h) ",
-                "(fun (qp : Level) (_ : Eq Bool (level_eqb (Level.succ p) qp) Bool.true -> Eq Level (Level.succ p) qp) => ",
-                "fun (h : Eq Bool (level_eqb (Level.succ p) (Level.succ qp)) Bool.true) => ",
+                "(fun (p : Level) (ih : forall (b : Level), @Eq Bool (level_eqb p b) Bool.true -> @Eq Level p b) => ",
+                "fun (b : Level) => @Level.rec ",
+                "(fun (zb : Level) => @Eq Bool (level_eqb (Level.succ p) zb) Bool.true -> @Eq Level (Level.succ p) zb) ",
+                "(fun (h : @Eq Bool (level_eqb (Level.succ p) Level.zero) Bool.true) => ",
+                "bool_false_ne_true (@Eq Level (Level.succ p) Level.zero) h) ",
+                "(fun (qp : Level) (_ : @Eq Bool (level_eqb (Level.succ p) qp) Bool.true -> @Eq Level (Level.succ p) qp) => ",
+                "fun (h : @Eq Bool (level_eqb (Level.succ p) (Level.succ qp)) Bool.true) => ",
                 "Eq.cong Level Level Level.succ p qp (ih qp h)) ",
-                "(fun (ql : Level) (qr : Level) (_ : Eq Bool (level_eqb (Level.succ p) ql) Bool.true -> Eq Level (Level.succ p) ql) (_ : Eq Bool (level_eqb (Level.succ p) qr) Bool.true -> Eq Level (Level.succ p) qr) => ",
-                "fun (h : Eq Bool (level_eqb (Level.succ p) (Level.max ql qr)) Bool.true) => ",
-                "bool_false_ne_true (Eq Level (Level.succ p) (Level.max ql qr)) h) ",
-                "(fun (ql : Level) (qr : Level) (_ : Eq Bool (level_eqb (Level.succ p) ql) Bool.true -> Eq Level (Level.succ p) ql) (_ : Eq Bool (level_eqb (Level.succ p) qr) Bool.true -> Eq Level (Level.succ p) qr) => ",
-                "fun (h : Eq Bool (level_eqb (Level.succ p) (Level.imax ql qr)) Bool.true) => ",
-                "bool_false_ne_true (Eq Level (Level.succ p) (Level.imax ql qr)) h) ",
-                "(fun (qm : Name) => fun (h : Eq Bool (level_eqb (Level.succ p) (Level.param qm)) Bool.true) => ",
-                "bool_false_ne_true (Eq Level (Level.succ p) (Level.param qm)) h) ",
+                "(fun (ql : Level) (qr : Level) (_ : @Eq Bool (level_eqb (Level.succ p) ql) Bool.true -> @Eq Level (Level.succ p) ql) (_ : @Eq Bool (level_eqb (Level.succ p) qr) Bool.true -> @Eq Level (Level.succ p) qr) => ",
+                "fun (h : @Eq Bool (level_eqb (Level.succ p) (Level.max ql qr)) Bool.true) => ",
+                "bool_false_ne_true (@Eq Level (Level.succ p) (Level.max ql qr)) h) ",
+                "(fun (ql : Level) (qr : Level) (_ : @Eq Bool (level_eqb (Level.succ p) ql) Bool.true -> @Eq Level (Level.succ p) ql) (_ : @Eq Bool (level_eqb (Level.succ p) qr) Bool.true -> @Eq Level (Level.succ p) qr) => ",
+                "fun (h : @Eq Bool (level_eqb (Level.succ p) (Level.imax ql qr)) Bool.true) => ",
+                "bool_false_ne_true (@Eq Level (Level.succ p) (Level.imax ql qr)) h) ",
+                "(fun (qm : Name) => fun (h : @Eq Bool (level_eqb (Level.succ p) (Level.param qm)) Bool.true) => ",
+                "bool_false_ne_true (@Eq Level (Level.succ p) (Level.param qm)) h) ",
                 "b) ",
                 // a = max pl pr (ih_l, ih_r)
-                "(fun (pl : Level) (pr : Level) (ih_l : forall (b : Level), Eq Bool (level_eqb pl b) Bool.true -> Eq Level pl b) (ih_r : forall (b : Level), Eq Bool (level_eqb pr b) Bool.true -> Eq Level pr b) => ",
-                "fun (b : Level) => Level.rec ",
-                "(fun (zb : Level) => Eq Bool (level_eqb (Level.max pl pr) zb) Bool.true -> Eq Level (Level.max pl pr) zb) ",
-                "(fun (h : Eq Bool (level_eqb (Level.max pl pr) Level.zero) Bool.true) => ",
-                "bool_false_ne_true (Eq Level (Level.max pl pr) Level.zero) h) ",
-                "(fun (qp : Level) (_ : Eq Bool (level_eqb (Level.max pl pr) qp) Bool.true -> Eq Level (Level.max pl pr) qp) => ",
-                "fun (h : Eq Bool (level_eqb (Level.max pl pr) (Level.succ qp)) Bool.true) => ",
-                "bool_false_ne_true (Eq Level (Level.max pl pr) (Level.succ qp)) h) ",
-                "(fun (ql : Level) (qr : Level) (_ : Eq Bool (level_eqb (Level.max pl pr) ql) Bool.true -> Eq Level (Level.max pl pr) ql) (_ : Eq Bool (level_eqb (Level.max pl pr) qr) Bool.true -> Eq Level (Level.max pl pr) qr) => ",
-                "fun (h : Eq Bool (level_eqb (Level.max pl pr) (Level.max ql qr)) Bool.true) => ",
+                "(fun (pl : Level) (pr : Level) (ih_l : forall (b : Level), @Eq Bool (level_eqb pl b) Bool.true -> @Eq Level pl b) (ih_r : forall (b : Level), @Eq Bool (level_eqb pr b) Bool.true -> @Eq Level pr b) => ",
+                "fun (b : Level) => @Level.rec ",
+                "(fun (zb : Level) => @Eq Bool (level_eqb (Level.max pl pr) zb) Bool.true -> @Eq Level (Level.max pl pr) zb) ",
+                "(fun (h : @Eq Bool (level_eqb (Level.max pl pr) Level.zero) Bool.true) => ",
+                "bool_false_ne_true (@Eq Level (Level.max pl pr) Level.zero) h) ",
+                "(fun (qp : Level) (_ : @Eq Bool (level_eqb (Level.max pl pr) qp) Bool.true -> @Eq Level (Level.max pl pr) qp) => ",
+                "fun (h : @Eq Bool (level_eqb (Level.max pl pr) (Level.succ qp)) Bool.true) => ",
+                "bool_false_ne_true (@Eq Level (Level.max pl pr) (Level.succ qp)) h) ",
+                "(fun (ql : Level) (qr : Level) (_ : @Eq Bool (level_eqb (Level.max pl pr) ql) Bool.true -> @Eq Level (Level.max pl pr) ql) (_ : @Eq Bool (level_eqb (Level.max pl pr) qr) Bool.true -> @Eq Level (Level.max pl pr) qr) => ",
+                "fun (h : @Eq Bool (level_eqb (Level.max pl pr) (Level.max ql qr)) Bool.true) => ",
                 "Eq.trans Level (Level.max pl pr) (Level.max ql pr) (Level.max ql qr) ",
                 "(Eq.cong Level Level (fun (w : Level) => Level.max w pr) pl ql (ih_l ql (band_eq_true_left (level_eqb pl ql) (level_eqb pr qr) h))) ",
                 "(Eq.cong Level Level (fun (w : Level) => Level.max ql w) pr qr (ih_r qr (band_eq_true_right (level_eqb pl ql) (level_eqb pr qr) h)))) ",
-                "(fun (ql : Level) (qr : Level) (_ : Eq Bool (level_eqb (Level.max pl pr) ql) Bool.true -> Eq Level (Level.max pl pr) ql) (_ : Eq Bool (level_eqb (Level.max pl pr) qr) Bool.true -> Eq Level (Level.max pl pr) qr) => ",
-                "fun (h : Eq Bool (level_eqb (Level.max pl pr) (Level.imax ql qr)) Bool.true) => ",
-                "bool_false_ne_true (Eq Level (Level.max pl pr) (Level.imax ql qr)) h) ",
-                "(fun (qm : Name) => fun (h : Eq Bool (level_eqb (Level.max pl pr) (Level.param qm)) Bool.true) => ",
-                "bool_false_ne_true (Eq Level (Level.max pl pr) (Level.param qm)) h) ",
+                "(fun (ql : Level) (qr : Level) (_ : @Eq Bool (level_eqb (Level.max pl pr) ql) Bool.true -> @Eq Level (Level.max pl pr) ql) (_ : @Eq Bool (level_eqb (Level.max pl pr) qr) Bool.true -> @Eq Level (Level.max pl pr) qr) => ",
+                "fun (h : @Eq Bool (level_eqb (Level.max pl pr) (Level.imax ql qr)) Bool.true) => ",
+                "bool_false_ne_true (@Eq Level (Level.max pl pr) (Level.imax ql qr)) h) ",
+                "(fun (qm : Name) => fun (h : @Eq Bool (level_eqb (Level.max pl pr) (Level.param qm)) Bool.true) => ",
+                "bool_false_ne_true (@Eq Level (Level.max pl pr) (Level.param qm)) h) ",
                 "b) ",
                 // a = imax pl pr (ih_l, ih_r)
-                "(fun (pl : Level) (pr : Level) (ih_l : forall (b : Level), Eq Bool (level_eqb pl b) Bool.true -> Eq Level pl b) (ih_r : forall (b : Level), Eq Bool (level_eqb pr b) Bool.true -> Eq Level pr b) => ",
-                "fun (b : Level) => Level.rec ",
-                "(fun (zb : Level) => Eq Bool (level_eqb (Level.imax pl pr) zb) Bool.true -> Eq Level (Level.imax pl pr) zb) ",
-                "(fun (h : Eq Bool (level_eqb (Level.imax pl pr) Level.zero) Bool.true) => ",
-                "bool_false_ne_true (Eq Level (Level.imax pl pr) Level.zero) h) ",
-                "(fun (qp : Level) (_ : Eq Bool (level_eqb (Level.imax pl pr) qp) Bool.true -> Eq Level (Level.imax pl pr) qp) => ",
-                "fun (h : Eq Bool (level_eqb (Level.imax pl pr) (Level.succ qp)) Bool.true) => ",
-                "bool_false_ne_true (Eq Level (Level.imax pl pr) (Level.succ qp)) h) ",
-                "(fun (ql : Level) (qr : Level) (_ : Eq Bool (level_eqb (Level.imax pl pr) ql) Bool.true -> Eq Level (Level.imax pl pr) ql) (_ : Eq Bool (level_eqb (Level.imax pl pr) qr) Bool.true -> Eq Level (Level.imax pl pr) qr) => ",
-                "fun (h : Eq Bool (level_eqb (Level.imax pl pr) (Level.max ql qr)) Bool.true) => ",
-                "bool_false_ne_true (Eq Level (Level.imax pl pr) (Level.max ql qr)) h) ",
-                "(fun (ql : Level) (qr : Level) (_ : Eq Bool (level_eqb (Level.imax pl pr) ql) Bool.true -> Eq Level (Level.imax pl pr) ql) (_ : Eq Bool (level_eqb (Level.imax pl pr) qr) Bool.true -> Eq Level (Level.imax pl pr) qr) => ",
-                "fun (h : Eq Bool (level_eqb (Level.imax pl pr) (Level.imax ql qr)) Bool.true) => ",
+                "(fun (pl : Level) (pr : Level) (ih_l : forall (b : Level), @Eq Bool (level_eqb pl b) Bool.true -> @Eq Level pl b) (ih_r : forall (b : Level), @Eq Bool (level_eqb pr b) Bool.true -> @Eq Level pr b) => ",
+                "fun (b : Level) => @Level.rec ",
+                "(fun (zb : Level) => @Eq Bool (level_eqb (Level.imax pl pr) zb) Bool.true -> @Eq Level (Level.imax pl pr) zb) ",
+                "(fun (h : @Eq Bool (level_eqb (Level.imax pl pr) Level.zero) Bool.true) => ",
+                "bool_false_ne_true (@Eq Level (Level.imax pl pr) Level.zero) h) ",
+                "(fun (qp : Level) (_ : @Eq Bool (level_eqb (Level.imax pl pr) qp) Bool.true -> @Eq Level (Level.imax pl pr) qp) => ",
+                "fun (h : @Eq Bool (level_eqb (Level.imax pl pr) (Level.succ qp)) Bool.true) => ",
+                "bool_false_ne_true (@Eq Level (Level.imax pl pr) (Level.succ qp)) h) ",
+                "(fun (ql : Level) (qr : Level) (_ : @Eq Bool (level_eqb (Level.imax pl pr) ql) Bool.true -> @Eq Level (Level.imax pl pr) ql) (_ : @Eq Bool (level_eqb (Level.imax pl pr) qr) Bool.true -> @Eq Level (Level.imax pl pr) qr) => ",
+                "fun (h : @Eq Bool (level_eqb (Level.imax pl pr) (Level.max ql qr)) Bool.true) => ",
+                "bool_false_ne_true (@Eq Level (Level.imax pl pr) (Level.max ql qr)) h) ",
+                "(fun (ql : Level) (qr : Level) (_ : @Eq Bool (level_eqb (Level.imax pl pr) ql) Bool.true -> @Eq Level (Level.imax pl pr) ql) (_ : @Eq Bool (level_eqb (Level.imax pl pr) qr) Bool.true -> @Eq Level (Level.imax pl pr) qr) => ",
+                "fun (h : @Eq Bool (level_eqb (Level.imax pl pr) (Level.imax ql qr)) Bool.true) => ",
                 "Eq.trans Level (Level.imax pl pr) (Level.imax ql pr) (Level.imax ql qr) ",
                 "(Eq.cong Level Level (fun (w : Level) => Level.imax w pr) pl ql (ih_l ql (band_eq_true_left (level_eqb pl ql) (level_eqb pr qr) h))) ",
                 "(Eq.cong Level Level (fun (w : Level) => Level.imax ql w) pr qr (ih_r qr (band_eq_true_right (level_eqb pl ql) (level_eqb pr qr) h)))) ",
-                "(fun (qm : Name) => fun (h : Eq Bool (level_eqb (Level.imax pl pr) (Level.param qm)) Bool.true) => ",
-                "bool_false_ne_true (Eq Level (Level.imax pl pr) (Level.param qm)) h) ",
+                "(fun (qm : Name) => fun (h : @Eq Bool (level_eqb (Level.imax pl pr) (Level.param qm)) Bool.true) => ",
+                "bool_false_ne_true (@Eq Level (Level.imax pl pr) (Level.param qm)) h) ",
                 "b) ",
                 // a = param pm (ih on Name is irrelevant): inner dispatch on b;
                 // cross constructors absurd, param/param inverts name_eqb via
                 // name_eqb_eq lifted through Level.param (Eq.cong).
                 "(fun (pm : Name) => ",
-                "fun (b : Level) => Level.rec ",
-                "(fun (zb : Level) => Eq Bool (level_eqb (Level.param pm) zb) Bool.true -> Eq Level (Level.param pm) zb) ",
-                "(fun (h : Eq Bool (level_eqb (Level.param pm) Level.zero) Bool.true) => ",
-                "bool_false_ne_true (Eq Level (Level.param pm) Level.zero) h) ",
-                "(fun (qp : Level) (_ : Eq Bool (level_eqb (Level.param pm) qp) Bool.true -> Eq Level (Level.param pm) qp) => ",
-                "fun (h : Eq Bool (level_eqb (Level.param pm) (Level.succ qp)) Bool.true) => ",
-                "bool_false_ne_true (Eq Level (Level.param pm) (Level.succ qp)) h) ",
-                "(fun (ql : Level) (qr : Level) (_ : Eq Bool (level_eqb (Level.param pm) ql) Bool.true -> Eq Level (Level.param pm) ql) (_ : Eq Bool (level_eqb (Level.param pm) qr) Bool.true -> Eq Level (Level.param pm) qr) => ",
-                "fun (h : Eq Bool (level_eqb (Level.param pm) (Level.max ql qr)) Bool.true) => ",
-                "bool_false_ne_true (Eq Level (Level.param pm) (Level.max ql qr)) h) ",
-                "(fun (ql : Level) (qr : Level) (_ : Eq Bool (level_eqb (Level.param pm) ql) Bool.true -> Eq Level (Level.param pm) ql) (_ : Eq Bool (level_eqb (Level.param pm) qr) Bool.true -> Eq Level (Level.param pm) qr) => ",
-                "fun (h : Eq Bool (level_eqb (Level.param pm) (Level.imax ql qr)) Bool.true) => ",
-                "bool_false_ne_true (Eq Level (Level.param pm) (Level.imax ql qr)) h) ",
-                "(fun (qm : Name) => fun (h : Eq Bool (level_eqb (Level.param pm) (Level.param qm)) Bool.true) => ",
+                "fun (b : Level) => @Level.rec ",
+                "(fun (zb : Level) => @Eq Bool (level_eqb (Level.param pm) zb) Bool.true -> @Eq Level (Level.param pm) zb) ",
+                "(fun (h : @Eq Bool (level_eqb (Level.param pm) Level.zero) Bool.true) => ",
+                "bool_false_ne_true (@Eq Level (Level.param pm) Level.zero) h) ",
+                "(fun (qp : Level) (_ : @Eq Bool (level_eqb (Level.param pm) qp) Bool.true -> @Eq Level (Level.param pm) qp) => ",
+                "fun (h : @Eq Bool (level_eqb (Level.param pm) (Level.succ qp)) Bool.true) => ",
+                "bool_false_ne_true (@Eq Level (Level.param pm) (Level.succ qp)) h) ",
+                "(fun (ql : Level) (qr : Level) (_ : @Eq Bool (level_eqb (Level.param pm) ql) Bool.true -> @Eq Level (Level.param pm) ql) (_ : @Eq Bool (level_eqb (Level.param pm) qr) Bool.true -> @Eq Level (Level.param pm) qr) => ",
+                "fun (h : @Eq Bool (level_eqb (Level.param pm) (Level.max ql qr)) Bool.true) => ",
+                "bool_false_ne_true (@Eq Level (Level.param pm) (Level.max ql qr)) h) ",
+                "(fun (ql : Level) (qr : Level) (_ : @Eq Bool (level_eqb (Level.param pm) ql) Bool.true -> @Eq Level (Level.param pm) ql) (_ : @Eq Bool (level_eqb (Level.param pm) qr) Bool.true -> @Eq Level (Level.param pm) qr) => ",
+                "fun (h : @Eq Bool (level_eqb (Level.param pm) (Level.imax ql qr)) Bool.true) => ",
+                "bool_false_ne_true (@Eq Level (Level.param pm) (Level.imax ql qr)) h) ",
+                "(fun (qm : Name) => fun (h : @Eq Bool (level_eqb (Level.param pm) (Level.param qm)) Bool.true) => ",
                 "Eq.cong Name Level Level.param pm qm (name_eqb_eq pm qm h)) ",
                 "b) ",
                 "a",
@@ -285,7 +285,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def level_eval (r : Name -> Nat) (l : Level) : Nat := ",
-                "Level.rec (fun (_ : Level) => Nat) ",
+                "@Level.rec (fun (_ : Level) => Nat) ",
                 "Nat.zero ",
                 "(fun (p : Level) (ih : Nat) => Nat.succ ih) ",
                 "(fun (l1 : Level) (l2 : Level) (ih1 : Nat) (ih2 : Nat) => nat_max ih1 ih2) ",
@@ -306,42 +306,42 @@ impl Specification {
         self.add_definition(Self::derived_eq_lemma(
             "level_is_zero_sound",
             concat!(
-                "forall (l : Level), Eq Bool (level_is_zero l) Bool.true -> ",
-                "forall (r : Name -> Nat), Eq Nat (level_eval r l) Nat.zero"
+                "forall (l : Level), @Eq Bool (level_is_zero l) Bool.true -> ",
+                "forall (r : Name -> Nat), @Eq Nat (level_eval r l) Nat.zero"
             ),
             concat!(
-                "fun (l : Level) => Level.rec ",
-                "(fun (z : Level) => Eq Bool (level_is_zero z) Bool.true -> forall (r : Name -> Nat), Eq Nat (level_eval r z) Nat.zero) ",
+                "fun (l : Level) => @Level.rec ",
+                "(fun (z : Level) => @Eq Bool (level_is_zero z) Bool.true -> forall (r : Name -> Nat), @Eq Nat (level_eval r z) Nat.zero) ",
                 // zero
-                "(fun (_ : Eq Bool (level_is_zero Level.zero) Bool.true) (r : Name -> Nat) => Eq.refl Nat Nat.zero) ",
+                "(fun (_ : @Eq Bool (level_is_zero Level.zero) Bool.true) (r : Name -> Nat) => @Eq.refl Nat Nat.zero) ",
                 // succ p (absurd: is_zero (succ p) = false)
-                "(fun (p : Level) (ih : Eq Bool (level_is_zero p) Bool.true -> forall (r : Name -> Nat), Eq Nat (level_eval r p) Nat.zero) => ",
-                "fun (h : Eq Bool (level_is_zero (Level.succ p)) Bool.true) (r : Name -> Nat) => ",
-                "bool_false_ne_true (Eq Nat (level_eval r (Level.succ p)) Nat.zero) h) ",
+                "(fun (p : Level) (ih : @Eq Bool (level_is_zero p) Bool.true -> forall (r : Name -> Nat), @Eq Nat (level_eval r p) Nat.zero) => ",
+                "fun (h : @Eq Bool (level_is_zero (Level.succ p)) Bool.true) (r : Name -> Nat) => ",
+                "bool_false_ne_true (@Eq Nat (level_eval r (Level.succ p)) Nat.zero) h) ",
                 // max l1 l2 : band split, rewrite both evals to 0
                 "(fun (l1 : Level) (l2 : Level) ",
-                "(ih1 : Eq Bool (level_is_zero l1) Bool.true -> forall (r : Name -> Nat), Eq Nat (level_eval r l1) Nat.zero) ",
-                "(ih2 : Eq Bool (level_is_zero l2) Bool.true -> forall (r : Name -> Nat), Eq Nat (level_eval r l2) Nat.zero) => ",
-                "fun (h : Eq Bool (level_is_zero (Level.max l1 l2)) Bool.true) (r : Name -> Nat) => ",
+                "(ih1 : @Eq Bool (level_is_zero l1) Bool.true -> forall (r : Name -> Nat), @Eq Nat (level_eval r l1) Nat.zero) ",
+                "(ih2 : @Eq Bool (level_is_zero l2) Bool.true -> forall (r : Name -> Nat), @Eq Nat (level_eval r l2) Nat.zero) => ",
+                "fun (h : @Eq Bool (level_is_zero (Level.max l1 l2)) Bool.true) (r : Name -> Nat) => ",
                 "Eq.trans Nat (nat_max (level_eval r l1) (level_eval r l2)) (nat_max Nat.zero Nat.zero) Nat.zero ",
                 "(Eq.trans Nat (nat_max (level_eval r l1) (level_eval r l2)) (nat_max Nat.zero (level_eval r l2)) (nat_max Nat.zero Nat.zero) ",
                 "(Eq.cong Nat Nat (fun (w : Nat) => nat_max w (level_eval r l2)) (level_eval r l1) Nat.zero ",
                 "(ih1 (band_eq_true_left (level_is_zero l1) (level_is_zero l2) h) r)) ",
                 "(Eq.cong Nat Nat (fun (w : Nat) => nat_max Nat.zero w) (level_eval r l2) Nat.zero ",
                 "(ih2 (band_eq_true_right (level_is_zero l1) (level_is_zero l2) h) r))) ",
-                "(Eq.refl Nat Nat.zero)) ",
+                "(@Eq.refl Nat Nat.zero)) ",
                 // imax l1 l2 : is_zero (imax l1 l2) = is_zero l2; rewrite eval l2 -> 0, imax_nat _ 0 = 0
                 "(fun (l1 : Level) (l2 : Level) ",
-                "(ih1 : Eq Bool (level_is_zero l1) Bool.true -> forall (r : Name -> Nat), Eq Nat (level_eval r l1) Nat.zero) ",
-                "(ih2 : Eq Bool (level_is_zero l2) Bool.true -> forall (r : Name -> Nat), Eq Nat (level_eval r l2) Nat.zero) => ",
-                "fun (h : Eq Bool (level_is_zero (Level.imax l1 l2)) Bool.true) (r : Name -> Nat) => ",
+                "(ih1 : @Eq Bool (level_is_zero l1) Bool.true -> forall (r : Name -> Nat), @Eq Nat (level_eval r l1) Nat.zero) ",
+                "(ih2 : @Eq Bool (level_is_zero l2) Bool.true -> forall (r : Name -> Nat), @Eq Nat (level_eval r l2) Nat.zero) => ",
+                "fun (h : @Eq Bool (level_is_zero (Level.imax l1 l2)) Bool.true) (r : Name -> Nat) => ",
                 "Eq.trans Nat (imax_nat (level_eval r l1) (level_eval r l2)) (imax_nat (level_eval r l1) Nat.zero) Nat.zero ",
                 "(Eq.cong Nat Nat (fun (w : Nat) => imax_nat (level_eval r l1) w) (level_eval r l2) Nat.zero (ih2 h r)) ",
-                "(Eq.refl Nat Nat.zero)) ",
+                "(@Eq.refl Nat Nat.zero)) ",
                 // param n (absurd: is_zero (param n) = false)
                 "(fun (n : Name) => ",
-                "fun (h : Eq Bool (level_is_zero (Level.param n)) Bool.true) (r : Name -> Nat) => ",
-                "bool_false_ne_true (Eq Nat (level_eval r (Level.param n)) Nat.zero) h) ",
+                "fun (h : @Eq Bool (level_is_zero (Level.param n)) Bool.true) (r : Name -> Nat) => ",
+                "bool_false_ne_true (@Eq Nat (level_eval r (Level.param n)) Nat.zero) h) ",
                 "l",
             ),
             "Level::is_zero soundness: a definitely-zero level evaluates to 0 under every parameter \
@@ -381,12 +381,12 @@ impl Specification {
         // 0 + succ b = succ b). The shared core of the "nonzero right arm" helpers.
         self.add_definition(Self::derived_eq_lemma(
             "nat_add_sub_succ_nonzero",
-            "forall (a : Nat) (b : Nat), Eq Bool (nat_is_zero (Nat.add a (Nat.sub (Nat.succ b) a))) Bool.false",
+            "forall (a : Nat) (b : Nat), @Eq Bool (nat_is_zero (Nat.add a (Nat.sub (Nat.succ b) a))) Bool.false",
             concat!(
-                "fun (a : Nat) (b : Nat) => Nat.rec ",
-                "(fun (aa : Nat) => Eq Bool (nat_is_zero (Nat.add aa (Nat.sub (Nat.succ b) aa))) Bool.false) ",
+                "fun (a : Nat) (b : Nat) => @Nat.rec ",
+                "(fun (aa : Nat) => @Eq Bool (nat_is_zero (Nat.add aa (Nat.sub (Nat.succ b) aa))) Bool.false) ",
                 "(Eq.cong Nat Bool (fun (z : Nat) => nat_is_zero z) (Nat.add Nat.zero (Nat.succ b)) (Nat.succ b) (nat_zero_add (Nat.succ b))) ",
-                "(fun (a1 : Nat) (ih : Eq Bool (nat_is_zero (Nat.add a1 (Nat.sub (Nat.succ b) a1))) Bool.false) => ",
+                "(fun (a1 : Nat) (ih : @Eq Bool (nat_is_zero (Nat.add a1 (Nat.sub (Nat.succ b) a1))) Bool.false) => ",
                 "Eq.cong Nat Bool (fun (z : Nat) => nat_is_zero z) (Nat.add (Nat.succ a1) (Nat.sub (Nat.succ b) (Nat.succ a1))) (Nat.succ (Nat.add a1 (Nat.sub (Nat.succ b) (Nat.succ a1)))) (nat_succ_add a1 (Nat.sub (Nat.succ b) (Nat.succ a1)))) ",
                 "a",
             ),
@@ -400,13 +400,13 @@ impl Specification {
         // a succ via nat_succ_add; nat_max 0 b is absurd against the hypothesis).
         self.add_definition(Self::derived_eq_lemma(
             "nat_is_zero_nat_max_left",
-            "forall (a : Nat) (b : Nat), Eq Bool (nat_is_zero a) Bool.false -> Eq Bool (nat_is_zero (nat_max a b)) Bool.false",
+            "forall (a : Nat) (b : Nat), @Eq Bool (nat_is_zero a) Bool.false -> @Eq Bool (nat_is_zero (nat_max a b)) Bool.false",
             concat!(
-                "fun (a : Nat) (b : Nat) => Nat.rec ",
-                "(fun (aa : Nat) => Eq Bool (nat_is_zero aa) Bool.false -> Eq Bool (nat_is_zero (nat_max aa b)) Bool.false) ",
-                "(fun (h : Eq Bool (nat_is_zero Nat.zero) Bool.false) => bool_false_ne_true (Eq Bool (nat_is_zero (nat_max Nat.zero b)) Bool.false) (Eq.symm Bool Bool.true Bool.false h)) ",
-                "(fun (a1 : Nat) (ih : Eq Bool (nat_is_zero a1) Bool.false -> Eq Bool (nat_is_zero (nat_max a1 b)) Bool.false) => ",
-                "fun (h : Eq Bool (nat_is_zero (Nat.succ a1)) Bool.false) => ",
+                "fun (a : Nat) (b : Nat) => @Nat.rec ",
+                "(fun (aa : Nat) => @Eq Bool (nat_is_zero aa) Bool.false -> @Eq Bool (nat_is_zero (nat_max aa b)) Bool.false) ",
+                "(fun (h : @Eq Bool (nat_is_zero Nat.zero) Bool.false) => bool_false_ne_true (@Eq Bool (nat_is_zero (nat_max Nat.zero b)) Bool.false) (Eq.symm Bool Bool.true Bool.false h)) ",
+                "(fun (a1 : Nat) (ih : @Eq Bool (nat_is_zero a1) Bool.false -> @Eq Bool (nat_is_zero (nat_max a1 b)) Bool.false) => ",
+                "fun (h : @Eq Bool (nat_is_zero (Nat.succ a1)) Bool.false) => ",
                 "Eq.cong Nat Bool (fun (z : Nat) => nat_is_zero z) (Nat.add (Nat.succ a1) (Nat.sub b (Nat.succ a1))) (Nat.succ (Nat.add a1 (Nat.sub b (Nat.succ a1)))) (nat_succ_add a1 (Nat.sub b (Nat.succ a1)))) ",
                 "a",
             ),
@@ -419,13 +419,13 @@ impl Specification {
         // Helper #3: nonzero right operand => nat_max nonzero (via helper #1).
         self.add_definition(Self::derived_eq_lemma(
             "nat_is_zero_nat_max_right",
-            "forall (a : Nat) (b : Nat), Eq Bool (nat_is_zero b) Bool.false -> Eq Bool (nat_is_zero (nat_max a b)) Bool.false",
+            "forall (a : Nat) (b : Nat), @Eq Bool (nat_is_zero b) Bool.false -> @Eq Bool (nat_is_zero (nat_max a b)) Bool.false",
             concat!(
-                "fun (a : Nat) (b : Nat) => Nat.rec ",
-                "(fun (bb : Nat) => Eq Bool (nat_is_zero bb) Bool.false -> Eq Bool (nat_is_zero (nat_max a bb)) Bool.false) ",
-                "(fun (h : Eq Bool (nat_is_zero Nat.zero) Bool.false) => bool_false_ne_true (Eq Bool (nat_is_zero (nat_max a Nat.zero)) Bool.false) (Eq.symm Bool Bool.true Bool.false h)) ",
-                "(fun (b1 : Nat) (ih : Eq Bool (nat_is_zero b1) Bool.false -> Eq Bool (nat_is_zero (nat_max a b1)) Bool.false) => ",
-                "fun (h : Eq Bool (nat_is_zero (Nat.succ b1)) Bool.false) => nat_add_sub_succ_nonzero a b1) ",
+                "fun (a : Nat) (b : Nat) => @Nat.rec ",
+                "(fun (bb : Nat) => @Eq Bool (nat_is_zero bb) Bool.false -> @Eq Bool (nat_is_zero (nat_max a bb)) Bool.false) ",
+                "(fun (h : @Eq Bool (nat_is_zero Nat.zero) Bool.false) => bool_false_ne_true (@Eq Bool (nat_is_zero (nat_max a Nat.zero)) Bool.false) (Eq.symm Bool Bool.true Bool.false h)) ",
+                "(fun (b1 : Nat) (ih : @Eq Bool (nat_is_zero b1) Bool.false -> @Eq Bool (nat_is_zero (nat_max a b1)) Bool.false) => ",
+                "fun (h : @Eq Bool (nat_is_zero (Nat.succ b1)) Bool.false) => nat_add_sub_succ_nonzero a b1) ",
                 "b",
             ),
             "nat_is_zero b = false -> nat_is_zero (nat_max a b) = false. Nat.rec on b: base \
@@ -438,13 +438,13 @@ impl Specification {
         // IS a + (succ b1 - a), the SAME reduct as nat_max, so reuses helper #1.
         self.add_definition(Self::derived_eq_lemma(
             "nat_is_zero_imax_nat_right",
-            "forall (a : Nat) (b : Nat), Eq Bool (nat_is_zero b) Bool.false -> Eq Bool (nat_is_zero (imax_nat a b)) Bool.false",
+            "forall (a : Nat) (b : Nat), @Eq Bool (nat_is_zero b) Bool.false -> @Eq Bool (nat_is_zero (imax_nat a b)) Bool.false",
             concat!(
-                "fun (a : Nat) (b : Nat) => Nat.rec ",
-                "(fun (bb : Nat) => Eq Bool (nat_is_zero bb) Bool.false -> Eq Bool (nat_is_zero (imax_nat a bb)) Bool.false) ",
-                "(fun (h : Eq Bool (nat_is_zero Nat.zero) Bool.false) => bool_false_ne_true (Eq Bool (nat_is_zero (imax_nat a Nat.zero)) Bool.false) (Eq.symm Bool Bool.true Bool.false h)) ",
-                "(fun (b1 : Nat) (ih : Eq Bool (nat_is_zero b1) Bool.false -> Eq Bool (nat_is_zero (imax_nat a b1)) Bool.false) => ",
-                "fun (h : Eq Bool (nat_is_zero (Nat.succ b1)) Bool.false) => nat_add_sub_succ_nonzero a b1) ",
+                "fun (a : Nat) (b : Nat) => @Nat.rec ",
+                "(fun (bb : Nat) => @Eq Bool (nat_is_zero bb) Bool.false -> @Eq Bool (nat_is_zero (imax_nat a bb)) Bool.false) ",
+                "(fun (h : @Eq Bool (nat_is_zero Nat.zero) Bool.false) => bool_false_ne_true (@Eq Bool (nat_is_zero (imax_nat a Nat.zero)) Bool.false) (Eq.symm Bool Bool.true Bool.false h)) ",
+                "(fun (b1 : Nat) (ih : @Eq Bool (nat_is_zero b1) Bool.false -> @Eq Bool (nat_is_zero (imax_nat a b1)) Bool.false) => ",
+                "fun (h : @Eq Bool (nat_is_zero (Nat.succ b1)) Bool.false) => nat_add_sub_succ_nonzero a b1) ",
                 "b",
             ),
             "nat_is_zero b = false -> nat_is_zero (imax_nat a b) = false. Nat.rec on b: base \
@@ -457,13 +457,13 @@ impl Specification {
         // a + (succ b1 - a) at b = succ b1 — Eq.refl).
         self.add_definition(Self::derived_eq_lemma(
             "nat_max_eq_imax_nonzero",
-            "forall (a : Nat) (b : Nat), Eq Bool (nat_is_zero b) Bool.false -> Eq Nat (nat_max a b) (imax_nat a b)",
+            "forall (a : Nat) (b : Nat), @Eq Bool (nat_is_zero b) Bool.false -> @Eq Nat (nat_max a b) (imax_nat a b)",
             concat!(
-                "fun (a : Nat) (b : Nat) => Nat.rec ",
-                "(fun (bb : Nat) => Eq Bool (nat_is_zero bb) Bool.false -> Eq Nat (nat_max a bb) (imax_nat a bb)) ",
-                "(fun (h : Eq Bool (nat_is_zero Nat.zero) Bool.false) => bool_false_ne_true (Eq Nat (nat_max a Nat.zero) (imax_nat a Nat.zero)) (Eq.symm Bool Bool.true Bool.false h)) ",
-                "(fun (b1 : Nat) (ih : Eq Bool (nat_is_zero b1) Bool.false -> Eq Nat (nat_max a b1) (imax_nat a b1)) => ",
-                "fun (h : Eq Bool (nat_is_zero (Nat.succ b1)) Bool.false) => Eq.refl Nat (Nat.add a (Nat.sub (Nat.succ b1) a))) ",
+                "fun (a : Nat) (b : Nat) => @Nat.rec ",
+                "(fun (bb : Nat) => @Eq Bool (nat_is_zero bb) Bool.false -> @Eq Nat (nat_max a bb) (imax_nat a bb)) ",
+                "(fun (h : @Eq Bool (nat_is_zero Nat.zero) Bool.false) => bool_false_ne_true (@Eq Nat (nat_max a Nat.zero) (imax_nat a Nat.zero)) (Eq.symm Bool Bool.true Bool.false h)) ",
+                "(fun (b1 : Nat) (ih : @Eq Bool (nat_is_zero b1) Bool.false -> @Eq Nat (nat_max a b1) (imax_nat a b1)) => ",
+                "fun (h : @Eq Bool (nat_is_zero (Nat.succ b1)) Bool.false) => @Eq.refl Nat (Nat.add a (Nat.sub (Nat.succ b1) a))) ",
                 "b",
             ),
             "nat_is_zero b = false -> nat_max a b = imax_nat a b. Nat.rec on b: base absurd; \
@@ -475,12 +475,12 @@ impl Specification {
         // Helper #6: imax_nat 0 m = m (impredicative left-zero is the max identity).
         self.add_definition(Self::derived_eq_lemma(
             "imax_nat_zero_left",
-            "forall (m : Nat), Eq Nat (imax_nat Nat.zero m) m",
+            "forall (m : Nat), @Eq Nat (imax_nat Nat.zero m) m",
             concat!(
-                "fun (m : Nat) => Nat.rec ",
-                "(fun (mm : Nat) => Eq Nat (imax_nat Nat.zero mm) mm) ",
-                "(Eq.refl Nat Nat.zero) ",
-                "(fun (m1 : Nat) (ih : Eq Nat (imax_nat Nat.zero m1) m1) => nat_zero_add (Nat.succ m1)) ",
+                "fun (m : Nat) => @Nat.rec ",
+                "(fun (mm : Nat) => @Eq Nat (imax_nat Nat.zero mm) mm) ",
+                "(@Eq.refl Nat Nat.zero) ",
+                "(fun (m1 : Nat) (ih : @Eq Nat (imax_nat Nat.zero m1) m1) => nat_zero_add (Nat.succ m1)) ",
                 "m",
             ),
             "imax_nat 0 m = m. Nat.rec on m: base imax_nat 0 0 = 0 (Eq.refl); step \
@@ -492,12 +492,12 @@ impl Specification {
         // Helper #7: imax_nat 1 m = m (Lean-4 is_one parity, as a Nat identity).
         self.add_definition(Self::derived_eq_lemma(
             "imax_nat_one_left",
-            "forall (m : Nat), Eq Nat (imax_nat (Nat.succ Nat.zero) m) m",
+            "forall (m : Nat), @Eq Nat (imax_nat (Nat.succ Nat.zero) m) m",
             concat!(
-                "fun (m : Nat) => Nat.rec ",
-                "(fun (mm : Nat) => Eq Nat (imax_nat (Nat.succ Nat.zero) mm) mm) ",
-                "(Eq.refl Nat Nat.zero) ",
-                "(fun (m1 : Nat) (ih : Eq Nat (imax_nat (Nat.succ Nat.zero) m1) m1) => ",
+                "fun (m : Nat) => @Nat.rec ",
+                "(fun (mm : Nat) => @Eq Nat (imax_nat (Nat.succ Nat.zero) mm) mm) ",
+                "(@Eq.refl Nat Nat.zero) ",
+                "(fun (m1 : Nat) (ih : @Eq Nat (imax_nat (Nat.succ Nat.zero) m1) m1) => ",
                 "Eq.trans Nat (Nat.add (Nat.succ Nat.zero) m1) (Nat.succ (Nat.add Nat.zero m1)) (Nat.succ m1) (nat_succ_add Nat.zero m1) (Eq.cong Nat Nat (fun (z : Nat) => Nat.succ z) (Nat.add Nat.zero m1) m1 (nat_zero_add m1))) ",
                 "m",
             ),
@@ -510,12 +510,12 @@ impl Specification {
         // Helper #8: imax_nat n n = n (self-imax collapses to the argument).
         self.add_definition(Self::derived_eq_lemma(
             "imax_nat_self",
-            "forall (n : Nat), Eq Nat (imax_nat n n) n",
+            "forall (n : Nat), @Eq Nat (imax_nat n n) n",
             concat!(
-                "fun (n : Nat) => Nat.rec ",
-                "(fun (nn : Nat) => Eq Nat (imax_nat nn nn) nn) ",
-                "(Eq.refl Nat Nat.zero) ",
-                "(fun (n1 : Nat) (ih : Eq Nat (imax_nat n1 n1) n1) => ",
+                "fun (n : Nat) => @Nat.rec ",
+                "(fun (nn : Nat) => @Eq Nat (imax_nat nn nn) nn) ",
+                "(@Eq.refl Nat Nat.zero) ",
+                "(fun (n1 : Nat) (ih : @Eq Nat (imax_nat n1 n1) n1) => ",
                 "Eq.cong Nat Nat (fun (s : Nat) => Nat.add (Nat.succ n1) s) (Nat.sub (Nat.succ n1) (Nat.succ n1)) Nat.zero (nat_sub_self (Nat.succ n1))) ",
                 "n",
             ),
@@ -533,47 +533,48 @@ impl Specification {
         // nat_sub_self / nat_zero_add / nat_sub_zero_left; the stuck arm is Eq.refl
         // (level_eval of Level.max IS nat_max).
         {
-            let inner2 = "(Bool.rec (fun (_ : Bool) => Level) (Level.max u v) u (level_is_zero v))";
+            let inner2 =
+                "(@Bool.rec (fun (_ : Bool) => Level) (Level.max u v) u (level_is_zero v))";
             let inner1 =
-                format!("(Bool.rec (fun (_ : Bool) => Level) {inner2} v (level_is_zero u))");
+                format!("(@Bool.rec (fun (_ : Bool) => Level) {inner2} v (level_is_zero u))");
             let rhs_max = "nat_max (level_eval r u) (level_eval r v)";
             let value_max = format!(
                 "fun (u : Level) (v : Level) (r : Name -> Nat) => \
-                 Bool.rec \
-                 (fun (g1 : Bool) => Eq Bool (level_eqb u v) g1 -> Eq Nat (level_eval r (Bool.rec (fun (_ : Bool) => Level) {inner1} u g1)) ({rhs_max})) \
-                 (fun (_ : Eq Bool (level_eqb u v) Bool.false) => \
-                 Bool.rec \
-                 (fun (g2 : Bool) => Eq Bool (level_is_zero u) g2 -> Eq Nat (level_eval r (Bool.rec (fun (_ : Bool) => Level) {inner2} v g2)) ({rhs_max})) \
-                 (fun (_ : Eq Bool (level_is_zero u) Bool.false) => \
-                 Bool.rec \
-                 (fun (g3 : Bool) => Eq Bool (level_is_zero v) g3 -> Eq Nat (level_eval r (Bool.rec (fun (_ : Bool) => Level) (Level.max u v) u g3)) ({rhs_max})) \
-                 (fun (_ : Eq Bool (level_is_zero v) Bool.false) => Eq.refl Nat ({rhs_max})) \
-                 (fun (hz3 : Eq Bool (level_is_zero v) Bool.true) => \
+                 @Bool.rec \
+                 (fun (g1 : Bool) => @Eq Bool (level_eqb u v) g1 -> @Eq Nat (level_eval r (@Bool.rec (fun (_ : Bool) => Level) {inner1} u g1)) ({rhs_max})) \
+                 (fun (_ : @Eq Bool (level_eqb u v) Bool.false) => \
+                 @Bool.rec \
+                 (fun (g2 : Bool) => @Eq Bool (level_is_zero u) g2 -> @Eq Nat (level_eval r (@Bool.rec (fun (_ : Bool) => Level) {inner2} v g2)) ({rhs_max})) \
+                 (fun (_ : @Eq Bool (level_is_zero u) Bool.false) => \
+                 @Bool.rec \
+                 (fun (g3 : Bool) => @Eq Bool (level_is_zero v) g3 -> @Eq Nat (level_eval r (@Bool.rec (fun (_ : Bool) => Level) (Level.max u v) u g3)) ({rhs_max})) \
+                 (fun (_ : @Eq Bool (level_is_zero v) Bool.false) => @Eq.refl Nat ({rhs_max})) \
+                 (fun (hz3 : @Eq Bool (level_is_zero v) Bool.true) => \
                  Eq.symm Nat ({rhs_max}) (level_eval r u) \
                  (Eq.trans Nat ({rhs_max}) (nat_max (level_eval r u) Nat.zero) (level_eval r u) \
                  (Eq.cong Nat Nat (fun (z : Nat) => nat_max (level_eval r u) z) (level_eval r v) Nat.zero (level_is_zero_sound v hz3 r)) \
                  (Eq.cong Nat Nat (fun (s : Nat) => Nat.add (level_eval r u) s) (Nat.sub Nat.zero (level_eval r u)) Nat.zero (nat_sub_zero_left (level_eval r u))))) \
                  (level_is_zero v) \
-                 (Eq.refl Bool (level_is_zero v))) \
-                 (fun (hz2 : Eq Bool (level_is_zero u) Bool.true) => \
+                 (@Eq.refl Bool (level_is_zero v))) \
+                 (fun (hz2 : @Eq Bool (level_is_zero u) Bool.true) => \
                  Eq.symm Nat ({rhs_max}) (level_eval r v) \
                  (Eq.trans Nat ({rhs_max}) (nat_max Nat.zero (level_eval r v)) (level_eval r v) \
                  (Eq.cong Nat Nat (fun (z : Nat) => nat_max z (level_eval r v)) (level_eval r u) Nat.zero (level_is_zero_sound u hz2 r)) \
                  (nat_zero_add (level_eval r v)))) \
                  (level_is_zero u) \
-                 (Eq.refl Bool (level_is_zero u))) \
-                 (fun (he1 : Eq Bool (level_eqb u v) Bool.true) => \
+                 (@Eq.refl Bool (level_is_zero u))) \
+                 (fun (he1 : @Eq Bool (level_eqb u v) Bool.true) => \
                  Eq.symm Nat ({rhs_max}) (level_eval r u) \
                  (Eq.trans Nat ({rhs_max}) (nat_max (level_eval r u) (level_eval r u)) (level_eval r u) \
                  (Eq.cong Nat Nat (fun (z : Nat) => nat_max (level_eval r u) z) (level_eval r v) (level_eval r u) \
                  (Eq.cong Level Nat (fun (w : Level) => level_eval r w) v u (Eq.symm Level u v (level_eqb_eq u v he1)))) \
                  (Eq.cong Nat Nat (fun (s : Nat) => Nat.add (level_eval r u) s) (Nat.sub (level_eval r u) (level_eval r u)) Nat.zero (nat_sub_self (level_eval r u))))) \
                  (level_eqb u v) \
-                 (Eq.refl Bool (level_eqb u v))"
+                 (@Eq.refl Bool (level_eqb u v))"
             );
             self.add_definition(Self::derived_eq_lemma(
                 "level_max_eval",
-                "forall (u : Level) (v : Level) (r : Name -> Nat), Eq Nat (level_eval r (level_max u v)) (nat_max (level_eval r u) (level_eval r v))",
+                "forall (u : Level) (v : Level) (r : Name -> Nat), @Eq Nat (level_eval r (level_max u v)) (nat_max (level_eval r u) (level_eval r v))",
                 &value_max,
                 "Level::max preserves the Nat denotation: level_eval (level_max u v) = \
                  nat_max (eval u) (eval v), for every parameter assignment. Three nested \
@@ -598,43 +599,43 @@ impl Specification {
         // feeds helper #2/#3; imax reduces to its second operand and feeds helper #4.
         self.add_definition(Self::derived_eq_lemma(
             "level_is_nonzero_sound",
-            "forall (l : Level), Eq Bool (level_is_nonzero l) Bool.true -> forall (r : Name -> Nat), Eq Bool (nat_is_zero (level_eval r l)) Bool.false",
+            "forall (l : Level), @Eq Bool (level_is_nonzero l) Bool.true -> forall (r : Name -> Nat), @Eq Bool (nat_is_zero (level_eval r l)) Bool.false",
             concat!(
-                "fun (l : Level) => Level.rec ",
-                "(fun (z : Level) => Eq Bool (level_is_nonzero z) Bool.true -> forall (r : Name -> Nat), Eq Bool (nat_is_zero (level_eval r z)) Bool.false) ",
+                "fun (l : Level) => @Level.rec ",
+                "(fun (z : Level) => @Eq Bool (level_is_nonzero z) Bool.true -> forall (r : Name -> Nat), @Eq Bool (nat_is_zero (level_eval r z)) Bool.false) ",
                 // zero: level_is_nonzero zero = false, hypothesis absurd
-                "(fun (h : Eq Bool (level_is_nonzero Level.zero) Bool.true) (r : Name -> Nat) => bool_false_ne_true (Eq Bool (nat_is_zero (level_eval r Level.zero)) Bool.false) h) ",
+                "(fun (h : @Eq Bool (level_is_nonzero Level.zero) Bool.true) (r : Name -> Nat) => bool_false_ne_true (@Eq Bool (nat_is_zero (level_eval r Level.zero)) Bool.false) h) ",
                 // succ p: eval (succ p) = succ (eval p), nat_is_zero (succ _) = false
-                "(fun (p : Level) (ih : Eq Bool (level_is_nonzero p) Bool.true -> forall (r : Name -> Nat), Eq Bool (nat_is_zero (level_eval r p)) Bool.false) => ",
-                "fun (h : Eq Bool (level_is_nonzero (Level.succ p)) Bool.true) (r : Name -> Nat) => Eq.refl Bool Bool.false) ",
+                "(fun (p : Level) (ih : @Eq Bool (level_is_nonzero p) Bool.true -> forall (r : Name -> Nat), @Eq Bool (nat_is_zero (level_eval r p)) Bool.false) => ",
+                "fun (h : @Eq Bool (level_is_nonzero (Level.succ p)) Bool.true) (r : Name -> Nat) => @Eq.refl Bool Bool.false) ",
                 // max l1 l2: level_is_nonzero = Bool.or; split via Bool.rec on nonzero l1
                 "(fun (l1 : Level) (l2 : Level) ",
-                "(ih1 : Eq Bool (level_is_nonzero l1) Bool.true -> forall (r : Name -> Nat), Eq Bool (nat_is_zero (level_eval r l1)) Bool.false) ",
-                "(ih2 : Eq Bool (level_is_nonzero l2) Bool.true -> forall (r : Name -> Nat), Eq Bool (nat_is_zero (level_eval r l2)) Bool.false) => ",
-                "fun (h : Eq Bool (level_is_nonzero (Level.max l1 l2)) Bool.true) (r : Name -> Nat) => ",
-                "Bool.rec ",
-                "(fun (bb : Bool) => Eq Bool (level_is_nonzero l1) bb -> Eq Bool (nat_is_zero (level_eval r (Level.max l1 l2))) Bool.false) ",
+                "(ih1 : @Eq Bool (level_is_nonzero l1) Bool.true -> forall (r : Name -> Nat), @Eq Bool (nat_is_zero (level_eval r l1)) Bool.false) ",
+                "(ih2 : @Eq Bool (level_is_nonzero l2) Bool.true -> forall (r : Name -> Nat), @Eq Bool (nat_is_zero (level_eval r l2)) Bool.false) => ",
+                "fun (h : @Eq Bool (level_is_nonzero (Level.max l1 l2)) Bool.true) (r : Name -> Nat) => ",
+                "@Bool.rec ",
+                "(fun (bb : Bool) => @Eq Bool (level_is_nonzero l1) bb -> @Eq Bool (nat_is_zero (level_eval r (Level.max l1 l2))) Bool.false) ",
                 // nonzero l1 = false: then nonzero l2 = true (from h via Bool.or false _)
-                "(fun (heq : Eq Bool (level_is_nonzero l1) Bool.false) => ",
+                "(fun (heq : @Eq Bool (level_is_nonzero l1) Bool.false) => ",
                 "nat_is_zero_nat_max_right (level_eval r l1) (level_eval r l2) ",
                 "(ih2 (Eq.trans Bool (Bool.or Bool.false (level_is_nonzero l2)) (Bool.or (level_is_nonzero l1) (level_is_nonzero l2)) Bool.true ",
                 "(Eq.symm Bool (Bool.or (level_is_nonzero l1) (level_is_nonzero l2)) (Bool.or Bool.false (level_is_nonzero l2)) ",
                 "(Eq.cong Bool Bool (fun (w : Bool) => Bool.or w (level_is_nonzero l2)) (level_is_nonzero l1) Bool.false heq)) ",
                 "h) r)) ",
                 // nonzero l1 = true: ih1 directly
-                "(fun (heq : Eq Bool (level_is_nonzero l1) Bool.true) => ",
+                "(fun (heq : @Eq Bool (level_is_nonzero l1) Bool.true) => ",
                 "nat_is_zero_nat_max_left (level_eval r l1) (level_eval r l2) (ih1 heq r)) ",
                 "(level_is_nonzero l1) ",
-                "(Eq.refl Bool (level_is_nonzero l1))) ",
+                "(@Eq.refl Bool (level_is_nonzero l1))) ",
                 // imax l1 l2: level_is_nonzero (imax) = nonzero l2; eval (imax) = imax_nat
                 "(fun (l1 : Level) (l2 : Level) ",
-                "(ih1 : Eq Bool (level_is_nonzero l1) Bool.true -> forall (r : Name -> Nat), Eq Bool (nat_is_zero (level_eval r l1)) Bool.false) ",
-                "(ih2 : Eq Bool (level_is_nonzero l2) Bool.true -> forall (r : Name -> Nat), Eq Bool (nat_is_zero (level_eval r l2)) Bool.false) => ",
-                "fun (h : Eq Bool (level_is_nonzero (Level.imax l1 l2)) Bool.true) (r : Name -> Nat) => ",
+                "(ih1 : @Eq Bool (level_is_nonzero l1) Bool.true -> forall (r : Name -> Nat), @Eq Bool (nat_is_zero (level_eval r l1)) Bool.false) ",
+                "(ih2 : @Eq Bool (level_is_nonzero l2) Bool.true -> forall (r : Name -> Nat), @Eq Bool (nat_is_zero (level_eval r l2)) Bool.false) => ",
+                "fun (h : @Eq Bool (level_is_nonzero (Level.imax l1 l2)) Bool.true) (r : Name -> Nat) => ",
                 "nat_is_zero_imax_nat_right (level_eval r l1) (level_eval r l2) (ih2 h r)) ",
                 // param n: level_is_nonzero (param n) = false, hypothesis absurd
                 "(fun (n : Name) => ",
-                "fun (h : Eq Bool (level_is_nonzero (Level.param n)) Bool.true) (r : Name -> Nat) => bool_false_ne_true (Eq Bool (nat_is_zero (level_eval r (Level.param n))) Bool.false) h) ",
+                "fun (h : @Eq Bool (level_is_nonzero (Level.param n)) Bool.true) (r : Name -> Nat) => bool_false_ne_true (@Eq Bool (nat_is_zero (level_eval r (Level.param n))) Bool.false) h) ",
                 "l",
             ),
             "Level::is_nonzero soundness: a definitely-nonzero level evaluates to a nonzero Nat \
@@ -659,70 +660,70 @@ impl Specification {
         // + level_max_eval + nat_max_eq_imax_nonzero for the max arm; level_eqb_eq ->
         // imax_nat_one_left / imax_nat_self); the stuck arm is Eq.refl.
         {
-            let b4 = "(Bool.rec (fun (_ : Bool) => Level) (Level.imax u v) u (level_eqb u v))";
+            let b4 = "(@Bool.rec (fun (_ : Bool) => Level) (Level.imax u v) u (level_eqb u v))";
             let b3 = format!(
-                "(Bool.rec (fun (_ : Bool) => Level) {b4} v (level_eqb u (Level.succ Level.zero)))"
+                "(@Bool.rec (fun (_ : Bool) => Level) {b4} v (level_eqb u (Level.succ Level.zero)))"
             );
-            let b2 = format!("(Bool.rec (fun (_ : Bool) => Level) {b3} v (level_is_zero u))");
+            let b2 = format!("(@Bool.rec (fun (_ : Bool) => Level) {b3} v (level_is_zero u))");
             let b1 = format!(
-                "(Bool.rec (fun (_ : Bool) => Level) {b2} (level_max u v) (level_is_nonzero v))"
+                "(@Bool.rec (fun (_ : Bool) => Level) {b2} (level_max u v) (level_is_nonzero v))"
             );
             let rhs_i = "imax_nat (level_eval r u) (level_eval r v)";
             let value_imax = format!(
                 "fun (u : Level) (v : Level) (r : Name -> Nat) => \
-                 Bool.rec \
-                 (fun (gz2 : Bool) => Eq Bool (level_is_zero v) gz2 -> Eq Nat (level_eval r (Bool.rec (fun (_ : Bool) => Level) {b1} Level.zero gz2)) ({rhs_i})) \
-                 (fun (_ : Eq Bool (level_is_zero v) Bool.false) => \
-                 Bool.rec \
-                 (fun (gnz2 : Bool) => Eq Bool (level_is_nonzero v) gnz2 -> Eq Nat (level_eval r (Bool.rec (fun (_ : Bool) => Level) {b2} (level_max u v) gnz2)) ({rhs_i})) \
-                 (fun (_ : Eq Bool (level_is_nonzero v) Bool.false) => \
-                 Bool.rec \
-                 (fun (gz1 : Bool) => Eq Bool (level_is_zero u) gz1 -> Eq Nat (level_eval r (Bool.rec (fun (_ : Bool) => Level) {b3} v gz1)) ({rhs_i})) \
-                 (fun (_ : Eq Bool (level_is_zero u) Bool.false) => \
-                 Bool.rec \
-                 (fun (ge1 : Bool) => Eq Bool (level_eqb u (Level.succ Level.zero)) ge1 -> Eq Nat (level_eval r (Bool.rec (fun (_ : Bool) => Level) {b4} v ge1)) ({rhs_i})) \
-                 (fun (_ : Eq Bool (level_eqb u (Level.succ Level.zero)) Bool.false) => \
-                 Bool.rec \
-                 (fun (ge2 : Bool) => Eq Bool (level_eqb u v) ge2 -> Eq Nat (level_eval r (Bool.rec (fun (_ : Bool) => Level) (Level.imax u v) u ge2)) ({rhs_i})) \
-                 (fun (_ : Eq Bool (level_eqb u v) Bool.false) => Eq.refl Nat ({rhs_i})) \
-                 (fun (he2 : Eq Bool (level_eqb u v) Bool.true) => \
+                 @Bool.rec \
+                 (fun (gz2 : Bool) => @Eq Bool (level_is_zero v) gz2 -> @Eq Nat (level_eval r (@Bool.rec (fun (_ : Bool) => Level) {b1} Level.zero gz2)) ({rhs_i})) \
+                 (fun (_ : @Eq Bool (level_is_zero v) Bool.false) => \
+                 @Bool.rec \
+                 (fun (gnz2 : Bool) => @Eq Bool (level_is_nonzero v) gnz2 -> @Eq Nat (level_eval r (@Bool.rec (fun (_ : Bool) => Level) {b2} (level_max u v) gnz2)) ({rhs_i})) \
+                 (fun (_ : @Eq Bool (level_is_nonzero v) Bool.false) => \
+                 @Bool.rec \
+                 (fun (gz1 : Bool) => @Eq Bool (level_is_zero u) gz1 -> @Eq Nat (level_eval r (@Bool.rec (fun (_ : Bool) => Level) {b3} v gz1)) ({rhs_i})) \
+                 (fun (_ : @Eq Bool (level_is_zero u) Bool.false) => \
+                 @Bool.rec \
+                 (fun (ge1 : Bool) => @Eq Bool (level_eqb u (Level.succ Level.zero)) ge1 -> @Eq Nat (level_eval r (@Bool.rec (fun (_ : Bool) => Level) {b4} v ge1)) ({rhs_i})) \
+                 (fun (_ : @Eq Bool (level_eqb u (Level.succ Level.zero)) Bool.false) => \
+                 @Bool.rec \
+                 (fun (ge2 : Bool) => @Eq Bool (level_eqb u v) ge2 -> @Eq Nat (level_eval r (@Bool.rec (fun (_ : Bool) => Level) (Level.imax u v) u ge2)) ({rhs_i})) \
+                 (fun (_ : @Eq Bool (level_eqb u v) Bool.false) => @Eq.refl Nat ({rhs_i})) \
+                 (fun (he2 : @Eq Bool (level_eqb u v) Bool.true) => \
                  Eq.symm Nat ({rhs_i}) (level_eval r u) \
                  (Eq.trans Nat ({rhs_i}) (imax_nat (level_eval r u) (level_eval r u)) (level_eval r u) \
                  (Eq.cong Nat Nat (fun (z : Nat) => imax_nat (level_eval r u) z) (level_eval r v) (level_eval r u) \
                  (Eq.cong Level Nat (fun (w : Level) => level_eval r w) v u (Eq.symm Level u v (level_eqb_eq u v he2)))) \
                  (imax_nat_self (level_eval r u)))) \
                  (level_eqb u v) \
-                 (Eq.refl Bool (level_eqb u v))) \
-                 (fun (he1 : Eq Bool (level_eqb u (Level.succ Level.zero)) Bool.true) => \
+                 (@Eq.refl Bool (level_eqb u v))) \
+                 (fun (he1 : @Eq Bool (level_eqb u (Level.succ Level.zero)) Bool.true) => \
                  Eq.symm Nat ({rhs_i}) (level_eval r v) \
                  (Eq.trans Nat ({rhs_i}) (imax_nat (Nat.succ Nat.zero) (level_eval r v)) (level_eval r v) \
                  (Eq.cong Nat Nat (fun (z : Nat) => imax_nat z (level_eval r v)) (level_eval r u) (Nat.succ Nat.zero) \
                  (Eq.cong Level Nat (fun (w : Level) => level_eval r w) u (Level.succ Level.zero) (level_eqb_eq u (Level.succ Level.zero) he1))) \
                  (imax_nat_one_left (level_eval r v)))) \
                  (level_eqb u (Level.succ Level.zero)) \
-                 (Eq.refl Bool (level_eqb u (Level.succ Level.zero)))) \
-                 (fun (hz1 : Eq Bool (level_is_zero u) Bool.true) => \
+                 (@Eq.refl Bool (level_eqb u (Level.succ Level.zero)))) \
+                 (fun (hz1 : @Eq Bool (level_is_zero u) Bool.true) => \
                  Eq.symm Nat ({rhs_i}) (level_eval r v) \
                  (Eq.trans Nat ({rhs_i}) (imax_nat Nat.zero (level_eval r v)) (level_eval r v) \
                  (Eq.cong Nat Nat (fun (z : Nat) => imax_nat z (level_eval r v)) (level_eval r u) Nat.zero (level_is_zero_sound u hz1 r)) \
                  (imax_nat_zero_left (level_eval r v)))) \
                  (level_is_zero u) \
-                 (Eq.refl Bool (level_is_zero u))) \
-                 (fun (hnz2 : Eq Bool (level_is_nonzero v) Bool.true) => \
+                 (@Eq.refl Bool (level_is_zero u))) \
+                 (fun (hnz2 : @Eq Bool (level_is_nonzero v) Bool.true) => \
                  Eq.trans Nat (level_eval r (level_max u v)) (nat_max (level_eval r u) (level_eval r v)) ({rhs_i}) \
                  (level_max_eval u v r) \
                  (nat_max_eq_imax_nonzero (level_eval r u) (level_eval r v) (level_is_nonzero_sound v hnz2 r))) \
                  (level_is_nonzero v) \
-                 (Eq.refl Bool (level_is_nonzero v))) \
-                 (fun (hz2 : Eq Bool (level_is_zero v) Bool.true) => \
+                 (@Eq.refl Bool (level_is_nonzero v))) \
+                 (fun (hz2 : @Eq Bool (level_is_zero v) Bool.true) => \
                  Eq.symm Nat ({rhs_i}) Nat.zero \
                  (Eq.cong Nat Nat (fun (z : Nat) => imax_nat (level_eval r u) z) (level_eval r v) Nat.zero (level_is_zero_sound v hz2 r))) \
                  (level_is_zero v) \
-                 (Eq.refl Bool (level_is_zero v))"
+                 (@Eq.refl Bool (level_is_zero v))"
             );
             self.add_definition(Self::derived_eq_lemma(
                 "level_imax_eval",
-                "forall (u : Level) (v : Level) (r : Name -> Nat), Eq Nat (level_eval r (level_imax u v)) (imax_nat (level_eval r u) (level_eval r v))",
+                "forall (u : Level) (v : Level) (r : Name -> Nat), @Eq Nat (level_eval r (level_imax u v)) (imax_nat (level_eval r u) (level_eval r v))",
                 &value_imax,
                 "THE imax-algebra theorem: Level::imax preserves the denotational imax_nat \
                  semantics for EVERY parameter assignment (the spec's Nat model IS the \
@@ -746,32 +747,32 @@ impl Specification {
             "ulist_eqb_eq",
             concat!(
                 "forall (xs : ListType Level) (ys : ListType Level), ",
-                "Eq Bool (ulist_eqb xs ys) Bool.true -> Eq (ListType Level) xs ys"
+                "@Eq Bool (ulist_eqb xs ys) Bool.true -> @Eq (ListType Level) xs ys"
             ),
             concat!(
-                "fun (xs : ListType Level) => ListType.rec Level ",
-                "(fun (zxs : ListType Level) => forall (ys : ListType Level), Eq Bool (ulist_eqb zxs ys) Bool.true -> Eq (ListType Level) zxs ys) ",
+                "fun (xs : ListType Level) => @ListType.rec Level ",
+                "(fun (zxs : ListType Level) => forall (ys : ListType Level), @Eq Bool (ulist_eqb zxs ys) Bool.true -> @Eq (ListType Level) zxs ys) ",
                 // xs = nil
-                "(fun (ys : ListType Level) => ListType.rec Level ",
-                "(fun (zys : ListType Level) => Eq Bool (ulist_eqb (ListType.nil Level) zys) Bool.true -> Eq (ListType Level) (ListType.nil Level) zys) ",
-                "(fun (_ : Eq Bool (ulist_eqb (ListType.nil Level) (ListType.nil Level)) Bool.true) => Eq.refl (ListType Level) (ListType.nil Level)) ",
-                "(fun (yh : Level) (yt : ListType Level) (_ : Eq Bool (ulist_eqb (ListType.nil Level) yt) Bool.true -> Eq (ListType Level) (ListType.nil Level) yt) => ",
-                "fun (h : Eq Bool (ulist_eqb (ListType.nil Level) (ListType.cons Level yh yt)) Bool.true) => ",
-                "bool_false_ne_true (Eq (ListType Level) (ListType.nil Level) (ListType.cons Level yh yt)) h) ",
+                "(fun (ys : ListType Level) => @ListType.rec Level ",
+                "(fun (zys : ListType Level) => @Eq Bool (ulist_eqb (@ListType.nil Level) zys) Bool.true -> @Eq (ListType Level) (@ListType.nil Level) zys) ",
+                "(fun (_ : @Eq Bool (ulist_eqb (@ListType.nil Level) (@ListType.nil Level)) Bool.true) => @Eq.refl (ListType Level) (@ListType.nil Level)) ",
+                "(fun (yh : Level) (yt : ListType Level) (_ : @Eq Bool (ulist_eqb (@ListType.nil Level) yt) Bool.true -> @Eq (ListType Level) (@ListType.nil Level) yt) => ",
+                "fun (h : @Eq Bool (ulist_eqb (@ListType.nil Level) (@ListType.cons Level yh yt)) Bool.true) => ",
+                "bool_false_ne_true (@Eq (ListType Level) (@ListType.nil Level) (@ListType.cons Level yh yt)) h) ",
                 "ys) ",
                 // xs = cons xh xt (ih)
-                "(fun (xh : Level) (xt : ListType Level) (ih : forall (ys : ListType Level), Eq Bool (ulist_eqb xt ys) Bool.true -> Eq (ListType Level) xt ys) => ",
-                "fun (ys : ListType Level) => ListType.rec Level ",
-                "(fun (zys : ListType Level) => Eq Bool (ulist_eqb (ListType.cons Level xh xt) zys) Bool.true -> Eq (ListType Level) (ListType.cons Level xh xt) zys) ",
+                "(fun (xh : Level) (xt : ListType Level) (ih : forall (ys : ListType Level), @Eq Bool (ulist_eqb xt ys) Bool.true -> @Eq (ListType Level) xt ys) => ",
+                "fun (ys : ListType Level) => @ListType.rec Level ",
+                "(fun (zys : ListType Level) => @Eq Bool (ulist_eqb (@ListType.cons Level xh xt) zys) Bool.true -> @Eq (ListType Level) (@ListType.cons Level xh xt) zys) ",
                 // (cons, nil): absurd
-                "(fun (h : Eq Bool (ulist_eqb (ListType.cons Level xh xt) (ListType.nil Level)) Bool.true) => ",
-                "bool_false_ne_true (Eq (ListType Level) (ListType.cons Level xh xt) (ListType.nil Level)) h) ",
+                "(fun (h : @Eq Bool (ulist_eqb (@ListType.cons Level xh xt) (@ListType.nil Level)) Bool.true) => ",
+                "bool_false_ne_true (@Eq (ListType Level) (@ListType.cons Level xh xt) (@ListType.nil Level)) h) ",
                 // (cons xh xt, cons yh yt): and (level_eqb xh yh) (ulist_eqb xt yt)
-                "(fun (yh : Level) (yt : ListType Level) (_ : Eq Bool (ulist_eqb (ListType.cons Level xh xt) yt) Bool.true -> Eq (ListType Level) (ListType.cons Level xh xt) yt) => ",
-                "fun (h : Eq Bool (ulist_eqb (ListType.cons Level xh xt) (ListType.cons Level yh yt)) Bool.true) => ",
-                "Eq.trans (ListType Level) (ListType.cons Level xh xt) (ListType.cons Level yh xt) (ListType.cons Level yh yt) ",
-                "(Eq.cong Level (ListType Level) (fun (w : Level) => ListType.cons Level w xt) xh yh (level_eqb_eq xh yh (band_eq_true_left (level_eqb xh yh) (ulist_eqb xt yt) h))) ",
-                "(Eq.cong (ListType Level) (ListType Level) (fun (w : ListType Level) => ListType.cons Level yh w) xt yt (ih yt (band_eq_true_right (level_eqb xh yh) (ulist_eqb xt yt) h)))) ",
+                "(fun (yh : Level) (yt : ListType Level) (_ : @Eq Bool (ulist_eqb (@ListType.cons Level xh xt) yt) Bool.true -> @Eq (ListType Level) (@ListType.cons Level xh xt) yt) => ",
+                "fun (h : @Eq Bool (ulist_eqb (@ListType.cons Level xh xt) (@ListType.cons Level yh yt)) Bool.true) => ",
+                "Eq.trans (ListType Level) (@ListType.cons Level xh xt) (@ListType.cons Level yh xt) (@ListType.cons Level yh yt) ",
+                "(Eq.cong Level (ListType Level) (fun (w : Level) => @ListType.cons Level w xt) xh yh (level_eqb_eq xh yh (band_eq_true_left (level_eqb xh yh) (ulist_eqb xt yt) h))) ",
+                "(Eq.cong (ListType Level) (ListType Level) (fun (w : ListType Level) => @ListType.cons Level yh w) xt yt (ih yt (band_eq_true_right (level_eqb xh yh) (ulist_eqb xt yt) h)))) ",
                 "ys) ",
                 "xs",
             ),
@@ -802,11 +803,11 @@ impl Specification {
 
         self.add_definition(Self::derived_eq_lemma(
             "kexpr_sort_inj",
-            "forall (n : Level) (m : Level), Eq KExpr (KExpr.sort n) (KExpr.sort m) -> Eq Level n m",
+            "forall (n : Level) (m : Level), @Eq KExpr (KExpr.sort n) (KExpr.sort m) -> @Eq Level n m",
             concat!(
-                "fun (n : Level) (m : Level) (h : Eq KExpr (KExpr.sort n) (KExpr.sort m)) => ",
+                "fun (n : Level) (m : Level) (h : @Eq KExpr (KExpr.sort n) (KExpr.sort m)) => ",
                 "Eq.cong KExpr Level ",
-                "(fun (e : KExpr) => KExpr.rec (fun (_ : KExpr) => Level) ",
+                "(fun (e : KExpr) => @KExpr.rec (fun (_ : KExpr) => Level) ",
                 "(fun (k : Level) => k) ",
                 "(fun (_ : Nat) => n) ",
                 "(fun (_ : KExpr) (_ : KExpr) (_ : Level) (_ : Level) => n) ",
@@ -825,11 +826,11 @@ impl Specification {
 
         self.add_definition_if_absent(Self::derived_eq_lemma(
             "kexpr_bvar_inj",
-            "forall (i : Nat) (j : Nat), Eq KExpr (KExpr.bvar i) (KExpr.bvar j) -> Eq Nat i j",
+            "forall (i : Nat) (j : Nat), @Eq KExpr (KExpr.bvar i) (KExpr.bvar j) -> @Eq Nat i j",
             concat!(
-                "fun (i : Nat) (j : Nat) (h : Eq KExpr (KExpr.bvar i) (KExpr.bvar j)) => ",
+                "fun (i : Nat) (j : Nat) (h : @Eq KExpr (KExpr.bvar i) (KExpr.bvar j)) => ",
                 "Eq.cong KExpr Nat ",
-                "(fun (e : KExpr) => KExpr.rec (fun (_ : KExpr) => Nat) ",
+                "(fun (e : KExpr) => @KExpr.rec (fun (_ : KExpr) => Nat) ",
                 "(fun (_ : Level) => i) ",
                 "(fun (k : Nat) => k) ",
                 "(fun (_ : KExpr) (_ : KExpr) (_ : Nat) (_ : Nat) => i) ",
@@ -848,11 +849,11 @@ impl Specification {
 
         self.add_definition(Self::derived_eq_lemma(
             "kexpr_lam_inj_fst",
-            "forall (t1 : KExpr) (b1 : KExpr) (t2 : KExpr) (b2 : KExpr), Eq KExpr (KExpr.lam t1 b1) (KExpr.lam t2 b2) -> Eq KExpr t1 t2",
+            "forall (t1 : KExpr) (b1 : KExpr) (t2 : KExpr) (b2 : KExpr), @Eq KExpr (KExpr.lam t1 b1) (KExpr.lam t2 b2) -> @Eq KExpr t1 t2",
             concat!(
-                "fun (t1 : KExpr) (b1 : KExpr) (t2 : KExpr) (b2 : KExpr) (h : Eq KExpr (KExpr.lam t1 b1) (KExpr.lam t2 b2)) => ",
+                "fun (t1 : KExpr) (b1 : KExpr) (t2 : KExpr) (b2 : KExpr) (h : @Eq KExpr (KExpr.lam t1 b1) (KExpr.lam t2 b2)) => ",
                 "Eq.cong KExpr KExpr ",
-                "(fun (e : KExpr) => KExpr.rec (fun (_ : KExpr) => KExpr) ",
+                "(fun (e : KExpr) => @KExpr.rec (fun (_ : KExpr) => KExpr) ",
                 "(fun (_ : Level) => t1) (fun (_ : Nat) => t1) ",
                 "(fun (_ : KExpr) (_ : KExpr) (_ : KExpr) (_ : KExpr) => t1) ",
                 "(fun (ty : KExpr) (_ : KExpr) (_ : KExpr) (_ : KExpr) => ty) ",
@@ -870,11 +871,11 @@ impl Specification {
 
         self.add_definition(Self::derived_eq_lemma(
             "kexpr_lam_inj_snd",
-            "forall (t1 : KExpr) (b1 : KExpr) (t2 : KExpr) (b2 : KExpr), Eq KExpr (KExpr.lam t1 b1) (KExpr.lam t2 b2) -> Eq KExpr b1 b2",
+            "forall (t1 : KExpr) (b1 : KExpr) (t2 : KExpr) (b2 : KExpr), @Eq KExpr (KExpr.lam t1 b1) (KExpr.lam t2 b2) -> @Eq KExpr b1 b2",
             concat!(
-                "fun (t1 : KExpr) (b1 : KExpr) (t2 : KExpr) (b2 : KExpr) (h : Eq KExpr (KExpr.lam t1 b1) (KExpr.lam t2 b2)) => ",
+                "fun (t1 : KExpr) (b1 : KExpr) (t2 : KExpr) (b2 : KExpr) (h : @Eq KExpr (KExpr.lam t1 b1) (KExpr.lam t2 b2)) => ",
                 "Eq.cong KExpr KExpr ",
-                "(fun (e : KExpr) => KExpr.rec (fun (_ : KExpr) => KExpr) ",
+                "(fun (e : KExpr) => @KExpr.rec (fun (_ : KExpr) => KExpr) ",
                 "(fun (_ : Level) => b1) (fun (_ : Nat) => b1) ",
                 "(fun (_ : KExpr) (_ : KExpr) (_ : KExpr) (_ : KExpr) => b1) ",
                 "(fun (_ : KExpr) (bd : KExpr) (_ : KExpr) (_ : KExpr) => bd) ",
@@ -892,11 +893,11 @@ impl Specification {
 
         self.add_definition(Self::derived_eq_lemma(
             "kexpr_pi_inj_fst",
-            "forall (t1 : KExpr) (b1 : KExpr) (t2 : KExpr) (b2 : KExpr), Eq KExpr (KExpr.pi t1 b1) (KExpr.pi t2 b2) -> Eq KExpr t1 t2",
+            "forall (t1 : KExpr) (b1 : KExpr) (t2 : KExpr) (b2 : KExpr), @Eq KExpr (KExpr.pi t1 b1) (KExpr.pi t2 b2) -> @Eq KExpr t1 t2",
             concat!(
-                "fun (t1 : KExpr) (b1 : KExpr) (t2 : KExpr) (b2 : KExpr) (h : Eq KExpr (KExpr.pi t1 b1) (KExpr.pi t2 b2)) => ",
+                "fun (t1 : KExpr) (b1 : KExpr) (t2 : KExpr) (b2 : KExpr) (h : @Eq KExpr (KExpr.pi t1 b1) (KExpr.pi t2 b2)) => ",
                 "Eq.cong KExpr KExpr ",
-                "(fun (e : KExpr) => KExpr.rec (fun (_ : KExpr) => KExpr) ",
+                "(fun (e : KExpr) => @KExpr.rec (fun (_ : KExpr) => KExpr) ",
                 "(fun (_ : Level) => t1) (fun (_ : Nat) => t1) ",
                 "(fun (_ : KExpr) (_ : KExpr) (_ : KExpr) (_ : KExpr) => t1) ",
                 "(fun (_ : KExpr) (_ : KExpr) (_ : KExpr) (_ : KExpr) => t1) ",
@@ -914,11 +915,11 @@ impl Specification {
 
         self.add_definition(Self::derived_eq_lemma(
             "kexpr_pi_inj_snd",
-            "forall (t1 : KExpr) (b1 : KExpr) (t2 : KExpr) (b2 : KExpr), Eq KExpr (KExpr.pi t1 b1) (KExpr.pi t2 b2) -> Eq KExpr b1 b2",
+            "forall (t1 : KExpr) (b1 : KExpr) (t2 : KExpr) (b2 : KExpr), @Eq KExpr (KExpr.pi t1 b1) (KExpr.pi t2 b2) -> @Eq KExpr b1 b2",
             concat!(
-                "fun (t1 : KExpr) (b1 : KExpr) (t2 : KExpr) (b2 : KExpr) (h : Eq KExpr (KExpr.pi t1 b1) (KExpr.pi t2 b2)) => ",
+                "fun (t1 : KExpr) (b1 : KExpr) (t2 : KExpr) (b2 : KExpr) (h : @Eq KExpr (KExpr.pi t1 b1) (KExpr.pi t2 b2)) => ",
                 "Eq.cong KExpr KExpr ",
-                "(fun (e : KExpr) => KExpr.rec (fun (_ : KExpr) => KExpr) ",
+                "(fun (e : KExpr) => @KExpr.rec (fun (_ : KExpr) => KExpr) ",
                 "(fun (_ : Level) => b1) (fun (_ : Nat) => b1) ",
                 "(fun (_ : KExpr) (_ : KExpr) (_ : KExpr) (_ : KExpr) => b1) ",
                 "(fun (_ : KExpr) (_ : KExpr) (_ : KExpr) (_ : KExpr) => b1) ",
@@ -936,11 +937,11 @@ impl Specification {
 
         self.add_definition(Self::derived_eq_lemma(
             "kexpr_const_inj_name",
-            "forall (n1 : Name) (us1 : ListType Level) (n2 : Name) (us2 : ListType Level), Eq KExpr (KExpr.const n1 us1) (KExpr.const n2 us2) -> Eq Name n1 n2",
+            "forall (n1 : Name) (us1 : ListType Level) (n2 : Name) (us2 : ListType Level), @Eq KExpr (KExpr.const n1 us1) (KExpr.const n2 us2) -> @Eq Name n1 n2",
             concat!(
-                "fun (n1 : Name) (us1 : ListType Level) (n2 : Name) (us2 : ListType Level) (h : Eq KExpr (KExpr.const n1 us1) (KExpr.const n2 us2)) => ",
+                "fun (n1 : Name) (us1 : ListType Level) (n2 : Name) (us2 : ListType Level) (h : @Eq KExpr (KExpr.const n1 us1) (KExpr.const n2 us2)) => ",
                 "Eq.cong KExpr Name ",
-                "(fun (e : KExpr) => KExpr.rec (fun (_ : KExpr) => Name) ",
+                "(fun (e : KExpr) => @KExpr.rec (fun (_ : KExpr) => Name) ",
                 "(fun (_ : Level) => n1) (fun (_ : Nat) => n1) ",
                 "(fun (_ : KExpr) (_ : KExpr) (_ : Name) (_ : Name) => n1) ",
                 "(fun (_ : KExpr) (_ : KExpr) (_ : Name) (_ : Name) => n1) ",
@@ -958,11 +959,11 @@ impl Specification {
 
         self.add_definition(Self::derived_eq_lemma(
             "kexpr_const_inj_ulist",
-            "forall (n1 : Name) (us1 : ListType Level) (n2 : Name) (us2 : ListType Level), Eq KExpr (KExpr.const n1 us1) (KExpr.const n2 us2) -> Eq (ListType Level) us1 us2",
+            "forall (n1 : Name) (us1 : ListType Level) (n2 : Name) (us2 : ListType Level), @Eq KExpr (KExpr.const n1 us1) (KExpr.const n2 us2) -> @Eq (ListType Level) us1 us2",
             concat!(
-                "fun (n1 : Name) (us1 : ListType Level) (n2 : Name) (us2 : ListType Level) (h : Eq KExpr (KExpr.const n1 us1) (KExpr.const n2 us2)) => ",
+                "fun (n1 : Name) (us1 : ListType Level) (n2 : Name) (us2 : ListType Level) (h : @Eq KExpr (KExpr.const n1 us1) (KExpr.const n2 us2)) => ",
                 "Eq.cong KExpr (ListType Level) ",
-                "(fun (e : KExpr) => KExpr.rec (fun (_ : KExpr) => ListType Level) ",
+                "(fun (e : KExpr) => @KExpr.rec (fun (_ : KExpr) => ListType Level) ",
                 "(fun (_ : Level) => us1) (fun (_ : Nat) => us1) ",
                 "(fun (_ : KExpr) (_ : KExpr) (_ : ListType Level) (_ : ListType Level) => us1) ",
                 "(fun (_ : KExpr) (_ : KExpr) (_ : ListType Level) (_ : ListType Level) => us1) ",
@@ -987,9 +988,9 @@ impl Specification {
             "kexpr_beq_sort_sort",
             concat!(
                 "forall (n : Level) (m : Level), ",
-                "Eq Bool (kexpr_beq (KExpr.sort n) (KExpr.sort m)) (level_eqb n m)"
+                "@Eq Bool (kexpr_beq (KExpr.sort n) (KExpr.sort m)) (level_eqb n m)"
             ),
-            "fun (n : Level) (m : Level) => Eq.refl Bool (kexpr_beq (KExpr.sort n) (KExpr.sort m))",
+            "fun (n : Level) (m : Level) => @Eq.refl Bool (kexpr_beq (KExpr.sort n) (KExpr.sort m))",
             "kexpr_beq sort/sort computation: = level_eqb n m, definitionally (Eq.refl). DerivedProved, \
              zero axiom_deps. Confluence-independent.",
             &["Eq.refl", "kexpr_beq"],
@@ -998,9 +999,9 @@ impl Specification {
             "kexpr_beq_bvar_bvar",
             concat!(
                 "forall (i : Nat) (j : Nat), ",
-                "Eq Bool (kexpr_beq (KExpr.bvar i) (KExpr.bvar j)) (nat_eqb i j)"
+                "@Eq Bool (kexpr_beq (KExpr.bvar i) (KExpr.bvar j)) (nat_eqb i j)"
             ),
-            "fun (i : Nat) (j : Nat) => Eq.refl Bool (kexpr_beq (KExpr.bvar i) (KExpr.bvar j))",
+            "fun (i : Nat) (j : Nat) => @Eq.refl Bool (kexpr_beq (KExpr.bvar i) (KExpr.bvar j))",
             "kexpr_beq bvar/bvar computation: = nat_eqb i j, definitionally (Eq.refl). DerivedProved, \
              zero axiom_deps. Confluence-independent.",
             &["Eq.refl", "kexpr_beq"],
@@ -1009,11 +1010,11 @@ impl Specification {
             "kexpr_beq_app_app",
             concat!(
                 "forall (f : KExpr) (a1 : KExpr) (g : KExpr) (c : KExpr), ",
-                "Eq Bool (kexpr_beq (KExpr.app f a1) (KExpr.app g c)) ",
+                "@Eq Bool (kexpr_beq (KExpr.app f a1) (KExpr.app g c)) ",
                 "(Bool.and (kexpr_beq f g) (kexpr_beq a1 c))"
             ),
             "fun (f : KExpr) (a1 : KExpr) (g : KExpr) (c : KExpr) => \
-             Eq.refl Bool (kexpr_beq (KExpr.app f a1) (KExpr.app g c))",
+             @Eq.refl Bool (kexpr_beq (KExpr.app f a1) (KExpr.app g c))",
             "kexpr_beq app/app computation: = Bool.and (kexpr_beq f g)(kexpr_beq a1 c), \
              definitionally (Eq.refl). DerivedProved, zero axiom_deps. Confluence-independent.",
             &["Eq.refl", "kexpr_beq"],
@@ -1022,11 +1023,11 @@ impl Specification {
             "kexpr_beq_lam_lam",
             concat!(
                 "forall (t1 : KExpr) (b1 : KExpr) (t2 : KExpr) (b2 : KExpr), ",
-                "Eq Bool (kexpr_beq (KExpr.lam t1 b1) (KExpr.lam t2 b2)) ",
+                "@Eq Bool (kexpr_beq (KExpr.lam t1 b1) (KExpr.lam t2 b2)) ",
                 "(Bool.and (kexpr_beq t1 t2) (kexpr_beq b1 b2))"
             ),
             "fun (t1 : KExpr) (b1 : KExpr) (t2 : KExpr) (b2 : KExpr) => \
-             Eq.refl Bool (kexpr_beq (KExpr.lam t1 b1) (KExpr.lam t2 b2))",
+             @Eq.refl Bool (kexpr_beq (KExpr.lam t1 b1) (KExpr.lam t2 b2))",
             "kexpr_beq lam/lam computation: = Bool.and (kexpr_beq t1 t2)(kexpr_beq b1 b2), \
              definitionally (Eq.refl). DerivedProved, zero axiom_deps. Confluence-independent.",
             &["Eq.refl", "kexpr_beq"],
@@ -1035,11 +1036,11 @@ impl Specification {
             "kexpr_beq_pi_pi",
             concat!(
                 "forall (t1 : KExpr) (b1 : KExpr) (t2 : KExpr) (b2 : KExpr), ",
-                "Eq Bool (kexpr_beq (KExpr.pi t1 b1) (KExpr.pi t2 b2)) ",
+                "@Eq Bool (kexpr_beq (KExpr.pi t1 b1) (KExpr.pi t2 b2)) ",
                 "(Bool.and (kexpr_beq t1 t2) (kexpr_beq b1 b2))"
             ),
             "fun (t1 : KExpr) (b1 : KExpr) (t2 : KExpr) (b2 : KExpr) => \
-             Eq.refl Bool (kexpr_beq (KExpr.pi t1 b1) (KExpr.pi t2 b2))",
+             @Eq.refl Bool (kexpr_beq (KExpr.pi t1 b1) (KExpr.pi t2 b2))",
             "kexpr_beq pi/pi computation: = Bool.and (kexpr_beq t1 t2)(kexpr_beq b1 b2), \
              definitionally (Eq.refl). DerivedProved, zero axiom_deps. Confluence-independent.",
             &["Eq.refl", "kexpr_beq"],
@@ -1048,11 +1049,11 @@ impl Specification {
             "kexpr_beq_const_const",
             concat!(
                 "forall (n1 : Name) (us1 : ListType Level) (n2 : Name) (us2 : ListType Level), ",
-                "Eq Bool (kexpr_beq (KExpr.const n1 us1) (KExpr.const n2 us2)) ",
+                "@Eq Bool (kexpr_beq (KExpr.const n1 us1) (KExpr.const n2 us2)) ",
                 "(Bool.and (name_eqb n1 n2) (ulist_eqb us1 us2))"
             ),
             "fun (n1 : Name) (us1 : ListType Level) (n2 : Name) (us2 : ListType Level) => \
-             Eq.refl Bool (kexpr_beq (KExpr.const n1 us1) (KExpr.const n2 us2))",
+             @Eq.refl Bool (kexpr_beq (KExpr.const n1 us1) (KExpr.const n2 us2))",
             "kexpr_beq const/const computation: = Bool.and (name_eqb n1 n2)(ulist_eqb us1 us2), \
              definitionally (Eq.refl). DerivedProved, zero axiom_deps. Confluence-independent.",
             &["Eq.refl", "kexpr_beq"],
@@ -1061,11 +1062,11 @@ impl Specification {
             "kexpr_beq_let_let",
             concat!(
                 "forall (t1 : KExpr) (v1 : KExpr) (b1 : KExpr) (t2 : KExpr) (v2 : KExpr) (b2 : KExpr), ",
-                "Eq Bool (kexpr_beq (KExpr.let_ t1 v1 b1) (KExpr.let_ t2 v2 b2)) ",
+                "@Eq Bool (kexpr_beq (KExpr.let_ t1 v1 b1) (KExpr.let_ t2 v2 b2)) ",
                 "(Bool.and (kexpr_beq t1 t2) (Bool.and (kexpr_beq v1 v2) (kexpr_beq b1 b2)))"
             ),
             "fun (t1 : KExpr) (v1 : KExpr) (b1 : KExpr) (t2 : KExpr) (v2 : KExpr) (b2 : KExpr) => \
-             Eq.refl Bool (kexpr_beq (KExpr.let_ t1 v1 b1) (KExpr.let_ t2 v2 b2))",
+             @Eq.refl Bool (kexpr_beq (KExpr.let_ t1 v1 b1) (KExpr.let_ t2 v2 b2))",
             "kexpr_beq let/let computation: = Bool.and (kexpr_beq t1 t2)(Bool.and (kexpr_beq v1 v2)(kexpr_beq b1 b2)), \
              definitionally (Eq.refl). DerivedProved, zero axiom_deps. Confluence-independent.",
             &["Eq.refl", "kexpr_beq"],
@@ -1075,12 +1076,12 @@ impl Specification {
             concat!(
                 "forall (s1 : Name) (i1 : Nat) (sub1 : KExpr) ",
                 "(s2 : Name) (i2 : Nat) (sub2 : KExpr), ",
-                "Eq Bool (kexpr_beq (KExpr.proj s1 i1 sub1) (KExpr.proj s2 i2 sub2)) ",
+                "@Eq Bool (kexpr_beq (KExpr.proj s1 i1 sub1) (KExpr.proj s2 i2 sub2)) ",
                 "(Bool.and (name_eqb s1 s2) (Bool.and (nat_eqb i1 i2) (kexpr_beq sub1 sub2)))"
             ),
             "fun (s1 : Name) (i1 : Nat) (sub1 : KExpr) \
              (s2 : Name) (i2 : Nat) (sub2 : KExpr) => \
-             Eq.refl Bool (kexpr_beq (KExpr.proj s1 i1 sub1) (KExpr.proj s2 i2 sub2))",
+             @Eq.refl Bool (kexpr_beq (KExpr.proj s1 i1 sub1) (KExpr.proj s2 i2 sub2))",
             "kexpr_beq proj/proj computation: name, projection index, and recursive subterm \
              equality as a nested Bool.and, definitionally (Eq.refl). DerivedProved, zero \
              axiom_deps. Confluence-independent.",
@@ -1090,10 +1091,10 @@ impl Specification {
             "kexpr_beq_lit_lit",
             concat!(
                 "forall (v : Nat) (w : Nat), ",
-                "Eq Bool (kexpr_beq (KExpr.lit v) (KExpr.lit w)) (nat_eqb v w)"
+                "@Eq Bool (kexpr_beq (KExpr.lit v) (KExpr.lit w)) (nat_eqb v w)"
             ),
             "fun (v : Nat) (w : Nat) => \
-             Eq.refl Bool (kexpr_beq (KExpr.lit v) (KExpr.lit w))",
+             @Eq.refl Bool (kexpr_beq (KExpr.lit v) (KExpr.lit w))",
             "kexpr_beq lit/lit computation: = nat_eqb v w, definitionally (Eq.refl). \
              DerivedProved, zero axiom_deps. Confluence-independent.",
             &["Eq.refl", "kexpr_beq"],
@@ -1161,11 +1162,11 @@ impl Specification {
         // the motive lands in Prop here). No recursor needed — the easy direction.
         self.add_definition(Self::derived_eq_lemma(
             "kexpr_beq_complete",
-            "forall (a : KExpr) (b : KExpr), Eq KExpr a b -> Eq Bool (kexpr_beq a b) Bool.true",
+            "forall (a : KExpr) (b : KExpr), @Eq KExpr a b -> @Eq Bool (kexpr_beq a b) Bool.true",
             concat!(
-                "fun (a : KExpr) (b : KExpr) (h : Eq KExpr a b) => ",
+                "fun (a : KExpr) (b : KExpr) (h : @Eq KExpr a b) => ",
                 "Eq.substType KExpr ",
-                "(fun (z : KExpr) => Eq Bool (kexpr_beq a z) Bool.true) ",
+                "(fun (z : KExpr) => @Eq Bool (kexpr_beq a z) Bool.true) ",
                 "a b h (kexpr_beq_refl a)",
             ),
             "Completeness of decidable syntactic equality on KExpr: a = b -> kexpr_beq a b = true. \
@@ -1180,7 +1181,7 @@ impl Specification {
         // term carries its own forall binders). This IS the mp half of the iff.
         self.add_definition(Self::derived_eq_lemma(
             "kexpr_beq_iff_mp",
-            "forall (a : KExpr) (b : KExpr), Eq Bool (kexpr_beq a b) Bool.true -> Eq KExpr a b",
+            "forall (a : KExpr) (b : KExpr), @Eq Bool (kexpr_beq a b) Bool.true -> @Eq KExpr a b",
             "fun (a : KExpr) (b : KExpr) => kexpr_beq_eq a b",
             "Forward direction (mp) of the decidable-syntactic-equality biconditional \
              `kexpr_beq a b = true <-> a = b`: kexpr_beq a b = true -> a = b. Soundness; aliases \
@@ -1193,7 +1194,7 @@ impl Specification {
         // the mpr half of the iff.
         self.add_definition(Self::derived_eq_lemma(
             "kexpr_beq_iff_mpr",
-            "forall (a : KExpr) (b : KExpr), Eq KExpr a b -> Eq Bool (kexpr_beq a b) Bool.true",
+            "forall (a : KExpr) (b : KExpr), @Eq KExpr a b -> @Eq Bool (kexpr_beq a b) Bool.true",
             "fun (a : KExpr) (b : KExpr) => kexpr_beq_complete a b",
             "Backward direction (mpr) of the decidable-syntactic-equality biconditional \
              `kexpr_beq a b = true <-> a = b`: a = b -> kexpr_beq a b = true. Completeness; aliases \
@@ -1212,7 +1213,7 @@ impl Specification {
         self.add_definition(Self::derived_eq_lemma(
             "kexpr_beq_complete_fires_witness",
             concat!(
-                "Eq Bool (kexpr_beq ",
+                "@Eq Bool (kexpr_beq ",
                 "(KExpr.lam (KExpr.sort Level.zero) (KExpr.bvar Nat.zero)) ",
                 "(KExpr.lam (KExpr.sort Level.zero) (KExpr.bvar Nat.zero))) Bool.true"
             ),
@@ -1220,7 +1221,7 @@ impl Specification {
                 "kexpr_beq_complete ",
                 "(KExpr.lam (KExpr.sort Level.zero) (KExpr.bvar Nat.zero)) ",
                 "(KExpr.lam (KExpr.sort Level.zero) (KExpr.bvar Nat.zero)) ",
-                "(Eq.refl KExpr (KExpr.lam (KExpr.sort Level.zero) (KExpr.bvar Nat.zero)))",
+                "(@Eq.refl KExpr (KExpr.lam (KExpr.sort Level.zero) (KExpr.bvar Nat.zero)))",
             ),
             "Non-vacuity: kexpr_beq_complete applied to Eq.refl KExpr e (e = lam (sort 0) (bvar 0)) \
              yields the concrete `kexpr_beq e e = true`. The completeness direction genuinely fires \
@@ -1236,7 +1237,7 @@ impl Specification {
         self.add_definition(Self::derived_eq_lemma(
             "kexpr_beq_iff_fires_witness",
             concat!(
-                "Eq Bool (kexpr_beq ",
+                "@Eq Bool (kexpr_beq ",
                 "(KExpr.app (KExpr.bvar Nat.zero) (KExpr.sort (Level.succ Level.zero))) ",
                 "(KExpr.app (KExpr.bvar Nat.zero) (KExpr.sort (Level.succ Level.zero)))) Bool.true"
             ),
@@ -1244,7 +1245,7 @@ impl Specification {
                 "kexpr_beq_iff_mpr ",
                 "(KExpr.app (KExpr.bvar Nat.zero) (KExpr.sort (Level.succ Level.zero))) ",
                 "(KExpr.app (KExpr.bvar Nat.zero) (KExpr.sort (Level.succ Level.zero))) ",
-                "(Eq.refl KExpr (KExpr.app (KExpr.bvar Nat.zero) (KExpr.sort (Level.succ Level.zero))))",
+                "(@Eq.refl KExpr (KExpr.app (KExpr.bvar Nat.zero) (KExpr.sort (Level.succ Level.zero))))",
             ),
             "Non-vacuity: the biconditional's backward projection (kexpr_beq_iff_mpr, i.e. \
              AndType.right of kexpr_beq_iff) applied to Eq.refl KExpr e (e = app (bvar 0) (sort 1)) \
@@ -1285,32 +1286,32 @@ impl Specification {
         // is the OUTER IH on a's subterms), but their binder types must match the
         // recursor's expected minor-premise shape.
         format!(
-            "fun (b : KExpr) => KExpr.rec \
-             (fun (zb : KExpr) => Eq Bool (kexpr_beq {a} zb) Bool.true -> Eq KExpr {a} zb) \
-             (fun (m : Level) (h : Eq Bool (kexpr_beq {a} (KExpr.sort m)) Bool.true) => {sort}) \
-             (fun (j : Nat) (h : Eq Bool (kexpr_beq {a} (KExpr.bvar j)) Bool.true) => {bvar}) \
+            "fun (b : KExpr) => @KExpr.rec \
+             (fun (zb : KExpr) => @Eq Bool (kexpr_beq {a} zb) Bool.true -> @Eq KExpr {a} zb) \
+             (fun (m : Level) (h : @Eq Bool (kexpr_beq {a} (KExpr.sort m)) Bool.true) => {sort}) \
+             (fun (j : Nat) (h : @Eq Bool (kexpr_beq {a} (KExpr.bvar j)) Bool.true) => {bvar}) \
              (fun (g : KExpr) (c : KExpr) \
-              (_ : Eq Bool (kexpr_beq {a} g) Bool.true -> Eq KExpr {a} g) \
-              (_ : Eq Bool (kexpr_beq {a} c) Bool.true -> Eq KExpr {a} c) \
-              (h : Eq Bool (kexpr_beq {a} (KExpr.app g c)) Bool.true) => {app}) \
+              (_ : @Eq Bool (kexpr_beq {a} g) Bool.true -> @Eq KExpr {a} g) \
+              (_ : @Eq Bool (kexpr_beq {a} c) Bool.true -> @Eq KExpr {a} c) \
+              (h : @Eq Bool (kexpr_beq {a} (KExpr.app g c)) Bool.true) => {app}) \
              (fun (gt : KExpr) (gb : KExpr) \
-              (_ : Eq Bool (kexpr_beq {a} gt) Bool.true -> Eq KExpr {a} gt) \
-              (_ : Eq Bool (kexpr_beq {a} gb) Bool.true -> Eq KExpr {a} gb) \
-              (h : Eq Bool (kexpr_beq {a} (KExpr.lam gt gb)) Bool.true) => {lam}) \
+              (_ : @Eq Bool (kexpr_beq {a} gt) Bool.true -> @Eq KExpr {a} gt) \
+              (_ : @Eq Bool (kexpr_beq {a} gb) Bool.true -> @Eq KExpr {a} gb) \
+              (h : @Eq Bool (kexpr_beq {a} (KExpr.lam gt gb)) Bool.true) => {lam}) \
              (fun (gt : KExpr) (gb : KExpr) \
-              (_ : Eq Bool (kexpr_beq {a} gt) Bool.true -> Eq KExpr {a} gt) \
-              (_ : Eq Bool (kexpr_beq {a} gb) Bool.true -> Eq KExpr {a} gb) \
-              (h : Eq Bool (kexpr_beq {a} (KExpr.pi gt gb)) Bool.true) => {pi}) \
-             (fun (n2 : Name) (us2 : ListType Level) (h : Eq Bool (kexpr_beq {a} (KExpr.const n2 us2)) Bool.true) => {konst}) \
+              (_ : @Eq Bool (kexpr_beq {a} gt) Bool.true -> @Eq KExpr {a} gt) \
+              (_ : @Eq Bool (kexpr_beq {a} gb) Bool.true -> @Eq KExpr {a} gb) \
+              (h : @Eq Bool (kexpr_beq {a} (KExpr.pi gt gb)) Bool.true) => {pi}) \
+             (fun (n2 : Name) (us2 : ListType Level) (h : @Eq Bool (kexpr_beq {a} (KExpr.const n2 us2)) Bool.true) => {konst}) \
              (fun (glt : KExpr) (glv : KExpr) (glb : KExpr) \
-              (_ : Eq Bool (kexpr_beq {a} glt) Bool.true -> Eq KExpr {a} glt) \
-              (_ : Eq Bool (kexpr_beq {a} glv) Bool.true -> Eq KExpr {a} glv) \
-             (_ : Eq Bool (kexpr_beq {a} glb) Bool.true -> Eq KExpr {a} glb) \
-              (h : Eq Bool (kexpr_beq {a} (KExpr.let_ glt glv glb)) Bool.true) => {let_}) \
+              (_ : @Eq Bool (kexpr_beq {a} glt) Bool.true -> @Eq KExpr {a} glt) \
+              (_ : @Eq Bool (kexpr_beq {a} glv) Bool.true -> @Eq KExpr {a} glv) \
+             (_ : @Eq Bool (kexpr_beq {a} glb) Bool.true -> @Eq KExpr {a} glb) \
+              (h : @Eq Bool (kexpr_beq {a} (KExpr.let_ glt glv glb)) Bool.true) => {let_}) \
              (fun (s2 : Name) (i2 : Nat) (sub2 : KExpr) \
-              (_ : Eq Bool (kexpr_beq {a} sub2) Bool.true -> Eq KExpr {a} sub2) \
-              (h : Eq Bool (kexpr_beq {a} (KExpr.proj s2 i2 sub2)) Bool.true) => {proj}) \
-             (fun (w : Nat) (h : Eq Bool (kexpr_beq {a} (KExpr.lit w)) Bool.true) => {lit}) \
+              (_ : @Eq Bool (kexpr_beq {a} sub2) Bool.true -> @Eq KExpr {a} sub2) \
+              (h : @Eq Bool (kexpr_beq {a} (KExpr.proj s2 i2 sub2)) Bool.true) => {proj}) \
+             (fun (w : Nat) (h : @Eq Bool (kexpr_beq {a} (KExpr.lit w)) Bool.true) => {lit}) \
              b",
             a = a_form,
             sort = arm_sort,
@@ -1329,7 +1330,7 @@ impl Specification {
     /// `kexpr_beq a_form b_form` reduces to `false` for distinct constructors, so
     /// `h : Eq Bool false true` and the no-confusion eliminator discharges it.
     fn absurd_arm(a_form: &str, b_form: &str) -> String {
-        format!("bool_false_ne_true (Eq KExpr {a_form} {b_form}) h")
+        format!("bool_false_ne_true (@Eq KExpr {a_form} {b_form}) h")
     }
 
     /// Register `kexpr_beq_eq : forall a b, kexpr_beq a b = true -> a = b`.
@@ -1345,8 +1346,8 @@ impl Specification {
             "(fun (n : Level) => {})",
             Self::inner_kexpr_rec(
                 "(KExpr.sort n)",
-                "(fun (hnm : Eq Level n m) => Eq.cong Level KExpr KExpr.sort n m hnm) \
-                 (level_eqb_eq n m (Eq.substType Bool (fun (x : Bool) => Eq Bool x Bool.true) \
+                "(fun (hnm : @Eq Level n m) => Eq.cong Level KExpr KExpr.sort n m hnm) \
+                 (level_eqb_eq n m (Eq.substType Bool (fun (x : Bool) => @Eq Bool x Bool.true) \
                  (kexpr_beq (KExpr.sort n) (KExpr.sort m)) (level_eqb n m) (kexpr_beq_sort_sort n m) h))",
                 &Self::absurd_arm("(KExpr.sort n)", "(KExpr.bvar j)"),
                 &Self::absurd_arm("(KExpr.sort n)", "(KExpr.app g c)"),
@@ -1365,8 +1366,8 @@ impl Specification {
             Self::inner_kexpr_rec(
                 "(KExpr.bvar i)",
                 &Self::absurd_arm("(KExpr.bvar i)", "(KExpr.sort m)"),
-                "(fun (hij : Eq Nat i j) => Eq.cong Nat KExpr KExpr.bvar i j hij) \
-                 (nat_eqb_eq i j (Eq.substType Bool (fun (x : Bool) => Eq Bool x Bool.true) \
+                "(fun (hij : @Eq Nat i j) => Eq.cong Nat KExpr KExpr.bvar i j hij) \
+                 (nat_eqb_eq i j (Eq.substType Bool (fun (x : Bool) => @Eq Bool x Bool.true) \
                  (kexpr_beq (KExpr.bvar i) (KExpr.bvar j)) (nat_eqb i j) (kexpr_beq_bvar_bvar i j) h))",
                 &Self::absurd_arm("(KExpr.bvar i)", "(KExpr.app g c)"),
                 &Self::absurd_arm("(KExpr.bvar i)", "(KExpr.lam gt gb)"),
@@ -1385,23 +1386,23 @@ impl Specification {
         // recursor IH application directly into Eq.cong's slot trips the elaborator —
         // then rebuild app f a1 = app g c via Eq.cong + Eq.trans.
         let app_match = concat!(
-            "(fun (hand : Eq Bool (Bool.and (kexpr_beq f g) (kexpr_beq a1 c)) Bool.true) => ",
-            "(fun (hx : Eq Bool (kexpr_beq f g) Bool.true) (hy : Eq Bool (kexpr_beq a1 c) Bool.true) => ",
-            "(fun (hf : Eq KExpr f g) (ha : Eq KExpr a1 c) => ",
+            "(fun (hand : @Eq Bool (Bool.and (kexpr_beq f g) (kexpr_beq a1 c)) Bool.true) => ",
+            "(fun (hx : @Eq Bool (kexpr_beq f g) Bool.true) (hy : @Eq Bool (kexpr_beq a1 c) Bool.true) => ",
+            "(fun (hf : @Eq KExpr f g) (ha : @Eq KExpr a1 c) => ",
             "Eq.trans KExpr (KExpr.app f a1) (KExpr.app g a1) (KExpr.app g c) ",
             "(Eq.cong KExpr KExpr (fun (w : KExpr) => KExpr.app w a1) f g hf) ",
             "(Eq.cong KExpr KExpr (fun (w : KExpr) => KExpr.app g w) a1 c ha)) ",
             "(ih_f g hx) (ih_a c hy)) ",
             "(band_eq_true_left (kexpr_beq f g) (kexpr_beq a1 c) hand) ",
             "(band_eq_true_right (kexpr_beq f g) (kexpr_beq a1 c) hand)) ",
-            "(Eq.substType Bool (fun (x : Bool) => Eq Bool x Bool.true) ",
+            "(Eq.substType Bool (fun (x : Bool) => @Eq Bool x Bool.true) ",
             "(kexpr_beq (KExpr.app f a1) (KExpr.app g c)) (Bool.and (kexpr_beq f g) (kexpr_beq a1 c)) ",
             "(kexpr_beq_app_app f a1 g c) h)",
         );
         let outer_app = format!(
             "(fun (f : KExpr) (a1 : KExpr) \
-             (ih_f : forall (b : KExpr), Eq Bool (kexpr_beq f b) Bool.true -> Eq KExpr f b) \
-             (ih_a : forall (b : KExpr), Eq Bool (kexpr_beq a1 b) Bool.true -> Eq KExpr a1 b) => {})",
+             (ih_f : forall (b : KExpr), @Eq Bool (kexpr_beq f b) Bool.true -> @Eq KExpr f b) \
+             (ih_a : forall (b : KExpr), @Eq Bool (kexpr_beq a1 b) Bool.true -> @Eq KExpr a1 b) => {})",
             Self::inner_kexpr_rec(
                 "(KExpr.app f a1)",
                 &Self::absurd_arm("(KExpr.app f a1)", "(KExpr.sort m)"),
@@ -1418,23 +1419,23 @@ impl Specification {
 
         // ---- lam ty1 b1 (ih_ty, ih_b): only the inner lam arm is substantive. ----
         let lam_match = concat!(
-            "(fun (hand : Eq Bool (Bool.and (kexpr_beq ty1 gt) (kexpr_beq b1 gb)) Bool.true) => ",
-            "(fun (hx : Eq Bool (kexpr_beq ty1 gt) Bool.true) (hy : Eq Bool (kexpr_beq b1 gb) Bool.true) => ",
-            "(fun (ht : Eq KExpr ty1 gt) (hb : Eq KExpr b1 gb) => ",
+            "(fun (hand : @Eq Bool (Bool.and (kexpr_beq ty1 gt) (kexpr_beq b1 gb)) Bool.true) => ",
+            "(fun (hx : @Eq Bool (kexpr_beq ty1 gt) Bool.true) (hy : @Eq Bool (kexpr_beq b1 gb) Bool.true) => ",
+            "(fun (ht : @Eq KExpr ty1 gt) (hb : @Eq KExpr b1 gb) => ",
             "Eq.trans KExpr (KExpr.lam ty1 b1) (KExpr.lam gt b1) (KExpr.lam gt gb) ",
             "(Eq.cong KExpr KExpr (fun (w : KExpr) => KExpr.lam w b1) ty1 gt ht) ",
             "(Eq.cong KExpr KExpr (fun (w : KExpr) => KExpr.lam gt w) b1 gb hb)) ",
             "(ih_ty gt hx) (ih_b gb hy)) ",
             "(band_eq_true_left (kexpr_beq ty1 gt) (kexpr_beq b1 gb) hand) ",
             "(band_eq_true_right (kexpr_beq ty1 gt) (kexpr_beq b1 gb) hand)) ",
-            "(Eq.substType Bool (fun (x : Bool) => Eq Bool x Bool.true) ",
+            "(Eq.substType Bool (fun (x : Bool) => @Eq Bool x Bool.true) ",
             "(kexpr_beq (KExpr.lam ty1 b1) (KExpr.lam gt gb)) (Bool.and (kexpr_beq ty1 gt) (kexpr_beq b1 gb)) ",
             "(kexpr_beq_lam_lam ty1 b1 gt gb) h)",
         );
         let outer_lam = format!(
             "(fun (ty1 : KExpr) (b1 : KExpr) \
-             (ih_ty : forall (b : KExpr), Eq Bool (kexpr_beq ty1 b) Bool.true -> Eq KExpr ty1 b) \
-             (ih_b : forall (b : KExpr), Eq Bool (kexpr_beq b1 b) Bool.true -> Eq KExpr b1 b) => {})",
+             (ih_ty : forall (b : KExpr), @Eq Bool (kexpr_beq ty1 b) Bool.true -> @Eq KExpr ty1 b) \
+             (ih_b : forall (b : KExpr), @Eq Bool (kexpr_beq b1 b) Bool.true -> @Eq KExpr b1 b) => {})",
             Self::inner_kexpr_rec(
                 "(KExpr.lam ty1 b1)",
                 &Self::absurd_arm("(KExpr.lam ty1 b1)", "(KExpr.sort m)"),
@@ -1451,23 +1452,23 @@ impl Specification {
 
         // ---- pi ty1 b1 (ih_ty, ih_b): only the inner pi arm is substantive. ----
         let pi_match = concat!(
-            "(fun (hand : Eq Bool (Bool.and (kexpr_beq ty1 gt) (kexpr_beq b1 gb)) Bool.true) => ",
-            "(fun (hx : Eq Bool (kexpr_beq ty1 gt) Bool.true) (hy : Eq Bool (kexpr_beq b1 gb) Bool.true) => ",
-            "(fun (ht : Eq KExpr ty1 gt) (hb : Eq KExpr b1 gb) => ",
+            "(fun (hand : @Eq Bool (Bool.and (kexpr_beq ty1 gt) (kexpr_beq b1 gb)) Bool.true) => ",
+            "(fun (hx : @Eq Bool (kexpr_beq ty1 gt) Bool.true) (hy : @Eq Bool (kexpr_beq b1 gb) Bool.true) => ",
+            "(fun (ht : @Eq KExpr ty1 gt) (hb : @Eq KExpr b1 gb) => ",
             "Eq.trans KExpr (KExpr.pi ty1 b1) (KExpr.pi gt b1) (KExpr.pi gt gb) ",
             "(Eq.cong KExpr KExpr (fun (w : KExpr) => KExpr.pi w b1) ty1 gt ht) ",
             "(Eq.cong KExpr KExpr (fun (w : KExpr) => KExpr.pi gt w) b1 gb hb)) ",
             "(ih_ty gt hx) (ih_b gb hy)) ",
             "(band_eq_true_left (kexpr_beq ty1 gt) (kexpr_beq b1 gb) hand) ",
             "(band_eq_true_right (kexpr_beq ty1 gt) (kexpr_beq b1 gb) hand)) ",
-            "(Eq.substType Bool (fun (x : Bool) => Eq Bool x Bool.true) ",
+            "(Eq.substType Bool (fun (x : Bool) => @Eq Bool x Bool.true) ",
             "(kexpr_beq (KExpr.pi ty1 b1) (KExpr.pi gt gb)) (Bool.and (kexpr_beq ty1 gt) (kexpr_beq b1 gb)) ",
             "(kexpr_beq_pi_pi ty1 b1 gt gb) h)",
         );
         let outer_pi = format!(
             "(fun (ty1 : KExpr) (b1 : KExpr) \
-             (ih_ty : forall (b : KExpr), Eq Bool (kexpr_beq ty1 b) Bool.true -> Eq KExpr ty1 b) \
-             (ih_b : forall (b : KExpr), Eq Bool (kexpr_beq b1 b) Bool.true -> Eq KExpr b1 b) => {})",
+             (ih_ty : forall (b : KExpr), @Eq Bool (kexpr_beq ty1 b) Bool.true -> @Eq KExpr ty1 b) \
+             (ih_b : forall (b : KExpr), @Eq Bool (kexpr_beq b1 b) Bool.true -> @Eq KExpr b1 b) => {})",
             Self::inner_kexpr_rec(
                 "(KExpr.pi ty1 b1)",
                 &Self::absurd_arm("(KExpr.pi ty1 b1)", "(KExpr.sort m)"),
@@ -1487,16 +1488,16 @@ impl Specification {
         // Present h in Bool.and form (kexpr_beq_const_const), bind the inverted
         // equalities (hn = name_eqb_eq, hu = ulist_eqb_eq) as clean hypotheses, rebuild.
         let const_match = concat!(
-            "(fun (hand : Eq Bool (Bool.and (name_eqb n1 n2) (ulist_eqb us1 us2)) Bool.true) => ",
-            "(fun (hx : Eq Bool (name_eqb n1 n2) Bool.true) (hy : Eq Bool (ulist_eqb us1 us2) Bool.true) => ",
-            "(fun (hn : Eq Name n1 n2) (hu : Eq (ListType Level) us1 us2) => ",
+            "(fun (hand : @Eq Bool (Bool.and (name_eqb n1 n2) (ulist_eqb us1 us2)) Bool.true) => ",
+            "(fun (hx : @Eq Bool (name_eqb n1 n2) Bool.true) (hy : @Eq Bool (ulist_eqb us1 us2) Bool.true) => ",
+            "(fun (hn : @Eq Name n1 n2) (hu : @Eq (ListType Level) us1 us2) => ",
             "Eq.trans KExpr (KExpr.const n1 us1) (KExpr.const n2 us1) (KExpr.const n2 us2) ",
             "(Eq.cong Name KExpr (fun (w : Name) => KExpr.const w us1) n1 n2 hn) ",
             "(Eq.cong (ListType Level) KExpr (fun (w : ListType Level) => KExpr.const n2 w) us1 us2 hu)) ",
             "(name_eqb_eq n1 n2 hx) (ulist_eqb_eq us1 us2 hy)) ",
             "(band_eq_true_left (name_eqb n1 n2) (ulist_eqb us1 us2) hand) ",
             "(band_eq_true_right (name_eqb n1 n2) (ulist_eqb us1 us2) hand)) ",
-            "(Eq.substType Bool (fun (x : Bool) => Eq Bool x Bool.true) ",
+            "(Eq.substType Bool (fun (x : Bool) => @Eq Bool x Bool.true) ",
             "(kexpr_beq (KExpr.const n1 us1) (KExpr.const n2 us2)) (Bool.and (name_eqb n1 n2) (ulist_eqb us1 us2)) ",
             "(kexpr_beq_const_const n1 us1 n2 us2) h)",
         );
@@ -1524,10 +1525,10 @@ impl Specification {
         // IHs, then rebuild let_ lt lv lb = let_ glt glv glb via three Eq.cong (one per
         // position) chained by two Eq.trans. Mirrors the lam/pi arms with a third leg.
         let let_match = concat!(
-            "(fun (hand : Eq Bool (Bool.and (kexpr_beq lt glt) (Bool.and (kexpr_beq lv glv) (kexpr_beq lb glb))) Bool.true) => ",
-            "(fun (hx : Eq Bool (kexpr_beq lt glt) Bool.true) (hrest : Eq Bool (Bool.and (kexpr_beq lv glv) (kexpr_beq lb glb)) Bool.true) => ",
-            "(fun (hy : Eq Bool (kexpr_beq lv glv) Bool.true) (hz : Eq Bool (kexpr_beq lb glb) Bool.true) => ",
-            "(fun (ht : Eq KExpr lt glt) (hvv : Eq KExpr lv glv) (hbb : Eq KExpr lb glb) => ",
+            "(fun (hand : @Eq Bool (Bool.and (kexpr_beq lt glt) (Bool.and (kexpr_beq lv glv) (kexpr_beq lb glb))) Bool.true) => ",
+            "(fun (hx : @Eq Bool (kexpr_beq lt glt) Bool.true) (hrest : @Eq Bool (Bool.and (kexpr_beq lv glv) (kexpr_beq lb glb)) Bool.true) => ",
+            "(fun (hy : @Eq Bool (kexpr_beq lv glv) Bool.true) (hz : @Eq Bool (kexpr_beq lb glb) Bool.true) => ",
+            "(fun (ht : @Eq KExpr lt glt) (hvv : @Eq KExpr lv glv) (hbb : @Eq KExpr lb glb) => ",
             "Eq.trans KExpr (KExpr.let_ lt lv lb) (KExpr.let_ glt lv lb) (KExpr.let_ glt glv glb) ",
             "(Eq.cong KExpr KExpr (fun (w : KExpr) => KExpr.let_ w lv lb) lt glt ht) ",
             "(Eq.trans KExpr (KExpr.let_ glt lv lb) (KExpr.let_ glt glv lb) (KExpr.let_ glt glv glb) ",
@@ -1538,15 +1539,15 @@ impl Specification {
             "(band_eq_true_right (kexpr_beq lv glv) (kexpr_beq lb glb) hrest)) ",
             "(band_eq_true_left (kexpr_beq lt glt) (Bool.and (kexpr_beq lv glv) (kexpr_beq lb glb)) hand) ",
             "(band_eq_true_right (kexpr_beq lt glt) (Bool.and (kexpr_beq lv glv) (kexpr_beq lb glb)) hand)) ",
-            "(Eq.substType Bool (fun (x : Bool) => Eq Bool x Bool.true) ",
+            "(Eq.substType Bool (fun (x : Bool) => @Eq Bool x Bool.true) ",
             "(kexpr_beq (KExpr.let_ lt lv lb) (KExpr.let_ glt glv glb)) (Bool.and (kexpr_beq lt glt) (Bool.and (kexpr_beq lv glv) (kexpr_beq lb glb))) ",
             "(kexpr_beq_let_let lt lv lb glt glv glb) h)",
         );
         let outer_let = format!(
             "(fun (lt : KExpr) (lv : KExpr) (lb : KExpr) \
-             (ih_lt : forall (b : KExpr), Eq Bool (kexpr_beq lt b) Bool.true -> Eq KExpr lt b) \
-             (ih_lv : forall (b : KExpr), Eq Bool (kexpr_beq lv b) Bool.true -> Eq KExpr lv b) \
-             (ih_lb : forall (b : KExpr), Eq Bool (kexpr_beq lb b) Bool.true -> Eq KExpr lb b) => {})",
+             (ih_lt : forall (b : KExpr), @Eq Bool (kexpr_beq lt b) Bool.true -> @Eq KExpr lt b) \
+             (ih_lv : forall (b : KExpr), @Eq Bool (kexpr_beq lv b) Bool.true -> @Eq KExpr lv b) \
+             (ih_lb : forall (b : KExpr), @Eq Bool (kexpr_beq lb b) Bool.true -> @Eq KExpr lb b) => {})",
             Self::inner_kexpr_rec(
                 "(KExpr.let_ lt lv lb)",
                 &Self::absurd_arm("(KExpr.let_ lt lv lb)", "(KExpr.sort m)"),
@@ -1563,12 +1564,12 @@ impl Specification {
 
         // ---- proj s1 i1 sub1 (ih_sub): compare name, index, and subterm. ----
         let proj_match = concat!(
-            "(fun (hand : Eq Bool (Bool.and (name_eqb s1 s2) (Bool.and (nat_eqb i1 i2) (kexpr_beq sub1 sub2))) Bool.true) => ",
-            "(fun (hname : Eq Bool (name_eqb s1 s2) Bool.true) ",
-            "(hrest : Eq Bool (Bool.and (nat_eqb i1 i2) (kexpr_beq sub1 sub2)) Bool.true) => ",
-            "(fun (hidx : Eq Bool (nat_eqb i1 i2) Bool.true) ",
-            "(hsub : Eq Bool (kexpr_beq sub1 sub2) Bool.true) => ",
-            "(fun (hs : Eq Name s1 s2) (hi : Eq Nat i1 i2) (he : Eq KExpr sub1 sub2) => ",
+            "(fun (hand : @Eq Bool (Bool.and (name_eqb s1 s2) (Bool.and (nat_eqb i1 i2) (kexpr_beq sub1 sub2))) Bool.true) => ",
+            "(fun (hname : @Eq Bool (name_eqb s1 s2) Bool.true) ",
+            "(hrest : @Eq Bool (Bool.and (nat_eqb i1 i2) (kexpr_beq sub1 sub2)) Bool.true) => ",
+            "(fun (hidx : @Eq Bool (nat_eqb i1 i2) Bool.true) ",
+            "(hsub : @Eq Bool (kexpr_beq sub1 sub2) Bool.true) => ",
+            "(fun (hs : @Eq Name s1 s2) (hi : @Eq Nat i1 i2) (he : @Eq KExpr sub1 sub2) => ",
             "Eq.trans KExpr (KExpr.proj s1 i1 sub1) (KExpr.proj s2 i1 sub1) (KExpr.proj s2 i2 sub2) ",
             "(Eq.cong Name KExpr (fun (w : Name) => KExpr.proj w i1 sub1) s1 s2 hs) ",
             "(Eq.trans KExpr (KExpr.proj s2 i1 sub1) (KExpr.proj s2 i2 sub1) (KExpr.proj s2 i2 sub2) ",
@@ -1579,14 +1580,14 @@ impl Specification {
             "(band_eq_true_right (nat_eqb i1 i2) (kexpr_beq sub1 sub2) hrest)) ",
             "(band_eq_true_left (name_eqb s1 s2) (Bool.and (nat_eqb i1 i2) (kexpr_beq sub1 sub2)) hand) ",
             "(band_eq_true_right (name_eqb s1 s2) (Bool.and (nat_eqb i1 i2) (kexpr_beq sub1 sub2)) hand)) ",
-            "(Eq.substType Bool (fun (x : Bool) => Eq Bool x Bool.true) ",
+            "(Eq.substType Bool (fun (x : Bool) => @Eq Bool x Bool.true) ",
             "(kexpr_beq (KExpr.proj s1 i1 sub1) (KExpr.proj s2 i2 sub2)) ",
             "(Bool.and (name_eqb s1 s2) (Bool.and (nat_eqb i1 i2) (kexpr_beq sub1 sub2))) ",
             "(kexpr_beq_proj_proj s1 i1 sub1 s2 i2 sub2) h)",
         );
         let outer_proj = format!(
             "(fun (s1 : Name) (i1 : Nat) (sub1 : KExpr) \
-             (ih_sub : forall (b : KExpr), Eq Bool (kexpr_beq sub1 b) Bool.true -> Eq KExpr sub1 b) => {})",
+             (ih_sub : forall (b : KExpr), @Eq Bool (kexpr_beq sub1 b) Bool.true -> @Eq KExpr sub1 b) => {})",
             Self::inner_kexpr_rec(
                 "(KExpr.proj s1 i1 sub1)",
                 &Self::absurd_arm("(KExpr.proj s1 i1 sub1)", "(KExpr.sort m)"),
@@ -1603,8 +1604,8 @@ impl Specification {
 
         // ---- lit v: compare the literal payload through nat_eqb soundness. ----
         let lit_match = concat!(
-            "(fun (hvw : Eq Nat v w) => Eq.cong Nat KExpr KExpr.lit v w hvw) ",
-            "(nat_eqb_eq v w (Eq.substType Bool (fun (x : Bool) => Eq Bool x Bool.true) ",
+            "(fun (hvw : @Eq Nat v w) => Eq.cong Nat KExpr KExpr.lit v w hvw) ",
+            "(nat_eqb_eq v w (Eq.substType Bool (fun (x : Bool) => @Eq Bool x Bool.true) ",
             "(kexpr_beq (KExpr.lit v) (KExpr.lit w)) (nat_eqb v w) ",
             "(kexpr_beq_lit_lit v w) h))",
         );
@@ -1625,8 +1626,8 @@ impl Specification {
         );
 
         let value_src = format!(
-            "fun (a : KExpr) => KExpr.rec \
-             (fun (za : KExpr) => forall (b : KExpr), Eq Bool (kexpr_beq za b) Bool.true -> Eq KExpr za b) \
+            "fun (a : KExpr) => @KExpr.rec \
+             (fun (za : KExpr) => forall (b : KExpr), @Eq Bool (kexpr_beq za b) Bool.true -> @Eq KExpr za b) \
              {sort} {bvar} {app} {lam} {pi} {konst} {let_} {proj} {lit} a",
             sort = outer_sort,
             bvar = outer_bvar,
@@ -1642,7 +1643,7 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "kexpr_beq_eq".to_string(),
             type_src:
-                "forall (a : KExpr) (b : KExpr), Eq Bool (kexpr_beq a b) Bool.true -> Eq KExpr a b"
+                "forall (a : KExpr) (b : KExpr), @Eq Bool (kexpr_beq a b) Bool.true -> @Eq KExpr a b"
                     .to_string(),
             value_src: Some(value_src),
             is_axiom: false,
@@ -1703,9 +1704,9 @@ impl Specification {
         // to true for the Eq.refl premise to typecheck.
         self.add_definition(Self::derived_eq_lemma(
             "nat_eqb_eq_fires_witness",
-            "Eq Nat (Nat.succ (Nat.succ Nat.zero)) (Nat.succ (Nat.succ Nat.zero))",
+            "@Eq Nat (Nat.succ (Nat.succ Nat.zero)) (Nat.succ (Nat.succ Nat.zero))",
             "nat_eqb_eq (Nat.succ (Nat.succ Nat.zero)) (Nat.succ (Nat.succ Nat.zero)) \
-             (Eq.refl Bool Bool.true)",
+             (@Eq.refl Bool Bool.true)",
             "Non-vacuity: nat_eqb_eq applied to a genuine `nat_eqb 2 2 = true` witness (Eq.refl Bool \
              true, which only typechecks because the kernel reduces nat_eqb 2 2 to true) yields the \
              concrete Eq Nat 2 2. Masquerade guard for nat_eqb_eq. DerivedProved, zero axiom_deps.",
@@ -1719,7 +1720,7 @@ impl Specification {
         self.add_definition(Self::derived_eq_lemma(
             "kexpr_beq_eq_fires_witness",
             concat!(
-                "Eq KExpr ",
+                "@Eq KExpr ",
                 "(KExpr.app (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.sort Level.zero)) ",
                 "(KExpr.app (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.sort Level.zero))"
             ),
@@ -1739,7 +1740,7 @@ impl Specification {
         self.add_definition(Self::derived_eq_lemma(
             "kexpr_beq_eq_proj_fires_witness",
             concat!(
-                "Eq KExpr ",
+                "@Eq KExpr ",
                 "(KExpr.proj Name.anonymous Nat.zero (KExpr.lit (Nat.succ Nat.zero))) ",
                 "(KExpr.proj Name.anonymous Nat.zero (KExpr.lit (Nat.succ Nat.zero)))"
             ),
@@ -1758,7 +1759,7 @@ impl Specification {
 
         self.add_definition(Self::derived_eq_lemma(
             "kexpr_beq_eq_lit_fires_witness",
-            "Eq KExpr (KExpr.lit (Nat.succ Nat.zero)) (KExpr.lit (Nat.succ Nat.zero))",
+            "@Eq KExpr (KExpr.lit (Nat.succ Nat.zero)) (KExpr.lit (Nat.succ Nat.zero))",
             concat!(
                 "kexpr_beq_eq ",
                 "(KExpr.lit (Nat.succ Nat.zero)) (KExpr.lit (Nat.succ Nat.zero)) ",
@@ -2099,7 +2100,7 @@ mod tests {
             .expect("kexpr_beq_iff_mpr should be registered");
         assert!(
             mpr.type_src
-                .contains("Eq KExpr a b -> Eq Bool (kexpr_beq a b) Bool.true"),
+                .contains("@Eq KExpr a b -> @Eq Bool (kexpr_beq a b) Bool.true"),
             "kexpr_beq_iff_mpr must literally state a = b -> kexpr_beq a b = true, got: {}",
             mpr.type_src
         );
@@ -2110,7 +2111,7 @@ mod tests {
             .expect("kexpr_beq_iff_mp should be registered");
         assert!(
             mp.type_src
-                .contains("Eq Bool (kexpr_beq a b) Bool.true -> Eq KExpr a b"),
+                .contains("@Eq Bool (kexpr_beq a b) Bool.true -> @Eq KExpr a b"),
             "kexpr_beq_iff_mp must literally state kexpr_beq a b = true -> a = b, got: {}",
             mp.type_src
         );

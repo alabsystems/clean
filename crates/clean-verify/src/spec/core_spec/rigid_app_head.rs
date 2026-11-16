@@ -112,7 +112,7 @@ impl Specification {
         // precisely where the side conditions get dropped.
         self.add_recursive_def(
             "def whnf_stuck_head_rigid (f : KExpr) (hs : whnf_stuck_head f) : rigid_app_head f := \
-             whnf_stuck_head.rec (fun (x : KExpr) (_h : whnf_stuck_head x) => rigid_app_head x) \
+             @whnf_stuck_head.rec (fun (x : KExpr) (_h : whnf_stuck_head x) => rigid_app_head x) \
              (fun (n : Level) => rigid_app_head.sort n) \
              (fun (pty : KExpr) (pbody : KExpr) => rigid_app_head.pi pty pbody) \
              (fun (af : KExpr) (aa : KExpr) (_hf : whnf_stuck_head af) \
@@ -141,7 +141,7 @@ impl Specification {
             let ih = match sub {
                 Some(v) => format!(
                     "(_ih : forall (C : Type) (lty : KExpr) (lbd : KExpr), \
-                     Eq KExpr {v} (KExpr.lam lty lbd) -> C) "
+                     @Eq KExpr {v} (KExpr.lam lty lbd) -> C) "
                 ),
                 None => String::new(),
             };
@@ -151,18 +151,18 @@ impl Specification {
             };
             not_lam_arms.push_str(&format!(
                 "(fun {payload} {rec_premise}{ih}(C : Type) (lty : KExpr) (lbd : KExpr) \
-                 (heq : Eq KExpr {form} (KExpr.lam lty lbd)) => \
-                 kexpr_discr_t C {form} (KExpr.lam lty lbd) heq (Eq.refl Bool Bool.false)) "
+                 (heq : @Eq KExpr {form} (KExpr.lam lty lbd)) => \
+                 kexpr_discr_t C {form} (KExpr.lam lty lbd) heq (@Eq.refl Bool Bool.false)) "
             ));
         }
         self.add_recursive_def(
             &format!(
                 "def rigid_app_head_not_lam (f : KExpr) (hr : rigid_app_head f) : \
                  forall (C : Type) (lty : KExpr) (lbd : KExpr), \
-                 Eq KExpr f (KExpr.lam lty lbd) -> C := \
-                 rigid_app_head.rec (fun (x : KExpr) (_h : rigid_app_head x) => \
+                 @Eq KExpr f (KExpr.lam lty lbd) -> C := \
+                 @rigid_app_head.rec (fun (x : KExpr) (_h : rigid_app_head x) => \
                  forall (C : Type) (lty : KExpr) (lbd : KExpr), \
-                 Eq KExpr x (KExpr.lam lty lbd) -> C) \
+                 @Eq KExpr x (KExpr.lam lty lbd) -> C) \
                  {not_lam_arms}f hr"
             ),
             "rigid_app_head_not_lam: a rigid head is never a lambda. All six arms conclude at a \
@@ -178,7 +178,7 @@ impl Specification {
             let ih = match sub {
                 Some(v) => format!(
                     "(_ih : forall (gf : KExpr) (ga : KExpr), \
-                     Eq KExpr {v} (KExpr.app gf ga) -> rigid_app_head gf) "
+                     @Eq KExpr {v} (KExpr.app gf ga) -> rigid_app_head gf) "
                 ),
                 None => String::new(),
             };
@@ -194,21 +194,21 @@ impl Specification {
             } else {
                 format!(
                     "kexpr_discr_t (rigid_app_head gf) {form} (KExpr.app gf ga) heq \
-                     (Eq.refl Bool Bool.false)"
+                     (@Eq.refl Bool Bool.false)"
                 )
             };
             app_inv_arms.push_str(&format!(
                 "(fun {payload} {rec_premise}{ih}(gf : KExpr) (ga : KExpr) \
-                 (heq : Eq KExpr {form} (KExpr.app gf ga)) => {body}) "
+                 (heq : @Eq KExpr {form} (KExpr.app gf ga)) => {body}) "
             ));
         }
         self.add_recursive_def(
             &format!(
                 "def rigid_app_head_app_inv (x : KExpr) (hr : rigid_app_head x) : \
-                 forall (gf : KExpr) (ga : KExpr), Eq KExpr x (KExpr.app gf ga) -> \
+                 forall (gf : KExpr) (ga : KExpr), @Eq KExpr x (KExpr.app gf ga) -> \
                  rigid_app_head gf := \
-                 rigid_app_head.rec (fun (z : KExpr) (_h : rigid_app_head z) => \
-                 forall (gf : KExpr) (ga : KExpr), Eq KExpr z (KExpr.app gf ga) -> \
+                 @rigid_app_head.rec (fun (z : KExpr) (_h : rigid_app_head z) => \
+                 forall (gf : KExpr) (ga : KExpr), @Eq KExpr z (KExpr.app gf ga) -> \
                  rigid_app_head gf) \
                  {app_inv_arms}x hr"
             ),
@@ -225,9 +225,11 @@ impl Specification {
     /// No constant name at the head, hence no ι or δ step.
     fn add_rigid_head_immunity(&mut self) -> Result<(), SpecError> {
         let none_at = |x: &str| {
-            format!("Eq (OptionType Name) (kexpr_const_name (kapp_fn {x})) (OptionType.none Name)")
+            format!(
+                "@Eq (OptionType Name) (kexpr_const_name (kapp_fn {x})) (@OptionType.none Name)"
+            )
         };
-        let refl = "Eq.refl (OptionType Name) (OptionType.none Name)";
+        let refl = "@Eq.refl (OptionType Name) (@OptionType.none Name)";
 
         let mut arms = String::new();
         for (payload, _form, sub) in RIGID_ARMS {
@@ -245,7 +247,7 @@ impl Specification {
         self.add_recursive_def(
             &format!(
                 "def rigid_app_head_no_const (f : KExpr) (hr : rigid_app_head f) : {goal} := \
-                 rigid_app_head.rec (fun (x : KExpr) (_h : rigid_app_head x) => {motive}) \
+                 @rigid_app_head.rec (fun (x : KExpr) (_h : rigid_app_head x) => {motive}) \
                  {arms}f hr",
                 goal = none_at("f"),
                 motive = none_at("x"),
@@ -275,7 +277,7 @@ impl Specification {
             self.add_recursive_def(
                 &format!(
                     "def {name} (renv : RedEnv) (f : KExpr) (hr : rigid_app_head f) : \
-                     Eq (OptionType KExpr) ({reduct} ({envsel}) f) (OptionType.none KExpr) := \
+                     @Eq (OptionType KExpr) ({reduct} ({envsel}) f) (@OptionType.none KExpr) := \
                      {lemma} ({envsel}) f (rigid_app_head_no_const f hr)"
                 ),
                 &format!(
@@ -330,7 +332,9 @@ mod tests {
     fn test_rigid_head_generated_arms_are_wellformed() {
         // Reconstruct the immunity arms, the only ones with IH plumbing.
         let none_at = |x: &str| {
-            format!("Eq (OptionType Name) (kexpr_const_name (kapp_fn {x})) (OptionType.none Name)")
+            format!(
+                "@Eq (OptionType Name) (kexpr_const_name (kapp_fn {x})) (@OptionType.none Name)"
+            )
         };
         let mut arms = String::new();
         for (payload, _form, sub) in RIGID_ARMS {
@@ -340,7 +344,7 @@ mod tests {
                     ih = none_at(v)
                 )),
                 None => arms.push_str(&format!(
-                    "(fun {payload} => Eq.refl (OptionType Name) (OptionType.none Name)) "
+                    "(fun {payload} => @Eq.refl (OptionType Name) (@OptionType.none Name)) "
                 )),
             }
         }

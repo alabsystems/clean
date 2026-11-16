@@ -232,15 +232,15 @@ const SIMAX11: &str = "(KExpr.sort (Level.imax (Level.succ Level.zero) (Level.su
 /// The fragment's identity function, annotated at the base type.
 const IDLAM0: &str = "(KExpr.lam (KExpr.sort Level.zero) (KExpr.bvar Nat.zero))";
 /// The empty context.
-const NILCTX: &str = "(ListType.nil KExpr)";
+const NILCTX: &str = "(@ListType.nil KExpr)";
 /// The one-entry context `[sort 0]`.
-const CTX1: &str = "(ListType.cons KExpr (KExpr.sort Level.zero) (ListType.nil KExpr))";
+const CTX1: &str = "(@ListType.cons KExpr (KExpr.sort Level.zero) (@ListType.nil KExpr))";
 /// The one-entry context `[sort 1]` — the context `SynTyL.letTy` opens.
 const CTX1S1: &str =
-    "(ListType.cons KExpr (KExpr.sort (Level.succ Level.zero)) (ListType.nil KExpr))";
+    "(@ListType.cons KExpr (KExpr.sort (Level.succ Level.zero)) (@ListType.nil KExpr))";
 /// The TWO-entry context `[sort 0 ; bvar 0]`, whose entry at index 1 is
 /// `bvar 0` — a type the lift genuinely MOVES.
-const CTX2: &str = "(ListType.cons KExpr (KExpr.sort Level.zero) (ListType.cons KExpr (KExpr.bvar Nat.zero) (ListType.nil KExpr)))";
+const CTX2: &str = "(@ListType.cons KExpr (KExpr.sort Level.zero) (@ListType.cons KExpr (KExpr.bvar Nat.zero) (@ListType.nil KExpr)))";
 /// The witness zeta redex `let_ (sort 1) (sort 0) (bvar 0)` — a `let` whose
 /// BODY IS THE BOUND VARIABLE, so the contractum is the value.
 const LETREDEX: &str = "(KExpr.let_ (KExpr.sort (Level.succ Level.zero)) (KExpr.sort Level.zero) (KExpr.bvar Nat.zero))";
@@ -250,30 +250,30 @@ const LETREDEX: &str = "(KExpr.let_ (KExpr.sort (Level.succ Level.zero)) (KExpr.
 // lifting of the TYPE.
 // ================================================================
 
-pub(super) const TY_CANDINTERP_LIFT_EQ: &str = "forall (k : Nat) (T : KExpr) (d : Nat), Eq (KExpr -> Type) (candInterp (lift_at T d k)) (candInterp T)";
+pub(super) const TY_CANDINTERP_LIFT_EQ: &str = "forall (k : Nat) (T : KExpr) (d : Nat), @Eq (KExpr -> Type) (candInterp (lift_at T d k)) (candInterp T)";
 
 pub(super) fn val_candinterp_lift_eq() -> String {
     let ih = |x: &str| {
-        format!("forall (qd : Nat), Eq (KExpr -> Type) (candInterp (lift_at {x} qd k)) (candInterp {x})")
+        format!("forall (qd : Nat), @Eq (KExpr -> Type) (candInterp (lift_at {x} qd k)) (candInterp {x})")
     };
-    let motive = "(fun (qT : KExpr) => forall (qd : Nat), Eq (KExpr -> Type) (candInterp (lift_at qT qd k)) (candInterp qT))";
+    let motive = "(fun (qT : KExpr) => forall (qd : Nat), @Eq (KExpr -> Type) (candInterp (lift_at qT qd k)) (candInterp qT))";
     // sort: lift_at fixes a sort, both sides are the top candidate.
     let a_sort =
-        "(fun (qn : Level) (qd : Nat) => Eq.refl (KExpr -> Type) (candInterp (KExpr.sort qn)))";
+        "(fun (qn : Level) (qd : Nat) => @Eq.refl (KExpr -> Type) (candInterp (KExpr.sort qn)))";
     // bvar: lift_bvar_at is STUCK on Nat.sub qd qi, so the arm splits on it —
     // and both branches are still bvar-headed, hence still the top candidate.
-    let lifted_bvar = "(Nat.rec (fun (_ : Nat) => KExpr) (KExpr.bvar (Nat.add qi k)) (fun (_ : Nat) (_ : KExpr) => KExpr.bvar qi) qj)";
-    let lifted_bvar_m = "(Nat.rec (fun (_ : Nat) => KExpr) (KExpr.bvar (Nat.add qi k)) (fun (_ : Nat) (_ : KExpr) => KExpr.bvar qi) qm)";
+    let lifted_bvar = "(@Nat.rec (fun (_ : Nat) => KExpr) (KExpr.bvar (Nat.add qi k)) (fun (_ : Nat) (_ : KExpr) => KExpr.bvar qi) qj)";
+    let lifted_bvar_m = "(@Nat.rec (fun (_ : Nat) => KExpr) (KExpr.bvar (Nat.add qi k)) (fun (_ : Nat) (_ : KExpr) => KExpr.bvar qi) qm)";
     let a_bvar = format!(
-        "(fun (qi : Nat) (qd : Nat) => Nat.rec (fun (qj : Nat) => Eq (KExpr -> Type) (candInterp {lifted_bvar}) (candInterp (KExpr.bvar qi))) (Eq.refl (KExpr -> Type) (candInterp (KExpr.bvar qi))) (fun (qm : Nat) (_qih : Eq (KExpr -> Type) (candInterp {lifted_bvar_m}) (candInterp (KExpr.bvar qi))) => Eq.refl (KExpr -> Type) (candInterp (KExpr.bvar qi))) (Nat.sub qd qi))"
+        "(fun (qi : Nat) (qd : Nat) => @Nat.rec (fun (qj : Nat) => @Eq (KExpr -> Type) (candInterp {lifted_bvar}) (candInterp (KExpr.bvar qi))) (@Eq.refl (KExpr -> Type) (candInterp (KExpr.bvar qi))) (fun (qm : Nat) (_qih : @Eq (KExpr -> Type) (candInterp {lifted_bvar_m}) (candInterp (KExpr.bvar qi))) => @Eq.refl (KExpr -> Type) (candInterp (KExpr.bvar qi))) (Nat.sub qd qi))"
     );
     let a_app = format!(
-        "(fun (qf : KExpr) (qa : KExpr) (_qihf : {}) (_qiha : {}) (qd : Nat) => Eq.refl (KExpr -> Type) (candInterp (KExpr.app qf qa)))",
+        "(fun (qf : KExpr) (qa : KExpr) (_qihf : {}) (_qiha : {}) (qd : Nat) => @Eq.refl (KExpr -> Type) (candInterp (KExpr.app qf qa)))",
         ih("qf"),
         ih("qa")
     );
     let a_lam = format!(
-        "(fun (qty : KExpr) (qb : KExpr) (_qihty : {}) (_qihb : {}) (qd : Nat) => Eq.refl (KExpr -> Type) (candInterp (KExpr.lam qty qb)))",
+        "(fun (qty : KExpr) (qb : KExpr) (_qihty : {}) (_qihb : {}) (qd : Nat) => @Eq.refl (KExpr -> Type) (candInterp (KExpr.lam qty qb)))",
         ih("qty"),
         ih("qb")
     );
@@ -281,61 +281,61 @@ pub(super) fn val_candinterp_lift_eq() -> String {
     // PiSet (candInterp A) (fun _ => candInterp B); rewrite each family by its
     // IH. Function equality congruences through PiSet directly — no funext.
     let a_pi = format!(
-        "(fun (qA : KExpr) (qB : KExpr) (qihA : {}) (qihB : {}) (qd : Nat) => Eq.trans (KExpr -> Type) (PiSet (candInterp (lift_at qA qd k)) (fun (_ : KExpr) => candInterp (lift_at qB (Nat.succ qd) k))) (PiSet (candInterp qA) (fun (_ : KExpr) => candInterp (lift_at qB (Nat.succ qd) k))) (PiSet (candInterp qA) (fun (_ : KExpr) => candInterp qB)) (Eq.cong (KExpr -> Type) (KExpr -> Type) (fun (qF : KExpr -> Type) => PiSet qF (fun (_ : KExpr) => candInterp (lift_at qB (Nat.succ qd) k))) (candInterp (lift_at qA qd k)) (candInterp qA) (qihA qd)) (Eq.cong (KExpr -> Type) (KExpr -> Type) (fun (qF : KExpr -> Type) => PiSet (candInterp qA) (fun (_ : KExpr) => qF)) (candInterp (lift_at qB (Nat.succ qd) k)) (candInterp qB) (qihB (Nat.succ qd))))",
+        "(fun (qA : KExpr) (qB : KExpr) (qihA : {}) (qihB : {}) (qd : Nat) => @Eq.trans (KExpr -> Type) (PiSet (candInterp (lift_at qA qd k)) (fun (_ : KExpr) => candInterp (lift_at qB (Nat.succ qd) k))) (PiSet (candInterp qA) (fun (_ : KExpr) => candInterp (lift_at qB (Nat.succ qd) k))) (PiSet (candInterp qA) (fun (_ : KExpr) => candInterp qB)) (@Eq.cong (KExpr -> Type) (KExpr -> Type) (fun (qF : KExpr -> Type) => PiSet qF (fun (_ : KExpr) => candInterp (lift_at qB (Nat.succ qd) k))) (candInterp (lift_at qA qd k)) (candInterp qA) (qihA qd)) (@Eq.cong (KExpr -> Type) (KExpr -> Type) (fun (qF : KExpr -> Type) => PiSet (candInterp qA) (fun (_ : KExpr) => qF)) (candInterp (lift_at qB (Nat.succ qd) k)) (candInterp qB) (qihB (Nat.succ qd))))",
         ih("qA"),
         ih("qB")
     );
-    let a_const = "(fun (qn : Name) (qus : ListType Level) (qd : Nat) => Eq.refl (KExpr -> Type) (candInterp (KExpr.const qn qus)))";
+    let a_const = "(fun (qn : Name) (qus : ListType Level) (qd : Nat) => @Eq.refl (KExpr -> Type) (candInterp (KExpr.const qn qus)))";
     let a_let = format!(
-        "(fun (qlty : KExpr) (qlv : KExpr) (qlb : KExpr) (_qih1 : {}) (_qih2 : {}) (_qih3 : {}) (qd : Nat) => Eq.refl (KExpr -> Type) (candInterp (KExpr.let_ qlty qlv qlb)))",
+        "(fun (qlty : KExpr) (qlv : KExpr) (qlb : KExpr) (_qih1 : {}) (_qih2 : {}) (_qih3 : {}) (qd : Nat) => @Eq.refl (KExpr -> Type) (candInterp (KExpr.let_ qlty qlv qlb)))",
         ih("qlty"),
         ih("qlv"),
         ih("qlb")
     );
     let a_proj = format!(
-        "(fun (qps : Name) (qpidx : Nat) (qsub : KExpr) (_qihs : {}) (qd : Nat) => Eq.refl (KExpr -> Type) (candInterp (KExpr.proj qps qpidx qsub)))",
+        "(fun (qps : Name) (qpidx : Nat) (qsub : KExpr) (_qihs : {}) (qd : Nat) => @Eq.refl (KExpr -> Type) (candInterp (KExpr.proj qps qpidx qsub)))",
         ih("qsub")
     );
     let a_lit =
-        "(fun (qv : Nat) (qd : Nat) => Eq.refl (KExpr -> Type) (candInterp (KExpr.lit qv)))";
+        "(fun (qv : Nat) (qd : Nat) => @Eq.refl (KExpr -> Type) (candInterp (KExpr.lit qv)))";
     format!(
-        "fun (k : Nat) (T : KExpr) => KExpr.rec {motive} {a_sort} {a_bvar} {a_app} {a_lam} {a_pi} {a_const} {a_let} {a_proj} {a_lit} T"
+        "fun (k : Nat) (T : KExpr) => @KExpr.rec {motive} {a_sort} {a_bvar} {a_app} {a_lam} {a_pi} {a_const} {a_let} {a_proj} {a_lit} T"
     )
 }
 
 pub(super) const TY_CANDINTERP_LIFT: &str = "forall (T : KExpr) (d : Nat) (k : Nat) (e : KExpr), candInterp T e -> candInterp (lift_at T d k) e";
 
-pub(super) const VAL_CANDINTERP_LIFT: &str = "fun (T : KExpr) (d : Nat) (k : Nat) (e : KExpr) (h : candInterp T e) => Eq.substType (KExpr -> Type) (fun (qF : KExpr -> Type) => qF e) (candInterp T) (candInterp (lift_at T d k)) (Eq.symm (KExpr -> Type) (candInterp (lift_at T d k)) (candInterp T) (candInterp_lift_eq k T d)) h";
+pub(super) const VAL_CANDINTERP_LIFT: &str = "fun (T : KExpr) (d : Nat) (k : Nat) (e : KExpr) (h : candInterp T e) => @Eq.substType (KExpr -> Type) (fun (qF : KExpr -> Type) => qF e) (candInterp T) (candInterp (lift_at T d k)) (@Eq.symm (KExpr -> Type) (candInterp (lift_at T d k)) (candInterp T) (candInterp_lift_eq k T d)) h";
 
 pub(super) const TY_CANDINTERP_UNLIFT: &str = "forall (T : KExpr) (d : Nat) (k : Nat) (e : KExpr), candInterp (lift_at T d k) e -> candInterp T e";
 
-pub(super) const VAL_CANDINTERP_UNLIFT: &str = "fun (T : KExpr) (d : Nat) (k : Nat) (e : KExpr) (h : candInterp (lift_at T d k) e) => Eq.substType (KExpr -> Type) (fun (qF : KExpr -> Type) => qF e) (candInterp (lift_at T d k)) (candInterp T) (candInterp_lift_eq k T d) h";
+pub(super) const VAL_CANDINTERP_UNLIFT: &str = "fun (T : KExpr) (d : Nat) (k : Nat) (e : KExpr) (h : candInterp (lift_at T d k) e) => @Eq.substType (KExpr -> Type) (fun (qF : KExpr -> Type) => qF e) (candInterp (lift_at T d k)) (candInterp T) (candInterp_lift_eq k T d) h";
 
 /// The lift is not a no-op at a loose variable: this is what makes
 /// `candInterp_lift_eq` a THEOREM rather than a restatement of reflexivity.
 pub(super) fn ty_r8_lift_moves_index() -> String {
-    format!("Eq KExpr (lift_at {V0} Nat.zero (Nat.succ (Nat.succ Nat.zero))) {V2}")
+    format!("@Eq KExpr (lift_at {V0} Nat.zero (Nat.succ (Nat.succ Nat.zero))) {V2}")
 }
 
 pub(super) fn val_r8_lift_moves_index() -> String {
-    format!("Eq.refl KExpr {V2}")
+    format!("@Eq.refl KExpr {V2}")
 }
 
 /// ...and it moves UNDER a `pi` binder too, at the shifted cutoff — the only
 /// arm of `candInterp_lift_eq` that is not `Eq.refl`.
 pub(super) fn ty_r8_lift_moves_under_pi() -> String {
     format!(
-        "Eq KExpr (lift_at (KExpr.pi {S0} {V1}) Nat.zero (Nat.succ Nat.zero)) (KExpr.pi {S0} {V2})"
+        "@Eq KExpr (lift_at (KExpr.pi {S0} {V1}) Nat.zero (Nat.succ Nat.zero)) (KExpr.pi {S0} {V2})"
     )
 }
 
 pub(super) fn val_r8_lift_moves_under_pi() -> String {
-    format!("Eq.refl KExpr (KExpr.pi {S0} {V2})")
+    format!("@Eq.refl KExpr (KExpr.pi {S0} {V2})")
 }
 
 /// The interpretation is unmoved where the syntax moved.
 pub(super) fn ty_r8_candinterp_lift_bvar_witness() -> String {
-    format!("Eq (KExpr -> Type) (candInterp (lift_at {V0} Nat.zero (Nat.succ (Nat.succ Nat.zero)))) (candInterp {V0})")
+    format!("@Eq (KExpr -> Type) (candInterp (lift_at {V0} Nat.zero (Nat.succ (Nat.succ Nat.zero)))) (candInterp {V0})")
 }
 
 pub(super) fn val_r8_candinterp_lift_bvar_witness() -> String {
@@ -364,7 +364,7 @@ pub(super) const VAL_R8_ZETA_SPINE_IS_NEUTRAL: &str =
 
 pub(super) const TY_R8_ZETA_OBSTRUCTION_LOCATED: &str = "forall (ty : KExpr) (v : KExpr) (b : KExpr) (a : KExpr), AndType (Neutral (KExpr.app (KExpr.let_ ty v b) a)) (Neutral (KExpr.let_ ty v b) -> Empty)";
 
-pub(super) const VAL_R8_ZETA_OBSTRUCTION_LOCATED: &str = "fun (ty : KExpr) (v : KExpr) (b : KExpr) (a : KExpr) => AndType.intro (Neutral (KExpr.app (KExpr.let_ ty v b) a)) (Neutral (KExpr.let_ ty v b) -> Empty) ConstFreeUnit.triv (fun (h : Neutral (KExpr.let_ ty v b)) => h)";
+pub(super) const VAL_R8_ZETA_OBSTRUCTION_LOCATED: &str = "fun (ty : KExpr) (v : KExpr) (b : KExpr) (a : KExpr) => @AndType.intro (Neutral (KExpr.app (KExpr.let_ ty v b) a)) (Neutral (KExpr.let_ ty v b) -> Empty) ConstFreeUnit.triv (fun (h : Neutral (KExpr.let_ ty v b)) => h)";
 
 // ================================================================
 // Group C — the CONVERGED judgment.
@@ -372,14 +372,14 @@ pub(super) const VAL_R8_ZETA_OBSTRUCTION_LOCATED: &str = "fun (ty : KExpr) (v : 
 
 /// `TypingCtx.var`'s rule, transcribed. Spelled once so the inductive source
 /// and the shape guard cannot drift apart.
-const VAR_RULE_LIFTED: &str = "| var : forall (G : ListType KExpr) (i : Nat) (A : KExpr), Eq (OptionType KExpr) (ctx_lookup G i) (OptionType.some KExpr A) -> SynTyL G (KExpr.bvar i) (lift_at A Nat.zero (Nat.succ i))";
+const VAR_RULE_LIFTED: &str = "| var : forall (G : ListType KExpr) (i : Nat) (A : KExpr), @Eq (OptionType KExpr) (ctx_lookup G i) (@OptionType.some KExpr A) -> SynTyL G (KExpr.bvar i) (lift_at A Nat.zero (Nat.succ i))";
 
 /// `TypingCtx.pi`'s formation rule, transcribed — including the literal
 /// `Level.imax`.
-const PI_RULE_IMAX: &str = "| pi : forall (G : ListType KExpr) (A : KExpr) (B : KExpr) (n : Level) (m : Level), SynTyL G A (KExpr.sort n) -> SynTyL (ListType.cons KExpr A G) B (KExpr.sort m) -> SynTyL G (KExpr.pi A B) (KExpr.sort (Level.imax n m))";
+const PI_RULE_IMAX: &str = "| pi : forall (G : ListType KExpr) (A : KExpr) (B : KExpr) (n : Level) (m : Level), SynTyL G A (KExpr.sort n) -> SynTyL (@ListType.cons KExpr A G) B (KExpr.sort m) -> SynTyL G (KExpr.pi A B) (KExpr.sort (Level.imax n m))";
 
 /// The zeta rule, at the sort-annotated fragment §B licenses.
-const LET_RULE_SORT: &str = "| letTy : forall (G : ListType KExpr) (n : Level) (m : Level) (v : KExpr) (b : KExpr), SynTyL G v (KExpr.sort n) -> SynTyL (ListType.cons KExpr (KExpr.sort n) G) b (KExpr.sort m) -> SynTyL G (KExpr.let_ (KExpr.sort n) v b) (KExpr.sort m)";
+const LET_RULE_SORT: &str = "| letTy : forall (G : ListType KExpr) (n : Level) (m : Level) (v : KExpr) (b : KExpr), SynTyL G v (KExpr.sort n) -> SynTyL (@ListType.cons KExpr (KExpr.sort n) G) b (KExpr.sort m) -> SynTyL G (KExpr.let_ (KExpr.sort n) v b) (KExpr.sort m)";
 
 pub(super) fn src_syn_ty_l() -> String {
     format!(
@@ -388,7 +388,7 @@ pub(super) fn src_syn_ty_l() -> String {
          | sort : forall (G : ListType KExpr) (n : Level), SynTyL G (KExpr.sort n) (KExpr.sort (Level.succ n))\n\
          {PI_RULE_IMAX}\n\
          | app : forall (G : ListType KExpr) (A : KExpr) (B : KExpr) (f : KExpr) (a : KExpr), SynTyL G f (KExpr.pi A B) -> SynTyL G a A -> SynTyL G (KExpr.app f a) B\n\
-         | lam : forall (G : ListType KExpr) (A : KExpr) (B : KExpr) (b : KExpr), SimpleTy A -> SynTyL (ListType.cons KExpr A G) b B -> SynTyL G (KExpr.lam A b) (KExpr.pi A B)\n\
+         | lam : forall (G : ListType KExpr) (A : KExpr) (B : KExpr) (b : KExpr), SimpleTy A -> SynTyL (@ListType.cons KExpr A G) b B -> SynTyL G (KExpr.lam A b) (KExpr.pi A B)\n\
          {LET_RULE_SORT}"
     )
 }
@@ -404,7 +404,7 @@ pub(super) fn val_syntyl_fundamental() -> String {
     // var: THE RUNG. The SubstOK lookup gives membership at the UNLIFTED type;
     // candInterp_lift carries it to the lifted one, which is what
     // TypingCtx.var's conclusion demands. psubst qs (bvar qi) is defeq qs qi.
-    let m_var = "(fun (qG : ListType KExpr) (qi : Nat) (qA : KExpr) (qhget : Eq (OptionType KExpr) (ctx_lookup qG qi) (OptionType.some KExpr qA)) (qs : Nat -> KExpr) (qhs : SubstOK qs qG) => candInterp_lift qA Nat.zero (Nat.succ qi) (qs qi) (qhs qi qA qhget))";
+    let m_var = "(fun (qG : ListType KExpr) (qi : Nat) (qA : KExpr) (qhget : @Eq (OptionType KExpr) (ctx_lookup qG qi) (@OptionType.some KExpr qA)) (qs : Nat -> KExpr) (qhs : SubstOK qs qG) => candInterp_lift qA Nat.zero (Nat.succ qi) (qs qi) (qhs qi qA qhget))";
     // sort: red_sort at the interpretation, with the landed SN of sorts.
     let m_sort = "(fun (qG : ListType KExpr) (qn : Level) (qs : Nat -> KExpr) (_qhs : SubstOK qs qG) => candInterp_sort_mem (Level.succ qn) (KExpr.sort qn) (whnfAcc_sort qn))";
     // The extended-context closing substitution at the fresh variable, and the
@@ -415,7 +415,7 @@ pub(super) fn val_syntyl_fundamental() -> String {
     };
     let body_acc = |ihname: &str, cod: &str, body: &str, dom: &str| {
         format!(
-            "(whnfAcc_of_instantiate_bvar0 (psubst (up qs) {body}) (Eq.substType KExpr (fun (qw : KExpr) => whnf_acc qw) (psubst (scons (KExpr.bvar Nat.zero) qs) {body}) (instantiate (psubst (up qs) {body}) (KExpr.bvar Nat.zero)) (psubst_scons_instantiate {body} (KExpr.bvar Nat.zero) qs) (candInterp_cr1 {cod} (psubst (scons (KExpr.bvar Nat.zero) qs) {body}) ({ihname} (scons (KExpr.bvar Nat.zero) qs) {ext}))))",
+            "(whnfAcc_of_instantiate_bvar0 (psubst (up qs) {body}) (@Eq.substType KExpr (fun (qw : KExpr) => whnf_acc qw) (psubst (scons (KExpr.bvar Nat.zero) qs) {body}) (instantiate (psubst (up qs) {body}) (KExpr.bvar Nat.zero)) (psubst_scons_instantiate {body} (KExpr.bvar Nat.zero) qs) (candInterp_cr1 {cod} (psubst (scons (KExpr.bvar Nat.zero) qs) {body}) ({ihname} (scons (KExpr.bvar Nat.zero) qs) {ext}))))",
             ext = fresh_ext(dom)
         )
     };
@@ -423,19 +423,19 @@ pub(super) fn val_syntyl_fundamental() -> String {
     // for R5 theorems.
     let ih_pi_a =
         "forall (qs2 : Nat -> KExpr), SubstOK qs2 qG -> candInterp (KExpr.sort qn) (psubst qs2 qA)";
-    let ih_pi_b = "forall (qs2 : Nat -> KExpr), SubstOK qs2 (ListType.cons KExpr qA qG) -> candInterp (KExpr.sort qm) (psubst qs2 qB)";
+    let ih_pi_b = "forall (qs2 : Nat -> KExpr), SubstOK qs2 (@ListType.cons KExpr qA qG) -> candInterp (KExpr.sort qm) (psubst qs2 qB)";
     let m_pi = format!(
-        "(fun (qG : ListType KExpr) (qA : KExpr) (qB : KExpr) (qn : Level) (qm : Level) (_qhA : SynTyL qG qA (KExpr.sort qn)) (_qhB : SynTyL (ListType.cons KExpr qA qG) qB (KExpr.sort qm)) (qihA : {ih_pi_a}) (qihB : {ih_pi_b}) (qs : Nat -> KExpr) (qhs : SubstOK qs qG) => candInterp_sort_mem (Level.imax qn qm) (KExpr.pi (psubst qs qA) (psubst (up qs) qB)) (whnfAcc_pi (psubst qs qA) (psubst (up qs) qB) (candInterp_cr1 (KExpr.sort qn) (psubst qs qA) (qihA qs qhs)) {codacc}))",
+        "(fun (qG : ListType KExpr) (qA : KExpr) (qB : KExpr) (qn : Level) (qm : Level) (_qhA : SynTyL qG qA (KExpr.sort qn)) (_qhB : SynTyL (@ListType.cons KExpr qA qG) qB (KExpr.sort qm)) (qihA : {ih_pi_a}) (qihB : {ih_pi_b}) (qs : Nat -> KExpr) (qhs : SubstOK qs qG) => candInterp_sort_mem (Level.imax qn qm) (KExpr.pi (psubst qs qA) (psubst (up qs) qB)) (whnfAcc_pi (psubst qs qA) (psubst (up qs) qB) (candInterp_cr1 (KExpr.sort qn) (psubst qs qA) (qihA qs qhs)) {codacc}))",
         codacc = body_acc("qihB", "(KExpr.sort qm)", "qB", "qA")
     );
     // app: pi_elim at the interpretation on the two IHs (non-dependent).
     let m_app = "(fun (qG : ListType KExpr) (qA : KExpr) (qB : KExpr) (qf : KExpr) (qa : KExpr) (_qhf : SynTyL qG qf (KExpr.pi qA qB)) (_qha : SynTyL qG qa qA) (qihf : forall (qs : Nat -> KExpr), SubstOK qs qG -> candInterp (KExpr.pi qA qB) (psubst qs qf)) (qiha : forall (qs : Nat -> KExpr), SubstOK qs qG -> candInterp qA (psubst qs qa)) (qs : Nat -> KExpr) (qhs : SubstOK qs qG) => candInterp_app qA qB (psubst qs qf) (psubst qs qa) (qihf qs qhs) (qiha qs qhs))";
     // lam: R7's arm, unchanged.
-    let ih_lam = "forall (qs2 : Nat -> KExpr), SubstOK qs2 (ListType.cons KExpr qA qG) -> candInterp qB (psubst qs2 qb)";
-    let hty = "(Eq.substType KExpr (fun (qw : KExpr) => whnf_acc qw) qA (psubst qs qA) (Eq.symm KExpr (psubst qs qA) qA (simpleTy_psubst qA qhA qs)) (simpleTy_whnfAcc qA qhA))";
-    let hfam = "(fun (qb2 : KExpr) (qstar : betaStar (psubst (up qs) qb) qb2) (qa : KExpr) (qha : candInterp qA qa) => candInterp_betaStar_closed qB (instantiate (psubst (up qs) qb) qa) (instantiate qb2 qa) (betaStar_inst_transport_env (psubst (up qs) qb) qb2 qstar qa) (Eq.substType KExpr (fun (qw : KExpr) => candInterp qB qw) (psubst (scons qa qs) qb) (instantiate (psubst (up qs) qb) qa) (psubst_scons_instantiate qb qa qs) (qih (scons qa qs) (substOK_extend qs qG qA qa qha qhs))))";
+    let ih_lam = "forall (qs2 : Nat -> KExpr), SubstOK qs2 (@ListType.cons KExpr qA qG) -> candInterp qB (psubst qs2 qb)";
+    let hty = "(@Eq.substType KExpr (fun (qw : KExpr) => whnf_acc qw) qA (psubst qs qA) (@Eq.symm KExpr (psubst qs qA) qA (simpleTy_psubst qA qhA qs)) (simpleTy_whnfAcc qA qhA))";
+    let hfam = "(fun (qb2 : KExpr) (qstar : betaStar (psubst (up qs) qb) qb2) (qa : KExpr) (qha : candInterp qA qa) => candInterp_betaStar_closed qB (instantiate (psubst (up qs) qb) qa) (instantiate qb2 qa) (betaStar_inst_transport_env (psubst (up qs) qb) qb2 qstar qa) (@Eq.substType KExpr (fun (qw : KExpr) => candInterp qB qw) (psubst (scons qa qs) qb) (instantiate (psubst (up qs) qb) qa) (psubst_scons_instantiate qb qa qs) (qih (scons qa qs) (substOK_extend qs qG qA qa qha qhs))))";
     let m_lam = format!(
-        "(fun (qG : ListType KExpr) (qA : KExpr) (qB : KExpr) (qb : KExpr) (qhA : SimpleTy qA) (_qhb : SynTyL (ListType.cons KExpr qA qG) qb qB) (qih : {ih_lam}) (qs : Nat -> KExpr) (qhs : SubstOK qs qG) => candInterp_lam qA qB (psubst qs qA) (psubst (up qs) qb) {hty} {bodyacc} {hfam})",
+        "(fun (qG : ListType KExpr) (qA : KExpr) (qB : KExpr) (qb : KExpr) (qhA : SimpleTy qA) (_qhb : SynTyL (@ListType.cons KExpr qA qG) qb qB) (qih : {ih_lam}) (qs : Nat -> KExpr) (qhs : SubstOK qs qG) => candInterp_lam qA qB (psubst qs qA) (psubst (up qs) qb) {hty} {bodyacc} {hfam})",
         bodyacc = body_acc("qih", "qB", "qb", "qA")
     );
     // letTy: THE ZETA ARM. whnfAcc_zeta_expand at the base set (which is what
@@ -445,14 +445,14 @@ pub(super) fn val_syntyl_fundamental() -> String {
     // substitution transport plus betaStar-closure.
     let ih_let_v =
         "forall (qs2 : Nat -> KExpr), SubstOK qs2 qG -> candInterp (KExpr.sort qn) (psubst qs2 qv)";
-    let ih_let_b = "forall (qs2 : Nat -> KExpr), SubstOK qs2 (ListType.cons KExpr (KExpr.sort qn) qG) -> candInterp (KExpr.sort qm) (psubst qs2 qb)";
-    let let_fam = "(fun (qb2 : KExpr) (qstar : betaStar (psubst (up qs) qb) qb2) (qv2 : KExpr) (qhv2 : whnf_acc qv2) => candInterp_betaStar_closed (KExpr.sort qm) (instantiate (psubst (up qs) qb) qv2) (instantiate qb2 qv2) (betaStar_inst_transport_env (psubst (up qs) qb) qb2 qstar qv2) (Eq.substType KExpr (fun (qw : KExpr) => candInterp (KExpr.sort qm) qw) (psubst (scons qv2 qs) qb) (instantiate (psubst (up qs) qb) qv2) (psubst_scons_instantiate qb qv2 qs) (qihb (scons qv2 qs) (substOK_extend qs qG (KExpr.sort qn) qv2 qhv2 qhs))))";
+    let ih_let_b = "forall (qs2 : Nat -> KExpr), SubstOK qs2 (@ListType.cons KExpr (KExpr.sort qn) qG) -> candInterp (KExpr.sort qm) (psubst qs2 qb)";
+    let let_fam = "(fun (qb2 : KExpr) (qstar : betaStar (psubst (up qs) qb) qb2) (qv2 : KExpr) (qhv2 : whnf_acc qv2) => candInterp_betaStar_closed (KExpr.sort qm) (instantiate (psubst (up qs) qb) qv2) (instantiate qb2 qv2) (betaStar_inst_transport_env (psubst (up qs) qb) qb2 qstar qv2) (@Eq.substType KExpr (fun (qw : KExpr) => candInterp (KExpr.sort qm) qw) (psubst (scons qv2 qs) qb) (instantiate (psubst (up qs) qb) qv2) (psubst_scons_instantiate qb qv2 qs) (qihb (scons qv2 qs) (substOK_extend qs qG (KExpr.sort qn) qv2 qhv2 qhs))))";
     let m_let = format!(
-        "(fun (qG : ListType KExpr) (qn : Level) (qm : Level) (qv : KExpr) (qb : KExpr) (_qhv : SynTyL qG qv (KExpr.sort qn)) (_qhb : SynTyL (ListType.cons KExpr (KExpr.sort qn) qG) qb (KExpr.sort qm)) (qihv : {ih_let_v}) (qihb : {ih_let_b}) (qs : Nat -> KExpr) (qhs : SubstOK qs qG) => whnfAcc_zeta_expand (KExpr.sort qn) (whnfAcc_sort qn) (psubst (up qs) qb) {bodyacc} {let_fam} (psubst qs qv) (qihv qs qhs))",
+        "(fun (qG : ListType KExpr) (qn : Level) (qm : Level) (qv : KExpr) (qb : KExpr) (_qhv : SynTyL qG qv (KExpr.sort qn)) (_qhb : SynTyL (@ListType.cons KExpr (KExpr.sort qn) qG) qb (KExpr.sort qm)) (qihv : {ih_let_v}) (qihb : {ih_let_b}) (qs : Nat -> KExpr) (qhs : SubstOK qs qG) => whnfAcc_zeta_expand (KExpr.sort qn) (whnfAcc_sort qn) (psubst (up qs) qb) {bodyacc} {let_fam} (psubst qs qv) (qihv qs qhs))",
         bodyacc = body_acc("qihb", "(KExpr.sort qm)", "qb", "(KExpr.sort qn)")
     );
     format!(
-        "fun (G : ListType KExpr) (e : KExpr) (T : KExpr) (h : SynTyL G e T) => SynTyL.rec {motive} {m_var} {m_sort} {m_pi} {m_app} {m_lam} {m_let} G e T h"
+        "fun (G : ListType KExpr) (e : KExpr) (T : KExpr) (h : SynTyL G e T) => @SynTyL.rec {motive} {m_var} {m_sort} {m_pi} {m_app} {m_lam} {m_let} G e T h"
     )
 }
 
@@ -463,43 +463,43 @@ pub(super) const VAL_SYNTYL_SN_SUBST: &str = "fun (G : ListType KExpr) (e : KExp
 pub(super) const TY_SYNTYL_SN: &str =
     "forall (G : ListType KExpr) (e : KExpr) (T : KExpr), SynTyL G e T -> whnf_acc e";
 
-pub(super) const VAL_SYNTYL_SN: &str = "fun (G : ListType KExpr) (e : KExpr) (T : KExpr) (h : SynTyL G e T) => Eq.substType KExpr (fun (qw : KExpr) => whnf_acc qw) (psubst idsubst e) e (psubst_id e) (synTyL_sn_subst G e T h idsubst (substOK_idsubst G))";
+pub(super) const VAL_SYNTYL_SN: &str = "fun (G : ListType KExpr) (e : KExpr) (T : KExpr) (h : SynTyL G e T) => @Eq.substType KExpr (fun (qw : KExpr) => whnf_acc qw) (psubst idsubst e) e (psubst_id e) (synTyL_sn_subst G e T h idsubst (substOK_idsubst G))";
 
 pub(super) const TY_SYNTYL_SN_CLOSED: &str =
-    "forall (e : KExpr) (T : KExpr), SynTyL (ListType.nil KExpr) e T -> whnf_acc e";
+    "forall (e : KExpr) (T : KExpr), SynTyL (@ListType.nil KExpr) e T -> whnf_acc e";
 
-pub(super) const VAL_SYNTYL_SN_CLOSED: &str = "fun (e : KExpr) (T : KExpr) (h : SynTyL (ListType.nil KExpr) e T) => synTyL_sn (ListType.nil KExpr) e T h";
+pub(super) const VAL_SYNTYL_SN_CLOSED: &str = "fun (e : KExpr) (T : KExpr) (h : SynTyL (@ListType.nil KExpr) e T) => synTyL_sn (@ListType.nil KExpr) e T h";
 
 // ================================================================
 // Group E — the bridge from R7 (and the proof that the converse is FALSE).
 // ================================================================
 
 pub(super) const TY_SIMPLETY_LIFT: &str =
-    "forall (T : KExpr), SimpleTy T -> forall (d : Nat) (k : Nat), Eq KExpr (lift_at T d k) T";
+    "forall (T : KExpr), SimpleTy T -> forall (d : Nat) (k : Nat), @Eq KExpr (lift_at T d k) T";
 
-pub(super) const VAL_SIMPLETY_LIFT: &str = "fun (T : KExpr) (h : SimpleTy T) => SimpleTy.rec (fun (qT : KExpr) (_ : SimpleTy qT) => forall (qd : Nat) (qk : Nat), Eq KExpr (lift_at qT qd qk) qT) (fun (qn : Level) (qd : Nat) (qk : Nat) => Eq.refl KExpr (KExpr.sort qn)) (fun (qA : KExpr) (qB : KExpr) (_qhA : SimpleTy qA) (_qhB : SimpleTy qB) (qihA : forall (qd : Nat) (qk : Nat), Eq KExpr (lift_at qA qd qk) qA) (qihB : forall (qd : Nat) (qk : Nat), Eq KExpr (lift_at qB qd qk) qB) (qd : Nat) (qk : Nat) => Eq.trans KExpr (KExpr.pi (lift_at qA qd qk) (lift_at qB (Nat.succ qd) qk)) (KExpr.pi qA (lift_at qB (Nat.succ qd) qk)) (KExpr.pi qA qB) (Eq.cong KExpr KExpr (fun (qw : KExpr) => KExpr.pi qw (lift_at qB (Nat.succ qd) qk)) (lift_at qA qd qk) qA (qihA qd qk)) (Eq.cong KExpr KExpr (fun (qw : KExpr) => KExpr.pi qA qw) (lift_at qB (Nat.succ qd) qk) qB (qihB (Nat.succ qd) qk))) T h";
+pub(super) const VAL_SIMPLETY_LIFT: &str = "fun (T : KExpr) (h : SimpleTy T) => @SimpleTy.rec (fun (qT : KExpr) (_ : SimpleTy qT) => forall (qd : Nat) (qk : Nat), @Eq KExpr (lift_at qT qd qk) qT) (fun (qn : Level) (qd : Nat) (qk : Nat) => @Eq.refl KExpr (KExpr.sort qn)) (fun (qA : KExpr) (qB : KExpr) (_qhA : SimpleTy qA) (_qhB : SimpleTy qB) (qihA : forall (qd : Nat) (qk : Nat), @Eq KExpr (lift_at qA qd qk) qA) (qihB : forall (qd : Nat) (qk : Nat), @Eq KExpr (lift_at qB qd qk) qB) (qd : Nat) (qk : Nat) => @Eq.trans KExpr (KExpr.pi (lift_at qA qd qk) (lift_at qB (Nat.succ qd) qk)) (KExpr.pi qA (lift_at qB (Nat.succ qd) qk)) (KExpr.pi qA qB) (@Eq.cong KExpr KExpr (fun (qw : KExpr) => KExpr.pi qw (lift_at qB (Nat.succ qd) qk)) (lift_at qA qd qk) qA (qihA qd qk)) (@Eq.cong KExpr KExpr (fun (qw : KExpr) => KExpr.pi qA qw) (lift_at qB (Nat.succ qd) qk) qB (qihB (Nat.succ qd) qk))) T h";
 
-pub(super) const SRC_CTX_SIMPLE: &str = "def CtxSimple (G : ListType KExpr) : Type := forall (i : Nat) (A : KExpr), Eq (OptionType KExpr) (ctx_lookup G i) (OptionType.some KExpr A) -> SimpleTy A";
+pub(super) const SRC_CTX_SIMPLE: &str = "def CtxSimple (G : ListType KExpr) : Type := forall (i : Nat) (A : KExpr), @Eq (OptionType KExpr) (ctx_lookup G i) (@OptionType.some KExpr A) -> SimpleTy A";
 
-pub(super) const TY_CTXSIMPLE_NIL: &str = "CtxSimple (ListType.nil KExpr)";
+pub(super) const TY_CTXSIMPLE_NIL: &str = "CtxSimple (@ListType.nil KExpr)";
 
-pub(super) const VAL_CTXSIMPLE_NIL: &str = "fun (i : Nat) (A : KExpr) (hget : Eq (OptionType KExpr) (ctx_lookup (ListType.nil KExpr) i) (OptionType.some KExpr A)) => option_none_ne_some_type KExpr A (SimpleTy A) hget";
+pub(super) const VAL_CTXSIMPLE_NIL: &str = "fun (i : Nat) (A : KExpr) (hget : @Eq (OptionType KExpr) (ctx_lookup (@ListType.nil KExpr) i) (@OptionType.some KExpr A)) => option_none_ne_some_type KExpr A (SimpleTy A) hget";
 
-pub(super) const TY_CTXSIMPLE_CONS: &str = "forall (A : KExpr) (G : ListType KExpr), SimpleTy A -> CtxSimple G -> CtxSimple (ListType.cons KExpr A G)";
+pub(super) const TY_CTXSIMPLE_CONS: &str = "forall (A : KExpr) (G : ListType KExpr), SimpleTy A -> CtxSimple G -> CtxSimple (@ListType.cons KExpr A G)";
 
-pub(super) const VAL_CTXSIMPLE_CONS: &str = "fun (A : KExpr) (G : ListType KExpr) (hA : SimpleTy A) (hG : CtxSimple G) (i : Nat) (A2 : KExpr) (hget : Eq (OptionType KExpr) (ctx_lookup (ListType.cons KExpr A G) i) (OptionType.some KExpr A2)) => Nat.rec (fun (qi : Nat) => Eq (OptionType KExpr) (ctx_lookup (ListType.cons KExpr A G) qi) (OptionType.some KExpr A2) -> SimpleTy A2) (fun (qh0 : Eq (OptionType KExpr) (ctx_lookup (ListType.cons KExpr A G) Nat.zero) (OptionType.some KExpr A2)) => Eq.substType KExpr (fun (qw : KExpr) => SimpleTy qw) A A2 (option_some_inj KExpr A A2 qh0) hA) (fun (qk : Nat) (_qih : Eq (OptionType KExpr) (ctx_lookup (ListType.cons KExpr A G) qk) (OptionType.some KExpr A2) -> SimpleTy A2) (qhk : Eq (OptionType KExpr) (ctx_lookup (ListType.cons KExpr A G) (Nat.succ qk)) (OptionType.some KExpr A2)) => hG qk A2 qhk) i hget";
+pub(super) const VAL_CTXSIMPLE_CONS: &str = "fun (A : KExpr) (G : ListType KExpr) (hA : SimpleTy A) (hG : CtxSimple G) (i : Nat) (A2 : KExpr) (hget : @Eq (OptionType KExpr) (ctx_lookup (@ListType.cons KExpr A G) i) (@OptionType.some KExpr A2)) => @Nat.rec (fun (qi : Nat) => @Eq (OptionType KExpr) (ctx_lookup (@ListType.cons KExpr A G) qi) (@OptionType.some KExpr A2) -> SimpleTy A2) (fun (qh0 : @Eq (OptionType KExpr) (ctx_lookup (@ListType.cons KExpr A G) Nat.zero) (@OptionType.some KExpr A2)) => @Eq.substType KExpr (fun (qw : KExpr) => SimpleTy qw) A A2 (option_some_inj KExpr A A2 qh0) hA) (fun (qk : Nat) (_qih : @Eq (OptionType KExpr) (ctx_lookup (@ListType.cons KExpr A G) qk) (@OptionType.some KExpr A2) -> SimpleTy A2) (qhk : @Eq (OptionType KExpr) (ctx_lookup (@ListType.cons KExpr A G) (Nat.succ qk)) (@OptionType.some KExpr A2)) => hG qk A2 qhk) i hget";
 
 pub(super) const TY_SYNTYT_TO_SYNTYL: &str = "forall (G : ListType KExpr) (e : KExpr) (T : KExpr), SynTyT G e T -> CtxSimple G -> SynTyL G e T";
 
 pub(super) fn val_syntyt_to_syntyl() -> String {
     let motive = "(fun (qG : ListType KExpr) (qe : KExpr) (qT : KExpr) (_ : SynTyT qG qe qT) => CtxSimple qG -> SynTyL qG qe qT)";
-    let m_var = "(fun (qG : ListType KExpr) (qi : Nat) (qT : KExpr) (qhget : Eq (OptionType KExpr) (ctx_lookup qG qi) (OptionType.some KExpr qT)) (qhc : CtxSimple qG) => Eq.substType KExpr (fun (qw : KExpr) => SynTyL qG (KExpr.bvar qi) qw) (lift_at qT Nat.zero (Nat.succ qi)) qT (simpleTy_lift qT (qhc qi qT qhget) Nat.zero (Nat.succ qi)) (SynTyL.var qG qi qT qhget))";
+    let m_var = "(fun (qG : ListType KExpr) (qi : Nat) (qT : KExpr) (qhget : @Eq (OptionType KExpr) (ctx_lookup qG qi) (@OptionType.some KExpr qT)) (qhc : CtxSimple qG) => @Eq.substType KExpr (fun (qw : KExpr) => SynTyL qG (KExpr.bvar qi) qw) (lift_at qT Nat.zero (Nat.succ qi)) qT (simpleTy_lift qT (qhc qi qT qhget) Nat.zero (Nat.succ qi)) (SynTyL.var qG qi qT qhget))";
     let m_sort =
         "(fun (qG : ListType KExpr) (qn : Level) (_qhc : CtxSimple qG) => SynTyL.sort qG qn)";
     let m_app = "(fun (qG : ListType KExpr) (qA : KExpr) (qB : KExpr) (qf : KExpr) (qa : KExpr) (_qhf : SynTyT qG qf (KExpr.pi qA qB)) (_qha : SynTyT qG qa qA) (qihf : CtxSimple qG -> SynTyL qG qf (KExpr.pi qA qB)) (qiha : CtxSimple qG -> SynTyL qG qa qA) (qhc : CtxSimple qG) => SynTyL.app qG qA qB qf qa (qihf qhc) (qiha qhc))";
-    let m_lam = "(fun (qG : ListType KExpr) (qA : KExpr) (qB : KExpr) (qb : KExpr) (qhA : SimpleTy qA) (_qhb : SynTyT (ListType.cons KExpr qA qG) qb qB) (qih : CtxSimple (ListType.cons KExpr qA qG) -> SynTyL (ListType.cons KExpr qA qG) qb qB) (qhc : CtxSimple qG) => SynTyL.lam qG qA qB qb qhA (qih (ctxSimple_cons qA qG qhA qhc)))";
+    let m_lam = "(fun (qG : ListType KExpr) (qA : KExpr) (qB : KExpr) (qb : KExpr) (qhA : SimpleTy qA) (_qhb : SynTyT (@ListType.cons KExpr qA qG) qb qB) (qih : CtxSimple (@ListType.cons KExpr qA qG) -> SynTyL (@ListType.cons KExpr qA qG) qb qB) (qhc : CtxSimple qG) => SynTyL.lam qG qA qB qb qhA (qih (ctxSimple_cons qA qG qhA qhc)))";
     format!(
-        "fun (G : ListType KExpr) (e : KExpr) (T : KExpr) (h : SynTyT G e T) => SynTyT.rec {motive} {m_var} {m_sort} {m_app} {m_lam} G e T h"
+        "fun (G : ListType KExpr) (e : KExpr) (T : KExpr) (h : SynTyT G e T) => @SynTyT.rec {motive} {m_var} {m_sort} {m_app} {m_lam} G e T h"
     )
 }
 
@@ -511,7 +511,7 @@ pub(super) const VAL_SYNTYT_SN_VIA_SYNTYL: &str = "fun (G : ListType KExpr) (e :
 /// `Empty`, every other constructor to `Nat` (the R2/R5/R6 `kexpr_discr`
 /// idiom, at the `pi` slot).
 fn kexpr_discr_pi() -> String {
-    "(KExpr.rec (fun (_ : KExpr) => Type) (fun (_ : Level) => Nat) (fun (_ : Nat) => Nat) (fun (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) => Nat) (fun (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) => Nat) (fun (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) => Empty) (fun (_ : Name) (_ : ListType Level) => Nat) (fun (_ : KExpr) (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) (_ : Type) => Nat) (fun (_ : Name) (_ : Nat) (_ : KExpr) (_ : Type) => Nat) (fun (_ : Nat) => Nat))".to_string()
+    "(@KExpr.rec (fun (_ : KExpr) => Type) (fun (_ : Level) => Nat) (fun (_ : Nat) => Nat) (fun (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) => Nat) (fun (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) => Nat) (fun (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) => Empty) (fun (_ : Name) (_ : ListType Level) => Nat) (fun (_ : KExpr) (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) (_ : Type) => Nat) (fun (_ : Name) (_ : Nat) (_ : KExpr) (_ : Type) => Nat) (fun (_ : Nat) => Nat))".to_string()
 }
 
 pub(super) const TY_SYNTYT_NO_PI_FORMATION: &str = "forall (G : ListType KExpr) (A : KExpr) (B : KExpr) (T : KExpr), SynTyT G (KExpr.pi A B) T -> Empty";
@@ -521,7 +521,7 @@ pub(super) fn val_syntyt_no_pi_formation() -> String {
     let motive = format!(
         "(fun (qG : ListType KExpr) (qe : KExpr) (qT : KExpr) (_ : SynTyT qG qe qT) => {d} qe)"
     );
-    let m_var = "(fun (qG : ListType KExpr) (qi : Nat) (qT : KExpr) (_qhget : Eq (OptionType KExpr) (ctx_lookup qG qi) (OptionType.some KExpr qT)) => Nat.zero)";
+    let m_var = "(fun (qG : ListType KExpr) (qi : Nat) (qT : KExpr) (_qhget : @Eq (OptionType KExpr) (ctx_lookup qG qi) (@OptionType.some KExpr qT)) => Nat.zero)";
     let m_sort = "(fun (qG : ListType KExpr) (qn : Level) => Nat.zero)";
     // The IH binders are the MOTIVE at the recursive premise's SUBJECT — a
     // STUCK `KExpr.rec` application, NOT `Nat`. Writing `Nat` there is the
@@ -531,10 +531,10 @@ pub(super) fn val_syntyt_no_pi_formation() -> String {
         "(fun (qG : ListType KExpr) (qA : KExpr) (qB : KExpr) (qf : KExpr) (qa : KExpr) (_qhf : SynTyT qG qf (KExpr.pi qA qB)) (_qha : SynTyT qG qa qA) (_qihf : {d} qf) (_qiha : {d} qa) => Nat.zero)"
     );
     let m_lam = format!(
-        "(fun (qG : ListType KExpr) (qA : KExpr) (qB : KExpr) (qb : KExpr) (_qhA : SimpleTy qA) (_qhb : SynTyT (ListType.cons KExpr qA qG) qb qB) (_qih : {d} qb) => Nat.zero)"
+        "(fun (qG : ListType KExpr) (qA : KExpr) (qB : KExpr) (qb : KExpr) (_qhA : SimpleTy qA) (_qhb : SynTyT (@ListType.cons KExpr qA qG) qb qB) (_qih : {d} qb) => Nat.zero)"
     );
     format!(
-        "fun (G : ListType KExpr) (A : KExpr) (B : KExpr) (T : KExpr) (h : SynTyT G (KExpr.pi A B) T) => SynTyT.rec {motive} {m_var} {m_sort} {m_app} {m_lam} G (KExpr.pi A B) T h"
+        "fun (G : ListType KExpr) (A : KExpr) (B : KExpr) (T : KExpr) (h : SynTyT G (KExpr.pi A B) T) => @SynTyT.rec {motive} {m_var} {m_sort} {m_app} {m_lam} G (KExpr.pi A B) T h"
     )
 }
 
@@ -548,7 +548,7 @@ pub(super) fn ty_syntyl_id() -> String {
 
 pub(super) fn val_syntyl_id() -> String {
     format!(
-        "fun (G : ListType KExpr) => SynTyL.lam G {S0} {S0} {V0} (SimpleTy.base Level.zero) (SynTyL.var (ListType.cons KExpr {S0} G) Nat.zero {S0} (Eq.refl (OptionType KExpr) (OptionType.some KExpr {S0})))"
+        "fun (G : ListType KExpr) => SynTyL.lam G {S0} {S0} {V0} (SimpleTy.base Level.zero) (SynTyL.var (@ListType.cons KExpr {S0} G) Nat.zero {S0} (@Eq.refl (OptionType KExpr) (@OptionType.some KExpr {S0})))"
     )
 }
 
@@ -568,7 +568,7 @@ pub(super) fn ty_syntyl_var_lift_witness() -> String {
 
 pub(super) fn val_syntyl_var_lift_witness() -> String {
     format!(
-        "SynTyL.var {CTX2} (Nat.succ Nat.zero) {V0} (Eq.refl (OptionType KExpr) (OptionType.some KExpr {V0}))"
+        "SynTyL.var {CTX2} (Nat.succ Nat.zero) {V0} (@Eq.refl (OptionType KExpr) (@OptionType.some KExpr {V0}))"
     )
 }
 
@@ -588,7 +588,7 @@ pub(super) fn ty_syntyl_let_witness() -> String {
 
 pub(super) fn val_syntyl_let_witness() -> String {
     format!(
-        "SynTyL.letTy {NILCTX} (Level.succ Level.zero) (Level.succ Level.zero) {S0} {V0} (SynTyL.sort {NILCTX} Level.zero) (SynTyL.var {CTX1S1} Nat.zero {S1} (Eq.refl (OptionType KExpr) (OptionType.some KExpr {S1})))"
+        "SynTyL.letTy {NILCTX} (Level.succ Level.zero) (Level.succ Level.zero) {S0} {V0} (SynTyL.sort {NILCTX} Level.zero) (SynTyL.var {CTX1S1} Nat.zero {S1} (@Eq.refl (OptionType KExpr) (@OptionType.some KExpr {S1})))"
     )
 }
 
@@ -626,7 +626,7 @@ pub(super) fn ty_syntyl_not_total() -> String {
 
 pub(super) fn val_syntyl_not_total() -> String {
     format!(
-        "fun (G : ListType KExpr) (h : SynTyL G r5_omegaLam {PI00}) => candInterp_pi_not_total (Eq.substType KExpr (fun (qw : KExpr) => candInterp {PI00} qw) (psubst idsubst r5_omegaLam) r5_omegaLam (psubst_id r5_omegaLam) (synTyL_fundamental G r5_omegaLam {PI00} h idsubst (substOK_idsubst G)))"
+        "fun (G : ListType KExpr) (h : SynTyL G r5_omegaLam {PI00}) => candInterp_pi_not_total (@Eq.substType KExpr (fun (qw : KExpr) => candInterp {PI00} qw) (psubst idsubst r5_omegaLam) r5_omegaLam (psubst_id r5_omegaLam) (synTyL_fundamental G r5_omegaLam {PI00} h idsubst (substOK_idsubst G)))"
     )
 }
 
@@ -1500,7 +1500,7 @@ mod tests {
             "| sort : forall (G : ListType KExpr) (n : Level), SynTyL G (KExpr.sort n) \
              (KExpr.sort (Level.succ n))",
             "SynTyL G f (KExpr.pi A B) -> SynTyL G a A -> SynTyL G (KExpr.app f a) B",
-            "SimpleTy A -> SynTyL (ListType.cons KExpr A G) b B -> SynTyL G (KExpr.lam A b) \
+            "SimpleTy A -> SynTyL (@ListType.cons KExpr A G) b B -> SynTyL G (KExpr.lam A b) \
              (KExpr.pi A B)",
         ] {
             assert!(
@@ -1513,9 +1513,9 @@ mod tests {
         // uniform leading (G : ListType KExpr) — three recursive premises
         // conclude at the EXTENDED context.
         for extended in [
-            "SynTyL (ListType.cons KExpr A G) B (KExpr.sort m)",
-            "SynTyL (ListType.cons KExpr A G) b B",
-            "SynTyL (ListType.cons KExpr (KExpr.sort n) G) b (KExpr.sort m)",
+            "SynTyL (@ListType.cons KExpr A G) B (KExpr.sort m)",
+            "SynTyL (@ListType.cons KExpr A G) b B",
+            "SynTyL (@ListType.cons KExpr (KExpr.sort n) G) b (KExpr.sort m)",
         ] {
             assert!(
                 syntyl.contains(extended),
@@ -1528,7 +1528,7 @@ mod tests {
         let fund = val_syntyl_fundamental();
         assert!(
             fund.contains(
-                "(_qhA : SynTyL qG qA (KExpr.sort qn)) (_qhB : SynTyL (ListType.cons KExpr qA qG) \
+                "(_qhA : SynTyL qG qA (KExpr.sort qn)) (_qhB : SynTyL (@ListType.cons KExpr qA qG) \
                  qB (KExpr.sort qm)) (qihA :"
             ),
             "the pi minor must bind BOTH recursive fields before the first IH (fields-then-IHs)"
@@ -1541,14 +1541,14 @@ mod tests {
         );
         assert!(
             fund.contains(
-                "(qhA : SimpleTy qA) (_qhb : SynTyL (ListType.cons KExpr qA qG) qb qB) (qih :"
+                "(qhA : SimpleTy qA) (_qhb : SynTyL (@ListType.cons KExpr qA qG) qb qB) (qih :"
             ),
             "the lam minor must bind the SimpleTy field, then the single recursive field, then the \
              single IH"
         );
         assert!(
             fund.contains(
-                "(_qhv : SynTyL qG qv (KExpr.sort qn)) (_qhb : SynTyL (ListType.cons KExpr \
+                "(_qhv : SynTyL qG qv (KExpr.sort qn)) (_qhb : SynTyL (@ListType.cons KExpr \
                  (KExpr.sort qn) qG) qb (KExpr.sort qm)) (qihv :"
             ),
             "the letTy minor must bind BOTH recursive fields before the first IH"

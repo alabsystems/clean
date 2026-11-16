@@ -292,7 +292,7 @@ impl Memory {
     }
 
     /// Allocate on stack (automatic storage duration)
-    pub fn alloc_stack(
+    pub(crate) fn alloc_stack(
         &mut self,
         size: usize,
         align: usize,
@@ -370,7 +370,7 @@ impl Memory {
     }
 
     /// Check if pointer is valid for read of given size
-    pub fn can_read(&self, ptr: Pointer, size: usize) -> UBResult<()> {
+    pub(crate) fn can_read(&self, ptr: Pointer, size: usize) -> UBResult<()> {
         if ptr.is_null() {
             return Err(UBKind::NullDeref);
         }
@@ -393,7 +393,7 @@ impl Memory {
     }
 
     /// Check if pointer is valid for write of given size
-    pub fn can_write(&self, ptr: Pointer, size: usize) -> UBResult<()> {
+    pub(crate) fn can_write(&self, ptr: Pointer, size: usize) -> UBResult<()> {
         if ptr.is_null() {
             return Err(UBKind::NullDeref);
         }
@@ -444,40 +444,40 @@ impl Memory {
     }
 
     /// Load a u8 value
-    pub fn load_u8(&self, ptr: Pointer) -> UBResult<u8> {
+    pub(crate) fn load_u8(&self, ptr: Pointer) -> UBResult<u8> {
         let bytes = self.load_bytes(ptr, 1)?;
         Ok(bytes[0])
     }
 
     /// Store a u8 value
-    pub fn store_u8(&mut self, ptr: Pointer, val: u8) -> UBResult<()> {
+    pub(crate) fn store_u8(&mut self, ptr: Pointer, val: u8) -> UBResult<()> {
         self.store_bytes(ptr, &[val])
     }
 
     /// Load a u16 value (little-endian)
-    pub fn load_u16(&self, ptr: Pointer) -> UBResult<u16> {
+    pub(crate) fn load_u16(&self, ptr: Pointer) -> UBResult<u16> {
         let bytes = self.load_bytes(ptr, 2)?;
         Ok(u16::from_le_bytes([bytes[0], bytes[1]]))
     }
 
     /// Store a u16 value (little-endian)
-    pub fn store_u16(&mut self, ptr: Pointer, val: u16) -> UBResult<()> {
+    pub(crate) fn store_u16(&mut self, ptr: Pointer, val: u16) -> UBResult<()> {
         self.store_bytes(ptr, &val.to_le_bytes())
     }
 
     /// Load a u32 value (little-endian)
-    pub fn load_u32(&self, ptr: Pointer) -> UBResult<u32> {
+    pub(crate) fn load_u32(&self, ptr: Pointer) -> UBResult<u32> {
         let bytes = self.load_bytes(ptr, 4)?;
         Ok(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
     }
 
     /// Store a u32 value (little-endian)
-    pub fn store_u32(&mut self, ptr: Pointer, val: u32) -> UBResult<()> {
+    pub(crate) fn store_u32(&mut self, ptr: Pointer, val: u32) -> UBResult<()> {
         self.store_bytes(ptr, &val.to_le_bytes())
     }
 
     /// Load a u64 value (little-endian)
-    pub fn load_u64(&self, ptr: Pointer) -> UBResult<u64> {
+    pub(crate) fn load_u64(&self, ptr: Pointer) -> UBResult<u64> {
         let bytes = self.load_bytes(ptr, 8)?;
         Ok(u64::from_le_bytes([
             bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
@@ -485,7 +485,7 @@ impl Memory {
     }
 
     /// Store a u64 value (little-endian)
-    pub fn store_u64(&mut self, ptr: Pointer, val: u64) -> UBResult<()> {
+    pub(crate) fn store_u64(&mut self, ptr: Pointer, val: u64) -> UBResult<()> {
         self.store_bytes(ptr, &val.to_le_bytes())
     }
 
@@ -501,7 +501,7 @@ impl Memory {
     }
 
     /// Load a signed i64 value
-    pub fn load_i64(&self, ptr: Pointer) -> UBResult<i64> {
+    pub(crate) fn load_i64(&self, ptr: Pointer) -> UBResult<i64> {
         let bytes = self.load_bytes(ptr, 8)?;
         Ok(i64::from_le_bytes([
             bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
@@ -509,7 +509,7 @@ impl Memory {
     }
 
     /// Store a signed i64 value
-    pub fn store_i64(&mut self, ptr: Pointer, val: i64) -> UBResult<()> {
+    pub(crate) fn store_i64(&mut self, ptr: Pointer, val: i64) -> UBResult<()> {
         self.store_bytes(ptr, &val.to_le_bytes())
     }
 
@@ -521,7 +521,7 @@ impl Memory {
     /// # Note
     /// The internal Pointer type uses u64/i64 for flexibility, but C-level storage
     /// uses the LP64 8-byte format. Values are zero/sign-extended on load.
-    pub fn load_ptr(&self, ptr: Pointer) -> UBResult<Pointer> {
+    pub(crate) fn load_ptr(&self, ptr: Pointer) -> UBResult<Pointer> {
         let bytes = self.load_bytes(ptr, 8)?;
         // Block ID stored as u32 in first 4 bytes, zero-extended to u64
         let block_id = u64::from(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]));
@@ -541,7 +541,7 @@ impl Memory {
     /// # Errors
     /// Returns an error if the block_id exceeds u32::MAX or offset exceeds i32 range,
     /// as these cannot be represented in 8-byte pointer storage.
-    pub fn store_ptr(&mut self, ptr: Pointer, val: Pointer) -> UBResult<()> {
+    pub(crate) fn store_ptr(&mut self, ptr: Pointer, val: Pointer) -> UBResult<()> {
         // Check that values fit in 8-byte pointer format
         // If block_id or offset exceed representable range, this indicates an invalid pointer
         let block_id = u32::try_from(val.block.0).map_err(|_| UBKind::InvalidPointer)?;
@@ -554,18 +554,18 @@ impl Memory {
     }
 
     /// Load a float (f32)
-    pub fn load_f32(&self, ptr: Pointer) -> UBResult<f32> {
+    pub(crate) fn load_f32(&self, ptr: Pointer) -> UBResult<f32> {
         let bytes = self.load_bytes(ptr, 4)?;
         Ok(f32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
     }
 
     /// Store a float (f32)
-    pub fn store_f32(&mut self, ptr: Pointer, val: f32) -> UBResult<()> {
+    pub(crate) fn store_f32(&mut self, ptr: Pointer, val: f32) -> UBResult<()> {
         self.store_bytes(ptr, &val.to_le_bytes())
     }
 
     /// Load a double (f64)
-    pub fn load_f64(&self, ptr: Pointer) -> UBResult<f64> {
+    pub(crate) fn load_f64(&self, ptr: Pointer) -> UBResult<f64> {
         let bytes = self.load_bytes(ptr, 8)?;
         Ok(f64::from_le_bytes([
             bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
@@ -573,7 +573,7 @@ impl Memory {
     }
 
     /// Store a double (f64)
-    pub fn store_f64(&mut self, ptr: Pointer, val: f64) -> UBResult<()> {
+    pub(crate) fn store_f64(&mut self, ptr: Pointer, val: f64) -> UBResult<()> {
         self.store_bytes(ptr, &val.to_le_bytes())
     }
 

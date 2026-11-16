@@ -18,6 +18,50 @@ fn source_world_type_covers_exactly_the_measured_registry() {
     assert_eq!(oracle().world, LeanWorld::ORACLE.tag());
 }
 
+fn oracle_header() -> Vec<u8> {
+    let bytes = fs::read(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../tests/fixtures/olean/v4.30.0/module-system/Sigma.olean"),
+    )
+    .expect("genuine tracked Oracle fixture");
+    bytes[..HEADER_SIZE_V2].to_vec()
+}
+
+#[test]
+fn snapshot_world_declares_the_configured_library_without_a_source_path() {
+    let root = TempDir::new().expect("tempdir");
+    let lib = install(root.path(), oracle().world, &oracle_header());
+    let decision = snapshot_world_for_library(lean_worlds(), lib.clone()).unwrap();
+    assert_eq!(decision.world(), LeanWorld::ORACLE);
+    assert_eq!(decision.declared_world(), Some(LeanWorld::ORACLE.tag()));
+    assert_eq!(
+        decision.imports(),
+        Ok(&ImportWorld::Explicit {
+            world: LeanWorld::ORACLE,
+            lib,
+        })
+    );
+}
+
+#[test]
+fn snapshot_world_refuses_an_authentic_other_world_under_the_pin_name() {
+    let root = TempDir::new().expect("tempdir");
+    let lib = install(root.path(), oracle().world, &v4_8_0_header());
+    let error = snapshot_world_for_library(lean_worlds(), lib).unwrap_err();
+    assert!(error.to_string().contains("another build"), "{error}");
+}
+
+#[test]
+fn snapshot_world_refuses_missing_and_unreadable_headers_without_a_fallback() {
+    let root = TempDir::new().expect("tempdir");
+    let lib = root.path().join("missing-library");
+    let error = snapshot_world_for_library(lean_worlds(), lib).unwrap_err();
+    assert!(error.to_string().contains("unreadable header"), "{error}");
+    let lib = install(root.path(), oracle().world, b"not an olean header");
+    let error = snapshot_world_for_library(lean_worlds(), lib).unwrap_err();
+    assert!(error.to_string().contains("unreadable header"), "{error}");
+}
+
 fn recent_header() -> Vec<u8> {
     let bytes = fs::read(
         Path::new(env!("CARGO_MANIFEST_DIR"))

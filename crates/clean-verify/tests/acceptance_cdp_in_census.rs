@@ -155,7 +155,7 @@ fn kernel_accepts_in_registers_axiom_free_and_says_what_it_claims() {
         // Not a conversion: a let body typed only through its local's VALUE.
         (
             "kernel_accepts_tc_in_let_zeta",
-            "KernelAcceptsTcIn R tenv Bool.true (ListType.nil CtxEntryIn) (KExpr.let_",
+            "KernelAcceptsTcIn R tenv Bool.true (@ListType.nil CtxEntryIn) (KExpr.let_",
         ),
     ] {
         let src = type_src(&spec, witness);
@@ -311,118 +311,118 @@ accepts_prepass_redex (KExpr.sort (Level.succ Level.zero)) accepts_prepass_starv
         "accepts_forged_seed_projection",
         r"def accepts_forged_seed_projection : par_reduces_cdp_star the_red_env accepts_proj_redex (KExpr.sort (Level.succ Level.zero)) :=
 par_cdp_to_star the_red_env accepts_proj_redex (KExpr.sort (Level.succ Level.zero))
-  (par_reduces_cdp.projection_beta the_red_env Name.anonymous Nat.zero
+  (@par_reduces_cdp.projection_beta the_red_env Name.anonymous Nat.zero
 accepts_proj_subject (KExpr.sort (Level.succ Level.zero)) accepts_proj_computes)",
     ),
     (
         "accepts_forged_dependent_domain",
         r"def accepts_forged_dependent_domain : ProjFieldIn accepts_dep_env Name.anonymous (KExpr.bvar Nat.zero) Nat.zero (Nat.succ Nat.zero)
-  (KExpr.pi (KExpr.sort (Level.succ Level.zero)) (KExpr.pi (KExpr.bvar Nat.zero) (KExpr.const Name.anonymous (ListType.nil Level))))
+  (KExpr.pi (KExpr.sort (Level.succ Level.zero)) (KExpr.pi (KExpr.bvar Nat.zero) (KExpr.const Name.anonymous (@ListType.nil Level))))
   (KExpr.sort (Level.succ Level.zero)) := accepts_dep_field_one_walk",
     ),
     (
         "accepts_forged_field_bound",
         r"def accepts_forged_field_bound : ProjStructIn projection_metadata_control_env Name.anonymous (Nat.succ Nat.zero) projection_metadata_control_type
   projection_metadata_control_ind projection_metadata_control_ctor :=
-ProjStructIn.mk projection_metadata_control_env Name.anonymous (Nat.succ Nat.zero) projection_metadata_control_type
+@ProjStructIn.mk projection_metadata_control_env Name.anonymous (Nat.succ Nat.zero) projection_metadata_control_type
   projection_metadata_control_ind projection_metadata_control_cn projection_metadata_control_ctor
-  (Eq.refl (OptionType Name) (OptionType.some Name Name.anonymous))
-  (Eq.refl (OptionType KIndMeta) (OptionType.some KIndMeta projection_metadata_control_ind))
-  (Eq.refl (ListType Name) (ListType.cons Name projection_metadata_control_cn (ListType.nil Name)))
-  (Eq.refl (OptionType KCtorMeta) (OptionType.some KCtorMeta projection_metadata_control_ctor))
-  (Eq.refl Bool Bool.true) (Eq.refl Bool Bool.true) (Eq.refl Bool Bool.true)",
+  (@Eq.refl (OptionType Name) (@OptionType.some Name Name.anonymous))
+  (@Eq.refl (OptionType KIndMeta) (@OptionType.some KIndMeta projection_metadata_control_ind))
+  (@Eq.refl (ListType Name) (@ListType.cons Name projection_metadata_control_cn (@ListType.nil Name)))
+  (@Eq.refl (OptionType KCtorMeta) (@OptionType.some KCtorMeta projection_metadata_control_ctor))
+  (@Eq.refl Bool Bool.true) (@Eq.refl Bool Bool.true) (@Eq.refl Bool Bool.true)",
     ),
     (
         "accepts_forged_one_name_congruence",
         r"def accepts_forged_one_name_congruence : DefEqCDPIn projection_metadata_control_env accepts_proj_redex
   (KExpr.proj accepts_proj_other_name Nat.zero accepts_proj_subject) :=
-DefEqCDPIn.proj projection_metadata_control_env Name.anonymous Nat.zero accepts_proj_subject accepts_proj_subject
-  (DefEqCDPIn.refl projection_metadata_control_env accepts_proj_subject)",
+@DefEqCDPIn.proj projection_metadata_control_env Name.anonymous Nat.zero accepts_proj_subject accepts_proj_subject
+  (@DefEqCDPIn.refl projection_metadata_control_env accepts_proj_subject)",
     ),
     (
         "accepts_tc_forged_proof_irrel_type",
-        r"def accepts_tc_forged_proof_irrel_type : forall (R : RedEnv) (tenv : KDeclEnv), KernelAcceptsTcIn R tenv Bool.false (ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.bvar (Nat.succ Nat.zero))) (ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.bvar Nat.zero)) (ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.sort (Level.succ Level.zero))) (ListType.nil CtxEntryIn)))) (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero) :=
+        r"def accepts_tc_forged_proof_irrel_type : forall (R : RedEnv) (tenv : KDeclEnv), KernelAcceptsTcIn R tenv Bool.false (@ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.bvar (Nat.succ Nat.zero))) (@ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.bvar Nat.zero)) (@ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.sort (Level.succ Level.zero))) (@ListType.nil CtxEntryIn)))) (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero) :=
 fun (R : RedEnv) (tenv : KDeclEnv) =>
-KernelAcceptsTcIn.proof_irrel R tenv (ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.bvar (Nat.succ Nat.zero))) (ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.bvar Nat.zero)) (ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.sort (Level.succ Level.zero))) (ListType.nil CtxEntryIn))))
+@KernelAcceptsTcIn.proof_irrel R tenv (@ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.bvar (Nat.succ Nat.zero))) (@ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.bvar Nat.zero)) (@ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.sort (Level.succ Level.zero))) (@ListType.nil CtxEntryIn))))
   (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero)))
   (KExpr.sort (Level.succ Level.zero)) (KExpr.bvar Nat.zero) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero)))
-  (KernelAcceptsTcIn.bvar R tenv (ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.bvar (Nat.succ Nat.zero))) (ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.bvar Nat.zero)) (ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.sort (Level.succ Level.zero))) (ListType.nil CtxEntryIn)))) (Nat.succ Nat.zero) (CtxEntryIn.decl (KExpr.bvar Nat.zero)) (Eq.refl (OptionType CtxEntryIn) (OptionType.some CtxEntryIn (CtxEntryIn.decl (KExpr.bvar Nat.zero)))))
-  (KernelAcceptsTcIn.cdp R tenv (ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.bvar (Nat.succ Nat.zero))) (ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.bvar Nat.zero)) (ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.sort (Level.succ Level.zero))) (ListType.nil CtxEntryIn)))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (DefEqCDPIn.refl R (KExpr.bvar (Nat.succ (Nat.succ Nat.zero)))))
-  (KernelAcceptsTcIn.bvar R tenv (ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.bvar (Nat.succ Nat.zero))) (ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.bvar Nat.zero)) (ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.sort (Level.succ Level.zero))) (ListType.nil CtxEntryIn)))) (Nat.succ (Nat.succ Nat.zero)) (CtxEntryIn.decl (KExpr.sort (Level.succ Level.zero))) (Eq.refl (OptionType CtxEntryIn) (OptionType.some CtxEntryIn (CtxEntryIn.decl (KExpr.sort (Level.succ Level.zero))))))
-  (KernelAcceptsTcIn.cdp R tenv (ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.bvar (Nat.succ Nat.zero))) (ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.bvar Nat.zero)) (ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.sort (Level.succ Level.zero))) (ListType.nil CtxEntryIn)))) (KExpr.sort (Level.succ Level.zero)) (KExpr.sort Level.zero) (DefEqCDPIn.refl R (KExpr.sort Level.zero)))
-  (KernelAcceptsTcIn.bvar R tenv (ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.bvar (Nat.succ Nat.zero))) (ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.bvar Nat.zero)) (ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.sort (Level.succ Level.zero))) (ListType.nil CtxEntryIn)))) Nat.zero (CtxEntryIn.decl (KExpr.bvar (Nat.succ Nat.zero))) (Eq.refl (OptionType CtxEntryIn) (OptionType.some CtxEntryIn (CtxEntryIn.decl (KExpr.bvar (Nat.succ Nat.zero))))))
-  (KernelAcceptsTcIn.cdp R tenv (ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.bvar (Nat.succ Nat.zero))) (ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.bvar Nat.zero)) (ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.sort (Level.succ Level.zero))) (ListType.nil CtxEntryIn)))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (DefEqCDPIn.refl R (KExpr.bvar (Nat.succ (Nat.succ Nat.zero)))))",
+  (@KernelAcceptsTcIn.bvar R tenv (@ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.bvar (Nat.succ Nat.zero))) (@ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.bvar Nat.zero)) (@ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.sort (Level.succ Level.zero))) (@ListType.nil CtxEntryIn)))) (Nat.succ Nat.zero) (CtxEntryIn.decl (KExpr.bvar Nat.zero)) (@Eq.refl (OptionType CtxEntryIn) (@OptionType.some CtxEntryIn (CtxEntryIn.decl (KExpr.bvar Nat.zero)))))
+  (@KernelAcceptsTcIn.cdp R tenv (@ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.bvar (Nat.succ Nat.zero))) (@ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.bvar Nat.zero)) (@ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.sort (Level.succ Level.zero))) (@ListType.nil CtxEntryIn)))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (@DefEqCDPIn.refl R (KExpr.bvar (Nat.succ (Nat.succ Nat.zero)))))
+  (@KernelAcceptsTcIn.bvar R tenv (@ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.bvar (Nat.succ Nat.zero))) (@ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.bvar Nat.zero)) (@ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.sort (Level.succ Level.zero))) (@ListType.nil CtxEntryIn)))) (Nat.succ (Nat.succ Nat.zero)) (CtxEntryIn.decl (KExpr.sort (Level.succ Level.zero))) (@Eq.refl (OptionType CtxEntryIn) (@OptionType.some CtxEntryIn (CtxEntryIn.decl (KExpr.sort (Level.succ Level.zero))))))
+  (@KernelAcceptsTcIn.cdp R tenv (@ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.bvar (Nat.succ Nat.zero))) (@ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.bvar Nat.zero)) (@ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.sort (Level.succ Level.zero))) (@ListType.nil CtxEntryIn)))) (KExpr.sort (Level.succ Level.zero)) (KExpr.sort Level.zero) (@DefEqCDPIn.refl R (KExpr.sort Level.zero)))
+  (@KernelAcceptsTcIn.bvar R tenv (@ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.bvar (Nat.succ Nat.zero))) (@ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.bvar Nat.zero)) (@ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.sort (Level.succ Level.zero))) (@ListType.nil CtxEntryIn)))) Nat.zero (CtxEntryIn.decl (KExpr.bvar (Nat.succ Nat.zero))) (@Eq.refl (OptionType CtxEntryIn) (@OptionType.some CtxEntryIn (CtxEntryIn.decl (KExpr.bvar (Nat.succ Nat.zero))))))
+  (@KernelAcceptsTcIn.cdp R tenv (@ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.bvar (Nat.succ Nat.zero))) (@ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.bvar Nat.zero)) (@ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.sort (Level.succ Level.zero))) (@ListType.nil CtxEntryIn)))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (@DefEqCDPIn.refl R (KExpr.bvar (Nat.succ (Nat.succ Nat.zero)))))",
     ),
     (
         "accepts_tc_forged_eta_non_function",
-        r"def accepts_tc_forged_eta_non_function : forall (R : RedEnv) (tenv : KDeclEnv), KernelAcceptsTcIn R tenv Bool.false (ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.sort Level.zero)) (ListType.nil CtxEntryIn)) (KExpr.bvar Nat.zero) (KExpr.lam (KExpr.sort Level.zero) (KExpr.app (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero))) :=
+        r"def accepts_tc_forged_eta_non_function : forall (R : RedEnv) (tenv : KDeclEnv), KernelAcceptsTcIn R tenv Bool.false (@ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.sort Level.zero)) (@ListType.nil CtxEntryIn)) (KExpr.bvar Nat.zero) (KExpr.lam (KExpr.sort Level.zero) (KExpr.app (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero))) :=
 fun (R : RedEnv) (tenv : KDeclEnv) =>
-KernelAcceptsTcIn.eta R tenv (ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.sort Level.zero)) (ListType.nil CtxEntryIn)) (KExpr.bvar Nat.zero) (KExpr.sort Level.zero) (KExpr.sort Level.zero) (KExpr.sort Level.zero)
-  (KernelAcceptsTcIn.bvar R tenv (ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.sort Level.zero)) (ListType.nil CtxEntryIn)) Nat.zero (CtxEntryIn.decl (KExpr.sort Level.zero)) (Eq.refl (OptionType CtxEntryIn) (OptionType.some CtxEntryIn (CtxEntryIn.decl (KExpr.sort Level.zero)))))
-  (KernelAcceptsTcIn.cdp R tenv (ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.sort Level.zero)) (ListType.nil CtxEntryIn)) (KExpr.sort Level.zero) (KExpr.pi (KExpr.sort Level.zero) (KExpr.sort Level.zero)) (DefEqCDPIn.refl R (KExpr.sort Level.zero)))",
+@KernelAcceptsTcIn.eta R tenv (@ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.sort Level.zero)) (@ListType.nil CtxEntryIn)) (KExpr.bvar Nat.zero) (KExpr.sort Level.zero) (KExpr.sort Level.zero) (KExpr.sort Level.zero)
+  (@KernelAcceptsTcIn.bvar R tenv (@ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.sort Level.zero)) (@ListType.nil CtxEntryIn)) Nat.zero (CtxEntryIn.decl (KExpr.sort Level.zero)) (@Eq.refl (OptionType CtxEntryIn) (@OptionType.some CtxEntryIn (CtxEntryIn.decl (KExpr.sort Level.zero)))))
+  (@KernelAcceptsTcIn.cdp R tenv (@ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.sort Level.zero)) (@ListType.nil CtxEntryIn)) (KExpr.sort Level.zero) (KExpr.pi (KExpr.sort Level.zero) (KExpr.sort Level.zero)) (@DefEqCDPIn.refl R (KExpr.sort Level.zero)))",
     ),
     (
         "accepts_tc_forged_unit_like_one_field",
         r"def accepts_tc_forged_unit_like_one_field : UnitLikeIn projection_metadata_control_env projection_metadata_control_type :=
-UnitLikeIn.mk projection_metadata_control_env projection_metadata_control_type Name.anonymous projection_metadata_control_ind projection_metadata_control_cn projection_metadata_control_ctor
-  (Eq.refl (OptionType Name) (OptionType.some Name Name.anonymous))
-  (Eq.refl (OptionType KIndMeta) (OptionType.some KIndMeta projection_metadata_control_ind))
-  (Eq.refl (ListType Name) (ListType.cons Name projection_metadata_control_cn (ListType.nil Name)))
-  (Eq.refl Bool Bool.true)
-  (Eq.refl (OptionType KCtorMeta) (OptionType.some KCtorMeta projection_metadata_control_ctor))
-  (Eq.refl Bool Bool.true)",
+@UnitLikeIn.mk projection_metadata_control_env projection_metadata_control_type Name.anonymous projection_metadata_control_ind projection_metadata_control_cn projection_metadata_control_ctor
+  (@Eq.refl (OptionType Name) (@OptionType.some Name Name.anonymous))
+  (@Eq.refl (OptionType KIndMeta) (@OptionType.some KIndMeta projection_metadata_control_ind))
+  (@Eq.refl (ListType Name) (@ListType.cons Name projection_metadata_control_cn (@ListType.nil Name)))
+  (@Eq.refl Bool Bool.true)
+  (@Eq.refl (OptionType KCtorMeta) (@OptionType.some KCtorMeta projection_metadata_control_ctor))
+  (@Eq.refl Bool Bool.true)",
     ),
     (
         "accepts_tc_forged_seed_unit_like",
         r"def accepts_tc_forged_seed_unit_like : UnitLikeIn the_red_env accepts_unit_type :=
-UnitLikeIn.mk the_red_env accepts_unit_type Name.anonymous accepts_unit_ind accepts_unit_cn accepts_unit_ctor
-  (Eq.refl (OptionType Name) (OptionType.some Name Name.anonymous))
-  (Eq.refl (OptionType KIndMeta) (OptionType.some KIndMeta accepts_unit_ind))
-  (Eq.refl (ListType Name) (ListType.cons Name accepts_unit_cn (ListType.nil Name)))
-  (Eq.refl Bool Bool.true)
-  (Eq.refl (OptionType KCtorMeta) (OptionType.some KCtorMeta accepts_unit_ctor))
-  (Eq.refl Bool Bool.true)",
+@UnitLikeIn.mk the_red_env accepts_unit_type Name.anonymous accepts_unit_ind accepts_unit_cn accepts_unit_ctor
+  (@Eq.refl (OptionType Name) (@OptionType.some Name Name.anonymous))
+  (@Eq.refl (OptionType KIndMeta) (@OptionType.some KIndMeta accepts_unit_ind))
+  (@Eq.refl (ListType Name) (@ListType.cons Name accepts_unit_cn (@ListType.nil Name)))
+  (@Eq.refl Bool Bool.true)
+  (@Eq.refl (OptionType KCtorMeta) (@OptionType.some KCtorMeta accepts_unit_ctor))
+  (@Eq.refl Bool Bool.true)",
     ),
     (
         "accepts_tc_forged_struct_eta_foreign_subject",
-        r"def accepts_tc_forged_struct_eta_foreign_subject : forall (tenv : KDeclEnv), KernelAcceptsTcIn projection_metadata_control_env tenv Bool.false (ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.sort (Level.succ Level.zero))) (ListType.nil CtxEntryIn)) accepts_struct_t (KExpr.bvar Nat.zero) :=
+        r"def accepts_tc_forged_struct_eta_foreign_subject : forall (tenv : KDeclEnv), KernelAcceptsTcIn projection_metadata_control_env tenv Bool.false (@ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.sort (Level.succ Level.zero))) (@ListType.nil CtxEntryIn)) accepts_struct_t (KExpr.bvar Nat.zero) :=
 fun (tenv : KDeclEnv) =>
-KernelAcceptsTcIn.struct_eta projection_metadata_control_env tenv (ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.sort (Level.succ Level.zero))) (ListType.nil CtxEntryIn))
+@KernelAcceptsTcIn.struct_eta projection_metadata_control_env tenv (@ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.sort (Level.succ Level.zero))) (@ListType.nil CtxEntryIn))
   accepts_struct_t (KExpr.bvar Nat.zero) (KExpr.sort (Level.succ Level.zero)) (KExpr.sort (Level.succ Level.zero))
   projection_metadata_control_ind projection_metadata_control_ctor accepts_struct_ctor
-  (KernelAcceptsTcIn.bvar projection_metadata_control_env tenv (ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.sort (Level.succ Level.zero))) (ListType.nil CtxEntryIn)) Nat.zero (CtxEntryIn.decl (KExpr.sort (Level.succ Level.zero))) (Eq.refl (OptionType CtxEntryIn) (OptionType.some CtxEntryIn (CtxEntryIn.decl (KExpr.sort (Level.succ Level.zero))))))
-  (KernelAcceptsTcIn.cdp projection_metadata_control_env tenv (ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.sort (Level.succ Level.zero))) (ListType.nil CtxEntryIn)) (KExpr.sort (Level.succ Level.zero)) (KExpr.sort (Level.succ Level.zero)) (DefEqCDPIn.refl projection_metadata_control_env (KExpr.sort (Level.succ Level.zero))))
-  (Eq.refl (OptionType Name) (OptionType.some Name Name.anonymous))
+  (@KernelAcceptsTcIn.bvar projection_metadata_control_env tenv (@ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.sort (Level.succ Level.zero))) (@ListType.nil CtxEntryIn)) Nat.zero (CtxEntryIn.decl (KExpr.sort (Level.succ Level.zero))) (@Eq.refl (OptionType CtxEntryIn) (@OptionType.some CtxEntryIn (CtxEntryIn.decl (KExpr.sort (Level.succ Level.zero))))))
+  (@KernelAcceptsTcIn.cdp projection_metadata_control_env tenv (@ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.sort (Level.succ Level.zero))) (@ListType.nil CtxEntryIn)) (KExpr.sort (Level.succ Level.zero)) (KExpr.sort (Level.succ Level.zero)) (@DefEqCDPIn.refl projection_metadata_control_env (KExpr.sort (Level.succ Level.zero))))
+  (@Eq.refl (OptionType Name) (@OptionType.some Name Name.anonymous))
   (accepts_struct_fields tenv)",
     ),
     (
         "accepts_tc_forged_lit_pred",
-        r"def accepts_tc_forged_lit_pred : forall (R : RedEnv) (tenv : KDeclEnv) (G : ListType CtxEntryIn), KernelAcceptsTcIn R tenv Bool.false G (literal_nat (Nat.succ (Nat.succ Nat.zero))) (KExpr.app (KExpr.const accepts_tc_nat_succ_name (ListType.nil Level)) (literal_nat Nat.zero)) :=
-fun (R : RedEnv) (tenv : KDeclEnv) (G : ListType CtxEntryIn) => KernelAcceptsTcIn.lit_succ R tenv G (Nat.succ Nat.zero)",
+        r"def accepts_tc_forged_lit_pred : forall (R : RedEnv) (tenv : KDeclEnv) (G : ListType CtxEntryIn), KernelAcceptsTcIn R tenv Bool.false G (literal_nat (Nat.succ (Nat.succ Nat.zero))) (KExpr.app (KExpr.const accepts_tc_nat_succ_name (@ListType.nil Level)) (literal_nat Nat.zero)) :=
+fun (R : RedEnv) (tenv : KDeclEnv) (G : ListType CtxEntryIn) => @KernelAcceptsTcIn.lit_succ R tenv G (Nat.succ Nat.zero)",
     ),
     (
         "accepts_tc_forged_zeta_on_decl",
-        r"def accepts_tc_forged_zeta_on_decl : forall (R : RedEnv) (tenv : KDeclEnv), KernelAcceptsTcIn R tenv Bool.false (ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.sort (Level.succ (Level.succ Level.zero)))) (ListType.nil CtxEntryIn)) (KExpr.bvar Nat.zero) (KExpr.sort (Level.succ Level.zero)) :=
+        r"def accepts_tc_forged_zeta_on_decl : forall (R : RedEnv) (tenv : KDeclEnv), KernelAcceptsTcIn R tenv Bool.false (@ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.sort (Level.succ (Level.succ Level.zero)))) (@ListType.nil CtxEntryIn)) (KExpr.bvar Nat.zero) (KExpr.sort (Level.succ Level.zero)) :=
 fun (R : RedEnv) (tenv : KDeclEnv) =>
-KernelAcceptsTcIn.zeta_local R tenv (ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.sort (Level.succ (Level.succ Level.zero)))) (ListType.nil CtxEntryIn)) Nat.zero (KExpr.sort (Level.succ (Level.succ Level.zero))) (KExpr.sort (Level.succ Level.zero))
-  (Eq.refl (OptionType CtxEntryIn) (OptionType.some CtxEntryIn (CtxEntryIn.defn (KExpr.sort (Level.succ (Level.succ Level.zero))) (KExpr.sort (Level.succ Level.zero)))))",
+@KernelAcceptsTcIn.zeta_local R tenv (@ListType.cons CtxEntryIn (CtxEntryIn.decl (KExpr.sort (Level.succ (Level.succ Level.zero)))) (@ListType.nil CtxEntryIn)) Nat.zero (KExpr.sort (Level.succ (Level.succ Level.zero))) (KExpr.sort (Level.succ Level.zero))
+  (@Eq.refl (OptionType CtxEntryIn) (@OptionType.some CtxEntryIn (CtxEntryIn.defn (KExpr.sort (Level.succ (Level.succ Level.zero))) (KExpr.sort (Level.succ Level.zero)))))",
     ),
     (
         "accepts_tc_forged_quot_short_mk",
-        r"def accepts_tc_forged_quot_short_mk : forall (R : RedEnv) (tenv : KDeclEnv) (G : ListType CtxEntryIn), KernelAcceptsTcIn R tenv Bool.false G (KExpr.app (KExpr.app (KExpr.app (KExpr.app (KExpr.app (KExpr.app (KExpr.const accepts_tc_quot_lift_name (ListType.cons Level Level.zero (ListType.cons Level Level.zero (ListType.nil Level)))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero))))))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero)))))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar (Nat.succ Nat.zero))) (KExpr.app (KExpr.app (KExpr.const accepts_tc_quot_mk_name (ListType.cons Level Level.zero (ListType.nil Level))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero))))))) (KExpr.bvar Nat.zero))) (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)) :=
+        r"def accepts_tc_forged_quot_short_mk : forall (R : RedEnv) (tenv : KDeclEnv) (G : ListType CtxEntryIn), KernelAcceptsTcIn R tenv Bool.false G (KExpr.app (KExpr.app (KExpr.app (KExpr.app (KExpr.app (KExpr.app (KExpr.const accepts_tc_quot_lift_name (@ListType.cons Level Level.zero (@ListType.cons Level Level.zero (@ListType.nil Level)))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero))))))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero)))))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar (Nat.succ Nat.zero))) (KExpr.app (KExpr.app (KExpr.const accepts_tc_quot_mk_name (@ListType.cons Level Level.zero (@ListType.nil Level))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero))))))) (KExpr.bvar Nat.zero))) (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)) :=
 fun (R : RedEnv) (tenv : KDeclEnv) (G : ListType CtxEntryIn) =>
-KernelAcceptsTcIn.quot_lift R tenv G (ListType.cons Level Level.zero (ListType.cons Level Level.zero (ListType.nil Level))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero)))))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar (Nat.succ Nat.zero)) (ListType.cons Level Level.zero (ListType.nil Level)) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero)))))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (KExpr.bvar Nat.zero)",
+@KernelAcceptsTcIn.quot_lift R tenv G (@ListType.cons Level Level.zero (@ListType.cons Level Level.zero (@ListType.nil Level))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero)))))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar (Nat.succ Nat.zero)) (@ListType.cons Level Level.zero (@ListType.nil Level)) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero)))))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (KExpr.bvar Nat.zero)",
     ),
     (
         "accepts_tc_forged_quot_ind_head",
-        r"def accepts_tc_forged_quot_ind_head : forall (R : RedEnv) (tenv : KDeclEnv) (G : ListType CtxEntryIn), KernelAcceptsTcIn R tenv Bool.false G (KExpr.app (KExpr.app (KExpr.app (KExpr.app (KExpr.app (KExpr.app (KExpr.const accepts_tc_quot_ind_name (ListType.cons Level Level.zero (ListType.cons Level Level.zero (ListType.nil Level)))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero))))))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero)))))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar (Nat.succ Nat.zero))) (KExpr.app (KExpr.app (KExpr.app (KExpr.const accepts_tc_quot_mk_name (ListType.cons Level Level.zero (ListType.nil Level))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero))))))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero)))))) (KExpr.bvar Nat.zero))) (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)) :=
+        r"def accepts_tc_forged_quot_ind_head : forall (R : RedEnv) (tenv : KDeclEnv) (G : ListType CtxEntryIn), KernelAcceptsTcIn R tenv Bool.false G (KExpr.app (KExpr.app (KExpr.app (KExpr.app (KExpr.app (KExpr.app (KExpr.const accepts_tc_quot_ind_name (@ListType.cons Level Level.zero (@ListType.cons Level Level.zero (@ListType.nil Level)))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero))))))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero)))))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar (Nat.succ Nat.zero))) (KExpr.app (KExpr.app (KExpr.app (KExpr.const accepts_tc_quot_mk_name (@ListType.cons Level Level.zero (@ListType.nil Level))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero))))))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero)))))) (KExpr.bvar Nat.zero))) (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)) :=
 fun (R : RedEnv) (tenv : KDeclEnv) (G : ListType CtxEntryIn) =>
-KernelAcceptsTcIn.quot_lift R tenv G (ListType.cons Level Level.zero (ListType.cons Level Level.zero (ListType.nil Level))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero)))))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar (Nat.succ Nat.zero)) (ListType.cons Level Level.zero (ListType.nil Level)) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero)))))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (KExpr.bvar Nat.zero)",
+@KernelAcceptsTcIn.quot_lift R tenv G (@ListType.cons Level Level.zero (@ListType.cons Level Level.zero (@ListType.nil Level))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero)))))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar (Nat.succ Nat.zero)) (@ListType.cons Level Level.zero (@ListType.nil Level)) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero)))))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (KExpr.bvar Nat.zero)",
     ),
     (
         "accepts_tc_forged_quot_wrong_function",
-        r"def accepts_tc_forged_quot_wrong_function : forall (R : RedEnv) (tenv : KDeclEnv) (G : ListType CtxEntryIn), KernelAcceptsTcIn R tenv Bool.false G (KExpr.app (KExpr.app (KExpr.app (KExpr.app (KExpr.app (KExpr.app (KExpr.const accepts_tc_quot_lift_name (ListType.cons Level Level.zero (ListType.cons Level Level.zero (ListType.nil Level)))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero))))))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero)))))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar (Nat.succ Nat.zero))) (KExpr.app (KExpr.app (KExpr.app (KExpr.const accepts_tc_quot_mk_name (ListType.cons Level Level.zero (ListType.nil Level))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero))))))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero)))))) (KExpr.bvar Nat.zero))) (KExpr.app (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) :=
+        r"def accepts_tc_forged_quot_wrong_function : forall (R : RedEnv) (tenv : KDeclEnv) (G : ListType CtxEntryIn), KernelAcceptsTcIn R tenv Bool.false G (KExpr.app (KExpr.app (KExpr.app (KExpr.app (KExpr.app (KExpr.app (KExpr.const accepts_tc_quot_lift_name (@ListType.cons Level Level.zero (@ListType.cons Level Level.zero (@ListType.nil Level)))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero))))))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero)))))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar (Nat.succ Nat.zero))) (KExpr.app (KExpr.app (KExpr.app (KExpr.const accepts_tc_quot_mk_name (@ListType.cons Level Level.zero (@ListType.nil Level))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero))))))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero)))))) (KExpr.bvar Nat.zero))) (KExpr.app (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) :=
 fun (R : RedEnv) (tenv : KDeclEnv) (G : ListType CtxEntryIn) =>
-KernelAcceptsTcIn.quot_lift R tenv G (ListType.cons Level Level.zero (ListType.cons Level Level.zero (ListType.nil Level))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero)))))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar (Nat.succ Nat.zero)) (ListType.cons Level Level.zero (ListType.nil Level)) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero)))))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (KExpr.bvar Nat.zero)",
+@KernelAcceptsTcIn.quot_lift R tenv G (@ListType.cons Level Level.zero (@ListType.cons Level Level.zero (@ListType.nil Level))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero)))))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar (Nat.succ Nat.zero)) (@ListType.cons Level Level.zero (@ListType.nil Level)) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero)))))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (KExpr.bvar Nat.zero)",
     ),
 ];

@@ -12,6 +12,7 @@ import platform
 import hashlib
 import importlib.util
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -54,6 +55,43 @@ _RUST_MODULES = None
 def need(ok, why):
     if not ok:
         raise ValueError(why)
+
+
+class EvidenceJSONError(ValueError):
+    """Ambiguous/non-finite evidence is not ignorable mixed-log text."""
+
+
+def decode_evidence(data):
+    violations = []
+    def remember(reason):
+        if not violations:
+            violations.append(reason)
+
+    def unique_object(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                remember('duplicate JSON key: ' + repr(key))
+            result[key] = value
+        return result
+
+    def nonfinite(word):
+        remember('non-finite JSON number: ' + word)
+
+    def finite_float(word):
+        value = float(word)
+        if not math.isfinite(value):
+            nonfinite(word)
+        return value
+
+    # Mixed build logs contain prose beginning with JSON-looking tokens. Let
+    # the complete syntax/trailing-data check reject those as non-JSON before
+    # refusing semantic violations in an otherwise complete JSON record.
+    value = json.loads(data, object_pairs_hook=unique_object,
+                       parse_constant=nonfinite, parse_float=finite_float)
+    if violations:
+        raise EvidenceJSONError(violations[0])
+    return value
 
 
 def _source_module(name, path):
@@ -552,7 +590,7 @@ def compile_record(driver, compiler, label, output, source):
                          for context in ('default', 'export')}
 
     def snapshot():
-        resolution = {context: inputs.reachable_metadata(json.loads(command(argv, env=env)))
+        resolution = {context: inputs.reachable_metadata(decode_evidence(command(argv, env=env)))
                       for context, argv in metadata_commands.items()}
         _root, specs = inputs.resolution_specs(resolution)
         target = Path(env['CARGO_TARGET_DIR']).resolve()
@@ -600,8 +638,8 @@ def compile_record(driver, compiler, label, output, source):
         test_targets = []
         for line in text.splitlines():
             try:
-                item = json.loads(line)
-            except ValueError:
+                item = decode_evidence(line)
+            except json.JSONDecodeError:
                 continue
             if item.get('reason') == 'compiler-artifact':
                 packages.add(item['package_id'])
@@ -655,7 +693,7 @@ def checked_stability(base, record, source, used_packages, local=False):
              reference['file'] == 'inputs-' + phase + '.json' and
              isinstance(reference['sha256'], str) and re.fullmatch('[0-9a-f]{64}', reference['sha256']),
              'input snapshot reference')
-        snapshot = json.loads(inputs.read_bound_file(base, reference['file'], reference['sha256']))
+        snapshot = decode_evidence(inputs.read_bound_file(base, reference['file'], reference['sha256']))
         need(set(snapshot) == {'schema', 'phase', 'observed_at', 'state'} and
              snapshot['schema'] == inputs.SNAPSHOT_SCHEMA and snapshot['phase'] == phase and
              isinstance(snapshot['observed_at'], str), 'input snapshot shape')
@@ -754,7 +792,7 @@ def checked_links(links, files):
 
 
 def checked_run(path, source, local=False, require_stability=False):
-    record = json.loads(path.read_text())
+    record = decode_evidence(path.read_text())
     need(record['schema'] in (SCHEMA, inputs.RUN_SCHEMA) and
          record['kind'] == 'rustc-family-qualification', 'run schema')
     need(not require_stability or record['schema'] == inputs.RUN_SCHEMA,
@@ -778,8 +816,8 @@ def checked_run(path, source, local=False, require_stability=False):
         logged_targets, logged_packages, logged_files = [], set(), set()
         for line in data.decode().splitlines():
             try:
-                item = json.loads(line)
-            except ValueError:
+                item = decode_evidence(line)
+            except json.JSONDecodeError:
                 continue
             if item.get('reason') == 'compiler-artifact':
                 logged_packages.add(item['package_id'])
@@ -837,7 +875,7 @@ def checked_run(path, source, local=False, require_stability=False):
 
 
 def checked_receipt(base, source, production_data=None):
-    receipt = json.loads((base / 'EVIDENCE.json').read_text())
+    receipt = decode_evidence((base / 'EVIDENCE.json').read_text())
     need(receipt['schema'] == 'clean.ck0-evidence/v1', 'evidence schema')
     need(receipt['proof_claim'] is False and receipt['q6_complete'] is False and receipt['genesis_promoted'] is False, 'evidence receipt cannot promote claims')
     need(receipt['source_sha256'] == digest(encoded(source)), 'evidence source pin')
@@ -937,6 +975,18 @@ def stability_selftest():
 
         check(record)
         checked_run(base / 'run.json', source, local=True, require_stability=True)
+        reference = record['input_snapshots']['before']
+        snapshot_path = base / reference['file']
+        original_snapshot = snapshot_path.read_bytes()
+        needle = b'"state": {'
+        need(original_snapshot.count(needle) == 1, 'snapshot duplicate control target')
+        ambiguous_snapshot = original_snapshot.replace(needle, b'"state": {}, ' + needle)
+        snapshot_path.write_bytes(ambiguous_snapshot)
+        duplicate = copy.deepcopy(record)
+        duplicate['input_snapshots']['before']['sha256'] = digest(ambiguous_snapshot)
+        refuses(duplicate, 'duplicate JSON key')
+        snapshot_path.write_bytes(original_snapshot)
+        check(record)
         legacy = copy.deepcopy(record)
         legacy['schema'] = SCHEMA
         check(legacy, strict=False)
@@ -1153,7 +1203,7 @@ const C: char = '\"';
     # each control changes precisely one edge while preserving all other bytes.
     production_path = ROOT / 'reports/self-proof-q6-2026-11-13/production.json'
     if production_path.exists():
-        production = json.loads(production_path.read_text())
+        production = decode_evidence(production_path.read_text())
         checked_production(production)
         for key in ('trust_files', 'ty_files', 'clean_files'):
             mutant = copy.deepcopy(production)
@@ -1406,6 +1456,7 @@ def main():
              '--require-stability requires --runs without early action modes')
     if args.pinned_inputs:
         print('\n'.join(sorted({PRODUCTION_BATCH_TEST, CANDIDATE_CONTEXT_TEST, TRANSPORT_TEST, SOURCE_PROFILE_TEST,
+                          'reports/self-proof-q6-2026-11-13/production.json',
                           'scripts/check_ck0_replay_custody.py', RESOURCE_HELPER, *(name for name in PRODUCER_FILES
                           if name != 'scripts/check_ck0_lineage.py')})))
         return
@@ -1426,14 +1477,14 @@ def main():
         args.production.write_bytes(encoded(production_record(args.trust_repo, args.ty_repo, args.clean_repo, args.trust_ref)))
         print(f'wrote production source provenance {args.production}; production NOT compiled')
         return
-    source = json.loads(args.source.read_text())
+    source = decode_evidence(args.source.read_text())
     checked_source(ROOT, source)
     if args.compile:
         compile_record(args.driver, args.compiler, args.compile, args.output, source)
         return
     production_data = args.production.read_bytes() if args.production else None
     if production_data is not None:
-        production = json.loads(production_data)
+        production = decode_evidence(production_data)
         checked_production(production)
         if args.authenticate_production:
             authenticate_production(production, args.trust_repo, args.ty_repo, args.clean_repo)

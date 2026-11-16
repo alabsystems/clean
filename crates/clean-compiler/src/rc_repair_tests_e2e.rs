@@ -55,7 +55,7 @@ fn run_emitted_c(pipeline: &PipelineConfig) -> (Vec<String>, bool) {
 }
 
 /// [`run_emitted_c`] for the closure of `roots` in `env`, run by `driver`.
-fn run_emitted_c_of(
+pub(super) fn run_emitted_c_of(
     env: &Environment,
     roots: &[&str],
     driver: &str,

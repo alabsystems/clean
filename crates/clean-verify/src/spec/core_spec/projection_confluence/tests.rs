@@ -291,7 +291,7 @@ fn projection_confluence_connected_callers_and_computation() {
         let spec = shared_spec();
         for (source, expected) in [
             ("cdp_binding_projection", "KExpr.proj kcre_prod_type_name Nat.zero projection_binding_subject"),
-            ("projection_post_whnf_reduct the_red_env cdp_binding_projection", "OptionType.some KExpr projection_binding_field"),
+            ("projection_post_whnf_reduct the_red_env cdp_binding_projection", "@OptionType.some KExpr projection_binding_field"),
             ("instantiate projection_binding_field (KExpr.bvar (Nat.succ Nat.zero))", "KExpr.lam rfnz_nat (KExpr.bvar (Nat.succ (Nat.succ Nat.zero)))"),
             ("cdp_union_mixed_source", "KExpr.app (KExpr.lam rfnz_nat cdp_binding_projection) (KExpr.bvar (Nat.succ Nat.zero))"),
             ("cdp_union_mixed_middle", "KExpr.app (KExpr.lam rfnz_nat projection_binding_field) (KExpr.bvar (Nat.succ Nat.zero))"),

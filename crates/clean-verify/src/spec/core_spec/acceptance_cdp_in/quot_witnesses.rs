@@ -27,14 +27,14 @@ pub(super) struct OwnedProof {
 }
 
 /// `Quot.mk.{0} #5 #4 #0`, the major the rules eliminate.
-const MK: &str = "(KExpr.app (KExpr.app (KExpr.app (KExpr.const accepts_tc_quot_mk_name (ListType.cons Level Level.zero (ListType.nil Level))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero))))))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero)))))) (KExpr.bvar Nat.zero))";
+const MK: &str = "(KExpr.app (KExpr.app (KExpr.app (KExpr.const accepts_tc_quot_mk_name (@ListType.cons Level Level.zero (@ListType.nil Level))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero))))))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero)))))) (KExpr.bvar Nat.zero))";
 
 /// The same major one binder deeper (every variable lifted by one), so that
 /// `instantiate MK_LIFTED (Sort 0)` is `MK` again.
-const MK_LIFTED: &str = "(KExpr.app (KExpr.app (KExpr.app (KExpr.const accepts_tc_quot_mk_name (ListType.cons Level Level.zero (ListType.nil Level))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero)))))))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero))))))) (KExpr.bvar (Nat.succ Nat.zero)))";
+const MK_LIFTED: &str = "(KExpr.app (KExpr.app (KExpr.app (KExpr.const accepts_tc_quot_mk_name (@ListType.cons Level Level.zero (@ListType.nil Level))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero)))))))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero))))))) (KExpr.bvar (Nat.succ Nat.zero)))";
 
 /// `Quot.lift.{0,0} #5 #4 #3 #2 #1`, the spine before its major.
-const LIFT_HEAD: &str = "(KExpr.app (KExpr.app (KExpr.app (KExpr.app (KExpr.app (KExpr.const accepts_tc_quot_lift_name (ListType.cons Level Level.zero (ListType.cons Level Level.zero (ListType.nil Level)))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero))))))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero)))))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar (Nat.succ Nat.zero)))";
+const LIFT_HEAD: &str = "(KExpr.app (KExpr.app (KExpr.app (KExpr.app (KExpr.app (KExpr.const accepts_tc_quot_lift_name (@ListType.cons Level Level.zero (@ListType.cons Level Level.zero (@ListType.nil Level)))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero))))))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero)))))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar (Nat.succ Nat.zero)))";
 
 /// `#2 #0`: argument 3 applied to the quoted value.
 const RESULT: &str =
@@ -47,9 +47,9 @@ pub(super) fn proofs() -> Vec<OwnedProof> {
     let n2 = "(KExpr.bvar (Nat.succ (Nat.succ Nat.zero)))";
     let n1 = "(KExpr.bvar (Nat.succ Nat.zero))";
     let n0 = "(KExpr.bvar Nat.zero)";
-    let l1 = "(ListType.cons Level Level.zero (ListType.nil Level))";
+    let l1 = "(@ListType.cons Level Level.zero (@ListType.nil Level))";
     let l2 =
-        "(ListType.cons Level Level.zero (ListType.cons Level Level.zero (ListType.nil Level)))";
+        "(@ListType.cons Level Level.zero (@ListType.cons Level Level.zero (@ListType.nil Level)))";
     let sort0 = "(KExpr.sort Level.zero)";
     let redex_major = format!("(KExpr.app (KExpr.lam {sort0} {MK_LIFTED}) {sort0})");
     let lift_beta = format!("(KExpr.app {LIFT_HEAD} {redex_major})");
@@ -58,24 +58,24 @@ pub(super) fn proofs() -> Vec<OwnedProof> {
         "(KExpr.app (KExpr.app (KExpr.app (KExpr.app (KExpr.app (KExpr.const accepts_tc_quot_ind_name {l1}) {n5}) {n4}) {n3}) {n2}) {MK})"
     );
     let lift_rule = format!(
-        "KernelAcceptsTcIn.quot_lift R tenv G {l2} {n5} {n4} {n3} {n2} {n1} {l1} {n5} {n4} {n0}"
+        "@KernelAcceptsTcIn.quot_lift R tenv G {l2} {n5} {n4} {n3} {n2} {n1} {l1} {n5} {n4} {n0}"
     );
     let beta_major = format!(
-        "KernelAcceptsTcIn.cdp R tenv G {redex_major} {MK}
-    (DefEqCDPIn.raw R {redex_major} {MK}
-      (par_reduces_cdp.beta R {sort0} {sort0} {MK_LIFTED} {MK_LIFTED} {sort0} {sort0}
-        (par_reduces_cdp.refl R {sort0}) (par_reduces_cdp.refl R {MK_LIFTED}) (par_reduces_cdp.refl R {sort0})))"
+        "@KernelAcceptsTcIn.cdp R tenv G {redex_major} {MK}
+    (@DefEqCDPIn.raw R {redex_major} {MK}
+      (@par_reduces_cdp.beta R {sort0} {sort0} {MK_LIFTED} {MK_LIFTED} {sort0} {sort0}
+        (@par_reduces_cdp.refl R {sort0}) (@par_reduces_cdp.refl R {MK_LIFTED}) (@par_reduces_cdp.refl R {sort0})))"
     );
     let refl_head = format!(
-        "KernelAcceptsTcIn.cdp R tenv G {LIFT_HEAD} {LIFT_HEAD} (DefEqCDPIn.refl R {LIFT_HEAD})"
+        "@KernelAcceptsTcIn.cdp R tenv G {LIFT_HEAD} {LIFT_HEAD} (@DefEqCDPIn.refl R {LIFT_HEAD})"
     );
     let lift_ty = format!(
         "forall (R : RedEnv) (tenv : KDeclEnv) (G : ListType CtxEntryIn), KernelAcceptsTcIn R tenv Bool.false G {lift_beta} {RESULT}"
     );
     let lift_value = format!(
         "fun (R : RedEnv) (tenv : KDeclEnv) (G : ListType CtxEntryIn) =>
-KernelAcceptsTcIn.trans R tenv G {lift_beta} {lift_mk} {RESULT}
-  (KernelAcceptsTcIn.app_cong R tenv G {LIFT_HEAD} {LIFT_HEAD} {redex_major} {MK}
+@KernelAcceptsTcIn.trans R tenv G {lift_beta} {lift_mk} {RESULT}
+  (@KernelAcceptsTcIn.app_cong R tenv G {LIFT_HEAD} {LIFT_HEAD} {redex_major} {MK}
     ({refl_head})
     ({beta_major}))
   ({lift_rule})"
@@ -85,7 +85,7 @@ KernelAcceptsTcIn.trans R tenv G {lift_beta} {lift_mk} {RESULT}
     );
     let ind_value = format!(
         "fun (R : RedEnv) (tenv : KDeclEnv) (G : ListType CtxEntryIn) =>
-KernelAcceptsTcIn.quot_ind R tenv G {l1} {n5} {n4} {n3} {n2} {l1} {n5} {n4} {n0}"
+@KernelAcceptsTcIn.quot_ind R tenv G {l1} {n5} {n4} {n3} {n2} {l1} {n5} {n4} {n0}"
     );
     let extra = "(KExpr.sort (Level.succ Level.zero))";
     let lift_extra_ty = format!(
@@ -93,9 +93,9 @@ KernelAcceptsTcIn.quot_ind R tenv G {l1} {n5} {n4} {n3} {n2} {l1} {n5} {n4} {n0}
     );
     let lift_extra_value = format!(
         "fun (R : RedEnv) (tenv : KDeclEnv) (G : ListType CtxEntryIn) =>
-KernelAcceptsTcIn.app_cong R tenv G {lift_mk} {RESULT} {extra} {extra}
+@KernelAcceptsTcIn.app_cong R tenv G {lift_mk} {RESULT} {extra} {extra}
   ({lift_rule})
-  (KernelAcceptsTcIn.cdp R tenv G {extra} {extra} (DefEqCDPIn.refl R {extra}))"
+  (@KernelAcceptsTcIn.cdp R tenv G {extra} {extra} (@DefEqCDPIn.refl R {extra}))"
     );
     let sound = |name: &str, target: &str, result: &str| {
         (

@@ -32,22 +32,22 @@ pub(super) const DECLARATIONS: &[DeclarationInput] = &[
         r"def accepts_k_rn : Name := Name.str Name.anonymous (Nat.succ (Nat.succ (Nat.succ Nat.zero)))",
     ),
     DeclarationInput::Data(
-        r"def accepts_k_type : KExpr := KExpr.const Name.anonymous (ListType.nil Level)",
+        r"def accepts_k_type : KExpr := KExpr.const Name.anonymous (@ListType.nil Level)",
     ),
     DeclarationInput::Data(
-        r"def accepts_k_ctor : KExpr := KExpr.const accepts_k_cn (ListType.nil Level)",
+        r"def accepts_k_ctor : KExpr := KExpr.const accepts_k_cn (@ListType.nil Level)",
     ),
     DeclarationInput::Data(
-        r"def accepts_k_ind_meta : KIndMeta := KIndMeta.mk (KConstSig.mk (ListType.nil Name) (KExpr.sort Level.zero)) Nat.zero Nat.zero (ListType.cons Name accepts_k_cn (ListType.nil Name)) (ListType.cons Name Name.anonymous (ListType.nil Name))",
+        r"def accepts_k_ind_meta : KIndMeta := KIndMeta.mk (KConstSig.mk (@ListType.nil Name) (KExpr.sort Level.zero)) Nat.zero Nat.zero (@ListType.cons Name accepts_k_cn (@ListType.nil Name)) (@ListType.cons Name Name.anonymous (@ListType.nil Name))",
     ),
     DeclarationInput::Data(
-        r"def accepts_k_ctor_meta : KCtorMeta := KCtorMeta.mk (KConstSig.mk (ListType.nil Name) accepts_k_type) Name.anonymous Nat.zero Nat.zero Nat.zero",
+        r"def accepts_k_ctor_meta : KCtorMeta := KCtorMeta.mk (KConstSig.mk (@ListType.nil Name) accepts_k_type) Name.anonymous Nat.zero Nat.zero Nat.zero",
     ),
     DeclarationInput::Data(
         r"def accepts_k_rhs : KExpr := KExpr.lam (KExpr.pi accepts_k_type (KExpr.sort (Level.param Name.anonymous))) (KExpr.lam (KExpr.app (KExpr.bvar Nat.zero) accepts_k_ctor) (KExpr.bvar Nat.zero))",
     ),
     DeclarationInput::Data(
-        r"def accepts_k_rec_sig : KConstSig := KConstSig.mk (ListType.cons Name Name.anonymous (ListType.nil Name)) (KExpr.pi (KExpr.pi accepts_k_type (KExpr.sort (Level.param Name.anonymous))) (KExpr.pi (KExpr.app (KExpr.bvar Nat.zero) accepts_k_ctor) (KExpr.pi accepts_k_type (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)))))",
+        r"def accepts_k_rec_sig : KConstSig := KConstSig.mk (@ListType.cons Name Name.anonymous (@ListType.nil Name)) (KExpr.pi (KExpr.pi accepts_k_type (KExpr.sort (Level.param Name.anonymous))) (KExpr.pi (KExpr.app (KExpr.bvar Nat.zero) accepts_k_ctor) (KExpr.pi accepts_k_type (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)))))",
     ),
     DeclarationInput::Data(
         r"def accepts_k_rec_meta : RecMeta := RecMeta.mk Nat.zero (Nat.succ Nat.zero) (Nat.succ Nat.zero) Nat.zero Bool.true accepts_k_rec_sig (Nat.succ Nat.zero)",
@@ -56,37 +56,37 @@ pub(super) const DECLARATIONS: &[DeclarationInput] = &[
         r"def accepts_k_env : RedEnv := RedEnv.mk (RecEnv.addRec RecEnv.empty accepts_k_rn accepts_k_rec_meta (RecRules.cons (RecRule.mk accepts_k_cn Nat.zero accepts_k_rhs) RecRules.nil)) DefEnv.empty (IndCtorEnv.addCtor (IndCtorEnv.addInd IndCtorEnv.empty Name.anonymous accepts_k_ind_meta) accepts_k_cn accepts_k_ctor_meta)",
     ),
     DeclarationInput::Data(
-        r"def accepts_k_tenv : KDeclEnv := fun (nm : Name) => opt_pick KConstSig (name_eqb nm accepts_k_cn) (KConstSig.mk (ListType.nil Name) accepts_k_type) (OptionType.none KConstSig)",
+        r"def accepts_k_tenv : KDeclEnv := fun (nm : Name) => opt_pick KConstSig (name_eqb nm accepts_k_cn) (KConstSig.mk (@ListType.nil Name) accepts_k_type) (@OptionType.none KConstSig)",
     ),
     DeclarationInput::Data(
-        r"def accepts_k_context : ListType CtxEntryIn := ListType.cons CtxEntryIn (CtxEntryIn.decl accepts_k_type) (ListType.nil CtxEntryIn)",
+        r"def accepts_k_context : ListType CtxEntryIn := @ListType.cons CtxEntryIn (CtxEntryIn.decl accepts_k_type) (@ListType.nil CtxEntryIn)",
     ),
     DeclarationInput::Proof(
         "accepts_k_admit",
         r"RecKAdmitIn accepts_k_env accepts_k_rn Name.anonymous accepts_k_rec_meta accepts_k_cn",
-        r"RecKAdmitIn.mk accepts_k_env accepts_k_rn Name.anonymous accepts_k_rec_meta accepts_k_cn accepts_k_rhs accepts_k_ctor_meta accepts_k_ind_meta
-  (Eq.refl (OptionType RecMeta) (OptionType.some RecMeta accepts_k_rec_meta))
-  (Eq.refl Nat (Nat.succ Nat.zero))
-  (Eq.refl (OptionType RecRules) (OptionType.some RecRules (RecRules.cons (RecRule.mk accepts_k_cn Nat.zero accepts_k_rhs) RecRules.nil)))
-  (Eq.refl (OptionType KCtorMeta) (OptionType.some KCtorMeta accepts_k_ctor_meta))
-  (Eq.refl Name Name.anonymous)
-  (Eq.refl Nat Nat.zero)
-  (Eq.refl (OptionType KIndMeta) (OptionType.some KIndMeta accepts_k_ind_meta))
-  (Eq.refl (ListType Name) (ListType.cons Name accepts_k_cn (ListType.nil Name)))
-  (Eq.refl (ListType Name) (ListType.cons Name Name.anonymous (ListType.nil Name)))
-  (Eq.refl Bool Bool.true)",
+        r"@RecKAdmitIn.mk accepts_k_env accepts_k_rn Name.anonymous accepts_k_rec_meta accepts_k_cn accepts_k_rhs accepts_k_ctor_meta accepts_k_ind_meta
+  (@Eq.refl (OptionType RecMeta) (@OptionType.some RecMeta accepts_k_rec_meta))
+  (@Eq.refl Nat (Nat.succ Nat.zero))
+  (@Eq.refl (OptionType RecRules) (@OptionType.some RecRules (RecRules.cons (RecRule.mk accepts_k_cn Nat.zero accepts_k_rhs) RecRules.nil)))
+  (@Eq.refl (OptionType KCtorMeta) (@OptionType.some KCtorMeta accepts_k_ctor_meta))
+  (@Eq.refl Name Name.anonymous)
+  (@Eq.refl Nat Nat.zero)
+  (@Eq.refl (OptionType KIndMeta) (@OptionType.some KIndMeta accepts_k_ind_meta))
+  (@Eq.refl (ListType Name) (@ListType.cons Name accepts_k_cn (@ListType.nil Name)))
+  (@Eq.refl (ListType Name) (@ListType.cons Name Name.anonymous (@ListType.nil Name)))
+  (@Eq.refl Bool Bool.true)",
     ),
     DeclarationInput::Proof(
         "kernel_accepts_tc_in_k_like",
         r"KernelAcceptsTcIn accepts_k_env accepts_k_tenv Bool.false accepts_k_context (KExpr.bvar Nat.zero) accepts_k_ctor",
-        r"KernelAcceptsTcIn.k_like accepts_k_env accepts_k_tenv accepts_k_context accepts_k_rn Name.anonymous accepts_k_rec_meta accepts_k_cn (ListType.nil Level)
+        r"@KernelAcceptsTcIn.k_like accepts_k_env accepts_k_tenv accepts_k_context accepts_k_rn Name.anonymous accepts_k_rec_meta accepts_k_cn (@ListType.nil Level)
   (KExpr.bvar Nat.zero) accepts_k_type accepts_k_type accepts_k_type
   accepts_k_admit
-  (KernelAcceptsTcIn.bvar accepts_k_env accepts_k_tenv accepts_k_context Nat.zero (CtxEntryIn.decl accepts_k_type) (Eq.refl (OptionType CtxEntryIn) (OptionType.some CtxEntryIn (CtxEntryIn.decl accepts_k_type))))
-  (KernelAcceptsTcIn.cdp accepts_k_env accepts_k_tenv accepts_k_context accepts_k_type accepts_k_type (DefEqCDPIn.refl accepts_k_env accepts_k_type))
-  (Eq.refl (OptionType Name) (OptionType.some Name Name.anonymous))
-  (KernelAcceptsTcIn.const accepts_k_env accepts_k_tenv accepts_k_context accepts_k_cn (ListType.nil Level) accepts_k_type accepts_k_type (Eq.refl (OptionType KExpr) (OptionType.some KExpr accepts_k_type)) (KExprUniverseEq.const Name.anonymous (ListType.nil Level) (ListType.nil Level) LevelListEqSem.nil))
-  (KernelAcceptsTcIn.cdp accepts_k_env accepts_k_tenv accepts_k_context accepts_k_type accepts_k_type (DefEqCDPIn.refl accepts_k_env accepts_k_type))",
+  (@KernelAcceptsTcIn.bvar accepts_k_env accepts_k_tenv accepts_k_context Nat.zero (CtxEntryIn.decl accepts_k_type) (@Eq.refl (OptionType CtxEntryIn) (@OptionType.some CtxEntryIn (CtxEntryIn.decl accepts_k_type))))
+  (@KernelAcceptsTcIn.cdp accepts_k_env accepts_k_tenv accepts_k_context accepts_k_type accepts_k_type (@DefEqCDPIn.refl accepts_k_env accepts_k_type))
+  (@Eq.refl (OptionType Name) (@OptionType.some Name Name.anonymous))
+  (@KernelAcceptsTcIn.const accepts_k_env accepts_k_tenv accepts_k_context accepts_k_cn (@ListType.nil Level) accepts_k_type accepts_k_type (@Eq.refl (OptionType KExpr) (@OptionType.some KExpr accepts_k_type)) (KExprUniverseEq.const Name.anonymous (@ListType.nil Level) (@ListType.nil Level) LevelListEqSem.nil))
+  (@KernelAcceptsTcIn.cdp accepts_k_env accepts_k_tenv accepts_k_context accepts_k_type accepts_k_type (@DefEqCDPIn.refl accepts_k_env accepts_k_type))",
     ),
     DeclarationInput::Proof(
         "accepts_tc_k_like_sound",
@@ -103,7 +103,7 @@ pub(super) const DECLARATIONS: &[DeclarationInput] = &[
         r"fun (R : RedEnv) (tenv : KDeclEnv) (G : ListType CtxEntryIn) (major : KExpr) (W : KExpr) (ctor : KExpr) (S : KExpr)
   (hm : TypingTcIn R tenv Bool.true G major W) (hc : TypingTcIn R tenv Bool.true G ctor W)
   (hW : TypingTcIn R tenv Bool.true G W S) (hS : TypingTcIn R tenv Bool.false G S (KExpr.sort Level.zero)) =>
-TypingTcIn.proof_irrel R tenv G major W ctor hm (TypingTcIn.conv R tenv G W S (KExpr.sort Level.zero) hW hS) hc",
+@TypingTcIn.proof_irrel R tenv G major W ctor hm (@TypingTcIn.conv R tenv G W S (KExpr.sort Level.zero) hW hS) hc",
     ),
 ];
 
@@ -113,7 +113,7 @@ TypingTcIn.proof_irrel R tenv G major W ctor hm (TypingTcIn.conv R tenv G W S (K
 pub(super) fn iota_witness() -> (String, String) {
     let motive = "(KExpr.lam accepts_k_type (KExpr.sort Level.zero))";
     let minor = "(KExpr.sort (Level.succ Level.zero))";
-    let us = "(ListType.cons Level Level.zero (ListType.nil Level))";
+    let us = "(@ListType.cons Level Level.zero (@ListType.nil Level))";
     let head = format!("(KExpr.app (KExpr.app (KExpr.const accepts_k_rn {us}) {motive}) {minor})");
     let redex = format!("(KExpr.app {head} (KExpr.bvar Nat.zero))");
     let at_ctor = format!("(KExpr.app {head} accepts_k_ctor)");
@@ -124,10 +124,10 @@ pub(super) fn iota_witness() -> (String, String) {
     let g = "accepts_k_context";
     let ty = format!("KernelAcceptsTcIn {env} {ten} Bool.false {g} {redex} {minor}");
     let k_step = format!(
-        "(KernelAcceptsTcIn.app_cong {env} {ten} {g} {head} {head} (KExpr.bvar Nat.zero) accepts_k_ctor (KernelAcceptsTcIn.cdp {env} {ten} {g} {head} {head} (DefEqCDPIn.refl {env} {head})) kernel_accepts_tc_in_k_like)"
+        "(@KernelAcceptsTcIn.app_cong {env} {ten} {g} {head} {head} (KExpr.bvar Nat.zero) accepts_k_ctor (@KernelAcceptsTcIn.cdp {env} {ten} {g} {head} {head} (@DefEqCDPIn.refl {env} {head})) kernel_accepts_tc_in_k_like)"
     );
     let iota = format!(
-        "(accepts_tc_iota {env} {ten} {g} {at_ctor} accepts_k_rn accepts_k_rec_meta accepts_k_ctor accepts_k_cn (RecRule.mk accepts_k_cn Nat.zero accepts_k_rhs) {contractum} (Eq.refl (OptionType Name) (OptionType.some Name accepts_k_rn)) (Eq.refl (OptionType RecMeta) (OptionType.some RecMeta accepts_k_rec_meta)) (Eq.refl (OptionType KExpr) (OptionType.some KExpr accepts_k_ctor)) (Eq.refl (OptionType Name) (OptionType.some Name accepts_k_cn)) (Eq.refl (OptionType RecRule) (OptionType.some RecRule (RecRule.mk accepts_k_cn Nat.zero accepts_k_rhs))) (Eq.refl (OptionType KExpr) (OptionType.some KExpr {contractum})))"
+        "(accepts_tc_iota {env} {ten} {g} {at_ctor} accepts_k_rn accepts_k_rec_meta accepts_k_ctor accepts_k_cn (RecRule.mk accepts_k_cn Nat.zero accepts_k_rhs) {contractum} (@Eq.refl (OptionType Name) (@OptionType.some Name accepts_k_rn)) (@Eq.refl (OptionType RecMeta) (@OptionType.some RecMeta accepts_k_rec_meta)) (@Eq.refl (OptionType KExpr) (@OptionType.some KExpr accepts_k_ctor)) (@Eq.refl (OptionType Name) (@OptionType.some Name accepts_k_cn)) (@Eq.refl (OptionType RecRule) (@OptionType.some RecRule (RecRule.mk accepts_k_cn Nat.zero accepts_k_rhs))) (@Eq.refl (OptionType KExpr) (@OptionType.some KExpr {contractum})))"
     );
     let inner = format!("(KExpr.app {rhs_inst} {motive})");
     let after = format!("(KExpr.lam (KExpr.app {motive} accepts_k_ctor) (KExpr.bvar Nat.zero))");
@@ -139,7 +139,7 @@ pub(super) fn iota_witness() -> (String, String) {
         "(accepts_tc_beta {env} {ten} {g} (KExpr.app {motive} accepts_k_ctor) (KExpr.bvar Nat.zero) {minor})"
     );
     let value = format!(
-        "KernelAcceptsTcIn.trans {env} {ten} {g} {redex} {at_ctor} {minor} {k_step} (KernelAcceptsTcIn.trans {env} {ten} {g} {at_ctor} {contractum} {minor} {iota} (KernelAcceptsTcIn.trans {env} {ten} {g} {contractum} {mid} {minor} {beta1} {beta2}))"
+        "@KernelAcceptsTcIn.trans {env} {ten} {g} {redex} {at_ctor} {minor} {k_step} (@KernelAcceptsTcIn.trans {env} {ten} {g} {at_ctor} {contractum} {minor} {iota} (@KernelAcceptsTcIn.trans {env} {ten} {g} {contractum} {mid} {minor} {beta1} {beta2}))"
     );
     (ty, value)
 }
@@ -153,21 +153,21 @@ pub(super) fn iota_witness() -> (String, String) {
 /// table's: `(eq, eq_refl, eq_rec)`.
 pub(super) fn seed_witness(eq: u64, eq_refl: u64, eq_rec: u64) -> [(String, String, String); 2] {
     let rule = format!(
-        "OptionType.rec RecRule (fun (_ : OptionType RecRule) => RecRule) (RecRule.mk Name.anonymous Nat.zero (KExpr.sort Level.zero)) (fun (r : RecRule) => r) (recrule_for (red_rec kernel_core_red_env) kcre_name_{eq_rec} kcre_name_{eq_refl})"
+        "@OptionType.rec RecRule (fun (_ : OptionType RecRule) => RecRule) (RecRule.mk Name.anonymous Nat.zero (KExpr.sort Level.zero)) (fun (r : RecRule) => r) (recrule_for (red_rec kernel_core_red_env) kcre_name_{eq_rec} kcre_name_{eq_refl})"
     );
     let env = "kernel_core_red_env";
     let value = format!(
-        "RecKAdmitIn.mk {env} kcre_name_{eq_rec} kcre_name_{eq} kcre_rec_meta_{eq_rec} kcre_name_{eq_refl} (recrule_rhs accepts_k_eq_refl_rule) kcre_ctor_meta_{eq_refl} kcre_ind_meta_{eq}
-  (Eq.refl (OptionType RecMeta) (OptionType.some RecMeta kcre_rec_meta_{eq_rec}))
-  (Eq.refl Nat (Nat.succ Nat.zero))
-  (Eq.refl (OptionType RecRules) (OptionType.some RecRules (RecRules.cons (RecRule.mk kcre_name_{eq_refl} Nat.zero (recrule_rhs accepts_k_eq_refl_rule)) RecRules.nil)))
-  (Eq.refl (OptionType KCtorMeta) (OptionType.some KCtorMeta kcre_ctor_meta_{eq_refl}))
-  (Eq.refl Name kcre_name_{eq})
-  (Eq.refl Nat Nat.zero)
-  (Eq.refl (OptionType KIndMeta) (OptionType.some KIndMeta kcre_ind_meta_{eq}))
-  (Eq.refl (ListType Name) (ListType.cons Name kcre_name_{eq_refl} (ListType.nil Name)))
-  (Eq.refl (ListType Name) (ListType.cons Name kcre_name_{eq} (ListType.nil Name)))
-  (Eq.refl Bool Bool.true)"
+        "@RecKAdmitIn.mk {env} kcre_name_{eq_rec} kcre_name_{eq} kcre_rec_meta_{eq_rec} kcre_name_{eq_refl} (recrule_rhs accepts_k_eq_refl_rule) kcre_ctor_meta_{eq_refl} kcre_ind_meta_{eq}
+  (@Eq.refl (OptionType RecMeta) (@OptionType.some RecMeta kcre_rec_meta_{eq_rec}))
+  (@Eq.refl Nat (Nat.succ Nat.zero))
+  (@Eq.refl (OptionType RecRules) (@OptionType.some RecRules (RecRules.cons (RecRule.mk kcre_name_{eq_refl} Nat.zero (recrule_rhs accepts_k_eq_refl_rule)) RecRules.nil)))
+  (@Eq.refl (OptionType KCtorMeta) (@OptionType.some KCtorMeta kcre_ctor_meta_{eq_refl}))
+  (@Eq.refl Name kcre_name_{eq})
+  (@Eq.refl Nat Nat.zero)
+  (@Eq.refl (OptionType KIndMeta) (@OptionType.some KIndMeta kcre_ind_meta_{eq}))
+  (@Eq.refl (ListType Name) (@ListType.cons Name kcre_name_{eq_refl} (@ListType.nil Name)))
+  (@Eq.refl (ListType Name) (@ListType.cons Name kcre_name_{eq} (@ListType.nil Name)))
+  (@Eq.refl Bool Bool.true)"
     );
     [
         (

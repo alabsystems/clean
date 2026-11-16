@@ -17,7 +17,7 @@ use crate::nn_verify::ibp_crown::Interval;
 /// Full verification result for a neural network certificate.
 #[derive(Debug, Clone)]
 #[non_exhaustive]
-pub struct VerificationResult {
+pub(crate) struct VerificationResult {
     /// Whether the claimed property is verified.
     pub verified: bool,
     /// Per-layer verification results.
@@ -33,7 +33,7 @@ pub struct VerificationResult {
 /// Trust level for the verification result.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
-pub enum TrustLevel {
+pub(crate) enum TrustLevel {
     /// Fully verified: all Farkas certificates checked, composition valid.
     FullyVerified,
     /// Certificate-based: Farkas certificates verified but formal proofs are DerivedPending.
@@ -50,7 +50,7 @@ pub enum TrustLevel {
 /// Verification result for a single layer.
 #[derive(Debug, Clone)]
 #[non_exhaustive]
-pub struct LayerVerifyResult {
+pub(crate) struct LayerVerifyResult {
     /// Layer index (0-based).
     pub layer_index: usize,
     /// Layer type string.
@@ -68,7 +68,7 @@ pub struct LayerVerifyResult {
 /// Errors from the end-to-end verification pipeline.
 #[derive(Debug)]
 #[non_exhaustive]
-pub enum E2eVerifyError {
+pub(crate) enum E2eVerifyError {
     /// Certificate parsing or validation failed.
     ParseError(PipelineParseError),
     /// Farkas bridge error during chain composition.

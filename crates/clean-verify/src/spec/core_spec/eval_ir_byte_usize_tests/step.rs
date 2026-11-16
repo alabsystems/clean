@@ -3,8 +3,8 @@
 
 use super::*;
 
-const RESULTS: &str = "(IRList.cons Nat 99 (IRList.nil Nat))";
-const TYPES: &str = "(IRList.cons IRTy (IRTy.usize_ 64) (IRList.nil IRTy))";
+const RESULTS: &str = "(@IRList.cons Nat 99 (@IRList.nil Nat))";
+const TYPES: &str = "(@IRList.cons IRTy (IRTy.usize_ 64) (@IRList.nil IRTy))";
 const INSTRUCTION: &str = "IRInst.atomic_fetch_add_relaxed_usize_seq 64 40 78";
 const FRAME: &str = "(usize_frame (IRScalar.ptr_ 16))";
 const CONFIG: &str = "IRByteConfigV1 Nat";
@@ -13,49 +13,49 @@ const UPDATED: &str = "IRByteMemoryV1.mk usize_allocs
 
 fn block(instruction: &str, results: &str) -> String {
     format!(
-        "(IRBlock.mk 7 (IRList.nil Nat)
-  (IRList.cons IRNode (IRNode.mk IRInst.unreachable (IRList.nil Nat))
-    (IRList.cons IRNode (IRNode.mk IRInst.unreachable (IRList.nil Nat))
-      (IRList.cons IRNode (IRNode.mk ({instruction}) {results}) (IRList.nil IRNode)))))"
+        "(IRBlock.mk 7 (@IRList.nil Nat)
+  (@IRList.cons IRNode (IRNode.mk IRInst.unreachable (@IRList.nil Nat))
+    (@IRList.cons IRNode (IRNode.mk IRInst.unreachable (@IRList.nil Nat))
+      (@IRList.cons IRNode (IRNode.mk ({instruction}) {results}) (@IRList.nil IRNode)))))"
     )
 }
 
 fn function(block: &str) -> String {
     format!(
-        "(IRFunc.mk 9 (IRList.cons Nat 40 (IRList.cons Nat 78 (IRList.nil Nat))) 7
-  (IRList.cons IRBlock {block} (IRList.nil IRBlock)))"
+        "(IRFunc.mk 9 (@IRList.cons Nat 40 (@IRList.cons Nat 78 (@IRList.nil Nat))) 7
+  (@IRList.cons IRBlock {block} (@IRList.nil IRBlock)))"
     )
 }
 
 fn context(instruction: &str, results: &str, types: &str, pc: u64) -> String {
     format!(
         "(IRByteContextV1.mk (IRModule.mk
-  (IRList.cons IRFunc {} (IRList.nil IRFunc)) (IRList.nil IRGlobal))
-  (IRList.cons IRByteLayoutV1 (IRByteLayoutV1.mk (IRTy.usize_ 64) 8 8
-    (IRList.nil IRTy) (IRList.nil Nat)) (IRList.nil IRByteLayoutV1))
-  (IRList.nil IRByteSignatureV1) (IRList.nil IRByteFunctionV1)
-  (IRList.cons IRByteSiteV1 (IRByteSiteV1.mk 9 7 {pc} 0 1 {types}) (IRList.nil IRByteSiteV1)))",
+  (@IRList.cons IRFunc {} (@IRList.nil IRFunc)) (@IRList.nil IRGlobal))
+  (@IRList.cons IRByteLayoutV1 (IRByteLayoutV1.mk (IRTy.usize_ 64) 8 8
+    (@IRList.nil IRTy) (@IRList.nil Nat)) (@IRList.nil IRByteLayoutV1))
+  (@IRList.nil IRByteSignatureV1) (@IRList.nil IRByteFunctionV1)
+  (@IRList.cons IRByteSiteV1 (IRByteSiteV1.mk 9 7 {pc} 0 1 {types}) (@IRList.nil IRByteSiteV1)))",
         function(&block(instruction, results))
     )
 }
 
 fn world(memory: &str) -> String {
-    format!("(IRByteWorldV1.mk Nat ({memory}) 123 usize_owners 9)")
+    format!("(@IRByteWorldV1.mk Nat ({memory}) 123 usize_owners 9)")
 }
 
 fn step(ctx: &str, frame: &str) -> String {
     format!(
         "ir_byte_step_v1 Nat ({ctx}) usize_providers
-  (IRByteConfigV1.running Nat (usize_machine {frame}) {})",
+  (@IRByteConfigV1.running Nat (usize_machine {frame}) {})",
         world("usize_memory 41")
     )
 }
 
 fn endpoint(frame: &str, old: u64, memory: &str) -> String {
     format!(
-        "IRByteConfigV1.running Nat
+        "@IRByteConfigV1.running Nat
   (usize_machine (ir_frame_advance (ir_frame_set_many {frame} {RESULTS}
-    (IRList.cons IRScalar (IRScalar.int_ {old}) (IRList.nil IRScalar))))) {}",
+    (@IRList.cons IRScalar (IRScalar.int_ {old}) (@IRList.nil IRScalar))))) {}",
         world(memory)
     )
 }
@@ -63,21 +63,21 @@ fn endpoint(frame: &str, old: u64, memory: &str) -> String {
 fn fixture() -> Specification {
     let mut spec = super::fixture();
     for source in [
-        r"def usize_owners : IRList Nat := IRList.cons Nat 7 (IRList.cons Nat 1 (IRList.nil Nat))",
-        r"def usize_tail : IRList IRFrame := IRList.cons IRFrame
-  (IRFrame.mk 3 4 5 (IRList.cons IRBinding (IRBinding.mk 777 (IRScalar.int_ 88)) (IRList.nil IRBinding))
-    (IRList.cons Nat 55 (IRList.nil Nat))) (IRList.nil IRFrame)",
+        r"def usize_owners : IRList Nat := @IRList.cons Nat 7 (@IRList.cons Nat 1 (@IRList.nil Nat))",
+        r"def usize_tail : IRList IRFrame := @IRList.cons IRFrame
+  (IRFrame.mk 3 4 5 (@IRList.cons IRBinding (IRBinding.mk 777 (IRScalar.int_ 88)) (@IRList.nil IRBinding))
+    (@IRList.cons Nat 55 (@IRList.nil Nat))) (@IRList.nil IRFrame)",
         r"def usize_frame (pointer : IRScalar) : IRFrame := IRFrame.mk 9 7 2
-  (IRList.cons IRBinding (IRBinding.mk 40 pointer)
-    (IRList.cons IRBinding (IRBinding.mk 78 (IRScalar.int_ 7))
-      (IRList.cons IRBinding (IRBinding.mk 56 (IRScalar.ptr_ 32))
-        (IRList.cons IRBinding (IRBinding.mk 99 (IRScalar.int_ 777)) (IRList.nil IRBinding)))))
-  (IRList.cons Nat 123 (IRList.nil Nat))",
+  (@IRList.cons IRBinding (IRBinding.mk 40 pointer)
+    (@IRList.cons IRBinding (IRBinding.mk 78 (IRScalar.int_ 7))
+      (@IRList.cons IRBinding (IRBinding.mk 56 (IRScalar.ptr_ 32))
+        (@IRList.cons IRBinding (IRBinding.mk 99 (IRScalar.int_ 777)) (@IRList.nil IRBinding)))))
+  (@IRList.cons Nat 123 (@IRList.nil Nat))",
         r"def usize_machine (frame : IRFrame) : IRMachine := IRMachine.mk
-  (IRList.cons IRFrame frame usize_tail) (IRList.nil IRMemSlot) 17",
+  (@IRList.cons IRFrame frame usize_tail) (@IRList.nil IRMemSlot) 17",
         r"def usize_providers : IRByteProvidersV1 Nat :=
 fun (_ : Nat) (_ : IRList IRScalar) (mem : IRByteMemoryV1) (host : Nat) =>
-  IRByteImportResultV1.mk Nat (IROutcome.stuck IRFault.no_func) mem host",
+  @IRByteImportResultV1.mk Nat (IROutcome.stuck IRFault.no_func) mem host",
     ] {
         register(&mut spec, source);
     }
@@ -101,28 +101,28 @@ fn byte_usize_fetched_step_derives_the_entire_world_from_inhabited_representatio
         let block = block(INSTRUCTION, RESULTS);
         let function = function(&block);
         let args = format!("Nat usize_step_ctx usize_providers {FRAME} usize_tail
-  (IRList.nil IRMemSlot) 17 (usize_memory 41) 123 usize_owners 9
+  (@IRList.nil IRMemSlot) 17 (usize_memory 41) 123 usize_owners 9
   40 78 99 0 1 {function} {block} 16 41 7
   (Nat.le_add_right 17 18446744073709551599)
-  (Eq.refl (IROption IRByteLayoutV1) (IROption.some IRByteLayoutV1 (IRByteLayoutV1.mk (IRTy.usize_ 64) 8 8 (IRList.nil IRTy) (IRList.nil Nat))))
-  (Eq.refl Bool Bool.true)
+  (@Eq.refl (IROption IRByteLayoutV1) (@IROption.some IRByteLayoutV1 (IRByteLayoutV1.mk (IRTy.usize_ 64) 8 8 (@IRList.nil IRTy) (@IRList.nil Nat))))
+  (@Eq.refl Bool Bool.true)
   (ir_byte_usize64_rep_write_v1 (IRByteMemoryV1.mk usize_allocs (ir_byte_write_word_v1 usize_blank 32 8 77) 128) 16 41)
   (Nat.le_add_right 49 18446744073709551567)
-  (Eq.refl Bool Bool.true)
-  (Eq.refl IRScalar (IRScalar.ptr_ 16)) (Eq.refl IRScalar (IRScalar.int_ 7))
-  (Eq.refl (IROption IRFunc) (IROption.some IRFunc {function}))
-  (Eq.refl (IROption IRBlock) (IROption.some IRBlock {block}))
-  (Eq.refl (IROption IRNode) (IROption.some IRNode (IRNode.mk ({INSTRUCTION}) {RESULTS})))
-  (Eq.refl (IROption IRByteSiteV1) (IROption.some IRByteSiteV1 (IRByteSiteV1.mk 9 7 2 0 1 {TYPES})))");
-        register(&mut spec, &format!("def usize_fetched_by_law : Eq ({CONFIG}) ({actual}) ({expected}) := ir_byte_step_fetch_add_relaxed_usize64_seq_below_v1 {args}"));
+  (@Eq.refl Bool Bool.true)
+  (@Eq.refl IRScalar (IRScalar.ptr_ 16)) (@Eq.refl IRScalar (IRScalar.int_ 7))
+  (@Eq.refl (IROption IRFunc) (@IROption.some IRFunc {function}))
+  (@Eq.refl (IROption IRBlock) (@IROption.some IRBlock {block}))
+  (@Eq.refl (IROption IRNode) (@IROption.some IRNode (IRNode.mk ({INSTRUCTION}) {RESULTS})))
+  (@Eq.refl (IROption IRByteSiteV1) (@IROption.some IRByteSiteV1 (IRByteSiteV1.mk 9 7 2 0 1 {TYPES})))");
+        register(&mut spec, &format!("def usize_fetched_by_law : @Eq ({CONFIG}) ({actual}) ({expected}) := ir_byte_step_fetch_add_relaxed_usize64_seq_below_v1 {args}"));
         checked(&spec, "usize_fetched_by_law");
         for (suffix, base, expected, extra) in [
             ("new", 16, 48, ""),
             ("frame", 32, 77, "32 8 (@Or.inr (Nat.le (Nat.add 32 8) 16) (Nat.le (Nat.add 16 8) 32) (Nat.le_add_right 24 8))"),
         ] {
-            register(&mut spec, &format!("def usize_fetched_{suffix}_by_law : Eq (IROption Nat)
+            register(&mut spec, &format!("def usize_fetched_{suffix}_by_law : @Eq (IROption Nat)
   (ir_byte_read_word_v1 (ir_byte_mem_bytes_v1 (ir_byte_world_memory_v1 Nat (ir_byte_final_world_v1 Nat ({actual})))) 8 {base})
-  (IROption.some Nat {expected}) := ir_byte_step_fetch_add_relaxed_usize64_seq_{suffix}_v1 {args} {extra}"));
+  (@IROption.some Nat {expected}) := ir_byte_step_fetch_add_relaxed_usize64_seq_{suffix}_v1 {args} {extra}"));
             checked(&spec, &format!("usize_fetched_{suffix}_by_law"));
         }
     });
@@ -156,7 +156,7 @@ fn byte_usize_fetched_operand_endpoint_and_site_mutations_are_observable() {
             (
                 "destination",
                 INSTRUCTION,
-                "(IRList.cons Nat 100 (IRList.nil Nat))",
+                "(@IRList.cons Nat 100 (@IRList.nil Nat))",
                 2,
             ),
             ("site", INSTRUCTION, RESULTS, 3),
@@ -195,19 +195,19 @@ fn byte_usize_fetched_operand_endpoint_and_site_mutations_are_observable() {
             (
                 "wrong_result_type",
                 RESULTS,
-                "(IRList.cons IRTy IRTy.bool_ (IRList.nil IRTy))",
+                "(@IRList.cons IRTy IRTy.bool_ (@IRList.nil IRTy))",
                 UPDATED,
             ),
             (
                 "missing_result_at_site",
-                "(IRList.nil Nat)",
+                "(@IRList.nil Nat)",
                 TYPES,
                 "usize_memory 41",
             ),
             (
                 "missing_result_at_bind",
-                "(IRList.nil Nat)",
-                "(IRList.nil IRTy)",
+                "(@IRList.nil Nat)",
+                "(@IRList.nil IRTy)",
                 UPDATED,
             ),
         ] {
@@ -218,7 +218,7 @@ fn byte_usize_fetched_operand_endpoint_and_site_mutations_are_observable() {
                 CONFIG,
                 &actual,
                 &format!(
-                    "IRByteConfigV1.halted Nat (IROutcome.type_error IRFault.bad_field) {}",
+                    "@IRByteConfigV1.halted Nat (IROutcome.type_error IRFault.bad_field) {}",
                     world(memory)
                 ),
             );
@@ -233,7 +233,7 @@ fn byte_usize_fetched_operand_endpoint_and_site_mutations_are_observable() {
                 CONFIG,
                 &actual,
                 &format!(
-                    "IRByteConfigV1.halted Nat (IROutcome.type_error IRFault.bad_field) {}",
+                    "@IRByteConfigV1.halted Nat (IROutcome.type_error IRFault.bad_field) {}",
                     world(wrong_memory)
                 ),
             );

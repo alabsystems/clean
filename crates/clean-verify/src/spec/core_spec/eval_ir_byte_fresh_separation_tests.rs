@@ -36,14 +36,14 @@ fn reject(spec: &mut Specification, name: &str, source: &str) {
 }
 
 fn rows(data: &[(u64, u64, u64, bool)]) -> String {
-    data.iter().rev().fold("(IRList.nil IRByteAllocationV1)".into(), |tail, (base, size, owner, live)| {
-        format!("(IRList.cons IRByteAllocationV1 (IRByteAllocationV1.mk {base} {size} {owner} Bool.{live}) {tail})")
+    data.iter().rev().fold("(@IRList.nil IRByteAllocationV1)".into(), |tail, (base, size, owner, live)| {
+        format!("(@IRList.cons IRByteAllocationV1 (IRByteAllocationV1.mk {base} {size} {owner} Bool.{live}) {tail})")
     })
 }
 
 fn access(allocs: &str, base: u64, address: u64, width: u64, align: u64) -> String {
     format!(
-        "(ir_byte_accessible_v1 (IRList.cons IRByteAllocationV1
+        "(ir_byte_accessible_v1 (@IRList.cons IRByteAllocationV1
       (IRByteAllocationV1.mk {base} 16 owner Bool.true) {allocs}) {address} {width} {align})"
     )
 }
@@ -51,7 +51,7 @@ fn access(allocs: &str, base: u64, address: u64, width: u64, align: u64) -> Stri
 fn rule(allocs: &str, base: u64, address: u64, width: u64, align: u64) -> String {
     format!(
         "ir_byte_accessible_fresh_range_v1 {allocs} {base} 16 owner {address} {width} {align}
-      (Eq.refl Nat 0) (Eq.refl Bool Bool.true)"
+      (@Eq.refl Nat 0) (@Eq.refl Bool Bool.true)"
     )
 }
 
@@ -79,7 +79,7 @@ fn fresh_separation_frames_before_after_and_between_preserve_actual_caller_acces
                 &mut spec,
                 &name,
                 &format!(
-                    "def {name} (owner : Nat) : Eq Bool {} Bool.true := {}",
+                    "def {name} (owner : Nat) : @Eq Bool {} Bool.true := {}",
                     access(&allocs, base, 128, 40, 8),
                     rule(&allocs, base, 128, 40, 8)
                 ),
@@ -92,7 +92,7 @@ fn fresh_separation_frames_before_after_and_between_preserve_actual_caller_acces
                     "def {name} (owner : Nat) :
               Or (Nat.le (Nat.add {base} 16) 128) (Nat.le 168 {base}) :=
               ir_byte_fresh_range_disjoint_v1 {allocs} {base} 16 owner 128 40 8
-                (Nat.zero_lt_succ 15) (Eq.refl Nat 0) (Eq.refl Bool Bool.true)"
+                (Nat.zero_lt_succ 15) (@Eq.refl Nat 0) (@Eq.refl Bool Bool.true)"
                 ),
             );
             let name = format!("fresh_read_preserved_case_{index}");
@@ -101,11 +101,11 @@ fn fresh_separation_frames_before_after_and_between_preserve_actual_caller_acces
                 &name,
                 &format!(
                     "def {name} (bytes : Nat -> IROption Nat) (owner word : Nat) :
-              Eq (IROption Nat)
+              @Eq (IROption Nat)
                 (ir_byte_read_word_v1 (ir_byte_write_word_v1 bytes 128 40 word) 16 {base})
                 (ir_byte_read_word_v1 bytes 16 {base}) :=
               ir_byte_fresh_range_read_preserved_v1 bytes {allocs} {base} 16 owner 128 40 8 word
-                (Nat.zero_lt_succ 15) (Eq.refl Nat 0) (Eq.refl Bool Bool.true)"
+                (Nat.zero_lt_succ 15) (@Eq.refl Nat 0) (@Eq.refl Bool Bool.true)"
                 ),
             );
         }
@@ -144,7 +144,7 @@ fn fresh_separation_refuses_overlap_retirement_partial_ranges_alignment_and_resu
                 &mut spec,
                 &name,
                 &format!(
-                    "def {name} (owner : Nat) : Eq Bool {} Bool.true := {}",
+                    "def {name} (owner : Nat) : @Eq Bool {} Bool.true := {}",
                     access(allocs, base, address, width, align),
                     rule(allocs, base, address, width, align)
                 ),
@@ -155,7 +155,7 @@ fn fresh_separation_refuses_overlap_retirement_partial_ranges_alignment_and_resu
             "fresh_bad_result",
             &format!(
                 "def fresh_bad_result (owner : Nat) :
-          Eq Bool {} Bool.false := {}",
+          @Eq Bool {} Bool.false := {}",
                 access(&normal, 80, 128, 40, 8),
                 rule(&normal, 80, 128, 40, 8)
             ),
@@ -166,10 +166,10 @@ fn fresh_separation_refuses_overlap_retirement_partial_ranges_alignment_and_resu
             &format!(
                 "def fresh_bad_read_address
           (bytes : Nat -> IROption Nat) (owner word : Nat) :
-          Eq (IROption Nat) (ir_byte_read_word_v1 (ir_byte_write_word_v1 bytes 128 40 word) 16 80)
+          @Eq (IROption Nat) (ir_byte_read_word_v1 (ir_byte_write_word_v1 bytes 128 40 word) 16 80)
             (ir_byte_read_word_v1 bytes 16 96) :=
           ir_byte_fresh_range_read_preserved_v1 bytes {normal} 80 16 owner 128 40 8 word
-            (Nat.zero_lt_succ 15) (Eq.refl Nat 0) (Eq.refl Bool Bool.true)"
+            (Nat.zero_lt_succ 15) (@Eq.refl Nat 0) (@Eq.refl Bool Bool.true)"
             ),
         );
     });

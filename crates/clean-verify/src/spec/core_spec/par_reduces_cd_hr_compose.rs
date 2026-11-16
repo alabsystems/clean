@@ -212,20 +212,20 @@ impl Specification {
             };
             let par_leg = if vary_first {
                 format!(
-                    "({par_cong} (red_rec env) u0 u1 {fixed} {fixed} hp (par_reduces_c_star.refl (red_rec env) {fixed}))"
+                    "({par_cong} (red_rec env) u0 u1 {fixed} {fixed} hp (@par_reduces_c_star.refl (red_rec env) {fixed}))"
                 )
             } else {
                 format!(
-                    "({par_cong} (red_rec env) {fixed} {fixed} u0 u1 (par_reduces_c_star.refl (red_rec env) {fixed}) hp)"
+                    "({par_cong} (red_rec env) {fixed} {fixed} u0 u1 (@par_reduces_c_star.refl (red_rec env) {fixed}) hp)"
                 )
             };
             let delta_leg = if vary_first {
                 format!(
-                    "({delta_cong} env u0 u1 {fixed} {fixed} hd (delta_cong_star.refl env {fixed}))"
+                    "({delta_cong} env u0 u1 {fixed} {fixed} hd (@delta_cong_star.refl env {fixed}))"
                 )
             } else {
                 format!(
-                    "({delta_cong} env {fixed} {fixed} u0 u1 (delta_cong_star.refl env {fixed}) hd)"
+                    "({delta_cong} env {fixed} {fixed} u0 u1 (@delta_cong_star.refl env {fixed}) hd)"
                 )
             };
             let type_src = format!(
@@ -237,8 +237,8 @@ impl Specification {
             let value_src = format!(
                 "fun (env : RedEnv) (u0 : KExpr) (u1 : KExpr) ({fixed} : KExpr) (h : m_step env u0 u1) => \
                  @m_step.rec env u0 u1 (fun (_ : m_step env u0 u1) => m_step env {w0} {w1}) \
-                 (fun (hp : par_reduces_c_star (red_rec env) u0 u1) => m_step.par env {w0} {w1} {par_leg}) \
-                 (fun (hd : delta_cong_star env u0 u1) => m_step.delta env {w0} {w1} {delta_leg}) \
+                 (fun (hp : par_reduces_c_star (red_rec env) u0 u1) => @m_step.par env {w0} {w1} {par_leg}) \
+                 (fun (hd : delta_cong_star env u0 u1) => @m_step.delta env {w0} {w1} {delta_leg}) \
                  h",
                 w0 = wrap("u0"),
                 w1 = wrap("u1"),
@@ -302,12 +302,12 @@ impl Specification {
             );
             let value_src = format!(
                 "fun (env : RedEnv) (u0 : KExpr) (u1 : KExpr) ({fixed} : KExpr) (h : m_star env u0 u1) => \
-                 m_star.rec env \
+                 @m_star.rec env \
                  (fun (x : KExpr) (y : KExpr) (_ : m_star env x y) => m_star env {wx} {wy}) \
-                 (fun (e : KExpr) => m_star.refl env {we}) \
+                 (fun (e : KExpr) => @m_star.refl env {we}) \
                  (fun (x : KExpr) (x1 : KExpr) (x2 : KExpr) \
                  (hstep : m_step env x x1) (_htail : m_star env x1 x2) (ih : m_star env {wx1} {wx2}) => \
-                 m_star.step env {wx} {wx1} {wx2} ({step_name} env x x1 {fixed} hstep) ih) \
+                 @m_star.step env {wx} {wx1} {wx2} ({step_name} env x x1 {fixed} hstep) ih) \
                  u0 u1 h",
                 wx = wrap("x"),
                 wy = wrap("y"),
@@ -457,14 +457,14 @@ impl Specification {
                 par_leg: || {
                     concat!(
                         "(par_reduces_c_star_let_cong (red_rec env) u0 u1 v v b b hp ",
-                        "(par_reduces_c_star.refl (red_rec env) v) (par_reduces_c_star.refl (red_rec env) b))"
+                        "(@par_reduces_c_star.refl (red_rec env) v) (@par_reduces_c_star.refl (red_rec env) b))"
                     )
                     .to_string()
                 },
                 delta_leg: || {
                     concat!(
                         "(delta_cong_star_let env u0 u1 v v b b hd ",
-                        "(delta_cong_star.refl env v) (delta_cong_star.refl env b))"
+                        "(@delta_cong_star.refl env v) (@delta_cong_star.refl env b))"
                     )
                     .to_string()
                 },
@@ -477,14 +477,14 @@ impl Specification {
                 par_leg: || {
                     concat!(
                         "(par_reduces_c_star_let_cong (red_rec env) t t u0 u1 b b ",
-                        "(par_reduces_c_star.refl (red_rec env) t) hp (par_reduces_c_star.refl (red_rec env) b))"
+                        "(@par_reduces_c_star.refl (red_rec env) t) hp (@par_reduces_c_star.refl (red_rec env) b))"
                     )
                     .to_string()
                 },
                 delta_leg: || {
                     concat!(
                         "(delta_cong_star_let env t t u0 u1 b b ",
-                        "(delta_cong_star.refl env t) hd (delta_cong_star.refl env b))"
+                        "(@delta_cong_star.refl env t) hd (@delta_cong_star.refl env b))"
                     )
                     .to_string()
                 },
@@ -497,14 +497,14 @@ impl Specification {
                 par_leg: || {
                     concat!(
                         "(par_reduces_c_star_let_cong (red_rec env) t t v v u0 u1 ",
-                        "(par_reduces_c_star.refl (red_rec env) t) (par_reduces_c_star.refl (red_rec env) v) hp)"
+                        "(@par_reduces_c_star.refl (red_rec env) t) (@par_reduces_c_star.refl (red_rec env) v) hp)"
                     )
                     .to_string()
                 },
                 delta_leg: || {
                     concat!(
                         "(delta_cong_star_let env t t v v u0 u1 ",
-                        "(delta_cong_star.refl env t) (delta_cong_star.refl env v) hd)"
+                        "(@delta_cong_star.refl env t) (@delta_cong_star.refl env v) hd)"
                     )
                     .to_string()
                 },
@@ -523,8 +523,8 @@ impl Specification {
             let value_src = format!(
                 "fun (env : RedEnv) (u0 : KExpr) (u1 : KExpr) ({f0} : KExpr) ({f1} : KExpr) (h : m_step env u0 u1) => \
                  @m_step.rec env u0 u1 (fun (_ : m_step env u0 u1) => m_step env {w0} {w1}) \
-                 (fun (hp : par_reduces_c_star (red_rec env) u0 u1) => m_step.par env {w0} {w1} {par_leg}) \
-                 (fun (hd : delta_cong_star env u0 u1) => m_step.delta env {w0} {w1} {delta_leg}) \
+                 (fun (hp : par_reduces_c_star (red_rec env) u0 u1) => @m_step.par env {w0} {w1} {par_leg}) \
+                 (fun (hd : delta_cong_star env u0 u1) => @m_step.delta env {w0} {w1} {delta_leg}) \
                  h",
                 f0 = s.f0,
                 f1 = s.f1,
@@ -578,12 +578,12 @@ impl Specification {
             );
             let value_src = format!(
                 "fun (env : RedEnv) (u0 : KExpr) (u1 : KExpr) ({f0} : KExpr) ({f1} : KExpr) (h : m_star env u0 u1) => \
-                 m_star.rec env \
+                 @m_star.rec env \
                  (fun (x : KExpr) (y : KExpr) (_ : m_star env x y) => m_star env {wx} {wy}) \
-                 (fun (e : KExpr) => m_star.refl env {we}) \
+                 (fun (e : KExpr) => @m_star.refl env {we}) \
                  (fun (x : KExpr) (x1 : KExpr) (x2 : KExpr) \
                  (hstep : m_step env x x1) (_htail : m_star env x1 x2) (ih : m_star env {wx1} {wx2}) => \
-                 m_star.step env {wx} {wx1} {wx2} ({step_name} env x x1 {f0} {f1} hstep) ih) \
+                 @m_star.step env {wx} {wx1} {wx2} ({step_name} env x x1 {f0} {f1} hstep) ih) \
                  u0 u1 h",
                 f0 = s.f0,
                 f1 = s.f1,
@@ -683,10 +683,10 @@ impl Specification {
                     "@m_step.rec env u0 u1 ",
                     "(fun (_ : m_step env u0 u1) => m_step env (KExpr.proj s i u0) (KExpr.proj s i u1)) ",
                     "(fun (hp : par_reduces_c_star (red_rec env) u0 u1) => ",
-                    "m_step.par env (KExpr.proj s i u0) (KExpr.proj s i u1) ",
+                    "@m_step.par env (KExpr.proj s i u0) (KExpr.proj s i u1) ",
                     "(par_reduces_c_star_proj (red_rec env) s i u0 u1 hp)) ",
                     "(fun (hd : delta_cong_star env u0 u1) => ",
-                    "m_step.delta env (KExpr.proj s i u0) (KExpr.proj s i u1) ",
+                    "@m_step.delta env (KExpr.proj s i u0) (KExpr.proj s i u1) ",
                     "(delta_cong_star_proj env s i u0 u1 hd)) ",
                     "h"
                 )
@@ -730,14 +730,14 @@ impl Specification {
                 concat!(
                     "fun (env : RedEnv) (s : Name) (i : Nat) (u0 : KExpr) (u1 : KExpr) ",
                     "(h : m_star env u0 u1) => ",
-                    "m_star.rec env ",
+                    "@m_star.rec env ",
                     "(fun (x : KExpr) (y : KExpr) (_ : m_star env x y) => ",
                     "m_star env (KExpr.proj s i x) (KExpr.proj s i y)) ",
-                    "(fun (e : KExpr) => m_star.refl env (KExpr.proj s i e)) ",
+                    "(fun (e : KExpr) => @m_star.refl env (KExpr.proj s i e)) ",
                     "(fun (x : KExpr) (x1 : KExpr) (x2 : KExpr) ",
                     "(hstep : m_step env x x1) (_htail : m_star env x1 x2) ",
                     "(ih : m_star env (KExpr.proj s i x1) (KExpr.proj s i x2)) => ",
-                    "m_star.step env (KExpr.proj s i x) (KExpr.proj s i x1) (KExpr.proj s i x2) ",
+                    "@m_star.step env (KExpr.proj s i x) (KExpr.proj s i x1) (KExpr.proj s i x2) ",
                     "(m_step_proj env s i x x1 hstep) ih) ",
                     "u0 u1 h"
                 )
@@ -788,14 +788,14 @@ impl Specification {
                 concat!(
                     "fun (env : RedEnv) (e : KExpr) (e' : KExpr) ",
                     "(h : par_reduces_c_star (red_rec env) e e') => ",
-                    "par_reduces_c_star.rec (red_rec env) ",
+                    "@par_reduces_c_star.rec (red_rec env) ",
                     "(fun (a : KExpr) (b : KExpr) (_ : par_reduces_c_star (red_rec env) a b) => ",
                     "par_reduces_cd_star env a b) ",
-                    "(fun (s : KExpr) => par_reduces_cd_star.refl env s) ",
+                    "(fun (s : KExpr) => @par_reduces_cd_star.refl env s) ",
                     "(fun (s : KExpr) (s' : KExpr) (s'' : KExpr) ",
                     "(hstep : par_reduces_c (red_rec env) s s') (_htail : par_reduces_c_star (red_rec env) s' s'') ",
                     "(ih : par_reduces_cd_star env s' s'') => ",
-                    "par_reduces_cd_star.step env s s' s'' ",
+                    "@par_reduces_cd_star.step env s s' s'' ",
                     "(par_reduces_c_subsumes_cd env s s' hstep) ih) ",
                     "e e' h"
                 )
@@ -881,9 +881,9 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (env : RedEnv) (a : KExpr) (b : KExpr) (h : m_star env a b) => ",
-                    "m_star.rec env ",
+                    "@m_star.rec env ",
                     "(fun (x : KExpr) (y : KExpr) (_ : m_star env x y) => par_reduces_cd_star env x y) ",
-                    "(fun (e : KExpr) => par_reduces_cd_star.refl env e) ",
+                    "(fun (e : KExpr) => @par_reduces_cd_star.refl env e) ",
                     "(fun (x : KExpr) (x1 : KExpr) (x2 : KExpr) ",
                     "(hstep : m_step env x x1) (_htail : m_star env x1 x2) ",
                     "(ih : par_reduces_cd_star env x1 x2) => ",
@@ -998,9 +998,9 @@ impl Specification {
                 concat!(
                     "fun (env : RedEnv) (e : KExpr) (e' : KExpr) ",
                     "(h : par_reduces_cd_star env e e') => ",
-                    "par_reduces_cd_star.rec env ",
+                    "@par_reduces_cd_star.rec env ",
                     "(fun (a : KExpr) (b : KExpr) (_ : par_reduces_cd_star env a b) => m_star env a b) ",
-                    "(fun (s : KExpr) => m_star.refl env s) ",
+                    "(fun (s : KExpr) => @m_star.refl env s) ",
                     "(fun (s : KExpr) (s' : KExpr) (s'' : KExpr) ",
                     "(hstep : par_reduces_cd env s s') (_htail : par_reduces_cd_star env s' s'') ",
                     "(ih : m_star env s' s'') => ",
@@ -1126,15 +1126,15 @@ impl Specification {
 /// nine constructor arms. `m_star env e e'` motive.
 fn par_reduces_cd_subsumes_m_star_proof() -> String {
     let motive = "(fun (a : KExpr) (b : KExpr) (_ : par_reduces_cd env a b) => m_star env a b)";
-    let refl_arm = "(fun (e : KExpr) => m_star.refl env e)";
+    let refl_arm = "(fun (e : KExpr) => @m_star.refl env e)";
     // beta: app (lam A body) arg => instantiate body' arg'. Reduce subterms via
     // m_star_app (m_star_lam) then fire one par_reduces_c.beta (refls) as one macro step.
     let beta_fire = concat!(
         "(m_step_to_mstar env (KExpr.app (KExpr.lam A' body') arg') (instantiate body' arg') ",
-        "(m_step.par env (KExpr.app (KExpr.lam A' body') arg') (instantiate body' arg') ",
+        "(@m_step.par env (KExpr.app (KExpr.lam A' body') arg') (instantiate body' arg') ",
         "(par_subsumes_par_c_star (red_rec env) (KExpr.app (KExpr.lam A' body') arg') (instantiate body' arg') ",
-        "(par_reduces_c.beta (red_rec env) A' A' body' body' arg' arg' ",
-        "(par_reduces_c.refl (red_rec env) A') (par_reduces_c.refl (red_rec env) body') (par_reduces_c.refl (red_rec env) arg')))))"
+        "(@par_reduces_c.beta (red_rec env) A' A' body' body' arg' arg' ",
+        "(@par_reduces_c.refl (red_rec env) A') (@par_reduces_c.refl (red_rec env) body') (@par_reduces_c.refl (red_rec env) arg')))))"
     );
     let beta_arm = format!(
         concat!(
@@ -1180,10 +1180,10 @@ fn par_reduces_cd_subsumes_m_star_proof() -> String {
     // par_reduces_c.let_ zeta (refls) as one macro step — the beta mechanism.
     let let_fire = concat!(
         "(m_step_to_mstar env (KExpr.let_ ty' val' body') (instantiate body' val') ",
-        "(m_step.par env (KExpr.let_ ty' val' body') (instantiate body' val') ",
+        "(@m_step.par env (KExpr.let_ ty' val' body') (instantiate body' val') ",
         "(par_subsumes_par_c_star (red_rec env) (KExpr.let_ ty' val' body') (instantiate body' val') ",
-        "(par_reduces_c.let_ (red_rec env) ty' ty' val' val' body' body' ",
-        "(par_reduces_c.refl (red_rec env) ty') (par_reduces_c.refl (red_rec env) val') (par_reduces_c.refl (red_rec env) body')))))"
+        "(@par_reduces_c.let_ (red_rec env) ty' ty' val' val' body' body' ",
+        "(@par_reduces_c.refl (red_rec env) ty') (@par_reduces_c.refl (red_rec env) val') (@par_reduces_c.refl (red_rec env) body')))))"
     );
     let let_arm = format!(
         concat!(
@@ -1215,20 +1215,20 @@ fn par_reduces_cd_subsumes_m_star_proof() -> String {
     let iota_arm = concat!(
         "(fun (e0 : KExpr) (e0' : KExpr) (hi : iota_step (red_rec env) e0 e0') => ",
         "m_step_to_mstar env e0 e0' ",
-        "(m_step.par env e0 e0' ",
-        "(par_subsumes_par_c_star (red_rec env) e0 e0' (par_reduces_c.iota (red_rec env) e0 e0' hi))))"
+        "(@m_step.par env e0 e0' ",
+        "(par_subsumes_par_c_star (red_rec env) e0 e0' (@par_reduces_c.iota (red_rec env) e0 e0' hi))))"
     );
     // delta: one delta_cong.here embed.
     let delta_arm = concat!(
         "(fun (e0 : KExpr) (e0' : KExpr) (hd : delta_step (red_def env) e0 e0') => ",
         "m_step_to_mstar env e0 e0' ",
-        "(m_step.delta env e0 e0' ",
-        "(delta_cong_subsumes_star env e0 e0' (delta_cong.here env e0 e0' hd))))"
+        "(@m_step.delta env e0 e0' ",
+        "(delta_cong_subsumes_star env e0 e0' (@delta_cong.here env e0 e0' hd))))"
     );
     format!(
         concat!(
             "fun (env : RedEnv) (e0 : KExpr) (e0' : KExpr) (h0 : par_reduces_cd env e0 e0') => ",
-            "par_reduces_cd.rec env {motive} ",
+            "@par_reduces_cd.rec env {motive} ",
             "{refl_arm} {beta_arm} {app_arm} {lam_arm} {pi_arm} {forall_arm} {let_arm} {iota_arm} {delta_arm} {let_cong_arm} {proj_arm} ",
             "e0 e0' h0"
         ),
@@ -1274,7 +1274,7 @@ fn par_reduces_cd_star_diamond_of_commute_proof() -> String {
             "@m_star_join.rec env e1 e2 ",
             "(fun (_w : m_star_join env e1 e2) => par_strips_witness_cd_star env e1 e2) ",
             "(fun (c : KExpr) (j1 : m_star env e1 c) (j2 : m_star env e2 c) => ",
-            "par_strips_witness_cd_star.intro env e1 e2 c ",
+            "@par_strips_witness_cd_star.intro env e1 e2 c ",
             "(m_star_to_cd_star env e1 c j1) (m_star_to_cd_star env e2 c j2)) ",
             "(mstar_confluent_of env {pcr} {dcr} COMM e e1 e2 ",
             "(par_reduces_cd_star_subsumes_m_star env e e1 h1) ",

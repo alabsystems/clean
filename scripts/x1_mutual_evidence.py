@@ -5,6 +5,9 @@
 
 --negative-control inspects original acyclic c24, requires rejection by the
 same constant-use predicate, and never writes the positive artifact.
+
+CLEAN_X1_LEAN_BIN selects an installed Lean directly. Both selection routes
+must pass the same exact pinned identity check before inspecting any probe.
 """
 import hashlib
 import json
@@ -17,7 +20,9 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parent.parent
 FIXTURE = ROOT / 'tests/fixtures/advice_replay_checker'
-LEAN = ['elan', 'run', 'leanprover/lean4:v4.30.0-rc2', 'lean']
+SELECTED_LEAN = os.environ.get('CLEAN_X1_LEAN_BIN')
+LEAN = ([str(Path(SELECTED_LEAN).resolve(strict=True))] if SELECTED_LEAN is not None
+        else ['elan', 'run', 'leanprover/lean4:v4.30.0-rc2', 'lean'])
 PROBES = {
     'c34_r4_i_call_cycle_shared_counter': ['whnf', 'conv', 'infer'],
     'c35_r4_ix_walk_call_cycle': ['whnf', 'conv', 'walk'],

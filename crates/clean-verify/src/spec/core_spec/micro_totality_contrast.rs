@@ -74,7 +74,7 @@ pub(super) fn ty_mv_not_total() -> String {
 }
 
 pub(super) fn val_mv_not_total() -> String {
-    format!("fun (htot : {TY_MV_TOTAL}) => mv_bvar_nil_reject {S0} {S0} (htot (ListType.nil MicroExpr) (MicroCert.bvar Nat.zero {S0}) (MicroExpr.bvar Nat.zero) {S0})")
+    format!("fun (htot : {TY_MV_TOTAL}) => mv_bvar_nil_reject {S0} {S0} (htot (@ListType.nil MicroExpr) (MicroCert.bvar Nat.zero {S0}) (MicroExpr.bvar Nat.zero) {S0})")
 }
 
 pub(super) fn ty_mv_totality_contrast() -> String {
@@ -82,7 +82,7 @@ pub(super) fn ty_mv_totality_contrast() -> String {
 }
 
 pub(super) fn val_mv_totality_contrast() -> String {
-    format!("AndType.intro ({TY_MHT_TOTAL}) (({TY_MV_TOTAL}) -> Empty) micro_has_type_total mv_not_total")
+    format!("@AndType.intro ({TY_MHT_TOTAL}) (({TY_MV_TOTAL}) -> Empty) micro_has_type_total mv_not_total")
 }
 
 fn thm(

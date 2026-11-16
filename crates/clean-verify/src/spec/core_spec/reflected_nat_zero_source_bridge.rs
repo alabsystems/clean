@@ -37,14 +37,14 @@ struct CheckedProof {
 const PROOFS: &[CheckedProof] = &[
     CheckedProof {
         name: "rfnz_source_tenv_eq",
-        type_src: r"Eq KDeclEnv rfnz_tenv kcre_nat_tenv",
-        value_src: r"Eq.refl KDeclEnv rfnz_tenv",
+        type_src: r"@Eq KDeclEnv rfnz_tenv kcre_nat_tenv",
+        value_src: r"@Eq.refl KDeclEnv rfnz_tenv",
         description: "Exact function equality between the explicit four-entry model environment and the genuine emitted Nat signature environment; checked by computation, not assumed.",
     },
     CheckedProof {
         name: "rfnz_source_lookup_agrees",
         type_src: r"forall (n : Name),
- Eq (OptionType KConstSig) (rfnz_tenv n) (kcre_nat_tenv n)",
+ @Eq (OptionType KConstSig) (rfnz_tenv n) (kcre_nat_tenv n)",
         value_src: r"fun (n : Name) =>
  Eq.cong KDeclEnv (OptionType KConstSig) (fun (tenv : KDeclEnv) => tenv n)
   rfnz_tenv kcre_nat_tenv rfnz_source_tenv_eq",
@@ -59,10 +59,10 @@ const PROOFS: &[CheckedProof] = &[
     },
     CheckedProof {
         name: "rfnz_source_stored_rhs_typed",
-        type_src: r"TypingCtx kcre_nat_tenv (ListType.nil KExpr) kcre_witness_nat_zero_rhs
+        type_src: r"TypingCtx kcre_nat_tenv (@ListType.nil KExpr) kcre_witness_nat_zero_rhs
   (rfnz_rule_type (Level.param rfnz_parameter))",
         value_src: r"Eq.substType KDeclEnv
-  (fun (tenv : KDeclEnv) => TypingCtx tenv (ListType.nil KExpr)
+  (fun (tenv : KDeclEnv) => TypingCtx tenv (@ListType.nil KExpr)
    kcre_witness_nat_zero_rhs (rfnz_rule_type (Level.param rfnz_parameter)))
   rfnz_tenv kcre_nat_tenv rfnz_source_tenv_eq rfnz_stored_rhs_typed",
         description: "Transport the directly typed actual stored Nat.zero RHS to the genuine emitted signature environment.",
@@ -70,20 +70,20 @@ const PROOFS: &[CheckedProof] = &[
     CheckedProof {
         name: "rfnz_source_lookup_instance_typed",
         type_src: r"forall (rule : RecRule)
- (found : Eq (OptionType RecRule)
+ (found : @Eq (OptionType RecRule)
   (recrule_for (red_rec kernel_core_red_env) fixture_nat_rec_name fixture_nat_zero_name)
-  (OptionType.some RecRule rule)) (u : Level),
- TypingCtx kcre_nat_tenv (ListType.nil KExpr)
+  (@OptionType.some RecRule rule)) (u : Level),
+ TypingCtx kcre_nat_tenv (@ListType.nil KExpr)
   (recursor_rhs_instance kcre_nat_rec_signature (recrule_rhs rule)
-   (ListType.cons Level u (ListType.nil Level))) (rfnz_rule_type u)",
+   (@ListType.cons Level u (@ListType.nil Level))) (rfnz_rule_type u)",
         value_src: r"fun (rule : RecRule)
- (found : Eq (OptionType RecRule)
+ (found : @Eq (OptionType RecRule)
   (recrule_for (red_rec kernel_core_red_env) fixture_nat_rec_name fixture_nat_zero_name)
-  (OptionType.some RecRule rule)) (u : Level) =>
+  (@OptionType.some RecRule rule)) (u : Level) =>
  Eq.substType KDeclEnv
-  (fun (tenv : KDeclEnv) => TypingCtx tenv (ListType.nil KExpr)
+  (fun (tenv : KDeclEnv) => TypingCtx tenv (@ListType.nil KExpr)
    (recursor_rhs_instance kcre_nat_rec_signature (recrule_rhs rule)
-    (ListType.cons Level u (ListType.nil Level))) (rfnz_rule_type u))
+    (@ListType.cons Level u (@ListType.nil Level))) (rfnz_rule_type u))
   rfnz_tenv kcre_nat_tenv rfnz_source_tenv_eq
   (rfnz_lookup_instance_typed rule found u)",
         description: "Typing of an actually looked-up once-instantiated zero rule in the emitted environment, preserving the prior stored-typing and universe-substitution proof.",
@@ -91,9 +91,9 @@ const PROOFS: &[CheckedProof] = &[
     CheckedProof {
         name: "rfnz_source_actual_instance_typed",
         type_src: r"forall (u : Level),
- TypingCtx kcre_nat_tenv (ListType.nil KExpr)
+ TypingCtx kcre_nat_tenv (@ListType.nil KExpr)
   (recursor_rhs_instance kcre_nat_rec_signature kcre_witness_nat_zero_rhs
-   (ListType.cons Level u (ListType.nil Level))) (rfnz_rule_type u)",
+   (@ListType.cons Level u (@ListType.nil Level))) (rfnz_rule_type u)",
         value_src: r"fun (u : Level) =>
  rfnz_source_lookup_instance_typed
   (RecRule.mk fixture_nat_zero_name Nat.zero kcre_witness_nat_zero_rhs)
@@ -102,21 +102,21 @@ const PROOFS: &[CheckedProof] = &[
     },
     CheckedProof {
         name: "rfnz_source_input_typed",
-        type_src: r"TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr)
+        type_src: r"TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr)
   rfnz_input rfnz_nat",
         value_src: r"Eq.substType KDeclEnv
   (fun (tenv : KDeclEnv) => TypingCtxConvIn kernel_core_red_env tenv
-   (ListType.nil KExpr) rfnz_input rfnz_nat)
+   (@ListType.nil KExpr) rfnz_input rfnz_nat)
   rfnz_tenv kcre_nat_tenv rfnz_source_tenv_eq rfnz_input_typed",
         description: "The genuine universe-one actual-name input is typed in the emitted environment; this is a bounded caller, not general source admission.",
     },
     CheckedProof {
         name: "rfnz_source_raw_result_typed",
-        type_src: r"TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr)
+        type_src: r"TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr)
   rfnz_raw_result rfnz_nat",
         value_src: r"Eq.substType KDeclEnv
   (fun (tenv : KDeclEnv) => TypingCtxConvIn kernel_core_red_env tenv
-   (ListType.nil KExpr) rfnz_raw_result rfnz_nat)
+   (@ListType.nil KExpr) rfnz_raw_result rfnz_nat)
   rfnz_tenv kcre_nat_tenv rfnz_source_tenv_eq rfnz_raw_result_typed",
         description: "The actual guarded raw output is typed in the emitted environment, transported from the explicit constructive caller rather than assumed subject reduction.",
     },
@@ -169,55 +169,55 @@ mod tests {
 
     // Exact original checked declarations, used only to verify record fidelity.
     const PROTOTYPES: &[&str] = &[
-        r"def rfnz_source_tenv_eq : Eq KDeclEnv rfnz_tenv kcre_nat_tenv :=
- Eq.refl KDeclEnv rfnz_tenv",
+        r"def rfnz_source_tenv_eq : @Eq KDeclEnv rfnz_tenv kcre_nat_tenv :=
+ @Eq.refl KDeclEnv rfnz_tenv",
         r"def rfnz_source_lookup_agrees (n : Name) :
- Eq (OptionType KConstSig) (rfnz_tenv n) (kcre_nat_tenv n) :=
+ @Eq (OptionType KConstSig) (rfnz_tenv n) (kcre_nat_tenv n) :=
  Eq.cong KDeclEnv (OptionType KConstSig) (fun (tenv : KDeclEnv) => tenv n)
   rfnz_tenv kcre_nat_tenv rfnz_source_tenv_eq",
         r"def rfnz_source_tenv_supported : KDeclEnvTypeParamSupported kcre_nat_tenv :=
  Eq.subst KDeclEnv (fun (tenv : KDeclEnv) => KDeclEnvTypeParamSupported tenv)
   rfnz_tenv kcre_nat_tenv rfnz_source_tenv_eq rfnz_tenv_supported",
         r"def rfnz_source_stored_rhs_typed :
- TypingCtx kcre_nat_tenv (ListType.nil KExpr) kcre_witness_nat_zero_rhs
+ TypingCtx kcre_nat_tenv (@ListType.nil KExpr) kcre_witness_nat_zero_rhs
   (rfnz_rule_type (Level.param rfnz_parameter)) :=
  Eq.substType KDeclEnv
-  (fun (tenv : KDeclEnv) => TypingCtx tenv (ListType.nil KExpr)
+  (fun (tenv : KDeclEnv) => TypingCtx tenv (@ListType.nil KExpr)
    kcre_witness_nat_zero_rhs (rfnz_rule_type (Level.param rfnz_parameter)))
   rfnz_tenv kcre_nat_tenv rfnz_source_tenv_eq rfnz_stored_rhs_typed",
         r"def rfnz_source_lookup_instance_typed (rule : RecRule)
- (found : Eq (OptionType RecRule)
+ (found : @Eq (OptionType RecRule)
   (recrule_for (red_rec kernel_core_red_env) fixture_nat_rec_name fixture_nat_zero_name)
-  (OptionType.some RecRule rule)) (u : Level) :
- TypingCtx kcre_nat_tenv (ListType.nil KExpr)
+  (@OptionType.some RecRule rule)) (u : Level) :
+ TypingCtx kcre_nat_tenv (@ListType.nil KExpr)
   (recursor_rhs_instance kcre_nat_rec_signature (recrule_rhs rule)
-   (ListType.cons Level u (ListType.nil Level))) (rfnz_rule_type u) :=
+   (@ListType.cons Level u (@ListType.nil Level))) (rfnz_rule_type u) :=
  Eq.substType KDeclEnv
-  (fun (tenv : KDeclEnv) => TypingCtx tenv (ListType.nil KExpr)
+  (fun (tenv : KDeclEnv) => TypingCtx tenv (@ListType.nil KExpr)
    (recursor_rhs_instance kcre_nat_rec_signature (recrule_rhs rule)
-    (ListType.cons Level u (ListType.nil Level))) (rfnz_rule_type u))
+    (@ListType.cons Level u (@ListType.nil Level))) (rfnz_rule_type u))
   rfnz_tenv kcre_nat_tenv rfnz_source_tenv_eq
   (rfnz_lookup_instance_typed rule found u)",
         r"def rfnz_source_actual_instance_typed (u : Level) :
- TypingCtx kcre_nat_tenv (ListType.nil KExpr)
+ TypingCtx kcre_nat_tenv (@ListType.nil KExpr)
   (recursor_rhs_instance kcre_nat_rec_signature kcre_witness_nat_zero_rhs
-   (ListType.cons Level u (ListType.nil Level))) (rfnz_rule_type u) :=
+   (@ListType.cons Level u (@ListType.nil Level))) (rfnz_rule_type u) :=
  rfnz_source_lookup_instance_typed
   (RecRule.mk fixture_nat_zero_name Nat.zero kcre_witness_nat_zero_rhs)
   rfnz_actual_zero_rule u",
         r"def rfnz_source_input_typed :
- TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr)
+ TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr)
   rfnz_input rfnz_nat :=
  Eq.substType KDeclEnv
   (fun (tenv : KDeclEnv) => TypingCtxConvIn kernel_core_red_env tenv
-   (ListType.nil KExpr) rfnz_input rfnz_nat)
+   (@ListType.nil KExpr) rfnz_input rfnz_nat)
   rfnz_tenv kcre_nat_tenv rfnz_source_tenv_eq rfnz_input_typed",
         r"def rfnz_source_raw_result_typed :
- TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr)
+ TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr)
   rfnz_raw_result rfnz_nat :=
  Eq.substType KDeclEnv
   (fun (tenv : KDeclEnv) => TypingCtxConvIn kernel_core_red_env tenv
-   (ListType.nil KExpr) rfnz_raw_result rfnz_nat)
+   (@ListType.nil KExpr) rfnz_raw_result rfnz_nat)
   rfnz_tenv kcre_nat_tenv rfnz_source_tenv_eq rfnz_raw_result_typed",
     ];
 
@@ -225,24 +225,24 @@ mod tests {
     const REFUSALS: &[CheckedProof] = &[
         CheckedProof {
             name: "rfnz_source_empty_environment_forgery",
-            type_src: r"Eq KDeclEnv kcre_nat_tenv (fun (_n : Name) => OptionType.none KConstSig)",
-            value_src: r"Eq.refl KDeclEnv kcre_nat_tenv",
+            type_src: r"@Eq KDeclEnv kcre_nat_tenv (fun (_n : Name) => @OptionType.none KConstSig)",
+            value_src: r"@Eq.refl KDeclEnv kcre_nat_tenv",
             description:
                 "Deliberately invalid actual generated-data bridge proof; must be rejected.",
         },
         CheckedProof {
             name: "rfnz_source_missing_universe_forgery",
-            type_src: r"Eq (OptionType KExpr)
-  (kdecl_type_at kcre_nat_tenv fixture_nat_rec_name (ListType.nil Level))
-  (OptionType.some KExpr (rfnz_rec_type (Level.succ Level.zero)))",
-            value_src: r"Eq.refl (OptionType KExpr)
-  (OptionType.some KExpr (rfnz_rec_type (Level.succ Level.zero)))",
+            type_src: r"@Eq (OptionType KExpr)
+  (kdecl_type_at kcre_nat_tenv fixture_nat_rec_name (@ListType.nil Level))
+  (@OptionType.some KExpr (rfnz_rec_type (Level.succ Level.zero)))",
+            value_src: r"@Eq.refl (OptionType KExpr)
+  (@OptionType.some KExpr (rfnz_rec_type (Level.succ Level.zero)))",
             description:
                 "Deliberately invalid actual generated-data bridge proof; must be rejected.",
         },
         CheckedProof {
             name: "rfnz_source_wrong_result_type_forgery",
-            type_src: r"TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr)
+            type_src: r"TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr)
   rfnz_raw_result (KExpr.sort Level.zero)",
             value_src: r"rfnz_source_raw_result_typed",
             description:
@@ -485,11 +485,11 @@ mod tests {
             for (value_src, type_src) in [
                 (
                     "rfnz_source_actual_instance_typed (Level.succ (Level.param rfnz_parameter))",
-                    "TypingCtx kcre_nat_tenv (ListType.nil KExpr) (recursor_rhs_instance kcre_nat_rec_signature kcre_witness_nat_zero_rhs (ListType.cons Level (Level.succ (Level.param rfnz_parameter)) (ListType.nil Level))) (rfnz_rule_type (Level.succ (Level.param rfnz_parameter)))",
+                    "TypingCtx kcre_nat_tenv (@ListType.nil KExpr) (recursor_rhs_instance kcre_nat_rec_signature kcre_witness_nat_zero_rhs (@ListType.cons Level (Level.succ (Level.param rfnz_parameter)) (@ListType.nil Level))) (rfnz_rule_type (Level.succ (Level.param rfnz_parameter)))",
                 ),
                 (
                     "rfnz_source_input_typed",
-                    "TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) rfnz_input rfnz_nat",
+                    "TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) rfnz_input rfnz_nat",
                 ),
                 (
                     "rfnz_guarded_step",
@@ -497,7 +497,7 @@ mod tests {
                 ),
                 (
                     "rfnz_source_raw_result_typed",
-                    "TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) rfnz_raw_result rfnz_nat",
+                    "TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) rfnz_raw_result rfnz_nat",
                 ),
             ] {
                 let value = spec.elaborate_source(value_src, "actual source-bridge caller").expect("caller elaborates");

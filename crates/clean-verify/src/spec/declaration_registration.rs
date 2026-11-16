@@ -9,6 +9,8 @@ use clean_kernel::{Declaration, Expr, Level, Name, TypeChecker};
 use clean_parser::parse_decl_exact;
 use std::collections::HashSet;
 
+#[cfg(test)]
+use super::source_admission_trace;
 use super::{decl_budget, AxiomCategory, ProofStatus, SpecDefinition, SpecError, Specification};
 
 impl Specification {
@@ -37,9 +39,14 @@ impl Specification {
     /// | pi : KExpr → KExpr → KExpr", "Kernel expression type")?;
     /// ```
     pub fn add_inductive(&mut self, source: &str, description: &str) -> Result<(), SpecError> {
+        #[cfg(test)]
+        let observation = source_admission_trace::begin(&self.env, "inductive", source);
         decl_budget::begin_declaration();
         let outcome = self.add_inductive_inner(source, description);
-        decl_budget::finish_declaration(description, outcome)
+        let outcome = decl_budget::finish_declaration(description, outcome);
+        #[cfg(test)]
+        source_admission_trace::finish(observation, self, &outcome);
+        outcome
     }
 
     fn add_inductive_inner(&mut self, source: &str, description: &str) -> Result<(), SpecError> {
@@ -50,8 +57,12 @@ impl Specification {
             .nth(1)
             .unwrap_or("<unknown>");
         let result = elaborate_decl_and_register(&mut self.env, &decl).map_err(|e| {
+            #[cfg(test)]
+            source_admission_trace::elaborator_error(&e);
             SpecError::ElabError(format!("Failed to elaborate inductive {ind_name}: {e}"))
         })?;
+        #[cfg(test)]
+        source_admission_trace::elaborator_result(&result);
 
         match result {
             ElabResult::Inductive {
@@ -350,9 +361,14 @@ impl Specification {
     ///   ```
     /// * `description` - Human-readable description for tracking
     pub fn add_recursive_def(&mut self, source: &str, description: &str) -> Result<(), SpecError> {
+        #[cfg(test)]
+        let observation = source_admission_trace::begin(&self.env, "def", source);
         decl_budget::begin_declaration();
         let outcome = self.add_recursive_def_inner(source, description);
-        decl_budget::finish_declaration(description, outcome)
+        let outcome = decl_budget::finish_declaration(description, outcome);
+        #[cfg(test)]
+        source_admission_trace::finish(observation, self, &outcome);
+        outcome
     }
 
     fn add_recursive_def_inner(
@@ -363,8 +379,12 @@ impl Specification {
         let decl = parse_decl_exact(source).map_err(|e| SpecError::ParseError(e.to_string()))?;
 
         let result = elaborate_decl_and_register(&mut self.env, &decl).map_err(|e| {
+            #[cfg(test)]
+            source_admission_trace::elaborator_error(&e);
             SpecError::ElabError(format!("Failed to elaborate def ({description}): {e}"))
         })?;
+        #[cfg(test)]
+        source_admission_trace::elaborator_result(&result);
 
         // Track the definition.
         match result {

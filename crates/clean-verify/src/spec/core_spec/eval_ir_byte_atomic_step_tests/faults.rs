@@ -60,7 +60,7 @@ fn byte_atomic_fetched_faults_retain_the_memory_at_the_actual_failure_point() {
         ] {
             let frame = format!("(atomic_step_frame ({pointer}) ({increment}))");
             let actual = step("atomic_step_context", &frame, memory);
-            let failed = format!("IRByteConfigV1.halted Nat ({fault}) {}", world(memory));
+            let failed = format!("@IRByteConfigV1.halted Nat ({fault}) {}", world(memory));
             equality(
                 &mut spec,
                 &format!("atomic_step_fault_{index}"),
@@ -71,10 +71,10 @@ fn byte_atomic_fetched_faults_retain_the_memory_at_the_actual_failure_point() {
         }
         for (name, types, site_pc, updated) in [
             ("site", RESULT_TYPES, 3, false),
-            ("arity", "(IRList.nil IRTy)", 2, false),
+            ("arity", "(@IRList.nil IRTy)", 2, false),
             (
                 "result_type",
-                "(IRList.cons IRTy IRTy.bool_ (IRList.nil IRTy))",
+                "(@IRList.cons IRTy IRTy.bool_ (@IRList.nil IRTy))",
                 2,
                 true,
             ),
@@ -91,7 +91,7 @@ fn byte_atomic_fetched_faults_retain_the_memory_at_the_actual_failure_point() {
             };
             let final_memory = if updated { UPDATED } else { MEMORY };
             let failed = format!(
-                "IRByteConfigV1.halted Nat ({fault}) {}",
+                "@IRByteConfigV1.halted Nat ({fault}) {}",
                 world(final_memory)
             );
             equality(
@@ -102,7 +102,7 @@ fn byte_atomic_fetched_faults_retain_the_memory_at_the_actual_failure_point() {
                 &failed,
             );
             if updated {
-                let rollback = format!("IRByteConfigV1.halted Nat ({fault}) {}", world(MEMORY));
+                let rollback = format!("@IRByteConfigV1.halted Nat ({fault}) {}", world(MEMORY));
                 reject(
                     &mut spec,
                     "atomic_step_wrong_rollback",
@@ -113,12 +113,12 @@ fn byte_atomic_fetched_faults_retain_the_memory_at_the_actual_failure_point() {
             }
         }
         let invalid_machine = format!(
-            "IRMachine.mk (IRList.cons IRFrame {BEFORE} atomic_step_tail)
-  (IRList.cons IRMemSlot (IRMemSlot.mk 200 (IRScalar.int_ 9) Bool.true) (IRList.nil IRMemSlot)) 17"
+            "IRMachine.mk (@IRList.cons IRFrame {BEFORE} atomic_step_tail)
+  (@IRList.cons IRMemSlot (IRMemSlot.mk 200 (IRScalar.int_ 9) Bool.true) (@IRList.nil IRMemSlot)) 17"
         );
         let invalid = format!(
             "ir_byte_step_v1 Nat atomic_step_context providers
-  (IRByteConfigV1.running Nat ({invalid_machine}) {})",
+  (@IRByteConfigV1.running Nat ({invalid_machine}) {})",
             world(MEMORY)
         );
         equality(
@@ -127,7 +127,7 @@ fn byte_atomic_fetched_faults_retain_the_memory_at_the_actual_failure_point() {
             CONFIG,
             &invalid,
             &format!(
-                "IRByteConfigV1.halted Nat (IROutcome.type_error IRFault.bad_addr) {}",
+                "@IRByteConfigV1.halted Nat (IROutcome.type_error IRFault.bad_addr) {}",
                 world(MEMORY)
             ),
         );

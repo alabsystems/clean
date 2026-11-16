@@ -131,8 +131,8 @@ fn float_sub_proved_module_matches_the_emitted_artifact() {
     let func = clean_block_sources("generated/ir_fs2.defs.txt", "def ir_fs2_func");
     assert!(
         func.contains(
-            "IRFunc.mk ir_d0 (IRList.cons Nat ir_d0 (IRList.cons Nat ir_d1 (IRList.cons Nat \
-             ir_d2 (IRList.nil Nat)))) ir_d0"
+            "IRFunc.mk ir_d0 (@IRList.cons Nat ir_d0 (@IRList.cons Nat ir_d1 (@IRList.cons Nat \
+             ir_d2 (@IRList.nil Nat)))) ir_d0"
         ),
         "the registered IRFunc must bind the same three parameter ids in the same order: {func}"
     );

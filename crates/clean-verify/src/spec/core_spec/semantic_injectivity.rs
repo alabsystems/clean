@@ -24,36 +24,36 @@ impl Specification {
         self.add_recursive_def(
             r"def par_reduces_cd_star_to_def_eq_in (R : RedEnv) (a : KExpr) (b : KExpr)
  (h : par_reduces_cd_star R a b) : DefEqIn R a b :=
- par_reduces_cd_star.rec R
+ @par_reduces_cd_star.rec R
   (fun (x : KExpr) (y : KExpr) (_h : par_reduces_cd_star R x y) => DefEqIn R x y)
-  (fun (x : KExpr) => DefEqIn.refl R x)
+  (fun (x : KExpr) => @DefEqIn.refl R x)
   (fun (x : KExpr) (y : KExpr) (z : KExpr) (xy : par_reduces_cd R x y)
     (_yz : par_reduces_cd_star R y z) (ih : DefEqIn R y z) =>
-    DefEqIn.trans R x y z (DefEqIn.raw R x y xy) ih) a b h",
+    @DefEqIn.trans R x y z (@DefEqIn.raw R x y xy) ih) a b h",
             "An actual finite raw parallel path embeds by induction into the supplied-environment semantic conversion relation.",
         )?;
 
         self.add_recursive_def(
             r"def semantic_join_to_def_eq_in (R : RedEnv) (a : KExpr) (b : KExpr)
  (h : SemanticJoin R a b) : DefEqIn R a b :=
- SemanticJoin.rec R a b (fun (_h : SemanticJoin R a b) => DefEqIn R a b)
+ @SemanticJoin.rec R a b (fun (_h : SemanticJoin R a b) => DefEqIn R a b)
   (fun (x : KExpr) (y : KExpr) (ax : par_reduces_cd_star R a x)
     (by_path : par_reduces_cd_star R b y) (xy : KExprUniverseEq x y) =>
-    DefEqIn.trans R a x b (par_reduces_cd_star_to_def_eq_in R a x ax)
-      (DefEqIn.trans R x y b (DefEqIn.levels R x y xy)
-        (DefEqIn.symm R b y (par_reduces_cd_star_to_def_eq_in R b y by_path)))) h",
+    @DefEqIn.trans R a x b (par_reduces_cd_star_to_def_eq_in R a x ax)
+      (@DefEqIn.trans R x y b (@DefEqIn.levels R x y xy)
+        (@DefEqIn.symm R b y (par_reduces_cd_star_to_def_eq_in R b y by_path)))) h",
             "The two actual join legs and the endpoint universe relation construct conversion; no faithfulness or extra joinability premise is required for this direction.",
         )?;
 
         self.add_recursive_def(
             r"def kexprUniverseEq_sort_injective (u : Level) (v : Level)
  (h : KExprUniverseEq (KExpr.sort u) (KExpr.sort v)) : levelEqSem u v :=
- LiftP.rec (levelEqSem u v) (fun (_ : LiftP (levelEqSem u v)) => levelEqSem u v)
+ @LiftP.rec (levelEqSem u v) (fun (_ : LiftP (levelEqSem u v)) => levelEqSem u v)
   (fun (p : levelEqSem u v) => p)
   (kexprUniverseEq_view (KExpr.sort u) (KExpr.sort v) h (LiftP (levelEqSem u v))
     (fun (w : Level) (uw : levelEqSem u w)
-      (vw : Eq KExpr (KExpr.sort v) (KExpr.sort w)) =>
-      LiftP.up (levelEqSem u v)
+      (vw : @Eq KExpr (KExpr.sort v) (KExpr.sort w)) =>
+      @LiftP.up (levelEqSem u v)
         (Eq.subst Level (fun (z : Level) => levelEqSem u z) w v
           (Eq.symm Level v w (kexpr_sort_inj v w vw)) uw)))",
             "Sort-level relation inversion yields equality of denotations, not equality of raw Level syntax. LiftP only adapts the existing Type-valued inversion API.",
@@ -65,7 +65,7 @@ impl Specification {
  (C : Type) (consume : KExprUniverseEq A A2 -> KExprUniverseEq B B2 -> C) : C :=
  kexprUniverseEq_view (KExpr.pi A B) (KExpr.pi A2 B2) h C
   (fun (A3 : KExpr) (B3 : KExpr) (hA : KExprUniverseEq A A3)
-    (hB : KExprUniverseEq B B3) (shape : Eq KExpr (KExpr.pi A2 B2) (KExpr.pi A3 B3)) =>
+    (hB : KExprUniverseEq B B3) (shape : @Eq KExpr (KExpr.pi A2 B2) (KExpr.pi A3 B3)) =>
     consume
       (Eq.substType KExpr (fun (z : KExpr) => KExprUniverseEq A z) A3 A2
         (Eq.symm KExpr A2 A3 (kexpr_pi_inj_fst A2 B2 A3 B3 shape)) hA)
@@ -77,7 +77,7 @@ impl Specification {
         self.add_recursive_def(
             r"def semantic_join_sort_injective (R : RedEnv) (u : Level) (v : Level)
  (h : SemanticJoin R (KExpr.sort u) (KExpr.sort v)) : levelEqSem u v :=
- SemanticJoin.rec R (KExpr.sort u) (KExpr.sort v)
+ @SemanticJoin.rec R (KExpr.sort u) (KExpr.sort v)
   (fun (_h : SemanticJoin R (KExpr.sort u) (KExpr.sort v)) => levelEqSem u v)
   (fun (x : KExpr) (y : KExpr)
     (ux : par_reduces_cd_star R (KExpr.sort u) x)
@@ -95,16 +95,16 @@ impl Specification {
  (A : KExpr) (B : KExpr) (A2 : KExpr) (B2 : KExpr)
  (h : SemanticJoin R (KExpr.pi A B) (KExpr.pi A2 B2))
  (C : Type) (consume : DefEqIn R A A2 -> DefEqIn R B B2 -> C) : C :=
- SemanticJoin.rec R (KExpr.pi A B) (KExpr.pi A2 B2)
+ @SemanticJoin.rec R (KExpr.pi A B) (KExpr.pi A2 B2)
   (fun (_h : SemanticJoin R (KExpr.pi A B) (KExpr.pi A2 B2)) => C)
   (fun (x : KExpr) (y : KExpr)
     (left : par_reduces_cd_star R (KExpr.pi A B) x)
     (right : par_reduces_cd_star R (KExpr.pi A2 B2) y) (xy : KExprUniverseEq x y) =>
     par_reduces_cd_star_pi_inv_eq R A B x C left
-      (fun (Ax : KExpr) (Bx : KExpr) (hx : Eq KExpr x (KExpr.pi Ax Bx))
+      (fun (Ax : KExpr) (Bx : KExpr) (hx : @Eq KExpr x (KExpr.pi Ax Bx))
         (hAx : par_reduces_cd_star R A Ax) (hBx : par_reduces_cd_star R B Bx) =>
         par_reduces_cd_star_pi_inv_eq R A2 B2 y C right
-          (fun (Ay : KExpr) (By : KExpr) (hy : Eq KExpr y (KExpr.pi Ay By))
+          (fun (Ay : KExpr) (By : KExpr) (hy : @Eq KExpr y (KExpr.pi Ay By))
             (hAy : par_reduces_cd_star R A2 Ay) (hBy : par_reduces_cd_star R B2 By) =>
             kexprUniverseEq_pi_components Ax Bx Ay By
               (Eq.substType KExpr (fun (z : KExpr) => KExprUniverseEq (KExpr.pi Ax Bx) z)
@@ -113,8 +113,8 @@ impl Specification {
                   x (KExpr.pi Ax Bx) hx xy))
               C (fun (hA : KExprUniverseEq Ax Ay) (hB : KExprUniverseEq Bx By) =>
                 consume
-                  (semantic_join_to_def_eq_in R A A2 (SemanticJoin.mk R A A2 Ax Ay hAx hAy hA))
-                  (semantic_join_to_def_eq_in R B B2 (SemanticJoin.mk R B B2 Bx By hBx hBy hB)))))) h",
+                  (semantic_join_to_def_eq_in R A A2 (@SemanticJoin.mk R A A2 Ax Ay hAx hAy hA))
+                  (semantic_join_to_def_eq_in R B B2 (@SemanticJoin.mk R B B2 Bx By hBx hBy hB)))))) h",
             "Both actual raw Pi paths are inverted into component paths; the semantic endpoint view gives the two component relations and constructs conversion through those paths.",
         )?;
 
@@ -190,9 +190,9 @@ impl Specification {
 
         self.add_recursive_def(
             r"def semantic_sort_imax_zero_syntax_distinct (u : Level)
- (h : Eq KExpr (KExpr.sort (Level.imax u Level.zero)) (KExpr.sort Level.zero)) : Empty :=
+ (h : @Eq KExpr (KExpr.sort (Level.imax u Level.zero)) (KExpr.sort Level.zero)) : Empty :=
  Eq.substType Level
-  (fun (v : Level) => Level.rec (fun (_ : Level) => Type)
+  (fun (v : Level) => @Level.rec (fun (_ : Level) => Type)
     Empty (fun (_ : Level) (_ : Type) => Empty)
     (fun (_ : Level) (_ : Level) (_ : Type) (_ : Type) => Empty)
     (fun (_ : Level) (_ : Level) (_ : Type) (_ : Type) => Nat)
@@ -297,8 +297,8 @@ mod tests {
         run_with_stack(|| {
             let mut spec = build_spec_with_stack();
             for source in [
-                "def semantic_injectivity_forged_raw_equality : Eq KExpr (KExpr.sort (Level.imax Level.zero Level.zero)) (KExpr.sort Level.zero) := Eq.refl KExpr (KExpr.sort Level.zero)",
-                "def semantic_injectivity_forged_level_equality : levelEqSem Level.zero (Level.succ Level.zero) := fun (valuation : Name -> Nat) => Eq.refl Nat Nat.zero",
+                "def semantic_injectivity_forged_raw_equality : @Eq KExpr (KExpr.sort (Level.imax Level.zero Level.zero)) (KExpr.sort Level.zero) := @Eq.refl KExpr (KExpr.sort Level.zero)",
+                "def semantic_injectivity_forged_level_equality : levelEqSem Level.zero (Level.succ Level.zero) := fun (valuation : Name -> Nat) => @Eq.refl Nat Nat.zero",
                 "def semantic_injectivity_forged_pi_payload : KExprUniverseEq (KExpr.pi (KExpr.sort Level.zero) (KExpr.lit Nat.zero)) (KExpr.pi (KExpr.sort Level.zero) (KExpr.lit (Nat.succ Nat.zero))) := kexprUniverseEq_refl (KExpr.pi (KExpr.sort Level.zero) (KExpr.lit Nat.zero))",
             ] {
                 assert!(spec.add_recursive_def(source, "Negative semantic injectivity control.").is_err(),

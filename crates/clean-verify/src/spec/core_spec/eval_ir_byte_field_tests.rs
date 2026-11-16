@@ -29,8 +29,8 @@ const ROOTS: &[&str] = &[
 const BAD: &str = "IRStepResult.fault (IROutcome.type_error IRFault.bad_field)";
 const BOUNDS: &str = "IRStepResult.fault (IROutcome.ub IRFault.bad_field)";
 const ABSENT: &str = "IRStepResult.fault (IROutcome.unmodelled IRFault.width_bounded)";
-const PROGRAM: &str = "IRModule.mk (IRList.nil IRFunc) (IRList.nil IRGlobal)";
-const TRUE: &str = "(Eq.refl Bool Bool.true)";
+const PROGRAM: &str = "IRModule.mk (@IRList.nil IRFunc) (@IRList.nil IRGlobal)";
+const TRUE: &str = "(@Eq.refl Bool Bool.true)";
 
 fn specification() -> Specification {
     crate::eval_ir::build_byte_prelude_spec_v1_with_stack().expect("public Byte field vocabulary")
@@ -54,7 +54,7 @@ fn add(spec: &mut Specification, source: &str) {
 fn equality(spec: &mut Specification, name: &str, ty: &str, actual: &str, expected: &str) {
     add(
         spec,
-        &format!("def {name} : Eq ({ty}) ({actual}) ({expected}) := Eq.refl ({ty}) ({expected})"),
+        &format!("def {name} : @Eq ({ty}) ({actual}) ({expected}) := @Eq.refl ({ty}) ({expected})"),
     );
 }
 
@@ -74,8 +74,8 @@ fn list(ty: &str, values: &[&str]) -> String {
     values
         .iter()
         .rev()
-        .fold(format!("IRList.nil {ty}"), |tail, value| {
-            format!("IRList.cons {ty} ({value}) ({tail})")
+        .fold(format!("@IRList.nil {ty}"), |tail, value| {
+            format!("@IRList.cons {ty} ({value}) ({tail})")
         })
 }
 
@@ -94,7 +94,7 @@ fn aggregate(ty: &str, values: &[&str]) -> String {
 
 fn layout(id: u64, fields: &[&str]) -> String {
     format!(
-        "IRByteLayoutV1.mk (IRTy.struct_ {id}) 32 8 ({}) (IRList.nil Nat)",
+        "IRByteLayoutV1.mk (IRTy.struct_ {id}) 32 8 ({}) (@IRList.nil Nat)",
         list("IRTy", fields)
     )
 }
@@ -133,7 +133,7 @@ fn site(pc: u64, ty: &str, operands: &[(u64, &str)]) -> String {
 }
 
 fn context(layouts: &[&str], enums: &[&str], sites: &[&str]) -> String {
-    format!("(IRByteContextV1.mke ({PROGRAM}) ({}) (IRList.nil IRByteSignatureV1) (IRList.nil IRByteFunctionV1) ({}) ({}))", list("IRByteLayoutV1", layouts), list("IRByteSiteV1", sites), list("IRByteEnumV1", enums))
+    format!("(IRByteContextV1.mke ({PROGRAM}) ({}) (@IRList.nil IRByteSignatureV1) (@IRList.nil IRByteFunctionV1) ({}) ({}))", list("IRByteLayoutV1", layouts), list("IRByteSiteV1", sites), list("IRByteEnumV1", enums))
 }
 
 #[test]
@@ -152,7 +152,7 @@ fn byte_field_nominal_laws_have_inhabited_applications_and_same_proof_controls()
             &mut spec,
             &format!("def field_law_ctx : IRByteContextV1 := {ctx}"),
         );
-        let extract = format!("def field_derived_extract : Eq IRStepResult\n  (ir_byte_extract_typed_v1 field_law_ctx (IRTy.struct_ 9) IRTy.fatstr_ (IRScalar.aggv ({sp})) 0)\n  (IRStepResult.value (IRScalar.fat_ 16 3)) :=\n  ir_byte_field_selected_extract_v1 field_law_ctx (IRTy.struct_ 9) IRTy.fatstr_ IRTy.fatstr_ ({sp}) 0 ({fields}) (IRScalar.fat_ 16 3) {TRUE}\n    (Eq.refl (IROption (IRList IRTy)) (IROption.some (IRList IRTy) ({fields})))\n    (Eq.refl (IROption IRTy) (IROption.some IRTy IRTy.fatstr_)) {TRUE}\n    (Eq.refl (IROption IRScalar) (IROption.some IRScalar (IRScalar.fat_ 16 3))) {TRUE}");
+        let extract = format!("def field_derived_extract : @Eq IRStepResult\n  (ir_byte_extract_typed_v1 field_law_ctx (IRTy.struct_ 9) IRTy.fatstr_ (IRScalar.aggv ({sp})) 0)\n  (IRStepResult.value (IRScalar.fat_ 16 3)) :=\n  ir_byte_field_selected_extract_v1 field_law_ctx (IRTy.struct_ 9) IRTy.fatstr_ IRTy.fatstr_ ({sp}) 0 ({fields}) (IRScalar.fat_ 16 3) {TRUE}\n    (@Eq.refl (IROption (IRList IRTy)) (@IROption.some (IRList IRTy) ({fields})))\n    (@Eq.refl (IROption IRTy) (@IROption.some IRTy IRTy.fatstr_)) {TRUE}\n    (@Eq.refl (IROption IRScalar) (@IROption.some IRScalar (IRScalar.fat_ 16 3))) {TRUE}");
         add(&mut spec, &extract);
         let wrong = extract
             .replacen("field_derived_extract", "field_wrong_nominal", 1)
@@ -167,7 +167,7 @@ fn byte_field_nominal_laws_have_inhabited_applications_and_same_proof_controls()
         );
         rejected(&mut spec, "field_wrong_nominal", &wrong);
         let updated = aggregate("IRScalar", &["IRScalar.fat_ 16 3", "IRScalar.int_ 11"]);
-        let insert = format!("def field_derived_insert : Eq IRStepResult\n  (ir_byte_insert_typed_v1 field_law_ctx (IRTy.struct_ 9) (IRTy.uint_ 64) (IRScalar.aggv ({sp})) 1 (IRScalar.int_ 11))\n  (IRStepResult.value ({updated})) :=\n  ir_byte_field_selected_insert_v1 field_law_ctx (IRTy.struct_ 9) (IRTy.uint_ 64) (IRTy.uint_ 64) ({sp}) 1 ({fields}) (IRScalar.int_ 11) {TRUE} {TRUE}\n    (Eq.refl (IROption (IRList IRTy)) (IROption.some (IRList IRTy) ({fields})))\n    (Eq.refl (IROption IRTy) (IROption.some IRTy (IRTy.uint_ 64))) {TRUE} {TRUE} {TRUE} {TRUE}");
+        let insert = format!("def field_derived_insert : @Eq IRStepResult\n  (ir_byte_insert_typed_v1 field_law_ctx (IRTy.struct_ 9) (IRTy.uint_ 64) (IRScalar.aggv ({sp})) 1 (IRScalar.int_ 11))\n  (IRStepResult.value ({updated})) :=\n  ir_byte_field_selected_insert_v1 field_law_ctx (IRTy.struct_ 9) (IRTy.uint_ 64) (IRTy.uint_ 64) ({sp}) 1 ({fields}) (IRScalar.int_ 11) {TRUE} {TRUE}\n    (@Eq.refl (IROption (IRList IRTy)) (@IROption.some (IRList IRTy) ({fields})))\n    (@Eq.refl (IROption IRTy) (@IROption.some IRTy (IRTy.uint_ 64))) {TRUE} {TRUE} {TRUE} {TRUE}");
         add(&mut spec, &insert);
         let wrong = insert
             .replacen("field_derived_insert", "field_wrong_updated", 1)
@@ -191,8 +191,8 @@ fn byte_field_nominal_laws_have_inhabited_applications_and_same_proof_controls()
             &[(0, "IRTy.struct_ 9"), (1, "IRTy.uint_ 64")],
         );
         let insert_ctx = context(&[&structure], &[], &[&insert_site]);
-        add(&mut spec, &format!("def field_derived_insert_site : Eq IRStepResult\n  (ir_byte_insert_field_v1 {insert_ctx} ({insert_site}) (IRTy.struct_ 9) 0 (IRScalar.aggv ({sp})) 1 1 (IRScalar.int_ 11))\n  (ir_byte_insert_typed_v1 {insert_ctx} (IRTy.struct_ 9) (IRTy.uint_ 64) (IRScalar.aggv ({sp})) 1 (IRScalar.int_ 11)) :=\n  ir_byte_field_insert_mkt_v1 {insert_ctx} 41 0 0 0 1 ({}) ({insert_rows}) (IRTy.struct_ 9) (IRTy.struct_ 9) 0 (IRScalar.aggv ({sp})) 1 1 (IRTy.uint_ 64) (IRScalar.int_ 11) {TRUE}\n    (Eq.refl (IROption IRTy) (IROption.some IRTy (IRTy.struct_ 9))) {TRUE}\n    (Eq.refl (IROption IRTy) (IROption.some IRTy (IRTy.uint_ 64)))", list("IRTy", &["IRTy.struct_ 9"])));
-        add(&mut spec, &format!("def field_derived_site : Eq IRStepResult\n  (ir_byte_extract_field_v1 field_law_ctx ({typed}) IRTy.fatstr_ 0 (IRScalar.aggv ({sp})) 0)\n  (ir_byte_extract_typed_v1 field_law_ctx (IRTy.struct_ 9) IRTy.fatstr_ (IRScalar.aggv ({sp})) 0) :=\n  ir_byte_field_extract_mkt_v1 field_law_ctx 41 0 0 0 1 ({}) ({}) IRTy.fatstr_ (IRTy.struct_ 9) 0 (IRScalar.aggv ({sp})) 0 {TRUE} (Eq.refl (IROption IRTy) (IROption.some IRTy (IRTy.struct_ 9)))", list("IRTy", &["IRTy.fatstr_"]), rows(&[(0, "IRTy.struct_ 9")])));
+        add(&mut spec, &format!("def field_derived_insert_site : @Eq IRStepResult\n  (ir_byte_insert_field_v1 {insert_ctx} ({insert_site}) (IRTy.struct_ 9) 0 (IRScalar.aggv ({sp})) 1 1 (IRScalar.int_ 11))\n  (ir_byte_insert_typed_v1 {insert_ctx} (IRTy.struct_ 9) (IRTy.uint_ 64) (IRScalar.aggv ({sp})) 1 (IRScalar.int_ 11)) :=\n  ir_byte_field_insert_mkt_v1 {insert_ctx} 41 0 0 0 1 ({}) ({insert_rows}) (IRTy.struct_ 9) (IRTy.struct_ 9) 0 (IRScalar.aggv ({sp})) 1 1 (IRTy.uint_ 64) (IRScalar.int_ 11) {TRUE}\n    (@Eq.refl (IROption IRTy) (@IROption.some IRTy (IRTy.struct_ 9))) {TRUE}\n    (@Eq.refl (IROption IRTy) (@IROption.some IRTy (IRTy.uint_ 64)))", list("IRTy", &["IRTy.struct_ 9"])));
+        add(&mut spec, &format!("def field_derived_site : @Eq IRStepResult\n  (ir_byte_extract_field_v1 field_law_ctx ({typed}) IRTy.fatstr_ 0 (IRScalar.aggv ({sp})) 0)\n  (ir_byte_extract_typed_v1 field_law_ctx (IRTy.struct_ 9) IRTy.fatstr_ (IRScalar.aggv ({sp})) 0) :=\n  ir_byte_field_extract_mkt_v1 field_law_ctx 41 0 0 0 1 ({}) ({}) IRTy.fatstr_ (IRTy.struct_ 9) 0 (IRScalar.aggv ({sp})) 0 {TRUE} (@Eq.refl (IROption IRTy) (@IROption.some IRTy (IRTy.struct_ 9)))", list("IRTy", &["IRTy.fatstr_"]), rows(&[(0, "IRTy.struct_ 9")])));
     });
 }
 
@@ -328,7 +328,7 @@ fn byte_field_enum_active_lanes_and_tag_read_only_use_canonical_words() {
                 BAD,
             );
         }
-        add(&mut spec, &format!("def field_derived_tag_refusal : Eq IRStepResult (ir_byte_insert_typed_v1 {ctx} (IRTy.enum_ 7) (IRTy.uint_ 64) ({active}) 0 (IRScalar.int_ 27)) ({BOUNDS}) := ir_byte_field_enum_tag_write_refused_v1 {ctx} 7 (IRTy.uint_ 64) ({}) (IRScalar.int_ 27) {TRUE}", spine("IRScalar", &["IRScalar.int_ 19", "IRScalar.fat_ 16 3"])));
+        add(&mut spec, &format!("def field_derived_tag_refusal : @Eq IRStepResult (ir_byte_insert_typed_v1 {ctx} (IRTy.enum_ 7) (IRTy.uint_ 64) ({active}) 0 (IRScalar.int_ 27)) ({BOUNDS}) := ir_byte_field_enum_tag_write_refused_v1 {ctx} 7 (IRTy.uint_ 64) ({}) (IRScalar.int_ 27) {TRUE}", spine("IRScalar", &["IRScalar.int_ 19", "IRScalar.fat_ 16 3"])));
     });
 }
 
@@ -394,10 +394,11 @@ fn byte_field_site_metadata_is_opt_in_unique_complete_and_single_result() {
         let mut spec = specification();
         let structure = layout(9, &["IRTy.uint_ 64"]);
         let value = aggregate("IRScalar", &["IRScalar.int_ 5"]);
-        let old = "IRByteSiteV1.mk 41 0 0 0 1 (IRList.cons IRTy (IRTy.uint_ 64) (IRList.nil IRTy))";
+        let old =
+            "IRByteSiteV1.mk 41 0 0 0 1 (@IRList.cons IRTy (IRTy.uint_ 64) (@IRList.nil IRTy))";
         let ctx = context(&[&structure], &[], &[old]);
-        add(&mut spec, &format!("def field_derived_old_extract : Eq IRStepResult (ir_byte_extract_field_v1 {ctx} ({old}) (IRTy.uint_ 64) 0 ({value}) 0) ({ABSENT}) := ir_byte_field_extract_old_refused_v1 {ctx} 41 0 0 0 1 ({}) (IRTy.uint_ 64) 0 ({value}) 0", list("IRTy", &["IRTy.uint_ 64"])));
-        add(&mut spec, &format!("def field_derived_old_insert : Eq IRStepResult (ir_byte_insert_field_v1 {ctx} ({old}) (IRTy.struct_ 9) 0 ({value}) 0 1 (IRScalar.int_ 7)) ({ABSENT}) := ir_byte_field_insert_old_refused_v1 {ctx} 41 0 0 0 1 ({}) (IRTy.struct_ 9) 0 ({value}) 0 1 (IRScalar.int_ 7)", list("IRTy", &["IRTy.uint_ 64"])));
+        add(&mut spec, &format!("def field_derived_old_extract : @Eq IRStepResult (ir_byte_extract_field_v1 {ctx} ({old}) (IRTy.uint_ 64) 0 ({value}) 0) ({ABSENT}) := ir_byte_field_extract_old_refused_v1 {ctx} 41 0 0 0 1 ({}) (IRTy.uint_ 64) 0 ({value}) 0", list("IRTy", &["IRTy.uint_ 64"])));
+        add(&mut spec, &format!("def field_derived_old_insert : @Eq IRStepResult (ir_byte_insert_field_v1 {ctx} ({old}) (IRTy.struct_ 9) 0 ({value}) 0 1 (IRScalar.int_ 7)) ({ABSENT}) := ir_byte_field_insert_old_refused_v1 {ctx} 41 0 0 0 1 ({}) (IRTy.struct_ 9) 0 ({value}) 0 1 (IRScalar.int_ 7)", list("IRTy", &["IRTy.uint_ 64"])));
         result(
             &mut spec,
             "field_old_extract_refused",
@@ -461,8 +462,8 @@ fn byte_field_site_metadata_is_opt_in_unique_complete_and_single_result() {
             BAD,
         );
         let insert = site(0, "IRTy.struct_ 9", &[(0, "IRTy.struct_ 9")]);
-        add(&mut spec, &format!("def field_derived_duplicate_extract : Eq IRStepResult (ir_byte_extract_field_v1 {duplicate} ({typed}) (IRTy.uint_ 64) 0 ({value}) 0) ({BAD}) := ir_byte_field_extract_metadata_refused_v1 {duplicate} 41 0 0 0 1 ({}) ({}) (IRTy.uint_ 64) (IRTy.struct_ 9) 0 ({value}) 0 (Eq.refl Bool Bool.false)", list("IRTy", &["IRTy.uint_ 64"]), rows(&[(0, "IRTy.struct_ 9")])));
-        add(&mut spec, &format!("def field_derived_duplicate_insert : Eq IRStepResult (ir_byte_insert_field_v1 {duplicate} ({typed}) (IRTy.uint_ 64) 0 ({value}) 0 1 (IRScalar.int_ 7)) ({BAD}) := ir_byte_field_insert_metadata_refused_v1 {duplicate} 41 0 0 0 1 ({}) ({}) (IRTy.uint_ 64) (IRTy.struct_ 9) 0 ({value}) 0 1 (IRScalar.int_ 7) (Eq.refl Bool Bool.false)", list("IRTy", &["IRTy.uint_ 64"]), rows(&[(0, "IRTy.struct_ 9")])));
+        add(&mut spec, &format!("def field_derived_duplicate_extract : @Eq IRStepResult (ir_byte_extract_field_v1 {duplicate} ({typed}) (IRTy.uint_ 64) 0 ({value}) 0) ({BAD}) := ir_byte_field_extract_metadata_refused_v1 {duplicate} 41 0 0 0 1 ({}) ({}) (IRTy.uint_ 64) (IRTy.struct_ 9) 0 ({value}) 0 (@Eq.refl Bool Bool.false)", list("IRTy", &["IRTy.uint_ 64"]), rows(&[(0, "IRTy.struct_ 9")])));
+        add(&mut spec, &format!("def field_derived_duplicate_insert : @Eq IRStepResult (ir_byte_insert_field_v1 {duplicate} ({typed}) (IRTy.uint_ 64) 0 ({value}) 0 1 (IRScalar.int_ 7)) ({BAD}) := ir_byte_field_insert_metadata_refused_v1 {duplicate} 41 0 0 0 1 ({}) ({}) (IRTy.uint_ 64) (IRTy.struct_ 9) 0 ({value}) 0 1 (IRScalar.int_ 7) (@Eq.refl Bool Bool.false)", list("IRTy", &["IRTy.uint_ 64"]), rows(&[(0, "IRTy.struct_ 9")])));
         result(&mut spec, "field_missing_replacement_row", &format!("ir_byte_insert_field_v1 {} ({insert}) (IRTy.struct_ 9) 0 ({value}) 0 1 (IRScalar.int_ 7)", context(&[&structure], &[], &[&insert])), BAD);
     });
 }

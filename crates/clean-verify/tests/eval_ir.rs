@@ -375,27 +375,27 @@ fn eval_ir_wrap_folds_a_literal_residue_without_walking_it() {
     let residues: &[(&str, &str)] = &[
         (
             "u32 sentinel, twice wrapped",
-            "def l2_gate_u32_sentinel : Eq Nat (ir_wrap 32 (ir_wrap 32 4294967295)) 4294967295 := Eq.refl Nat 4294967295",
+            "def l2_gate_u32_sentinel : @Eq Nat (ir_wrap 32 (ir_wrap 32 4294967295)) 4294967295 := @Eq.refl Nat 4294967295",
         ),
         (
             "is_valid_char's left-constant icmp residue",
-            "def l2_gate_vc_c2 : Eq Nat (ir_wrap 64 (ir_wrap 64 57343)) 57343 := Eq.refl Nat 57343",
+            "def l2_gate_vc_c2 : @Eq Nat (ir_wrap 64 (ir_wrap 64 57343)) 57343 := @Eq.refl Nat 57343",
         ),
         (
             "the 0x110000 bound is_valid_char's bb4 materializes",
-            "def l2_gate_vc_c3 : Eq Nat (ir_wrap 64 (ir_wrap 64 1114112)) 1114112 := Eq.refl Nat 1114112",
+            "def l2_gate_vc_c3 : @Eq Nat (ir_wrap 64 (ir_wrap 64 1114112)) 1114112 := @Eq.refl Nat 1114112",
         ),
         (
             "a NON-zero quotient still reduces to the right residue",
-            "def l2_gate_quotient : Eq Nat (ir_wrap 8 55296) Nat.zero := Eq.refl Nat Nat.zero",
+            "def l2_gate_quotient : @Eq Nat (ir_wrap 8 55296) Nat.zero := @Eq.refl Nat Nat.zero",
         ),
         (
             "the u32 sentinel EQUALITY — 4.29e9 paired walk steps",
-            "def l2_gate_eqb_sentinel : Eq Bool (ir_nat_eqb (ir_wrap 32 (ir_wrap 32 4294967295)) (ir_wrap 32 4294967295)) Bool.true := Eq.refl Bool Bool.true",
+            "def l2_gate_eqb_sentinel : @Eq Bool (ir_nat_eqb (ir_wrap 32 (ir_wrap 32 4294967295)) (ir_wrap 32 4294967295)) Bool.true := @Eq.refl Bool Bool.true",
         ),
         (
             "is_valid_char's widest comparison — 0x110000 peels on the argument",
-            "def l2_gate_ltb_vc_c3 : Eq Bool (ir_nat_ltb (ir_wrap 64 1114112) (ir_wrap 64 (ir_wrap 64 1114112))) Bool.false := Eq.refl Bool Bool.false",
+            "def l2_gate_ltb_vc_c3 : @Eq Bool (ir_nat_ltb (ir_wrap 64 1114112) (ir_wrap 64 (ir_wrap 64 1114112))) Bool.false := @Eq.refl Bool Bool.false",
         ),
     ];
 

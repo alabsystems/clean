@@ -46,7 +46,7 @@ impl Specification {
         let motive_at = |p: &str, q: &str| {
             format!(
                 "forall (f : KExpr) (a : KExpr), rigid_app_head (KExpr.app f a) -> \
-                 Eq KExpr {p} (KExpr.app f a) -> {g}",
+                 @Eq KExpr {p} (KExpr.app f a) -> {g}",
                 g = goal(q)
             )
         };
@@ -70,8 +70,8 @@ impl Specification {
             format!(
                 "(fun {payload} {proofs}{ihs}(f : KExpr) (a : KExpr) \
                  (_hr : rigid_app_head (KExpr.app f a)) \
-                 (heq : Eq KExpr {src} (KExpr.app f a)) => \
-                 kexpr_discr_t {g} {src} (KExpr.app f a) heq (Eq.refl Bool Bool.false)) ",
+                 (heq : @Eq KExpr {src} (KExpr.app f a)) => \
+                 kexpr_discr_t {g} {src} (KExpr.app f a) heq (@Eq.refl Bool Bool.false)) ",
                 g = goal(tgt)
             )
         };
@@ -80,9 +80,9 @@ impl Specification {
         let mut arms = String::from(
             "(fun (e0 : KExpr) (f : KExpr) (a : KExpr) \
              (_hr : rigid_app_head (KExpr.app f a)) \
-             (heq : Eq KExpr e0 (KExpr.app f a)) => \
-             StuckAppRedWitness.mk env f a e0 f a heq \
-             (par_reduces_cd_star.refl env f) (par_reduces_cd_star.refl env a)) ",
+             (heq : @Eq KExpr e0 (KExpr.app f a)) => \
+             @StuckAppRedWitness.mk env f a e0 f a heq \
+             (@par_reduces_cd_star.refl env f) (@par_reduces_cd_star.refl env a)) ",
         );
 
         // beta: the head would be a lambda, and a rigid head is not.
@@ -92,10 +92,10 @@ impl Specification {
             arms.push_str(&format!(
                 "(fun {payload} {proofs}{ihs}(f : KExpr) (a : KExpr) \
                  (hr : rigid_app_head (KExpr.app f a)) \
-                 (heq : Eq KExpr {src} (KExpr.app f a)) => \
+                 (heq : @Eq KExpr {src} (KExpr.app f a)) => \
                  rigid_app_head_not_lam f \
                  (rigid_app_head_app_inv (KExpr.app f a) hr f a \
-                 (Eq.refl KExpr (KExpr.app f a))) \
+                 (@Eq.refl KExpr (KExpr.app f a))) \
                  {g} bA bbody \
                  (Eq.symm KExpr (KExpr.lam bA bbody) f \
                  (app_inj_fst (KExpr.lam bA bbody) barg f a heq))) ",
@@ -110,16 +110,16 @@ impl Specification {
             arms.push_str(&format!(
                 "(fun {payload} {proofs}{ihs}(f : KExpr) (a : KExpr) \
                  (_hr : rigid_app_head (KExpr.app f a)) \
-                 (heq : Eq KExpr {src} (KExpr.app f a)) => \
-                 (fun (hf : Eq KExpr af f) (ha : Eq KExpr aa a) => \
-                 StuckAppRedWitness.mk env f a {tgt} af2 aa2 \
-                 (Eq.refl KExpr {tgt}) \
+                 (heq : @Eq KExpr {src} (KExpr.app f a)) => \
+                 (fun (hf : @Eq KExpr af f) (ha : @Eq KExpr aa a) => \
+                 @StuckAppRedWitness.mk env f a {tgt} af2 aa2 \
+                 (@Eq.refl KExpr {tgt}) \
                  (Eq.substType KExpr (fun (z : KExpr) => par_reduces_cd_star env z af2) \
-                 af f hf (par_reduces_cd_star.step env af af2 af2 hpf \
-                 (par_reduces_cd_star.refl env af2))) \
+                 af f hf (@par_reduces_cd_star.step env af af2 af2 hpf \
+                 (@par_reduces_cd_star.refl env af2))) \
                  (Eq.substType KExpr (fun (z : KExpr) => par_reduces_cd_star env z aa2) \
-                 aa a ha (par_reduces_cd_star.step env aa aa2 aa2 hpa \
-                 (par_reduces_cd_star.refl env aa2)))) \
+                 aa a ha (@par_reduces_cd_star.step env aa aa2 aa2 hpa \
+                 (@par_reduces_cd_star.refl env aa2)))) \
                  (app_inj_fst af aa f a heq) (app_inj_snd af aa f a heq)) "
             ));
         }
@@ -138,16 +138,16 @@ impl Specification {
                 "(fun ({var} : KExpr) ({var}2 : KExpr) \
                  (hst : {ctor}_step ({envsel}) {var} {var}2) (f : KExpr) (a : KExpr) \
                  (hr : rigid_app_head (KExpr.app f a)) \
-                 (heq : Eq KExpr {var} (KExpr.app f a)) => \
+                 (heq : @Eq KExpr {var} (KExpr.app f a)) => \
                  opt_none_ne_some_t KExpr {var}2 {g} \
-                 (Eq.trans (OptionType KExpr) (OptionType.none KExpr) \
+                 (Eq.trans (OptionType KExpr) (@OptionType.none KExpr) \
                  ({ctor}_reduct ({envsel}) (KExpr.app f a)) \
-                 (OptionType.some KExpr {var}2) \
+                 (@OptionType.some KExpr {var}2) \
                  (Eq.symm (OptionType KExpr) ({ctor}_reduct ({envsel}) (KExpr.app f a)) \
-                 (OptionType.none KExpr) ({immune} env (KExpr.app f a) hr)) \
+                 (@OptionType.none KExpr) ({immune} env (KExpr.app f a) hr)) \
                  (Eq.substType KExpr \
-                 (fun (z : KExpr) => Eq (OptionType KExpr) ({ctor}_reduct ({envsel}) z) \
-                 (OptionType.some KExpr {var}2)) {var} (KExpr.app f a) heq hst))) ",
+                 (fun (z : KExpr) => @Eq (OptionType KExpr) ({ctor}_reduct ({envsel}) z) \
+                 (@OptionType.some KExpr {var}2)) {var} (KExpr.app f a) heq hst))) ",
                 g = goal(&format!("{var}2"))
             ));
         }
@@ -166,11 +166,11 @@ impl Specification {
                 "def par_reduces_cd_rigid_app_inv (env : RedEnv) (p : KExpr) (q : KExpr) \
                  (h : par_reduces_cd env p q) : \
                  forall (f : KExpr) (a : KExpr), rigid_app_head (KExpr.app f a) -> \
-                 Eq KExpr p (KExpr.app f a) -> StuckAppRedWitness env f a q := \
-                 par_reduces_cd.rec env \
+                 @Eq KExpr p (KExpr.app f a) -> StuckAppRedWitness env f a q := \
+                 @par_reduces_cd.rec env \
                  (fun (pp : KExpr) (qq : KExpr) (_h : par_reduces_cd env pp qq) => \
                  forall (f : KExpr) (a : KExpr), rigid_app_head (KExpr.app f a) -> \
-                 Eq KExpr pp (KExpr.app f a) -> StuckAppRedWitness env f a qq) \
+                 @Eq KExpr pp (KExpr.app f a) -> StuckAppRedWitness env f a qq) \
                  {arms}p q h"
             ),
             "par_reduces_cd_rigid_app_inv: single-step head rigidity for applications, with the \
@@ -187,32 +187,32 @@ impl Specification {
             "def par_reduces_cd_star_rigid_app_inv (env : RedEnv) (p : KExpr) (t : KExpr) \
              (h : par_reduces_cd_star env p t) : \
              forall (f : KExpr) (a : KExpr), rigid_app_head (KExpr.app f a) -> \
-             Eq KExpr p (KExpr.app f a) -> StuckAppRedWitness env f a t := \
-             par_reduces_cd_star.rec env \
+             @Eq KExpr p (KExpr.app f a) -> StuckAppRedWitness env f a t := \
+             @par_reduces_cd_star.rec env \
              (fun (pp : KExpr) (qq : KExpr) (_h : par_reduces_cd_star env pp qq) => \
              forall (f : KExpr) (a : KExpr), rigid_app_head (KExpr.app f a) -> \
-             Eq KExpr pp (KExpr.app f a) -> StuckAppRedWitness env f a qq) \
+             @Eq KExpr pp (KExpr.app f a) -> StuckAppRedWitness env f a qq) \
              (fun (e0 : KExpr) (f : KExpr) (a : KExpr) \
              (_hr : rigid_app_head (KExpr.app f a)) \
-             (heq : Eq KExpr e0 (KExpr.app f a)) => \
-             StuckAppRedWitness.mk env f a e0 f a heq \
-             (par_reduces_cd_star.refl env f) (par_reduces_cd_star.refl env a)) \
+             (heq : @Eq KExpr e0 (KExpr.app f a)) => \
+             @StuckAppRedWitness.mk env f a e0 f a heq \
+             (@par_reduces_cd_star.refl env f) (@par_reduces_cd_star.refl env a)) \
              (fun (e0 : KExpr) (e1 : KExpr) (e3 : KExpr) \
              (hstep : par_reduces_cd env e0 e1) \
              (_hstar : par_reduces_cd_star env e1 e3) \
              (ih : forall (f : KExpr) (a : KExpr), rigid_app_head (KExpr.app f a) -> \
-             Eq KExpr e1 (KExpr.app f a) -> StuckAppRedWitness env f a e3) \
+             @Eq KExpr e1 (KExpr.app f a) -> StuckAppRedWitness env f a e3) \
              (f : KExpr) (a : KExpr) (hr : rigid_app_head (KExpr.app f a)) \
-             (heq : Eq KExpr e0 (KExpr.app f a)) => \
-             StuckAppRedWitness.rec env f a e1 \
+             (heq : @Eq KExpr e0 (KExpr.app f a)) => \
+             @StuckAppRedWitness.rec env f a e1 \
              (fun (_w : StuckAppRedWitness env f a e1) => StuckAppRedWitness env f a e3) \
-             (fun (f1 : KExpr) (a1 : KExpr) (he1 : Eq KExpr e1 (KExpr.app f1 a1)) \
+             (fun (f1 : KExpr) (a1 : KExpr) (he1 : @Eq KExpr e1 (KExpr.app f1 a1)) \
              (hf1 : par_reduces_cd_star env f f1) (ha1 : par_reduces_cd_star env a a1) => \
-             StuckAppRedWitness.rec env f1 a1 e3 \
+             @StuckAppRedWitness.rec env f1 a1 e3 \
              (fun (_w2 : StuckAppRedWitness env f1 a1 e3) => StuckAppRedWitness env f a e3) \
-             (fun (f2 : KExpr) (a2 : KExpr) (he2 : Eq KExpr e3 (KExpr.app f2 a2)) \
+             (fun (f2 : KExpr) (a2 : KExpr) (he2 : @Eq KExpr e3 (KExpr.app f2 a2)) \
              (hf2 : par_reduces_cd_star env f1 f2) (ha2 : par_reduces_cd_star env a1 a2) => \
-             StuckAppRedWitness.mk env f a e3 f2 a2 he2 \
+             @StuckAppRedWitness.mk env f a e3 f2 a2 he2 \
              (par_reduces_cd_star_trans env f f1 f2 hf1 hf2) \
              (par_reduces_cd_star_trans env a a1 a2 ha1 ha2)) \
              (ih f1 a1 \

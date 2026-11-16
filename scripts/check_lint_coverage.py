@@ -484,6 +484,13 @@ GATE_RUSTDOCFLAGS = ("-Ztrust-verify=off",)
 # the allowlist admits exactly the value this check passed, never a count from
 # anywhere else. A thread count changes no lint level, cfg or verdict
 # (rustc_session `trust_frontend_threads_by_flags`: the option is untracked).
+# The same flag reaches the typed scan's units (cargo hands every unit
+# CARGO_ENCODED_RUSTFLAGS) and keeps the parallel front end out of the driver
+# that embeds the compiler, which nobody has audited under it; tippy-driver's
+# own `serial_lint_frontend` does not stand in for it at Trust 82bb867edd -- it
+# clears `unstable_opts.threads` after `jobs.frontend` was parsed from it, a
+# field nothing reads again. Arms 13e, 13f, 39b and 45 hold the width and the
+# allowlist's exactness.
 # rustdoc gets no thread flag: targo adds none to a rustdoc invocation.
 GATE_RUSTFLAGS = (*GATE_RUSTDOCFLAGS, "-Zthreads=1")
 # ...and what cargo itself adds for CARGO_UNSTABLE_CHECKSUM_FRESHNESS (see
@@ -875,6 +882,14 @@ def hermetic_env(env: dict[str, str], home: Path) -> dict[str, str]:
     # tree does not have; under checksum freshness it rebuilt and passed. The
     # other direction is the fail-open one: a passing artifact over a tree whose
     # test now fails.
+    # NOT IN FORCE SINCE Trust 81c9219b1c (2026-11-03), found 2026-11-15: with
+    # this unstable flag on, targo's source fingerprint is `build.fingerprint`'s,
+    # whose default is mtime (and the flag turns off native targo's own content
+    # default), so these runs are mtime-fresh again -- every unit of a 2026-11-15
+    # run recorded `"fingerprint":"mtime"`. Content freshness under targo also puts
+    # `-Z binary-dep-depinfo` on every line and the unit's binary dependencies in
+    # its dep-info, which `source_problems` reads as compiled source; restoring it
+    # is that model widened, owed (docs/DECISIONS.md, 2026-11-15, lint-coverage).
     run["CARGO_UNSTABLE_CHECKSUM_FRESHNESS"] = "true"
     return run
 
@@ -1511,8 +1526,16 @@ if [[ "$1" == check ]]; then
   prog="$PWD/bin/trustc"
   [[ -n "${RUSTC_WORKSPACE_WRAPPER:-}" ]] && prog="$RUSTC_WORKSPACE_WRAPPER $prog"
   plant PLANT_TYPES_OTHER_DRIVER && prog="$PWD/bin/scanner-lenient $PWD/bin/trustc"
-  flags="$(profile_flags) --force-warn=unused_crate_dependencies"
+  # What cargo puts on the unit's line: CARGO_ENCODED_RUSTFLAGS, as the stub
+  # frontend does for the lint.
+  flags="$(profile_flags)"
+  [[ -n "${CARGO_ENCODED_RUSTFLAGS:-}" ]] && flags="$flags ${CARGO_ENCODED_RUSTFLAGS//$'\x1f'/ }"
+  flags="$flags --force-warn=unused_crate_dependencies"
   plant PLANT_TYPES_LINE_CFG && flags="$flags --cfg test"
+  # targo gives a unit whose line names no front-end width its job count's
+  # (Trust 5aada4e7be); the plant keeps the gate's own width off the line.
+  plant PLANT_TYPES_WIDTH_DROPPED && flags="${flags// -Zthreads=1/}"
+  [[ "$flags" == *" -Zthreads="* ]] || flags="$flags -Zthreads=16"
   if plant PLANT_TYPES_UNUSED_DEPENDENCY; then
     printf '{"reason":"compiler-message","message":{"level":"warning","code":{"code":"unused_crate_dependencies"},"rendered":"warning: unused dependency"}}\n'
   fi
@@ -1624,6 +1647,8 @@ plant PLANT_LINE_ALLOW_WARNINGS && flags="$flags -A warnings"
 plant PLANT_LINE_ARGFILE && flags="$flags @/cfg/lint.args"
 plant PLANT_LINE_CFG_TEST && flags="$flags --cfg test"
 plant PLANT_LINE_EXTERN && flags="$flags --extern trust_ir=/elsewhere/libtrust_ir.rmeta"
+# Another `-Z` option, one that does lower a lint: a crate attribute.
+plant PLANT_LINE_CRATE_ATTR && flags="$flags -Zcrate-attr=allow(warnings)"
 # Cargo's own tracking flag is present on ordinary compiler command lines.
 flags="$flags --force-warn=unused_crate_dependencies"
 plant PLANT_FORCE_OTHER && flags="$flags --force-warn=clippy::wildcard_enum_match_arm"
@@ -1638,7 +1663,8 @@ plant PLANT_LINE_THREADS && flags="$flags -Zthreads=8"
 driver="$PWD/bin/tippy-driver"
 plant PLANT_RUSTC_WRAPPER && driver="/usr/local/bin/sccache $driver"
 capped=0
-[[ "$flags" == *cap-lints* || "$flags" == *"-A warnings"* || "$flags" == *" @"* ]] && capped=1
+[[ "$flags" == *cap-lints* || "$flags" == *"-A warnings"* || "$flags" == *" @"* \
+   || "$flags" == *crate-attr* ]] && capped=1
 # An inherited variable the toolchain honours and cargo never echoes (the class
 # the environment allowlist exists for): it caps silently.
 [[ -n "${CLEAN_STUB_INVISIBLE_CAP:-}" ]] && capped=1
@@ -1784,6 +1810,9 @@ _SELFTEST_ARMS: tuple[tuple[str, str, bool, dict[str, str]], ...] = (
     # GATE_RUSTFLAGS reddens the baseline; a count from anywhere else is refused.
     ("13e a front-end thread count this check did not pass (`-Zthreads=8`) on the line",
      "PLANT_LINE_THREADS", False, {}),
+    ("13f `-Zcrate-attr=allow(warnings)` on the line over an unused function (another `-Z` "
+     "option; only the line allowlist stops it)", "PLANT_UNUSED_FN PLANT_LINE_CRATE_ATTR",
+     False, {}),
     ("14 the test unit is Fresh: nothing was linted over this run's arguments",
      "PLANT_FRESH_TEST_UNIT", False, {}),
     ("15 a rustc wrapper stands between cargo and the clippy driver",
@@ -1867,6 +1896,9 @@ _SELFTEST_ARMS: tuple[tuple[str, str, bool, dict[str, str]], ...] = (
     ("38 the typed driver checked a unit and printed no scan of it", "PLANT_TYPES_SILENT",
      False, {}),
     ("39 `--cfg test` on the typed scan's line", "PLANT_TYPES_LINE_CFG", False, {}),
+    ("39b the gate's `-Zthreads=1` does not reach the typed scan's line: the typed driver "
+     "would run the parallel front end at the width targo infers", "PLANT_TYPES_WIDTH_DROPPED",
+     False, {}),
     ("40 the tests and the lint compiled a tracked file the typed scan never read",
      "ONLY_TESTED PLANT_TEST_DEPINFO:src/only_tested.rs PLANT_DEPINFO:src/only_tested.rs",
      False, {}),
@@ -1924,6 +1956,23 @@ def _selftest_non_runner_arms(work: Path) -> list[str]:
     if got != sorted(want | {extra}):
         problems.append(f"  ARM FAILED 33 the derived pin set of gated crates with an added "
                         f"file: expected {sorted(want | {extra})}, got {got}")
+    # The front end's width is ONE: the gate hands `-Zthreads=1` and nothing else
+    # that names a width (rustdoc none), and a line may carry that text alone --
+    # no other count (one that begins with it included), spelling or width option.
+    line = ["--crate-name", "stub", "src/main.rs"]
+    handed = [f for f in GATE_RUSTFLAGS if "threads" in f or "jobs" in f]
+    handed_doc = [f for f in GATE_RUSTDOCFLAGS if "threads" in f or "jobs" in f]
+    admitted = sorted(o for o in _LINT_UNSTABLE_OPTS if "threads" in o)
+    kept = [w for w in (["-Zthreads=1"], ["-Z", "threads=1"]) if unmodeled_lint_args(line + w)]
+    passed = [w for w in ("-Zthreads=10", "-Zthreads=16", "-Zthreads=2", "-Zthreads=0",
+                          "-Zthreads=01", "-Zthreads=sync", "-Zthreads", "-Z=threads=1",
+                          "--jobs-frontend=1", "--jobs=1")
+              if not unmodeled_lint_args([*line, "-Zthreads=1", w])]
+    if handed != ["-Zthreads=1"] or handed_doc or admitted != ["threads=1"] or kept or passed:
+        problems.append(f"  ARM FAILED 45 the front end's width is exactly one thread: the gate "
+                        f"hands {handed} (rustdoc {handed_doc}), a line may carry {admitted}, "
+                        f"the gate's own flag is refused as {kept}, and these other widths "
+                        f"pass: {passed}")
     return problems
 
 
@@ -2030,6 +2079,15 @@ def _selftest_arm(work: Path, stubs: Path, i: int, arm: tuple) -> str | None:
     if "TARGO_NO_SIBLING_TRUSTC" in plant and not any(
             "has no sibling `trustc`" in f for f in failures):
         return f"  ARM FAILED {name}: refused for another reason -- {failures}"
+    # The line allowlist, by the option it names -- not a lint the stub reported.
+    for marker, half, option in (("PLANT_LINE_THREADS", "clippy", "-Z threads=8"),
+                                 ("PLANT_LINE_CRATE_ATTR", "clippy",
+                                  "-Z crate-attr=allow(warnings)"),
+                                 ("PLANT_TYPES_WIDTH_DROPPED", "types", "-Z threads=16")):
+        if marker in plant.split() and not any(
+                f"its {half} FAILED" in f and f"ran with {option} on its command line" in f
+                for f in failures):
+            return f"  ARM FAILED {name}: refused for another reason -- {failures}"
     if "NOTHING_RUNS" in plant:
         calls = (fake / ".stub-calls").read_text(encoding="utf-8").splitlines() \
             if (fake / ".stub-calls").is_file() else []
@@ -2076,7 +2134,7 @@ def selftest(root: Path = ROOT) -> int:
         shutil.rmtree(work, ignore_errors=True)
     for problem in problems:
         print(problem, file=sys.stderr)
-    print(f"LINT_COVERAGE_SELFTEST arms={len(_SELFTEST_ARMS) + 3} failed={len(problems)}")
+    print(f"LINT_COVERAGE_SELFTEST arms={len(_SELFTEST_ARMS) + 4} failed={len(problems)}")
     return len(problems)
 
 

@@ -154,7 +154,7 @@ impl Specification {
              everything else — NaN payloads included, which is why this is TOTAL where fadd \
              refuses NaNs: negate is a quiet bit operation with no payload freedom. trust-ir \
              a4e81b6 eval_float_unop FNeg is host `-x`, the same bit flip. Junk refuses \
-             (ir_f64_is_pattern). Bool.rec minor order is (false, true). DerivedProved, zero \
+             (ir_f64_is_pattern). @Bool.rec minor order is (false, true). DerivedProved, zero \
              axiom_deps.",
         )?;
 
@@ -197,7 +197,7 @@ impl Specification {
              here a second time ONLY because registration order forces it: ir_binop_eval's \
              fmin/fmax arms elaborate before the comparison band registers, and moving \
              ir_f64_ltb would change a pre-existing def's registration position. The \
-             duplication is pinned by ir_f64_ltb_pre_agrees — a kernel-checked Eq.refl at \
+             duplication is pinned by ir_f64_ltb_pre_agrees — a kernel-checked @Eq.refl at \
              universally quantified operands, so the two spellings are definitionally equal \
              or every spec build fails. DerivedProved, zero axiom_deps.",
         )?;
@@ -210,7 +210,7 @@ impl Specification {
             "The ordered minimum: a when a < b, else b — always ONE OF THE OPERANDS, exactly \
              as minNum returns an operand. On equal non-NaN values outside the zero pair the \
              two operands are the same pattern, so the else-branch's b is not a choice. \
-             Bool.rec minor order is (false, true). DerivedProved, zero axiom_deps.",
+             @Bool.rec minor order is (false, true). DerivedProved, zero axiom_deps.",
         )?;
 
         self.add_recursive_def(
@@ -266,7 +266,7 @@ impl Specification {
                 "ca cb",
             ),
             "*** IEEE 754-2008 minNum on the classified fragment *** — trust-ir a4e81b6 \
-             eval_float_binop FMin, host `lhs.min(rhs)`. Two nested IRF64Class.rec over the \
+             eval_float_binop FMin, host `lhs.min(rhs)`. Two nested @IRF64Class.rec over the \
              4x4 class product in constructor order (nan_, inf_, zero_, fin_), the \
              ir_f64_div_at idiom. NaN/NaN refuses (the result NaN's payload is \
              implementation-defined); NaN/x and x/NaN return THE OTHER OPERAND exactly ('the \
@@ -355,7 +355,7 @@ impl Specification {
              because binary64 magnitudes are ordered bit patterns (ceil of 1.999... reaches \
              2.0 through this carry, and the executed witness pins it). Rounds away from \
              zero only when `away` AND the fraction is nonzero — an exact integer is \
-             returned unchanged by BOTH branches' q-side. Bool.rec minor order is \
+             returned unchanged by BOTH branches' q-side. @Bool.rec minor order is \
              (false, true). DerivedProved, zero axiom_deps.",
         )?;
 

@@ -66,11 +66,11 @@ fn bounded_add_universal_actual_operations_derive_both_branches_and_canonical_re
             add_checked(&mut spec, &name, &format!(
                 "def {name} (width a b : Nat) \
                  (aBound : Nat.lt a (ir_nat_pow2 width)) (bBound : Nat.lt b (ir_nat_pow2 width)) : \
-                 And (Eq IRStepResult ({actual}) (IRStepResult.value (IRScalar.int_ ({selected})))) \
+                 And (@Eq IRStepResult ({actual}) (IRStepResult.value (IRScalar.int_ ({selected})))) \
                    (Nat.lt ({selected}) (ir_nat_pow2 width)) := \
-                 let aFits : Eq Bool (ir_nat_ltb a (ir_nat_pow2 width)) Bool.true := ir_byte_ltb_of_lt_v1 a (ir_nat_pow2 width) aBound; \
-                 let bFits : Eq Bool (ir_nat_ltb b (ir_nat_pow2 width)) Bool.true := ir_byte_ltb_of_lt_v1 b (ir_nat_pow2 width) bBound; \
-                 @And.intro (Eq IRStepResult ({actual}) (IRStepResult.value (IRScalar.int_ ({selected})))) \
+                 let aFits : @Eq Bool (ir_nat_ltb a (ir_nat_pow2 width)) Bool.true := ir_byte_ltb_of_lt_v1 a (ir_nat_pow2 width) aBound; \
+                 let bFits : @Eq Bool (ir_nat_ltb b (ir_nat_pow2 width)) Bool.true := ir_byte_ltb_of_lt_v1 b (ir_nat_pow2 width) bBound; \
+                 @And.intro (@Eq IRStepResult ({actual}) (IRStepResult.value (IRScalar.int_ ({selected})))) \
                    (Nat.lt ({selected}) (ir_nat_pow2 width)) ({op} width a b aFits bFits) \
                    (ir_byte_separation_lt_of_ltb_v1 ({selected}) (ir_nat_pow2 width) ({bound} width a b aFits bFits))"));
             for (label, flag, output) in [
@@ -84,15 +84,15 @@ fn bounded_add_universal_actual_operations_derive_both_branches_and_canonical_re
                 let name = format!("ordinary_bounded_add_{kind}_{label}");
                 add_checked(&mut spec, &name, &format!(
                     "def {name} (width a b : Nat) \
-                     (aFits : Eq Bool (ir_nat_ltb a (ir_nat_pow2 width)) Bool.true) \
-                     (bFits : Eq Bool (ir_nat_ltb b (ir_nat_pow2 width)) Bool.true) \
-                     (branch : Eq Bool (ir_nat_ltb (Nat.add a b) (ir_nat_pow2 width)) Bool.{flag}) : \
-                     Eq IRStepResult ({actual}) (IRStepResult.value (IRScalar.int_ ({output}))) := \
-                     Eq.trans IRStepResult ({actual}) (IRStepResult.value (IRScalar.int_ ({selected}))) \
+                     (aFits : @Eq Bool (ir_nat_ltb a (ir_nat_pow2 width)) Bool.true) \
+                     (bFits : @Eq Bool (ir_nat_ltb b (ir_nat_pow2 width)) Bool.true) \
+                     (branch : @Eq Bool (ir_nat_ltb (Nat.add a b) (ir_nat_pow2 width)) Bool.{flag}) : \
+                     @Eq IRStepResult ({actual}) (IRStepResult.value (IRScalar.int_ ({output}))) := \
+                     @Eq.trans IRStepResult ({actual}) (IRStepResult.value (IRScalar.int_ ({selected}))) \
                        (IRStepResult.value (IRScalar.int_ ({output}))) ({op} width a b aFits bFits) \
                        (ir_eq_cong Bool IRStepResult \
                          (fun (guard : Bool) => IRStepResult.value (IRScalar.int_ \
-                           (Bool.rec (fun (_ : Bool) => Nat) (Nat.sub (Nat.add a b) (ir_nat_pow2 width)) (Nat.add a b) guard))) \
+                           (@Bool.rec (fun (_ : Bool) => Nat) (Nat.sub (Nat.add a b) (ir_nat_pow2 width)) (Nat.add a b) guard))) \
                          (ir_nat_ltb (Nat.add a b) (ir_nat_pow2 width)) Bool.{flag} branch)"));
             }
             let fit_law = if kind == "uint" {
@@ -104,9 +104,9 @@ fn bounded_add_universal_actual_operations_derive_both_branches_and_canonical_re
             let name = format!("ordinary_bounded_add_{kind}_full64_result_fits");
             add_checked(&mut spec, &name, &format!(
                 "def {name} (ctx : IRByteContextV1) (a b : Nat) \
-                 (aFits : Eq Bool (ir_nat_ltb a (ir_nat_pow2 64)) Bool.true) \
-                 (bFits : Eq Bool (ir_nat_ltb b (ir_nat_pow2 64)) Bool.true) : \
-                 Eq Bool (ir_byte_value_matches_v1 ctx (IRTy.{carrier} 64) (IRScalar.int_ ({result}))) Bool.true := \
+                 (aFits : @Eq Bool (ir_nat_ltb a (ir_nat_pow2 64)) Bool.true) \
+                 (bFits : @Eq Bool (ir_nat_ltb b (ir_nat_pow2 64)) Bool.true) : \
+                 @Eq Bool (ir_byte_value_matches_v1 ctx (IRTy.{carrier} 64) (IRScalar.int_ ({result}))) Bool.true := \
                  {fit_law} ctx ({result}) ({bound} 64 a b aFits bFits)"));
         }
     });
@@ -132,7 +132,7 @@ fn bounded_add_full64_positive_negative_and_wrap_boundaries_match_independent_li
                 &mut spec,
                 &residue,
                 &format!(
-                    "def {residue} : Eq Nat ({selected}) {expected} := Eq.refl Nat {expected}"
+                    "def {residue} : @Eq Nat ({selected}) {expected} := @Eq.refl Nat {expected}"
                 ),
             );
             for carrier in ["uint_", "int_"] {
@@ -140,16 +140,16 @@ fn bounded_add_full64_positive_negative_and_wrap_boundaries_match_independent_li
                 let name = format!("full64_add_{kind}_{a}_{b}");
                 let actual = operation(carrier, 64, a, b, "add");
                 add_checked(&mut spec, &name, &format!(
-                    "def {name} : Eq IRStepResult ({actual}) (IRStepResult.value (IRScalar.int_ {expected})) := \
-                     Eq.trans IRStepResult ({actual}) (IRStepResult.value (IRScalar.int_ ({selected}))) \
+                    "def {name} : @Eq IRStepResult ({actual}) (IRStepResult.value (IRScalar.int_ {expected})) := \
+                     @Eq.trans IRStepResult ({actual}) (IRStepResult.value (IRScalar.int_ ({selected}))) \
                        (IRStepResult.value (IRScalar.int_ {expected})) \
-                       (ir_byte_add_{kind}_canonical_v1 64 {a} {b} (Eq.refl Bool Bool.true) (Eq.refl Bool Bool.true)) \
+                       (ir_byte_add_{kind}_canonical_v1 64 {a} {b} (@Eq.refl Bool Bool.true) (@Eq.refl Bool Bool.true)) \
                        (ir_eq_cong Nat IRStepResult (fun (word : Nat) => IRStepResult.value (IRScalar.int_ word)) \
                          ({selected}) {expected} {residue})"));
                 let name = format!("{name}_result_bound");
                 add_checked(&mut spec, &name, &format!(
-                    "def {name} : Eq Bool (ir_nat_ltb ({selected}) (ir_nat_pow2 64)) Bool.true := \
-                     ir_byte_add_{kind}_canonical_result_bound_v1 64 {a} {b} (Eq.refl Bool Bool.true) (Eq.refl Bool Bool.true)"));
+                    "def {name} : @Eq Bool (ir_nat_ltb ({selected}) (ir_nat_pow2 64)) Bool.true := \
+                     ir_byte_add_{kind}_canonical_result_bound_v1 64 {a} {b} (@Eq.refl Bool Bool.true) (@Eq.refl Bool Bool.true)"));
             }
         }
     });
@@ -164,10 +164,10 @@ fn bounded_add_small_false_controls_refuse_changed_operands_width_opcode_and_ans
             let selected = value("4", "14", "3");
             let original = operation(carrier, 4, 14, 3, "add");
             let proof = elaborate(spec, &format!(
-                "Eq.trans IRStepResult ({original}) (IRStepResult.value (IRScalar.int_ ({selected}))) \
+                "@Eq.trans IRStepResult ({original}) (IRStepResult.value (IRScalar.int_ ({selected}))) \
                    (IRStepResult.value (IRScalar.int_ 1)) \
-                   (ir_byte_add_{kind}_canonical_v1 4 14 3 (Eq.refl Bool Bool.true) (Eq.refl Bool Bool.true)) \
-                   (Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ 1)))"));
+                   (ir_byte_add_{kind}_canonical_v1 4 14 3 (@Eq.refl Bool Bool.true) (@Eq.refl Bool Bool.true)) \
+                   (@Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ 1)))"));
             for (actual, expected, false_answer) in [
                 (operation(carrier, 4, 13, 3, "add"), 0, 1),
                 (operation(carrier, 4, 14, 4, "add"), 2, 1),
@@ -175,30 +175,30 @@ fn bounded_add_small_false_controls_refuse_changed_operands_width_opcode_and_ans
                 (operation(carrier, 4, 14, 3, "mul"), 10, 1),
                 (original.clone(), 1, 0),
             ] {
-                let truth = elaborate(spec, &format!("Eq IRStepResult ({actual}) (IRStepResult.value (IRScalar.int_ {expected}))"));
+                let truth = elaborate(spec, &format!("@Eq IRStepResult ({actual}) (IRStepResult.value (IRScalar.int_ {expected}))"));
                 let normal = elaborate(
                     spec,
                     &format!(
-                        "Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ {expected}))"
+                        "@Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ {expected}))"
                     ),
                 );
                 let tc = checker(spec);
                 tc.check_type(&normal, &truth)
                     .expect("independent actual small normal form");
                 unspent(&tc);
-                let false_goal = elaborate(spec, &format!("Eq IRStepResult ({actual}) (IRStepResult.value (IRScalar.int_ {false_answer}))"));
+                let false_goal = elaborate(spec, &format!("@Eq IRStepResult ({actual}) (IRStepResult.value (IRScalar.int_ {false_answer}))"));
                 rejects_false(spec, &proof, &false_goal);
             }
-            let false_bound = elaborate(spec, "Eq Bool (ir_nat_ltb 16 (ir_nat_pow2 4)) Bool.true");
+            let false_bound = elaborate(spec, "@Eq Bool (ir_nat_ltb 16 (ir_nat_pow2 4)) Bool.true");
             let false_normal =
-                elaborate(spec, "Eq Bool (ir_nat_ltb 16 (ir_nat_pow2 4)) Bool.false");
+                elaborate(spec, "@Eq Bool (ir_nat_ltb 16 (ir_nat_pow2 4)) Bool.false");
             let tc = checker(spec);
-            tc.check_type(&elaborate(spec, "Eq.refl Bool Bool.false"), &false_normal)
+            tc.check_type(&elaborate(spec, "@Eq.refl Bool Bool.false"), &false_normal)
                 .unwrap();
             unspent(&tc);
             rejects_false(
                 spec,
-                &elaborate(spec, "Eq.refl Bool Bool.true"),
+                &elaborate(spec, "@Eq.refl Bool Bool.true"),
                 &false_bound,
             );
         }
@@ -228,7 +228,7 @@ fn bounded_add_installer_refuses_every_collision_and_rolls_back_the_actual_last_
         let mut spec = byte().clone();
         let before = spec.clone();
         const LAST: &str = "ir_byte_add_int_canonical_result_bound_v1";
-        const FALSE_LAST: &str = "def ir_byte_add_int_canonical_result_bound_v1 : Eq Bool Bool.true Bool.false := Eq.refl Bool Bool.false";
+        const FALSE_LAST: &str = "def ir_byte_add_int_canonical_result_bound_v1 : @Eq Bool Bool.true Bool.false := @Eq.refl Bool Bool.false";
         let rows = word_add::LAWS.iter().copied().map(|(name, source)| {
             if name == LAST {
                 (name, FALSE_LAST)

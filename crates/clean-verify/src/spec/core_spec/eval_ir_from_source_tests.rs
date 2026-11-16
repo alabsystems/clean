@@ -168,13 +168,13 @@ fn test_fuel_bound_matches_the_minted_module() {
 fn test_a5_is_present_and_composes() {
     assert!(SRC_IR_FS_MACHINE_SOUND.contains("ir_eval fuel ir_fs_module"));
     assert!(
-        SRC_IR_FS_MACHINE_SOUND.contains(": Eq Nat (clean_mode_tag (clean_mode_from_source s)) t")
+        SRC_IR_FS_MACHINE_SOUND.contains(": @Eq Nat (clean_mode_tag (clean_mode_from_source s)) t")
     );
     assert!(SRC_IR_FS_MACHINE_SOUND.contains("ir_fs_correct mem fuel na r s henc hle"));
     assert!(SRC_IR_FS_MACHINE_SOUND.contains("ir_outcome_disc"));
     assert!(SRC_IR_FS_MACHINE_SOUND_MODE.contains("clean_mode_of_tag_tag"));
     assert!(SRC_IR_FS_MACHINE_SOUND_MODE
-        .contains(": Eq CleanModeR (clean_mode_of_tag t) (clean_mode_from_source s)"));
+        .contains(": @Eq CleanModeR (clean_mode_of_tag t) (clean_mode_from_source s)"));
     assert!(
         SRC_IR_FS_MACHINE_SOUND_CUBICAL.contains("clean_mode_has_cubical"),
         "the cross-chain composition must reach the FIRST chain's reflected predicate"

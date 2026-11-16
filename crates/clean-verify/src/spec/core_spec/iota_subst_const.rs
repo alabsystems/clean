@@ -35,13 +35,13 @@ impl Specification {
         // guard(E) : the head of E is the const nm.
         let guard = |e: &str| -> String {
             format!(
-                "Eq (OptionType Name) (kexpr_const_name (kapp_fn {e})) (OptionType.some Name nm)"
+                "@Eq (OptionType Name) (kexpr_const_name (kapp_fn {e})) (@OptionType.some Name nm)"
             )
         };
         // goal(E) : kapp_fn commutes with instantiate_at on E.
         let goal = |e: &str| -> String {
             format!(
-                "Eq KExpr (kapp_fn (instantiate_at {e} v d)) (instantiate_at (kapp_fn {e}) v d)"
+                "@Eq KExpr (kapp_fn (instantiate_at {e} v d)) (instantiate_at (kapp_fn {e}) v d)"
             )
         };
         // A non-const arm discharged by the guard: the head is structural so
@@ -51,9 +51,9 @@ impl Specification {
         // Type — the goal is a Prop, so we eliminate Empty straight into it.)
         let discharge = |ctor: &str| -> String {
             format!(
-                "(g : {g}) => Empty.rec (fun (_ : Empty) => {goal}) \
-                 (Eq.substType (OptionType Name) (opt_is_none Name) \
-                 (OptionType.none Name) (OptionType.some Name nm) g Nat.zero)",
+                "(g : {g}) => @Empty.rec (fun (_ : Empty) => {goal}) \
+                 (@Eq.substType (OptionType Name) (opt_is_none Name) \
+                 (@OptionType.none Name) (@OptionType.some Name nm) g Nat.zero)",
                 g = guard(ctor),
                 goal = goal(ctor),
             )
@@ -65,7 +65,7 @@ impl Specification {
         let kapp_fn_value = format!(
             concat!(
                 "fun (v : KExpr) (d : Nat) (nm : Name) (e : KExpr) => ",
-                "KExpr.rec ",
+                "@KExpr.rec ",
                 "(fun (e0 : KExpr) => {g_e0} -> {goal_e0}) ",
                 // sort (discharged)
                 "(fun (n : Level) {disch_sort}) ",
@@ -83,7 +83,7 @@ impl Specification {
                 "{disch_pi}) ",
                 // const (genuine: both sides reduce to const nm0 us)
                 "(fun (nm0 : Name) (us : ListType Level) (g : {g_const}) => ",
-                "Eq.refl KExpr (KExpr.const nm0 us)) ",
+                "@Eq.refl KExpr (KExpr.const nm0 us)) ",
                 // let_ (discharged: a let is its own spine head, never const-headed)
                 "(fun (ty : KExpr) (val : KExpr) (body : KExpr) (_ihty : {g_ty} -> {goal_ty}) (_ihval : {g_val} -> {goal_val}) (_ihbody : {g_body} -> {goal_body}) ",
                 "{disch_let}) ",
@@ -164,62 +164,62 @@ impl Specification {
         // goal_args(E) : kapp_args commutes with instantiate_at (up to list_map).
         let goal_args = |e: &str| -> String {
             format!(
-                "Eq (ListType KExpr) (kapp_args (instantiate_at {e} v d)) (list_map {fmap} (kapp_args {e}))"
+                "@Eq (ListType KExpr) (kapp_args (instantiate_at {e} v d)) (list_map {fmap} (kapp_args {e}))"
             )
         };
         let discharge_args = |ctor: &str| -> String {
             format!(
-                "(g : {g}) => Empty.rec (fun (_ : Empty) => {goal}) \
-                 (Eq.substType (OptionType Name) (opt_is_none Name) \
-                 (OptionType.none Name) (OptionType.some Name nm) g Nat.zero)",
+                "(g : {g}) => @Empty.rec (fun (_ : Empty) => {goal}) \
+                 (@Eq.substType (OptionType Name) (opt_is_none Name) \
+                 (@OptionType.none Name) (@OptionType.some Name nm) g Nat.zero)",
                 g = guard(ctor),
                 goal = goal_args(ctor),
             )
         };
         // The meeting point M for the app arm.
         let meet = format!(
-            "(list_append (list_map {fmap} (kapp_args f)) (ListType.cons KExpr (instantiate_at a v d) (ListType.nil KExpr)))"
+            "(list_append (list_map {fmap} (kapp_args f)) (@ListType.cons KExpr (instantiate_at a v d) (@ListType.nil KExpr)))"
         );
         let app_arm = format!(
             concat!(
                 "(fun (f : KExpr) (a : KExpr) ",
                 "(ihf : {g_f} -> {goal_f}) (iha : {g_a} -> {goal_a}) (g : {g_appfa}) => ",
-                "Eq.trans (ListType KExpr) ",
+                "@Eq.trans (ListType KExpr) ",
                 "(kapp_args (instantiate_at (KExpr.app f a) v d)) {meet} (list_map {fmap} (kapp_args (KExpr.app f a))) ",
                 // LHS -> M
-                "(Eq.trans (ListType KExpr) ",
+                "(@Eq.trans (ListType KExpr) ",
                 "(kapp_args (instantiate_at (KExpr.app f a) v d)) ",
                 "(kapp_args (KExpr.app (instantiate_at f v d) (instantiate_at a v d))) {meet} ",
-                "(Eq.cong KExpr (ListType KExpr) (fun (X : KExpr) => kapp_args X) ",
+                "(@Eq.cong KExpr (ListType KExpr) (fun (X : KExpr) => kapp_args X) ",
                 "(instantiate_at (KExpr.app f a) v d) (KExpr.app (instantiate_at f v d) (instantiate_at a v d)) ",
                 "(instantiate_at_app f a v d)) ",
-                "(Eq.trans (ListType KExpr) ",
+                "(@Eq.trans (ListType KExpr) ",
                 "(kapp_args (KExpr.app (instantiate_at f v d) (instantiate_at a v d))) ",
-                "(list_append (kapp_args (instantiate_at f v d)) (ListType.cons KExpr (instantiate_at a v d) (ListType.nil KExpr))) ",
+                "(list_append (kapp_args (instantiate_at f v d)) (@ListType.cons KExpr (instantiate_at a v d) (@ListType.nil KExpr))) ",
                 "{meet} ",
                 "(kapp_args_app (instantiate_at f v d) (instantiate_at a v d)) ",
-                "(Eq.cong (ListType KExpr) (ListType KExpr) ",
-                "(fun (L : ListType KExpr) => list_append L (ListType.cons KExpr (instantiate_at a v d) (ListType.nil KExpr))) ",
+                "(@Eq.cong (ListType KExpr) (ListType KExpr) ",
+                "(fun (L : ListType KExpr) => list_append L (@ListType.cons KExpr (instantiate_at a v d) (@ListType.nil KExpr))) ",
                 "(kapp_args (instantiate_at f v d)) (list_map {fmap} (kapp_args f)) (ihf g)))) ",
                 // M -> RHS  (symm of RHS -> M)
-                "(Eq.symm (ListType KExpr) (list_map {fmap} (kapp_args (KExpr.app f a))) {meet} ",
-                "(Eq.trans (ListType KExpr) ",
+                "(@Eq.symm (ListType KExpr) (list_map {fmap} (kapp_args (KExpr.app f a))) {meet} ",
+                "(@Eq.trans (ListType KExpr) ",
                 "(list_map {fmap} (kapp_args (KExpr.app f a))) ",
-                "(list_map {fmap} (list_append (kapp_args f) (ListType.cons KExpr a (ListType.nil KExpr)))) ",
+                "(list_map {fmap} (list_append (kapp_args f) (@ListType.cons KExpr a (@ListType.nil KExpr)))) ",
                 "{meet} ",
-                "(Eq.cong (ListType KExpr) (ListType KExpr) (fun (L : ListType KExpr) => list_map {fmap} L) ",
-                "(kapp_args (KExpr.app f a)) (list_append (kapp_args f) (ListType.cons KExpr a (ListType.nil KExpr))) ",
+                "(@Eq.cong (ListType KExpr) (ListType KExpr) (fun (L : ListType KExpr) => list_map {fmap} L) ",
+                "(kapp_args (KExpr.app f a)) (list_append (kapp_args f) (@ListType.cons KExpr a (@ListType.nil KExpr))) ",
                 "(kapp_args_app f a)) ",
-                "(Eq.trans (ListType KExpr) ",
-                "(list_map {fmap} (list_append (kapp_args f) (ListType.cons KExpr a (ListType.nil KExpr)))) ",
-                "(list_append (list_map {fmap} (kapp_args f)) (list_map {fmap} (ListType.cons KExpr a (ListType.nil KExpr)))) ",
+                "(@Eq.trans (ListType KExpr) ",
+                "(list_map {fmap} (list_append (kapp_args f) (@ListType.cons KExpr a (@ListType.nil KExpr)))) ",
+                "(list_append (list_map {fmap} (kapp_args f)) (list_map {fmap} (@ListType.cons KExpr a (@ListType.nil KExpr)))) ",
                 "{meet} ",
-                "(list_map_append {fmap} (kapp_args f) (ListType.cons KExpr a (ListType.nil KExpr))) ",
-                "(Eq.cong (ListType KExpr) (ListType KExpr) ",
+                "(list_map_append {fmap} (kapp_args f) (@ListType.cons KExpr a (@ListType.nil KExpr))) ",
+                "(@Eq.cong (ListType KExpr) (ListType KExpr) ",
                 "(fun (L : ListType KExpr) => list_append (list_map {fmap} (kapp_args f)) L) ",
-                "(list_map {fmap} (ListType.cons KExpr a (ListType.nil KExpr))) ",
-                "(ListType.cons KExpr (instantiate_at a v d) (ListType.nil KExpr)) ",
-                "(list_map_cons {fmap} a (ListType.nil KExpr)))))))"
+                "(list_map {fmap} (@ListType.cons KExpr a (@ListType.nil KExpr))) ",
+                "(@ListType.cons KExpr (instantiate_at a v d) (@ListType.nil KExpr)) ",
+                "(list_map_cons {fmap} a (@ListType.nil KExpr)))))))"
             ),
             g_f = guard("f"),
             goal_f = goal_args("f"),
@@ -232,7 +232,7 @@ impl Specification {
         let kapp_args_value = format!(
             concat!(
                 "fun (v : KExpr) (d : Nat) (nm : Name) (e : KExpr) => ",
-                "KExpr.rec ",
+                "@KExpr.rec ",
                 "(fun (e0 : KExpr) => {g_e0} -> {goal_e0}) ",
                 "(fun (n : Level) {disch_sort}) ",
                 "(fun (i : Nat) {disch_bvar}) ",
@@ -240,7 +240,7 @@ impl Specification {
                 "(fun (ty : KExpr) (b : KExpr) (_ihty : {g_ty} -> {goal_ty}) (_ihb : {g_b} -> {goal_b}) {disch_lam}) ",
                 "(fun (ty : KExpr) (b : KExpr) (_ihty : {g_ty} -> {goal_ty}) (_ihb : {g_b} -> {goal_b}) {disch_pi}) ",
                 "(fun (nm0 : Name) (us : ListType Level) (g : {g_const}) => ",
-                "Eq.refl (ListType KExpr) (ListType.nil KExpr)) ",
+                "@Eq.refl (ListType KExpr) (@ListType.nil KExpr)) ",
                 "(fun (ty : KExpr) (val : KExpr) (body : KExpr) (_ihty : {g_ty} -> {goal_ty}) (_ihval : {g_val} -> {goal_val}) (_ihbody : {g_body} -> {goal_body}) {disch_let}) ",
                 "(fun (s : Name) (i : Nat) (sub : KExpr) (_ihsub : {g_sub} -> {goal_sub}) {disch_proj}) ",
                 "(fun (m : Nat) {disch_lit}) ",
@@ -316,18 +316,18 @@ impl Specification {
         // (instantiate_at_const), ALL other arms (incl app) discharged (their
         // kexpr_const_name is none, so the guard none = some is absurd).
         let guard_h = |h: &str| {
-            format!("Eq (OptionType Name) (kexpr_const_name {h}) (OptionType.some Name nm)")
+            format!("@Eq (OptionType Name) (kexpr_const_name {h}) (@OptionType.some Name nm)")
         };
         let goal_h = |h: &str| {
             format!(
-                "Eq (OptionType Name) (kexpr_const_name (instantiate_at {h} v d)) (kexpr_const_name {h})"
+                "@Eq (OptionType Name) (kexpr_const_name (instantiate_at {h} v d)) (kexpr_const_name {h})"
             )
         };
         let disch_h = |ctor: &str| {
             format!(
-                "(g : {g}) => Empty.rec (fun (_ : Empty) => {goal}) \
-                 (Eq.substType (OptionType Name) (opt_is_none Name) \
-                 (OptionType.none Name) (OptionType.some Name nm) g Nat.zero)",
+                "(g : {g}) => @Empty.rec (fun (_ : Empty) => {goal}) \
+                 (@Eq.substType (OptionType Name) (opt_is_none Name) \
+                 (@OptionType.none Name) (@OptionType.some Name nm) g Nat.zero)",
                 g = guard_h(ctor),
                 goal = goal_h(ctor),
             )
@@ -335,7 +335,7 @@ impl Specification {
         let inst_some_value = format!(
             concat!(
                 "fun (v : KExpr) (d : Nat) (nm : Name) (h : KExpr) => ",
-                "KExpr.rec ",
+                "@KExpr.rec ",
                 "(fun (h0 : KExpr) => {g_h0} -> {goal_h0}) ",
                 "(fun (n : Level) {disch_sort}) ",
                 "(fun (i : Nat) {disch_bvar}) ",
@@ -343,7 +343,7 @@ impl Specification {
                 "(fun (ty : KExpr) (b : KExpr) (_ihty : {g_ty} -> {goal_ty}) (_ihb : {g_b} -> {goal_b}) {disch_lam}) ",
                 "(fun (ty : KExpr) (b : KExpr) (_ihty : {g_ty} -> {goal_ty}) (_ihb : {g_b} -> {goal_b}) {disch_pi}) ",
                 "(fun (nm0 : Name) (us : ListType Level) (g : {g_const}) => ",
-                "Eq.cong KExpr (OptionType Name) (fun (X : KExpr) => kexpr_const_name X) ",
+                "@Eq.cong KExpr (OptionType Name) (fun (X : KExpr) => kexpr_const_name X) ",
                 "(instantiate_at (KExpr.const nm0 us) v d) (KExpr.const nm0 us) ",
                 "(instantiate_at_const nm0 us v d)) ",
                 "(fun (ty : KExpr) (val : KExpr) (body : KExpr) (_ihty : {g_ty} -> {goal_ty}) (_ihval : {g_val} -> {goal_val}) (_ihbody : {g_body} -> {goal_body}) {disch_let}) ",
@@ -412,17 +412,17 @@ impl Specification {
             name: "kexpr_const_name_instantiate_const".to_string(),
             type_src: format!(
                 "forall (v : KExpr) (d : Nat) (nm : Name) (e : KExpr), {g} -> \
-                 Eq (OptionType Name) (kexpr_const_name (kapp_fn (instantiate_at e v d))) (kexpr_const_name (kapp_fn e))",
+                 @Eq (OptionType Name) (kexpr_const_name (kapp_fn (instantiate_at e v d))) (kexpr_const_name (kapp_fn e))",
                 g = guard("e"),
             ),
             value_src: Some(format!(
                 concat!(
                     "fun (v : KExpr) (d : Nat) (nm : Name) (e : KExpr) (g : {g}) => ",
-                    "Eq.trans (OptionType Name) ",
+                    "@Eq.trans (OptionType Name) ",
                     "(kexpr_const_name (kapp_fn (instantiate_at e v d))) ",
                     "(kexpr_const_name (instantiate_at (kapp_fn e) v d)) ",
                     "(kexpr_const_name (kapp_fn e)) ",
-                    "(Eq.cong KExpr (OptionType Name) (fun (X : KExpr) => kexpr_const_name X) ",
+                    "(@Eq.cong KExpr (OptionType Name) (fun (X : KExpr) => kexpr_const_name X) ",
                     "(kapp_fn (instantiate_at e v d)) (instantiate_at (kapp_fn e) v d) ",
                     "(instantiate_at_kapp_fn_const v d nm e g)) ",
                     "(kexpr_const_name_inst_some v d nm (kapp_fn e) g)"

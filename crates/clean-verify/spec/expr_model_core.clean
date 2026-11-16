@@ -56,7 +56,7 @@ inductive KExpr : Type
 
 -- lift_bvar_at: helper for lift_at (bvar case)
 /-- Compute lifted bvar: if idx >= cutoff, add amount; else keep. Part of #410. -/
-def lift_bvar_at (idx : Nat) (cutoff : Nat) (amount : Nat) : KExpr := Nat.rec (fun _ => KExpr) (KExpr.bvar (Nat.add idx amount)) (fun _ _ => KExpr.bvar idx) (Nat.sub cutoff idx)
+def lift_bvar_at (idx : Nat) (cutoff : Nat) (amount : Nat) : KExpr := @Nat.rec (fun _ => KExpr) (KExpr.bvar (Nat.add idx amount)) (fun _ _ => KExpr.bvar idx) (Nat.sub cutoff idx)
 
 -- lift_at: lift bound variables above cutoff by amount
 /-- Lift bound variables >= cutoff by amount. Part of #410. proj/lit: proj recurses, lit is a leaf. -/
@@ -77,11 +77,11 @@ def lift (e : KExpr) (amount : Nat) : KExpr := lift_at e Nat.zero amount
 
 -- instantiate_bvar_geq: helper for instantiate_bvar_at (idx >= depth)
 /-- Helper: if idx == depth, substitute with lifted val; if idx > depth, decrement. Part of #643. -/
-def instantiate_bvar_geq (idx : Nat) (depth : Nat) (val : KExpr) : KExpr := Nat.rec (fun _ => KExpr) (lift_at val Nat.zero depth) (fun _ _ => KExpr.bvar (Nat.sub idx (Nat.succ Nat.zero))) (Nat.sub idx depth)
+def instantiate_bvar_geq (idx : Nat) (depth : Nat) (val : KExpr) : KExpr := @Nat.rec (fun _ => KExpr) (lift_at val Nat.zero depth) (fun _ _ => KExpr.bvar (Nat.sub idx (Nat.succ Nat.zero))) (Nat.sub idx depth)
 
 -- instantiate_bvar_at: helper for instantiate_at (bvar case)
 /-- Helper: three-way comparison idx vs depth for bvar substitution. Part of #643. -/
-def instantiate_bvar_at (idx : Nat) (depth : Nat) (val : KExpr) : KExpr := Nat.rec (fun _ => KExpr) (instantiate_bvar_geq idx depth val) (fun _ _ => KExpr.bvar idx) (Nat.sub depth idx)
+def instantiate_bvar_at (idx : Nat) (depth : Nat) (val : KExpr) : KExpr := @Nat.rec (fun _ => KExpr) (instantiate_bvar_geq idx depth val) (fun _ _ => KExpr.bvar idx) (Nat.sub depth idx)
 
 -- instantiate_at: substitute val for BVar(depth), tracking binders
 /-- Substitute val for BVar(depth), incrementing depth under binders. Part of #643. proj/lit: proj recurses, lit is a leaf. -/

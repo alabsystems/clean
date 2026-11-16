@@ -105,21 +105,21 @@ impl Specification {
                      (hrw : par_reduces_cd_star the_red_env ({ctor} t2 b2) w) => \
                      {inv} the_red_env t1 b1 w (BinderJoinComponents t1 b1 t2 b2) hlw \
                      (fun (w1 : KExpr) (w2 : KExpr) \
-                     (hwl : Eq KExpr w ({ctor} w1 w2)) \
+                     (hwl : @Eq KExpr w ({ctor} w1 w2)) \
                      (ht1 : par_reduces_cd_star the_red_env t1 w1) \
                      (hb1 : par_reduces_cd_star the_red_env b1 w2) => \
                      {inv} the_red_env t2 b2 w (BinderJoinComponents t1 b1 t2 b2) hrw \
                      (fun (v1 : KExpr) (v2 : KExpr) \
-                     (hwr : Eq KExpr w ({ctor} v1 v2)) \
+                     (hwr : @Eq KExpr w ({ctor} v1 v2)) \
                      (ht2 : par_reduces_cd_star the_red_env t2 v1) \
                      (hb2 : par_reduces_cd_star the_red_env b2 v2) => \
-                     (fun (hsame : Eq KExpr ({ctor} w1 w2) ({ctor} v1 v2)) => \
-                     BinderJoinComponents.mk t1 b1 t2 b2 \
-                     (par_strips_witness_cd_star.intro the_red_env t1 t2 w1 ht1 \
+                     (fun (hsame : @Eq KExpr ({ctor} w1 w2) ({ctor} v1 v2)) => \
+                     @BinderJoinComponents.mk t1 b1 t2 b2 \
+                     (@par_strips_witness_cd_star.intro the_red_env t1 t2 w1 ht1 \
                      (Eq.substType KExpr \
                      (fun (z : KExpr) => par_reduces_cd_star the_red_env t2 z) \
                      v1 w1 (Eq.symm KExpr w1 v1 ({inj_fst} w1 w2 v1 v2 hsame)) ht2)) \
-                     (par_strips_witness_cd_star.intro the_red_env b1 b2 w2 hb1 \
+                     (@par_strips_witness_cd_star.intro the_red_env b1 b2 w2 hb1 \
                      (Eq.substType KExpr \
                      (fun (z : KExpr) => par_reduces_cd_star the_red_env b2 z) \
                      v2 w2 (Eq.symm KExpr w2 v2 ({inj_snd} w1 w2 v1 v2 hsame)) hb2))) \

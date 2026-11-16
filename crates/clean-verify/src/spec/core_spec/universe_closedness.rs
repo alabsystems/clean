@@ -48,7 +48,7 @@ impl Specification {
             type_src: "forall (a : Nat) (b : Nat), Lt a b -> Le (Nat.succ a) b".to_string(),
             value_src: Some(concat!(
                 "fun (a : Nat) (b : Nat) (h : Lt a b) => ",
-                "Lt.rec (fun (x : Nat) (y : Nat) (_ : Lt x y) => Le (Nat.succ x) y) ",
+                "@Lt.rec (fun (x : Nat) (y : Nat) (_ : Lt x y) => Le (Nat.succ x) y) ",
                 "(fun (n : Nat) => le_succ_succ Nat.zero n (le_zero_n n)) ",
                 "(fun (n : Nat) (m : Nat) (_hnm : Lt n m) (ih : Le (Nat.succ n) m) => le_succ_succ (Nat.succ n) m ih) ",
                 "a b h",
@@ -78,7 +78,7 @@ impl Specification {
     is_closed_at (instL s e) d",
             r"fun (s : Name -> Level) (e : KExpr) (d : Nat)
     (h : is_closed_at e d) =>
-  is_closed_at.rec
+  @is_closed_at.rec
     (fun (e0 : KExpr) (d0 : Nat) (_h : is_closed_at e0 d0) =>
       is_closed_at (instL s e0) d0)
     (fun (u : Level) (d0 : Nat) => is_closed_at.sort (substL s u) d0)
@@ -136,13 +136,13 @@ impl Specification {
             self,
             "psubst_closed_cong2",
             r"forall (c : KExpr -> KExpr -> KExpr) (a : KExpr) (a2 : KExpr) (b : KExpr) (b2 : KExpr)
-    (ha : Eq KExpr a a2) (hb : Eq KExpr b b2),
-    Eq KExpr (c a b) (c a2 b2)",
+    (ha : @Eq KExpr a a2) (hb : @Eq KExpr b b2),
+    @Eq KExpr (c a b) (c a2 b2)",
             r"fun (c : KExpr -> KExpr -> KExpr) (a : KExpr) (a2 : KExpr) (b : KExpr) (b2 : KExpr)
-    (ha : Eq KExpr a a2) (hb : Eq KExpr b b2) =>
-  Eq.trans KExpr (c a b) (c a2 b) (c a2 b2)
-    (Eq.cong KExpr KExpr (fun (x : KExpr) => c x b) a a2 ha)
-    (Eq.cong KExpr KExpr (fun (x : KExpr) => c a2 x) b b2 hb)",
+    (ha : @Eq KExpr a a2) (hb : @Eq KExpr b b2) =>
+  @Eq.trans KExpr (c a b) (c a2 b) (c a2 b2)
+    (@Eq.cong KExpr KExpr (fun (x : KExpr) => c x b) a a2 ha)
+    (@Eq.cong KExpr KExpr (fun (x : KExpr) => c a2 x) b b2 hb)",
             "Two-argument expression-constructor congruence, proved using Eq.cong and Eq.trans.",
         )?;
 
@@ -150,13 +150,13 @@ impl Specification {
             self,
             "psubst_closed_cong3",
             r"forall (c : KExpr -> KExpr -> KExpr -> KExpr) (a : KExpr) (a2 : KExpr) (b : KExpr) (b2 : KExpr) (d : KExpr) (d2 : KExpr)
-    (ha : Eq KExpr a a2) (hb : Eq KExpr b b2) (hd : Eq KExpr d d2),
-    Eq KExpr (c a b d) (c a2 b2 d2)",
+    (ha : @Eq KExpr a a2) (hb : @Eq KExpr b b2) (hd : @Eq KExpr d d2),
+    @Eq KExpr (c a b d) (c a2 b2 d2)",
             r"fun (c : KExpr -> KExpr -> KExpr -> KExpr) (a : KExpr) (a2 : KExpr) (b : KExpr) (b2 : KExpr) (d : KExpr) (d2 : KExpr)
-    (ha : Eq KExpr a a2) (hb : Eq KExpr b b2) (hd : Eq KExpr d d2) =>
-  Eq.trans KExpr (c a b d) (c a2 b2 d) (c a2 b2 d2)
+    (ha : @Eq KExpr a a2) (hb : @Eq KExpr b b2) (hd : @Eq KExpr d d2) =>
+  @Eq.trans KExpr (c a b d) (c a2 b2 d) (c a2 b2 d2)
     (psubst_closed_cong2 (fun (x : KExpr) (y : KExpr) => c x y d) a a2 b b2 ha hb)
-    (Eq.cong KExpr KExpr (fun (x : KExpr) => c a2 b2 x) d d2 hd)",
+    (@Eq.cong KExpr KExpr (fun (x : KExpr) => c a2 b2 x) d d2 hd)",
             "Three-argument expression-constructor congruence, proved using checked equality congruence.",
         )?;
 
@@ -164,61 +164,61 @@ impl Specification {
             self,
             "psubst_closed_upn_id",
             r"forall (e : KExpr) (depth : Nat) (h : is_closed_at e depth),
-    forall (s : Nat -> KExpr), Eq KExpr (psubst (upn depth s) e) e",
+    forall (s : Nat -> KExpr), @Eq KExpr (psubst (upn depth s) e) e",
             r"fun (e : KExpr) (depth : Nat) (h : is_closed_at e depth) =>
-  is_closed_at.rec
+  @is_closed_at.rec
     (fun (e0 : KExpr) (d : Nat) (_h : is_closed_at e0 d) =>
-      forall (s : Nat -> KExpr), Eq KExpr (psubst (upn d s) e0) e0)
+      forall (s : Nat -> KExpr), @Eq KExpr (psubst (upn d s) e0) e0)
     (fun (u : Level) (_d : Nat) (_s : Nat -> KExpr) =>
-      Eq.refl KExpr (KExpr.sort u))
+      @Eq.refl KExpr (KExpr.sort u))
     (fun (i : Nat) (d : Nat) (hlt : Lt i d) (s : Nat -> KExpr) =>
       upn_apply_lt d s i hlt)
     (fun (f : KExpr) (a : KExpr) (d : Nat)
       (_hf : is_closed_at f d) (_ha : is_closed_at a d)
-      (ihf : forall (s : Nat -> KExpr), Eq KExpr (psubst (upn d s) f) f)
-      (iha : forall (s : Nat -> KExpr), Eq KExpr (psubst (upn d s) a) a)
+      (ihf : forall (s : Nat -> KExpr), @Eq KExpr (psubst (upn d s) f) f)
+      (iha : forall (s : Nat -> KExpr), @Eq KExpr (psubst (upn d s) a) a)
       (s : Nat -> KExpr) =>
         psubst_closed_cong2 KExpr.app
           (psubst (upn d s) f) f (psubst (upn d s) a) a (ihf s) (iha s))
     (fun (A : KExpr) (b : KExpr) (d : Nat)
       (_hA : is_closed_at A d) (_hb : is_closed_at b (Nat.succ d))
-      (ihA : forall (s : Nat -> KExpr), Eq KExpr (psubst (upn d s) A) A)
+      (ihA : forall (s : Nat -> KExpr), @Eq KExpr (psubst (upn d s) A) A)
       (ihb : forall (s : Nat -> KExpr),
-        Eq KExpr (psubst (upn (Nat.succ d) s) b) b)
+        @Eq KExpr (psubst (upn (Nat.succ d) s) b) b)
       (s : Nat -> KExpr) =>
         psubst_closed_cong2 KExpr.lam
           (psubst (upn d s) A) A (psubst (upn (Nat.succ d) s) b) b
           (ihA s) (ihb s))
     (fun (A : KExpr) (B : KExpr) (d : Nat)
       (_hA : is_closed_at A d) (_hB : is_closed_at B (Nat.succ d))
-      (ihA : forall (s : Nat -> KExpr), Eq KExpr (psubst (upn d s) A) A)
+      (ihA : forall (s : Nat -> KExpr), @Eq KExpr (psubst (upn d s) A) A)
       (ihB : forall (s : Nat -> KExpr),
-        Eq KExpr (psubst (upn (Nat.succ d) s) B) B)
+        @Eq KExpr (psubst (upn (Nat.succ d) s) B) B)
       (s : Nat -> KExpr) =>
         psubst_closed_cong2 KExpr.pi
           (psubst (upn d s) A) A (psubst (upn (Nat.succ d) s) B) B
           (ihA s) (ihB s))
     (fun (n : Name) (us : ListType Level) (_d : Nat) (_s : Nat -> KExpr) =>
-      Eq.refl KExpr (KExpr.const n us))
+      @Eq.refl KExpr (KExpr.const n us))
     (fun (A : KExpr) (v : KExpr) (b : KExpr) (d : Nat)
       (_hA : is_closed_at A d) (_hv : is_closed_at v d)
       (_hb : is_closed_at b (Nat.succ d))
-      (ihA : forall (s : Nat -> KExpr), Eq KExpr (psubst (upn d s) A) A)
-      (ihv : forall (s : Nat -> KExpr), Eq KExpr (psubst (upn d s) v) v)
+      (ihA : forall (s : Nat -> KExpr), @Eq KExpr (psubst (upn d s) A) A)
+      (ihv : forall (s : Nat -> KExpr), @Eq KExpr (psubst (upn d s) v) v)
       (ihb : forall (s : Nat -> KExpr),
-        Eq KExpr (psubst (upn (Nat.succ d) s) b) b)
+        @Eq KExpr (psubst (upn (Nat.succ d) s) b) b)
       (s : Nat -> KExpr) =>
         psubst_closed_cong3 KExpr.let_
           (psubst (upn d s) A) A (psubst (upn d s) v) v
           (psubst (upn (Nat.succ d) s) b) b (ihA s) (ihv s) (ihb s))
     (fun (sn : Name) (i : Nat) (sub : KExpr) (d : Nat)
       (_hsub : is_closed_at sub d)
-      (ihsub : forall (s : Nat -> KExpr), Eq KExpr (psubst (upn d s) sub) sub)
+      (ihsub : forall (s : Nat -> KExpr), @Eq KExpr (psubst (upn d s) sub) sub)
       (s : Nat -> KExpr) =>
-        Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.proj sn i x)
+        @Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.proj sn i x)
           (psubst (upn d s) sub) sub (ihsub s))
     (fun (n : Nat) (_d : Nat) (_s : Nat -> KExpr) =>
-      Eq.refl KExpr (KExpr.lit n))
+      @Eq.refl KExpr (KExpr.lit n))
     e depth h",
             "Parallel substitution lifted under the closedness depth is identity; the bound-variable case reuses upn_apply_lt and binder cases increment depth.",
         )?;
@@ -227,7 +227,7 @@ impl Specification {
             self,
             "psubst_closed_id",
             r"forall (s : Nat -> KExpr) (A : KExpr) (h : is_closed_at A Nat.zero),
-    Eq KExpr (psubst s A) A",
+    @Eq KExpr (psubst s A) A",
             r"fun (s : Nat -> KExpr) (A : KExpr) (h : is_closed_at A Nat.zero) =>
   psubst_closed_upn_id A Nat.zero h s",
             "Any parallel substitution is identity on a de Bruijn-closed expression. A structural model theorem, not a declaration-admission assertion.",

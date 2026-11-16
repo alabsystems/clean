@@ -77,6 +77,12 @@ _gate_build() ( # <memory GiB> <CPUs> <label> <executable> [args...]
     echo "local-gate admission: REFUSED: run local_gate.sh directly, outside a memory reservation" >&2
     return 75
   fi
+  # This compiler-capable composite may rebuild cold under the current toolchain.
+  # Preserve higher requests; warm samples are not a lower cold-build bound.
+  if [[ ${#gb} -lt 2 || ( ${#gb} -eq 2 && "$gb" < "47" ) ]]; then
+    printf 'local-gate admission: RAISED %s from %s to 47 GiB (compiler floor)\n' "$label" "$gb" >&2
+    gb=47
+  fi
   shift 3
   started="$(mktemp "${TMPDIR:-/tmp}/local-gate-admitted.XXXXXX")" || return 75
   trap 'rm -f "$started"' EXIT
@@ -94,6 +100,19 @@ _gate_build() ( # <memory GiB> <CPUs> <label> <executable> [args...]
   fi
   return "$rc"
 )
+
+# The frontend's run/doc phases keep their own auto history, including high
+# partial peaks. Scope its minimum to this call; never change the machine policy.
+_gate_frontend_auto_floor() {
+  local floor=${HEAVY_GATE_AUTO_FLOOR_GB:-47}
+  if [[ ! "$floor" =~ ^[0-9]+$ ]]; then
+    echo "local-gate admission: REFUSED: frontend auto floor must be numeric" >&2
+    return 75
+  fi
+  while [[ ${#floor} -gt 1 && "$floor" == 0* ]]; do floor=${floor#0}; done
+  if [[ ${#floor} -lt 2 || ( ${#floor} -eq 2 && "$floor" < "47" ) ]]; then floor=47; fi
+  printf '%s\n' "$floor"
+}
 
 # ── THE STANDALONE CRATE HAS NO LEG HERE ────────────────────────────────────
 #
@@ -1545,6 +1564,40 @@ PYCHK
   "$GATE_PYTHON" scripts/check_kcheck_trusted_rows.py \
     || fail "kcheck-trusted-rows -- inspect the source envelope and record an exact row decision"
 
+  # GATE-LEG: kcheck-coverage
+  # Interim thread step K3: data/kcheck_coverage.json counts the real
+  # declarations the adopted checker accepted in one run of theories/kcheck_run.
+  # A second reader that shares no code with the Lean loader must agree with the
+  # run's classes, names, details and statement echoes, or the record is
+  # refused. Exit 3 (no record yet, or its Lean sources moved) is not a failure
+  # here: the scoreboard leg below then derives the figure as ABSENT with that
+  # reason, and fails once, until the board is re-minted, if the committed board
+  # still states a number. No Lean toolchain is used; the rebuild is
+  # `kcheck_coverage.py --replay`. This leg runs first so that the cause is
+  # printed before the board that reads it.
+  echo "== local gate: kcheck coverage =="
+  "$GATE_PYTHON" scripts/kcheck_coverage.py --self-test \
+    || fail "kcheck-coverage self-test -- a planted forged or miscounted run escaped"
+  kcheck_coverage_rc=0
+  "$GATE_PYTHON" scripts/kcheck_coverage.py --check || kcheck_coverage_rc=$?
+  case "$kcheck_coverage_rc" in
+    0) ;;
+    3) echo "  KCHECK_COVERAGE=UNKNOWN (no current record; the scoreboard derives the figure as ABSENT)" ;;
+    *) fail "kcheck-coverage -- the second reader refuses the record; re-mint with: python3 scripts/kcheck_coverage.py --write --advice-origin '<command>'" ;;
+  esac
+
+  # GATE-LEG: self-proof-scoreboard
+  # Self-proof plan unit W0: data/self_proof_scoreboard.json holds the two
+  # headline figures (sites that mint a planted False; real declarations the
+  # compiled kcheck decides) re-derived from the artifacts that mint them.
+  # A record that disagrees with its sources fails; an absent source reads
+  # ABSENT, never zero. It states where the work stands and proves nothing.
+  echo "== local gate: self-proof scoreboard =="
+  "$GATE_PYTHON" scripts/self_proof_scoreboard.py --self-test \
+    || fail "self-proof-scoreboard self-test -- a planted stale or miscounted record escaped"
+  "$GATE_PYTHON" scripts/self_proof_scoreboard.py --check \
+    || fail "self-proof-scoreboard -- re-mint with: python3 scripts/self_proof_scoreboard.py --write"
+
   # GATE-LEG: authority-sites
   # (full mode: a self-test, then a lexed walk of crates/**/*.rs and of the
   # pinned Trust commit; timings in scripts/githooks/gate-legs.txt. Self-proof
@@ -2517,7 +2570,16 @@ else
   fms_self="$(FRONTEND_SUITE_PYTHON="$GATE_PYTHON" scripts/frontend_merge_suite.sh --selftest 2>&1)" \
     || { printf '%s\n' "$fms_self" >&2; fail "frontend-merge-suite SELFTEST — the per-target verdict logic's own refusal arms no longer fire, so a green from the suite would mean nothing (scripts/frontend_merge_suite.sh --selftest names the arm)"; }
   echo "  ${fms_self##*$'\n'}"
-  FRONTEND_SUITE_PYTHON="$GATE_PYTHON" scripts/frontend_merge_suite.sh \
+  # Build is possibly cold; run/doc retain their real auto classes and any
+  # higher completed/partial peak. This scopes a conservative floor, not a cap.
+  fms_auto_floor="$(_gate_frontend_auto_floor)" \
+    || fail "frontend merge suite — invalid auto reservation floor"
+  FRONTEND_SUITE_PYTHON="$GATE_PYTHON" \
+    FRONTEND_SUITE_BUILD_GB=47 \
+    FRONTEND_SUITE_RUN_GB=auto:frontend-suite-run:47 \
+    FRONTEND_SUITE_DOC_GB=auto:frontend-suite-doc:47 \
+    HEAVY_GATE_AUTO_FLOOR_GB="$fms_auto_floor" \
+    scripts/frontend_merge_suite.sh \
     || fail "frontend merge suite — a frontend target is RED or was never run (the table above names each one; the full cargo output and summary.json are under \$CARGO_TARGET_DIR/frontend-merge-suite, default target/targo-merge-suite). A target that is slow rather than red belongs in scripts/frontend_merge_suite_slow.txt WITH its measurement, never in a name filter."
   # GATE-FULL-ONLY END
 fi

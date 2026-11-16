@@ -42,11 +42,11 @@ use crate::spec::Specification;
 /// what turned a single false premise into nine vacuous declarations.
 pub(super) const SRC_DEF_EQ_FUEL: &str =
     "def def_eq_fuel (renv : RedEnv) (fuel : Nat) : KExpr -> KExpr -> Bool := \
-     Nat.rec (fun (_ : Nat) => KExpr -> KExpr -> Bool) \
+     @Nat.rec (fun (_ : Nat) => KExpr -> KExpr -> Bool) \
      (fun (_ : KExpr) (_ : KExpr) => Bool.false) \
      (fun (k : Nat) (ih : KExpr -> KExpr -> Bool) => fun (a : KExpr) (b : KExpr) => \
-     OptionType.rec KExpr (fun (_ : OptionType KExpr) => Bool) Bool.false \
-     (fun (na : KExpr) => OptionType.rec KExpr (fun (_ : OptionType KExpr) => Bool) \
+     @OptionType.rec KExpr (fun (_ : OptionType KExpr) => Bool) Bool.false \
+     (fun (na : KExpr) => @OptionType.rec KExpr (fun (_ : OptionType KExpr) => Bool) \
      Bool.false (fun (nb : KExpr) => def_eq_struct ih na nb) (whnf_fuel_red renv k b)) \
      (whnf_fuel_red renv k a)) fuel";
 
@@ -59,8 +59,8 @@ impl Specification {
         // exactly the unsoundness this whole program exists to prevent.
         self.add_recursive_def(
             "def def_eq_whnf_fuel (renv : RedEnv) (fuel : Nat) (a : KExpr) (b : KExpr) : Bool := \
-             OptionType.rec KExpr (fun (_ : OptionType KExpr) => Bool) Bool.false \
-             (fun (na : KExpr) => OptionType.rec KExpr (fun (_ : OptionType KExpr) => Bool) \
+             @OptionType.rec KExpr (fun (_ : OptionType KExpr) => Bool) Bool.false \
+             (fun (na : KExpr) => @OptionType.rec KExpr (fun (_ : OptionType KExpr) => Bool) \
              Bool.false (fun (nb : KExpr) => kexpr_beq na nb) (whnf_fuel_red renv fuel b)) \
              (whnf_fuel_red renv fuel a)",
             "def_eq_whnf_fuel renv fuel a b: THE FIRST CONVERSION ALGORITHM on KExpr — run the \
@@ -83,9 +83,9 @@ impl Specification {
         self.add_recursive_def(
             "def def_eq_whnf_fuel_sound (renv : RedEnv) (fuel : Nat) (a : KExpr) (b : KExpr) \
              (na : KExpr) (nb : KExpr) \
-             (ha : Eq (OptionType KExpr) (whnf_fuel_red renv fuel a) (OptionType.some KExpr na)) \
-             (hb : Eq (OptionType KExpr) (whnf_fuel_red renv fuel b) (OptionType.some KExpr nb)) \
-             (heq : Eq Bool (kexpr_beq na nb) Bool.true) : whnf_red_conv renv a b := \
+             (ha : @Eq (OptionType KExpr) (whnf_fuel_red renv fuel a) (@OptionType.some KExpr na)) \
+             (hb : @Eq (OptionType KExpr) (whnf_fuel_red renv fuel b) (@OptionType.some KExpr nb)) \
+             (heq : @Eq Bool (kexpr_beq na nb) Bool.true) : whnf_red_conv renv a b := \
              whnf_red_conv_trans renv a na b (whnf_fuel_red_conv renv fuel a na ha) \
              (whnf_red_conv_symm renv b na \
              (Eq.substType KExpr (fun (x : KExpr) => whnf_red_conv renv b x) nb na \
@@ -127,23 +127,23 @@ impl Specification {
         self.add_recursive_def(
             "def def_eq_whnf_fuel_complete (renv : RedEnv) (fuel : Nat) (a : KExpr) (b : KExpr) \
              (na : KExpr) (nb : KExpr) \
-             (ha : Eq (OptionType KExpr) (whnf_fuel_red renv fuel a) (OptionType.some KExpr na)) \
-             (hb : Eq (OptionType KExpr) (whnf_fuel_red renv fuel b) (OptionType.some KExpr nb)) \
-             (heq : Eq KExpr na nb) : Eq Bool (def_eq_whnf_fuel renv fuel a b) Bool.true := \
+             (ha : @Eq (OptionType KExpr) (whnf_fuel_red renv fuel a) (@OptionType.some KExpr na)) \
+             (hb : @Eq (OptionType KExpr) (whnf_fuel_red renv fuel b) (@OptionType.some KExpr nb)) \
+             (heq : @Eq KExpr na nb) : @Eq Bool (def_eq_whnf_fuel renv fuel a b) Bool.true := \
              Eq.substType (OptionType KExpr) \
-             (fun (o : OptionType KExpr) => Eq Bool (OptionType.rec KExpr \
+             (fun (o : OptionType KExpr) => @Eq Bool (@OptionType.rec KExpr \
              (fun (_ : OptionType KExpr) => Bool) Bool.false (fun (na2 : KExpr) => \
-             OptionType.rec KExpr (fun (_ : OptionType KExpr) => Bool) Bool.false \
+             @OptionType.rec KExpr (fun (_ : OptionType KExpr) => Bool) Bool.false \
              (fun (nb2 : KExpr) => kexpr_beq na2 nb2) (whnf_fuel_red renv fuel b)) o) Bool.true) \
-             (OptionType.some KExpr na) (whnf_fuel_red renv fuel a) \
-             (Eq.symm (OptionType KExpr) (whnf_fuel_red renv fuel a) (OptionType.some KExpr na) ha) \
+             (@OptionType.some KExpr na) (whnf_fuel_red renv fuel a) \
+             (Eq.symm (OptionType KExpr) (whnf_fuel_red renv fuel a) (@OptionType.some KExpr na) ha) \
              (Eq.substType (OptionType KExpr) \
-             (fun (o : OptionType KExpr) => Eq Bool (OptionType.rec KExpr \
+             (fun (o : OptionType KExpr) => @Eq Bool (@OptionType.rec KExpr \
              (fun (_ : OptionType KExpr) => Bool) Bool.false \
              (fun (nb2 : KExpr) => kexpr_beq na nb2) o) Bool.true) \
-             (OptionType.some KExpr nb) (whnf_fuel_red renv fuel b) \
-             (Eq.symm (OptionType KExpr) (whnf_fuel_red renv fuel b) (OptionType.some KExpr nb) hb) \
-             (Eq.substType KExpr (fun (x : KExpr) => Eq Bool (kexpr_beq na x) Bool.true) \
+             (@OptionType.some KExpr nb) (whnf_fuel_red renv fuel b) \
+             (Eq.symm (OptionType KExpr) (whnf_fuel_red renv fuel b) (@OptionType.some KExpr nb) hb) \
+             (Eq.substType KExpr (fun (x : KExpr) => @Eq Bool (kexpr_beq na x) Bool.true) \
              na nb heq (kexpr_beq_refl na)))",
             "def_eq_whnf_fuel_complete: COMPLETENESS of the conversion algorithm against its own \
              criterion — if the executable whnf loop reduces a to na and b to nb and those reducts \
@@ -175,7 +175,7 @@ impl Specification {
         // writable.
         self.add_recursive_def(
             "def beta_reduces_bd_to_def_eq (e : KExpr) (e2 : KExpr) (h : beta_reduces_bd e e2) : \
-             DefEq e e2 := beta_reduces_bd.rec \
+             DefEq e e2 := @beta_reduces_bd.rec \
              (fun (x : KExpr) (y : KExpr) (_ : beta_reduces_bd x y) => DefEq x y) \
              (fun (A : KExpr) (body : KExpr) (arg : KExpr) => DefEq.beta A body arg) \
              (fun (f : KExpr) (f2 : KExpr) (a : KExpr) (_ : beta_reduces_bd f f2) \
@@ -230,15 +230,15 @@ impl Specification {
         self.add_recursive_def(
             "def whnf_red_step_to_def_eq (e : KExpr) (e2 : KExpr) \
              (h : whnf_red_step the_red_env e e2) : DefEq e e2 := \
-             whnf_red_step.rec the_red_env \
+             @whnf_red_step.rec the_red_env \
              (fun (x : KExpr) (y : KExpr) (_ : whnf_red_step the_red_env x y) => DefEq x y) \
              (fun (x : KExpr) (y : KExpr) (hb : beta_reduces_bd x y) => \
              beta_reduces_bd_to_def_eq x y hb) \
-             (fun (x : KExpr) (y : KExpr) (hd : Eq (OptionType KExpr) \
-             (delta_reduct (red_def the_red_env) x) (OptionType.some KExpr y)) => \
+             (fun (x : KExpr) (y : KExpr) (hd : @Eq (OptionType KExpr) \
+             (delta_reduct (red_def the_red_env) x) (@OptionType.some KExpr y)) => \
              DefEq.delta x y (delta_reduces.mk x y hd)) \
-             (fun (x : KExpr) (y : KExpr) (hi : Eq (OptionType KExpr) \
-             (iota_reduct (red_rec the_red_env) x) (OptionType.some KExpr y)) => \
+             (fun (x : KExpr) (y : KExpr) (hi : @Eq (OptionType KExpr) \
+             (iota_reduct (red_rec the_red_env) x) (@OptionType.some KExpr y)) => \
              DefEq.iota x y (iota_reduces.mk x y hi)) \
              (fun (f : KExpr) (f2 : KExpr) (a : KExpr) \
              (_ : whnf_red_step the_red_env f f2) (ih : DefEq f f2) => \
@@ -261,7 +261,7 @@ impl Specification {
         self.add_recursive_def(
             "def whnf_red_conv_to_def_eq (e : KExpr) (e2 : KExpr) \
              (h : whnf_red_conv the_red_env e e2) : DefEq e e2 := \
-             whnf_red_conv.rec the_red_env \
+             @whnf_red_conv.rec the_red_env \
              (fun (x : KExpr) (y : KExpr) (_ : whnf_red_conv the_red_env x y) => DefEq x y) \
              (fun (x : KExpr) => DefEq.refl x) \
              (fun (a : KExpr) (b : KExpr) (c : KExpr) (hs : whnf_red_step the_red_env a b) \
@@ -298,7 +298,7 @@ impl Specification {
         // the arm/leaf counts checkable (9 outer arms, 72 Bool.false mismatches).
         self.add_recursive_def(
             "def def_eq_struct (cmp : KExpr -> KExpr -> Bool) (a : KExpr) (b : KExpr) : Bool := \
-             KExpr.rec (fun (_ : KExpr) => KExpr -> Bool) (fun (n : Level) => fun (y : KExpr) => KExpr.rec (fun (_ : KExpr) => Bool) (fun (m : Level) => level_eqb n m) (fun (j : Nat) => Bool.false) (fun (g : KExpr) (c : KExpr) (_ : Bool) (_ : Bool) => Bool.false) (fun (t : KExpr) (d : KExpr) (_ : Bool) (_ : Bool) => Bool.false) (fun (t : KExpr) (d : KExpr) (_ : Bool) (_ : Bool) => Bool.false) (fun (nm2 : Name) (us2 : ListType Level) => Bool.false) (fun (t2 : KExpr) (v2 : KExpr) (b2 : KExpr) (_ : Bool) (_ : Bool) (_ : Bool) => Bool.false) (fun (s2 : Name) (i2 : Nat) (sub2 : KExpr) (_ : Bool) => Bool.false) (fun (w2 : Nat) => Bool.false) y) (fun (i : Nat) => fun (y : KExpr) => KExpr.rec (fun (_ : KExpr) => Bool) (fun (m : Level) => Bool.false) (fun (j : Nat) => nat_eqb i j) (fun (g : KExpr) (c : KExpr) (_ : Bool) (_ : Bool) => Bool.false) (fun (t : KExpr) (d : KExpr) (_ : Bool) (_ : Bool) => Bool.false) (fun (t : KExpr) (d : KExpr) (_ : Bool) (_ : Bool) => Bool.false) (fun (nm2 : Name) (us2 : ListType Level) => Bool.false) (fun (t2 : KExpr) (v2 : KExpr) (b2 : KExpr) (_ : Bool) (_ : Bool) (_ : Bool) => Bool.false) (fun (s2 : Name) (i2 : Nat) (sub2 : KExpr) (_ : Bool) => Bool.false) (fun (w2 : Nat) => Bool.false) y) (fun (f : KExpr) (a1 : KExpr) (_ : KExpr -> Bool) (_ : KExpr -> Bool) => fun (y : KExpr) => KExpr.rec (fun (_ : KExpr) => Bool) (fun (m : Level) => Bool.false) (fun (j : Nat) => Bool.false) (fun (g : KExpr) (c : KExpr) (_ : Bool) (_ : Bool) => Bool.and (cmp f g) (cmp a1 c)) (fun (t : KExpr) (d : KExpr) (_ : Bool) (_ : Bool) => Bool.false) (fun (t : KExpr) (d : KExpr) (_ : Bool) (_ : Bool) => Bool.false) (fun (nm2 : Name) (us2 : ListType Level) => Bool.false) (fun (t2 : KExpr) (v2 : KExpr) (b2 : KExpr) (_ : Bool) (_ : Bool) (_ : Bool) => Bool.false) (fun (s2 : Name) (i2 : Nat) (sub2 : KExpr) (_ : Bool) => Bool.false) (fun (w2 : Nat) => Bool.false) y) (fun (ty1 : KExpr) (b1 : KExpr) (_ : KExpr -> Bool) (_ : KExpr -> Bool) => fun (y : KExpr) => KExpr.rec (fun (_ : KExpr) => Bool) (fun (m : Level) => Bool.false) (fun (j : Nat) => Bool.false) (fun (g : KExpr) (c : KExpr) (_ : Bool) (_ : Bool) => Bool.false) (fun (t : KExpr) (d : KExpr) (_ : Bool) (_ : Bool) => Bool.and (cmp ty1 t) (cmp b1 d)) (fun (t : KExpr) (d : KExpr) (_ : Bool) (_ : Bool) => Bool.false) (fun (nm2 : Name) (us2 : ListType Level) => Bool.false) (fun (t2 : KExpr) (v2 : KExpr) (b2 : KExpr) (_ : Bool) (_ : Bool) (_ : Bool) => Bool.false) (fun (s2 : Name) (i2 : Nat) (sub2 : KExpr) (_ : Bool) => Bool.false) (fun (w2 : Nat) => Bool.false) y) (fun (ty1 : KExpr) (b1 : KExpr) (_ : KExpr -> Bool) (_ : KExpr -> Bool) => fun (y : KExpr) => KExpr.rec (fun (_ : KExpr) => Bool) (fun (m : Level) => Bool.false) (fun (j : Nat) => Bool.false) (fun (g : KExpr) (c : KExpr) (_ : Bool) (_ : Bool) => Bool.false) (fun (t : KExpr) (d : KExpr) (_ : Bool) (_ : Bool) => Bool.false) (fun (t : KExpr) (d : KExpr) (_ : Bool) (_ : Bool) => Bool.and (cmp ty1 t) (cmp b1 d)) (fun (nm2 : Name) (us2 : ListType Level) => Bool.false) (fun (t2 : KExpr) (v2 : KExpr) (b2 : KExpr) (_ : Bool) (_ : Bool) (_ : Bool) => Bool.false) (fun (s2 : Name) (i2 : Nat) (sub2 : KExpr) (_ : Bool) => Bool.false) (fun (w2 : Nat) => Bool.false) y) (fun (nm : Name) (us : ListType Level) => fun (y : KExpr) => KExpr.rec (fun (_ : KExpr) => Bool) (fun (m : Level) => Bool.false) (fun (j : Nat) => Bool.false) (fun (g : KExpr) (c : KExpr) (_ : Bool) (_ : Bool) => Bool.false) (fun (t : KExpr) (d : KExpr) (_ : Bool) (_ : Bool) => Bool.false) (fun (t : KExpr) (d : KExpr) (_ : Bool) (_ : Bool) => Bool.false) (fun (nm2 : Name) (us2 : ListType Level) => Bool.and (name_eqb nm nm2) (ulist_eqb us us2)) (fun (t2 : KExpr) (v2 : KExpr) (b2 : KExpr) (_ : Bool) (_ : Bool) (_ : Bool) => Bool.false) (fun (s2 : Name) (i2 : Nat) (sub2 : KExpr) (_ : Bool) => Bool.false) (fun (w2 : Nat) => Bool.false) y) (fun (lt : KExpr) (lv : KExpr) (lb : KExpr) (_ : KExpr -> Bool) (_ : KExpr -> Bool) (_ : KExpr -> Bool) => fun (y : KExpr) => KExpr.rec (fun (_ : KExpr) => Bool) (fun (m : Level) => Bool.false) (fun (j : Nat) => Bool.false) (fun (g : KExpr) (c : KExpr) (_ : Bool) (_ : Bool) => Bool.false) (fun (t : KExpr) (d : KExpr) (_ : Bool) (_ : Bool) => Bool.false) (fun (t : KExpr) (d : KExpr) (_ : Bool) (_ : Bool) => Bool.false) (fun (nm2 : Name) (us2 : ListType Level) => Bool.false) (fun (t2 : KExpr) (v2 : KExpr) (b2 : KExpr) (_ : Bool) (_ : Bool) (_ : Bool) => Bool.and (cmp lt t2) (Bool.and (cmp lv v2) (cmp lb b2))) (fun (s2 : Name) (i2 : Nat) (sub2 : KExpr) (_ : Bool) => Bool.false) (fun (w2 : Nat) => Bool.false) y) (fun (ps : Name) (pidx : Nat) (psub : KExpr) (_ : KExpr -> Bool) => fun (y : KExpr) => KExpr.rec (fun (_ : KExpr) => Bool) (fun (m : Level) => Bool.false) (fun (j : Nat) => Bool.false) (fun (g : KExpr) (c : KExpr) (_ : Bool) (_ : Bool) => Bool.false) (fun (t : KExpr) (d : KExpr) (_ : Bool) (_ : Bool) => Bool.false) (fun (t : KExpr) (d : KExpr) (_ : Bool) (_ : Bool) => Bool.false) (fun (nm2 : Name) (us2 : ListType Level) => Bool.false) (fun (t2 : KExpr) (v2 : KExpr) (b2 : KExpr) (_ : Bool) (_ : Bool) (_ : Bool) => Bool.false) (fun (s2 : Name) (i2 : Nat) (sub2 : KExpr) (_ : Bool) => Bool.and (Bool.and (name_eqb ps s2) (nat_eqb pidx i2)) (cmp psub sub2)) (fun (w2 : Nat) => Bool.false) y) (fun (w : Nat) => fun (y : KExpr) => KExpr.rec (fun (_ : KExpr) => Bool) (fun (m : Level) => Bool.false) (fun (j : Nat) => Bool.false) (fun (g : KExpr) (c : KExpr) (_ : Bool) (_ : Bool) => Bool.false) (fun (t : KExpr) (d : KExpr) (_ : Bool) (_ : Bool) => Bool.false) (fun (t : KExpr) (d : KExpr) (_ : Bool) (_ : Bool) => Bool.false) (fun (nm2 : Name) (us2 : ListType Level) => Bool.false) (fun (t2 : KExpr) (v2 : KExpr) (b2 : KExpr) (_ : Bool) (_ : Bool) (_ : Bool) => Bool.false) (fun (s2 : Name) (i2 : Nat) (sub2 : KExpr) (_ : Bool) => Bool.false) (fun (w2 : Nat) => nat_eqb w w2) y) a b",
+             @KExpr.rec (fun (_ : KExpr) => KExpr -> Bool) (fun (n : Level) => fun (y : KExpr) => @KExpr.rec (fun (_ : KExpr) => Bool) (fun (m : Level) => level_eqb n m) (fun (j : Nat) => Bool.false) (fun (g : KExpr) (c : KExpr) (_ : Bool) (_ : Bool) => Bool.false) (fun (t : KExpr) (d : KExpr) (_ : Bool) (_ : Bool) => Bool.false) (fun (t : KExpr) (d : KExpr) (_ : Bool) (_ : Bool) => Bool.false) (fun (nm2 : Name) (us2 : ListType Level) => Bool.false) (fun (t2 : KExpr) (v2 : KExpr) (b2 : KExpr) (_ : Bool) (_ : Bool) (_ : Bool) => Bool.false) (fun (s2 : Name) (i2 : Nat) (sub2 : KExpr) (_ : Bool) => Bool.false) (fun (w2 : Nat) => Bool.false) y) (fun (i : Nat) => fun (y : KExpr) => @KExpr.rec (fun (_ : KExpr) => Bool) (fun (m : Level) => Bool.false) (fun (j : Nat) => nat_eqb i j) (fun (g : KExpr) (c : KExpr) (_ : Bool) (_ : Bool) => Bool.false) (fun (t : KExpr) (d : KExpr) (_ : Bool) (_ : Bool) => Bool.false) (fun (t : KExpr) (d : KExpr) (_ : Bool) (_ : Bool) => Bool.false) (fun (nm2 : Name) (us2 : ListType Level) => Bool.false) (fun (t2 : KExpr) (v2 : KExpr) (b2 : KExpr) (_ : Bool) (_ : Bool) (_ : Bool) => Bool.false) (fun (s2 : Name) (i2 : Nat) (sub2 : KExpr) (_ : Bool) => Bool.false) (fun (w2 : Nat) => Bool.false) y) (fun (f : KExpr) (a1 : KExpr) (_ : KExpr -> Bool) (_ : KExpr -> Bool) => fun (y : KExpr) => @KExpr.rec (fun (_ : KExpr) => Bool) (fun (m : Level) => Bool.false) (fun (j : Nat) => Bool.false) (fun (g : KExpr) (c : KExpr) (_ : Bool) (_ : Bool) => Bool.and (cmp f g) (cmp a1 c)) (fun (t : KExpr) (d : KExpr) (_ : Bool) (_ : Bool) => Bool.false) (fun (t : KExpr) (d : KExpr) (_ : Bool) (_ : Bool) => Bool.false) (fun (nm2 : Name) (us2 : ListType Level) => Bool.false) (fun (t2 : KExpr) (v2 : KExpr) (b2 : KExpr) (_ : Bool) (_ : Bool) (_ : Bool) => Bool.false) (fun (s2 : Name) (i2 : Nat) (sub2 : KExpr) (_ : Bool) => Bool.false) (fun (w2 : Nat) => Bool.false) y) (fun (ty1 : KExpr) (b1 : KExpr) (_ : KExpr -> Bool) (_ : KExpr -> Bool) => fun (y : KExpr) => @KExpr.rec (fun (_ : KExpr) => Bool) (fun (m : Level) => Bool.false) (fun (j : Nat) => Bool.false) (fun (g : KExpr) (c : KExpr) (_ : Bool) (_ : Bool) => Bool.false) (fun (t : KExpr) (d : KExpr) (_ : Bool) (_ : Bool) => Bool.and (cmp ty1 t) (cmp b1 d)) (fun (t : KExpr) (d : KExpr) (_ : Bool) (_ : Bool) => Bool.false) (fun (nm2 : Name) (us2 : ListType Level) => Bool.false) (fun (t2 : KExpr) (v2 : KExpr) (b2 : KExpr) (_ : Bool) (_ : Bool) (_ : Bool) => Bool.false) (fun (s2 : Name) (i2 : Nat) (sub2 : KExpr) (_ : Bool) => Bool.false) (fun (w2 : Nat) => Bool.false) y) (fun (ty1 : KExpr) (b1 : KExpr) (_ : KExpr -> Bool) (_ : KExpr -> Bool) => fun (y : KExpr) => @KExpr.rec (fun (_ : KExpr) => Bool) (fun (m : Level) => Bool.false) (fun (j : Nat) => Bool.false) (fun (g : KExpr) (c : KExpr) (_ : Bool) (_ : Bool) => Bool.false) (fun (t : KExpr) (d : KExpr) (_ : Bool) (_ : Bool) => Bool.false) (fun (t : KExpr) (d : KExpr) (_ : Bool) (_ : Bool) => Bool.and (cmp ty1 t) (cmp b1 d)) (fun (nm2 : Name) (us2 : ListType Level) => Bool.false) (fun (t2 : KExpr) (v2 : KExpr) (b2 : KExpr) (_ : Bool) (_ : Bool) (_ : Bool) => Bool.false) (fun (s2 : Name) (i2 : Nat) (sub2 : KExpr) (_ : Bool) => Bool.false) (fun (w2 : Nat) => Bool.false) y) (fun (nm : Name) (us : ListType Level) => fun (y : KExpr) => @KExpr.rec (fun (_ : KExpr) => Bool) (fun (m : Level) => Bool.false) (fun (j : Nat) => Bool.false) (fun (g : KExpr) (c : KExpr) (_ : Bool) (_ : Bool) => Bool.false) (fun (t : KExpr) (d : KExpr) (_ : Bool) (_ : Bool) => Bool.false) (fun (t : KExpr) (d : KExpr) (_ : Bool) (_ : Bool) => Bool.false) (fun (nm2 : Name) (us2 : ListType Level) => Bool.and (name_eqb nm nm2) (ulist_eqb us us2)) (fun (t2 : KExpr) (v2 : KExpr) (b2 : KExpr) (_ : Bool) (_ : Bool) (_ : Bool) => Bool.false) (fun (s2 : Name) (i2 : Nat) (sub2 : KExpr) (_ : Bool) => Bool.false) (fun (w2 : Nat) => Bool.false) y) (fun (lt : KExpr) (lv : KExpr) (lb : KExpr) (_ : KExpr -> Bool) (_ : KExpr -> Bool) (_ : KExpr -> Bool) => fun (y : KExpr) => @KExpr.rec (fun (_ : KExpr) => Bool) (fun (m : Level) => Bool.false) (fun (j : Nat) => Bool.false) (fun (g : KExpr) (c : KExpr) (_ : Bool) (_ : Bool) => Bool.false) (fun (t : KExpr) (d : KExpr) (_ : Bool) (_ : Bool) => Bool.false) (fun (t : KExpr) (d : KExpr) (_ : Bool) (_ : Bool) => Bool.false) (fun (nm2 : Name) (us2 : ListType Level) => Bool.false) (fun (t2 : KExpr) (v2 : KExpr) (b2 : KExpr) (_ : Bool) (_ : Bool) (_ : Bool) => Bool.and (cmp lt t2) (Bool.and (cmp lv v2) (cmp lb b2))) (fun (s2 : Name) (i2 : Nat) (sub2 : KExpr) (_ : Bool) => Bool.false) (fun (w2 : Nat) => Bool.false) y) (fun (ps : Name) (pidx : Nat) (psub : KExpr) (_ : KExpr -> Bool) => fun (y : KExpr) => @KExpr.rec (fun (_ : KExpr) => Bool) (fun (m : Level) => Bool.false) (fun (j : Nat) => Bool.false) (fun (g : KExpr) (c : KExpr) (_ : Bool) (_ : Bool) => Bool.false) (fun (t : KExpr) (d : KExpr) (_ : Bool) (_ : Bool) => Bool.false) (fun (t : KExpr) (d : KExpr) (_ : Bool) (_ : Bool) => Bool.false) (fun (nm2 : Name) (us2 : ListType Level) => Bool.false) (fun (t2 : KExpr) (v2 : KExpr) (b2 : KExpr) (_ : Bool) (_ : Bool) (_ : Bool) => Bool.false) (fun (s2 : Name) (i2 : Nat) (sub2 : KExpr) (_ : Bool) => Bool.and (Bool.and (name_eqb ps s2) (nat_eqb pidx i2)) (cmp psub sub2)) (fun (w2 : Nat) => Bool.false) y) (fun (w : Nat) => fun (y : KExpr) => @KExpr.rec (fun (_ : KExpr) => Bool) (fun (m : Level) => Bool.false) (fun (j : Nat) => Bool.false) (fun (g : KExpr) (c : KExpr) (_ : Bool) (_ : Bool) => Bool.false) (fun (t : KExpr) (d : KExpr) (_ : Bool) (_ : Bool) => Bool.false) (fun (t : KExpr) (d : KExpr) (_ : Bool) (_ : Bool) => Bool.false) (fun (nm2 : Name) (us2 : ListType Level) => Bool.false) (fun (t2 : KExpr) (v2 : KExpr) (b2 : KExpr) (_ : Bool) (_ : Bool) (_ : Bool) => Bool.false) (fun (s2 : Name) (i2 : Nat) (sub2 : KExpr) (_ : Bool) => Bool.false) (fun (w2 : Nat) => nat_eqb w w2) y) a b",
             "def_eq_struct rec a b: one-layer structural conversion comparison — 9x9 double \
              KExpr.rec, matching heads compare components via the supplied `rec`, mismatched heads \
              are false, leaves via level_eqb / nat_eqb / name_eqb / ulist_eqb. The congruence step \

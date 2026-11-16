@@ -160,7 +160,7 @@ impl Specification {
         format!(
             "def beta_reduces_bd_to_beta_reduces (e : KExpr) (e2 : KExpr) \
              (h : beta_reduces_bd e e2) : beta_reduces e e2 := \
-             beta_reduces_bd.rec \
+             @beta_reduces_bd.rec \
              (fun (x : KExpr) (y : KExpr) (_ : beta_reduces_bd x y) => beta_reduces x y) \
              {minors}e e2 h"
         )

@@ -144,68 +144,6 @@ fn arg_heads(e: &Expr, limit: usize) -> String {
     format!("<{}>", heads.join(","))
 }
 
-#[cfg(test)]
-mod signature_tests {
-    use super::{type_error_signature, Expr};
-    use clean_kernel::name::Name;
-    use clean_kernel::tc::TypeError;
-
-    fn cst(n: &str) -> Expr {
-        Expr::const_(Name::from_string(n), vec![])
-    }
-
-    fn mismatch(expected: Expr, inferred: Expr) -> TypeError {
-        TypeError::TypeMismatch {
-            expected: Box::new(expected),
-            inferred: Box::new(inferred),
-            location: None,
-        }
-    }
-
-    /// Two types that SHARE a head must not both render as the bare head.
-    ///
-    /// `Eq Nat` vs `Eq Int` differ, but `head_summary` reports only
-    /// `get_app_fn()`, so both printed `Eq` and the reject read
-    /// `mismatch expected=Eq got=Eq` — 474 of the v32 run's kernel-rejects said
-    /// exactly that and named nothing actionable.
-    #[test]
-    fn test_signature_distinguishes_operands_when_heads_collide() {
-        let sig = type_error_signature(&mismatch(
-            Expr::app(cst("Eq"), cst("Nat")),
-            Expr::app(cst("Eq"), cst("Int")),
-        ));
-        assert!(
-            sig.contains("Nat") && sig.contains("Int"),
-            "operand heads must appear when the shapes collide, got: {sig}"
-        );
-        assert_ne!(
-            sig, "mismatch expected=Eq got=Eq",
-            "the uninformative form must be gone"
-        );
-    }
-
-    /// Genuinely different shapes keep their EXACT previous signature, so
-    /// existing frequency rankings and any saved baselines still line up.
-    #[test]
-    fn test_signature_unchanged_when_shapes_already_differ() {
-        assert_eq!(
-            type_error_signature(&mismatch(cst("Eq"), Expr::prop())),
-            "mismatch expected=Eq got=Sort"
-        );
-    }
-
-    /// Same shape and no operands at all: say so, rather than printing two
-    /// identical sides and implying they looked different.
-    #[test]
-    fn test_signature_flags_shape_identical_with_no_operands() {
-        let sig = type_error_signature(&mismatch(cst("Eq"), cst("Eq")));
-        assert!(
-            sig.contains("shape-identical"),
-            "an opaque collision must be labelled, got: {sig}"
-        );
-    }
-}
-
 /// Normalize a kernel [`EnvError`] into a stable, frequency-rankable cluster
 /// signature. For the dominant `TypeCheckFailed`/`TypeMismatch` case this is
 /// `mismatch expected=<shape> got=<shape>`; other kinds get a bare tag.
@@ -368,5 +306,67 @@ pub(super) fn maybe_dump_full(name: &str, serial: i64, err: &EnvError) {
             eprintln!("AT: {location:?}");
         }
         _ => {}
+    }
+}
+
+#[cfg(test)]
+mod signature_tests {
+    use super::{type_error_signature, Expr};
+    use clean_kernel::name::Name;
+    use clean_kernel::tc::TypeError;
+
+    fn cst(n: &str) -> Expr {
+        Expr::const_(Name::from_string(n), vec![])
+    }
+
+    fn mismatch(expected: Expr, inferred: Expr) -> TypeError {
+        TypeError::TypeMismatch {
+            expected: Box::new(expected),
+            inferred: Box::new(inferred),
+            location: None,
+        }
+    }
+
+    /// Two types that SHARE a head must not both render as the bare head.
+    ///
+    /// `Eq Nat` vs `Eq Int` differ, but `head_summary` reports only
+    /// `get_app_fn()`, so both printed `Eq` and the reject read
+    /// `mismatch expected=Eq got=Eq` — 474 of the v32 run's kernel-rejects said
+    /// exactly that and named nothing actionable.
+    #[test]
+    fn test_signature_distinguishes_operands_when_heads_collide() {
+        let sig = type_error_signature(&mismatch(
+            Expr::app(cst("Eq"), cst("Nat")),
+            Expr::app(cst("Eq"), cst("Int")),
+        ));
+        assert!(
+            sig.contains("Nat") && sig.contains("Int"),
+            "operand heads must appear when the shapes collide, got: {sig}"
+        );
+        assert_ne!(
+            sig, "mismatch expected=Eq got=Eq",
+            "the uninformative form must be gone"
+        );
+    }
+
+    /// Genuinely different shapes keep their EXACT previous signature, so
+    /// existing frequency rankings and any saved baselines still line up.
+    #[test]
+    fn test_signature_unchanged_when_shapes_already_differ() {
+        assert_eq!(
+            type_error_signature(&mismatch(cst("Eq"), Expr::prop())),
+            "mismatch expected=Eq got=Sort"
+        );
+    }
+
+    /// Same shape and no operands at all: say so, rather than printing two
+    /// identical sides and implying they looked different.
+    #[test]
+    fn test_signature_flags_shape_identical_with_no_operands() {
+        let sig = type_error_signature(&mismatch(cst("Eq"), cst("Eq")));
+        assert!(
+            sig.contains("shape-identical"),
+            "an opaque collision must be labelled, got: {sig}"
+        );
     }
 }

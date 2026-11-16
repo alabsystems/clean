@@ -55,12 +55,12 @@ impl Specification {
 
         self.add_recursive_def(
             r"def ctor_decl_id (c : CtorDecl) : Nat :=
-CtorDecl.rec (fun (_ : CtorDecl) => Nat) (fun (id : Nat) (_ty : KExpr) => id) c",
+@CtorDecl.rec (fun (_ : CtorDecl) => Nat) (fun (id : Nat) (_ty : KExpr) => id) c",
             "Actual numeric constructor identifier, independent of its type.",
         )?;
         self.add_recursive_def(
             r"def ctor_ids_fresh_b (ctors : CtorDecls) (target : Nat) : Bool :=
-CtorDecls.rec (fun (_ : CtorDecls) => Nat -> Bool)
+@CtorDecls.rec (fun (_ : CtorDecls) => Nat -> Bool)
  (fun (_target : Nat) => Bool.true)
  (fun (c : CtorDecl) (_rest : CtorDecls) (ih : Nat -> Bool) (n : Nat) =>
    Bool.and (Bool.not (nat_eqb (ctor_decl_id c) n)) (ih n)) ctors target",
@@ -72,7 +72,7 @@ CtorDecls.rec (fun (_ : CtorDecls) => Nat -> Bool)
         // declaration extensions, not Rust's separate names-present no-op path.
         self.add_recursive_def(
             r"def kenv_fresh (env : KEnv) (target : Nat) : Bool :=
-KEnv.rec (fun (_ : KEnv) => Nat -> Bool)
+@KEnv.rec (fun (_ : KEnv) => Nat -> Bool)
  (fun (_target : Nat) => Bool.true)
  (fun (_env : KEnv) (_kind : ConstExtensionKind) (id : Nat) (_ty : KExpr)
    (_value : KExpr) (ih : Nat -> Bool) (n : Nat) =>
@@ -86,7 +86,7 @@ KEnv.rec (fun (_ : KEnv) => Nat -> Bool)
 
         self.add_recursive_def(
             r"def ctor_decls_fresh_b (env : KEnv) (family : Nat) (ctors : CtorDecls) : Bool :=
-CtorDecls.rec (fun (_ : CtorDecls) => Bool) Bool.true
+@CtorDecls.rec (fun (_ : CtorDecls) => Bool) Bool.true
  (fun (c : CtorDecl) (rest : CtorDecls) (ih : Bool) =>
    Bool.and (kenv_fresh env (ctor_decl_id c))
      (Bool.and (Bool.not (nat_eqb family (ctor_decl_id c)))
@@ -96,7 +96,7 @@ CtorDecls.rec (fun (_ : CtorDecls) => Bool) Bool.true
         )?;
         self.add_recursive_def(
             r"def FreshCtorDecls (env : KEnv) (family : Nat) (ctors : CtorDecls) : Prop :=
-Eq Bool (ctor_decls_fresh_b env family ctors) Bool.true",
+@Eq Bool (ctor_decls_fresh_b env family ctors) Bool.true",
             "Actual computational constructor-name freshness and pairwise distinctness obligation.",
         )?;
 
@@ -111,7 +111,7 @@ Eq Bool (ctor_decls_fresh_b env family ctors) Bool.true",
             name: "FreshDeclName".to_string(),
             type_src: "KEnv -> Nat -> Prop".to_string(),
             value_src: Some(
-                "fun (env : KEnv) (decl_id : Nat) => Eq Bool (kenv_fresh env decl_id) Bool.true"
+                "fun (env : KEnv) (decl_id : Nat) => @Eq Bool (kenv_fresh env decl_id) Bool.true"
                     .to_string(),
             ),
             is_axiom: false,
@@ -152,7 +152,7 @@ Eq Bool (ctor_decls_fresh_b env family ctors) Bool.true",
             // the unincremented depth; see the pinned historical counterexample
             // in scratch/projection-occurs-old-counterexample.rs.
             r"def occurs_in (depth : Nat) (e : KExpr) : Bool :=
-KExpr.rec (fun (_ : KExpr) => Nat -> Bool)
+@KExpr.rec (fun (_ : KExpr) => Nat -> Bool)
  (fun (_u : Level) (_d : Nat) => Bool.false)
  (fun (i : Nat) (d : Nat) => nat_eqb i d)
  (fun (_f : KExpr) (_a : KExpr) (ihf : Nat -> Bool) (iha : Nat -> Bool) (d : Nat) =>
@@ -191,7 +191,7 @@ KExpr.rec (fun (_ : KExpr) => Nat -> Bool)
         // strictly_positive_in depth e: I occurs only strictly positively in field type e.
         self.add_recursive_def(
             r"def strictly_positive_in (depth : Nat) (e : KExpr) : Bool :=
-KExpr.rec (fun (_ : KExpr) => Nat -> Bool)
+@KExpr.rec (fun (_ : KExpr) => Nat -> Bool)
  (fun (_u : Level) (_d : Nat) => Bool.true)
  (fun (_i : Nat) (_d : Nat) => Bool.true)
  (fun (f : KExpr) (a : KExpr) (_ihf : Nat -> Bool) (_iha : Nat -> Bool) (d : Nat) =>
@@ -219,7 +219,7 @@ KExpr.rec (fun (_ : KExpr) => Nat -> Bool)
         // must be strictly_positive_in; the (non-Pi) return type is WellFormed's job.
         self.add_recursive_def(
             r"def ctor_positive (depth : Nat) (e : KExpr) : Bool :=
-KExpr.rec (fun (_ : KExpr) => Nat -> Bool)
+@KExpr.rec (fun (_ : KExpr) => Nat -> Bool)
  (fun (_u : Level) (_d : Nat) => Bool.true)
  (fun (_i : Nat) (_d : Nat) => Bool.true)
  (fun (_f : KExpr) (_a : KExpr) (_ihf : Nat -> Bool) (_iha : Nat -> Bool) (_d : Nat) => Bool.true)
@@ -262,7 +262,7 @@ KExpr.rec (fun (_ : KExpr) => Nat -> Bool)
             name: "StrictlyPositiveCtorDecls".to_string(),
             type_src: "KExpr -> CtorDecls -> Prop".to_string(),
             value_src: Some(
-                "fun (ind_ty : KExpr) (ctors : CtorDecls) => Eq Bool (strictly_positive_ctors_b ctors) Bool.true"
+                "fun (ind_ty : KExpr) (ctors : CtorDecls) => @Eq Bool (strictly_positive_ctors_b ctors) Bool.true"
                     .to_string(),
             ),
             is_axiom: false,
@@ -382,7 +382,7 @@ KExpr.rec (fun (_ : KExpr) => Nat -> Bool)
         // parameter bvars in order.
         self.add_recursive_def(
             r"def return_args_wf_from (d : Nat) (np : Nat) (e : KExpr) : Bool :=
-KExpr.rec (fun (_ : KExpr) => Nat -> Bool)
+@KExpr.rec (fun (_ : KExpr) => Nat -> Bool)
  (fun (_u : Level) (_remaining : Nat) => Bool.false)
  (fun (i : Nat) (remaining : Nat) => Bool.and (nat_eqb i d) (nat_is_zero remaining))
  (fun (_f : KExpr) (a : KExpr) (ihf : Nat -> Bool) (_iha : Nat -> Bool) (remaining : Nat) =>
@@ -436,35 +436,35 @@ KExpr.rec (fun (_ : KExpr) => Nat -> Bool)
         self.add_recursive_def(
             concat!(
                 "def level_eqb (a : Level) (b : Level) : Bool := ",
-                "Level.rec (fun (_ : Level) => Level -> Bool) ",
-                "(fun (y : Level) => Level.rec (fun (_ : Level) => Bool) ",
+                "@Level.rec (fun (_ : Level) => Level -> Bool) ",
+                "(fun (y : Level) => @Level.rec (fun (_ : Level) => Bool) ",
                 "Bool.true ",
                 "(fun (yp : Level) (_ : Bool) => Bool.false) ",
                 "(fun (yl : Level) (yr : Level) (_ : Bool) (_ : Bool) => Bool.false) ",
                 "(fun (yl : Level) (yr : Level) (_ : Bool) (_ : Bool) => Bool.false) ",
                 "(fun (yn : Name) => Bool.false) y) ",
                 "(fun (ap : Level) (ih_ap : Level -> Bool) => fun (y : Level) => ",
-                "Level.rec (fun (_ : Level) => Bool) ",
+                "@Level.rec (fun (_ : Level) => Bool) ",
                 "Bool.false ",
                 "(fun (yp : Level) (_ : Bool) => ih_ap yp) ",
                 "(fun (yl : Level) (yr : Level) (_ : Bool) (_ : Bool) => Bool.false) ",
                 "(fun (yl : Level) (yr : Level) (_ : Bool) (_ : Bool) => Bool.false) ",
                 "(fun (yn : Name) => Bool.false) y) ",
                 "(fun (al : Level) (ar : Level) (ih_al : Level -> Bool) (ih_ar : Level -> Bool) => ",
-                "fun (y : Level) => Level.rec (fun (_ : Level) => Bool) ",
+                "fun (y : Level) => @Level.rec (fun (_ : Level) => Bool) ",
                 "Bool.false ",
                 "(fun (yp : Level) (_ : Bool) => Bool.false) ",
                 "(fun (yl : Level) (yr : Level) (_ : Bool) (_ : Bool) => Bool.and (ih_al yl) (ih_ar yr)) ",
                 "(fun (yl : Level) (yr : Level) (_ : Bool) (_ : Bool) => Bool.false) ",
                 "(fun (yn : Name) => Bool.false) y) ",
                 "(fun (al : Level) (ar : Level) (ih_al : Level -> Bool) (ih_ar : Level -> Bool) => ",
-                "fun (y : Level) => Level.rec (fun (_ : Level) => Bool) ",
+                "fun (y : Level) => @Level.rec (fun (_ : Level) => Bool) ",
                 "Bool.false ",
                 "(fun (yp : Level) (_ : Bool) => Bool.false) ",
                 "(fun (yl : Level) (yr : Level) (_ : Bool) (_ : Bool) => Bool.false) ",
                 "(fun (yl : Level) (yr : Level) (_ : Bool) (_ : Bool) => Bool.and (ih_al yl) (ih_ar yr)) ",
                 "(fun (yn : Name) => Bool.false) y) ",
-                "(fun (am : Name) => fun (y : Level) => Level.rec (fun (_ : Level) => Bool) ",
+                "(fun (am : Name) => fun (y : Level) => @Level.rec (fun (_ : Level) => Bool) ",
                 "Bool.false ",
                 "(fun (yp : Level) (_ : Bool) => Bool.false) ",
                 "(fun (yl : Level) (yr : Level) (_ : Bool) (_ : Bool) => Bool.false) ",
@@ -494,8 +494,8 @@ KExpr.rec (fun (_ : KExpr) => Nat -> Bool)
         // job). No done for KExpr.lam: a lambda return head is soundly rejected.
         self.add_inductive(
             r"inductive FieldsBounded : Level -> ListType KExpr -> Nat -> KExpr -> Type
-| param : forall (rlvl : Level) (gamma : ListType KExpr) (rp : Nat) (dom : KExpr) (cod : KExpr) (s : Level), CtxTyping gamma dom (KExpr.sort s) -> FieldsBounded rlvl (ListType.cons KExpr dom gamma) rp cod -> FieldsBounded rlvl gamma (Nat.succ rp) (KExpr.pi dom cod)
-| field : forall (rlvl : Level) (gamma : ListType KExpr) (dom : KExpr) (cod : KExpr) (s : Level), CtxTyping gamma dom (KExpr.sort s) -> Eq Bool (Bool.or (level_is_zero rlvl) (level_leb s rlvl)) Bool.true -> FieldsBounded rlvl (ListType.cons KExpr dom gamma) Nat.zero cod -> FieldsBounded rlvl gamma Nat.zero (KExpr.pi dom cod)
+| param : forall (rlvl : Level) (gamma : ListType KExpr) (rp : Nat) (dom : KExpr) (cod : KExpr) (s : Level), CtxTyping gamma dom (KExpr.sort s) -> FieldsBounded rlvl (@ListType.cons KExpr dom gamma) rp cod -> FieldsBounded rlvl gamma (Nat.succ rp) (KExpr.pi dom cod)
+| field : forall (rlvl : Level) (gamma : ListType KExpr) (dom : KExpr) (cod : KExpr) (s : Level), CtxTyping gamma dom (KExpr.sort s) -> @Eq Bool (Bool.or (level_is_zero rlvl) (level_leb s rlvl)) Bool.true -> FieldsBounded rlvl (@ListType.cons KExpr dom gamma) Nat.zero cod -> FieldsBounded rlvl gamma Nat.zero (KExpr.pi dom cod)
 | done_sort : forall (rlvl : Level) (gamma : ListType KExpr) (n : Level), FieldsBounded rlvl gamma Nat.zero (KExpr.sort n)
 | done_bvar : forall (rlvl : Level) (gamma : ListType KExpr) (i : Nat), FieldsBounded rlvl gamma Nat.zero (KExpr.bvar i)
 | done_app : forall (rlvl : Level) (gamma : ListType KExpr) (f : KExpr) (a : KExpr), FieldsBounded rlvl gamma Nat.zero (KExpr.app f a)
@@ -512,7 +512,7 @@ KExpr.rec (fun (_ : KExpr) => Nat -> Bool)
         self.add_inductive(
             r"inductive CtorsWellTyped : Level -> Nat -> KExpr -> CtorDecls -> Type
 | nil : forall (rlvl : Level) (num_params : Nat) (ind_ty : KExpr), CtorsWellTyped rlvl num_params ind_ty CtorDecls.nil
-| cons : forall (rlvl : Level) (num_params : Nat) (ind_ty : KExpr) (id : Nat) (ct : KExpr) (u : Level) (rest : CtorDecls), CtxTyping (ListType.cons KExpr ind_ty (ListType.nil KExpr)) ct (KExpr.sort u) -> FieldsBounded rlvl (ListType.cons KExpr ind_ty (ListType.nil KExpr)) num_params ct -> CtorsWellTyped rlvl num_params ind_ty rest -> CtorsWellTyped rlvl num_params ind_ty (CtorDecls.cons (CtorDecl.mk id ct) rest)",
+| cons : forall (rlvl : Level) (num_params : Nat) (ind_ty : KExpr) (id : Nat) (ct : KExpr) (u : Level) (rest : CtorDecls), CtxTyping (@ListType.cons KExpr ind_ty (@ListType.nil KExpr)) ct (KExpr.sort u) -> FieldsBounded rlvl (@ListType.cons KExpr ind_ty (@ListType.nil KExpr)) num_params ct -> CtorsWellTyped rlvl num_params ind_ty rest -> CtorsWellTyped rlvl num_params ind_ty (CtorDecls.cons (CtorDecl.mk id ct) rest)",
             "CtorsWellTyped rlvl num_params ind_ty ctors: each constructor type is \
              CtxTyping-well-typed in context [ind_ty] and universe-bounded by rlvl. \
              SOUND but conv-free + const-free incomplete (see WellFormedCtorDecls).",
@@ -522,7 +522,7 @@ KExpr.rec (fun (_ : KExpr) => Nat -> Bool)
         // Same 5-arg signature so InductiveExtension.mk's premise threads unchanged.
         self.add_inductive(
             r"inductive WellFormedCtorDecls (env : KEnv) (decl_id : Nat) (num_params : Nat) (ind_ty : KExpr) (ctors : CtorDecls) : Type
-| mk : forall (rlvl : Level), FreshCtorDecls env decl_id ctors -> Eq KExpr (return_type ind_ty) (KExpr.sort rlvl) -> Eq Bool (ctor_decls_wf_b num_params ctors) Bool.true -> CtorsWellTyped rlvl num_params ind_ty ctors -> WellFormedCtorDecls env decl_id num_params ind_ty ctors",
+| mk : forall (rlvl : Level), FreshCtorDecls env decl_id ctors -> @Eq KExpr (return_type ind_ty) (KExpr.sort rlvl) -> @Eq Bool (ctor_decls_wf_b num_params ctors) Bool.true -> CtorsWellTyped rlvl num_params ind_ty ctors -> WellFormedCtorDecls env decl_id num_params ind_ty ctors",
             "WellFormedCtorDecls env decl_id num_params ind_ty ctors: constructor-side \
              well-formedness, DRAINED from an opaque HelperAxiom to a genuine inductive. \
              mk checks constructor IDs against the old environment, new family and each \
@@ -551,7 +551,7 @@ KExpr.rec (fun (_ : KExpr) => Nat -> Bool)
                 "WellFormedCtorDecls KEnv.empty Nat.zero Nat.zero (KExpr.sort (Level.succ Level.zero)) (CtorDecls.cons (CtorDecl.mk (Nat.succ Nat.zero) (KExpr.bvar Nat.zero)) CtorDecls.nil)"
                     .to_string(),
             value_src: Some(
-                "WellFormedCtorDecls.mk KEnv.empty Nat.zero Nat.zero (KExpr.sort (Level.succ Level.zero)) (CtorDecls.cons (CtorDecl.mk (Nat.succ Nat.zero) (KExpr.bvar Nat.zero)) CtorDecls.nil) (Level.succ Level.zero) (Eq.refl Bool Bool.true) (Eq.refl KExpr (KExpr.sort (Level.succ Level.zero))) (Eq.refl Bool Bool.true) (CtorsWellTyped.cons (Level.succ Level.zero) Nat.zero (KExpr.sort (Level.succ Level.zero)) (Nat.succ Nat.zero) (KExpr.bvar Nat.zero) (Level.succ Level.zero) CtorDecls.nil (CtxTyping.var (ListType.cons KExpr (KExpr.sort (Level.succ Level.zero)) (ListType.nil KExpr)) Nat.zero (KExpr.sort (Level.succ Level.zero)) (CtxLookup.here (KExpr.sort (Level.succ Level.zero)) (ListType.nil KExpr))) (FieldsBounded.done_bvar (Level.succ Level.zero) (ListType.cons KExpr (KExpr.sort (Level.succ Level.zero)) (ListType.nil KExpr)) Nat.zero) (CtorsWellTyped.nil (Level.succ Level.zero) Nat.zero (KExpr.sort (Level.succ Level.zero))))"
+                "@WellFormedCtorDecls.mk KEnv.empty Nat.zero Nat.zero (KExpr.sort (Level.succ Level.zero)) (CtorDecls.cons (CtorDecl.mk (Nat.succ Nat.zero) (KExpr.bvar Nat.zero)) CtorDecls.nil) (Level.succ Level.zero) (@Eq.refl Bool Bool.true) (@Eq.refl KExpr (KExpr.sort (Level.succ Level.zero))) (@Eq.refl Bool Bool.true) (CtorsWellTyped.cons (Level.succ Level.zero) Nat.zero (KExpr.sort (Level.succ Level.zero)) (Nat.succ Nat.zero) (KExpr.bvar Nat.zero) (Level.succ Level.zero) CtorDecls.nil (CtxTyping.var (@ListType.cons KExpr (KExpr.sort (Level.succ Level.zero)) (@ListType.nil KExpr)) Nat.zero (KExpr.sort (Level.succ Level.zero)) (CtxLookup.here (KExpr.sort (Level.succ Level.zero)) (@ListType.nil KExpr))) (FieldsBounded.done_bvar (Level.succ Level.zero) (@ListType.cons KExpr (KExpr.sort (Level.succ Level.zero)) (@ListType.nil KExpr)) Nat.zero) (CtorsWellTyped.nil (Level.succ Level.zero) Nat.zero (KExpr.sort (Level.succ Level.zero))))"
                     .to_string(),
             ),
             is_axiom: false,
@@ -771,7 +771,7 @@ KExpr.rec (fun (_ : KExpr) => Nat -> Bool)
                     "fun (env : KEnv) (env' : KEnv) ",
                     "(h_ext : DefinitionalExtension env env') ",
                     "(h_sound : EnvSound env) => ",
-                    "DefinitionalExtension.rec ",
+                    "@DefinitionalExtension.rec ",
                     "(fun (src_env : KEnv) (dst_env : KEnv) (h_ext_step : DefinitionalExtension src_env dst_env) => EnvSound src_env -> EnvSound dst_env) ",
                     "(fun (base : KEnv) (base_sound : EnvSound base) => base_sound) ",
                     "(fun (src_env : KEnv) (dst_env : KEnv) (h_const : ConstantExtension src_env dst_env) ",

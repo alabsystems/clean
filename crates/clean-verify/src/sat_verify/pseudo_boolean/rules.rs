@@ -34,7 +34,7 @@ use super::PbError;
 /// A PB proof derivation rule.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
-pub enum PbRule {
+pub(crate) enum PbRule {
     /// Introduce an input constraint from the formula.
     Input(usize),
     /// Add two derived constraints.

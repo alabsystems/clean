@@ -21,6 +21,11 @@ impl ScalarSort {
         if *ty == Ty::Bool {
             return Ok(Self::Bool);
         }
+        if matches!(ty, Ty::FnItem(_)) {
+            return Err(unsupported(
+                "FnItem is a nominal singleton, not a scalar or code pointer",
+            ));
+        }
         width_of_ty(ty)
             .map(Self::UInt)
             .ok_or_else(|| unsupported("unsupported scalar carrier"))
@@ -296,6 +301,7 @@ pub fn denote_scalar_function(
                 PtrData,
                 PtrMetadata,
                 PtrFromParts,
+                BoxDeref,
                 AtomicLoad,
                 AtomicStore,
                 AtomicRMW,

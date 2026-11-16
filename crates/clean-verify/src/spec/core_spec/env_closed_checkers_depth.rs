@@ -130,7 +130,7 @@ impl Specification {
         // Nat -> Bool), inner Nat.rec on d: (0, 0) -> false; (0, succ _) ->
         // true; (succ _, 0) -> false; (succ ip, succ dp) -> nat_lt_b ip dp.
         self.add_recursive_def(
-            r"def nat_lt_b (i : Nat) (d : Nat) : Bool := Nat.rec (fun (_ : Nat) => Nat -> Bool) (fun (dd : Nat) => Nat.rec (fun (_ : Nat) => Bool) Bool.false (fun (dp : Nat) (_ : Bool) => Bool.true) dd) (fun (ip : Nat) (ih : Nat -> Bool) (dd : Nat) => Nat.rec (fun (_ : Nat) => Bool) Bool.false (fun (dp : Nat) (_ : Bool) => ih dp) dd) i d",
+            r"def nat_lt_b (i : Nat) (d : Nat) : Bool := @Nat.rec (fun (_ : Nat) => Nat -> Bool) (fun (dd : Nat) => @Nat.rec (fun (_ : Nat) => Bool) Bool.false (fun (dp : Nat) (_ : Bool) => Bool.true) dd) (fun (ip : Nat) (ih : Nat -> Bool) (dd : Nat) => @Nat.rec (fun (_ : Nat) => Bool) Bool.false (fun (dp : Nat) (_ : Bool) => ih dp) dd) i d",
             "Bool mirror of Lt: nat_lt_b i d = true iff i < d. Double Nat.rec (outer on i with a \
              Nat -> Bool motive, inner case split on d); (succ, succ) recurses on both. \
              Kernel-evaluable; the bvar-depth test of closed_at_b. Front #1 Stage 3/4 \
@@ -229,11 +229,11 @@ impl Specification {
         // Type-valued, so the absurd checker arms need this mirror.
         self.add_definition(Self::eccd_lemma(
             "bool_false_ne_true_t",
-            "forall (C : Type), Eq Bool Bool.false Bool.true -> C",
-            "fun (C : Type) (h : Eq Bool Bool.false Bool.true) => \
-             Empty.rec (fun (_ : Empty) => C) \
-             (Eq.substType Bool \
-             (fun (z : Bool) => Bool.rec (fun (_ : Bool) => Type) Nat Empty z) \
+            "forall (C : Type), @Eq Bool Bool.false Bool.true -> C",
+            "fun (C : Type) (h : @Eq Bool Bool.false Bool.true) => \
+             @Empty.rec (fun (_ : Empty) => C) \
+             (@Eq.substType Bool \
+             (fun (z : Bool) => @Bool.rec (fun (_ : Bool) => Type) Nat Empty z) \
              Bool.false Bool.true h Nat.zero)",
             "Bool no-confusion, Type-valued: Eq false true is absurd (CPS into any Type). The \
              Type mirror of bool_false_ne_true (which is Prop-CPS); needed because Lt and \
@@ -249,27 +249,27 @@ impl Specification {
         // reduces definitionally to nat_lt_b ip dp).
         self.add_definition(Self::eccd_lemma(
             "nat_lt_b_sound",
-            "forall (i : Nat) (d : Nat), Eq Bool (nat_lt_b i d) Bool.true -> Lt i d",
-            "fun (i : Nat) (d : Nat) (h : Eq Bool (nat_lt_b i d) Bool.true) => \
-             Nat.rec \
-             (fun (ii : Nat) => forall (dd : Nat), Eq Bool (nat_lt_b ii dd) Bool.true -> Lt ii dd) \
-             (fun (dd : Nat) => Nat.rec \
-             (fun (d0 : Nat) => Eq Bool (nat_lt_b Nat.zero d0) Bool.true -> Lt Nat.zero d0) \
-             (fun (h0 : Eq Bool (nat_lt_b Nat.zero Nat.zero) Bool.true) => \
+            "forall (i : Nat) (d : Nat), @Eq Bool (nat_lt_b i d) Bool.true -> Lt i d",
+            "fun (i : Nat) (d : Nat) (h : @Eq Bool (nat_lt_b i d) Bool.true) => \
+             @Nat.rec \
+             (fun (ii : Nat) => forall (dd : Nat), @Eq Bool (nat_lt_b ii dd) Bool.true -> Lt ii dd) \
+             (fun (dd : Nat) => @Nat.rec \
+             (fun (d0 : Nat) => @Eq Bool (nat_lt_b Nat.zero d0) Bool.true -> Lt Nat.zero d0) \
+             (fun (h0 : @Eq Bool (nat_lt_b Nat.zero Nat.zero) Bool.true) => \
              bool_false_ne_true_t (Lt Nat.zero Nat.zero) h0) \
-             (fun (dp : Nat) (_ihd : Eq Bool (nat_lt_b Nat.zero dp) Bool.true -> Lt Nat.zero dp) \
-             (_h1 : Eq Bool (nat_lt_b Nat.zero (Nat.succ dp)) Bool.true) => \
+             (fun (dp : Nat) (_ihd : @Eq Bool (nat_lt_b Nat.zero dp) Bool.true -> Lt Nat.zero dp) \
+             (_h1 : @Eq Bool (nat_lt_b Nat.zero (Nat.succ dp)) Bool.true) => \
              Lt.zero_lt_succ dp) \
              dd) \
              (fun (ip : Nat) \
-             (ih : forall (dd : Nat), Eq Bool (nat_lt_b ip dd) Bool.true -> Lt ip dd) \
-             (dd : Nat) => Nat.rec \
-             (fun (d0 : Nat) => Eq Bool (nat_lt_b (Nat.succ ip) d0) Bool.true -> Lt (Nat.succ ip) d0) \
-             (fun (h0 : Eq Bool (nat_lt_b (Nat.succ ip) Nat.zero) Bool.true) => \
+             (ih : forall (dd : Nat), @Eq Bool (nat_lt_b ip dd) Bool.true -> Lt ip dd) \
+             (dd : Nat) => @Nat.rec \
+             (fun (d0 : Nat) => @Eq Bool (nat_lt_b (Nat.succ ip) d0) Bool.true -> Lt (Nat.succ ip) d0) \
+             (fun (h0 : @Eq Bool (nat_lt_b (Nat.succ ip) Nat.zero) Bool.true) => \
              bool_false_ne_true_t (Lt (Nat.succ ip) Nat.zero) h0) \
              (fun (dp : Nat) \
-             (_ihd : Eq Bool (nat_lt_b (Nat.succ ip) dp) Bool.true -> Lt (Nat.succ ip) dp) \
-             (h1 : Eq Bool (nat_lt_b (Nat.succ ip) (Nat.succ dp)) Bool.true) => \
+             (_ihd : @Eq Bool (nat_lt_b (Nat.succ ip) dp) Bool.true -> Lt (Nat.succ ip) dp) \
+             (h1 : @Eq Bool (nat_lt_b (Nat.succ ip) (Nat.succ dp)) Bool.true) => \
              Lt.succ_lt_succ ip dp (ih dp h1)) \
              dd) \
              i d h",
@@ -285,56 +285,56 @@ impl Specification {
         self.add_definition(Self::eccd_lemma(
             "closed_at_b_sound",
             "forall (e : KExpr) (d : Nat), \
-             Eq Bool (closed_at_b e d) Bool.true -> is_closed_at e d",
-            "fun (e : KExpr) (d : Nat) (h : Eq Bool (closed_at_b e d) Bool.true) => \
-             KExpr.rec \
+             @Eq Bool (closed_at_b e d) Bool.true -> is_closed_at e d",
+            "fun (e : KExpr) (d : Nat) (h : @Eq Bool (closed_at_b e d) Bool.true) => \
+             @KExpr.rec \
              (fun (x : KExpr) => forall (dd : Nat), \
-             Eq Bool (closed_at_b x dd) Bool.true -> is_closed_at x dd) \
+             @Eq Bool (closed_at_b x dd) Bool.true -> is_closed_at x dd) \
              (fun (n : Level) (dd : Nat) \
-             (_hb : Eq Bool (closed_at_b (KExpr.sort n) dd) Bool.true) => \
+             (_hb : @Eq Bool (closed_at_b (KExpr.sort n) dd) Bool.true) => \
              is_closed_at.sort n dd) \
              (fun (i : Nat) (dd : Nat) \
-             (hb : Eq Bool (closed_at_b (KExpr.bvar i) dd) Bool.true) => \
+             (hb : @Eq Bool (closed_at_b (KExpr.bvar i) dd) Bool.true) => \
              is_closed_at.bvar i dd (nat_lt_b_sound i dd hb)) \
              (fun (f : KExpr) (a : KExpr) \
-             (ihf : forall (dd : Nat), Eq Bool (closed_at_b f dd) Bool.true -> is_closed_at f dd) \
-             (iha : forall (dd : Nat), Eq Bool (closed_at_b a dd) Bool.true -> is_closed_at a dd) \
-             (dd : Nat) (hb : Eq Bool (closed_at_b (KExpr.app f a) dd) Bool.true) => \
+             (ihf : forall (dd : Nat), @Eq Bool (closed_at_b f dd) Bool.true -> is_closed_at f dd) \
+             (iha : forall (dd : Nat), @Eq Bool (closed_at_b a dd) Bool.true -> is_closed_at a dd) \
+             (dd : Nat) (hb : @Eq Bool (closed_at_b (KExpr.app f a) dd) Bool.true) => \
              is_closed_at.app f a dd \
              (ihf dd (band_eq_true_left (closed_at_b f dd) (closed_at_b a dd) hb)) \
              (iha dd (band_eq_true_right (closed_at_b f dd) (closed_at_b a dd) hb))) \
              (fun (ty : KExpr) (b : KExpr) \
-             (ihty : forall (dd : Nat), Eq Bool (closed_at_b ty dd) Bool.true -> is_closed_at ty dd) \
-             (ihb : forall (dd : Nat), Eq Bool (closed_at_b b dd) Bool.true -> is_closed_at b dd) \
-             (dd : Nat) (hb : Eq Bool (closed_at_b (KExpr.lam ty b) dd) Bool.true) => \
+             (ihty : forall (dd : Nat), @Eq Bool (closed_at_b ty dd) Bool.true -> is_closed_at ty dd) \
+             (ihb : forall (dd : Nat), @Eq Bool (closed_at_b b dd) Bool.true -> is_closed_at b dd) \
+             (dd : Nat) (hb : @Eq Bool (closed_at_b (KExpr.lam ty b) dd) Bool.true) => \
              is_closed_at.lam ty b dd \
              (ihty dd (band_eq_true_left (closed_at_b ty dd) (closed_at_b b (Nat.succ dd)) hb)) \
              (ihb (Nat.succ dd) (band_eq_true_right (closed_at_b ty dd) (closed_at_b b (Nat.succ dd)) hb))) \
              (fun (ty : KExpr) (b : KExpr) \
-             (ihty : forall (dd : Nat), Eq Bool (closed_at_b ty dd) Bool.true -> is_closed_at ty dd) \
-             (ihb : forall (dd : Nat), Eq Bool (closed_at_b b dd) Bool.true -> is_closed_at b dd) \
-             (dd : Nat) (hb : Eq Bool (closed_at_b (KExpr.pi ty b) dd) Bool.true) => \
+             (ihty : forall (dd : Nat), @Eq Bool (closed_at_b ty dd) Bool.true -> is_closed_at ty dd) \
+             (ihb : forall (dd : Nat), @Eq Bool (closed_at_b b dd) Bool.true -> is_closed_at b dd) \
+             (dd : Nat) (hb : @Eq Bool (closed_at_b (KExpr.pi ty b) dd) Bool.true) => \
              is_closed_at.pi ty b dd \
              (ihty dd (band_eq_true_left (closed_at_b ty dd) (closed_at_b b (Nat.succ dd)) hb)) \
              (ihb (Nat.succ dd) (band_eq_true_right (closed_at_b ty dd) (closed_at_b b (Nat.succ dd)) hb))) \
              (fun (nm : Name) (us : ListType Level) (dd : Nat) \
-             (_hb : Eq Bool (closed_at_b (KExpr.const nm us) dd) Bool.true) => \
+             (_hb : @Eq Bool (closed_at_b (KExpr.const nm us) dd) Bool.true) => \
              is_closed_at.const nm us dd) \
              (fun (ty : KExpr) (val : KExpr) (body : KExpr) \
-             (ihty : forall (dd : Nat), Eq Bool (closed_at_b ty dd) Bool.true -> is_closed_at ty dd) \
-             (ihval : forall (dd : Nat), Eq Bool (closed_at_b val dd) Bool.true -> is_closed_at val dd) \
-             (ihbody : forall (dd : Nat), Eq Bool (closed_at_b body dd) Bool.true -> is_closed_at body dd) \
-             (dd : Nat) (hb : Eq Bool (closed_at_b (KExpr.let_ ty val body) dd) Bool.true) => \
+             (ihty : forall (dd : Nat), @Eq Bool (closed_at_b ty dd) Bool.true -> is_closed_at ty dd) \
+             (ihval : forall (dd : Nat), @Eq Bool (closed_at_b val dd) Bool.true -> is_closed_at val dd) \
+             (ihbody : forall (dd : Nat), @Eq Bool (closed_at_b body dd) Bool.true -> is_closed_at body dd) \
+             (dd : Nat) (hb : @Eq Bool (closed_at_b (KExpr.let_ ty val body) dd) Bool.true) => \
              is_closed_at.let_ ty val body dd \
              (ihty dd (band_eq_true_left (closed_at_b ty dd) (Bool.and (closed_at_b val dd) (closed_at_b body (Nat.succ dd))) hb)) \
              (ihval dd (band_eq_true_left (closed_at_b val dd) (closed_at_b body (Nat.succ dd)) (band_eq_true_right (closed_at_b ty dd) (Bool.and (closed_at_b val dd) (closed_at_b body (Nat.succ dd))) hb))) \
              (ihbody (Nat.succ dd) (band_eq_true_right (closed_at_b val dd) (closed_at_b body (Nat.succ dd)) (band_eq_true_right (closed_at_b ty dd) (Bool.and (closed_at_b val dd) (closed_at_b body (Nat.succ dd))) hb)))) \
              (fun (s : Name) (i : Nat) (sub : KExpr) \
-             (ihsub : forall (dd : Nat), Eq Bool (closed_at_b sub dd) Bool.true -> is_closed_at sub dd) \
-             (dd : Nat) (hb : Eq Bool (closed_at_b (KExpr.proj s i sub) dd) Bool.true) => \
+             (ihsub : forall (dd : Nat), @Eq Bool (closed_at_b sub dd) Bool.true -> is_closed_at sub dd) \
+             (dd : Nat) (hb : @Eq Bool (closed_at_b (KExpr.proj s i sub) dd) Bool.true) => \
              is_closed_at.proj s i sub dd (ihsub dd hb)) \
              (fun (v : Nat) (dd : Nat) \
-             (_hb : Eq Bool (closed_at_b (KExpr.lit v) dd) Bool.true) => \
+             (_hb : @Eq Bool (closed_at_b (KExpr.lit v) dd) Bool.true) => \
              is_closed_at.lit v dd) \
              e d h",
             "Soundness of the depth-aware checker: closed_at_b e d = true -> is_closed_at e d. \
@@ -374,15 +374,15 @@ impl Specification {
             "inst_closed_at_id",
             "forall (e : KExpr) (d : Nat), is_closed_at e d -> \
              forall (val : KExpr) (k : Nat), Le d k -> \
-             Eq KExpr (instantiate_at e val k) e",
+             @Eq KExpr (instantiate_at e val k) e",
             "fun (e : KExpr) (d : Nat) (h : is_closed_at e d) => \
-             is_closed_at.rec \
+             @is_closed_at.rec \
              (fun (e0 : KExpr) (D : Nat) (_hc : is_closed_at e0 D) => \
-             forall (v : KExpr) (k : Nat), Le D k -> Eq KExpr (instantiate_at e0 v k) e0) \
+             forall (v : KExpr) (k : Nat), Le D k -> @Eq KExpr (instantiate_at e0 v k) e0) \
              (fun (n : Level) (D : Nat) (v : KExpr) (k : Nat) (_hk : Le D k) => \
              instantiate_at_sort n v k) \
              (fun (i : Nat) (D : Nat) (hlt : Lt i D) (v : KExpr) (k : Nat) (hk : Le D k) => \
-             Eq.trans KExpr \
+             @Eq.trans KExpr \
              (instantiate_at (KExpr.bvar i) v k) \
              (instantiate_bvar_at i k v) \
              (KExpr.bvar i) \
@@ -391,63 +391,63 @@ impl Specification {
              (le_trans (Nat.succ i) D k (lt_to_le_succ i D hlt) hk))) \
              (fun (f : KExpr) (g : KExpr) (D : Nat) \
              (_hf : is_closed_at f D) (_hg : is_closed_at g D) \
-             (ihf : forall (v : KExpr) (k : Nat), Le D k -> Eq KExpr (instantiate_at f v k) f) \
-             (ihg : forall (v : KExpr) (k : Nat), Le D k -> Eq KExpr (instantiate_at g v k) g) \
+             (ihf : forall (v : KExpr) (k : Nat), Le D k -> @Eq KExpr (instantiate_at f v k) f) \
+             (ihg : forall (v : KExpr) (k : Nat), Le D k -> @Eq KExpr (instantiate_at g v k) g) \
              (v : KExpr) (k : Nat) (hk : Le D k) => \
-             Eq.trans KExpr \
+             @Eq.trans KExpr \
              (instantiate_at (KExpr.app f g) v k) \
              (KExpr.app (instantiate_at f v k) (instantiate_at g v k)) \
              (KExpr.app f g) \
              (instantiate_at_app f g v k) \
-             (Eq.trans KExpr \
+             (@Eq.trans KExpr \
              (KExpr.app (instantiate_at f v k) (instantiate_at g v k)) \
              (KExpr.app f (instantiate_at g v k)) \
              (KExpr.app f g) \
-             (Eq.cong KExpr KExpr \
+             (@Eq.cong KExpr KExpr \
              (fun (x : KExpr) => KExpr.app x (instantiate_at g v k)) \
              (instantiate_at f v k) f (ihf v k hk)) \
-             (Eq.cong KExpr KExpr \
+             (@Eq.cong KExpr KExpr \
              (fun (x : KExpr) => KExpr.app f x) \
              (instantiate_at g v k) g (ihg v k hk)))) \
              (fun (ty : KExpr) (b : KExpr) (D : Nat) \
              (_hty : is_closed_at ty D) (_hb : is_closed_at b (Nat.succ D)) \
-             (ihty : forall (v : KExpr) (k : Nat), Le D k -> Eq KExpr (instantiate_at ty v k) ty) \
-             (ihb : forall (v : KExpr) (k : Nat), Le (Nat.succ D) k -> Eq KExpr (instantiate_at b v k) b) \
+             (ihty : forall (v : KExpr) (k : Nat), Le D k -> @Eq KExpr (instantiate_at ty v k) ty) \
+             (ihb : forall (v : KExpr) (k : Nat), Le (Nat.succ D) k -> @Eq KExpr (instantiate_at b v k) b) \
              (v : KExpr) (k : Nat) (hk : Le D k) => \
-             Eq.trans KExpr \
+             @Eq.trans KExpr \
              (instantiate_at (KExpr.lam ty b) v k) \
              (KExpr.lam (instantiate_at ty v k) (instantiate_at b v (Nat.succ k))) \
              (KExpr.lam ty b) \
              (instantiate_at_lam ty b v k) \
-             (Eq.trans KExpr \
+             (@Eq.trans KExpr \
              (KExpr.lam (instantiate_at ty v k) (instantiate_at b v (Nat.succ k))) \
              (KExpr.lam ty (instantiate_at b v (Nat.succ k))) \
              (KExpr.lam ty b) \
-             (Eq.cong KExpr KExpr \
+             (@Eq.cong KExpr KExpr \
              (fun (x : KExpr) => KExpr.lam x (instantiate_at b v (Nat.succ k))) \
              (instantiate_at ty v k) ty (ihty v k hk)) \
-             (Eq.cong KExpr KExpr \
+             (@Eq.cong KExpr KExpr \
              (fun (x : KExpr) => KExpr.lam ty x) \
              (instantiate_at b v (Nat.succ k)) b \
              (ihb v (Nat.succ k) (le_succ_succ D k hk))))) \
              (fun (ty : KExpr) (b : KExpr) (D : Nat) \
              (_hty : is_closed_at ty D) (_hb : is_closed_at b (Nat.succ D)) \
-             (ihty : forall (v : KExpr) (k : Nat), Le D k -> Eq KExpr (instantiate_at ty v k) ty) \
-             (ihb : forall (v : KExpr) (k : Nat), Le (Nat.succ D) k -> Eq KExpr (instantiate_at b v k) b) \
+             (ihty : forall (v : KExpr) (k : Nat), Le D k -> @Eq KExpr (instantiate_at ty v k) ty) \
+             (ihb : forall (v : KExpr) (k : Nat), Le (Nat.succ D) k -> @Eq KExpr (instantiate_at b v k) b) \
              (v : KExpr) (k : Nat) (hk : Le D k) => \
-             Eq.trans KExpr \
+             @Eq.trans KExpr \
              (instantiate_at (KExpr.pi ty b) v k) \
              (KExpr.pi (instantiate_at ty v k) (instantiate_at b v (Nat.succ k))) \
              (KExpr.pi ty b) \
              (instantiate_at_pi ty b v k) \
-             (Eq.trans KExpr \
+             (@Eq.trans KExpr \
              (KExpr.pi (instantiate_at ty v k) (instantiate_at b v (Nat.succ k))) \
              (KExpr.pi ty (instantiate_at b v (Nat.succ k))) \
              (KExpr.pi ty b) \
-             (Eq.cong KExpr KExpr \
+             (@Eq.cong KExpr KExpr \
              (fun (x : KExpr) => KExpr.pi x (instantiate_at b v (Nat.succ k))) \
              (instantiate_at ty v k) ty (ihty v k hk)) \
-             (Eq.cong KExpr KExpr \
+             (@Eq.cong KExpr KExpr \
              (fun (x : KExpr) => KExpr.pi ty x) \
              (instantiate_at b v (Nat.succ k)) b \
              (ihb v (Nat.succ k) (le_succ_succ D k hk))))) \
@@ -456,43 +456,43 @@ impl Specification {
              instantiate_at_const nm us v k) \
              (fun (ty : KExpr) (val : KExpr) (body : KExpr) (D : Nat) \
              (_hty : is_closed_at ty D) (_hval : is_closed_at val D) (_hbody : is_closed_at body (Nat.succ D)) \
-             (ihty : forall (v : KExpr) (k : Nat), Le D k -> Eq KExpr (instantiate_at ty v k) ty) \
-             (ihval : forall (v : KExpr) (k : Nat), Le D k -> Eq KExpr (instantiate_at val v k) val) \
-             (ihbody : forall (v : KExpr) (k : Nat), Le (Nat.succ D) k -> Eq KExpr (instantiate_at body v k) body) \
+             (ihty : forall (v : KExpr) (k : Nat), Le D k -> @Eq KExpr (instantiate_at ty v k) ty) \
+             (ihval : forall (v : KExpr) (k : Nat), Le D k -> @Eq KExpr (instantiate_at val v k) val) \
+             (ihbody : forall (v : KExpr) (k : Nat), Le (Nat.succ D) k -> @Eq KExpr (instantiate_at body v k) body) \
              (v : KExpr) (k : Nat) (hk : Le D k) => \
-             Eq.trans KExpr \
+             @Eq.trans KExpr \
              (instantiate_at (KExpr.let_ ty val body) v k) \
              (KExpr.let_ (instantiate_at ty v k) (instantiate_at val v k) (instantiate_at body v (Nat.succ k))) \
              (KExpr.let_ ty val body) \
              (instantiate_at_let_ ty val body v k) \
-             (Eq.trans KExpr \
+             (@Eq.trans KExpr \
              (KExpr.let_ (instantiate_at ty v k) (instantiate_at val v k) (instantiate_at body v (Nat.succ k))) \
              (KExpr.let_ ty (instantiate_at val v k) (instantiate_at body v (Nat.succ k))) \
              (KExpr.let_ ty val body) \
-             (Eq.cong KExpr KExpr \
+             (@Eq.cong KExpr KExpr \
              (fun (x : KExpr) => KExpr.let_ x (instantiate_at val v k) (instantiate_at body v (Nat.succ k))) \
              (instantiate_at ty v k) ty (ihty v k hk)) \
-             (Eq.trans KExpr \
+             (@Eq.trans KExpr \
              (KExpr.let_ ty (instantiate_at val v k) (instantiate_at body v (Nat.succ k))) \
              (KExpr.let_ ty val (instantiate_at body v (Nat.succ k))) \
              (KExpr.let_ ty val body) \
-             (Eq.cong KExpr KExpr \
+             (@Eq.cong KExpr KExpr \
              (fun (x : KExpr) => KExpr.let_ ty x (instantiate_at body v (Nat.succ k))) \
              (instantiate_at val v k) val (ihval v k hk)) \
-             (Eq.cong KExpr KExpr \
+             (@Eq.cong KExpr KExpr \
              (fun (x : KExpr) => KExpr.let_ ty val x) \
              (instantiate_at body v (Nat.succ k)) body \
              (ihbody v (Nat.succ k) (le_succ_succ D k hk)))))) \
              (fun (s : Name) (i : Nat) (sub : KExpr) (D : Nat) \
              (_hsub : is_closed_at sub D) \
-             (ihsub : forall (v : KExpr) (k : Nat), Le D k -> Eq KExpr (instantiate_at sub v k) sub) \
+             (ihsub : forall (v : KExpr) (k : Nat), Le D k -> @Eq KExpr (instantiate_at sub v k) sub) \
              (v : KExpr) (k : Nat) (hk : Le D k) => \
-             Eq.trans KExpr \
+             @Eq.trans KExpr \
              (instantiate_at (KExpr.proj s i sub) v k) \
              (KExpr.proj s i (instantiate_at sub v k)) \
              (KExpr.proj s i sub) \
              (instantiate_at_proj s i sub v k) \
-             (Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.proj s i x) (instantiate_at sub v k) sub (ihsub v k hk))) \
+             (@Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.proj s i x) (instantiate_at sub v k) sub (ihsub v k hk))) \
              (fun (litv : Nat) (D : Nat) (v : KExpr) (k : Nat) (_hk : Le D k) => \
              instantiate_at_lit litv v k) \
              e d h",
@@ -530,11 +530,11 @@ impl Specification {
             "lift_closed_at_id",
             "forall (e : KExpr) (d : Nat), is_closed_at e d -> \
              forall (cutoff : Nat) (amount : Nat), Le d cutoff -> \
-             Eq KExpr (lift_at e cutoff amount) e",
+             @Eq KExpr (lift_at e cutoff amount) e",
             "fun (e : KExpr) (d : Nat) (h : is_closed_at e d) => \
-             is_closed_at.rec \
+             @is_closed_at.rec \
              (fun (e0 : KExpr) (D : Nat) (_hc : is_closed_at e0 D) => \
-             forall (c : Nat) (a : Nat), Le D c -> Eq KExpr (lift_at e0 c a) e0) \
+             forall (c : Nat) (a : Nat), Le D c -> @Eq KExpr (lift_at e0 c a) e0) \
              (fun (n : Level) (D : Nat) (c : Nat) (a : Nat) (_hk : Le D c) => \
              lift_at_sort n c a) \
              (fun (i : Nat) (D : Nat) (hlt : Lt i D) (c : Nat) (a : Nat) (hk : Le D c) => \
@@ -542,63 +542,63 @@ impl Specification {
              (le_trans (Nat.succ i) D c (lt_to_le_succ i D hlt) hk)) \
              (fun (f : KExpr) (g : KExpr) (D : Nat) \
              (_hf : is_closed_at f D) (_hg : is_closed_at g D) \
-             (ihf : forall (c : Nat) (a : Nat), Le D c -> Eq KExpr (lift_at f c a) f) \
-             (ihg : forall (c : Nat) (a : Nat), Le D c -> Eq KExpr (lift_at g c a) g) \
+             (ihf : forall (c : Nat) (a : Nat), Le D c -> @Eq KExpr (lift_at f c a) f) \
+             (ihg : forall (c : Nat) (a : Nat), Le D c -> @Eq KExpr (lift_at g c a) g) \
              (c : Nat) (a : Nat) (hk : Le D c) => \
-             Eq.trans KExpr \
+             @Eq.trans KExpr \
              (lift_at (KExpr.app f g) c a) \
              (KExpr.app (lift_at f c a) (lift_at g c a)) \
              (KExpr.app f g) \
              (lift_at_app f g c a) \
-             (Eq.trans KExpr \
+             (@Eq.trans KExpr \
              (KExpr.app (lift_at f c a) (lift_at g c a)) \
              (KExpr.app f (lift_at g c a)) \
              (KExpr.app f g) \
-             (Eq.cong KExpr KExpr \
+             (@Eq.cong KExpr KExpr \
              (fun (x : KExpr) => KExpr.app x (lift_at g c a)) \
              (lift_at f c a) f (ihf c a hk)) \
-             (Eq.cong KExpr KExpr \
+             (@Eq.cong KExpr KExpr \
              (fun (x : KExpr) => KExpr.app f x) \
              (lift_at g c a) g (ihg c a hk)))) \
              (fun (ty : KExpr) (b : KExpr) (D : Nat) \
              (_hty : is_closed_at ty D) (_hb : is_closed_at b (Nat.succ D)) \
-             (ihty : forall (c : Nat) (a : Nat), Le D c -> Eq KExpr (lift_at ty c a) ty) \
-             (ihb : forall (c : Nat) (a : Nat), Le (Nat.succ D) c -> Eq KExpr (lift_at b c a) b) \
+             (ihty : forall (c : Nat) (a : Nat), Le D c -> @Eq KExpr (lift_at ty c a) ty) \
+             (ihb : forall (c : Nat) (a : Nat), Le (Nat.succ D) c -> @Eq KExpr (lift_at b c a) b) \
              (c : Nat) (a : Nat) (hk : Le D c) => \
-             Eq.trans KExpr \
+             @Eq.trans KExpr \
              (lift_at (KExpr.lam ty b) c a) \
              (KExpr.lam (lift_at ty c a) (lift_at b (Nat.succ c) a)) \
              (KExpr.lam ty b) \
              (lift_at_lam ty b c a) \
-             (Eq.trans KExpr \
+             (@Eq.trans KExpr \
              (KExpr.lam (lift_at ty c a) (lift_at b (Nat.succ c) a)) \
              (KExpr.lam ty (lift_at b (Nat.succ c) a)) \
              (KExpr.lam ty b) \
-             (Eq.cong KExpr KExpr \
+             (@Eq.cong KExpr KExpr \
              (fun (x : KExpr) => KExpr.lam x (lift_at b (Nat.succ c) a)) \
              (lift_at ty c a) ty (ihty c a hk)) \
-             (Eq.cong KExpr KExpr \
+             (@Eq.cong KExpr KExpr \
              (fun (x : KExpr) => KExpr.lam ty x) \
              (lift_at b (Nat.succ c) a) b \
              (ihb (Nat.succ c) a (le_succ_succ D c hk))))) \
              (fun (ty : KExpr) (b : KExpr) (D : Nat) \
              (_hty : is_closed_at ty D) (_hb : is_closed_at b (Nat.succ D)) \
-             (ihty : forall (c : Nat) (a : Nat), Le D c -> Eq KExpr (lift_at ty c a) ty) \
-             (ihb : forall (c : Nat) (a : Nat), Le (Nat.succ D) c -> Eq KExpr (lift_at b c a) b) \
+             (ihty : forall (c : Nat) (a : Nat), Le D c -> @Eq KExpr (lift_at ty c a) ty) \
+             (ihb : forall (c : Nat) (a : Nat), Le (Nat.succ D) c -> @Eq KExpr (lift_at b c a) b) \
              (c : Nat) (a : Nat) (hk : Le D c) => \
-             Eq.trans KExpr \
+             @Eq.trans KExpr \
              (lift_at (KExpr.pi ty b) c a) \
              (KExpr.pi (lift_at ty c a) (lift_at b (Nat.succ c) a)) \
              (KExpr.pi ty b) \
              (lift_at_pi ty b c a) \
-             (Eq.trans KExpr \
+             (@Eq.trans KExpr \
              (KExpr.pi (lift_at ty c a) (lift_at b (Nat.succ c) a)) \
              (KExpr.pi ty (lift_at b (Nat.succ c) a)) \
              (KExpr.pi ty b) \
-             (Eq.cong KExpr KExpr \
+             (@Eq.cong KExpr KExpr \
              (fun (x : KExpr) => KExpr.pi x (lift_at b (Nat.succ c) a)) \
              (lift_at ty c a) ty (ihty c a hk)) \
-             (Eq.cong KExpr KExpr \
+             (@Eq.cong KExpr KExpr \
              (fun (x : KExpr) => KExpr.pi ty x) \
              (lift_at b (Nat.succ c) a) b \
              (ihb (Nat.succ c) a (le_succ_succ D c hk))))) \
@@ -607,43 +607,43 @@ impl Specification {
              lift_at_const nm us c a) \
              (fun (ty : KExpr) (val : KExpr) (body : KExpr) (D : Nat) \
              (_hty : is_closed_at ty D) (_hval : is_closed_at val D) (_hbody : is_closed_at body (Nat.succ D)) \
-             (ihty : forall (c : Nat) (a : Nat), Le D c -> Eq KExpr (lift_at ty c a) ty) \
-             (ihval : forall (c : Nat) (a : Nat), Le D c -> Eq KExpr (lift_at val c a) val) \
-             (ihbody : forall (c : Nat) (a : Nat), Le (Nat.succ D) c -> Eq KExpr (lift_at body c a) body) \
+             (ihty : forall (c : Nat) (a : Nat), Le D c -> @Eq KExpr (lift_at ty c a) ty) \
+             (ihval : forall (c : Nat) (a : Nat), Le D c -> @Eq KExpr (lift_at val c a) val) \
+             (ihbody : forall (c : Nat) (a : Nat), Le (Nat.succ D) c -> @Eq KExpr (lift_at body c a) body) \
              (c : Nat) (a : Nat) (hk : Le D c) => \
-             Eq.trans KExpr \
+             @Eq.trans KExpr \
              (lift_at (KExpr.let_ ty val body) c a) \
              (KExpr.let_ (lift_at ty c a) (lift_at val c a) (lift_at body (Nat.succ c) a)) \
              (KExpr.let_ ty val body) \
              (lift_at_let_ ty val body c a) \
-             (Eq.trans KExpr \
+             (@Eq.trans KExpr \
              (KExpr.let_ (lift_at ty c a) (lift_at val c a) (lift_at body (Nat.succ c) a)) \
              (KExpr.let_ ty (lift_at val c a) (lift_at body (Nat.succ c) a)) \
              (KExpr.let_ ty val body) \
-             (Eq.cong KExpr KExpr \
+             (@Eq.cong KExpr KExpr \
              (fun (x : KExpr) => KExpr.let_ x (lift_at val c a) (lift_at body (Nat.succ c) a)) \
              (lift_at ty c a) ty (ihty c a hk)) \
-             (Eq.trans KExpr \
+             (@Eq.trans KExpr \
              (KExpr.let_ ty (lift_at val c a) (lift_at body (Nat.succ c) a)) \
              (KExpr.let_ ty val (lift_at body (Nat.succ c) a)) \
              (KExpr.let_ ty val body) \
-             (Eq.cong KExpr KExpr \
+             (@Eq.cong KExpr KExpr \
              (fun (x : KExpr) => KExpr.let_ ty x (lift_at body (Nat.succ c) a)) \
              (lift_at val c a) val (ihval c a hk)) \
-             (Eq.cong KExpr KExpr \
+             (@Eq.cong KExpr KExpr \
              (fun (x : KExpr) => KExpr.let_ ty val x) \
              (lift_at body (Nat.succ c) a) body \
              (ihbody (Nat.succ c) a (le_succ_succ D c hk)))))) \
              (fun (s : Name) (i : Nat) (sub : KExpr) (D : Nat) \
              (_hsub : is_closed_at sub D) \
-             (ihsub : forall (c : Nat) (a : Nat), Le D c -> Eq KExpr (lift_at sub c a) sub) \
+             (ihsub : forall (c : Nat) (a : Nat), Le D c -> @Eq KExpr (lift_at sub c a) sub) \
              (c : Nat) (a : Nat) (hk : Le D c) => \
-             Eq.trans KExpr \
+             @Eq.trans KExpr \
              (lift_at (KExpr.proj s i sub) c a) \
              (KExpr.proj s i (lift_at sub c a)) \
              (KExpr.proj s i sub) \
              (lift_at_proj s i sub c a) \
-             (Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.proj s i x) (lift_at sub c a) sub (ihsub c a hk))) \
+             (@Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.proj s i x) (lift_at sub c a) sub (ihsub c a hk))) \
              (fun (litv : Nat) (D : Nat) (c : Nat) (a : Nat) (_hk : Le D c) => \
              lift_at_lit litv c a) \
              e d h",
@@ -685,36 +685,36 @@ impl Specification {
         self.add_definition(Self::eccd_lemma(
             "rec_rules_closed_b2_sound",
             "forall (rs : RecRules) (cname : Name) (rule : RecRule), \
-             Eq (OptionType RecRule) (recrule_in_rules rs cname) (OptionType.some RecRule rule) -> \
-             Eq Bool (rec_rules_closed_b2 rs) Bool.true -> \
-             Eq Bool (closed_b (recrule_rhs rule)) Bool.true",
+             @Eq (OptionType RecRule) (recrule_in_rules rs cname) (@OptionType.some RecRule rule) -> \
+             @Eq Bool (rec_rules_closed_b2 rs) Bool.true -> \
+             @Eq Bool (closed_b (recrule_rhs rule)) Bool.true",
             "fun (rs : RecRules) (cname : Name) (rule : RecRule) => \
-             RecRules.rec \
+             @RecRules.rec \
              (fun (l : RecRules) => \
-             Eq (OptionType RecRule) (recrule_in_rules l cname) (OptionType.some RecRule rule) -> \
-             Eq Bool (rec_rules_closed_b2 l) Bool.true -> \
-             Eq Bool (closed_b (recrule_rhs rule)) Bool.true) \
-             (fun (hlk : Eq (OptionType RecRule) (recrule_in_rules RecRules.nil cname) (OptionType.some RecRule rule)) \
-             (_hb : Eq Bool (rec_rules_closed_b2 RecRules.nil) Bool.true) => \
+             @Eq (OptionType RecRule) (recrule_in_rules l cname) (@OptionType.some RecRule rule) -> \
+             @Eq Bool (rec_rules_closed_b2 l) Bool.true -> \
+             @Eq Bool (closed_b (recrule_rhs rule)) Bool.true) \
+             (fun (hlk : @Eq (OptionType RecRule) (recrule_in_rules RecRules.nil cname) (@OptionType.some RecRule rule)) \
+             (_hb : @Eq Bool (rec_rules_closed_b2 RecRules.nil) Bool.true) => \
              option_none_ne_some RecRule rule \
-             (Eq Bool (closed_b (recrule_rhs rule)) Bool.true) hlk) \
+             (@Eq Bool (closed_b (recrule_rhs rule)) Bool.true) hlk) \
              (fun (r : RecRule) (rest : RecRules) \
-             (ih : Eq (OptionType RecRule) (recrule_in_rules rest cname) (OptionType.some RecRule rule) -> \
-             Eq Bool (rec_rules_closed_b2 rest) Bool.true -> \
-             Eq Bool (closed_b (recrule_rhs rule)) Bool.true) \
-             (hlk : Eq (OptionType RecRule) (recrule_in_rules (RecRules.cons r rest) cname) (OptionType.some RecRule rule)) \
-             (hb : Eq Bool (rec_rules_closed_b2 (RecRules.cons r rest)) Bool.true) => \
+             (ih : @Eq (OptionType RecRule) (recrule_in_rules rest cname) (@OptionType.some RecRule rule) -> \
+             @Eq Bool (rec_rules_closed_b2 rest) Bool.true -> \
+             @Eq Bool (closed_b (recrule_rhs rule)) Bool.true) \
+             (hlk : @Eq (OptionType RecRule) (recrule_in_rules (RecRules.cons r rest) cname) (@OptionType.some RecRule rule)) \
+             (hb : @Eq Bool (rec_rules_closed_b2 (RecRules.cons r rest)) Bool.true) => \
              opt_pick_some_inv RecRule (name_eqb (recrule_ctor_name r) cname) r \
              (recrule_in_rules rest cname) rule \
-             (Eq Bool (closed_b (recrule_rhs rule)) Bool.true) hlk \
-             (fun (_ht : Eq Bool (name_eqb (recrule_ctor_name r) cname) Bool.true) \
-             (hval : Eq RecRule r rule) => \
-             Eq.subst RecRule \
-             (fun (z : RecRule) => Eq Bool (closed_b (recrule_rhs z)) Bool.true) \
+             (@Eq Bool (closed_b (recrule_rhs rule)) Bool.true) hlk \
+             (fun (_ht : @Eq Bool (name_eqb (recrule_ctor_name r) cname) Bool.true) \
+             (hval : @Eq RecRule r rule) => \
+             @Eq.subst RecRule \
+             (fun (z : RecRule) => @Eq Bool (closed_b (recrule_rhs z)) Bool.true) \
              r rule hval \
              (band_eq_true_left (closed_b (recrule_rhs r)) (rec_rules_closed_b2 rest) hb)) \
-             (fun (_hf : Eq Bool (name_eqb (recrule_ctor_name r) cname) Bool.false) \
-             (hrest : Eq (OptionType RecRule) (recrule_in_rules rest cname) (OptionType.some RecRule rule)) => \
+             (fun (_hf : @Eq Bool (name_eqb (recrule_ctor_name r) cname) Bool.false) \
+             (hrest : @Eq (OptionType RecRule) (recrule_in_rules rest cname) (@OptionType.some RecRule rule)) => \
              ih hrest \
              (band_eq_true_right (closed_b (recrule_rhs r)) (rec_rules_closed_b2 rest) hb))) \
              rs",
@@ -744,36 +744,36 @@ impl Specification {
         self.add_definition(Self::eccd_lemma(
             "rec_env_closed_b2_sound",
             "forall (env : RecEnv) (rname : Name) (rules : RecRules), \
-             Eq (OptionType RecRules) (recrules_for env rname) (OptionType.some RecRules rules) -> \
-             Eq Bool (rec_env_closed_b2 env) Bool.true -> \
-             Eq Bool (rec_rules_closed_b2 rules) Bool.true",
+             @Eq (OptionType RecRules) (recrules_for env rname) (@OptionType.some RecRules rules) -> \
+             @Eq Bool (rec_env_closed_b2 env) Bool.true -> \
+             @Eq Bool (rec_rules_closed_b2 rules) Bool.true",
             "fun (env : RecEnv) (rname : Name) (rules : RecRules) => \
-             RecEnv.rec \
+             @RecEnv.rec \
              (fun (e : RecEnv) => \
-             Eq (OptionType RecRules) (recrules_for e rname) (OptionType.some RecRules rules) -> \
-             Eq Bool (rec_env_closed_b2 e) Bool.true -> \
-             Eq Bool (rec_rules_closed_b2 rules) Bool.true) \
-             (fun (hlk : Eq (OptionType RecRules) (recrules_for RecEnv.empty rname) (OptionType.some RecRules rules)) \
-             (_hb : Eq Bool (rec_env_closed_b2 RecEnv.empty) Bool.true) => \
+             @Eq (OptionType RecRules) (recrules_for e rname) (@OptionType.some RecRules rules) -> \
+             @Eq Bool (rec_env_closed_b2 e) Bool.true -> \
+             @Eq Bool (rec_rules_closed_b2 rules) Bool.true) \
+             (fun (hlk : @Eq (OptionType RecRules) (recrules_for RecEnv.empty rname) (@OptionType.some RecRules rules)) \
+             (_hb : @Eq Bool (rec_env_closed_b2 RecEnv.empty) Bool.true) => \
              option_none_ne_some RecRules rules \
-             (Eq Bool (rec_rules_closed_b2 rules) Bool.true) hlk) \
+             (@Eq Bool (rec_rules_closed_b2 rules) Bool.true) hlk) \
              (fun (tail : RecEnv) (rn : Name) (mta : RecMeta) (rls : RecRules) \
-             (ih : Eq (OptionType RecRules) (recrules_for tail rname) (OptionType.some RecRules rules) -> \
-             Eq Bool (rec_env_closed_b2 tail) Bool.true -> \
-             Eq Bool (rec_rules_closed_b2 rules) Bool.true) \
-             (hlk : Eq (OptionType RecRules) (recrules_for (RecEnv.addRec tail rn mta rls) rname) (OptionType.some RecRules rules)) \
-             (hb : Eq Bool (rec_env_closed_b2 (RecEnv.addRec tail rn mta rls)) Bool.true) => \
+             (ih : @Eq (OptionType RecRules) (recrules_for tail rname) (@OptionType.some RecRules rules) -> \
+             @Eq Bool (rec_env_closed_b2 tail) Bool.true -> \
+             @Eq Bool (rec_rules_closed_b2 rules) Bool.true) \
+             (hlk : @Eq (OptionType RecRules) (recrules_for (RecEnv.addRec tail rn mta rls) rname) (@OptionType.some RecRules rules)) \
+             (hb : @Eq Bool (rec_env_closed_b2 (RecEnv.addRec tail rn mta rls)) Bool.true) => \
              opt_pick_some_inv RecRules (name_eqb rn rname) rls \
              (recrules_for tail rname) rules \
-             (Eq Bool (rec_rules_closed_b2 rules) Bool.true) hlk \
-             (fun (_ht : Eq Bool (name_eqb rn rname) Bool.true) \
-             (hval : Eq RecRules rls rules) => \
-             Eq.subst RecRules \
-             (fun (z : RecRules) => Eq Bool (rec_rules_closed_b2 z) Bool.true) \
+             (@Eq Bool (rec_rules_closed_b2 rules) Bool.true) hlk \
+             (fun (_ht : @Eq Bool (name_eqb rn rname) Bool.true) \
+             (hval : @Eq RecRules rls rules) => \
+             @Eq.subst RecRules \
+             (fun (z : RecRules) => @Eq Bool (rec_rules_closed_b2 z) Bool.true) \
              rls rules hval \
              (band_eq_true_left (rec_rules_closed_b2 rls) (rec_env_closed_b2 tail) hb)) \
-             (fun (_hf : Eq Bool (name_eqb rn rname) Bool.false) \
-             (htail : Eq (OptionType RecRules) (recrules_for tail rname) (OptionType.some RecRules rules)) => \
+             (fun (_hf : @Eq Bool (name_eqb rn rname) Bool.false) \
+             (htail : @Eq (OptionType RecRules) (recrules_for tail rname) (@OptionType.some RecRules rules)) => \
              ih htail \
              (band_eq_true_right (rec_rules_closed_b2 rls) (rec_env_closed_b2 tail) hb))) \
              env",
@@ -801,36 +801,36 @@ impl Specification {
         self.add_definition(Self::eccd_lemma(
             "def_env_closed_b2_sound",
             "forall (env : DefEnv) (dname : Name) (defval : KExpr), \
-             Eq (OptionType KExpr) (defval_for env dname) (OptionType.some KExpr defval) -> \
-             Eq Bool (def_env_closed_b2 env) Bool.true -> \
-             Eq Bool (closed_b defval) Bool.true",
+             @Eq (OptionType KExpr) (defval_for env dname) (@OptionType.some KExpr defval) -> \
+             @Eq Bool (def_env_closed_b2 env) Bool.true -> \
+             @Eq Bool (closed_b defval) Bool.true",
             "fun (env : DefEnv) (dname : Name) (defval : KExpr) => \
-             DefEnv.rec \
+             @DefEnv.rec \
              (fun (e : DefEnv) => \
-             Eq (OptionType KExpr) (defval_for e dname) (OptionType.some KExpr defval) -> \
-             Eq Bool (def_env_closed_b2 e) Bool.true -> \
-             Eq Bool (closed_b defval) Bool.true) \
-             (fun (hlk : Eq (OptionType KExpr) (defval_for DefEnv.empty dname) (OptionType.some KExpr defval)) \
-             (_hb : Eq Bool (def_env_closed_b2 DefEnv.empty) Bool.true) => \
+             @Eq (OptionType KExpr) (defval_for e dname) (@OptionType.some KExpr defval) -> \
+             @Eq Bool (def_env_closed_b2 e) Bool.true -> \
+             @Eq Bool (closed_b defval) Bool.true) \
+             (fun (hlk : @Eq (OptionType KExpr) (defval_for DefEnv.empty dname) (@OptionType.some KExpr defval)) \
+             (_hb : @Eq Bool (def_env_closed_b2 DefEnv.empty) Bool.true) => \
              option_none_ne_some KExpr defval \
-             (Eq Bool (closed_b defval) Bool.true) hlk) \
+             (@Eq Bool (closed_b defval) Bool.true) hlk) \
              (fun (tail : DefEnv) (dn : Name) (defn : KDefSig) \
-             (ih : Eq (OptionType KExpr) (defval_for tail dname) (OptionType.some KExpr defval) -> \
-             Eq Bool (def_env_closed_b2 tail) Bool.true -> \
-             Eq Bool (closed_b defval) Bool.true) \
-             (hlk : Eq (OptionType KExpr) (defval_for (DefEnv.addDef tail dn defn) dname) (OptionType.some KExpr defval)) \
-             (hb : Eq Bool (def_env_closed_b2 (DefEnv.addDef tail dn defn)) Bool.true) => \
+             (ih : @Eq (OptionType KExpr) (defval_for tail dname) (@OptionType.some KExpr defval) -> \
+             @Eq Bool (def_env_closed_b2 tail) Bool.true -> \
+             @Eq Bool (closed_b defval) Bool.true) \
+             (hlk : @Eq (OptionType KExpr) (defval_for (DefEnv.addDef tail dn defn) dname) (@OptionType.some KExpr defval)) \
+             (hb : @Eq Bool (def_env_closed_b2 (DefEnv.addDef tail dn defn)) Bool.true) => \
              opt_pick_some_inv KExpr (name_eqb dn dname) (kdef_value defn) \
              (defval_for tail dname) defval \
-             (Eq Bool (closed_b defval) Bool.true) hlk \
-             (fun (_ht : Eq Bool (name_eqb dn dname) Bool.true) \
-             (hval : Eq KExpr (kdef_value defn) defval) => \
-             Eq.subst KExpr \
-             (fun (z : KExpr) => Eq Bool (closed_b z) Bool.true) \
+             (@Eq Bool (closed_b defval) Bool.true) hlk \
+             (fun (_ht : @Eq Bool (name_eqb dn dname) Bool.true) \
+             (hval : @Eq KExpr (kdef_value defn) defval) => \
+             @Eq.subst KExpr \
+             (fun (z : KExpr) => @Eq Bool (closed_b z) Bool.true) \
              (kdef_value defn) defval hval \
              (band_eq_true_left (closed_b (kdef_value defn)) (def_env_closed_b2 tail) hb)) \
-             (fun (_hf : Eq Bool (name_eqb dn dname) Bool.false) \
-             (htail : Eq (OptionType KExpr) (defval_for tail dname) (OptionType.some KExpr defval)) => \
+             (fun (_hf : @Eq Bool (name_eqb dn dname) Bool.false) \
+             (htail : @Eq (OptionType KExpr) (defval_for tail dname) (@OptionType.some KExpr defval)) => \
              ih htail \
              (band_eq_true_right (closed_b (kdef_value defn)) (def_env_closed_b2 tail) hb))) \
              env",
@@ -878,17 +878,17 @@ impl Specification {
         self.add_definition(Self::eccd_lemma(
             "rec_env_closed_of_b2",
             "forall (env : RecEnv), \
-             Eq Bool (rec_env_closed_b2 env) Bool.true -> RecEnvClosed env",
-            "fun (env : RecEnv) (hb : Eq Bool (rec_env_closed_b2 env) Bool.true) => \
-             RecEnvClosed.mk env \
+             @Eq Bool (rec_env_closed_b2 env) Bool.true -> RecEnvClosed env",
+            "fun (env : RecEnv) (hb : @Eq Bool (rec_env_closed_b2 env) Bool.true) => \
+             @RecEnvClosed.mk env \
              (fun (rname : Name) (cname : Name) (rule : RecRule) \
-             (hlk : Eq (OptionType RecRule) (recrule_for env rname cname) (OptionType.some RecRule rule)) => \
+             (hlk : @Eq (OptionType RecRule) (recrule_for env rname cname) (@OptionType.some RecRule rule)) => \
              opt_bind_some_inv_type RecRules RecRule (recrules_for env rname) \
              (fun (rules : RecRules) => recrule_in_rules rules cname) rule \
              (is_closed_at (recrule_rhs rule) Nat.zero) hlk \
              (fun (rules : RecRules) \
-             (hrules : Eq (OptionType RecRules) (recrules_for env rname) (OptionType.some RecRules rules)) \
-             (hin : Eq (OptionType RecRule) (recrule_in_rules rules cname) (OptionType.some RecRule rule)) => \
+             (hrules : @Eq (OptionType RecRules) (recrules_for env rname) (@OptionType.some RecRules rules)) \
+             (hin : @Eq (OptionType RecRule) (recrule_in_rules rules cname) (@OptionType.some RecRule rule)) => \
              closed_at_b_sound (recrule_rhs rule) Nat.zero \
              (rec_rules_closed_b2_sound rules cname rule hin \
              (rec_env_closed_b2_sound env rname rules hrules hb))))",
@@ -923,17 +923,17 @@ impl Specification {
         self.add_definition(Self::eccd_lemma(
             "rec_env_lift_closed_of_b2",
             "forall (env : RecEnv), \
-             Eq Bool (rec_env_lift_closed_b2 env) Bool.true -> RecEnvLiftClosed env",
-            "fun (env : RecEnv) (hb : Eq Bool (rec_env_lift_closed_b2 env) Bool.true) => \
-             RecEnvLiftClosed.mk env \
+             @Eq Bool (rec_env_lift_closed_b2 env) Bool.true -> RecEnvLiftClosed env",
+            "fun (env : RecEnv) (hb : @Eq Bool (rec_env_lift_closed_b2 env) Bool.true) => \
+             @RecEnvLiftClosed.mk env \
              (fun (rname : Name) (cname : Name) (rule : RecRule) \
-             (hlk : Eq (OptionType RecRule) (recrule_for env rname cname) (OptionType.some RecRule rule)) => \
+             (hlk : @Eq (OptionType RecRule) (recrule_for env rname cname) (@OptionType.some RecRule rule)) => \
              opt_bind_some_inv_type RecRules RecRule (recrules_for env rname) \
              (fun (rules : RecRules) => recrule_in_rules rules cname) rule \
              (is_closed_at (recrule_rhs rule) Nat.zero) hlk \
              (fun (rules : RecRules) \
-             (hrules : Eq (OptionType RecRules) (recrules_for env rname) (OptionType.some RecRules rules)) \
-             (hin : Eq (OptionType RecRule) (recrule_in_rules rules cname) (OptionType.some RecRule rule)) => \
+             (hrules : @Eq (OptionType RecRules) (recrules_for env rname) (@OptionType.some RecRules rules)) \
+             (hin : @Eq (OptionType RecRule) (recrule_in_rules rules cname) (@OptionType.some RecRule rule)) => \
              closed_at_b_sound (recrule_rhs rule) Nat.zero \
              (rec_rules_closed_b2_sound rules cname rule hin \
              (rec_env_closed_b2_sound env rname rules hrules hb))))",
@@ -962,11 +962,11 @@ impl Specification {
         self.add_definition(Self::eccd_lemma(
             "def_env_closed_of_b2",
             "forall (env : DefEnv), \
-             Eq Bool (def_env_closed_b2 env) Bool.true -> DefEnvClosed env",
-            "fun (env : DefEnv) (hb : Eq Bool (def_env_closed_b2 env) Bool.true) => \
-             DefEnvClosed.mk env \
+             @Eq Bool (def_env_closed_b2 env) Bool.true -> DefEnvClosed env",
+            "fun (env : DefEnv) (hb : @Eq Bool (def_env_closed_b2 env) Bool.true) => \
+             @DefEnvClosed.mk env \
              (fun (dname : Name) (defval : KExpr) \
-             (hlk : Eq (OptionType KExpr) (defval_for env dname) (OptionType.some KExpr defval)) => \
+             (hlk : @Eq (OptionType KExpr) (defval_for env dname) (@OptionType.some KExpr defval)) => \
              closed_at_b_sound defval Nat.zero \
              (def_env_closed_b2_sound env dname defval hlk hb))",
             "GENERIC depth-aware checker soundness (inst): def_env_closed_b2 env = true -> \
@@ -991,11 +991,11 @@ impl Specification {
         self.add_definition(Self::eccd_lemma(
             "def_env_lift_closed_of_b2",
             "forall (env : DefEnv), \
-             Eq Bool (def_env_lift_closed_b2 env) Bool.true -> DefEnvLiftClosed env",
-            "fun (env : DefEnv) (hb : Eq Bool (def_env_lift_closed_b2 env) Bool.true) => \
-             DefEnvLiftClosed.mk env \
+             @Eq Bool (def_env_lift_closed_b2 env) Bool.true -> DefEnvLiftClosed env",
+            "fun (env : DefEnv) (hb : @Eq Bool (def_env_lift_closed_b2 env) Bool.true) => \
+             @DefEnvLiftClosed.mk env \
              (fun (dname : Name) (defval : KExpr) \
-             (hlk : Eq (OptionType KExpr) (defval_for env dname) (OptionType.some KExpr defval)) => \
+             (hlk : @Eq (OptionType KExpr) (defval_for env dname) (@OptionType.some KExpr defval)) => \
              closed_at_b_sound defval Nat.zero \
              (def_env_closed_b2_sound env dname defval hlk hb))",
             "GENERIC depth-aware checker soundness (lift): def_env_lift_closed_b2 env = true -> \
@@ -1029,22 +1029,22 @@ impl Specification {
             (
                 "faithful_red_env_rec_closed_via_checker_b2",
                 "RecEnvClosed (red_rec faithful_red_env)".to_string(),
-                "rec_env_closed_of_b2 (red_rec faithful_red_env) (Eq.refl Bool Bool.true)",
+                "rec_env_closed_of_b2 (red_rec faithful_red_env) (@Eq.refl Bool Bool.true)",
             ),
             (
                 "faithful_red_env_rec_lift_closed_via_checker_b2",
                 "RecEnvLiftClosed (red_rec faithful_red_env)".to_string(),
-                "rec_env_lift_closed_of_b2 (red_rec faithful_red_env) (Eq.refl Bool Bool.true)",
+                "rec_env_lift_closed_of_b2 (red_rec faithful_red_env) (@Eq.refl Bool Bool.true)",
             ),
             (
                 "faithful_red_env_def_closed_via_checker_b2",
                 "DefEnvClosed (red_def faithful_red_env)".to_string(),
-                "def_env_closed_of_b2 (red_def faithful_red_env) (Eq.refl Bool Bool.true)",
+                "def_env_closed_of_b2 (red_def faithful_red_env) (@Eq.refl Bool Bool.true)",
             ),
             (
                 "faithful_red_env_def_lift_closed_via_checker_b2",
                 "DefEnvLiftClosed (red_def faithful_red_env)".to_string(),
-                "def_env_lift_closed_of_b2 (red_def faithful_red_env) (Eq.refl Bool Bool.true)",
+                "def_env_lift_closed_of_b2 (red_def faithful_red_env) (@Eq.refl Bool Bool.true)",
             ),
         ];
 
@@ -1086,22 +1086,22 @@ impl Specification {
             (
                 "kernel_core_red_env_rec_closed_via_checker_b2",
                 "RecEnvClosed (red_rec kernel_core_red_env)".to_string(),
-                "rec_env_closed_of_b2 (red_rec kernel_core_red_env) (Eq.refl Bool Bool.true)",
+                "rec_env_closed_of_b2 (red_rec kernel_core_red_env) (@Eq.refl Bool Bool.true)",
             ),
             (
                 "kernel_core_red_env_rec_lift_closed_via_checker_b2",
                 "RecEnvLiftClosed (red_rec kernel_core_red_env)".to_string(),
-                "rec_env_lift_closed_of_b2 (red_rec kernel_core_red_env) (Eq.refl Bool Bool.true)",
+                "rec_env_lift_closed_of_b2 (red_rec kernel_core_red_env) (@Eq.refl Bool Bool.true)",
             ),
             (
                 "kernel_core_red_env_def_closed_via_checker_b2",
                 "DefEnvClosed (red_def kernel_core_red_env)".to_string(),
-                "def_env_closed_of_b2 (red_def kernel_core_red_env) (Eq.refl Bool Bool.true)",
+                "def_env_closed_of_b2 (red_def kernel_core_red_env) (@Eq.refl Bool Bool.true)",
             ),
             (
                 "kernel_core_red_env_def_lift_closed_via_checker_b2",
                 "DefEnvLiftClosed (red_def kernel_core_red_env)".to_string(),
-                "def_env_lift_closed_of_b2 (red_def kernel_core_red_env) (Eq.refl Bool Bool.true)",
+                "def_env_lift_closed_of_b2 (red_def kernel_core_red_env) (@Eq.refl Bool Bool.true)",
             ),
         ];
 
@@ -1247,7 +1247,7 @@ mod tests {
                 .as_deref()
                 .unwrap_or_else(|| panic!("{name} must carry a proof term"));
             assert!(
-                value.contains("(Eq.refl Bool Bool.true)"),
+                value.contains("(@Eq.refl Bool Bool.true)"),
                 "{name} must be the single-rfl checker route, got: {value}"
             );
             spec.verify_definition(name)
@@ -1289,7 +1289,7 @@ mod tests {
                 .as_deref()
                 .unwrap_or_else(|| panic!("{name} must carry a proof term"));
             assert!(
-                value.contains("(Eq.refl Bool Bool.true)"),
+                value.contains("(@Eq.refl Bool Bool.true)"),
                 "{name} must be the single-rfl checker route, got: {value}"
             );
             spec.verify_definition(name).unwrap_or_else(|e| {

@@ -122,7 +122,7 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (e0 : KExpr) (T0 : KExpr) (h0 : Typing e0 T0) => ",
-                    "Typing.rec ",
+                    "@Typing.rec ",
                     "(fun (e : KExpr) (T : KExpr) (_ : Typing e T) => const_free e) ",
                     // sort n
                     "(fun (n : Level) => ConstFreeUnit.triv) ",
@@ -130,17 +130,17 @@ impl Specification {
                     "(fun (A : KExpr) (B : KExpr) (n : Level) (m : Level) ",
                     "(_hA : Typing A (KExpr.sort n)) (_hB : Typing B (KExpr.sort m)) ",
                     "(ihA : const_free A) (ihB : const_free B) => ",
-                    "AndType.intro (const_free A) (const_free B) ihA ihB) ",
+                    "@AndType.intro (const_free A) (const_free B) ihA ihB) ",
                     // lam A b B u
                     "(fun (A : KExpr) (b : KExpr) (B : KExpr) (u : Level) ",
                     "(_hA : Typing A (KExpr.sort u)) (_hb : Typing b B) ",
                     "(ihA : const_free A) (ihb : const_free b) => ",
-                    "AndType.intro (const_free A) (const_free b) ihA ihb) ",
+                    "@AndType.intro (const_free A) (const_free b) ihA ihb) ",
                     // app f a A B
                     "(fun (f : KExpr) (a : KExpr) (A : KExpr) (B : KExpr) ",
                     "(_hf : Typing f (KExpr.pi A B)) (_ha : Typing a A) ",
                     "(ihf : const_free f) (iha : const_free a) => ",
-                    "AndType.intro (const_free f) (const_free a) ihf iha) ",
+                    "@AndType.intro (const_free f) (const_free a) ihf iha) ",
                     // conv e A B — subject unchanged, forward the IH.
                     "(fun (e : KExpr) (A : KExpr) (B : KExpr) ",
                     "(_he : Typing e A) (_eq : DefEq A B) ",
@@ -196,7 +196,7 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (e0 : KExpr) => ",
-                    "KExpr.rec ",
+                    "@KExpr.rec ",
                     "(fun (x : KExpr) => const_free x -> const_free (kapp_fn x)) ",
                     // sort n
                     "(fun (n : Level) (h : const_free (KExpr.sort n)) => h) ",
@@ -268,60 +268,60 @@ impl Specification {
             name: "const_free_head_name_none".to_string(),
             type_src: concat!(
                 "forall (e : KExpr), const_free e -> ",
-                "Eq (OptionType Name) (kexpr_const_name e) (OptionType.none Name)"
+                "@Eq (OptionType Name) (kexpr_const_name e) (@OptionType.none Name)"
             )
             .to_string(),
             value_src: Some(
                 concat!(
                     "fun (e0 : KExpr) => ",
-                    "KExpr.rec ",
+                    "@KExpr.rec ",
                     "(fun (x : KExpr) => const_free x -> ",
-                    "Eq (OptionType Name) (kexpr_const_name x) (OptionType.none Name)) ",
+                    "@Eq (OptionType Name) (kexpr_const_name x) (@OptionType.none Name)) ",
                     // sort n
                     "(fun (n : Level) (_ : const_free (KExpr.sort n)) => ",
-                    "Eq.refl (OptionType Name) (OptionType.none Name)) ",
+                    "@Eq.refl (OptionType Name) (@OptionType.none Name)) ",
                     // bvar i
                     "(fun (i : Nat) (_ : const_free (KExpr.bvar i)) => ",
-                    "Eq.refl (OptionType Name) (OptionType.none Name)) ",
+                    "@Eq.refl (OptionType Name) (@OptionType.none Name)) ",
                     // app f a
                     "(fun (f : KExpr) (a : KExpr) ",
-                    "(_ihf : const_free f -> Eq (OptionType Name) (kexpr_const_name f) (OptionType.none Name)) ",
-                    "(_iha : const_free a -> Eq (OptionType Name) (kexpr_const_name a) (OptionType.none Name)) ",
+                    "(_ihf : const_free f -> @Eq (OptionType Name) (kexpr_const_name f) (@OptionType.none Name)) ",
+                    "(_iha : const_free a -> @Eq (OptionType Name) (kexpr_const_name a) (@OptionType.none Name)) ",
                     "(_ : const_free (KExpr.app f a)) => ",
-                    "Eq.refl (OptionType Name) (OptionType.none Name)) ",
+                    "@Eq.refl (OptionType Name) (@OptionType.none Name)) ",
                     // lam ty b
                     "(fun (ty : KExpr) (b : KExpr) ",
-                    "(_ihty : const_free ty -> Eq (OptionType Name) (kexpr_const_name ty) (OptionType.none Name)) ",
-                    "(_ihb : const_free b -> Eq (OptionType Name) (kexpr_const_name b) (OptionType.none Name)) ",
+                    "(_ihty : const_free ty -> @Eq (OptionType Name) (kexpr_const_name ty) (@OptionType.none Name)) ",
+                    "(_ihb : const_free b -> @Eq (OptionType Name) (kexpr_const_name b) (@OptionType.none Name)) ",
                     "(_ : const_free (KExpr.lam ty b)) => ",
-                    "Eq.refl (OptionType Name) (OptionType.none Name)) ",
+                    "@Eq.refl (OptionType Name) (@OptionType.none Name)) ",
                     // pi ty b
                     "(fun (ty : KExpr) (b : KExpr) ",
-                    "(_ihty : const_free ty -> Eq (OptionType Name) (kexpr_const_name ty) (OptionType.none Name)) ",
-                    "(_ihb : const_free b -> Eq (OptionType Name) (kexpr_const_name b) (OptionType.none Name)) ",
+                    "(_ihty : const_free ty -> @Eq (OptionType Name) (kexpr_const_name ty) (@OptionType.none Name)) ",
+                    "(_ihb : const_free b -> @Eq (OptionType Name) (kexpr_const_name b) (@OptionType.none Name)) ",
                     "(_ : const_free (KExpr.pi ty b)) => ",
-                    "Eq.refl (OptionType Name) (OptionType.none Name)) ",
+                    "@Eq.refl (OptionType Name) (@OptionType.none Name)) ",
                     // const nm us — const_free (const nm us) = Empty.
                     "(fun (nm : Name) (us : ListType Level) ",
                     "(h : const_free (KExpr.const nm us)) => ",
-                    "Empty.rec (fun (_ : Empty) => ",
-                    "Eq (OptionType Name) (kexpr_const_name (KExpr.const nm us)) (OptionType.none Name)) ",
+                    "@Empty.rec (fun (_ : Empty) => ",
+                    "@Eq (OptionType Name) (kexpr_const_name (KExpr.const nm us)) (@OptionType.none Name)) ",
                     "h) ",
                     // let_ ty v b — kexpr_const_name (let_ ...) = none by refl.
                     "(fun (ty : KExpr) (v : KExpr) (b : KExpr) ",
-                    "(_ihty : const_free ty -> Eq (OptionType Name) (kexpr_const_name ty) (OptionType.none Name)) ",
-                    "(_ihv : const_free v -> Eq (OptionType Name) (kexpr_const_name v) (OptionType.none Name)) ",
-                    "(_ihb : const_free b -> Eq (OptionType Name) (kexpr_const_name b) (OptionType.none Name)) ",
+                    "(_ihty : const_free ty -> @Eq (OptionType Name) (kexpr_const_name ty) (@OptionType.none Name)) ",
+                    "(_ihv : const_free v -> @Eq (OptionType Name) (kexpr_const_name v) (@OptionType.none Name)) ",
+                    "(_ihb : const_free b -> @Eq (OptionType Name) (kexpr_const_name b) (@OptionType.none Name)) ",
                     "(_ : const_free (KExpr.let_ ty v b)) => ",
-                    "Eq.refl (OptionType Name) (OptionType.none Name)) ",
+                    "@Eq.refl (OptionType Name) (@OptionType.none Name)) ",
                     // proj s i sub — kexpr_const_name (proj ..) = none by refl.
                     "(fun (s : Name) (i : Nat) (sub : KExpr) ",
-                    "(_ihsub : const_free sub -> Eq (OptionType Name) (kexpr_const_name sub) (OptionType.none Name)) ",
+                    "(_ihsub : const_free sub -> @Eq (OptionType Name) (kexpr_const_name sub) (@OptionType.none Name)) ",
                     "(_ : const_free (KExpr.proj s i sub)) => ",
-                    "Eq.refl (OptionType Name) (OptionType.none Name)) ",
+                    "@Eq.refl (OptionType Name) (@OptionType.none Name)) ",
                     // lit v — kexpr_const_name (lit v) = none by refl.
                     "(fun (v : Nat) (_ : const_free (KExpr.lit v)) => ",
-                    "Eq.refl (OptionType Name) (OptionType.none Name)) ",
+                    "@Eq.refl (OptionType Name) (@OptionType.none Name)) ",
                     "e0"
                 )
                 .to_string(),
@@ -357,7 +357,7 @@ impl Specification {
             name: "const_free_head_const_name_none".to_string(),
             type_src: concat!(
                 "forall (e : KExpr), const_free e -> ",
-                "Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.none Name)"
+                "@Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (@OptionType.none Name)"
             )
             .to_string(),
             value_src: Some(
@@ -403,7 +403,7 @@ impl Specification {
             name: "beta_reduces_to_bd_cf".to_string(),
             type_src: concat!(
                 "forall (e : KExpr) (e' : KExpr), beta_reduces e e' -> ",
-                "Eq Nat (bvar_ceiling e) Nat.zero -> const_free e -> beta_reduces_bd e e'"
+                "@Eq Nat (bvar_ceiling e) Nat.zero -> const_free e -> beta_reduces_bd e e'"
             )
             .to_string(),
             value_src: Some(beta_reduces_to_bd_cf_proof()),
@@ -476,20 +476,20 @@ impl Specification {
             name: "whnf_step_to_bd_cf".to_string(),
             type_src: concat!(
                 "forall (e : KExpr) (e' : KExpr), whnf_step e e' -> ",
-                "Eq Nat (bvar_ceiling e) Nat.zero -> const_free e -> beta_reduces_bd e e'"
+                "@Eq Nat (bvar_ceiling e) Nat.zero -> const_free e -> beta_reduces_bd e e'"
             )
             .to_string(),
             value_src: Some(
                 concat!(
                     "fun (e : KExpr) (e' : KExpr) (hstep : whnf_step e e') => ",
-                    "whnf_step.rec e e' ",
+                    "@whnf_step.rec e e' ",
                     "(fun (_ : whnf_step e e') => ",
-                    "Eq Nat (bvar_ceiling e) Nat.zero -> const_free e -> beta_reduces_bd e e') ",
+                    "@Eq Nat (bvar_ceiling e) Nat.zero -> const_free e -> beta_reduces_bd e e') ",
                     // beta leg: forward to beta_reduces_to_bd_cf.
                     "(fun (hb : beta_reduces e e') => beta_reduces_to_bd_cf e e' hb) ",
                     // delta leg: vacuous on a const-free term.
                     "(fun (hd : delta_reduces e e') ",
-                    "(_hceil : Eq Nat (bvar_ceiling e) Nat.zero) (hcf : const_free e) => ",
+                    "(_hceil : @Eq Nat (bvar_ceiling e) Nat.zero) (hcf : const_free e) => ",
                     "delta_step_head_none_absurd_type (red_def the_red_env) e e' ",
                     "(beta_reduces_bd e e') ",
                     "(const_free_head_const_name_none e hcf) ",
@@ -611,19 +611,19 @@ impl Specification {
 fn beta_reduces_to_bd_cf_proof() -> String {
     concat!(
         "fun (s : KExpr) (t : KExpr) (hst : beta_reduces s t) => ",
-        "beta_reduces.rec ",
+        "@beta_reduces.rec ",
         "(fun (e : KExpr) (e' : KExpr) (_ : beta_reduces e e') => ",
-        "Eq Nat (bvar_ceiling e) Nat.zero -> const_free e -> beta_reduces_bd e e') ",
+        "@Eq Nat (bvar_ceiling e) Nat.zero -> const_free e -> beta_reduces_bd e e') ",
         // beta A body arg : the head redex; maps straight to beta_reduces_bd.beta.
         "(fun (A : KExpr) (body : KExpr) (arg : KExpr) ",
-        "(_hc : Eq Nat (bvar_ceiling (KExpr.app (KExpr.lam A body) arg)) Nat.zero) ",
+        "(_hc : @Eq Nat (bvar_ceiling (KExpr.app (KExpr.lam A body) arg)) Nat.zero) ",
         "(_hcf : const_free (KExpr.app (KExpr.lam A body) arg)) => ",
         "beta_reduces_bd.beta A body arg) ",
         // app_left f f' a
         "(fun (f : KExpr) (f' : KExpr) (a : KExpr) ",
         "(_hstep : beta_reduces f f') ",
-        "(ih : Eq Nat (bvar_ceiling f) Nat.zero -> const_free f -> beta_reduces_bd f f') ",
-        "(hc : Eq Nat (bvar_ceiling (KExpr.app f a)) Nat.zero) ",
+        "(ih : @Eq Nat (bvar_ceiling f) Nat.zero -> const_free f -> beta_reduces_bd f f') ",
+        "(hc : @Eq Nat (bvar_ceiling (KExpr.app f a)) Nat.zero) ",
         "(hcf : const_free (KExpr.app f a)) => ",
         "beta_reduces_bd.app_left f f' a ",
         "(ih (nat_add_eq_zero_left (bvar_ceiling f) (bvar_ceiling a) hc) ",
@@ -631,8 +631,8 @@ fn beta_reduces_to_bd_cf_proof() -> String {
         // app_right f a a'
         "(fun (f : KExpr) (a : KExpr) (a' : KExpr) ",
         "(_hstep : beta_reduces a a') ",
-        "(ih : Eq Nat (bvar_ceiling a) Nat.zero -> const_free a -> beta_reduces_bd a a') ",
-        "(hc : Eq Nat (bvar_ceiling (KExpr.app f a)) Nat.zero) ",
+        "(ih : @Eq Nat (bvar_ceiling a) Nat.zero -> const_free a -> beta_reduces_bd a a') ",
+        "(hc : @Eq Nat (bvar_ceiling (KExpr.app f a)) Nat.zero) ",
         "(hcf : const_free (KExpr.app f a)) => ",
         "beta_reduces_bd.app_right f a a' ",
         "(ih (nat_add_eq_zero_right (bvar_ceiling f) (bvar_ceiling a) hc) ",
@@ -640,8 +640,8 @@ fn beta_reduces_to_bd_cf_proof() -> String {
         // lam_ty ty ty' body
         "(fun (ty : KExpr) (ty' : KExpr) (body : KExpr) ",
         "(_hstep : beta_reduces ty ty') ",
-        "(ih : Eq Nat (bvar_ceiling ty) Nat.zero -> const_free ty -> beta_reduces_bd ty ty') ",
-        "(hc : Eq Nat (bvar_ceiling (KExpr.lam ty body)) Nat.zero) ",
+        "(ih : @Eq Nat (bvar_ceiling ty) Nat.zero -> const_free ty -> beta_reduces_bd ty ty') ",
+        "(hc : @Eq Nat (bvar_ceiling (KExpr.lam ty body)) Nat.zero) ",
         "(hcf : const_free (KExpr.lam ty body)) => ",
         "beta_reduces_bd.lam_ty ty ty' body ",
         "(ih (nat_add_eq_zero_left (bvar_ceiling ty) (bvar_ceiling body) hc) ",
@@ -649,8 +649,8 @@ fn beta_reduces_to_bd_cf_proof() -> String {
         // lam_body ty body body'
         "(fun (ty : KExpr) (body : KExpr) (body' : KExpr) ",
         "(_hstep : beta_reduces body body') ",
-        "(ih : Eq Nat (bvar_ceiling body) Nat.zero -> const_free body -> beta_reduces_bd body body') ",
-        "(hc : Eq Nat (bvar_ceiling (KExpr.lam ty body)) Nat.zero) ",
+        "(ih : @Eq Nat (bvar_ceiling body) Nat.zero -> const_free body -> beta_reduces_bd body body') ",
+        "(hc : @Eq Nat (bvar_ceiling (KExpr.lam ty body)) Nat.zero) ",
         "(hcf : const_free (KExpr.lam ty body)) => ",
         "beta_reduces_bd.lam_body ty body body' ",
         "(ih (nat_add_eq_zero_right (bvar_ceiling ty) (bvar_ceiling body) hc) ",
@@ -658,8 +658,8 @@ fn beta_reduces_to_bd_cf_proof() -> String {
         // pi_dom dom dom' body
         "(fun (dom : KExpr) (dom' : KExpr) (body : KExpr) ",
         "(_hstep : beta_reduces dom dom') ",
-        "(ih : Eq Nat (bvar_ceiling dom) Nat.zero -> const_free dom -> beta_reduces_bd dom dom') ",
-        "(hc : Eq Nat (bvar_ceiling (KExpr.pi dom body)) Nat.zero) ",
+        "(ih : @Eq Nat (bvar_ceiling dom) Nat.zero -> const_free dom -> beta_reduces_bd dom dom') ",
+        "(hc : @Eq Nat (bvar_ceiling (KExpr.pi dom body)) Nat.zero) ",
         "(hcf : const_free (KExpr.pi dom body)) => ",
         "beta_reduces_bd.pi_dom dom dom' body ",
         "(ih (nat_add_eq_zero_left (bvar_ceiling dom) (bvar_ceiling body) hc) ",
@@ -667,8 +667,8 @@ fn beta_reduces_to_bd_cf_proof() -> String {
         // pi_cod dom body body'
         "(fun (dom : KExpr) (body : KExpr) (body' : KExpr) ",
         "(_hstep : beta_reduces body body') ",
-        "(ih : Eq Nat (bvar_ceiling body) Nat.zero -> const_free body -> beta_reduces_bd body body') ",
-        "(hc : Eq Nat (bvar_ceiling (KExpr.pi dom body)) Nat.zero) ",
+        "(ih : @Eq Nat (bvar_ceiling body) Nat.zero -> const_free body -> beta_reduces_bd body body') ",
+        "(hc : @Eq Nat (bvar_ceiling (KExpr.pi dom body)) Nat.zero) ",
         "(hcf : const_free (KExpr.pi dom body)) => ",
         "beta_reduces_bd.pi_cod dom body body' ",
         "(ih (nat_add_eq_zero_right (bvar_ceiling dom) (bvar_ceiling body) hc) ",
@@ -676,8 +676,8 @@ fn beta_reduces_to_bd_cf_proof() -> String {
         // forall_congr_dom dom dom' body — forall_ is the reducible pi alias.
         "(fun (dom : KExpr) (dom' : KExpr) (body : KExpr) ",
         "(_hstep : beta_reduces dom dom') ",
-        "(ih : Eq Nat (bvar_ceiling dom) Nat.zero -> const_free dom -> beta_reduces_bd dom dom') ",
-        "(hc : Eq Nat (bvar_ceiling (KExpr.forall_ dom body)) Nat.zero) ",
+        "(ih : @Eq Nat (bvar_ceiling dom) Nat.zero -> const_free dom -> beta_reduces_bd dom dom') ",
+        "(hc : @Eq Nat (bvar_ceiling (KExpr.forall_ dom body)) Nat.zero) ",
         "(hcf : const_free (KExpr.forall_ dom body)) => ",
         "beta_reduces_bd.forall_congr_dom dom dom' body ",
         "(ih (nat_add_eq_zero_left (bvar_ceiling dom) (bvar_ceiling body) hc) ",
@@ -685,8 +685,8 @@ fn beta_reduces_to_bd_cf_proof() -> String {
         // forall_congr_cod dom body body'
         "(fun (dom : KExpr) (body : KExpr) (body' : KExpr) ",
         "(_hstep : beta_reduces body body') ",
-        "(ih : Eq Nat (bvar_ceiling body) Nat.zero -> const_free body -> beta_reduces_bd body body') ",
-        "(hc : Eq Nat (bvar_ceiling (KExpr.forall_ dom body)) Nat.zero) ",
+        "(ih : @Eq Nat (bvar_ceiling body) Nat.zero -> const_free body -> beta_reduces_bd body body') ",
+        "(hc : @Eq Nat (bvar_ceiling (KExpr.forall_ dom body)) Nat.zero) ",
         "(hcf : const_free (KExpr.forall_ dom body)) => ",
         "beta_reduces_bd.forall_congr_cod dom body body' ",
         "(ih (nat_add_eq_zero_right (bvar_ceiling dom) (bvar_ceiling body) hc) ",
@@ -694,7 +694,7 @@ fn beta_reduces_to_bd_cf_proof() -> String {
         // zeta ty val body — the genuine let_ head contraction; maps straight to
         // beta_reduces_bd.zeta (identical contractum instantiate body val).
         "(fun (ty : KExpr) (val : KExpr) (body : KExpr) ",
-        "(_hc : Eq Nat (bvar_ceiling (KExpr.let_ ty val body)) Nat.zero) ",
+        "(_hc : @Eq Nat (bvar_ceiling (KExpr.let_ ty val body)) Nat.zero) ",
         "(_hcf : const_free (KExpr.let_ ty val body)) => ",
         "beta_reduces_bd.zeta ty val body) ",
         // let_ty ty ty' val body — plain congruence; triple splits
@@ -702,8 +702,8 @@ fn beta_reduces_to_bd_cf_proof() -> String {
         // const_free (let_ ty val body) = AndType cf_ty (AndType cf_val cf_body)).
         "(fun (ty : KExpr) (ty' : KExpr) (val : KExpr) (body : KExpr) ",
         "(_hstep : beta_reduces ty ty') ",
-        "(ih : Eq Nat (bvar_ceiling ty) Nat.zero -> const_free ty -> beta_reduces_bd ty ty') ",
-        "(hc : Eq Nat (bvar_ceiling (KExpr.let_ ty val body)) Nat.zero) ",
+        "(ih : @Eq Nat (bvar_ceiling ty) Nat.zero -> const_free ty -> beta_reduces_bd ty ty') ",
+        "(hc : @Eq Nat (bvar_ceiling (KExpr.let_ ty val body)) Nat.zero) ",
         "(hcf : const_free (KExpr.let_ ty val body)) => ",
         "beta_reduces_bd.let_ty ty ty' val body ",
         "(ih (nat_add_eq_zero_left (bvar_ceiling ty) ",
@@ -712,8 +712,8 @@ fn beta_reduces_to_bd_cf_proof() -> String {
         // let_val ty val val' body
         "(fun (ty : KExpr) (val : KExpr) (val' : KExpr) (body : KExpr) ",
         "(_hstep : beta_reduces val val') ",
-        "(ih : Eq Nat (bvar_ceiling val) Nat.zero -> const_free val -> beta_reduces_bd val val') ",
-        "(hc : Eq Nat (bvar_ceiling (KExpr.let_ ty val body)) Nat.zero) ",
+        "(ih : @Eq Nat (bvar_ceiling val) Nat.zero -> const_free val -> beta_reduces_bd val val') ",
+        "(hc : @Eq Nat (bvar_ceiling (KExpr.let_ ty val body)) Nat.zero) ",
         "(hcf : const_free (KExpr.let_ ty val body)) => ",
         "beta_reduces_bd.let_val ty val val' body ",
         "(ih (nat_add_eq_zero_left (bvar_ceiling val) (bvar_ceiling body) ",
@@ -725,8 +725,8 @@ fn beta_reduces_to_bd_cf_proof() -> String {
         // old bundled instantiate premise is gone; zeta carries the contraction).
         "(fun (ty : KExpr) (val : KExpr) (body : KExpr) (body' : KExpr) ",
         "(_hstep : beta_reduces body body') ",
-        "(ih : Eq Nat (bvar_ceiling body) Nat.zero -> const_free body -> beta_reduces_bd body body') ",
-        "(hc : Eq Nat (bvar_ceiling (KExpr.let_ ty val body)) Nat.zero) ",
+        "(ih : @Eq Nat (bvar_ceiling body) Nat.zero -> const_free body -> beta_reduces_bd body body') ",
+        "(hc : @Eq Nat (bvar_ceiling (KExpr.let_ ty val body)) Nat.zero) ",
         "(hcf : const_free (KExpr.let_ ty val body)) => ",
         "beta_reduces_bd.let_body ty val body body' ",
         "(ih (nat_add_eq_zero_right (bvar_ceiling val) (bvar_ceiling body) ",
@@ -736,7 +736,7 @@ fn beta_reduces_to_bd_cf_proof() -> String {
         "(AndType.right (const_free ty) (AndType (const_free val) (const_free body)) hcf)))) ",
         // iota e e' : VACUOUS on a const-free term.
         "(fun (e : KExpr) (e' : KExpr) (hir : iota_reduces e e') ",
-        "(_hc : Eq Nat (bvar_ceiling e) Nat.zero) (hcf : const_free e) => ",
+        "(_hc : @Eq Nat (bvar_ceiling e) Nat.zero) (hcf : const_free e) => ",
         "iota_step_head_none_absurd_type (red_rec the_red_env) e e' ",
         "(beta_reduces_bd e e') ",
         "(const_free_head_const_name_none e hcf) ",
@@ -745,8 +745,8 @@ fn beta_reduces_to_bd_cf_proof() -> String {
         // to beta_reduces_bd.proj; bvar_ceiling/const_free reduce through proj (defeq).
         "(fun (ps : Name) (pidx : Nat) (sub : KExpr) (sub' : KExpr) ",
         "(_hstep : beta_reduces sub sub') ",
-        "(ih : Eq Nat (bvar_ceiling sub) Nat.zero -> const_free sub -> beta_reduces_bd sub sub') ",
-        "(hc : Eq Nat (bvar_ceiling (KExpr.proj ps pidx sub)) Nat.zero) ",
+        "(ih : @Eq Nat (bvar_ceiling sub) Nat.zero -> const_free sub -> beta_reduces_bd sub sub') ",
+        "(hc : @Eq Nat (bvar_ceiling (KExpr.proj ps pidx sub)) Nat.zero) ",
         "(hcf : const_free (KExpr.proj ps pidx sub)) => ",
         "beta_reduces_bd.proj ps pidx sub sub' (ih hc hcf)) ",
         // indices + major
@@ -761,15 +761,15 @@ fn beta_reduces_to_bd_cf_proof() -> String {
 fn whnf_terminates_well_typed_proof() -> String {
     concat!(
         "fun (e0 : KExpr) (T0 : KExpr) (ht : has_type e0 T0) => ",
-        "beta_bd_acc.rec ",
+        "@beta_bd_acc.rec ",
         "(fun (e : KExpr) (_ : beta_bd_acc e) => ",
-        "Eq Nat (bvar_ceiling e) Nat.zero -> const_free e -> whnf_acc e) ",
+        "@Eq Nat (bvar_ceiling e) Nat.zero -> const_free e -> whnf_acc e) ",
         // minor: at an accessible node e, with per-reduct IH ih, build whnf_acc e.
         "(fun (e : KExpr) ",
         "(_h : forall (e' : KExpr), beta_reduces_bd e e' -> beta_bd_acc e') ",
         "(ih : forall (e' : KExpr), beta_reduces_bd e e' -> ",
-        "Eq Nat (bvar_ceiling e') Nat.zero -> const_free e' -> whnf_acc e') ",
-        "(hceil : Eq Nat (bvar_ceiling e) Nat.zero) ",
+        "@Eq Nat (bvar_ceiling e') Nat.zero -> const_free e' -> whnf_acc e') ",
+        "(hceil : @Eq Nat (bvar_ceiling e) Nat.zero) ",
         "(hcf : const_free e) => ",
         "whnf_acc.intro e ",
         "(fun (y : KExpr) (hstep : whnf_step e y) => ",

@@ -35,6 +35,80 @@ const HAND: [&str; 6] = [
     "def ir_hlb_module : IRModule := IRModule.mk (IRList.cons IRFunc ir_hlb_func (IRList.cons IRFunc ir_lbr_func (IRList.nil IRFunc))) (IRList.nil IRGlobal)",
 ];
 
+/// Version 1 of the CURRENT source spelling for this historical fixture.
+///
+/// The existing struct-id transport happens first. This additional transport
+/// only marks the complete IRList constructor prefixes used by HAND: nil at
+/// IRFunc/IRGlobal and cons at IRNode/IRFunc. It preserves every supplied
+/// argument and is neither a source parser nor a semantic normalization.
+fn current_source_spelling_v1(line: &str) -> String {
+    assert!(line.is_ascii() && line.starts_with("def "));
+    assert!(!line.contains('"') && !line.contains('\\'));
+    let mut out = line.to_owned();
+    for (name, arity) in [("IRList.nil", 1usize), ("IRList.cons", 3usize)] {
+        let head = format!("({name}");
+        let mut cursor = 0;
+        while let Some(relative) = out[cursor..].find(&head) {
+            let start = cursor + relative;
+            let after_head = start + head.len();
+            let next = out.as_bytes().get(after_head).copied();
+            // A longer qualified identifier is not this constructor.
+            if next.map_or(false, |b| {
+                b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b'\'')
+            }) {
+                cursor = after_head;
+                continue;
+            }
+            assert_eq!(next, Some(b' '), "v1 requires a complete grouped {name}");
+            let (args, end) = split_args(&out, after_head + 1);
+            assert!(end < out.len() && out.as_bytes()[end] == b')');
+            assert_eq!(
+                args.len(),
+                arity,
+                "v1 requires every original {name} argument"
+            );
+            assert!(
+                matches!(
+                    (name, args[0].as_str()),
+                    ("IRList.nil", "IRFunc" | "IRGlobal") | ("IRList.cons", "IRNode" | "IRFunc")
+                ),
+                "v1 is closed to HAND's original constructor type arguments"
+            );
+            out.insert(start + 1, '@');
+            cursor = start + 2;
+        }
+    }
+    out
+}
+
+#[test]
+fn current_source_spelling_v1_is_closed_and_argument_preserving() {
+    for historical in HAND {
+        let at_pin = historical.replace("IRTy.struct_ 29", "IRTy.struct_ 765");
+        let current = current_source_spelling_v1(&at_pin);
+        assert_eq!(current.replace("@IRList.", "IRList."), at_pin);
+        assert_eq!(current_source_spelling_v1(&current), current);
+    }
+    let module = current_source_spelling_v1(HAND[5]);
+    assert!(module.contains("(@IRList.cons IRFunc "));
+    assert!(module.contains("(@IRList.nil IRGlobal)"));
+    for other in [
+        "def other : Type := (Other.IRList.nil IRFunc)",
+        "def other : Type := (IRList.nilSuffix IRFunc)",
+        "def other : Type := (@IRList.nil IRFunc)",
+    ] {
+        assert_eq!(current_source_spelling_v1(other), other);
+    }
+    for incomplete in [
+        "def bad : Type := (IRList.nil)",
+        "def bad : Type := (IRList.cons IRFunc f)",
+        "def bad : Type := (IRList.cons IRFunc f (IRList.nil IRFunc)",
+        "def bad : Type := (IRList.nil IRScalar)",
+    ] {
+        assert!(std::panic::catch_unwind(|| current_source_spelling_v1(incomplete)).is_err());
+    }
+}
+
 /// The top-level arguments of `(head a b …)`, given the byte index just past
 /// the head and its following space, and the index of the closing paren.
 ///
@@ -75,9 +149,9 @@ fn unfold_builder(mut s: String, name: &str, arity: usize) -> String {
     while let Some(k) = s.find(&head) {
         let (args, end) = split_args(&s, k + head.len());
         assert_eq!(args.len(), arity, "{name} takes {arity} nodes: {args:?}");
-        let mut spine = String::from("(IRList.nil IRNode)");
+        let mut spine = String::from("(@IRList.nil IRNode)");
         for a in args.iter().rev() {
-            spine = format!("(IRList.cons IRNode {a} {spine})");
+            spine = format!("(@IRList.cons IRNode {a} {spine})");
         }
         s = format!("{}{spine}{}", &s[..k], &s[end + 1..]);
     }
@@ -133,9 +207,13 @@ fn the_hand_transcription_and_the_mint_are_the_same_program() {
     // has_loose_bvars type-table-index struct.29 -> struct.765) with zero
     // instructions moved, so the comparison is taken against the hand line at
     // the CURRENT pin -- the ledger's mapping, applied once and named here.
+    // Current-source v1 adds only explicit IRList constructor markers, after
+    // the unchanged ledger-bound id map. The comparison/count below concern
+    // this current representation, never byte equality of historical HAND.
     let hand_at_current_pin: Vec<String> = HAND
         .iter()
         .map(|h| h.replace("IRTy.struct_ 29", "IRTy.struct_ 765"))
+        .map(|h| current_source_spelling_v1(&h))
         .collect();
     assert_ne!(
         hand_at_current_pin[0], HAND[0],
@@ -186,6 +264,11 @@ fn the_hand_transcription_and_the_mint_are_the_same_program() {
         minted[1],
         "…and the minted line, whose ir_dN atoms are aliases too"
     );
+    assert_ne!(
+        unfold(&hand_at_current_pin[1]),
+        hand_at_current_pin[1],
+        "the unfolder must also unfold the current-source hand projection"
+    );
     // And it must still SEPARATE two different programs: one operator moved on
     // either side, and the two no longer unfold to the same term.
     for (from, to) in [
@@ -198,6 +281,25 @@ fn the_hand_transcription_and_the_mint_are_the_same_program() {
             unfold(&mutated),
             unfold(minted[1]),
             "unfolding must not absorb a real change (`{from}` -> `{to}`)"
+        );
+        // Compare mutations in the SAME current spelling. A bare/@ difference
+        // must not be what makes a semantic mutation appear detectable.
+        let mutated_current = hand_at_current_pin[1].replace(from, to);
+        assert_ne!(
+            mutated_current, hand_at_current_pin[1],
+            "the current mutation must apply"
+        );
+        assert_ne!(
+            unfold(&mutated_current),
+            unfold(minted[1]),
+            "current-source unfolding must preserve the change (`{from}` -> `{to}`)"
+        );
+        let mutated_mint = minted[1].replace(from, to);
+        assert_ne!(mutated_mint, minted[1], "the minted mutation must apply");
+        assert_ne!(
+            unfold(&hand_at_current_pin[1]),
+            unfold(&mutated_mint),
+            "the same mutation on the minted side must also remain visible"
         );
     }
     assert!(

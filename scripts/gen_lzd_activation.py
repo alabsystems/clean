@@ -21,6 +21,12 @@ The state is a TRIPLE — heap, counter, and a `MemExt mem na <heap> <counter>`
 witness — so the framing term is composed as the chain is built rather than
 reconstructed afterwards.
 
+The terms are built without explicit prefixes; that is the shape `--self-test`
+and `--pin` digest. What the tree registers is that text printed by
+`scripts/explicit_prefix.py` with `@` before the heads in `EXPLICIT_HEADS`, less
+the ones a const's committed source keeps bare (`KEPT_BARE`), and `--print`,
+`--emit` and `--check` speak the printed text.
+
 USAGE
     python3 scripts/gen_lzd_activation.py --print <name>
     python3 scripts/gen_lzd_activation.py --emit    # rewrite the Rust consts
@@ -30,11 +36,33 @@ USAGE
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import re
 import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
+
+ANSWERS_PINNED_INPUTS = True
+HELPER_INPUTS = ('scripts/test_generator_source_helpers.py', 'scripts/resource_transport.py', 'scripts/explicit_prefix.py', 'crates/clean-verify/src/spec/core_spec/eval_ir_lzd_activation.rs', 'crates/clean-verify/src/spec/core_spec/eval_ir_lzd_correct.rs')
+
+
+def _source_module(name, path):
+    """Execute pinned source bytes; an accepted pyc is not a declared input."""
+    spec = importlib.util.spec_from_file_location(name, path)
+    if spec is None or spec.loader is None:
+        raise ValueError('source helper unavailable: ' + str(path))
+    module = importlib.util.module_from_spec(spec)
+    exec(compile(path.read_bytes(), str(path), 'exec', dont_inherit=True), module.__dict__)
+    return module
+
+
+def _helper_source_controls():
+    controls = _source_module('generator_source_controls', REPO / 'scripts/test_generator_source_helpers.py')
+    controls.run_generator_controls(Path(__file__).name)
+
+
+XP = _source_module("explicit_prefix", REPO / "scripts/explicit_prefix.py")
 ACTIVATION_RS = REPO / "crates/clean-verify/src/spec/core_spec/eval_ir_lzd_activation.rs"
 
 M = "ir_lzd_module"
@@ -514,6 +542,32 @@ def digests() -> dict:
     return {k: hashlib.sha256(f().encode()).hexdigest() for k, f in LEMMAS.items()}
 
 
+# The heads the committed consts name with an explicit `@` (the spelling
+# 1b6b65dc83 and the EvalIR commits after it gave them).
+EXPLICIT_HEADS = frozenset({
+    "Bool.rec", "EncodesLevelArcD.imax", "EncodesLevelArcD.max", "EncodesLevelArcD.param",
+    "EncodesLevelArcD.rec", "EncodesLevelArcD.succ", "EncodesLevelArcD.zero",
+    "EncodesLiveLevelRefD.rec", "Eq", "Eq.refl", "Eq.subst", "Eq.symm", "Eq.trans",
+    "IRList.nil", "IROption.some", "MemExt.refl",
+})
+
+# Heads a const's committed source names bare at every occurrence, though it
+# prefixes the rest. Recorded, not chosen: the printer reproduces the committed
+# spelling, and making these consts uniform is a source change the EvalIR
+# initializer would have to accept first.
+KEPT_BARE = {
+    "SRC_IR_LZD_FRAME_AGREE": frozenset({"Eq.trans"}),
+    "SRC_IR_LZD_ACTIVATION": frozenset({"Eq.subst", "Eq.symm", "Eq.trans"}),
+    "SRC_IR_LZD_CORRECT": frozenset({"Eq.subst", "Eq.symm", "Eq.trans"}),
+    "SRC_IR_LZD_MACHINE_SOUND": frozenset({"Eq.symm", "Eq.trans"}),
+}
+
+
+def spell(name: str, term: str) -> str:
+    """One built term as the tree registers it."""
+    return XP.respell(term, EXPLICIT_HEADS - KEPT_BARE.get(name, frozenset()))
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--print", dest="name")
@@ -522,8 +576,14 @@ def main() -> int:
     ap.add_argument("--self-test", dest="selftest", action="store_true")
     ap.add_argument("--digests", action="store_true")
     ap.add_argument("--pin", action="store_true")
+    ap.add_argument("--pinned-inputs", action="store_true", help="list exact source/control inputs")
     a = ap.parse_args()
-    built = {k: f() for k, f in LEMMAS.items()}
+    if a.pinned_inputs:
+        if any(value for key, value in vars(a).items() if key != "pinned_inputs"):
+            ap.error("--pinned-inputs cannot be combined with another action")
+        print("\n".join(HELPER_INPUTS))
+        return 0
+    built = {k: spell(k, f()) for k, f in LEMMAS.items()}
     if a.name:
         key = a.name if a.name.startswith("SRC_") else "SRC_" + a.name.upper()
         print(built[key])
@@ -556,12 +616,15 @@ def main() -> int:
     if a.selftest:
         have = digests()
         bad = [k for k, v in PINNED_DIGESTS.items() if have.get(k) != v]
-        drift = _coverage_invariant()
+        drift = _coverage_invariant() + XP.self_test()
+        drift += [f"KEPT_BARE: {k} is not a minted const" for k in sorted(set(KEPT_BARE) - set(LEMMAS))]
         for k in bad:
             print(f"DIGEST MOVED: {k}")
         for line in drift:
             print(line)
         ok = not bad and not drift
+        if ok:
+            _helper_source_controls()
         print("gen_lzd_activation --self-test: " + ("OK" if ok else "FAILED"))
         return 0 if ok else 1
     if a.check:

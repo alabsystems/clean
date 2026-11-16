@@ -142,20 +142,20 @@ impl Specification {
                     "fun (tenv : Name -> OptionType ImplConstInfo) (lps : ListType Name) ",
                     "(n : Nat) (G : LCtx) (e : ImplExpr) (T : ImplExpr) (m : Nat) ",
                     "(h : ImplInfer tenv lps n G e T m) => ",
-                    "ImplInfer.rec tenv lps ",
+                    "@ImplInfer.rec tenv lps ",
                     "(fun (n2 : Nat) (G2 : LCtx) (e2 : ImplExpr) (T2 : ImplExpr) (m2 : Nat) ",
                     "(_h : ImplInfer tenv lps n2 G2 e2 T2 m2) => Le n2 m2) ",
                     // sort / fvar / const / lit: the counter is untouched.
                     "(fun (sn : Nat) (sG : LCtx) (sl : Level) ",
-                    "(shl : Eq Bool (level_params_ok lps sl) Bool.true) => Le.refl sn) ",
+                    "(shl : @Eq Bool (level_params_ok lps sl) Bool.true) => Le.refl sn) ",
                     "(fun (vn : Nat) (vG : LCtx) (vx : Nat) (vA : ImplExpr) ",
-                    "(vlk : Eq (OptionType ImplExpr) (lctx_lookup vG vx) (OptionType.some ImplExpr vA)) => Le.refl vn) ",
+                    "(vlk : @Eq (OptionType ImplExpr) (lctx_lookup vG vx) (@OptionType.some ImplExpr vA)) => Le.refl vn) ",
                     "(fun (cn : Nat) (cG : LCtx) (cnm : Name) (cus : ListType Level) (cci : ImplConstInfo) ",
-                    "(cget : Eq (OptionType ImplConstInfo) (tenv cnm) (OptionType.some ImplConstInfo cci)) ",
-                    "(car : Eq Nat (name_list_len (impl_const_lps cci)) (level_list_len cus)) ",
-                    "(clv : Eq Bool (impl_levels_ok lps cus) Bool.true) ",
-                    "(cuf : Eq Bool (impl_const_unsafe cci) Bool.false) ",
-                    "(cpf : Eq Bool (impl_const_partial cci) Bool.false) => Le.refl cn) ",
+                    "(cget : @Eq (OptionType ImplConstInfo) (tenv cnm) (@OptionType.some ImplConstInfo cci)) ",
+                    "(car : @Eq Nat (name_list_len (impl_const_lps cci)) (level_list_len cus)) ",
+                    "(clv : @Eq Bool (impl_levels_ok lps cus) Bool.true) ",
+                    "(cuf : @Eq Bool (impl_const_unsafe cci) Bool.false) ",
+                    "(cpf : @Eq Bool (impl_const_partial cci) Bool.false) => Le.refl cn) ",
                     // app: two sub-derivations in sequence, n -> n1 -> n2.
                     "(fun (an : Nat) (an1 : Nat) (an2 : Nat) (aG : LCtx) (af : ImplExpr) (aa : ImplExpr) ",
                     "(aF : ImplExpr) (abd : BinderData) (aA : ImplExpr) (aB : ImplExpr) (aA2 : ImplExpr) ",
@@ -171,7 +171,7 @@ impl Specification {
                     "(lA : ImplExpr) (lb : ImplExpr) (lS : ImplExpr) (ll : Level) (lbt : ImplExpr) ",
                     "(lhA : ImplInfer tenv lps ln lG lA lS ln1) ",
                     "(lhS : ImplWhnfTo lS (ImplExpr.sort ll)) ",
-                    "(lhb : ImplInfer tenv lps (Nat.succ ln1) (LCtx.snoc lG (LocalDecl.mk ln1 lA (OptionType.none ImplExpr) lbd)) (impl_open lb ln1) lbt ln2) ",
+                    "(lhb : ImplInfer tenv lps (Nat.succ ln1) (LCtx.snoc lG (LocalDecl.mk ln1 lA (@OptionType.none ImplExpr) lbd)) (impl_open lb ln1) lbt ln2) ",
                     "(lihA : Le ln ln1) (lihb : Le (Nat.succ ln1) ln2) => ",
                     "le_trans ln ln1 ln2 lihA ",
                     "(le_trans ln1 (Nat.succ ln1) ln2 (Le.step ln1 ln1 (Le.refl ln1)) lihb)) ",
@@ -180,7 +180,7 @@ impl Specification {
                     "(pA : ImplExpr) (pb : ImplExpr) (pS1 : ImplExpr) (pS2 : ImplExpr) (pl1 : Level) (pl2 : Level) ",
                     "(phA : ImplInfer tenv lps pn pG pA pS1 pn1) ",
                     "(phS1 : ImplWhnfTo pS1 (ImplExpr.sort pl1)) ",
-                    "(phb : ImplInfer tenv lps (Nat.succ pn1) (LCtx.snoc pG (LocalDecl.mk pn1 pA (OptionType.none ImplExpr) pbd)) (impl_open pb pn1) pS2 pn2) ",
+                    "(phb : ImplInfer tenv lps (Nat.succ pn1) (LCtx.snoc pG (LocalDecl.mk pn1 pA (@OptionType.none ImplExpr) pbd)) (impl_open pb pn1) pS2 pn2) ",
                     "(phS2 : ImplWhnfTo pS2 (ImplExpr.sort pl2)) ",
                     "(pihA : Le pn pn1) (pihb : Le (Nat.succ pn1) pn2) => ",
                     "le_trans pn pn1 pn2 pihA ",
@@ -194,7 +194,7 @@ impl Specification {
                     "(zhS : ImplWhnfTo zS (ImplExpr.sort zl)) ",
                     "(zhv : ImplInfer tenv lps zn1 zG zv zTv zn2) ",
                     "(zhle : ImplIsLe zTv zty) ",
-                    "(zhb : ImplInfer tenv lps (Nat.succ zn2) (LCtx.snoc zG (LocalDecl.mk zn2 zty (OptionType.some ImplExpr zv) (BinderData.mk BinderInfo.default Multiplicity.many))) (impl_open zb zn2) zbt zn3) ",
+                    "(zhb : ImplInfer tenv lps (Nat.succ zn2) (LCtx.snoc zG (LocalDecl.mk zn2 zty (@OptionType.some ImplExpr zv) (BinderData.mk BinderInfo.default Multiplicity.many))) (impl_open zb zn2) zbt zn3) ",
                     "(zihty : Le zn zn1) (zihv : Le zn1 zn2) (zihb : Le (Nat.succ zn2) zn3) => ",
                     "le_trans zn zn2 zn3 (le_trans zn zn1 zn2 zihty zihv) ",
                     "(le_trans zn2 (Nat.succ zn2) zn3 (Le.step zn2 zn2 (Le.refl zn2)) zihb)) ",
@@ -324,8 +324,8 @@ impl Specification {
         )?;
         self.add_recursive_def(
             r"def impl_lit_type (l : ImplLit) : ImplExpr := match l with
-| ImplLit.natVal k => ImplExpr.const impl_name_nat (ListType.nil Level)
-| ImplLit.strVal k => ImplExpr.const impl_name_string (ListType.nil Level)",
+| ImplLit.natVal k => ImplExpr.const impl_name_nat (@ListType.nil Level)
+| ImplLit.strVal k => ImplExpr.const impl_name_string (@ListType.nil Level)",
             "The release Lit arm's result table (tc/infer.rs:647-650): Nat literals \
              get `const Nat []`, String literals get `const String []`. The literal \
              VALUE is discarded and there is ZERO environment validation — modelled \
@@ -396,18 +396,18 @@ impl Specification {
                 // ── sort (tc/infer.rs:360-370) ──────────────────────────────
                 // check_level in check mode, then Sort(succ l). No recursion,
                 // no context change, next_id untouched.
-                "| sort : forall (n : Nat) (G : LCtx) (l : Level), Eq Bool (level_params_ok lps l) Bool.true -> ImplInfer tenv lps n G (ImplExpr.sort l) (ImplExpr.sort (Level.succ l)) n\n",
+                "| sort : forall (n : Nat) (G : LCtx) (l : Level), @Eq Bool (level_params_ok lps l) Bool.true -> ImplInfer tenv lps n G (ImplExpr.sort l) (ImplExpr.sort (Level.succ l)) n\n",
                 // ── fvar (tc/infer.rs:351-359) ──────────────────────────────
                 // Context lookup by FVarId, returning the stored type UNLIFTED.
                 // This is where layer 1 visibly differs from KernelInfers.bvar /
                 // TypingCtxConv.var, both of which apply lift_at A 0 (succ i).
-                "| fvar : forall (n : Nat) (G : LCtx) (x : Nat) (A : ImplExpr), Eq (OptionType ImplExpr) (lctx_lookup G x) (OptionType.some ImplExpr A) -> ImplInfer tenv lps n G (ImplExpr.fvar x) A n\n",
+                "| fvar : forall (n : Nat) (G : LCtx) (x : Nat) (A : ImplExpr), @Eq (OptionType ImplExpr) (lctx_lookup G x) (@OptionType.some ImplExpr A) -> ImplInfer tenv lps n G (ImplExpr.fvar x) A n\n",
                 // ── const (tc/infer.rs:371-424) ─────────────────────────────
                 // FIVE operations, all present: get_const, level-arity equality,
                 // check_level per level, the unsafe gate, the partial gate; the
                 // result is instantiate_level_params_direct. Model B's const arm
                 // models ZERO of these.
-                "| const : forall (n : Nat) (G : LCtx) (nm : Name) (us : ListType Level) (ci : ImplConstInfo), Eq (OptionType ImplConstInfo) (tenv nm) (OptionType.some ImplConstInfo ci) -> Eq Nat (name_list_len (impl_const_lps ci)) (level_list_len us) -> Eq Bool (impl_levels_ok lps us) Bool.true -> Eq Bool (impl_const_unsafe ci) Bool.false -> Eq Bool (impl_const_partial ci) Bool.false -> ImplInfer tenv lps n G (ImplExpr.const nm us) (impl_inst_levels (impl_const_lps ci) us (impl_const_type ci)) n\n",
+                "| const : forall (n : Nat) (G : LCtx) (nm : Name) (us : ListType Level) (ci : ImplConstInfo), @Eq (OptionType ImplConstInfo) (tenv nm) (@OptionType.some ImplConstInfo ci) -> @Eq Nat (name_list_len (impl_const_lps ci)) (level_list_len us) -> @Eq Bool (impl_levels_ok lps us) Bool.true -> @Eq Bool (impl_const_unsafe ci) Bool.false -> @Eq Bool (impl_const_partial ci) Bool.false -> ImplInfer tenv lps n G (ImplExpr.const nm us) (impl_inst_levels (impl_const_lps ci) us (impl_const_type ci)) n\n",
                 // ── app (tc/infer.rs:425-508) ───────────────────────────────
                 // infer f; whnf its type to a Pi; infer the argument; is_le the
                 // argument's type against the domain; result instantiate B a.
@@ -418,12 +418,12 @@ impl Specification {
                 // value, bd); OPEN the body to FVar(n1); infer; ABSTRACT n1 back
                 // out; conclude Pi bd A (abstract bt n1). This is the arm model B
                 // cannot express: it recurses on the RAW de Bruijn body.
-                "| lam : forall (n : Nat) (n1 : Nat) (n2 : Nat) (G : LCtx) (bd : BinderData) (A : ImplExpr) (b : ImplExpr) (S : ImplExpr) (l : Level) (bt : ImplExpr), ImplInfer tenv lps n G A S n1 -> ImplWhnfTo S (ImplExpr.sort l) -> ImplInfer tenv lps (Nat.succ n1) (LCtx.snoc G (LocalDecl.mk n1 A (OptionType.none ImplExpr) bd)) (impl_open b n1) bt n2 -> ImplInfer tenv lps n G (ImplExpr.lam bd A b) (ImplExpr.pi bd A (impl_abstract_fvar bt n1)) n2\n",
+                "| lam : forall (n : Nat) (n1 : Nat) (n2 : Nat) (G : LCtx) (bd : BinderData) (A : ImplExpr) (b : ImplExpr) (S : ImplExpr) (l : Level) (bt : ImplExpr), ImplInfer tenv lps n G A S n1 -> ImplWhnfTo S (ImplExpr.sort l) -> ImplInfer tenv lps (Nat.succ n1) (LCtx.snoc G (LocalDecl.mk n1 A (@OptionType.none ImplExpr) bd)) (impl_open b n1) bt n2 -> ImplInfer tenv lps n G (ImplExpr.lam bd A b) (ImplExpr.pi bd A (impl_abstract_fvar bt n1)) n2\n",
                 // ── pi (tc/infer.rs:550-583) ────────────────────────────────
                 // Identical binder discipline to lam, but BOTH sorts are whnf'd
                 // and required, and there is NO infer_only guard — Pi always
                 // checks. Result Sort (imax l1 l2).
-                "| pi : forall (n : Nat) (n1 : Nat) (n2 : Nat) (G : LCtx) (bd : BinderData) (A : ImplExpr) (b : ImplExpr) (S1 : ImplExpr) (S2 : ImplExpr) (l1 : Level) (l2 : Level), ImplInfer tenv lps n G A S1 n1 -> ImplWhnfTo S1 (ImplExpr.sort l1) -> ImplInfer tenv lps (Nat.succ n1) (LCtx.snoc G (LocalDecl.mk n1 A (OptionType.none ImplExpr) bd)) (impl_open b n1) S2 n2 -> ImplWhnfTo S2 (ImplExpr.sort l2) -> ImplInfer tenv lps n G (ImplExpr.pi bd A b) (ImplExpr.sort (Level.imax l1 l2)) n2\n",
+                "| pi : forall (n : Nat) (n1 : Nat) (n2 : Nat) (G : LCtx) (bd : BinderData) (A : ImplExpr) (b : ImplExpr) (S1 : ImplExpr) (S2 : ImplExpr) (l1 : Level) (l2 : Level), ImplInfer tenv lps n G A S1 n1 -> ImplWhnfTo S1 (ImplExpr.sort l1) -> ImplInfer tenv lps (Nat.succ n1) (LCtx.snoc G (LocalDecl.mk n1 A (@OptionType.none ImplExpr) bd)) (impl_open b n1) S2 n2 -> ImplWhnfTo S2 (ImplExpr.sort l2) -> ImplInfer tenv lps n G (ImplExpr.pi bd A b) (ImplExpr.sort (Level.imax l1 l2)) n2\n",
                 // ── let_ (tc/infer.rs:584-646) ──────────────────────────────
                 // Annotation inferred and whnf'd to a sort; value inferred and
                 // is_le-checked against the annotation; body opened under a LET
@@ -432,7 +432,7 @@ impl Specification {
              // tc/local_context.rs:109-128); the result is
                 // subst_fvar, i.e. ZETA DIRECTLY, not `instantiate` and not an
                 // abstract+instantiate round trip (tc/infer.rs:641-645).
-                "| let_ : forall (n : Nat) (n1 : Nat) (n2 : Nat) (n3 : Nat) (G : LCtx) (nm : Name) (ty : ImplExpr) (v : ImplExpr) (b : ImplExpr) (S : ImplExpr) (l : Level) (Tv : ImplExpr) (bt : ImplExpr), ImplInfer tenv lps n G ty S n1 -> ImplWhnfTo S (ImplExpr.sort l) -> ImplInfer tenv lps n1 G v Tv n2 -> ImplIsLe Tv ty -> ImplInfer tenv lps (Nat.succ n2) (LCtx.snoc G (LocalDecl.mk n2 ty (OptionType.some ImplExpr v) (BinderData.mk BinderInfo.default Multiplicity.many))) (impl_open b n2) bt n3 -> ImplInfer tenv lps n G (ImplExpr.let_ nm ty v b) (impl_subst_fvar bt n2 v) n3\n",
+                "| let_ : forall (n : Nat) (n1 : Nat) (n2 : Nat) (n3 : Nat) (G : LCtx) (nm : Name) (ty : ImplExpr) (v : ImplExpr) (b : ImplExpr) (S : ImplExpr) (l : Level) (Tv : ImplExpr) (bt : ImplExpr), ImplInfer tenv lps n G ty S n1 -> ImplWhnfTo S (ImplExpr.sort l) -> ImplInfer tenv lps n1 G v Tv n2 -> ImplIsLe Tv ty -> ImplInfer tenv lps (Nat.succ n2) (LCtx.snoc G (LocalDecl.mk n2 ty (@OptionType.some ImplExpr v) (BinderData.mk BinderInfo.default Multiplicity.many))) (impl_open b n2) bt n3 -> ImplInfer tenv lps n G (ImplExpr.let_ nm ty v b) (impl_subst_fvar bt n2 v) n3\n",
                 // ── lit (tc/infer.rs:647-650) ───────────────────────────────
                 // A fixed constant per literal kind, ZERO env validation.
                 "| lit : forall (n : Nat) (G : LCtx) (lt : ImplLit), ImplInfer tenv lps n G (ImplExpr.lit lt) (impl_lit_type lt) n\n",
@@ -477,7 +477,7 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (x : ImplExpr) => ",
-                    "ImplExpr.rec (fun (_ : ImplExpr) => Type) ",
+                    "@ImplExpr.rec (fun (_ : ImplExpr) => Type) ",
                     // bvar — the ONLY Empty arm
                     "(fun (i : Nat) => Empty) ",
                     // fvar
@@ -546,22 +546,22 @@ impl Specification {
                     "fun (tenv : Name -> OptionType ImplConstInfo) (lps : ListType Name) ",
                     "(n : Nat) (G : LCtx) (i : Nat) (T : ImplExpr) (m : Nat) ",
                     "(h : ImplInfer tenv lps n G (ImplExpr.bvar i) T m) => ",
-                    "ImplInfer.rec tenv lps ",
+                    "@ImplInfer.rec tenv lps ",
                     "(fun (n2 : Nat) (G2 : LCtx) (e2 : ImplExpr) (T2 : ImplExpr) (m2 : Nat) ",
                     "(_h : ImplInfer tenv lps n2 G2 e2 T2 m2) => ImplNotBVar e2) ",
                     // sort: 4 args, 0 IH
                     "(fun (sn : Nat) (sG : LCtx) (sl : Level) ",
-                    "(shl : Eq Bool (level_params_ok lps sl) Bool.true) => ImplUnit.mk) ",
+                    "(shl : @Eq Bool (level_params_ok lps sl) Bool.true) => ImplUnit.mk) ",
                     // fvar: 5 args, 0 IH
                     "(fun (vn : Nat) (vG : LCtx) (vx : Nat) (vA : ImplExpr) ",
-                    "(vlk : Eq (OptionType ImplExpr) (lctx_lookup vG vx) (OptionType.some ImplExpr vA)) => ImplUnit.mk) ",
+                    "(vlk : @Eq (OptionType ImplExpr) (lctx_lookup vG vx) (@OptionType.some ImplExpr vA)) => ImplUnit.mk) ",
                     // const: 10 args, 0 IH
                     "(fun (cn : Nat) (cG : LCtx) (cnm : Name) (cus : ListType Level) (cci : ImplConstInfo) ",
-                    "(cget : Eq (OptionType ImplConstInfo) (tenv cnm) (OptionType.some ImplConstInfo cci)) ",
-                    "(car : Eq Nat (name_list_len (impl_const_lps cci)) (level_list_len cus)) ",
-                    "(clv : Eq Bool (impl_levels_ok lps cus) Bool.true) ",
-                    "(cuf : Eq Bool (impl_const_unsafe cci) Bool.false) ",
-                    "(cpf : Eq Bool (impl_const_partial cci) Bool.false) => ImplUnit.mk) ",
+                    "(cget : @Eq (OptionType ImplConstInfo) (tenv cnm) (@OptionType.some ImplConstInfo cci)) ",
+                    "(car : @Eq Nat (name_list_len (impl_const_lps cci)) (level_list_len cus)) ",
+                    "(clv : @Eq Bool (impl_levels_ok lps cus) Bool.true) ",
+                    "(cuf : @Eq Bool (impl_const_unsafe cci) Bool.false) ",
+                    "(cpf : @Eq Bool (impl_const_partial cci) Bool.false) => ImplUnit.mk) ",
                     // app: 15 args, 2 IHs
                     "(fun (an : Nat) (an1 : Nat) (an2 : Nat) (aG : LCtx) (af : ImplExpr) (aa : ImplExpr) ",
                     "(aF : ImplExpr) (abd : BinderData) (aA : ImplExpr) (aB : ImplExpr) (aA2 : ImplExpr) ",
@@ -575,14 +575,14 @@ impl Specification {
                     "(lA : ImplExpr) (lb : ImplExpr) (lS : ImplExpr) (ll : Level) (lbt : ImplExpr) ",
                     "(lhA : ImplInfer tenv lps ln lG lA lS ln1) ",
                     "(lhS : ImplWhnfTo lS (ImplExpr.sort ll)) ",
-                    "(lhb : ImplInfer tenv lps (Nat.succ ln1) (LCtx.snoc lG (LocalDecl.mk ln1 lA (OptionType.none ImplExpr) lbd)) (impl_open lb ln1) lbt ln2) ",
+                    "(lhb : ImplInfer tenv lps (Nat.succ ln1) (LCtx.snoc lG (LocalDecl.mk ln1 lA (@OptionType.none ImplExpr) lbd)) (impl_open lb ln1) lbt ln2) ",
                     "(lihA : ImplNotBVar lA) (lihb : ImplNotBVar (impl_open lb ln1)) => ImplUnit.mk) ",
                     // pi: 15 args, 2 IHs
                     "(fun (pn : Nat) (pn1 : Nat) (pn2 : Nat) (pG : LCtx) (pbd : BinderData) ",
                     "(pA : ImplExpr) (pb : ImplExpr) (pS1 : ImplExpr) (pS2 : ImplExpr) (pl1 : Level) (pl2 : Level) ",
                     "(phA : ImplInfer tenv lps pn pG pA pS1 pn1) ",
                     "(phS1 : ImplWhnfTo pS1 (ImplExpr.sort pl1)) ",
-                    "(phb : ImplInfer tenv lps (Nat.succ pn1) (LCtx.snoc pG (LocalDecl.mk pn1 pA (OptionType.none ImplExpr) pbd)) (impl_open pb pn1) pS2 pn2) ",
+                    "(phb : ImplInfer tenv lps (Nat.succ pn1) (LCtx.snoc pG (LocalDecl.mk pn1 pA (@OptionType.none ImplExpr) pbd)) (impl_open pb pn1) pS2 pn2) ",
                     "(phS2 : ImplWhnfTo pS2 (ImplExpr.sort pl2)) ",
                     "(pihA : ImplNotBVar pA) (pihb : ImplNotBVar (impl_open pb pn1)) => ImplUnit.mk) ",
                     // let_: 18 args, 3 IHs
@@ -593,7 +593,7 @@ impl Specification {
                     "(zhS : ImplWhnfTo zS (ImplExpr.sort zl)) ",
                     "(zhv : ImplInfer tenv lps zn1 zG zv zTv zn2) ",
                     "(zhle : ImplIsLe zTv zty) ",
-                    "(zhb : ImplInfer tenv lps (Nat.succ zn2) (LCtx.snoc zG (LocalDecl.mk zn2 zty (OptionType.some ImplExpr zv) (BinderData.mk BinderInfo.default Multiplicity.many))) (impl_open zb zn2) zbt zn3) ",
+                    "(zhb : ImplInfer tenv lps (Nat.succ zn2) (LCtx.snoc zG (LocalDecl.mk zn2 zty (@OptionType.some ImplExpr zv) (BinderData.mk BinderInfo.default Multiplicity.many))) (impl_open zb zn2) zbt zn3) ",
                     "(zihty : ImplNotBVar zty) (zihv : ImplNotBVar zv) ",
                     "(zihb : ImplNotBVar (impl_open zb zn2)) => ImplUnit.mk) ",
                     // lit: 3 args, 0 IH

@@ -4,7 +4,7 @@
  "derivation": {
   "script": "scripts/verdict_io_contracts.py",
   "source_artifact": "data/verdict_set.json",
-  "source_artifact_sha256": "bbfbecc316e92457fe16cfe0ed6b7e6959e2d56125a6fad42b80530e81189547",
+  "source_artifact_sha256": "1f50ee9fce64529ed3dd07fb2f4483f3836f389e25c8da045a5ea35d19f25ffb",
   "shared_denominator": "the site scan is IMPORTED from scripts/verdict_set.py (production_lines + IO_TOKENS) and re-run over the same members at the same pinned digests; a total that disagrees with the committed io_site_total aborts the mint",
   "axis_1_effect": {
    "what": "what the site actually does, decided by ordered lexical rules over the LEXED line (comments and literals blanked, #[cfg(test)] mod bodies removed); first match wins; a site matching no rule aborts the mint",
@@ -1683,21 +1683,21 @@
     "member": "crates/clean-olean/src/import/project_world.rs",
     "site_count": 9,
     "lines": [
-     330,
-     330,
-     330,
-     448,
-     448,
-     448,
-     480,
-     480,
-     480
+     369,
+     369,
+     369,
+     487,
+     487,
+     487,
+     519,
+     519,
+     519
     ],
     "statement": "crates/clean-olean/src/import/project_world.rs assumes, without proof, that: Every byte a verdict path consumes from a file is the byte its provenance was established over: the path names the file that was digested, the file is not substituted between the pin and the read, and a short or truncated read is refused rather than decoded.",
     "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
     "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-olean/src/import/project_world.rs",
     "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
-    "date": "2026-11-14",
+    "date": "2026-11-16",
     "owning_job": "R2b-READ"
    },
    {
@@ -1909,14 +1909,14 @@
     "member": "crates/clean-olean/src/import/project_world.rs",
     "site_count": 2,
     "lines": [
-     573,
-     573
+     612,
+     612
     ],
     "statement": "crates/clean-olean/src/import/project_world.rs assumes, without proof, that: A directory walk returns exactly the input set the verdict quantifies over: no entry appears or disappears during the walk, no entry is silently dropped for being a symlink, non-UTF-8 or unreadable, and enumeration order does not change the verdict.",
     "checked": "NOTHING in the tree checks this contract",
     "probe": "scripts/verdict_io_contracts.py --sites C-READ-SET --member crates/clean-olean/src/import/project_world.rs",
     "discharge": "quantify every walk over a committed manifest and refuse on set difference in BOTH directions (missing and unexpected), rather than over whatever the filesystem returned.",
-    "date": "2026-11-14",
+    "date": "2026-11-16",
     "owning_job": "R2b-SET"
    },
    {
@@ -2064,13 +2064,13 @@
     "member": "crates/clean-olean/src/import/project_world.rs",
     "site_count": 1,
     "lines": [
-     572
+     611
     ],
     "statement": "crates/clean-olean/src/import/project_world.rs assumes, without proof, that: The ABSENCE of every environment variable is the safe default, and no value a caller can set either changes what a verdict depends on or escapes being recorded in that verdict's provenance.",
     "checked": "NOTHING in the tree checks this contract",
     "probe": "scripts/verdict_io_contracts.py --sites C-ENV-NEUTRAL --member crates/clean-olean/src/import/project_world.rs",
     "discharge": "commit a table of every variable name lane (b) reads with a declared disposition (`diagnostic-only` / `behaviour-changing`), enforce it here so an unlisted name aborts the mint, and require every behaviour-changing name to appear in the provenance of any verdict minted under it.",
-    "date": "2026-11-14",
+    "date": "2026-11-16",
     "owning_job": "R2b-ENV"
    },
    {
@@ -5377,7 +5377,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/project_world.rs",
-   "line": 330,
+   "line": 369,
    "token": "fs::*",
    "rule": "E-READ",
    "effect": "read-file",
@@ -5387,7 +5387,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/project_world.rs",
-   "line": 330,
+   "line": 369,
    "token": "read_to_string",
    "rule": "E-READ",
    "effect": "read-file",
@@ -5397,7 +5397,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/project_world.rs",
-   "line": 330,
+   "line": 369,
    "token": "std::fs",
    "rule": "E-READ",
    "effect": "read-file",
@@ -5407,7 +5407,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/project_world.rs",
-   "line": 446,
+   "line": 485,
    "token": "io::*",
    "rule": "E-USE",
    "effect": "declaration-import",
@@ -5416,7 +5416,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/project_world.rs",
-   "line": 446,
+   "line": 485,
    "token": "std::io",
    "rule": "E-USE",
    "effect": "declaration-import",
@@ -5425,7 +5425,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/project_world.rs",
-   "line": 448,
+   "line": 487,
    "token": "File::open/create",
    "rule": "E-READ",
    "effect": "read-file",
@@ -5435,7 +5435,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/project_world.rs",
-   "line": 448,
+   "line": 487,
    "token": "fs::*",
    "rule": "E-READ",
    "effect": "read-file",
@@ -5445,7 +5445,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/project_world.rs",
-   "line": 448,
+   "line": 487,
    "token": "std::fs",
    "rule": "E-READ",
    "effect": "read-file",
@@ -5455,7 +5455,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/project_world.rs",
-   "line": 480,
+   "line": 519,
    "token": "fs::*",
    "rule": "E-READ",
    "effect": "read-file",
@@ -5465,7 +5465,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/project_world.rs",
-   "line": 480,
+   "line": 519,
    "token": "read_to_string",
    "rule": "E-READ",
    "effect": "read-file",
@@ -5475,7 +5475,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/project_world.rs",
-   "line": 480,
+   "line": 519,
    "token": "std::fs",
    "rule": "E-READ",
    "effect": "read-file",
@@ -5485,7 +5485,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/project_world.rs",
-   "line": 572,
+   "line": 611,
    "token": "env::var",
    "rule": "E-ENV",
    "effect": "read-env",
@@ -5496,7 +5496,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/project_world.rs",
-   "line": 573,
+   "line": 612,
    "token": "fs::*",
    "rule": "E-READDIR",
    "effect": "read-dir",
@@ -5506,7 +5506,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/project_world.rs",
-   "line": 573,
+   "line": 612,
    "token": "std::fs",
    "rule": "E-READDIR",
    "effect": "read-dir",
@@ -5516,7 +5516,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/project_world.rs",
-   "line": 585,
+   "line": 624,
    "token": "std::fs",
    "rule": "E-TYPE",
    "effect": "declaration-type",
@@ -5525,7 +5525,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/project_world.rs",
-   "line": 585,
+   "line": 624,
    "token": "std::io",
    "rule": "E-TYPE",
    "effect": "declaration-type",

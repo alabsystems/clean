@@ -88,10 +88,10 @@ const FAULT_NOT_PTR: &str = "(IRStepResult.fault (IROutcome.type_error IRFault.n
 fn decls() -> Vec<(String, &'static str)> {
     let mut out: Vec<(String, &'static str)> = vec![
         (
-            "def ir_e5_ptrmeta_mt_is_read (d : Nat) (v : Nat) : Eq IRStepResult \
+            "def ir_e5_ptrmeta_mt_is_read (d : Nat) (v : Nat) : @Eq IRStepResult \
              (ir_ptrmeta_eval IRTy.ptr_ (IRScalar.fat_ d v)) \
              (IRStepResult.value (IRScalar.ptr_ v)) := \
-             Eq.refl IRStepResult (IRStepResult.value (IRScalar.ptr_ v))"
+             @Eq.refl IRStepResult (IRStepResult.value (IRScalar.ptr_ v))"
                 .to_string(),
             "ir_e5_ptrmeta_mt_is_read: a fat value's metadata word read at the thin pointer type \
              is the vtable ADDRESS `ptr_ v`, where the pre-E5 arm answered `int_ v` at every type. \
@@ -99,10 +99,10 @@ fn decls() -> Vec<(String, &'static str)> {
              no longer an irrelevance row. DerivedProved, zero axiom_deps.",
         ),
         (
-            "def ir_e5_ptrmeta_len_word (w : Nat) (d : Nat) (n : Nat) : Eq IRStepResult \
+            "def ir_e5_ptrmeta_len_word (w : Nat) (d : Nat) (n : Nat) : @Eq IRStepResult \
              (ir_ptrmeta_eval (IRTy.uint_ w) (IRScalar.fat_ d n)) \
              (IRStepResult.value (IRScalar.int_ n)) := \
-             Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ n))"
+             @Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ n))"
                 .to_string(),
             "ir_e5_ptrmeta_len_word: at an unsigned metadata type the word is the LENGTH, bound as \
              an integer exactly as before E5 — the Str/Slice/ContainerLen arm, and the reason \
@@ -111,8 +111,8 @@ fn decls() -> Vec<(String, &'static str)> {
         (
             format!(
                 "def ir_e5_ptrmeta_noncanonical_refused (w : Nat) (d : Nat) (m : Nat) : \
-                 Eq IRStepResult (ir_ptrmeta_eval (IRTy.int_ w) (IRScalar.fat_ d m)) \
-                 {FAULT_NOT_PTR} := Eq.refl IRStepResult {FAULT_NOT_PTR}"
+                 @Eq IRStepResult (ir_ptrmeta_eval (IRTy.int_ w) (IRScalar.fat_ d m)) \
+                 {FAULT_NOT_PTR} := @Eq.refl IRStepResult {FAULT_NOT_PTR}"
             ),
             "ir_e5_ptrmeta_noncanonical_refused: a SIGNED metadata type is no kind's canonical \
              metadata type (trust-ir `PointerMetadataShape::metadata_ty`: a pointer-sized \
@@ -120,9 +120,9 @@ fn decls() -> Vec<(String, &'static str)> {
              type_error for it; so does the model. DerivedProved, zero axiom_deps.",
         ),
         (
-            "def ir_e5_ptrmeta_thin_unit (mt : IRTy) (a : Nat) : Eq IRStepResult \
+            "def ir_e5_ptrmeta_thin_unit (mt : IRTy) (a : Nat) : @Eq IRStepResult \
              (ir_ptrmeta_eval mt (IRScalar.ptr_ a)) (IRStepResult.value IRScalar.unit_) := \
-             Eq.refl IRStepResult (IRStepResult.value IRScalar.unit_)"
+             @Eq.refl IRStepResult (IRStepResult.value IRScalar.unit_)"
                 .to_string(),
             "ir_e5_ptrmeta_thin_unit: the THIN arm is unchanged by E5 and still consults no \
              type: a thin pointer's metadata is unit at every declared type. The reference also \
@@ -153,10 +153,10 @@ fn decls() -> Vec<(String, &'static str)> {
     ] {
         out.push((
             format!(
-                "def {name} {binders}(d : Nat) (md : Nat) : Eq IRStepResult \
+                "def {name} {binders}(d : Nat) (md : Nat) : @Eq IRStepResult \
                  (ir_copy_eval {ty} (IRScalar.fat_ d md)) \
                  (IRStepResult.value (IRScalar.fat_ d md)) := \
-                 Eq.refl IRStepResult (IRStepResult.value (IRScalar.fat_ d md))"
+                 @Eq.refl IRStepResult (IRStepResult.value (IRScalar.fat_ d md))"
             ),
             match what {
                 "container_len" => {
@@ -180,9 +180,9 @@ fn decls() -> Vec<(String, &'static str)> {
     }
     out.push((
         format!(
-            "def ir_e5_copy_fat_refuses_thin (a : Nat) : Eq IRStepResult \
+            "def ir_e5_copy_fat_refuses_thin (a : Nat) : @Eq IRStepResult \
              (ir_copy_eval IRTy.containervtable_ (IRScalar.ptr_ a)) {FAULT_NOT_PTR} := \
-             Eq.refl IRStepResult {FAULT_NOT_PTR}"
+             @Eq.refl IRStepResult {FAULT_NOT_PTR}"
         ),
         "ir_e5_copy_fat_refuses_thin: a THIN pointer is not a wide one: copying it at a fat \
          kind faults, as the reference's expect_ty does (a `Ptr` value against a `FatPtr` \
@@ -228,9 +228,9 @@ fn decls() -> Vec<(String, &'static str)> {
     ] {
         out.push((
             format!(
-                "def {name} {binders}(a : IRScalar) (b : IRScalar) : Eq IRStepResult \
+                "def {name} {binders}(a : IRScalar) (b : IRScalar) : @Eq IRStepResult \
                  (ir_icmp_eval IRICmpOp.{op} {ty} a b) {FAULT_NOT_INT} := \
-                 Eq.refl IRStepResult {FAULT_NOT_INT}"
+                 @Eq.refl IRStepResult {FAULT_NOT_INT}"
             ),
             "ir_e5_icmp_*_refused: `icmp` at a wide-pointer type halts type_error at EVERY \
              operand pair — the exact image of the authority, measured: trust-ir's reference \
@@ -243,8 +243,8 @@ fn decls() -> Vec<(String, &'static str)> {
     out.extend([
         (
             "def ir_vtable_slot (mem : IRList IRMemSlot) (a : Nat) (v : IRScalar) : Prop := \
-             Eq (IROption IRMemSlot) (ir_mem_lookup mem a) \
-             (IROption.some IRMemSlot (IRMemSlot.mk a v Bool.true))"
+             @Eq (IROption IRMemSlot) (ir_mem_lookup mem a) \
+             (@IROption.some IRMemSlot (IRMemSlot.mk a v Bool.true))"
                 .to_string(),
             "ir_vtable_slot mem a v: the heap holds a LIVE cell at address `a` carrying `v` — one \
              word of a vtable image. A representation premise states one per slot a body reads; \
@@ -252,10 +252,10 @@ fn decls() -> Vec<(String, &'static str)> {
         ),
         (
             "def ir_vtable_method_cells (a : Nat) (ms : IRList IRScalar) : IRList IRMemSlot := \
-             IRList.rec IRScalar (fun (_ : IRList IRScalar) => Nat -> IRList IRMemSlot) \
-             (fun (_ : Nat) => IRList.nil IRMemSlot) \
+             @IRList.rec IRScalar (fun (_ : IRList IRScalar) => Nat -> IRList IRMemSlot) \
+             (fun (_ : Nat) => @IRList.nil IRMemSlot) \
              (fun (m : IRScalar) (_ : IRList IRScalar) (ih : Nat -> IRList IRMemSlot) => \
-             fun (b : Nat) => IRList.cons IRMemSlot (IRMemSlot.mk b m Bool.true) (ih (Nat.add b ir_d8))) \
+             fun (b : Nat) => @IRList.cons IRMemSlot (IRMemSlot.mk b m Bool.true) (ih (Nat.add b ir_d8))) \
              ms a"
                 .to_string(),
             "ir_vtable_method_cells a ms: the method slots of a vtable image, one live cell per \
@@ -265,9 +265,9 @@ fn decls() -> Vec<(String, &'static str)> {
         (
             "def ir_vtable_cells (vt : Nat) (drop : IRScalar) (size : Nat) (align : Nat) \
              (ms : IRList IRScalar) : IRList IRMemSlot := \
-             IRList.cons IRMemSlot (IRMemSlot.mk vt drop Bool.true) \
-             (IRList.cons IRMemSlot (IRMemSlot.mk (Nat.add vt ir_d8) (IRScalar.int_ size) Bool.true) \
-             (IRList.cons IRMemSlot (IRMemSlot.mk (Nat.add vt ir_d16) (IRScalar.int_ align) Bool.true) \
+             @IRList.cons IRMemSlot (IRMemSlot.mk vt drop Bool.true) \
+             (@IRList.cons IRMemSlot (IRMemSlot.mk (Nat.add vt ir_d8) (IRScalar.int_ size) Bool.true) \
+             (@IRList.cons IRMemSlot (IRMemSlot.mk (Nat.add vt ir_d16) (IRScalar.int_ align) Bool.true) \
              (ir_vtable_method_cells (Nat.add vt ir_d24) ms)))"
                 .to_string(),
             "ir_vtable_cells vt drop size align ms: THE VTABLE IMAGE — the region rustc's \
@@ -284,16 +284,16 @@ fn decls() -> Vec<(String, &'static str)> {
     ] {
         let a = format!("(Nat.add vt {off})");
         let some =
-            format!("(IROption.some IRMemSlot (IRMemSlot.mk {a} (IRScalar.int_ w) Bool.true))");
+            format!("(@IROption.some IRMemSlot (IRMemSlot.mk {a} (IRScalar.int_ w) Bool.true))");
         out.push((
             format!(
                 "def {name} (mem : IRList IRMemSlot) (vt : Nat) (w : Nat) \
-                 (h : ir_vtable_slot mem {a} (IRScalar.int_ w)) : Eq IRStepResult \
+                 (h : ir_vtable_slot mem {a} (IRScalar.int_ w)) : @Eq IRStepResult \
                  (ir_load_at mem (IRScalar.ptr_ {a})) (IRStepResult.value (IRScalar.int_ w)) := \
-                 Eq.subst (IROption IRMemSlot) (fun (o : IROption IRMemSlot) => Eq IRStepResult \
+                 @Eq.subst (IROption IRMemSlot) (fun (o : IROption IRMemSlot) => @Eq IRStepResult \
                  (ir_load_slot o) (IRStepResult.value (IRScalar.int_ w))) {some} \
-                 (ir_mem_lookup mem {a}) (Eq.symm (IROption IRMemSlot) (ir_mem_lookup mem {a}) \
-                 {some} h) (Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ w)))"
+                 (ir_mem_lookup mem {a}) (@Eq.symm (IROption IRMemSlot) (ir_mem_lookup mem {a}) \
+                 {some} h) (@Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ w)))"
             ),
             if what.starts_with("SIZE") {
                 "ir_vtable_size_load: a load through vt+8 of a heap holding the vtable's SIZE word \
@@ -308,10 +308,10 @@ fn decls() -> Vec<(String, &'static str)> {
     out.extend([
         (
             "def ir_vtable_slot_frame_store (mem : IRList IRMemSlot) (a : Nat) (x : Nat) \
-             (v : IRScalar) (w : IRScalar) (hne : Eq Bool (ir_nat_eqb a x) Bool.false) \
+             (v : IRScalar) (w : IRScalar) (hne : @Eq Bool (ir_nat_eqb a x) Bool.false) \
              (h : ir_vtable_slot mem x w) : ir_vtable_slot (ir_mem_update mem a v) x w := \
-             Eq.trans (IROption IRMemSlot) (ir_mem_lookup (ir_mem_update mem a v) x) \
-             (ir_mem_lookup mem x) (IROption.some IRMemSlot (IRMemSlot.mk x w Bool.true)) \
+             @Eq.trans (IROption IRMemSlot) (ir_mem_lookup (ir_mem_update mem a v) x) \
+             (ir_mem_lookup mem x) (@IROption.some IRMemSlot (IRMemSlot.mk x w Bool.true)) \
              (ir_mem_lookup_update_skip mem a x v hne) h"
                 .to_string(),
             "ir_vtable_slot_frame_store: the EvalIR half of READ-ONLY — a store to any address \
@@ -320,10 +320,10 @@ fn decls() -> Vec<(String, &'static str)> {
              derived from a vtable word (crystal memo §23). DerivedProved, zero axiom_deps.",
         ),
         (
-            "def ir_e5_d14_gep (vt : Nat) : Eq IRStepResult \
-             (ir_gep_eval (IRScalar.ptr_ vt) (IRList.cons IRScalar (IRScalar.int_ ir_d16) \
-             (IRList.nil IRScalar))) (IRStepResult.value (IRScalar.ptr_ (Nat.add vt ir_d16))) := \
-             Eq.refl IRStepResult (IRStepResult.value (IRScalar.ptr_ (Nat.add vt ir_d16)))"
+            "def ir_e5_d14_gep (vt : Nat) : @Eq IRStepResult \
+             (ir_gep_eval (IRScalar.ptr_ vt) (@IRList.cons IRScalar (IRScalar.int_ ir_d16) \
+             (@IRList.nil IRScalar))) (IRStepResult.value (IRScalar.ptr_ (Nat.add vt ir_d16))) := \
+             @Eq.refl IRStepResult (IRStepResult.value (IRScalar.ptr_ (Nat.add vt ir_d16)))"
                 .to_string(),
             "ir_e5_d14_gep: D14's `gep inbounds i8, ptr %vt, 16` addresses cell vt+16 — the \
              byte offset IS the cell offset, because the cell machine's GEP is single-scale \

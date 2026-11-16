@@ -121,8 +121,7 @@ fn split_camel_case(s: &str) -> Vec<String> {
                 && chars[i + 1].is_lowercase()
                 && current.chars().last().is_some_and(|ch| ch.is_uppercase());
             if prev_lower || next_lower {
-                parts.push(current);
-                current = String::new();
+                parts.push(std::mem::take(&mut current));
             }
         }
         current.push(c);

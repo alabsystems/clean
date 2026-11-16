@@ -81,7 +81,7 @@ fn test_unf_c_statements_name_exact_relation() {
     );
     let isn_val = isn.value_src.as_deref().unwrap_or_default();
     assert!(
-        isn_val.contains("par_reduces_c env e e' -> Eq KExpr e e'"),
+        isn_val.contains("par_reduces_c env e e' -> @Eq KExpr e e'"),
         "is_normal_c must be 'every par_reduces_c reduct is e itself': {isn_val}"
     );
     assert!(
@@ -97,7 +97,7 @@ fn test_unf_c_statements_name_exact_relation() {
     assert_eq!(
         nse.type_src,
         "forall (env : RecEnv) (n : KExpr) (m : KExpr), \
-         is_normal_c env n -> par_reduces_c_star env n m -> Eq KExpr n m",
+         is_normal_c env n -> par_reduces_c_star env n m -> @Eq KExpr n m",
         "normal_c_star_eq must be stated over par_reduces_c_star and is_normal_c"
     );
 
@@ -112,7 +112,7 @@ fn test_unf_c_statements_name_exact_relation() {
          RecEnvClosed env -> RecEnvLiftClosed env -> \
          par_reduces_c_star env e n1 -> par_reduces_c_star env e n2 -> \
          is_normal_c env n1 -> is_normal_c env n2 -> \
-         Eq KExpr n1 n2",
+         @Eq KExpr n1 n2",
         "unique_normal_forms_c must join par_reduces_c_star legs under the four faithful interfaces"
     );
 
@@ -127,7 +127,7 @@ fn test_unf_c_statements_name_exact_relation() {
          par_reduces_c_star (red_rec faithful_red_env) e n2 -> \
          is_normal_c (red_rec faithful_red_env) n1 -> \
          is_normal_c (red_rec faithful_red_env) n2 -> \
-         Eq KExpr n1 n2",
+         @Eq KExpr n1 n2",
         "the faithful corollary must be pinned to red_rec faithful_red_env"
     );
 }

@@ -58,24 +58,24 @@ struct Refusal {
 const REFUSALS: &[Refusal] = &[
     Refusal {
         name: "rfnz_forged_stored_parameter",
-        type_src: r"TypingCtx rfnz_tenv (ListType.nil KExpr) kcre_witness_nat_zero_rhs (rfnz_rule_type (Level.param Name.anonymous))",
+        type_src: r"TypingCtx rfnz_tenv (@ListType.nil KExpr) kcre_witness_nat_zero_rhs (rfnz_rule_type (Level.param Name.anonymous))",
         value_src: r"rfnz_stored_rhs_typed",
     },
     Refusal {
         name: "rfnz_forged_zero_type",
-        type_src: r"TypingCtx rfnz_tenv (ListType.nil KExpr) rfnz_zero (KExpr.sort (Level.succ Level.zero))",
-        value_src: r"rfnz_zero_typed (ListType.nil KExpr)",
+        type_src: r"TypingCtx rfnz_tenv (@ListType.nil KExpr) rfnz_zero (KExpr.sort (Level.succ Level.zero))",
+        value_src: r"rfnz_zero_typed (@ListType.nil KExpr)",
     },
     Refusal {
         name: "rfnz_forged_missing_universe",
-        type_src: r"Eq (OptionType KExpr) (kdecl_type_at rfnz_tenv fixture_nat_rec_name (ListType.nil Level)) (OptionType.some KExpr (rfnz_rec_type Level.zero))",
-        value_src: r"Eq.refl (OptionType KExpr) (OptionType.some KExpr (rfnz_rec_type Level.zero))",
+        type_src: r"@Eq (OptionType KExpr) (kdecl_type_at rfnz_tenv fixture_nat_rec_name (@ListType.nil Level)) (@OptionType.some KExpr (rfnz_rec_type Level.zero))",
+        value_src: r"@Eq.refl (OptionType KExpr) (@OptionType.some KExpr (rfnz_rec_type Level.zero))",
     },
     Refusal {
         name: "rfnz_forged_double_instance",
-        type_src: r"TypingCtx rfnz_tenv (ListType.nil KExpr)
+        type_src: r"TypingCtx rfnz_tenv (@ListType.nil KExpr)
   (recursor_rhs_instance rfnz_rec_signature kcre_witness_nat_zero_rhs
-   (ListType.cons Level (Level.succ (Level.param rfnz_parameter)) (ListType.nil Level)))
+   (@ListType.cons Level (Level.succ (Level.param rfnz_parameter)) (@ListType.nil Level)))
   (rfnz_rule_type (Level.succ (Level.succ (Level.param rfnz_parameter))))",
         value_src: r"rfnz_actual_instance_typed (Level.succ (Level.param rfnz_parameter))",
     },
@@ -84,7 +84,7 @@ const REFUSALS: &[Refusal] = &[
         type_src: r"iota_step (red_rec rfnz_env) rfnz_input
   (KExpr.app (KExpr.app (KExpr.app
    (recursor_rhs_instance rfnz_rec_signature kcre_witness_nat_zero_rhs
-(ListType.cons Level Level.zero (ListType.nil Level)))
+(@ListType.cons Level Level.zero (@ListType.nil Level)))
    rfnz_motive) rfnz_zero) rfnz_minor)",
         value_src: r"rfnz_guarded_step",
     },
@@ -95,12 +95,12 @@ const REFUSALS: &[Refusal] = &[
     },
     Refusal {
         name: "rfnz_forged_raw_output_type",
-        type_src: r"TypingCtxConvIn rfnz_env rfnz_tenv (ListType.nil KExpr) rfnz_raw_result (KExpr.sort Level.zero)",
+        type_src: r"TypingCtxConvIn rfnz_env rfnz_tenv (@ListType.nil KExpr) rfnz_raw_result (KExpr.sort Level.zero)",
         value_src: r"rfnz_raw_result_typed",
     },
     Refusal {
         name: "rfnz_forged_input_type",
-        type_src: r"TypingCtxConvIn rfnz_env rfnz_tenv (ListType.nil KExpr) rfnz_input (KExpr.sort Level.zero)",
+        type_src: r"TypingCtxConvIn rfnz_env rfnz_tenv (@ListType.nil KExpr) rfnz_input (KExpr.sort Level.zero)",
         value_src: r"rfnz_input_typed",
     },
 ];
@@ -332,15 +332,15 @@ fn reflected_nat_zero_real_instance_input_guarded_and_output_callers_check() {
         for (value_src, type_src) in [
             (
                 "rfnz_actual_instance_typed (Level.succ (Level.param rfnz_parameter))",
-                "TypingCtx rfnz_tenv (ListType.nil KExpr) (recursor_rhs_instance rfnz_rec_signature kcre_witness_nat_zero_rhs (ListType.cons Level (Level.succ (Level.param rfnz_parameter)) (ListType.nil Level))) (rfnz_rule_type (Level.succ (Level.param rfnz_parameter)))",
+                "TypingCtx rfnz_tenv (@ListType.nil KExpr) (recursor_rhs_instance rfnz_rec_signature kcre_witness_nat_zero_rhs (@ListType.cons Level (Level.succ (Level.param rfnz_parameter)) (@ListType.nil Level))) (rfnz_rule_type (Level.succ (Level.param rfnz_parameter)))",
             ),
             (
                 "rfnz_lookup_instance_typed (RecRule.mk fixture_nat_zero_name Nat.zero kcre_witness_nat_zero_rhs) rfnz_actual_zero_rule (Level.succ Level.zero)",
-                "TypingCtx rfnz_tenv (ListType.nil KExpr) (recursor_rhs_instance rfnz_rec_signature kcre_witness_nat_zero_rhs (ListType.cons Level (Level.succ Level.zero) (ListType.nil Level))) (rfnz_rule_type (Level.succ Level.zero))",
+                "TypingCtx rfnz_tenv (@ListType.nil KExpr) (recursor_rhs_instance rfnz_rec_signature kcre_witness_nat_zero_rhs (@ListType.cons Level (Level.succ Level.zero) (@ListType.nil Level))) (rfnz_rule_type (Level.succ Level.zero))",
             ),
             (
                 "rfnz_input_typed",
-                "TypingCtxConvIn rfnz_env rfnz_tenv (ListType.nil KExpr) rfnz_input rfnz_nat",
+                "TypingCtxConvIn rfnz_env rfnz_tenv (@ListType.nil KExpr) rfnz_input rfnz_nat",
             ),
             (
                 "rfnz_guarded_step",
@@ -348,7 +348,7 @@ fn reflected_nat_zero_real_instance_input_guarded_and_output_callers_check() {
             ),
             (
                 "rfnz_raw_result_typed",
-                "TypingCtxConvIn rfnz_env rfnz_tenv (ListType.nil KExpr) rfnz_raw_result rfnz_nat",
+                "TypingCtxConvIn rfnz_env rfnz_tenv (@ListType.nil KExpr) rfnz_raw_result rfnz_nat",
             ),
         ] {
             let value = spec.elaborate_source(value_src, "actual reflected Nat.zero caller").expect("real caller elaborates");

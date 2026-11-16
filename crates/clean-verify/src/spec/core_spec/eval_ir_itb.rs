@@ -65,15 +65,15 @@ const SRC_ITB_HB: &str =
     "def ir_itb_hb : IRFunc := IRFunc.mk ir_d1 (ir_nl1 ir_d0) ir_d0 (ir_blk ir_itb_hb_b0 ir_blk0)";
 
 /// The module: the MINTED target, and the authored model beside it.
-const SRC_ITB_MODULE: &str = "def ir_itb_module : IRModule := IRModule.mk (IRList.cons IRFunc ir_it_func (IRList.cons IRFunc ir_itb_hb (IRList.nil IRFunc))) (IRList.nil IRGlobal)";
+const SRC_ITB_MODULE: &str = "def ir_itb_module : IRModule := IRModule.mk (@IRList.cons IRFunc ir_it_func (@IRList.cons IRFunc ir_itb_hb (@IRList.nil IRFunc))) (@IRList.nil IRGlobal)";
 
-const SRC_ITB_MACH0: &str = "def ir_itb_mach0 (mem : IRList IRMemSlot) (p : Nat) (q : Nat) (na : Nat) : IRMachine := IRMachine.mk (IRList.cons IRFrame (IRFrame.mk ir_d0 ir_d0 Nat.zero (ir_bind_params (ir_nl2 ir_d0 ir_d1) (ir_vl2 (IRScalar.ptr_ p) (IRScalar.ptr_ q)) (IRList.nil IRBinding)) (IRList.nil Nat)) (IRList.nil IRFrame)) mem na";
+const SRC_ITB_MACH0: &str = "def ir_itb_mach0 (mem : IRList IRMemSlot) (p : Nat) (q : Nat) (na : Nat) : IRMachine := IRMachine.mk (@IRList.cons IRFrame (IRFrame.mk ir_d0 ir_d0 Nat.zero (ir_bind_params (ir_nl2 ir_d0 ir_d1) (ir_vl2 (IRScalar.ptr_ p) (IRScalar.ptr_ q)) (@IRList.nil IRBinding)) (@IRList.nil Nat)) (@IRList.nil IRFrame)) mem na";
 
-const SRC_ITB_INIT: &str = "def ir_itb_init_is_mach0 (mem : IRList IRMemSlot) (p : Nat) (q : Nat) (na : Nat) : Eq IRConfig (ir_init ir_itb_module ir_d0 (ir_vl2 (IRScalar.ptr_ p) (IRScalar.ptr_ q)) mem na) (IRConfig.running (ir_itb_mach0 mem p q na)) := Eq.refl IRConfig (IRConfig.running (ir_itb_mach0 mem p q na))";
+const SRC_ITB_INIT: &str = "def ir_itb_init_is_mach0 (mem : IRList IRMemSlot) (p : Nat) (q : Nat) (na : Nat) : @Eq IRConfig (ir_init ir_itb_module ir_d0 (ir_vl2 (IRScalar.ptr_ p) (IRScalar.ptr_ q)) mem na) (IRConfig.running (ir_itb_mach0 mem p q na)) := @Eq.refl IRConfig (IRConfig.running (ir_itb_mach0 mem p q na))";
 
-const SRC_ITB_REACHES: &str = "def ir_itb_reaches_the_inference_call (mem : IRList IRMemSlot) (p : Nat) (q : Nat) (na : Nat) : Eq IROutcome (ir_eval ir_d16 ir_itb_module ir_d0 (ir_vl2 (IRScalar.ptr_ p) (IRScalar.ptr_ q)) mem na) (IROutcome.stuck IRFault.no_func) := Eq.refl IROutcome (IROutcome.stuck IRFault.no_func)";
+const SRC_ITB_REACHES: &str = "def ir_itb_reaches_the_inference_call (mem : IRList IRMemSlot) (p : Nat) (q : Nat) (na : Nat) : @Eq IROutcome (ir_eval ir_d16 ir_itb_module ir_d0 (ir_vl2 (IRScalar.ptr_ p) (IRScalar.ptr_ q)) mem na) (IROutcome.stuck IRFault.no_func) := @Eq.refl IROutcome (IROutcome.stuck IRFault.no_func)";
 
-const SRC_ITB_STILL_RUNNING: &str = "def ir_itb_takes_the_switch (mem : IRList IRMemSlot) (p : Nat) (q : Nat) (na : Nat) : Eq IROutcome (ir_eval ir_d6 ir_itb_module ir_d0 (ir_vl2 (IRScalar.ptr_ p) (IRScalar.ptr_ q)) mem na) IROutcome.fuel_out := Eq.refl IROutcome IROutcome.fuel_out";
+const SRC_ITB_STILL_RUNNING: &str = "def ir_itb_takes_the_switch (mem : IRList IRMemSlot) (p : Nat) (q : Nat) (na : Nat) : @Eq IROutcome (ir_eval ir_d6 ir_itb_module ir_d0 (ir_vl2 (IRScalar.ptr_ p) (IRScalar.ptr_ q)) mem na) IROutcome.fuel_out := @Eq.refl IROutcome IROutcome.fuel_out";
 
 impl Specification {
     /// `ir_itb` — the target's whole dispatch, over an authored heartbeat.

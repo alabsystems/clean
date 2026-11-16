@@ -174,7 +174,7 @@ BLOCKED_BY_UNITMATE: dict[str, str] = {
 # Each substring is the ELABORATOR's own wording as built into the Trust toolchain from
 # its first-party/clean submodule, so it moves when that pin moves and the control then
 # reds for the toolchain's reason, not its own. Where each is rendered (grep 2026-09-15):
-# five pin the `Type mismatch` lead and one the `Unknown identifier` lead of ElabError's
+# two pin the `Type mismatch` lead, three its `expected <their equation>` (2026-11-16), one the `Unknown identifier` lead of ElabError's
 # thiserror strings in crates/clean-elab/src/error.rs (TypeMismatch, UnknownIdent); the
 # two recursor pins are TypeMismatch's `expected {expected}, got {actual}` frame around
 # the unifier's `cannot unify <kind> with <kind>` (unify/unifier/unify_expr.rs), kinds
@@ -219,19 +219,19 @@ def _control_message_matches(expect, stderr: str) -> bool:
 
 NEGATIVE_CONTROLS = [
     ("add_recurses_left",
-     "def bad_add (n : Nat) : Eq Nat (Nat.add Nat.zero n) n := Eq.refl Nat n",
-     "Nat.add recursing on its LEFT argument would make this hold", "Type mismatch"),
+     "def bad_add (n : Nat) : @Eq Nat (Nat.add Nat.zero n) n := @Eq.refl Nat n",
+     "Nat.add recursing on its LEFT argument would make this hold", "Type mismatch: expected Nat.add Nat.zero"),
     ("pred_zero_wrong",
-     "def bad_pred : Eq Nat (Nat.pred Nat.zero) (Nat.succ Nat.zero) := Eq.refl Nat (Nat.succ Nat.zero)",
-     "Nat.pred Nat.zero must be Nat.zero, not a successor", "Type mismatch"),
+     "def bad_pred : @Eq Nat (Nat.pred Nat.zero) (Nat.succ Nat.zero) := @Eq.refl Nat (Nat.succ Nat.zero)",
+     "Nat.pred Nat.zero must be Nat.zero, not a successor", "Type mismatch: expected Nat.pred Nat.zero = Nat.succ Nat.zero"),
     ("sub_drops_pred",
-     "def bad_sub (a : Nat) (b : Nat) : Eq Nat (Nat.sub a (Nat.succ b)) (Nat.sub a b) := Eq.refl Nat (Nat.sub a b)",
-     "Nat.sub must peel the right operand THROUGH pred", "Type mismatch"),
+     "def bad_sub (a : Nat) (b : Nat) : @Eq Nat (Nat.sub a (Nat.succ b)) (Nat.sub a b) := @Eq.refl Nat (Nat.sub a b)",
+     "Nat.sub must peel the right operand THROUGH pred", "Type mismatch: expected Nat.sub"),
     ("succ_wrong_arity",
      "def bad_succ : Nat -> Nat -> Nat := Nat.succ",
      "Nat.succ must be unary", "Type mismatch"),
     ("nat_rec_three_minors",
-     "def bad_nat_rec (C : Nat -> Type) (z : C Nat.zero) (s : (n : Nat) -> C n -> C (Nat.succ n)) (x : C Nat.zero) (n : Nat) : C n := Nat.rec C z s x n",
+     "def bad_nat_rec (C : Nat -> Type) (z : C Nat.zero) (s : (n : Nat) -> C n -> C (Nat.succ n)) (x : C Nat.zero) (n : Nat) : C n := @Nat.rec C z s x n",
      "Nat.rec takes one minor premise per constructor, so a third would mean a third constructor",
      # Was "Discriminant" -- never a kernel word: clean-elab's unifier
      # (unify/unifier/unify_expr.rs) printed a shape mismatch as `{:?}` of
@@ -261,7 +261,7 @@ NEGATIVE_CONTROLS = [
      ["expected Nat, got cannot unify an application with a constant",
       ('suffix: ["Nat"]', "got cannot unify expressions of different shape")]),
     ("bool_rec_three_minors",
-     "def bad_bool_rec (C : Bool -> Type) (f : C Bool.false) (t : C Bool.true) (x : C Bool.false) (b : Bool) : C b := Bool.rec C f t x b",
+     "def bad_bool_rec (C : Bool -> Type) (f : C Bool.false) (t : C Bool.true) (x : C Bool.false) (b : Bool) : C b := @Bool.rec C f t x b",
      "Bool.rec takes one minor premise per constructor, so a third would mean a third constructor",
      # Was "Discriminant"; same provenance, mechanism and measurements as
      # `nat_rec_three_minors` above, over Bool (`expected Bool, got cannot unify

@@ -58,9 +58,9 @@ impl Specification {
             name: "instantiate_lift_cancel_general_bvar".to_string(),
             type_src: concat!(
                 "forall (i : Nat) (val : KExpr) (c : Nat) (a : Nat) (j : Nat), ",
-                "Eq Nat (Nat.sub a j) ",
+                "@Eq Nat (Nat.sub a j) ",
                 "(Nat.succ (Nat.sub (Nat.sub a j) (Nat.succ Nat.zero))) -> ",
-                "Eq KExpr ",
+                "@Eq KExpr ",
                 "(instantiate_at (lift_at (KExpr.bvar i) c a) val (Nat.add c j)) ",
                 "(lift_at (KExpr.bvar i) c (Nat.sub a (Nat.succ Nat.zero)))"
             )
@@ -200,9 +200,9 @@ impl Specification {
             name: "instantiate_lift_cancel_general".to_string(),
             type_src: concat!(
                 "forall (e : KExpr) (val : KExpr) (c : Nat) (a : Nat) (j : Nat), ",
-                "Eq Nat (Nat.sub a j) ",
+                "@Eq Nat (Nat.sub a j) ",
                 "(Nat.succ (Nat.sub (Nat.sub a j) (Nat.succ Nat.zero))) -> ",
-                "Eq KExpr ",
+                "@Eq KExpr ",
                 "(instantiate_at (lift_at e c a) val (Nat.add c j)) ",
                 "(lift_at e c (Nat.sub a (Nat.succ Nat.zero)))"
             )
@@ -247,7 +247,7 @@ impl Specification {
 
 /// The guard `j < a` (positivity of `Nat.sub a j`).
 fn guard() -> String {
-    "Eq Nat (Nat.sub a j) (Nat.succ (Nat.sub (Nat.sub a j) (Nat.succ Nat.zero)))".to_string()
+    "@Eq Nat (Nat.sub a j) (Nat.succ (Nat.sub (Nat.sub a j) (Nat.succ Nat.zero)))".to_string()
 }
 
 /// Build the bvar-case proof term (Nat.rec convoy on `Nat.sub c i`).
@@ -268,85 +268,86 @@ fn instantiate_lift_cancel_general_bvar_value() -> String {
     let h_ja0 = format!("(nat_sub_zero_of_sub_pos a j {gaj} hj)"); // sub j a = 0
     let h_a_eq = format!("(nat_sub_zero_succ_gap_to_add a j {gaj} {h_ja0} hj)"); // a = (succ gaj) + j
     let h_a_eq2 = format!(
-        "(Eq.trans Nat a (Nat.add (Nat.succ {gaj}) j) (Nat.succ {gpj}) {h_a_eq} (nat_succ_add {gaj} j))"
+        "(@Eq.trans Nat a (Nat.add (Nat.succ {gaj}) j) (Nat.succ {gpj}) {h_a_eq} (nat_succ_add {gaj} j))"
     ); // a = succ (a-1)
     let h_c_ig = format!("(nat_sub_zero_add_right c i {gaj} h_ci)"); // sub c (i+gaj) = 0
     let h_cj_iggj0 = format!("(nat_sub_zero_add_same_right c (Nat.add i {gaj}) j {h_c_ig})"); // sub (c+j) ((i+gaj)+j) = 0
     let h_assoc = format!("(nat_add_assoc i {gaj} j)"); // (i+gaj)+j = i+(gaj+j) = X
     let h_cj_x0 = format!(
-        "(Eq.subst Nat (fun (z : Nat) => Eq Nat (Nat.sub {cj} z) Nat.zero) (Nat.add (Nat.add i {gaj}) j) {x} {h_assoc} {h_cj_iggj0})"
+        "(@Eq.subst Nat (fun (z : Nat) => @Eq Nat (Nat.sub {cj} z) Nat.zero) (Nat.add (Nat.add i {gaj}) j) {x} {h_assoc} {h_cj_iggj0})"
     ); // sub (c+j) X = 0
     let h_succx_cj_pos = format!("(nat_sub_pos_witness {cj} {x} {h_cj_x0})"); // sub (succ X) (c+j) > 0
     let h_ia_succx = format!(
-        "(Eq.trans Nat {ia} (Nat.add i (Nat.succ {gpj})) (Nat.succ {x}) \
-         (Eq.cong Nat Nat (fun (z : Nat) => Nat.add i z) a (Nat.succ {gpj}) {h_a_eq2}) \
+        "(@Eq.trans Nat {ia} (Nat.add i (Nat.succ {gpj})) (Nat.succ {x}) \
+         (@Eq.cong Nat Nat (fun (z : Nat) => Nat.add i z) a (Nat.succ {gpj}) {h_a_eq2}) \
          (nat_add_succ_right i {gpj}))"
     ); // i+a = succ X
     let h2 = format!(
-        "(Eq.subst Nat \
-         (fun (z : Nat) => Eq Nat (Nat.sub z {cj}) (Nat.succ (Nat.sub (Nat.sub z {cj}) (Nat.succ Nat.zero)))) \
-         (Nat.succ {x}) {ia} (Eq.symm Nat {ia} (Nat.succ {x}) {h_ia_succx}) {h_succx_cj_pos})"
+        "(@Eq.subst Nat \
+         (fun (z : Nat) => @Eq Nat (Nat.sub z {cj}) (Nat.succ (Nat.sub (Nat.sub z {cj}) (Nat.succ Nat.zero)))) \
+         (Nat.succ {x}) {ia} (@Eq.symm Nat {ia} (Nat.succ {x}) {h_ia_succx}) {h_succx_cj_pos})"
     ); // sub (i+a) (c+j) > 0
     let h1 = format!("(nat_sub_zero_add_monotone c i j a h_ci {h_ja0})"); // sub (c+j) (i+a) = 0
 
     // index equality: i+(a-1) = (i+a)-1  (both equal X)
     let h_suba1 = format!(
-        "(Eq.trans Nat {a1} (Nat.sub (Nat.succ {gpj}) (Nat.succ Nat.zero)) {gpj} \
-         (Eq.cong Nat Nat (fun (z : Nat) => Nat.sub z (Nat.succ Nat.zero)) a (Nat.succ {gpj}) {h_a_eq2}) \
+        "(@Eq.trans Nat {a1} (Nat.sub (Nat.succ {gpj}) (Nat.succ Nat.zero)) {gpj} \
+         (@Eq.cong Nat Nat (fun (z : Nat) => Nat.sub z (Nat.succ Nat.zero)) a (Nat.succ {gpj}) {h_a_eq2}) \
          (nat_sub_succ_one {gpj}))"
     ); // a-1 = gpj
-    let part1 = format!("(Eq.cong Nat Nat (fun (z : Nat) => Nat.add i z) {a1} {gpj} {h_suba1})"); // i+(a-1) = X
+    let part1 = format!("(@Eq.cong Nat Nat (fun (z : Nat) => Nat.add i z) {a1} {gpj} {h_suba1})"); // i+(a-1) = X
     let p3 = format!(
-        "(Eq.trans Nat {iam1} (Nat.sub (Nat.succ {x}) (Nat.succ Nat.zero)) {x} \
-         (Eq.cong Nat Nat (fun (z : Nat) => Nat.sub z (Nat.succ Nat.zero)) {ia} (Nat.succ {x}) {h_ia_succx}) \
+        "(@Eq.trans Nat {iam1} (Nat.sub (Nat.succ {x}) (Nat.succ Nat.zero)) {x} \
+         (@Eq.cong Nat Nat (fun (z : Nat) => Nat.sub z (Nat.succ Nat.zero)) {ia} (Nat.succ {x}) {h_ia_succx}) \
          (nat_sub_succ_one {x}))"
     ); // (i+a)-1 = X
-    let index_eq =
-        format!("(Eq.trans Nat (Nat.add i {a1}) {x} {iam1} {part1} (Eq.symm Nat {iam1} {x} {p3}))"); // i+(a-1) = (i+a)-1
+    let index_eq = format!(
+        "(@Eq.trans Nat (Nat.add i {a1}) {x} {iam1} {part1} (@Eq.symm Nat {iam1} {x} {p3}))"
+    ); // i+(a-1) = (i+a)-1
 
     let geq_lhs_to_bvar = format!(
-        "(Eq.trans KExpr {lhs} (instantiate_at (KExpr.bvar {ia}) val {cj}) (KExpr.bvar {iam1}) \
-         (Eq.cong KExpr KExpr (fun (t : KExpr) => instantiate_at t val {cj}) \
+        "(@Eq.trans KExpr {lhs} (instantiate_at (KExpr.bvar {ia}) val {cj}) (KExpr.bvar {iam1}) \
+         (@Eq.cong KExpr KExpr (fun (t : KExpr) => instantiate_at t val {cj}) \
          (lift_at (KExpr.bvar i) c a) (KExpr.bvar {ia}) (lift_at_bvar_geq i c a h_ci)) \
-         (Eq.trans KExpr (instantiate_at (KExpr.bvar {ia}) val {cj}) \
+         (@Eq.trans KExpr (instantiate_at (KExpr.bvar {ia}) val {cj}) \
          (instantiate_bvar_at {ia} {cj} val) (KExpr.bvar {iam1}) \
          (instantiate_at_bvar {ia} val {cj}) \
          (instantiate_bvar_at_above {ia} {cj} val {h1} {h2})))"
     );
     let geq_bvar_to_rhs = format!(
-        "(Eq.symm KExpr {rhs} (KExpr.bvar {iam1}) \
-         (Eq.trans KExpr {rhs} (KExpr.bvar (Nat.add i {a1})) (KExpr.bvar {iam1}) \
+        "(@Eq.symm KExpr {rhs} (KExpr.bvar {iam1}) \
+         (@Eq.trans KExpr {rhs} (KExpr.bvar (Nat.add i {a1})) (KExpr.bvar {iam1}) \
          (lift_at_bvar_geq i c {a1} h_ci) \
-         (Eq.cong Nat KExpr KExpr.bvar (Nat.add i {a1}) {iam1} {index_eq})))"
+         (@Eq.cong Nat KExpr KExpr.bvar (Nat.add i {a1}) {iam1} {index_eq})))"
     );
     let geq_arm = format!(
-        "(Eq.trans KExpr {lhs} (KExpr.bvar {iam1}) {rhs} {geq_lhs_to_bvar} {geq_bvar_to_rhs})"
+        "(@Eq.trans KExpr {lhs} (KExpr.bvar {iam1}) {rhs} {geq_lhs_to_bvar} {geq_bvar_to_rhs})"
     );
 
     // -- below arm (i < c: h_sk : sub c i = succ kk) --
     let h_ci_pos = "(nat_pos_witness_from_succ_eq (Nat.sub c i) kk h_sk)"; // sub c i > 0
     let below_lhs_to_bvar = format!(
-        "(Eq.trans KExpr {lhs} (instantiate_at (KExpr.bvar i) val {cj}) (KExpr.bvar i) \
-         (Eq.cong KExpr KExpr (fun (t : KExpr) => instantiate_at t val {cj}) \
+        "(@Eq.trans KExpr {lhs} (instantiate_at (KExpr.bvar i) val {cj}) (KExpr.bvar i) \
+         (@Eq.cong KExpr KExpr (fun (t : KExpr) => instantiate_at t val {cj}) \
          (lift_at (KExpr.bvar i) c a) (KExpr.bvar i) (lift_at_bvar_below i c a {h_ci_pos})) \
-         (Eq.trans KExpr (instantiate_at (KExpr.bvar i) val {cj}) \
+         (@Eq.trans KExpr (instantiate_at (KExpr.bvar i) val {cj}) \
          (instantiate_bvar_at i {cj} val) (KExpr.bvar i) \
          (instantiate_at_bvar i val {cj}) \
          (instantiate_bvar_at_below i {cj} val (nat_sub_pos_add_right c j i {h_ci_pos}))))"
     );
     let below_bvar_to_rhs =
-        format!("(Eq.symm KExpr {rhs} (KExpr.bvar i) (lift_at_bvar_below i c {a1} {h_ci_pos}))");
+        format!("(@Eq.symm KExpr {rhs} (KExpr.bvar i) (lift_at_bvar_below i c {a1} {h_ci_pos}))");
     let below_arm = format!(
-        "(Eq.trans KExpr {lhs} (KExpr.bvar i) {rhs} {below_lhs_to_bvar} {below_bvar_to_rhs})"
+        "(@Eq.trans KExpr {lhs} (KExpr.bvar i) {rhs} {below_lhs_to_bvar} {below_bvar_to_rhs})"
     );
 
     format!(
         "fun (i : Nat) (val : KExpr) (c : Nat) (a : Nat) (j : Nat) (hj : {g}) => \
-         Nat.rec (fun (gg : Nat) => Eq Nat (Nat.sub c i) gg -> Eq KExpr {lhs} {rhs}) \
-         (fun (h_ci : Eq Nat (Nat.sub c i) Nat.zero) => {geq_arm}) \
-         (fun (kk : Nat) (ihk : Eq Nat (Nat.sub c i) kk -> Eq KExpr {lhs} {rhs}) \
-         (h_sk : Eq Nat (Nat.sub c i) (Nat.succ kk)) => {below_arm}) \
-         (Nat.sub c i) (Eq.refl Nat (Nat.sub c i))"
+         @Nat.rec (fun (gg : Nat) => @Eq Nat (Nat.sub c i) gg -> @Eq KExpr {lhs} {rhs}) \
+         (fun (h_ci : @Eq Nat (Nat.sub c i) Nat.zero) => {geq_arm}) \
+         (fun (kk : Nat) (ihk : @Eq Nat (Nat.sub c i) kk -> @Eq KExpr {lhs} {rhs}) \
+         (h_sk : @Eq Nat (Nat.sub c i) (Nat.succ kk)) => {below_arm}) \
+         (Nat.sub c i) (@Eq.refl Nat (Nat.sub c i))"
     )
 }
 
@@ -380,8 +381,8 @@ fn binder_two_arm(ctor: &str, lift_unfold: &str, inst_unfold: &str, is_binder: b
     // nat_succ_add: (succ c)+j = succ(c+j).
     let x2_body_eq = if is_binder {
         format!(
-            "(Eq.subst Nat \
-             (fun (dd : Nat) => Eq KExpr (instantiate_at {x2_lifted} w dd) {x2_lifted_res}) \
+            "(@Eq.subst Nat \
+             (fun (dd : Nat) => @Eq KExpr (instantiate_at {x2_lifted} w dd) {x2_lifted_res}) \
              (Nat.add (Nat.succ c) j) (Nat.succ (Nat.add c j)) (nat_succ_add c j) \
              (ih_bd w (Nat.succ c) a j hj))"
         )
@@ -397,32 +398,32 @@ fn binder_two_arm(ctor: &str, lift_unfold: &str, inst_unfold: &str, is_binder: b
 
     // step LHS -> mid : unfold lift then instantiate on the constructor.
     let lhs_to_mid = format!(
-        "(Eq.trans KExpr {lhs} (instantiate_at {unfolded_lift} w (Nat.add c j)) {mid} \
-         (Eq.cong KExpr KExpr (fun (t : KExpr) => instantiate_at t w (Nat.add c j)) \
+        "(@Eq.trans KExpr {lhs} (instantiate_at {unfolded_lift} w (Nat.add c j)) {mid} \
+         (@Eq.cong KExpr KExpr (fun (t : KExpr) => instantiate_at t w (Nat.add c j)) \
          (lift_at ({ctor} ty0 bd0) c a) {unfolded_lift} ({lift_unfold} ty0 bd0 c a)) \
          ({inst_unfold} (lift_at ty0 c a) {x2_lifted} w (Nat.add c j)))"
     );
     // step mid -> res : apply the two IHs (congruence on each slot).
     let mid_to_res = format!(
-        "(Eq.trans KExpr {mid} \
+        "(@Eq.trans KExpr {mid} \
          ({ctor} (lift_at ty0 c (Nat.sub a (Nat.succ Nat.zero))) {x2_inst}) {res} \
-         (Eq.cong KExpr KExpr (fun (t : KExpr) => {ctor} t {x2_inst}) \
+         (@Eq.cong KExpr KExpr (fun (t : KExpr) => {ctor} t {x2_inst}) \
          (instantiate_at (lift_at ty0 c a) w (Nat.add c j)) \
          (lift_at ty0 c (Nat.sub a (Nat.succ Nat.zero))) (ih_ty w c a j hj)) \
-         (Eq.cong KExpr KExpr \
+         (@Eq.cong KExpr KExpr \
          (fun (t : KExpr) => {ctor} (lift_at ty0 c (Nat.sub a (Nat.succ Nat.zero))) t) \
          {x2_inst} {x2_lifted_res} {x2_body_eq}))"
     );
     // step res -> RHS : fold the lift back over the constructor.
     let res_to_rhs = format!(
-        "(Eq.symm KExpr {rhs} {res} ({lift_unfold} ty0 bd0 c (Nat.sub a (Nat.succ Nat.zero))))"
+        "(@Eq.symm KExpr {rhs} {res} ({lift_unfold} ty0 bd0 c (Nat.sub a (Nat.succ Nat.zero))))"
     );
 
     format!(
         "(fun (ty0 : KExpr) (bd0 : KExpr) {} \
          (w : KExpr) (c : Nat) (a : Nat) (j : Nat) (hj : {g}) => \
-         Eq.trans KExpr {lhs} {mid} {rhs} {lhs_to_mid} \
-         (Eq.trans KExpr {mid} {res} {rhs} {mid_to_res} {res_to_rhs}))",
+         @Eq.trans KExpr {lhs} {mid} {rhs} {lhs_to_mid} \
+         (@Eq.trans KExpr {mid} {res} {rhs} {mid_to_res} {res_to_rhs}))",
         ih_hyps()
     )
 }
@@ -433,10 +434,10 @@ fn ih_hyps() -> String {
     let g = guard();
     format!(
         "(ih_ty : forall (w : KExpr) (c : Nat) (a : Nat) (j : Nat), {g} -> \
-         Eq KExpr (instantiate_at (lift_at ty0 c a) w (Nat.add c j)) \
+         @Eq KExpr (instantiate_at (lift_at ty0 c a) w (Nat.add c j)) \
          (lift_at ty0 c (Nat.sub a (Nat.succ Nat.zero)))) \
          (ih_bd : forall (w : KExpr) (c : Nat) (a : Nat) (j : Nat), {g} -> \
-         Eq KExpr (instantiate_at (lift_at bd0 c a) w (Nat.add c j)) \
+         @Eq KExpr (instantiate_at (lift_at bd0 c a) w (Nat.add c j)) \
          (lift_at bd0 c (Nat.sub a (Nat.succ Nat.zero))))"
     )
 }
@@ -448,7 +449,7 @@ fn binder_step_type(ctor: &str) -> String {
     format!(
         "forall (ty0 : KExpr) (bd0 : KExpr) {hyps} \
          (w : KExpr) (c : Nat) (a : Nat) (j : Nat), {g} -> \
-         Eq KExpr (instantiate_at (lift_at ({ctor} ty0 bd0) c a) w (Nat.add c j)) \
+         @Eq KExpr (instantiate_at (lift_at ({ctor} ty0 bd0) c a) w (Nat.add c j)) \
          (lift_at ({ctor} ty0 bd0) c (Nat.sub a (Nat.succ Nat.zero)))"
     )
 }
@@ -471,13 +472,13 @@ fn ih_hyps_let() -> String {
     let g = guard();
     format!(
         "(ih_ty : forall (w : KExpr) (c : Nat) (a : Nat) (j : Nat), {g} -> \
-         Eq KExpr (instantiate_at (lift_at ty0 c a) w (Nat.add c j)) \
+         @Eq KExpr (instantiate_at (lift_at ty0 c a) w (Nat.add c j)) \
          (lift_at ty0 c (Nat.sub a (Nat.succ Nat.zero)))) \
          (ih_val : forall (w : KExpr) (c : Nat) (a : Nat) (j : Nat), {g} -> \
-         Eq KExpr (instantiate_at (lift_at val0 c a) w (Nat.add c j)) \
+         @Eq KExpr (instantiate_at (lift_at val0 c a) w (Nat.add c j)) \
          (lift_at val0 c (Nat.sub a (Nat.succ Nat.zero)))) \
          (ih_bd : forall (w : KExpr) (c : Nat) (a : Nat) (j : Nat), {g} -> \
-         Eq KExpr (instantiate_at (lift_at bd0 c a) w (Nat.add c j)) \
+         @Eq KExpr (instantiate_at (lift_at bd0 c a) w (Nat.add c j)) \
          (lift_at bd0 c (Nat.sub a (Nat.succ Nat.zero))))"
     )
 }
@@ -490,7 +491,7 @@ fn binder_step_type_let() -> String {
     format!(
         "forall (ty0 : KExpr) (val0 : KExpr) (bd0 : KExpr) {hyps} \
          (w : KExpr) (c : Nat) (a : Nat) (j : Nat), {g} -> \
-         Eq KExpr (instantiate_at (lift_at (KExpr.let_ ty0 val0 bd0) c a) w (Nat.add c j)) \
+         @Eq KExpr (instantiate_at (lift_at (KExpr.let_ ty0 val0 bd0) c a) w (Nat.add c j)) \
          (lift_at (KExpr.let_ ty0 val0 bd0) c (Nat.sub a (Nat.succ Nat.zero)))"
     )
 }
@@ -519,45 +520,45 @@ fn let_three_arm() -> String {
     let m2 = format!("(KExpr.let_ {l_ty_res} {l_val_res} {i_bd})");
     // body IH transported from (succ c)+j to succ(c+j) via nat_succ_add.
     let bd_body_eq = format!(
-        "(Eq.subst Nat \
-         (fun (dd : Nat) => Eq KExpr (instantiate_at {l_bd} w dd) {l_bd_res}) \
+        "(@Eq.subst Nat \
+         (fun (dd : Nat) => @Eq KExpr (instantiate_at {l_bd} w dd) {l_bd_res}) \
          (Nat.add (Nat.succ c) j) (Nat.succ (Nat.add c j)) (nat_succ_add c j) \
          (ih_bd w (Nat.succ c) a j hj))"
     );
     // LHS -> mid: unfold lift then instantiate over the constructor.
     let lhs_to_mid = format!(
-        "(Eq.trans KExpr {lhs} (instantiate_at {unfolded_lift} w (Nat.add c j)) {mid} \
-         (Eq.cong KExpr KExpr (fun (t : KExpr) => instantiate_at t w (Nat.add c j)) \
+        "(@Eq.trans KExpr {lhs} (instantiate_at {unfolded_lift} w (Nat.add c j)) {mid} \
+         (@Eq.cong KExpr KExpr (fun (t : KExpr) => instantiate_at t w (Nat.add c j)) \
          (lift_at (KExpr.let_ ty0 val0 bd0) c a) {unfolded_lift} (lift_at_let_ ty0 val0 bd0 c a)) \
          (instantiate_at_let_ {l_ty} {l_val} {l_bd} w (Nat.add c j)))"
     );
     // mid -> res: three congruences (ty, val, then transported body).
     let cong_ty = format!(
-        "(Eq.cong KExpr KExpr (fun (t : KExpr) => KExpr.let_ t {i_val} {i_bd}) \
+        "(@Eq.cong KExpr KExpr (fun (t : KExpr) => KExpr.let_ t {i_val} {i_bd}) \
          {i_ty} {l_ty_res} (ih_ty w c a j hj))"
     );
     let cong_val = format!(
-        "(Eq.cong KExpr KExpr (fun (t : KExpr) => KExpr.let_ {l_ty_res} t {i_bd}) \
+        "(@Eq.cong KExpr KExpr (fun (t : KExpr) => KExpr.let_ {l_ty_res} t {i_bd}) \
          {i_val} {l_val_res} (ih_val w c a j hj))"
     );
     let cong_bd = format!(
-        "(Eq.cong KExpr KExpr (fun (t : KExpr) => KExpr.let_ {l_ty_res} {l_val_res} t) \
+        "(@Eq.cong KExpr KExpr (fun (t : KExpr) => KExpr.let_ {l_ty_res} {l_val_res} t) \
          {i_bd} {l_bd_res} {bd_body_eq})"
     );
     let mid_to_res = format!(
-        "(Eq.trans KExpr {mid} {m1} {res} {cong_ty} \
-         (Eq.trans KExpr {m1} {m2} {res} {cong_val} {cong_bd}))"
+        "(@Eq.trans KExpr {mid} {m1} {res} {cong_ty} \
+         (@Eq.trans KExpr {m1} {m2} {res} {cong_val} {cong_bd}))"
     );
     // res -> RHS: fold the lift back over the constructor.
     let res_to_rhs = format!(
-        "(Eq.symm KExpr {rhs} {res} \
+        "(@Eq.symm KExpr {rhs} {res} \
          (lift_at_let_ ty0 val0 bd0 c (Nat.sub a (Nat.succ Nat.zero))))"
     );
     format!(
         "(fun (ty0 : KExpr) (val0 : KExpr) (bd0 : KExpr) {} \
          (w : KExpr) (c : Nat) (a : Nat) (j : Nat) (hj : {g}) => \
-         Eq.trans KExpr {lhs} {mid} {rhs} {lhs_to_mid} \
-         (Eq.trans KExpr {mid} {res} {rhs} {mid_to_res} {res_to_rhs}))",
+         @Eq.trans KExpr {lhs} {mid} {rhs} {lhs_to_mid} \
+         (@Eq.trans KExpr {mid} {res} {rhs} {mid_to_res} {res_to_rhs}))",
         ih_hyps_let()
     )
 }
@@ -578,24 +579,24 @@ fn instantiate_lift_cancel_general_value() -> String {
     let g = guard();
     let motive = format!(
         "(fun (xe : KExpr) => forall (w : KExpr) (c : Nat) (a : Nat) (j : Nat), {g} -> \
-         Eq KExpr (instantiate_at (lift_at xe c a) w (Nat.add c j)) \
+         @Eq KExpr (instantiate_at (lift_at xe c a) w (Nat.add c j)) \
          (lift_at xe c (Nat.sub a (Nat.succ Nat.zero))))"
     );
 
     // sort branch: both sides reduce to (sort n) via lift_at_sort / instantiate_at_sort.
     let sort_branch = format!(
         "(fun (n : Level) (w : KExpr) (c : Nat) (a : Nat) (j : Nat) (hj : {g}) => \
-         Eq.trans KExpr \
+         @Eq.trans KExpr \
          (instantiate_at (lift_at (KExpr.sort n) c a) w (Nat.add c j)) \
          (KExpr.sort n) \
          (lift_at (KExpr.sort n) c (Nat.sub a (Nat.succ Nat.zero))) \
-         (Eq.trans KExpr \
+         (@Eq.trans KExpr \
          (instantiate_at (lift_at (KExpr.sort n) c a) w (Nat.add c j)) \
          (instantiate_at (KExpr.sort n) w (Nat.add c j)) (KExpr.sort n) \
-         (Eq.cong KExpr KExpr (fun (t : KExpr) => instantiate_at t w (Nat.add c j)) \
+         (@Eq.cong KExpr KExpr (fun (t : KExpr) => instantiate_at t w (Nat.add c j)) \
          (lift_at (KExpr.sort n) c a) (KExpr.sort n) (lift_at_sort n c a)) \
          (instantiate_at_sort n w (Nat.add c j))) \
-         (Eq.symm KExpr (lift_at (KExpr.sort n) c (Nat.sub a (Nat.succ Nat.zero))) (KExpr.sort n) \
+         (@Eq.symm KExpr (lift_at (KExpr.sort n) c (Nat.sub a (Nat.succ Nat.zero))) (KExpr.sort n) \
          (lift_at_sort n c (Nat.sub a (Nat.succ Nat.zero)))))"
     );
 
@@ -611,28 +612,28 @@ fn instantiate_lift_cancel_general_value() -> String {
 
     let const_branch = format!(
         "(fun (nm : Name) (us : ListType Level) (w : KExpr) (c : Nat) (a : Nat) (j : Nat) (hj : {g}) => \
-         Eq.refl KExpr (KExpr.const nm us))"
+         @Eq.refl KExpr (KExpr.const nm us))"
     );
 
     // proj: 1-child node; instantiate_at + lift_at reduce through proj, ih_sub cong.
     let proj_branch = format!(
         "(fun (s : Name) (i : Nat) (sub : KExpr) \
          (ih_sub : forall (w : KExpr) (c : Nat) (a : Nat) (j : Nat), {g} -> \
-         Eq KExpr (instantiate_at (lift_at sub c a) w (Nat.add c j)) (lift_at sub c (Nat.sub a (Nat.succ Nat.zero)))) \
+         @Eq KExpr (instantiate_at (lift_at sub c a) w (Nat.add c j)) (lift_at sub c (Nat.sub a (Nat.succ Nat.zero)))) \
          (w : KExpr) (c : Nat) (a : Nat) (j : Nat) (hj : {g}) => \
-         Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.proj s i x) \
+         @Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.proj s i x) \
          (instantiate_at (lift_at sub c a) w (Nat.add c j)) \
          (lift_at sub c (Nat.sub a (Nat.succ Nat.zero))) (ih_sub w c a j hj))"
     );
     // lit: leaf; both sides reduce to (lit m).
     let lit_branch = format!(
         "(fun (m : Nat) (w : KExpr) (c : Nat) (a : Nat) (j : Nat) (hj : {g}) => \
-         Eq.refl KExpr (KExpr.lit m))"
+         @Eq.refl KExpr (KExpr.lit m))"
     );
 
     format!(
         "fun (e : KExpr) (val : KExpr) (c : Nat) (a : Nat) (j : Nat) (hj : {g}) => \
-         KExpr.rec {motive} {sort_branch} {bvar_branch} {app_branch} {lam_branch} {pi_branch} \
+         @KExpr.rec {motive} {sort_branch} {bvar_branch} {app_branch} {lam_branch} {pi_branch} \
          {const_branch} {let_branch} {proj_branch} {lit_branch} e val c a j hj"
     )
 }

@@ -267,8 +267,8 @@ fn test_candmodel_r7_shape_guards() {
     // (3) The other three rules are the ordinary shapes, var going through
     // ctx_lookup.
     for needle in [
-        "| var : forall (G : ListType KExpr) (i : Nat) (T : KExpr), Eq (OptionType KExpr) \
-         (ctx_lookup G i) (OptionType.some KExpr T) -> SynTyT G (KExpr.bvar i) T",
+        "| var : forall (G : ListType KExpr) (i : Nat) (T : KExpr), @Eq (OptionType KExpr) \
+         (ctx_lookup G i) (@OptionType.some KExpr T) -> SynTyT G (KExpr.bvar i) T",
         "| sort : forall (G : ListType KExpr) (n : Level), SynTyT G (KExpr.sort n) \
          (KExpr.sort (Level.succ n))",
         "SynTyT G f (KExpr.pi A B) -> SynTyT G a A -> SynTyT G (KExpr.app f a) B",
@@ -283,7 +283,7 @@ fn test_candmodel_r7_shape_guards() {
     // uniform leading (G : ListType KExpr), because SynTyT.lam's recursive
     // premise concludes at the EXTENDED context.
     assert!(
-        syntyt.contains("SynTyT (ListType.cons KExpr A G) b B"),
+        syntyt.contains("SynTyT (@ListType.cons KExpr A G) b B"),
         "SynTyT.lam's recursive premise must conclude at the EXTENDED context, or the leading \
          index becomes fixed and fixedIndicesToParams promotes it"
     );
@@ -298,7 +298,7 @@ fn test_candmodel_r7_shape_guards() {
     );
     assert!(
         fund.contains(
-            "(qhA : SimpleTy qA) (_qhb : SynTyT (ListType.cons KExpr qA qG) qb qB) (qih :"
+            "(qhA : SimpleTy qA) (_qhb : SynTyT (@ListType.cons KExpr qA qG) qb qB) (qih :"
         ),
         "the lam minor must bind the SimpleTy field, then the single recursive field, then the \
          single IH"

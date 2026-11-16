@@ -114,7 +114,7 @@ impl Specification {
             ),
             (
                 "wh_perm_stuck_app",
-                "(KExpr.app (KExpr.const Name.anonymous (ListType.nil Level)) (KExpr.sort Level.zero))",
+                "(KExpr.app (KExpr.const Name.anonymous (@ListType.nil Level)) (KExpr.sort Level.zero))",
                 "an APPLICATION, which is the shape that matters: nf_head's hard case is an \
                  application on a const head. Name.anonymous is in neither component of the \
                  reflected env, so the head neither delta-unfolds nor carries recursor metadata, \
@@ -138,10 +138,10 @@ impl Specification {
         // then fails to match the recursor's arm types. That is what the first two
         // attempts at hnf_conv did.
         format!(
-            "(forall (j : Nat), Eq (OptionType KExpr) \
+            "(forall (j : Nat), @Eq (OptionType KExpr) \
              (reduce_once_red_wh the_red_env \
              (fun (e2 : KExpr) => whnf_fuel_red_wh the_red_env j e2) {x}) \
-             (OptionType.none KExpr))"
+             (@OptionType.none KExpr))"
         )
     }
 
@@ -156,7 +156,7 @@ impl Specification {
     /// The kernel reported it as `fvar mismatch: FVarId(4) vs FVarId(1)`: the
     /// right complaint, at the wrong distance from the cause.
     fn app_side(x: &str) -> String {
-        format!("forall (zf : KExpr) (za : KExpr), Eq KExpr {x} (KExpr.app zf za) -> nf_head {x}")
+        format!("forall (zf : KExpr) (za : KExpr), @Eq KExpr {x} (KExpr.app zf za) -> nf_head {x}")
     }
 
     fn hnf_conv_goal(x: &str) -> String {
@@ -197,7 +197,7 @@ impl Specification {
                 "(f : KExpr) (a : KExpr)",
                 &["f", "a"],
                 "(KExpr.app f a)",
-                "happ f a (Eq.refl KExpr (KExpr.app f a))",
+                "happ f a (@Eq.refl KExpr (KExpr.app f a))",
             ),
             (
                 "(ty : KExpr) (b : KExpr)",
@@ -218,7 +218,7 @@ impl Specification {
                 "nf_head.constdead n us \
               (delta_reduct_no_value_at (red_def the_red_env) \
               (KExpr.const n us) n \
-              (Eq.refl (OptionType Name) (OptionType.some Name n)) (hstuck Nat.zero))",
+              (@Eq.refl (OptionType Name) (@OptionType.some Name n)) (hstuck Nat.zero))",
             ),
             (
                 "(ty : KExpr) (v : KExpr) (b : KExpr)",
@@ -227,7 +227,7 @@ impl Specification {
                 "option_none_ne_some_type KExpr (instantiate b v) \
               (nf_head (KExpr.let_ ty v b)) \
               (Eq.symm (OptionType KExpr) \
-              (OptionType.some KExpr (instantiate b v)) (OptionType.none KExpr) \
+              (@OptionType.some KExpr (instantiate b v)) (@OptionType.none KExpr) \
               (hstuck Nat.zero))",
             ),
             (
@@ -258,7 +258,7 @@ impl Specification {
         self.add_recursive_def(
             &format!(
                 "def hnf_conv (r : KExpr) : {goal} := \
-                 KExpr.rec (fun (x : KExpr) => {motive}) {body}r",
+                 @KExpr.rec (fun (x : KExpr) => {motive}) {body}r",
                 goal = Self::hnf_conv_goal("r"),
                 motive = Self::hnf_conv_goal("x"),
             ),
@@ -320,14 +320,14 @@ impl Specification {
         )?;
         self.add_recursive_def(
             "def hnf_conv_rigid (r : KExpr) \
-             (hstuck : (forall (j : Nat), Eq (OptionType KExpr) \
+             (hstuck : (forall (j : Nat), @Eq (OptionType KExpr) \
              (reduce_once_red_wh the_red_env \
              (fun (e2 : KExpr) => whnf_fuel_red_wh the_red_env j e2) r) \
-             (OptionType.none KExpr))) \
-             (hrig : forall (f : KExpr) (a : KExpr), Eq KExpr r (KExpr.app f a) -> \
+             (@OptionType.none KExpr))) \
+             (hrig : forall (f : KExpr) (a : KExpr), @Eq KExpr r (KExpr.app f a) -> \
              rigid_app_head f) : nf_head r := \
              hnf_conv r hstuck \
-             (fun (f : KExpr) (a : KExpr) (heq : Eq KExpr r (KExpr.app f a)) => \
+             (fun (f : KExpr) (a : KExpr) (heq : @Eq KExpr r (KExpr.app f a)) => \
              Eq.substType KExpr (fun (X : KExpr) => nf_head X) (KExpr.app f a) r \
              (Eq.symm KExpr r (KExpr.app f a) heq) \
              (nf_head_app_of_rigid f a (hrig f a heq)))",
@@ -402,20 +402,20 @@ impl Specification {
         )?;
         self.add_recursive_def(
             "def def_eq_fuel_wh3_zero (renv : RedEnv) (a : KExpr) (b : KExpr) : \
-             Eq Bool (def_eq_fuel_wh3 renv Nat.zero a b) Bool.false := \
-             Eq.refl Bool (def_eq_fuel_wh3 renv Nat.zero a b)",
+             @Eq Bool (def_eq_fuel_wh3 renv Nat.zero a b) Bool.false := \
+             @Eq.refl Bool (def_eq_fuel_wh3 renv Nat.zero a b)",
             "def_eq_fuel_wh3_zero: fails closed at fuel 0, definitionally. DerivedProved, zero \
              axiom_deps.",
         )?;
         self.add_recursive_def(
             "def def_eq_fuel_wh3_succ (renv : RedEnv) (k : Nat) (a : KExpr) (b : KExpr) : \
-             Eq Bool (def_eq_fuel_wh3 renv (Nat.succ k) a b) \
-             (OptionType.rec KExpr (fun (_ : OptionType KExpr) => Bool) Bool.false \
-             (fun (na : KExpr) => OptionType.rec KExpr (fun (_ : OptionType KExpr) => Bool) \
+             @Eq Bool (def_eq_fuel_wh3 renv (Nat.succ k) a b) \
+             (@OptionType.rec KExpr (fun (_ : OptionType KExpr) => Bool) Bool.false \
+             (fun (na : KExpr) => @OptionType.rec KExpr (fun (_ : OptionType KExpr) => Bool) \
              Bool.false (fun (nb : KExpr) => def_eq_struct (def_eq_fuel_wh3 renv k) na nb) \
              (whnf_fuel_red_wh3 renv k b)) \
              (whnf_fuel_red_wh3 renv k a)) := \
-             Eq.refl Bool (def_eq_fuel_wh3 renv (Nat.succ k) a b)",
+             @Eq.refl Bool (def_eq_fuel_wh3 renv (Nat.succ k) a b)",
             "def_eq_fuel_wh3_succ: one fuel layer unfolds to whnf both sides through the THREE-WAY \
              loop, then compare structurally at fuel k (Eq.refl, definitional). \
              \
@@ -502,7 +502,7 @@ impl Specification {
     fn add_wh_algorithm_base(&mut self) -> Result<(), SpecError> {
         self.add_inductive(
             "inductive DefEqFuelAcceptsWh (a : KExpr) (b : KExpr) : Type\n\
-             | mk : forall (n : Nat), Eq Bool (def_eq_fuel_wh the_red_env n a b) Bool.true -> \
+             | mk : forall (n : Nat), @Eq Bool (def_eq_fuel_wh the_red_env n a b) Bool.true -> \
              DefEqFuelAcceptsWh a b",
             "DefEqFuelAcceptsWh a b: some fuel is enough for the FAITHFUL algorithm to accept a \
              against b — the conclusion a non-vacuous completeness capstone must reach. Same \
@@ -511,8 +511,8 @@ impl Specification {
         )?;
         self.add_recursive_def(
             "def def_eq_fuel_wh_zero (renv : RedEnv) (a : KExpr) (b : KExpr) : \
-             Eq Bool (def_eq_fuel_wh renv Nat.zero a b) Bool.false := \
-             Eq.refl Bool (def_eq_fuel_wh renv Nat.zero a b)",
+             @Eq Bool (def_eq_fuel_wh renv Nat.zero a b) Bool.false := \
+             @Eq.refl Bool (def_eq_fuel_wh renv Nat.zero a b)",
             "def_eq_fuel_wh_zero: the faithful algorithm also fails CLOSED at fuel 0 (Eq.refl, \
              definitional). Failing closed is what makes a soundness base case absurd rather than \
              an argument — and it is why completeness, not soundness, is the hard direction here. \
@@ -520,13 +520,13 @@ impl Specification {
         )?;
         self.add_recursive_def(
             "def def_eq_fuel_wh_succ (renv : RedEnv) (k : Nat) (a : KExpr) (b : KExpr) : \
-             Eq Bool (def_eq_fuel_wh renv (Nat.succ k) a b) \
-             (OptionType.rec KExpr (fun (_ : OptionType KExpr) => Bool) Bool.false \
-             (fun (na : KExpr) => OptionType.rec KExpr (fun (_ : OptionType KExpr) => Bool) \
+             @Eq Bool (def_eq_fuel_wh renv (Nat.succ k) a b) \
+             (@OptionType.rec KExpr (fun (_ : OptionType KExpr) => Bool) Bool.false \
+             (fun (na : KExpr) => @OptionType.rec KExpr (fun (_ : OptionType KExpr) => Bool) \
              Bool.false (fun (nb : KExpr) => def_eq_struct (def_eq_fuel_wh renv k) na nb) \
              (whnf_fuel_red_wh renv k b)) \
              (whnf_fuel_red_wh renv k a)) := \
-             Eq.refl Bool (def_eq_fuel_wh renv (Nat.succ k) a b)",
+             @Eq.refl Bool (def_eq_fuel_wh renv (Nat.succ k) a b)",
             "def_eq_fuel_wh_succ: one fuel layer of the faithful algorithm unfolds to whnf both \
              sides THROUGH THE PRE-PASS LOOP, then compare structurally at fuel k (Eq.refl, \
              definitional). \
@@ -545,10 +545,10 @@ impl Specification {
     fn add_perm_stuck(&mut self) -> Result<(), SpecError> {
         self.add_recursive_def(
             "def wh_perm_stuck (e : KExpr) : Prop := \
-             forall (j : Nat), Eq (OptionType KExpr) \
+             forall (j : Nat), @Eq (OptionType KExpr) \
              (reduce_once_red_wh the_red_env \
              (fun (e2 : KExpr) => whnf_fuel_red_wh the_red_env j e2) e) \
-             (OptionType.none KExpr)",
+             (@OptionType.none KExpr)",
             "wh_perm_stuck e: the faithful loop's step function finds nothing to do on e AT ANY \
              pre-pass budget. This is the convergence hypothesis hnf needs, and the quantifier is \
              load-bearing. \
@@ -569,7 +569,7 @@ impl Specification {
             self.add_recursive_def(
                 &format!(
                     "def {name} : wh_perm_stuck {subject} := \
-                     fun (j : Nat) => Eq.refl (OptionType KExpr) (OptionType.none KExpr)"
+                     fun (j : Nat) => @Eq.refl (OptionType KExpr) (@OptionType.none KExpr)"
                 ),
                 &format!(
                     "{name} (NON-VACUITY): wh_perm_stuck holds at {why}. \

@@ -48,7 +48,6 @@
 //! import Mathverse.Mathlib                     -- install, note the corpus, load nothing
 //! import Mathverse.Mathlib.eq_or_ne            -- load `eq_or_ne` from the Lean4 corpus
 //! import Mathverse.Isabelle.Pure.prop_def      -- load `Pure.prop_def` from Isabelle
-//! import Mathverse.Mathlib.eq_or_ne, Mathverse.Isabelle.Pure.prop_def
 //! ```
 //!
 //! `set_option mathverse.trust "relaxed-foundational"` widens the gate from the

@@ -64,7 +64,7 @@ use crate::spec::Specification;
 /// pre-pass gap is closed, this premise and `nf_head`'s `neutral` arm move
 /// together.
 pub(super) const HNF: &str = "(hnf : forall (m : Nat) (e : KExpr) (r : KExpr), \
-     Eq (OptionType KExpr) (whnf_fuel_red the_red_env m e) (OptionType.some KExpr r) -> \
+     @Eq (OptionType KExpr) (whnf_fuel_red the_red_env m e) (@OptionType.some KExpr r) -> \
      nf_head r) ";
 
 impl Specification {
@@ -83,8 +83,8 @@ impl Specification {
              | neutral : forall (f : KExpr) (a : KExpr), iota_neutral f -> \
              iota_immune (KExpr.app f a) -> nf_head (KExpr.app f a)\n\
              | constdead : forall (cn : Name) (cus : ListType Level), \
-             Eq (OptionType KExpr) (delta_reduct (red_def the_red_env) (KExpr.const cn cus)) \
-             (OptionType.none KExpr) -> nf_head (KExpr.const cn cus)\n\
+             @Eq (OptionType KExpr) (delta_reduct (red_def the_red_env) (KExpr.const cn cus)) \
+             (@OptionType.none KExpr) -> nf_head (KExpr.const cn cus)\n\
              | bvar : forall (bi : Nat), nf_head (KExpr.bvar bi)",
             "nf_head e: e has a normal-form head — a lambda, or a rigid head (sort, pi, literal, \
              projection, or an application on one of those). Deliberately COARSER than \
@@ -104,29 +104,29 @@ impl Specification {
         // through `LiftP`; the const arm's inversion is equation-form and needs
         // no wrap. That asymmetry is a property of the inversion family, now
         // recorded in three places rather than rediscovered.
-        let lam_tag = "Eq Nat (kexpr_tag (KExpr.lam lty lbody)) (kexpr_tag w)";
-        let neu_tag = "Eq Nat (kexpr_tag (KExpr.app nf na2)) (kexpr_tag w)";
+        let lam_tag = "@Eq Nat (kexpr_tag (KExpr.lam lty lbody)) (kexpr_tag w)";
+        let neu_tag = "@Eq Nat (kexpr_tag (KExpr.app nf na2)) (kexpr_tag w)";
         self.add_recursive_def(
             &format!(
                 "def nf_head_star_preserves_tag (e : KExpr) (hn : nf_head e) : \
                  forall (w : KExpr), par_reduces_cd_star the_red_env e w -> \
-                 Eq Nat (kexpr_tag e) (kexpr_tag w) := \
-                 nf_head.rec \
+                 @Eq Nat (kexpr_tag e) (kexpr_tag w) := \
+                 @nf_head.rec \
                  (fun (x : KExpr) (_h : nf_head x) => \
                  forall (w : KExpr), par_reduces_cd_star the_red_env x w -> \
-                 Eq Nat (kexpr_tag x) (kexpr_tag w)) \
+                 @Eq Nat (kexpr_tag x) (kexpr_tag w)) \
                  (fun (lty : KExpr) (lbody : KExpr) (w : KExpr) \
                  (hs : par_reduces_cd_star the_red_env (KExpr.lam lty lbody) w) => \
-                 LiftP.rec ({lam_tag}) \
+                 @LiftP.rec ({lam_tag}) \
                  (fun (_l : LiftP ({lam_tag})) => {lam_tag}) \
                  (fun (p : {lam_tag}) => p) \
                  (par_reduces_cd_star_lam_inv_eq the_red_env lty lbody w \
                  (LiftP ({lam_tag})) hs \
                  (fun (ty2 : KExpr) (body2 : KExpr) \
-                 (heq : Eq KExpr w (KExpr.lam ty2 body2)) \
+                 (heq : @Eq KExpr w (KExpr.lam ty2 body2)) \
                  (_h1 : par_reduces_cd_star the_red_env lty ty2) \
                  (_h2 : par_reduces_cd_star the_red_env lbody body2) => \
-                 LiftP.up ({lam_tag}) \
+                 @LiftP.up ({lam_tag}) \
                  (Eq.symm Nat (kexpr_tag w) (kexpr_tag (KExpr.lam ty2 body2)) \
                  (Eq.cong KExpr Nat kexpr_tag w (KExpr.lam ty2 body2) heq))))) \
                  (fun (e0 : KExpr) (hr : rigid_app_head e0) (w : KExpr) \
@@ -135,24 +135,24 @@ impl Specification {
                  (fun (nf : KExpr) (na2 : KExpr) (hin : iota_neutral nf) \
                  (hii : iota_immune (KExpr.app nf na2)) (w : KExpr) \
                  (hs : par_reduces_cd_star the_red_env (KExpr.app nf na2) w) => \
-                 LiftP.rec ({neu_tag}) \
+                 @LiftP.rec ({neu_tag}) \
                  (fun (_l : LiftP ({neu_tag})) => {neu_tag}) \
                  (fun (p : {neu_tag}) => p) \
                  (par_reduces_cd_star_neutral_app_inv_eq nf na2 w (LiftP ({neu_tag})) \
                  hin hii hs \
                  (fun (f2 : KExpr) (a2 : KExpr) \
-                 (heq : Eq KExpr w (KExpr.app f2 a2)) \
+                 (heq : @Eq KExpr w (KExpr.app f2 a2)) \
                  (_r1 : par_reduces_cd_star the_red_env nf f2) \
                  (_r2 : par_reduces_cd_star the_red_env na2 a2) \
                  (_hin2 : iota_neutral f2) \
                  (_hii2 : iota_immune (KExpr.app f2 a2)) => \
-                 LiftP.up ({neu_tag}) \
+                 @LiftP.up ({neu_tag}) \
                  (Eq.symm Nat (kexpr_tag w) (kexpr_tag (KExpr.app f2 a2)) \
                  (Eq.cong KExpr Nat kexpr_tag w (KExpr.app f2 a2) heq))))) \
                  (fun (cn : Name) (cus : ListType Level) \
-                 (hdd : Eq (OptionType KExpr) \
+                 (hdd : @Eq (OptionType KExpr) \
                  (delta_reduct (red_def the_red_env) (KExpr.const cn cus)) \
-                 (OptionType.none KExpr)) (w : KExpr) \
+                 (@OptionType.none KExpr)) (w : KExpr) \
                  (hs : par_reduces_cd_star the_red_env (KExpr.const cn cus) w) => \
                  Eq.symm Nat (kexpr_tag w) (kexpr_tag (KExpr.const cn cus)) \
                  (Eq.cong KExpr Nat kexpr_tag w (KExpr.const cn cus) \
@@ -189,7 +189,7 @@ impl Specification {
              (hna : nf_head na) (hnb : nf_head nb) \
              (hsa : par_reduces_cd_star the_red_env na w) \
              (hsb : par_reduces_cd_star the_red_env nb w) : \
-             Eq Nat (kexpr_tag na) (kexpr_tag nb) := \
+             @Eq Nat (kexpr_tag na) (kexpr_tag nb) := \
              Eq.trans Nat (kexpr_tag na) (kexpr_tag w) (kexpr_tag nb) \
              (nf_head_star_preserves_tag na hna w hsa) \
              (Eq.symm Nat (kexpr_tag nb) (kexpr_tag w) \

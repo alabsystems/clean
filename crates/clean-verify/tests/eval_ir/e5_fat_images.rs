@@ -251,8 +251,8 @@ fn register_slice(spec: &mut Specification, prefix: &str, core: &str, structs: &
 /// the machine.
 fn run_claim(name: &str, module: &str, args: &str, heap: &str, expected: &str) -> String {
     format!(
-        "def {name} : Eq IROutcome (ir_eval ir_d40 {module} ir_d0 {args} {heap} ir_d0) {expected} \
-         := Eq.refl IROutcome {expected}"
+        "def {name} : @Eq IROutcome (ir_eval ir_d40 {module} ir_d0 {args} {heap} ir_d0) {expected} \
+         := @Eq.refl IROutcome {expected}"
     )
 }
 
@@ -262,7 +262,7 @@ fn nonnull(d: u128, m: u128) -> String {
 }
 
 fn one(v: &str) -> String {
-    format!("(IRList.cons IRScalar {v} (IRList.nil IRScalar))")
+    format!("(@IRList.cons IRScalar {v} (@IRList.nil IRScalar))")
 }
 
 /// The data address and the vtable address of the E1 runs; the heap holds only the vtable image.
@@ -285,7 +285,7 @@ fn e5_evalir_runs_each_minted_slice_to_the_reference_answer() {
     for ((_, core, structs), prefix) in SLICES.iter().zip(prefixes) {
         register_slice(&mut spec, prefix, core, structs);
     }
-    let empty = "(IRList.nil IRMemSlot)";
+    let empty = "(@IRList.nil IRMemSlot)";
     let mut accept: Vec<String> = Vec::new();
     let mut reject: Vec<(String, &str)> = Vec::new();
 
@@ -306,7 +306,7 @@ fn e5_evalir_runs_each_minted_slice_to_the_reference_answer() {
             panic!("the vtable read returns an integer")
         };
         let heap = format!(
-            "(ir_vtable_cells {VTABLE} IRScalar.nullptr_ 24 {align} (IRList.nil IRScalar))"
+            "(ir_vtable_cells {VTABLE} IRScalar.nullptr_ 24 {align} (@IRList.nil IRScalar))"
         );
         accept.push(run_claim(
             &format!("ir_e5t_vtable_read_align{align}"),
@@ -344,7 +344,7 @@ fn e5_evalir_runs_each_minted_slice_to_the_reference_answer() {
     let rb_off = offset_of(e2(&runs, "e5::drive_rebuild_data"));
     assert_eq!(e2(&runs, "e5::drive_rebuild_vtable_align"), E2::Int(16));
     let rb_args = format!(
-        "(IRList.cons IRScalar (IRScalar.ptr_ {}) {})",
+        "(@IRList.cons IRScalar (IRScalar.ptr_ {}) {})",
         DATA + 16,
         one(&format!("(IRScalar.ptr_ {VTABLE})"))
     );
@@ -394,7 +394,7 @@ fn e5_evalir_runs_each_minted_slice_to_the_reference_answer() {
     accept.push(run_claim(
         "ir_e5t_ptr_eq_refused",
         "ir_e5t_eq_module",
-        &format!("(IRList.cons IRScalar {fat} {})", one(&fat)),
+        &format!("(@IRList.cons IRScalar {fat} {})", one(&fat)),
         empty,
         "(IROutcome.type_error IRFault.not_int)",
     ));
@@ -402,7 +402,7 @@ fn e5_evalir_runs_each_minted_slice_to_the_reference_answer() {
         run_claim(
             "ir_e5t_ptr_eq_answers",
             "ir_e5t_eq_module",
-            &format!("(IRList.cons IRScalar {fat} {})", one(&fat)),
+            &format!("(@IRList.cons IRScalar {fat} {})", one(&fat)),
             empty,
             &format!("(IROutcome.ret {})", one("(IRScalar.bool_ Bool.true)")),
         ),

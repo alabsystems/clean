@@ -421,7 +421,7 @@ pub fn parse_tlaplus(text: &str) -> TlaParseResult<TlaModule> {
                         name
                     });
                     current_def_kind = *kind;
-                    current_def_params = Vec::new();
+                    current_def_params.clear();
                     if !body.is_empty() {
                         current_def_lines.push(body.to_owned());
                     }
@@ -430,7 +430,7 @@ pub fn parse_tlaplus(text: &str) -> TlaParseResult<TlaModule> {
                     let name = format!("{keyword}_{}", module.declarations.len());
                     current_def_name = Some(name);
                     current_def_kind = *kind;
-                    current_def_params = Vec::new();
+                    current_def_params.clear();
                     if !rest.is_empty() {
                         current_def_lines.push(rest.to_owned());
                     }

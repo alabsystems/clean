@@ -101,7 +101,7 @@ const SRC_ITD_FAST_B0: &str = "def ir_itd_fast_b0 (sp : IRConst) : IRBlock := IR
 const SRC_ITD_FAST: &str = "def ir_itd_fast (sp : IRConst) : IRFunc := IRFunc.mk ir_d2 (ir_nl2 ir_d0 ir_d1) ir_d0 (ir_blk (ir_itd_fast_b0 sp) ir_blk0)";
 
 /// The module: the MINTED target, and BOTH authored models beside it.
-const SRC_ITD_MODULE: &str = "def ir_itd_module (sp : IRConst) : IRModule := IRModule.mk (IRList.cons IRFunc ir_it_func (IRList.cons IRFunc ir_itb_hb (IRList.cons IRFunc (ir_itd_fast sp) (IRList.nil IRFunc)))) (IRList.nil IRGlobal)";
+const SRC_ITD_MODULE: &str = "def ir_itd_module (sp : IRConst) : IRModule := IRModule.mk (@IRList.cons IRFunc ir_it_func (@IRList.cons IRFunc ir_itb_hb (@IRList.cons IRFunc (ir_itd_fast sp) (@IRList.nil IRFunc)))) (@IRList.nil IRGlobal)";
 
 /// The value the model returns, derived THROUGH `ir_const_value` from the very
 /// constant the block emits — one spelling, not two transcriptions.
@@ -109,13 +109,13 @@ const SRC_ITD_ANSWER: &str =
     "def ir_itd_answer (sp : IRConst) : IRScalar := ir_const_value (ir_itd_cval sp)";
 
 /// Lower half of the cost pin.
-const SRC_ITD_THIRTEEN: &str = "def ir_itd_is_still_running_at_thirteen (sp : IRConst) (p : Nat) (q : Nat) : Eq IROutcome (ir_eval ir_d13 (ir_itd_module sp) ir_d0 (ir_vl2 (IRScalar.ptr_ p) (IRScalar.ptr_ q)) ir_mem0 ir_d7) IROutcome.fuel_out := Eq.refl IROutcome IROutcome.fuel_out";
+const SRC_ITD_THIRTEEN: &str = "def ir_itd_is_still_running_at_thirteen (sp : IRConst) (p : Nat) (q : Nat) : @Eq IROutcome (ir_eval ir_d13 (ir_itd_module sp) ir_d0 (ir_vl2 (IRScalar.ptr_ p) (IRScalar.ptr_ q)) ir_mem0 ir_d7) IROutcome.fuel_out := @Eq.refl IROutcome IROutcome.fuel_out";
 
 /// **The transport theorem, at the exact cost.**
-const SRC_ITD_FOURTEEN: &str = "def ir_itd_transports_the_inference_result (sp : IRConst) (p : Nat) (q : Nat) : Eq IROutcome (ir_eval ir_d14 (ir_itd_module sp) ir_d0 (ir_vl2 (IRScalar.ptr_ p) (IRScalar.ptr_ q)) ir_mem0 ir_d7) (IROutcome.ret (ir_vl1 (ir_itd_answer sp))) := Eq.refl IROutcome (IROutcome.ret (ir_vl1 (ir_itd_answer sp)))";
+const SRC_ITD_FOURTEEN: &str = "def ir_itd_transports_the_inference_result (sp : IRConst) (p : Nat) (q : Nat) : @Eq IROutcome (ir_eval ir_d14 (ir_itd_module sp) ir_d0 (ir_vl2 (IRScalar.ptr_ p) (IRScalar.ptr_ q)) ir_mem0 ir_d7) (IROutcome.ret (ir_vl1 (ir_itd_answer sp))) := @Eq.refl IROutcome (IROutcome.ret (ir_vl1 (ir_itd_answer sp)))";
 
 /// Halting is stable under more fuel.
-const SRC_ITD_MORE_FUEL: &str = "def ir_itd_more_fuel_does_not_change_it (sp : IRConst) (p : Nat) (q : Nat) : Eq IROutcome (ir_eval ir_d40 (ir_itd_module sp) ir_d0 (ir_vl2 (IRScalar.ptr_ p) (IRScalar.ptr_ q)) ir_mem0 ir_d7) (IROutcome.ret (ir_vl1 (ir_itd_answer sp))) := Eq.refl IROutcome (IROutcome.ret (ir_vl1 (ir_itd_answer sp)))";
+const SRC_ITD_MORE_FUEL: &str = "def ir_itd_more_fuel_does_not_change_it (sp : IRConst) (p : Nat) (q : Nat) : @Eq IROutcome (ir_eval ir_d40 (ir_itd_module sp) ir_d0 (ir_vl2 (IRScalar.ptr_ p) (IRScalar.ptr_ q)) ir_mem0 ir_d7) (IROutcome.ret (ir_vl1 (ir_itd_answer sp))) := @Eq.refl IROutcome (IROutcome.ret (ir_vl1 (ir_itd_answer sp)))";
 
 impl Specification {
     /// `ir_itd` — the target running to completion over two authored models.

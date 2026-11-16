@@ -22,7 +22,7 @@ use crate::spec::Specification;
 
 /// Inline KExpr.rec discriminator: non-Pi -> Nat, Pi -> Empty.
 const KEXPR_NOT_PI_INLINE: &str = concat!(
-    "(KExpr.rec (fun (_ : KExpr) => Type) ",
+    "(@KExpr.rec (fun (_ : KExpr) => Type) ",
     "(fun (_ : Level) => Nat) ",
     "(fun (_ : Nat) => Nat) ",
     "(fun (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) => Nat) ",
@@ -51,7 +51,7 @@ impl Specification {
             type_src: "KExpr -> Type".to_string(),
             value_src: Some(
                 concat!(
-                    "KExpr.rec (fun (_ : KExpr) => Type) ",
+                    "@KExpr.rec (fun (_ : KExpr) => Type) ",
                     "(fun (_ : Level) => Nat) ",
                     "(fun (_ : Nat) => Nat) ",
                     "(fun (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) => Nat) ",
@@ -79,12 +79,12 @@ impl Specification {
         // sort_ne_pi: Sort n ≠ Pi A B
         self.add_definition(SpecDefinition {
             name: "sort_ne_pi".to_string(),
-            type_src: "forall (n : Level) (A : KExpr) (B : KExpr) (R : Type), Eq KExpr (KExpr.sort n) (KExpr.pi A B) -> R".to_string(),
+            type_src: "forall (n : Level) (A : KExpr) (B : KExpr) (R : Type), @Eq KExpr (KExpr.sort n) (KExpr.pi A B) -> R".to_string(),
             value_src: Some(format!(
                 "fun (n : Level) (A : KExpr) (B : KExpr) (R : Type) \
-                 (h : Eq KExpr (KExpr.sort n) (KExpr.pi A B)) => \
-                 Empty.rec (fun (_ : Empty) => R) \
-                 (Eq.substType KExpr {discr} (KExpr.sort n) (KExpr.pi A B) h Nat.zero)",
+                 (h : @Eq KExpr (KExpr.sort n) (KExpr.pi A B)) => \
+                 @Empty.rec (fun (_ : Empty) => R) \
+                 (@Eq.substType KExpr {discr} (KExpr.sort n) (KExpr.pi A B) h Nat.zero)",
                 discr = KEXPR_NOT_PI_INLINE,
             )),
             is_axiom: false,
@@ -108,12 +108,12 @@ impl Specification {
         // app_ne_pi: App f a ≠ Pi A B
         self.add_definition(SpecDefinition {
             name: "app_ne_pi".to_string(),
-            type_src: "forall (f : KExpr) (a : KExpr) (A : KExpr) (B : KExpr) (R : Type), Eq KExpr (KExpr.app f a) (KExpr.pi A B) -> R".to_string(),
+            type_src: "forall (f : KExpr) (a : KExpr) (A : KExpr) (B : KExpr) (R : Type), @Eq KExpr (KExpr.app f a) (KExpr.pi A B) -> R".to_string(),
             value_src: Some(format!(
                 "fun (f : KExpr) (a : KExpr) (A : KExpr) (B : KExpr) (R : Type) \
-                 (h : Eq KExpr (KExpr.app f a) (KExpr.pi A B)) => \
-                 Empty.rec (fun (_ : Empty) => R) \
-                 (Eq.substType KExpr {discr} (KExpr.app f a) (KExpr.pi A B) h Nat.zero)",
+                 (h : @Eq KExpr (KExpr.app f a) (KExpr.pi A B)) => \
+                 @Empty.rec (fun (_ : Empty) => R) \
+                 (@Eq.substType KExpr {discr} (KExpr.app f a) (KExpr.pi A B) h Nat.zero)",
                 discr = KEXPR_NOT_PI_INLINE,
             )),
             is_axiom: false,
@@ -133,12 +133,12 @@ impl Specification {
         // lam_ne_pi: Lam A0 b0 ≠ Pi A B
         self.add_definition(SpecDefinition {
             name: "lam_ne_pi".to_string(),
-            type_src: "forall (A0 : KExpr) (b0 : KExpr) (A : KExpr) (B : KExpr) (R : Type), Eq KExpr (KExpr.lam A0 b0) (KExpr.pi A B) -> R".to_string(),
+            type_src: "forall (A0 : KExpr) (b0 : KExpr) (A : KExpr) (B : KExpr) (R : Type), @Eq KExpr (KExpr.lam A0 b0) (KExpr.pi A B) -> R".to_string(),
             value_src: Some(format!(
                 "fun (A0 : KExpr) (b0 : KExpr) (A : KExpr) (B : KExpr) (R : Type) \
-                 (h : Eq KExpr (KExpr.lam A0 b0) (KExpr.pi A B)) => \
-                 Empty.rec (fun (_ : Empty) => R) \
-                 (Eq.substType KExpr {discr} (KExpr.lam A0 b0) (KExpr.pi A B) h Nat.zero)",
+                 (h : @Eq KExpr (KExpr.lam A0 b0) (KExpr.pi A B)) => \
+                 @Empty.rec (fun (_ : Empty) => R) \
+                 (@Eq.substType KExpr {discr} (KExpr.lam A0 b0) (KExpr.pi A B) h Nat.zero)",
                 discr = KEXPR_NOT_PI_INLINE,
             )),
             is_axiom: false,
@@ -166,7 +166,7 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (e : KExpr) (default : KExpr) => ",
-                    "KExpr.rec (fun (_ : KExpr) => KExpr) ",
+                    "@KExpr.rec (fun (_ : KExpr) => KExpr) ",
                     "(fun (_ : Level) => default) ",
                     "(fun (_ : Nat) => default) ",
                     "(fun (_ : KExpr) (_ : KExpr) (_ : KExpr) (_ : KExpr) => default) ",
@@ -199,7 +199,7 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (e : KExpr) (default : KExpr) => ",
-                    "KExpr.rec (fun (_ : KExpr) => KExpr) ",
+                    "@KExpr.rec (fun (_ : KExpr) => KExpr) ",
                     "(fun (_ : Level) => default) ",
                     "(fun (_ : Nat) => default) ",
                     "(fun (_ : KExpr) (_ : KExpr) (_ : KExpr) (_ : KExpr) => default) ",
@@ -236,12 +236,12 @@ impl Specification {
         // pi_inj_fst: Pi A1 B1 = Pi A2 B2 -> A1 = A2
         self.add_definition(SpecDefinition {
             name: "pi_inj_fst".to_string(),
-            type_src: "forall (A1 : KExpr) (B1 : KExpr) (A2 : KExpr) (B2 : KExpr), Eq KExpr (KExpr.pi A1 B1) (KExpr.pi A2 B2) -> Eq KExpr A1 A2".to_string(),
+            type_src: "forall (A1 : KExpr) (B1 : KExpr) (A2 : KExpr) (B2 : KExpr), @Eq KExpr (KExpr.pi A1 B1) (KExpr.pi A2 B2) -> @Eq KExpr A1 A2".to_string(),
             value_src: Some(
                 "fun (A1 : KExpr) (B1 : KExpr) (A2 : KExpr) (B2 : KExpr) \
-                 (h : Eq KExpr (KExpr.pi A1 B1) (KExpr.pi A2 B2)) => \
-                 Eq.cong KExpr KExpr \
-                 (fun (e : KExpr) => KExpr.rec (fun (_ : KExpr) => KExpr) \
+                 (h : @Eq KExpr (KExpr.pi A1 B1) (KExpr.pi A2 B2)) => \
+                 @Eq.cong KExpr KExpr \
+                 (fun (e : KExpr) => @KExpr.rec (fun (_ : KExpr) => KExpr) \
                    (fun (_ : Level) => A1) \
                    (fun (_ : Nat) => A1) \
                    (fun (_ : KExpr) (_ : KExpr) (_ : KExpr) (_ : KExpr) => A1) \
@@ -271,12 +271,12 @@ impl Specification {
         // pi_inj_snd: Pi A1 B1 = Pi A2 B2 -> B1 = B2
         self.add_definition(SpecDefinition {
             name: "pi_inj_snd".to_string(),
-            type_src: "forall (A1 : KExpr) (B1 : KExpr) (A2 : KExpr) (B2 : KExpr), Eq KExpr (KExpr.pi A1 B1) (KExpr.pi A2 B2) -> Eq KExpr B1 B2".to_string(),
+            type_src: "forall (A1 : KExpr) (B1 : KExpr) (A2 : KExpr) (B2 : KExpr), @Eq KExpr (KExpr.pi A1 B1) (KExpr.pi A2 B2) -> @Eq KExpr B1 B2".to_string(),
             value_src: Some(
                 "fun (A1 : KExpr) (B1 : KExpr) (A2 : KExpr) (B2 : KExpr) \
-                 (h : Eq KExpr (KExpr.pi A1 B1) (KExpr.pi A2 B2)) => \
-                 Eq.cong KExpr KExpr \
-                 (fun (e : KExpr) => KExpr.rec (fun (_ : KExpr) => KExpr) \
+                 (h : @Eq KExpr (KExpr.pi A1 B1) (KExpr.pi A2 B2)) => \
+                 @Eq.cong KExpr KExpr \
+                 (fun (e : KExpr) => @KExpr.rec (fun (_ : KExpr) => KExpr) \
                    (fun (_ : Level) => B1) \
                    (fun (_ : Nat) => B1) \
                    (fun (_ : KExpr) (_ : KExpr) (_ : KExpr) (_ : KExpr) => B1) \

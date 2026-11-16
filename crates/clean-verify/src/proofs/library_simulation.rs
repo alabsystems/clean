@@ -107,7 +107,7 @@ impl ProofLibrary {
             "impl_state_matches_spec_mk".to_string(),
             ProofTerm::new(
                 "KernelStateMatchesSpec.mk",
-                "fun (st : KernelState) (henv : KernelStateEnvValid st) (hctx : KernelStateLocalCtxWellFormed st) => AndType.intro (KernelStateEnvValid st) (KernelStateLocalCtxWellFormed st) henv hctx",
+                "fun (st : KernelState) (henv : KernelStateEnvValid st) (hctx : KernelStateLocalCtxWellFormed st) => @AndType.intro (KernelStateEnvValid st) (KernelStateLocalCtxWellFormed st) henv hctx",
                 "Summary builder is constructive via AndType.intro (KernelStateMatchesSpec unfolds to the split-state conjunction).",
             ),
         );

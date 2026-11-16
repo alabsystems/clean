@@ -83,7 +83,7 @@ fn byte_fat_general_laws_are_audited_and_have_inhabited_bound_only_applications(
   (ctx : IRByteContextV1) {binder} (data metadata : Nat)
   (dataBound : Nat.lt data ir_byte_limit_v1)
   (metadataBound : Nat.lt metadata ir_byte_limit_v1) :
-  Eq IRStepResult ({actual}) ({expected}) :=
+  @Eq IRStepResult ({actual}) ({expected}) :=
   {root} ctx {argument} data metadata dataBound metadataBound"
                     ),
                 );
@@ -97,7 +97,7 @@ fn byte_fat_general_laws_are_audited_and_have_inhabited_bound_only_applications(
                         &mut spec,
                         &format!(
                             "def byte_fat_inhabited_{prefix}_{op}_{j}
-  (ctx : IRByteContextV1) : Eq IRStepResult ({actual}) ({expected}) :=
+  (ctx : IRByteContextV1) : @Eq IRStepResult ({actual}) ({expected}) :=
   {root} ctx {concrete_argument} {data} {meta} {} {}",
                             bound(data),
                             bound(meta)
@@ -111,7 +111,7 @@ fn byte_fat_general_laws_are_audited_and_have_inhabited_bound_only_applications(
             "byte_fat_law_cannot_change_metadata",
             &format!(
                 "def byte_fat_law_cannot_change_metadata (ctx : IRByteContextV1) :
-  Eq IRStepResult (ir_byte_ptrfromparts_eval_v1 ctx IRTy.containerlen_ (IRTy.uint_ 64)
+  @Eq IRStepResult (ir_byte_ptrfromparts_eval_v1 ctx IRTy.containerlen_ (IRTy.uint_ 64)
     (IRScalar.ptr_ 16) (IRScalar.int_ 5)) (IRStepResult.value (IRScalar.fat_ 16 6)) :=
   ir_byte_containerlen_fromparts_v1 ctx 16 5 {} {}",
                 bound("16"),

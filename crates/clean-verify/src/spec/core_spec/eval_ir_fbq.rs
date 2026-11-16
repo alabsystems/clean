@@ -62,9 +62,9 @@ pub(crate) fn ir_fbq_module_defs() -> &'static [&'static str] {
 //   1.0        = 0x3FF0000000000000 = 4607182418800017408
 //   2.0        = 0x4000000000000000 = 4611686018427387904
 //   a quiet NaN= 0x7FF8000000000000 = 9221120237041090560
-const SRC_W_EQUAL: &str = "def ir_fbq_equal_operands_answer_true : Eq IROutcome (ir_eval ir_d2 ir_fbq_module ir_d0 (ir_vl3 IRScalar.undef_ (IRScalar.float_ 4607182418800017408) (IRScalar.float_ 4607182418800017408)) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.true))) := Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.true)))";
-const SRC_W_DISTINCT: &str = "def ir_fbq_distinct_operands_answer_false : Eq IROutcome (ir_eval ir_d2 ir_fbq_module ir_d0 (ir_vl3 IRScalar.undef_ (IRScalar.float_ 4607182418800017408) (IRScalar.float_ 4611686018427387904)) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.false))) := Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.false)))";
-const SRC_W_NAN: &str = "def ir_fbq_nan_is_not_equal_to_itself : Eq IROutcome (ir_eval ir_d2 ir_fbq_module ir_d0 (ir_vl3 IRScalar.undef_ (IRScalar.float_ 9221120237041090560) (IRScalar.float_ 9221120237041090560)) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.false))) := Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.false)))";
+const SRC_W_EQUAL: &str = "def ir_fbq_equal_operands_answer_true : @Eq IROutcome (ir_eval ir_d2 ir_fbq_module ir_d0 (ir_vl3 IRScalar.undef_ (IRScalar.float_ 4607182418800017408) (IRScalar.float_ 4607182418800017408)) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.true))) := @Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.true)))";
+const SRC_W_DISTINCT: &str = "def ir_fbq_distinct_operands_answer_false : @Eq IROutcome (ir_eval ir_d2 ir_fbq_module ir_d0 (ir_vl3 IRScalar.undef_ (IRScalar.float_ 4607182418800017408) (IRScalar.float_ 4611686018427387904)) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.false))) := @Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.false)))";
+const SRC_W_NAN: &str = "def ir_fbq_nan_is_not_equal_to_itself : @Eq IROutcome (ir_eval ir_d2 ir_fbq_module ir_d0 (ir_vl3 IRScalar.undef_ (IRScalar.float_ 9221120237041090560) (IRScalar.float_ 9221120237041090560)) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.false))) := @Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.false)))";
 
 impl Specification {
     /// Register the minted `fcmp oeq` module and its executed witnesses.

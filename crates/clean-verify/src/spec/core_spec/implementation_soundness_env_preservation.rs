@@ -70,7 +70,7 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (env : KEnv) (env' : KEnv) (h : KernelAddDeclAccepts env env') => ",
-                    "KernelAddDeclAccepts.rec env env' ",
+                    "@KernelAddDeclAccepts.rec env env' ",
                     "(fun (_ : KernelAddDeclAccepts env env') => DefinitionalExtension env env') ",
                     "(fun (ce : ConstantExtension env env') => DefinitionalExtension.const_ env env' ce) ",
                     "(fun (ie : InductiveExtension env env') => DefinitionalExtension.inductive_ env env' ie) ",
@@ -212,15 +212,15 @@ impl Specification {
                     "fun (env : KEnv) (env' : KEnv) (ctx : KernelLocalCtx) ",
                     "(hctx : KernelLocalCtxWellFormed env ctx) ",
                     "(_hadd : KernelAddDeclAccepts env env') => ",
-                    "KernelLocalCtxWellFormed.rec env ",
+                    "@KernelLocalCtxWellFormed.rec env ",
                     "(fun (c : KernelLocalCtx) (_h : KernelLocalCtxWellFormed env c) => ",
                     "KernelLocalCtxWellFormed env' c) ",
-                    "(KernelLocalCtxWellFormed.nil env') ",
+                    "(@KernelLocalCtxWellFormed.nil env') ",
                     "(fun (id : Nat) (ty : KExpr) (u : Level) (rest : KernelLocalCtx) ",
                     "(hty : Typing ty (KExpr.sort u)) ",
                     "(_hrest : KernelLocalCtxWellFormed env rest) ",
                     "(ih : KernelLocalCtxWellFormed env' rest) => ",
-                    "KernelLocalCtxWellFormed.cons env' id ty u rest hty ih) ",
+                    "@KernelLocalCtxWellFormed.cons env' id ty u rest hty ih) ",
                     "ctx hctx"
                 )
                 .to_string(),
@@ -410,7 +410,7 @@ impl Specification {
                     "(hmatch : KernelStateMatchesSpec (KernelState.mk env ctx)) ",
                     "(hsound : EnvSound env) ",
                     "(hadd : KernelAddDeclAccepts env env') => ",
-                    "ProdType.mk ",
+                    "@ProdType.mk ",
                     "(KernelStateMatchesSpec (KernelState.mk env' ctx)) ",
                     "(EnvSound env') ",
                     "(KernelAddDeclPreservesState env env' ctx hmatch hadd) ",

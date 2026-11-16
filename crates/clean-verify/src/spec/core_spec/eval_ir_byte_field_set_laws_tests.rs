@@ -14,7 +14,8 @@ const ROOTS: &[&str] = &[
 const ROOT: &str = "ir_byte_field_spine_set_typed_v1";
 const SPINE: &str =
     "IRScalar.vcons IRScalar.unit_ (IRScalar.vcons (IRScalar.bool_ Bool.false) IRScalar.vnil)";
-const TYPES: &str = "IRList.cons IRTy IRTy.unit_ (IRList.cons IRTy IRTy.bool_ (IRList.nil IRTy))";
+const TYPES: &str =
+    "@IRList.cons IRTy IRTy.unit_ (@IRList.cons IRTy IRTy.bool_ (@IRList.nil IRTy))";
 
 fn specification() -> Specification {
     crate::eval_ir::build_byte_prelude_spec_v1_with_stack()
@@ -43,12 +44,12 @@ fn add(spec: &mut Specification, name: &str, source: &str) {
 fn witness(index: &str, ty: &str, replacement: &str, name: &str) -> String {
     format!(
         "def {name} (ctx : IRByteContextV1) :\n\
-         Eq Bool (ir_byte_match_fields_v1\n\
+         @Eq Bool (ir_byte_match_fields_v1\n\
            (ir_byte_value_match_v1 ctx (ir_vals_set ({SPINE}) ({index}) ({replacement}))) ({TYPES})) Bool.true :=\n\
          {ROOT} ctx ({SPINE}) ({TYPES}) ({index}) ({ty}) ({replacement})\n\
-           (Eq.refl Bool Bool.true)\n\
-           (Eq.refl (IROption IRTy) (IROption.some IRTy ({ty})))\n\
-           (Eq.refl Bool Bool.true)"
+           (@Eq.refl Bool Bool.true)\n\
+           (@Eq.refl (IROption IRTy) (@IROption.some IRTy ({ty})))\n\
+           (@Eq.refl Bool Bool.true)"
     )
 }
 

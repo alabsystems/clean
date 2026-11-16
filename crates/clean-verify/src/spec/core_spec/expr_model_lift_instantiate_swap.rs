@@ -38,7 +38,7 @@ impl Specification {
             name: "lift_instantiate_swap_bvar".to_string(),
             type_src: concat!(
                 "forall (i : Nat) (val : KExpr) (d : Nat) (k : Nat) (a : Nat), ",
-                "Eq KExpr ",
+                "@Eq KExpr ",
                 "(lift_at (instantiate_at (KExpr.bvar i) val d) (Nat.add d k) a) ",
                 "(instantiate_at (lift_at (KExpr.bvar i) (Nat.succ (Nat.add d k)) a) ",
                 "(lift_at val k a) d)",
@@ -92,7 +92,7 @@ impl Specification {
             name: "lift_instantiate_swap".to_string(),
             type_src: concat!(
                 "forall (body : KExpr) (val : KExpr) (d : Nat) (k : Nat) (a : Nat), ",
-                "Eq KExpr ",
+                "@Eq KExpr ",
                 "(lift_at (instantiate_at body val d) (Nat.add d k) a) ",
                 "(instantiate_at (lift_at body (Nat.succ (Nat.add d k)) a) ",
                 "(lift_at val k a) d)",
@@ -159,38 +159,38 @@ fn bvar_proof() -> String {
         concat!(
             "fun (i : Nat) (val : KExpr) (d : Nat) (k : Nat) (a : Nat) => ",
             // ===== OUTER Nat.rec on sub(i, d) =====
-            "Nat.rec ",
-            "(fun (g : Nat) => Eq Nat (Nat.sub i d) g -> Eq KExpr {lhs} {rhs}) ",
+            "@Nat.rec ",
+            "(fun (g : Nat) => @Eq Nat (Nat.sub i d) g -> @Eq KExpr {lhs} {rhs}) ",
             // ----- OUTER ZERO: sub(i,d) = 0 (i <= d) -----
-            "(fun (h_id : Eq Nat (Nat.sub i d) Nat.zero) => ",
+            "(fun (h_id : @Eq Nat (Nat.sub i d) Nat.zero) => ",
             // MIDDLE Nat.rec on sub(d, i)
-            "Nat.rec ",
-            "(fun (g2 : Nat) => Eq Nat (Nat.sub d i) g2 -> Eq KExpr {lhs} {rhs}) ",
+            "@Nat.rec ",
+            "(fun (g2 : Nat) => @Eq Nat (Nat.sub d i) g2 -> @Eq KExpr {lhs} {rhs}) ",
             // --- MIDDLE ZERO: sub(d,i) = 0 (i = d) : LEAF 2 ---
-            "(fun (h_di0 : Eq Nat (Nat.sub d i) Nat.zero) => {leaf2}) ",
+            "(fun (h_di0 : @Eq Nat (Nat.sub d i) Nat.zero) => {leaf2}) ",
             // --- MIDDLE SUCC: sub(d,i) = succ k2 (i < d) : LEAF 1 ---
             "(fun (k2 : Nat) ",
-            "(_ : Eq Nat (Nat.sub d i) k2 -> Eq KExpr {lhs} {rhs}) ",
-            "(h_di : Eq Nat (Nat.sub d i) (Nat.succ k2)) => {leaf1}) ",
-            "(Nat.sub d i) (Eq.refl Nat (Nat.sub d i))) ",
+            "(_ : @Eq Nat (Nat.sub d i) k2 -> @Eq KExpr {lhs} {rhs}) ",
+            "(h_di : @Eq Nat (Nat.sub d i) (Nat.succ k2)) => {leaf1}) ",
+            "(Nat.sub d i) (@Eq.refl Nat (Nat.sub d i))) ",
             // ----- OUTER SUCC: sub(i,d) = succ k4 (i > d) -----
             "(fun (k4 : Nat) ",
-            "(_ : Eq Nat (Nat.sub i d) k4 -> Eq KExpr {lhs} {rhs}) ",
-            "(h_id : Eq Nat (Nat.sub i d) (Nat.succ k4)) => ",
+            "(_ : @Eq Nat (Nat.sub i d) k4 -> @Eq KExpr {lhs} {rhs}) ",
+            "(h_id : @Eq Nat (Nat.sub i d) (Nat.succ k4)) => ",
             // INNER Nat.rec on sub(succ(d+k), i)
-            "Nat.rec ",
-            "(fun (g3 : Nat) => Eq Nat (Nat.sub (Nat.succ (Nat.add d k)) i) g3 -> ",
-            "Eq KExpr {lhs} {rhs}) ",
+            "@Nat.rec ",
+            "(fun (g3 : Nat) => @Eq Nat (Nat.sub (Nat.succ (Nat.add d k)) i) g3 -> ",
+            "@Eq KExpr {lhs} {rhs}) ",
             // --- INNER ZERO: sub(succ(d+k),i) = 0 (i >= succ(d+k)) : LEAF 3 ---
-            "(fun (h_s0 : Eq Nat (Nat.sub (Nat.succ (Nat.add d k)) i) Nat.zero) => {leaf3}) ",
+            "(fun (h_s0 : @Eq Nat (Nat.sub (Nat.succ (Nat.add d k)) i) Nat.zero) => {leaf3}) ",
             // --- INNER SUCC: sub(succ(d+k),i) = succ k6 (i < succ(d+k)) : LEAF 4 ---
             "(fun (k6 : Nat) ",
-            "(_ : Eq Nat (Nat.sub (Nat.succ (Nat.add d k)) i) k6 -> Eq KExpr {lhs} {rhs}) ",
-            "(h_s : Eq Nat (Nat.sub (Nat.succ (Nat.add d k)) i) (Nat.succ k6)) => {leaf4}) ",
+            "(_ : @Eq Nat (Nat.sub (Nat.succ (Nat.add d k)) i) k6 -> @Eq KExpr {lhs} {rhs}) ",
+            "(h_s : @Eq Nat (Nat.sub (Nat.succ (Nat.add d k)) i) (Nat.succ k6)) => {leaf4}) ",
             "(Nat.sub (Nat.succ (Nat.add d k)) i) ",
-            "(Eq.refl Nat (Nat.sub (Nat.succ (Nat.add d k)) i))) ",
+            "(@Eq.refl Nat (Nat.sub (Nat.succ (Nat.add d k)) i))) ",
             // apply outer to the discriminant + refl
-            "(Nat.sub i d) (Eq.refl Nat (Nat.sub i d))",
+            "(Nat.sub i d) (@Eq.refl Nat (Nat.sub i d))",
         ),
         lhs = LHS,
         rhs = RHS,
@@ -214,12 +214,12 @@ fn leaf1() -> String {
     //   = bvar i                                [lift_at_bvar_below]
     let lhs_to_bvar = format!(
         concat!(
-            "(Eq.trans KExpr {lhs} ",
+            "(@Eq.trans KExpr {lhs} ",
             "(lift_at (KExpr.bvar i) (Nat.add d k) a) ",
             "(KExpr.bvar i) ",
-            "(Eq.cong KExpr KExpr (fun (x : KExpr) => lift_at x (Nat.add d k) a) ",
+            "(@Eq.cong KExpr KExpr (fun (x : KExpr) => lift_at x (Nat.add d k) a) ",
             "(instantiate_at (KExpr.bvar i) val d) (KExpr.bvar i) ",
-            "(Eq.trans KExpr (instantiate_at (KExpr.bvar i) val d) ",
+            "(@Eq.trans KExpr (instantiate_at (KExpr.bvar i) val d) ",
             "(instantiate_bvar_at i d val) (KExpr.bvar i) ",
             "(instantiate_at_bvar i val d) ",
             "(instantiate_bvar_at_below i d val {w_di}))) ",
@@ -235,14 +235,14 @@ fn leaf1() -> String {
     //   = bvar i                                     [inst_bvar / below]
     let rhs_to_bvar = format!(
         concat!(
-            "(Eq.trans KExpr {rhs} ",
+            "(@Eq.trans KExpr {rhs} ",
             "(instantiate_at (KExpr.bvar i) (lift_at val k a) d) ",
             "(KExpr.bvar i) ",
-            "(Eq.cong KExpr KExpr ",
+            "(@Eq.cong KExpr KExpr ",
             "(fun (x : KExpr) => instantiate_at x (lift_at val k a) d) ",
             "(lift_at (KExpr.bvar i) (Nat.succ (Nat.add d k)) a) (KExpr.bvar i) ",
             "(lift_at_bvar_below i (Nat.succ (Nat.add d k)) a {w_sdki})) ",
-            "(Eq.trans KExpr (instantiate_at (KExpr.bvar i) (lift_at val k a) d) ",
+            "(@Eq.trans KExpr (instantiate_at (KExpr.bvar i) (lift_at val k a) d) ",
             "(instantiate_bvar_at i d (lift_at val k a)) (KExpr.bvar i) ",
             "(instantiate_at_bvar i (lift_at val k a) d) ",
             "(instantiate_bvar_at_below i d (lift_at val k a) {w_di})))"
@@ -252,7 +252,7 @@ fn leaf1() -> String {
         w_di = W_DI,
     );
     format!(
-        "Eq.trans KExpr {lhs} (KExpr.bvar i) {rhs} {l} (Eq.symm KExpr {rhs} (KExpr.bvar i) {r})",
+        "@Eq.trans KExpr {lhs} (KExpr.bvar i) {rhs} {l} (@Eq.symm KExpr {rhs} (KExpr.bvar i) {r})",
         lhs = LHS,
         rhs = RHS,
         l = lhs_to_bvar,
@@ -269,7 +269,7 @@ fn leaf2() -> String {
     //   lift_at (instantiate_at (bvar i) val d) (d+k) a
     //   = lift_at (lift_at val 0 d) (d+k) a   [cong (inst eq from zero witnesses)]
     let lhs_form = concat!(
-        "(Eq.cong KExpr KExpr (fun (x : KExpr) => lift_at x (Nat.add d k) a) ",
+        "(@Eq.cong KExpr KExpr (fun (x : KExpr) => lift_at x (Nat.add d k) a) ",
         "(instantiate_at (KExpr.bvar i) val d) ",
         "(lift_at val Nat.zero d) ",
         "(instantiate_at_bvar_eq_from_zero_witnesses i d val h_di0 h_id))"
@@ -280,10 +280,10 @@ fn leaf2() -> String {
     //   = lift_at (lift_at val k a) 0 d                [inst eq from zero witnesses]
     let rhs_form = format!(
         concat!(
-            "(Eq.trans KExpr {rhs} ",
+            "(@Eq.trans KExpr {rhs} ",
             "(instantiate_at (KExpr.bvar i) (lift_at val k a) d) ",
             "(lift_at (lift_at val k a) Nat.zero d) ",
-            "(Eq.cong KExpr KExpr ",
+            "(@Eq.cong KExpr KExpr ",
             "(fun (x : KExpr) => instantiate_at x (lift_at val k a) d) ",
             "(lift_at (KExpr.bvar i) (Nat.succ (Nat.add d k)) a) (KExpr.bvar i) ",
             "(lift_at_bvar_below i (Nat.succ (Nat.add d k)) a {w_sdki})) ",
@@ -315,28 +315,28 @@ fn leaf2() -> String {
         // we construct  E : lift(lift(val,k,a),0,d) = lift(lift(val,0,d),(d+k),a)
         // and return Eq.symm E : lift(lift(val,0,d),(d+k),a) = lift(lift(val,k,a),0,d).
         // Eq.symm KExpr A B (E : Eq A B) : Eq B A, with A=MID2, B=MID1.
-        "(Eq.symm KExpr ",
+        "(@Eq.symm KExpr ",
         "(lift_at (lift_at val k a) Nat.zero d) ",
         "(lift_at (lift_at val Nat.zero d) (Nat.add d k) a) ",
         // E:
-        "(Eq.trans KExpr ",
+        "(@Eq.trans KExpr ",
         "(lift_at (lift_at val k a) Nat.zero d) ",
         "(lift_at (lift_at val Nat.zero d) (Nat.add Nat.zero (Nat.add d k)) a) ",
         "(lift_at (lift_at val Nat.zero d) (Nat.add d k) a) ",
         // E1 : lift(lift(val,k,a),0,d) = lift(lift(val,0,d),(0+(d+k)),a)
-        "(Eq.trans KExpr ",
+        "(@Eq.trans KExpr ",
         "(lift_at (lift_at val k a) Nat.zero d) ",
         "(lift_at (lift_at val (Nat.add Nat.zero k) a) Nat.zero d) ",
         "(lift_at (lift_at val Nat.zero d) (Nat.add Nat.zero (Nat.add d k)) a) ",
         // rewrite k -> 0+k on the exchange LHS inner cutoff (symm nat_zero_add k)
-        "(Eq.cong Nat KExpr ",
+        "(@Eq.cong Nat KExpr ",
         "(fun (n : Nat) => lift_at (lift_at val n a) Nat.zero d) ",
         "k (Nat.add Nat.zero k) ",
-        "(Eq.symm Nat (Nat.add Nat.zero k) k (nat_zero_add k))) ",
+        "(@Eq.symm Nat (Nat.add Nat.zero k) k (nat_zero_add k))) ",
         // exchange instance at c=0
         "(lift_at_lift_at_exchange val Nat.zero k a d)) ",
         // E2 : rewrite (0+(d+k)) -> (d+k) on outer cutoff (nat_zero_add (d+k))
-        "(Eq.cong Nat KExpr ",
+        "(@Eq.cong Nat KExpr ",
         "(fun (n : Nat) => lift_at (lift_at val Nat.zero d) n a) ",
         "(Nat.add Nat.zero (Nat.add d k)) (Nat.add d k) ",
         "(nat_zero_add (Nat.add d k)))))"
@@ -344,14 +344,14 @@ fn leaf2() -> String {
     // Assemble: LHS = lift(lift val 0 d)(d+k)a [lhs_form] ; bridge ; RHS [symm rhs_form].
     format!(
         concat!(
-            "Eq.trans KExpr {lhs} ",
+            "@Eq.trans KExpr {lhs} ",
             "(lift_at (lift_at val Nat.zero d) (Nat.add d k) a) {rhs} ",
             "{lhs_form} ",
-            "(Eq.trans KExpr ",
+            "(@Eq.trans KExpr ",
             "(lift_at (lift_at val Nat.zero d) (Nat.add d k) a) ",
             "(lift_at (lift_at val k a) Nat.zero d) {rhs} ",
             "{bridge} ",
-            "(Eq.symm KExpr {rhs} (lift_at (lift_at val k a) Nat.zero d) {rhs_form}))"
+            "(@Eq.symm KExpr {rhs} (lift_at (lift_at val k a) Nat.zero d) {rhs_form}))"
         ),
         lhs = LHS,
         rhs = RHS,
@@ -382,13 +382,13 @@ fn leaf3() -> String {
     //   = bvar ((i-1)+a)                     [lift geq with w_dk_pred0]
     let lhs_chain = format!(
         concat!(
-            "(Eq.trans KExpr {lhs} ",
+            "(@Eq.trans KExpr {lhs} ",
             "(lift_at (KExpr.bvar (Nat.sub i (Nat.succ Nat.zero))) (Nat.add d k) a) ",
             "(KExpr.bvar (Nat.add (Nat.sub i (Nat.succ Nat.zero)) a)) ",
-            "(Eq.cong KExpr KExpr (fun (x : KExpr) => lift_at x (Nat.add d k) a) ",
+            "(@Eq.cong KExpr KExpr (fun (x : KExpr) => lift_at x (Nat.add d k) a) ",
             "(instantiate_at (KExpr.bvar i) val d) ",
             "(KExpr.bvar (Nat.sub i (Nat.succ Nat.zero))) ",
-            "(Eq.trans KExpr (instantiate_at (KExpr.bvar i) val d) ",
+            "(@Eq.trans KExpr (instantiate_at (KExpr.bvar i) val d) ",
             "(instantiate_bvar_at i d val) ",
             "(KExpr.bvar (Nat.sub i (Nat.succ Nat.zero))) ",
             "(instantiate_at_bvar i val d) ",
@@ -406,15 +406,15 @@ fn leaf3() -> String {
     //   = bvar ((i+a)-1)                                 [inst above]
     let rhs_chain = format!(
         concat!(
-            "(Eq.trans KExpr {rhs} ",
+            "(@Eq.trans KExpr {rhs} ",
             "(instantiate_at (KExpr.bvar (Nat.add i a)) (lift_at val k a) d) ",
             "(KExpr.bvar (Nat.sub (Nat.add i a) (Nat.succ Nat.zero))) ",
-            "(Eq.cong KExpr KExpr ",
+            "(@Eq.cong KExpr KExpr ",
             "(fun (x : KExpr) => instantiate_at x (lift_at val k a) d) ",
             "(lift_at (KExpr.bvar i) (Nat.succ (Nat.add d k)) a) ",
             "(KExpr.bvar (Nat.add i a)) ",
             "(lift_at_bvar_geq i (Nat.succ (Nat.add d k)) a h_s0)) ",
-            "(Eq.trans KExpr ",
+            "(@Eq.trans KExpr ",
             "(instantiate_at (KExpr.bvar (Nat.add i a)) (lift_at val k a) d) ",
             "(instantiate_bvar_at (Nat.add i a) d (lift_at val k a)) ",
             "(KExpr.bvar (Nat.sub (Nat.add i a) (Nat.succ Nat.zero))) ",
@@ -429,10 +429,10 @@ fn leaf3() -> String {
     //   nat_pred_add_at_pos i a d k4 h_id : sub(i+a,1) = (sub(i,1)) + a
     //   i.e. (i+a)-1 = (i-1)+a. We need (i-1)+a = (i+a)-1, so Eq.symm.
     let bridge = concat!(
-        "(Eq.cong Nat KExpr KExpr.bvar ",
+        "(@Eq.cong Nat KExpr KExpr.bvar ",
         "(Nat.add (Nat.sub i (Nat.succ Nat.zero)) a) ",
         "(Nat.sub (Nat.add i a) (Nat.succ Nat.zero)) ",
-        "(Eq.symm Nat ",
+        "(@Eq.symm Nat ",
         "(Nat.sub (Nat.add i a) (Nat.succ Nat.zero)) ",
         "(Nat.add (Nat.sub i (Nat.succ Nat.zero)) a) ",
         "(nat_pred_add_at_pos i a d k4 h_id)))"
@@ -440,14 +440,14 @@ fn leaf3() -> String {
     // Assemble: LHS = bvar((i-1)+a) [lhs_chain] ; bridge to bvar((i+a)-1) ; symm rhs_chain.
     format!(
         concat!(
-            "Eq.trans KExpr {lhs} ",
+            "@Eq.trans KExpr {lhs} ",
             "(KExpr.bvar (Nat.add (Nat.sub i (Nat.succ Nat.zero)) a)) {rhs} ",
             "{lhs_chain} ",
-            "(Eq.trans KExpr ",
+            "(@Eq.trans KExpr ",
             "(KExpr.bvar (Nat.add (Nat.sub i (Nat.succ Nat.zero)) a)) ",
             "(KExpr.bvar (Nat.sub (Nat.add i a) (Nat.succ Nat.zero))) {rhs} ",
             "{bridge} ",
-            "(Eq.symm KExpr {rhs} ",
+            "(@Eq.symm KExpr {rhs} ",
             "(KExpr.bvar (Nat.sub (Nat.add i a) (Nat.succ Nat.zero))) {rhs_chain}))"
         ),
         lhs = LHS,
@@ -477,13 +477,13 @@ fn leaf4() -> String {
     //   = bvar (i-1)                      [lift below with w_dk_pred_pos]
     let lhs_chain = format!(
         concat!(
-            "(Eq.trans KExpr {lhs} ",
+            "(@Eq.trans KExpr {lhs} ",
             "(lift_at (KExpr.bvar (Nat.sub i (Nat.succ Nat.zero))) (Nat.add d k) a) ",
             "(KExpr.bvar (Nat.sub i (Nat.succ Nat.zero))) ",
-            "(Eq.cong KExpr KExpr (fun (x : KExpr) => lift_at x (Nat.add d k) a) ",
+            "(@Eq.cong KExpr KExpr (fun (x : KExpr) => lift_at x (Nat.add d k) a) ",
             "(instantiate_at (KExpr.bvar i) val d) ",
             "(KExpr.bvar (Nat.sub i (Nat.succ Nat.zero))) ",
-            "(Eq.trans KExpr (instantiate_at (KExpr.bvar i) val d) ",
+            "(@Eq.trans KExpr (instantiate_at (KExpr.bvar i) val d) ",
             "(instantiate_bvar_at i d val) ",
             "(KExpr.bvar (Nat.sub i (Nat.succ Nat.zero))) ",
             "(instantiate_at_bvar i val d) ",
@@ -501,14 +501,14 @@ fn leaf4() -> String {
     //   = bvar (i-1)                                 [inst above]
     let rhs_chain = format!(
         concat!(
-            "(Eq.trans KExpr {rhs} ",
+            "(@Eq.trans KExpr {rhs} ",
             "(instantiate_at (KExpr.bvar i) (lift_at val k a) d) ",
             "(KExpr.bvar (Nat.sub i (Nat.succ Nat.zero))) ",
-            "(Eq.cong KExpr KExpr ",
+            "(@Eq.cong KExpr KExpr ",
             "(fun (x : KExpr) => instantiate_at x (lift_at val k a) d) ",
             "(lift_at (KExpr.bvar i) (Nat.succ (Nat.add d k)) a) (KExpr.bvar i) ",
             "(lift_at_bvar_below i (Nat.succ (Nat.add d k)) a {w_s_pos})) ",
-            "(Eq.trans KExpr ",
+            "(@Eq.trans KExpr ",
             "(instantiate_at (KExpr.bvar i) (lift_at val k a) d) ",
             "(instantiate_bvar_at i d (lift_at val k a)) ",
             "(KExpr.bvar (Nat.sub i (Nat.succ Nat.zero))) ",
@@ -522,10 +522,10 @@ fn leaf4() -> String {
     );
     format!(
         concat!(
-            "Eq.trans KExpr {lhs} ",
+            "@Eq.trans KExpr {lhs} ",
             "(KExpr.bvar (Nat.sub i (Nat.succ Nat.zero))) {rhs} ",
             "{lhs_chain} ",
-            "(Eq.symm KExpr {rhs} (KExpr.bvar (Nat.sub i (Nat.succ Nat.zero))) {rhs_chain})"
+            "(@Eq.symm KExpr {rhs} (KExpr.bvar (Nat.sub i (Nat.succ Nat.zero))) {rhs_chain})"
         ),
         lhs = LHS,
         rhs = RHS,
@@ -541,13 +541,13 @@ fn leaf4() -> String {
 fn full_proof() -> String {
     let motive = concat!(
         "(fun (expr : KExpr) => forall (val : KExpr) (d : Nat) (k : Nat) (a : Nat), ",
-        "Eq KExpr ",
+        "@Eq KExpr ",
         "(lift_at (instantiate_at expr val d) (Nat.add d k) a) ",
         "(instantiate_at (lift_at expr (Nat.succ (Nat.add d k)) a) (lift_at val k a) d))"
     );
     let ih = concat!(
         "forall (val : KExpr) (d : Nat) (k : Nat) (a : Nat), ",
-        "Eq KExpr ",
+        "@Eq KExpr ",
         "(lift_at (instantiate_at SUB val d) (Nat.add d k) a) ",
         "(instantiate_at (lift_at SUB (Nat.succ (Nat.add d k)) a) (lift_at val k a) d)"
     );
@@ -559,10 +559,10 @@ fn full_proof() -> String {
     format!(
         concat!(
             "fun (body : KExpr) (val : KExpr) (d : Nat) (k : Nat) (a : Nat) => ",
-            "KExpr.rec {motive} ",
+            "@KExpr.rec {motive} ",
             // sort
             "(fun (sv : Level) (val : KExpr) (d : Nat) (k : Nat) (a : Nat) => ",
-            "Eq.refl KExpr (KExpr.sort sv)) ",
+            "@Eq.refl KExpr (KExpr.sort sv)) ",
             // bvar
             "(fun (i : Nat) (val : KExpr) (d : Nat) (k : Nat) (a : Nat) => ",
             "lift_instantiate_swap_bvar i val d k a) ",
@@ -581,18 +581,18 @@ fn full_proof() -> String {
             // const
             "(fun (nm : Name) (us : ListType Level) ",
             "(val : KExpr) (d : Nat) (k : Nat) (a : Nat) => ",
-            "Eq.refl KExpr (KExpr.const nm us)) ",
+            "@Eq.refl KExpr (KExpr.const nm us)) ",
             // let_
             "(fun (ty : KExpr) (lval : KExpr) (body : KExpr) ",
             "(ih_ty : {ih_ty}) (ih_lval : {ih_lval}) (ih_body : {ih_body}) ",
             "(val : KExpr) (d : Nat) (k : Nat) (a : Nat) => {let_arm}) ",
             // proj: 1-child node; lift_at + instantiate_at reduce through proj, ih_sub cong.
             "(fun (s : Name) (i : Nat) (sub : KExpr) ",
-            "(ih_sub : forall (val : KExpr) (d : Nat) (k : Nat) (a : Nat), Eq KExpr (lift_at (instantiate_at sub val d) (Nat.add d k) a) (instantiate_at (lift_at sub (Nat.succ (Nat.add d k)) a) (lift_at val k a) d)) ",
+            "(ih_sub : forall (val : KExpr) (d : Nat) (k : Nat) (a : Nat), @Eq KExpr (lift_at (instantiate_at sub val d) (Nat.add d k) a) (instantiate_at (lift_at sub (Nat.succ (Nat.add d k)) a) (lift_at val k a) d)) ",
             "(val : KExpr) (d : Nat) (k : Nat) (a : Nat) => ",
-            "Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.proj s i x) (lift_at (instantiate_at sub val d) (Nat.add d k) a) (instantiate_at (lift_at sub (Nat.succ (Nat.add d k)) a) (lift_at val k a) d) (ih_sub val d k a)) ",
+            "@Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.proj s i x) (lift_at (instantiate_at sub val d) (Nat.add d k) a) (instantiate_at (lift_at sub (Nat.succ (Nat.add d k)) a) (lift_at val k a) d) (ih_sub val d k a)) ",
             // lit: leaf.
-            "(fun (litn : Nat) (val : KExpr) (d : Nat) (k : Nat) (a : Nat) => Eq.refl KExpr (KExpr.lit litn)) ",
+            "(fun (litn : Nat) (val : KExpr) (d : Nat) (k : Nat) (a : Nat) => @Eq.refl KExpr (KExpr.lit litn)) ",
             "body val d k a",
         ),
         motive = motive,
@@ -639,41 +639,41 @@ fn app_arm() -> String {
     format!(
         concat!(
             // LHS = LHS_mid
-            "Eq.trans KExpr {lhs} {lhs_mid} {rhs} ",
-            "(Eq.trans KExpr {lhs} ",
+            "@Eq.trans KExpr {lhs} {lhs_mid} {rhs} ",
+            "(@Eq.trans KExpr {lhs} ",
             "(lift_at (KExpr.app (instantiate_at f val d) (instantiate_at a0 val d)) ",
             "(Nat.add d k) a) ",
             "{lhs_mid} ",
-            "(Eq.cong KExpr KExpr (fun (x : KExpr) => lift_at x (Nat.add d k) a) ",
+            "(@Eq.cong KExpr KExpr (fun (x : KExpr) => lift_at x (Nat.add d k) a) ",
             "(instantiate_at (KExpr.app f a0) val d) ",
             "(KExpr.app (instantiate_at f val d) (instantiate_at a0 val d)) ",
             "(instantiate_at_app f a0 val d)) ",
             "(lift_at_app (instantiate_at f val d) (instantiate_at a0 val d) (Nat.add d k) a)) ",
             // LHS_mid = RHS_mid via IHs, then RHS_mid = RHS
-            "(Eq.trans KExpr {lhs_mid} {rhs_mid} {rhs} ",
+            "(@Eq.trans KExpr {lhs_mid} {rhs_mid} {rhs} ",
             // IH on f then IH on a0
-            "(Eq.trans KExpr {lhs_mid} ",
+            "(@Eq.trans KExpr {lhs_mid} ",
             "(KExpr.app ",
             "(instantiate_at (lift_at f (Nat.succ (Nat.add d k)) a) (lift_at val k a) d) ",
             "(lift_at (instantiate_at a0 val d) (Nat.add d k) a)) ",
             "{rhs_mid} ",
-            "(Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.app x ",
+            "(@Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.app x ",
             "(lift_at (instantiate_at a0 val d) (Nat.add d k) a)) ",
             "(lift_at (instantiate_at f val d) (Nat.add d k) a) ",
             "(instantiate_at (lift_at f (Nat.succ (Nat.add d k)) a) (lift_at val k a) d) ",
             "(ih_f val d k a)) ",
-            "(Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.app ",
+            "(@Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.app ",
             "(instantiate_at (lift_at f (Nat.succ (Nat.add d k)) a) (lift_at val k a) d) x) ",
             "(lift_at (instantiate_at a0 val d) (Nat.add d k) a) ",
             "(instantiate_at (lift_at a0 (Nat.succ (Nat.add d k)) a) (lift_at val k a) d) ",
             "(ih_a val d k a))) ",
             // RHS_mid = RHS : fold back via symm of (inst_app then lift_app cong)
-            "(Eq.symm KExpr {rhs} {rhs_mid} ",
-            "(Eq.trans KExpr {rhs} ",
+            "(@Eq.symm KExpr {rhs} {rhs_mid} ",
+            "(@Eq.trans KExpr {rhs} ",
             "(instantiate_at (KExpr.app (lift_at f (Nat.succ (Nat.add d k)) a) ",
             "(lift_at a0 (Nat.succ (Nat.add d k)) a)) (lift_at val k a) d) ",
             "{rhs_mid} ",
-            "(Eq.cong KExpr KExpr ",
+            "(@Eq.cong KExpr KExpr ",
             "(fun (x : KExpr) => instantiate_at x (lift_at val k a) d) ",
             "(lift_at (KExpr.app f a0) (Nat.succ (Nat.add d k)) a) ",
             "(KExpr.app (lift_at f (Nat.succ (Nat.add d k)) a) ",
@@ -710,7 +710,7 @@ fn binder_arm(ctor: &str, lift_unfold: &str, inst_unfold: &str) -> String {
         concat!(
             // canonical shapes
             // LHS, RHS
-            "Eq.trans KExpr ",
+            "@Eq.trans KExpr ",
             "(lift_at (instantiate_at ({ctor} ty body) val d) (Nat.add d k) a) ",
             // LHS_mid = C (lift (inst ty val d) (d+k) a) (lift (inst body val (succ d)) (succ(d+k)) a)
             "({ctor} (lift_at (instantiate_at ty val d) (Nat.add d k) a) ",
@@ -718,20 +718,20 @@ fn binder_arm(ctor: &str, lift_unfold: &str, inst_unfold: &str) -> String {
             "(instantiate_at (lift_at ({ctor} ty body) (Nat.succ (Nat.add d k)) a) ",
             "(lift_at val k a) d) ",
             // ---- LHS = LHS_mid ----
-            "(Eq.trans KExpr ",
+            "(@Eq.trans KExpr ",
             "(lift_at (instantiate_at ({ctor} ty body) val d) (Nat.add d k) a) ",
             "(lift_at ({ctor} (instantiate_at ty val d) ",
             "(instantiate_at body val (Nat.succ d))) (Nat.add d k) a) ",
             "({ctor} (lift_at (instantiate_at ty val d) (Nat.add d k) a) ",
             "(lift_at (instantiate_at body val (Nat.succ d)) (Nat.succ (Nat.add d k)) a)) ",
-            "(Eq.cong KExpr KExpr (fun (x : KExpr) => lift_at x (Nat.add d k) a) ",
+            "(@Eq.cong KExpr KExpr (fun (x : KExpr) => lift_at x (Nat.add d k) a) ",
             "(instantiate_at ({ctor} ty body) val d) ",
             "({ctor} (instantiate_at ty val d) (instantiate_at body val (Nat.succ d))) ",
             "({inst_unfold} ty body val d)) ",
             "({lift_unfold} (instantiate_at ty val d) ",
             "(instantiate_at body val (Nat.succ d)) (Nat.add d k) a)) ",
             // ---- LHS_mid = RHS ----
-            "(Eq.trans KExpr ",
+            "(@Eq.trans KExpr ",
             "({ctor} (lift_at (instantiate_at ty val d) (Nat.add d k) a) ",
             "(lift_at (instantiate_at body val (Nat.succ d)) (Nat.succ (Nat.add d k)) a)) ",
             // RHS_mid = C (inst (lift ty (succ(d+k)) a) (lift val k a) d)
@@ -743,7 +743,7 @@ fn binder_arm(ctor: &str, lift_unfold: &str, inst_unfold: &str) -> String {
             "(instantiate_at (lift_at ({ctor} ty body) (Nat.succ (Nat.add d k)) a) ",
             "(lift_at val k a) d) ",
             // ty IH and body IH (with transport)
-            "(Eq.trans KExpr ",
+            "(@Eq.trans KExpr ",
             "({ctor} (lift_at (instantiate_at ty val d) (Nat.add d k) a) ",
             "(lift_at (instantiate_at body val (Nat.succ d)) (Nat.succ (Nat.add d k)) a)) ",
             "({ctor} ",
@@ -754,32 +754,32 @@ fn binder_arm(ctor: &str, lift_unfold: &str, inst_unfold: &str) -> String {
             "(instantiate_at (lift_at body (Nat.succ (Nat.succ (Nat.add d k))) a) ",
             "(lift_at val k a) (Nat.succ d))) ",
             // cong ty IH on first slot
-            "(Eq.cong KExpr KExpr (fun (x : KExpr) => {ctor} x ",
+            "(@Eq.cong KExpr KExpr (fun (x : KExpr) => {ctor} x ",
             "(lift_at (instantiate_at body val (Nat.succ d)) (Nat.succ (Nat.add d k)) a)) ",
             "(lift_at (instantiate_at ty val d) (Nat.add d k) a) ",
             "(instantiate_at (lift_at ty (Nat.succ (Nat.add d k)) a) (lift_at val k a) d) ",
             "(ih_ty val d k a)) ",
             // cong body IH (transported) on second slot
-            "(Eq.cong KExpr KExpr (fun (x : KExpr) => {ctor} ",
+            "(@Eq.cong KExpr KExpr (fun (x : KExpr) => {ctor} ",
             "(instantiate_at (lift_at ty (Nat.succ (Nat.add d k)) a) (lift_at val k a) d) x) ",
             "(lift_at (instantiate_at body val (Nat.succ d)) (Nat.succ (Nat.add d k)) a) ",
             "(instantiate_at (lift_at body (Nat.succ (Nat.succ (Nat.add d k))) a) ",
             "(lift_at val k a) (Nat.succ d)) ",
             // body chain: transport LHS cutoff succ(d+k) -> (succ d)+k, apply body IH,
             // transport result cutoff succ((succ d)+k) -> succ(succ(d+k)).
-            "(Eq.trans KExpr ",
+            "(@Eq.trans KExpr ",
             "(lift_at (instantiate_at body val (Nat.succ d)) (Nat.succ (Nat.add d k)) a) ",
             "(lift_at (instantiate_at body val (Nat.succ d)) (Nat.add (Nat.succ d) k) a) ",
             "(instantiate_at (lift_at body (Nat.succ (Nat.succ (Nat.add d k))) a) ",
             "(lift_at val k a) (Nat.succ d)) ",
             // transport LHS body cutoff succ(d+k) -> (succ d)+k (symm nat_succ_add)
-            "(Eq.cong Nat KExpr ",
+            "(@Eq.cong Nat KExpr ",
             "(fun (n : Nat) => lift_at (instantiate_at body val (Nat.succ d)) n a) ",
             "(Nat.succ (Nat.add d k)) (Nat.add (Nat.succ d) k) ",
-            "(Eq.symm Nat (Nat.add (Nat.succ d) k) (Nat.succ (Nat.add d k)) ",
+            "(@Eq.symm Nat (Nat.add (Nat.succ d) k) (Nat.succ (Nat.add d k)) ",
             "(nat_succ_add d k))) ",
             // apply body IH at (val, succ d, k, a), then transport its result cutoff.
-            "(Eq.trans KExpr ",
+            "(@Eq.trans KExpr ",
             "(lift_at (instantiate_at body val (Nat.succ d)) (Nat.add (Nat.succ d) k) a) ",
             "(instantiate_at (lift_at body (Nat.succ (Nat.add (Nat.succ d) k)) a) ",
             "(lift_at val k a) (Nat.succ d)) ",
@@ -787,20 +787,20 @@ fn binder_arm(ctor: &str, lift_unfold: &str, inst_unfold: &str) -> String {
             "(lift_at val k a) (Nat.succ d)) ",
             "(ih_body val (Nat.succ d) k a) ",
             // transport succ((succ d)+k) -> succ(succ(d+k)) via nat_succ_add inside succ
-            "(Eq.cong Nat KExpr ",
+            "(@Eq.cong Nat KExpr ",
             "(fun (n : Nat) => instantiate_at (lift_at body (Nat.succ n) a) ",
             "(lift_at val k a) (Nat.succ d)) ",
             "(Nat.add (Nat.succ d) k) (Nat.succ (Nat.add d k)) ",
             "(nat_succ_add d k)))))) ",
             // ---- RHS_mid = RHS : fold back ----
-            "(Eq.symm KExpr ",
+            "(@Eq.symm KExpr ",
             "(instantiate_at (lift_at ({ctor} ty body) (Nat.succ (Nat.add d k)) a) ",
             "(lift_at val k a) d) ",
             "({ctor} ",
             "(instantiate_at (lift_at ty (Nat.succ (Nat.add d k)) a) (lift_at val k a) d) ",
             "(instantiate_at (lift_at body (Nat.succ (Nat.succ (Nat.add d k))) a) ",
             "(lift_at val k a) (Nat.succ d))) ",
-            "(Eq.trans KExpr ",
+            "(@Eq.trans KExpr ",
             "(instantiate_at (lift_at ({ctor} ty body) (Nat.succ (Nat.add d k)) a) ",
             "(lift_at val k a) d) ",
             "(instantiate_at ({ctor} (lift_at ty (Nat.succ (Nat.add d k)) a) ",
@@ -810,7 +810,7 @@ fn binder_arm(ctor: &str, lift_unfold: &str, inst_unfold: &str) -> String {
             "(instantiate_at (lift_at body (Nat.succ (Nat.succ (Nat.add d k))) a) ",
             "(lift_at val k a) (Nat.succ d))) ",
             // unfold the outer lift on (C ty body) at cutoff succ(d+k): body cutoff becomes succ(succ(d+k))
-            "(Eq.cong KExpr KExpr ",
+            "(@Eq.cong KExpr KExpr ",
             "(fun (x : KExpr) => instantiate_at x (lift_at val k a) d) ",
             "(lift_at ({ctor} ty body) (Nat.succ (Nat.add d k)) a) ",
             "({ctor} (lift_at ty (Nat.succ (Nat.add d k)) a) ",
@@ -863,8 +863,8 @@ fn let_arm() -> String {
 
     // ---- STEP1: LHS = LHS_mid (unfold instantiate then lift over let_) ----
     let step1 = format!(
-        "(Eq.trans KExpr {lhs} {lift_of_that} {lhs_mid} \
-         (Eq.cong KExpr KExpr (fun (x : KExpr) => lift_at x (Nat.add d k) a) \
+        "(@Eq.trans KExpr {lhs} {lift_of_that} {lhs_mid} \
+         (@Eq.cong KExpr KExpr (fun (x : KExpr) => lift_at x (Nat.add d k) a) \
          (instantiate_at (KExpr.let_ ty lval body) val d) {inst_unfolded} \
          (instantiate_at_let_ ty lval body val d)) \
          (lift_at_let_ {inst_ty_d} {inst_lval_d} {inst_body_sd} (Nat.add d k) a))"
@@ -873,19 +873,19 @@ fn let_arm() -> String {
     // body-child chain: transport the LHS body cutoff succ(d+k) -> (succ d)+k,
     // apply the body IH at (val, succ d, k, a), transport its result cutoff back.
     let body_chain = format!(
-        "(Eq.trans KExpr {lift_inst_body} \
+        "(@Eq.trans KExpr {lift_inst_body} \
          (lift_at (instantiate_at body val (Nat.succ d)) (Nat.add (Nat.succ d) k) a) \
          {inst_lift_body} \
-         (Eq.cong Nat KExpr \
+         (@Eq.cong Nat KExpr \
          (fun (n : Nat) => lift_at (instantiate_at body val (Nat.succ d)) n a) \
          (Nat.succ (Nat.add d k)) (Nat.add (Nat.succ d) k) \
-         (Eq.symm Nat (Nat.add (Nat.succ d) k) (Nat.succ (Nat.add d k)) (nat_succ_add d k))) \
-         (Eq.trans KExpr \
+         (@Eq.symm Nat (Nat.add (Nat.succ d) k) (Nat.succ (Nat.add d k)) (nat_succ_add d k))) \
+         (@Eq.trans KExpr \
          (lift_at (instantiate_at body val (Nat.succ d)) (Nat.add (Nat.succ d) k) a) \
          (instantiate_at (lift_at body (Nat.succ (Nat.add (Nat.succ d) k)) a) (lift_at val k a) (Nat.succ d)) \
          {inst_lift_body} \
          (ih_body val (Nat.succ d) k a) \
-         (Eq.cong Nat KExpr \
+         (@Eq.cong Nat KExpr \
          (fun (n : Nat) => instantiate_at (lift_at body (Nat.succ n) a) (lift_at val k a) (Nat.succ d)) \
          (Nat.add (Nat.succ d) k) (Nat.succ (Nat.add d k)) \
          (nat_succ_add d k))))"
@@ -893,27 +893,27 @@ fn let_arm() -> String {
 
     // ---- STEP2: LHS_mid = RHS_mid via the three child IHs ----
     let cong_ty = format!(
-        "(Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.let_ x {lift_inst_lval} {lift_inst_body}) \
+        "(@Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.let_ x {lift_inst_lval} {lift_inst_body}) \
          {lift_inst_ty} {inst_lift_ty} (ih_ty val d k a))"
     );
     let cong_lval = format!(
-        "(Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.let_ {inst_lift_ty} x {lift_inst_body}) \
+        "(@Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.let_ {inst_lift_ty} x {lift_inst_body}) \
          {lift_inst_lval} {inst_lift_lval} (ih_lval val d k a))"
     );
     let cong_body = format!(
-        "(Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.let_ {inst_lift_ty} {inst_lift_lval} x) \
+        "(@Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.let_ {inst_lift_ty} {inst_lift_lval} x) \
          {lift_inst_body} {inst_lift_body} {body_chain})"
     );
     let step2 = format!(
-        "(Eq.trans KExpr {lhs_mid} {m1} {rhs_mid} {cong_ty} \
-         (Eq.trans KExpr {m1} {m2} {rhs_mid} {cong_lval} {cong_body}))"
+        "(@Eq.trans KExpr {lhs_mid} {m1} {rhs_mid} {cong_ty} \
+         (@Eq.trans KExpr {m1} {m2} {rhs_mid} {cong_lval} {cong_body}))"
     );
 
     // ---- STEP3: RHS_mid = RHS (fold the lift/instantiate back over let_) ----
     let step3 = format!(
-        "(Eq.symm KExpr {rhs} {rhs_mid} \
-         (Eq.trans KExpr {rhs} {rhs_intermediate} {rhs_mid} \
-         (Eq.cong KExpr KExpr (fun (x : KExpr) => instantiate_at x (lift_at val k a) d) \
+        "(@Eq.symm KExpr {rhs} {rhs_mid} \
+         (@Eq.trans KExpr {rhs} {rhs_intermediate} {rhs_mid} \
+         (@Eq.cong KExpr KExpr (fun (x : KExpr) => instantiate_at x (lift_at val k a) d) \
          (lift_at (KExpr.let_ ty lval body) (Nat.succ (Nat.add d k)) a) \
          (KExpr.let_ {lift_ty_s} {lift_lval_s} {lift_body_ss}) \
          (lift_at_let_ ty lval body (Nat.succ (Nat.add d k)) a)) \
@@ -921,8 +921,8 @@ fn let_arm() -> String {
     );
 
     format!(
-        "Eq.trans KExpr {lhs} {lhs_mid} {rhs} {step1} \
-         (Eq.trans KExpr {lhs_mid} {rhs_mid} {rhs} {step2} {step3})"
+        "@Eq.trans KExpr {lhs} {lhs_mid} {rhs} {step1} \
+         (@Eq.trans KExpr {lhs_mid} {rhs_mid} {rhs} {step2} {step3})"
     )
 }
 

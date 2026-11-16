@@ -76,7 +76,7 @@ impl Specification {
              (hiota : forall (x : KExpr) (y : KExpr) (t : Nat -> KExpr), \
              iota_reduces x y -> beta_reduces (psubst t x) (psubst t y)) \
              (e : KExpr) (e2 : KExpr) (h : beta_reduces e e2) : {goal_e} := \
-             beta_reduces.rec {motive} \
+             @beta_reduces.rec {motive} \
              {a_beta} {a_app_left} {a_app_right} {a_lam_ty} {a_lam_body} \
              {a_pi_dom} {a_pi_cod} {a_fa_dom} {a_fa_cod} {a_zeta} \
              {a_let_ty} {a_let_val} {a_let_body} {a_iota} {a_proj} \
@@ -86,12 +86,12 @@ impl Specification {
             // the redex under psubst and then transports along the substrate's
             // composition chain.
             a_beta = "(fun (A : KExpr) (body : KExpr) (arg : KExpr) (s : Nat -> KExpr) => \
-                      Eq.substType KExpr \
+                      @Eq.substType KExpr \
                       (fun (z : KExpr) => beta_reduces \
                       (KExpr.app (KExpr.lam (psubst s A) (psubst (up s) body)) (psubst s arg)) z) \
                       (instantiate (psubst (up s) body) (psubst s arg)) \
                       (psubst s (instantiate body arg)) \
-                      (Eq.symm KExpr (psubst s (instantiate body arg)) \
+                      (@Eq.symm KExpr (psubst s (instantiate body arg)) \
                       (instantiate (psubst (up s) body) (psubst s arg)) \
                       (psubst_instantiate body arg s)) \
                       (beta_reduces.beta (psubst s A) (psubst (up s) body) (psubst s arg)))",
@@ -148,12 +148,12 @@ impl Specification {
                         (psubst (up s) body2) (ih (up s)))",
             // zeta: the same instantiate transport as beta, one constructor over.
             a_zeta = "(fun (ty : KExpr) (val : KExpr) (body : KExpr) (s : Nat -> KExpr) => \
-                      Eq.substType KExpr \
+                      @Eq.substType KExpr \
                       (fun (z : KExpr) => beta_reduces \
                       (KExpr.let_ (psubst s ty) (psubst s val) (psubst (up s) body)) z) \
                       (instantiate (psubst (up s) body) (psubst s val)) \
                       (psubst s (instantiate body val)) \
-                      (Eq.symm KExpr (psubst s (instantiate body val)) \
+                      (@Eq.symm KExpr (psubst s (instantiate body val)) \
                       (instantiate (psubst (up s) body) (psubst s val)) \
                       (psubst_instantiate body val s)) \
                       (beta_reduces.zeta (psubst s ty) (psubst s val) (psubst (up s) body)))",
@@ -209,7 +209,7 @@ impl Specification {
          delta_reduces x y -> whnf_step (psubst t x) (psubst t y)) \
          (e : KExpr) (e2 : KExpr) (h : whnf_step e e2) : \
          forall (s : Nat -> KExpr), whnf_step (psubst s e) (psubst s e2) := \
-         whnf_step.rec e e2 \
+         @whnf_step.rec e e2 \
          (fun (_h : whnf_step e e2) => \
          forall (s : Nat -> KExpr), whnf_step (psubst s e) (psubst s e2)) \
          (fun (hb : beta_reduces e e2) (s : Nat -> KExpr) => \
@@ -238,7 +238,7 @@ impl Specification {
     pub(super) fn whnf_acc_psubst_inv_src() -> String {
         let motive = "(fun (y : KExpr) (_hy : whnf_acc y) => \
                       forall (e : KExpr) (s : Nat -> KExpr), \
-                      Eq KExpr y (psubst s e) -> whnf_acc e)";
+                      @Eq KExpr y (psubst s e) -> whnf_acc e)";
         format!(
             "def whnf_acc_psubst_inv \
              (hiota : forall (x : KExpr) (y : KExpr) (t : Nat -> KExpr), \
@@ -246,19 +246,19 @@ impl Specification {
              (hdelta : forall (x : KExpr) (y : KExpr) (t : Nat -> KExpr), \
              delta_reduces x y -> whnf_step (psubst t x) (psubst t y)) \
              (x : KExpr) (hx : whnf_acc x) : \
-             forall (e : KExpr) (s : Nat -> KExpr), Eq KExpr x (psubst s e) -> whnf_acc e := \
-             whnf_acc.rec {motive} \
+             forall (e : KExpr) (s : Nat -> KExpr), @Eq KExpr x (psubst s e) -> whnf_acc e := \
+             @whnf_acc.rec {motive} \
              (fun (y : KExpr) \
              (f : forall (y2 : KExpr), whnf_step y y2 -> whnf_acc y2) \
              (ih : forall (y2 : KExpr) (_st : whnf_step y y2), \
-             forall (e : KExpr) (s : Nat -> KExpr), Eq KExpr y2 (psubst s e) -> whnf_acc e) \
-             (e : KExpr) (s : Nat -> KExpr) (heq : Eq KExpr y (psubst s e)) => \
+             forall (e : KExpr) (s : Nat -> KExpr), @Eq KExpr y2 (psubst s e) -> whnf_acc e) \
+             (e : KExpr) (s : Nat -> KExpr) (heq : @Eq KExpr y (psubst s e)) => \
              whnf_acc.intro e (fun (e2 : KExpr) (st : whnf_step e e2) => \
              ih (psubst s e2) \
-             (Eq.substType KExpr (fun (z : KExpr) => whnf_step z (psubst s e2)) \
-             (psubst s e) y (Eq.symm KExpr y (psubst s e) heq) \
+             (@Eq.substType KExpr (fun (z : KExpr) => whnf_step z (psubst s e2)) \
+             (psubst s e) y (@Eq.symm KExpr y (psubst s e) heq) \
              (whnf_step_psubst_congr hiota hdelta e e2 st s)) \
-             e2 s (Eq.refl KExpr (psubst s e2)))) \
+             e2 s (@Eq.refl KExpr (psubst s e2)))) \
              x hx"
         )
     }
@@ -314,171 +314,171 @@ impl Specification {
         // equations are what tie them back to the ones being inverted.
         let motive = format!(
             "(fun (x : KExpr) (y : KExpr) (_h : beta_reduces x y) => \
-             Eq KExpr x {lt} -> Eq KExpr y e2 -> C)"
+             @Eq KExpr x {lt} -> @Eq KExpr y e2 -> C)"
         );
         format!(
             "def whnf_step_let_inv (A : KExpr) (a : KExpr) (b : KExpr) (e2 : KExpr) (C : Type) \
              (h : whnf_step {lt} e2) \
-             (kz : Eq KExpr e2 (instantiate b a) -> C) \
+             (kz : @Eq KExpr e2 (instantiate b a) -> C) \
              (kty : forall (A2 : KExpr), beta_reduces A A2 -> \
-             Eq KExpr e2 (KExpr.let_ A2 a b) -> C) \
+             @Eq KExpr e2 (KExpr.let_ A2 a b) -> C) \
              (kval : forall (a2 : KExpr), beta_reduces a a2 -> \
-             Eq KExpr e2 (KExpr.let_ A a2 b) -> C) \
+             @Eq KExpr e2 (KExpr.let_ A a2 b) -> C) \
              (kbody : forall (b2 : KExpr), beta_reduces b b2 -> \
-             Eq KExpr e2 (KExpr.let_ A a b2) -> C) \
+             @Eq KExpr e2 (KExpr.let_ A a b2) -> C) \
              (kiota : iota_reduces {lt} e2 -> C) \
              (kdelta : delta_reduces {lt} e2 -> C) : C := \
-             whnf_step.rec {lt} e2 (fun (_hs : whnf_step {lt} e2) => C) \
+             @whnf_step.rec {lt} e2 (fun (_hs : whnf_step {lt} e2) => C) \
              (fun (hb : beta_reduces {lt} e2) => \
-             beta_reduces.rec {motive} \
+             @beta_reduces.rec {motive} \
              {a_beta} {a_app_left} {a_app_right} {a_lam_ty} {a_lam_body} \
              {a_pi_dom} {a_pi_cod} {a_fa_dom} {a_fa_cod} {a_zeta} \
              {a_let_ty} {a_let_val} {a_let_body} {a_iota} {a_proj} \
-             {lt} e2 hb (Eq.refl KExpr {lt}) (Eq.refl KExpr e2)) \
+             {lt} e2 hb (@Eq.refl KExpr {lt}) (@Eq.refl KExpr e2)) \
              (fun (hd : delta_reduces {lt} e2) => kdelta hd) \
              h",
             // --- the ten refuted arms: left index is not a `let_` ---
             a_beta = format_args!(
                 "(fun (A0 : KExpr) (body : KExpr) (arg : KExpr) \
-                 (hx : Eq KExpr (KExpr.app (KExpr.lam A0 body) arg) {lt}) \
-                 (_hy : Eq KExpr (instantiate body arg) e2) => \
+                 (hx : @Eq KExpr (KExpr.app (KExpr.lam A0 body) arg) {lt}) \
+                 (_hy : @Eq KExpr (instantiate body arg) e2) => \
                  let_ne_app A a b (KExpr.lam A0 body) arg C \
-                 (Eq.symm KExpr (KExpr.app (KExpr.lam A0 body) arg) {lt} hx))"
+                 (@Eq.symm KExpr (KExpr.app (KExpr.lam A0 body) arg) {lt} hx))"
             ),
             a_app_left = format_args!(
                 "(fun (f : KExpr) (f2 : KExpr) (aa : KExpr) (_hs : beta_reduces f f2) \
-                 (_ih : Eq KExpr f {lt} -> Eq KExpr f2 e2 -> C) \
-                 (hx : Eq KExpr (KExpr.app f aa) {lt}) \
-                 (_hy : Eq KExpr (KExpr.app f2 aa) e2) => \
-                 let_ne_app A a b f aa C (Eq.symm KExpr (KExpr.app f aa) {lt} hx))"
+                 (_ih : @Eq KExpr f {lt} -> @Eq KExpr f2 e2 -> C) \
+                 (hx : @Eq KExpr (KExpr.app f aa) {lt}) \
+                 (_hy : @Eq KExpr (KExpr.app f2 aa) e2) => \
+                 let_ne_app A a b f aa C (@Eq.symm KExpr (KExpr.app f aa) {lt} hx))"
             ),
             a_app_right = format_args!(
                 "(fun (f : KExpr) (aa : KExpr) (a2 : KExpr) (_hs : beta_reduces aa a2) \
-                 (_ih : Eq KExpr aa {lt} -> Eq KExpr a2 e2 -> C) \
-                 (hx : Eq KExpr (KExpr.app f aa) {lt}) \
-                 (_hy : Eq KExpr (KExpr.app f a2) e2) => \
-                 let_ne_app A a b f aa C (Eq.symm KExpr (KExpr.app f aa) {lt} hx))"
+                 (_ih : @Eq KExpr aa {lt} -> @Eq KExpr a2 e2 -> C) \
+                 (hx : @Eq KExpr (KExpr.app f aa) {lt}) \
+                 (_hy : @Eq KExpr (KExpr.app f a2) e2) => \
+                 let_ne_app A a b f aa C (@Eq.symm KExpr (KExpr.app f aa) {lt} hx))"
             ),
             a_lam_ty = format_args!(
                 "(fun (ty : KExpr) (ty2 : KExpr) (body : KExpr) (_hs : beta_reduces ty ty2) \
-                 (_ih : Eq KExpr ty {lt} -> Eq KExpr ty2 e2 -> C) \
-                 (hx : Eq KExpr (KExpr.lam ty body) {lt}) \
-                 (_hy : Eq KExpr (KExpr.lam ty2 body) e2) => \
-                 let_ne_lam A a b ty body C (Eq.symm KExpr (KExpr.lam ty body) {lt} hx))"
+                 (_ih : @Eq KExpr ty {lt} -> @Eq KExpr ty2 e2 -> C) \
+                 (hx : @Eq KExpr (KExpr.lam ty body) {lt}) \
+                 (_hy : @Eq KExpr (KExpr.lam ty2 body) e2) => \
+                 let_ne_lam A a b ty body C (@Eq.symm KExpr (KExpr.lam ty body) {lt} hx))"
             ),
             a_lam_body = format_args!(
                 "(fun (ty : KExpr) (body : KExpr) (body2 : KExpr) (_hs : beta_reduces body body2) \
-                 (_ih : Eq KExpr body {lt} -> Eq KExpr body2 e2 -> C) \
-                 (hx : Eq KExpr (KExpr.lam ty body) {lt}) \
-                 (_hy : Eq KExpr (KExpr.lam ty body2) e2) => \
-                 let_ne_lam A a b ty body C (Eq.symm KExpr (KExpr.lam ty body) {lt} hx))"
+                 (_ih : @Eq KExpr body {lt} -> @Eq KExpr body2 e2 -> C) \
+                 (hx : @Eq KExpr (KExpr.lam ty body) {lt}) \
+                 (_hy : @Eq KExpr (KExpr.lam ty body2) e2) => \
+                 let_ne_lam A a b ty body C (@Eq.symm KExpr (KExpr.lam ty body) {lt} hx))"
             ),
             a_pi_dom = format_args!(
                 "(fun (dom : KExpr) (dom2 : KExpr) (body : KExpr) (_hs : beta_reduces dom dom2) \
-                 (_ih : Eq KExpr dom {lt} -> Eq KExpr dom2 e2 -> C) \
-                 (hx : Eq KExpr (KExpr.pi dom body) {lt}) \
-                 (_hy : Eq KExpr (KExpr.pi dom2 body) e2) => \
-                 let_ne_pi A a b dom body C (Eq.symm KExpr (KExpr.pi dom body) {lt} hx))"
+                 (_ih : @Eq KExpr dom {lt} -> @Eq KExpr dom2 e2 -> C) \
+                 (hx : @Eq KExpr (KExpr.pi dom body) {lt}) \
+                 (_hy : @Eq KExpr (KExpr.pi dom2 body) e2) => \
+                 let_ne_pi A a b dom body C (@Eq.symm KExpr (KExpr.pi dom body) {lt} hx))"
             ),
             a_pi_cod = format_args!(
                 "(fun (dom : KExpr) (body : KExpr) (body2 : KExpr) (_hs : beta_reduces body body2) \
-                 (_ih : Eq KExpr body {lt} -> Eq KExpr body2 e2 -> C) \
-                 (hx : Eq KExpr (KExpr.pi dom body) {lt}) \
-                 (_hy : Eq KExpr (KExpr.pi dom body2) e2) => \
-                 let_ne_pi A a b dom body C (Eq.symm KExpr (KExpr.pi dom body) {lt} hx))"
+                 (_ih : @Eq KExpr body {lt} -> @Eq KExpr body2 e2 -> C) \
+                 (hx : @Eq KExpr (KExpr.pi dom body) {lt}) \
+                 (_hy : @Eq KExpr (KExpr.pi dom body2) e2) => \
+                 let_ne_pi A a b dom body C (@Eq.symm KExpr (KExpr.pi dom body) {lt} hx))"
             ),
             a_fa_dom = format_args!(
                 "(fun (dom : KExpr) (dom2 : KExpr) (body : KExpr) (_hs : beta_reduces dom dom2) \
-                 (_ih : Eq KExpr dom {lt} -> Eq KExpr dom2 e2 -> C) \
-                 (hx : Eq KExpr (KExpr.forall_ dom body) {lt}) \
-                 (_hy : Eq KExpr (KExpr.forall_ dom2 body) e2) => \
+                 (_ih : @Eq KExpr dom {lt} -> @Eq KExpr dom2 e2 -> C) \
+                 (hx : @Eq KExpr (KExpr.forall_ dom body) {lt}) \
+                 (_hy : @Eq KExpr (KExpr.forall_ dom2 body) e2) => \
                  let_ne_pi A a b dom body C \
-                 (Eq.symm KExpr (KExpr.forall_ dom body) {lt} hx))"
+                 (@Eq.symm KExpr (KExpr.forall_ dom body) {lt} hx))"
             ),
             a_fa_cod = format_args!(
                 "(fun (dom : KExpr) (body : KExpr) (body2 : KExpr) (_hs : beta_reduces body body2) \
-                 (_ih : Eq KExpr body {lt} -> Eq KExpr body2 e2 -> C) \
-                 (hx : Eq KExpr (KExpr.forall_ dom body) {lt}) \
-                 (_hy : Eq KExpr (KExpr.forall_ dom body2) e2) => \
+                 (_ih : @Eq KExpr body {lt} -> @Eq KExpr body2 e2 -> C) \
+                 (hx : @Eq KExpr (KExpr.forall_ dom body) {lt}) \
+                 (_hy : @Eq KExpr (KExpr.forall_ dom body2) e2) => \
                  let_ne_pi A a b dom body C \
-                 (Eq.symm KExpr (KExpr.forall_ dom body) {lt} hx))"
+                 (@Eq.symm KExpr (KExpr.forall_ dom body) {lt} hx))"
             ),
             a_proj = format_args!(
                 "(fun (ps : Name) (pidx : Nat) (sub : KExpr) (sub2 : KExpr) \
                  (_hs : beta_reduces sub sub2) \
-                 (_ih : Eq KExpr sub {lt} -> Eq KExpr sub2 e2 -> C) \
-                 (hx : Eq KExpr (KExpr.proj ps pidx sub) {lt}) \
-                 (_hy : Eq KExpr (KExpr.proj ps pidx sub2) e2) => \
+                 (_ih : @Eq KExpr sub {lt} -> @Eq KExpr sub2 e2 -> C) \
+                 (hx : @Eq KExpr (KExpr.proj ps pidx sub) {lt}) \
+                 (_hy : @Eq KExpr (KExpr.proj ps pidx sub2) e2) => \
                  let_ne_proj A a b ps pidx sub C \
-                 (Eq.symm KExpr (KExpr.proj ps pidx sub) {lt} hx))"
+                 (@Eq.symm KExpr (KExpr.proj ps pidx sub) {lt} hx))"
             ),
             // --- the four real arms: rebuild through let_ injectivity ---
             a_zeta = format_args!(
                 "(fun (ty : KExpr) (val : KExpr) (body : KExpr) \
-                 (hx : Eq KExpr (KExpr.let_ ty val body) {lt}) \
-                 (hy : Eq KExpr (instantiate body val) e2) => \
-                 kz (Eq.substType KExpr \
-                 (fun (z : KExpr) => Eq KExpr e2 (instantiate z a)) body b \
+                 (hx : @Eq KExpr (KExpr.let_ ty val body) {lt}) \
+                 (hy : @Eq KExpr (instantiate body val) e2) => \
+                 kz (@Eq.substType KExpr \
+                 (fun (z : KExpr) => @Eq KExpr e2 (instantiate z a)) body b \
                  (let_inj_thd ty val body A a b hx) \
-                 (Eq.substType KExpr \
-                 (fun (w : KExpr) => Eq KExpr e2 (instantiate body w)) val a \
+                 (@Eq.substType KExpr \
+                 (fun (w : KExpr) => @Eq KExpr e2 (instantiate body w)) val a \
                  (let_inj_snd ty val body A a b hx) \
-                 (Eq.symm KExpr (instantiate body val) e2 hy))))"
+                 (@Eq.symm KExpr (instantiate body val) e2 hy))))"
             ),
             a_let_ty = format_args!(
                 "(fun (ty : KExpr) (ty2 : KExpr) (val : KExpr) (body : KExpr) \
                  (hs : beta_reduces ty ty2) \
-                 (_ih : Eq KExpr ty {lt} -> Eq KExpr ty2 e2 -> C) \
-                 (hx : Eq KExpr (KExpr.let_ ty val body) {lt}) \
-                 (hy : Eq KExpr (KExpr.let_ ty2 val body) e2) => \
-                 kty ty2 (Eq.substType KExpr (fun (z : KExpr) => beta_reduces z ty2) \
+                 (_ih : @Eq KExpr ty {lt} -> @Eq KExpr ty2 e2 -> C) \
+                 (hx : @Eq KExpr (KExpr.let_ ty val body) {lt}) \
+                 (hy : @Eq KExpr (KExpr.let_ ty2 val body) e2) => \
+                 kty ty2 (@Eq.substType KExpr (fun (z : KExpr) => beta_reduces z ty2) \
                  ty A (let_inj_fst ty val body A a b hx) hs) \
-                 (Eq.substType KExpr \
-                 (fun (z : KExpr) => Eq KExpr e2 (KExpr.let_ ty2 a z)) body b \
+                 (@Eq.substType KExpr \
+                 (fun (z : KExpr) => @Eq KExpr e2 (KExpr.let_ ty2 a z)) body b \
                  (let_inj_thd ty val body A a b hx) \
-                 (Eq.substType KExpr \
-                 (fun (w : KExpr) => Eq KExpr e2 (KExpr.let_ ty2 w body)) val a \
+                 (@Eq.substType KExpr \
+                 (fun (w : KExpr) => @Eq KExpr e2 (KExpr.let_ ty2 w body)) val a \
                  (let_inj_snd ty val body A a b hx) \
-                 (Eq.symm KExpr (KExpr.let_ ty2 val body) e2 hy))))"
+                 (@Eq.symm KExpr (KExpr.let_ ty2 val body) e2 hy))))"
             ),
             a_let_val = format_args!(
                 "(fun (ty : KExpr) (val : KExpr) (val2 : KExpr) (body : KExpr) \
                  (hs : beta_reduces val val2) \
-                 (_ih : Eq KExpr val {lt} -> Eq KExpr val2 e2 -> C) \
-                 (hx : Eq KExpr (KExpr.let_ ty val body) {lt}) \
-                 (hy : Eq KExpr (KExpr.let_ ty val2 body) e2) => \
-                 kval val2 (Eq.substType KExpr (fun (z : KExpr) => beta_reduces z val2) \
+                 (_ih : @Eq KExpr val {lt} -> @Eq KExpr val2 e2 -> C) \
+                 (hx : @Eq KExpr (KExpr.let_ ty val body) {lt}) \
+                 (hy : @Eq KExpr (KExpr.let_ ty val2 body) e2) => \
+                 kval val2 (@Eq.substType KExpr (fun (z : KExpr) => beta_reduces z val2) \
                  val a (let_inj_snd ty val body A a b hx) hs) \
-                 (Eq.substType KExpr \
-                 (fun (z : KExpr) => Eq KExpr e2 (KExpr.let_ A val2 z)) body b \
+                 (@Eq.substType KExpr \
+                 (fun (z : KExpr) => @Eq KExpr e2 (KExpr.let_ A val2 z)) body b \
                  (let_inj_thd ty val body A a b hx) \
-                 (Eq.substType KExpr \
-                 (fun (w : KExpr) => Eq KExpr e2 (KExpr.let_ w val2 body)) ty A \
+                 (@Eq.substType KExpr \
+                 (fun (w : KExpr) => @Eq KExpr e2 (KExpr.let_ w val2 body)) ty A \
                  (let_inj_fst ty val body A a b hx) \
-                 (Eq.symm KExpr (KExpr.let_ ty val2 body) e2 hy))))"
+                 (@Eq.symm KExpr (KExpr.let_ ty val2 body) e2 hy))))"
             ),
             a_let_body = format_args!(
                 "(fun (ty : KExpr) (val : KExpr) (body : KExpr) (body2 : KExpr) \
                  (hs : beta_reduces body body2) \
-                 (_ih : Eq KExpr body {lt} -> Eq KExpr body2 e2 -> C) \
-                 (hx : Eq KExpr (KExpr.let_ ty val body) {lt}) \
-                 (hy : Eq KExpr (KExpr.let_ ty val body2) e2) => \
-                 kbody body2 (Eq.substType KExpr (fun (z : KExpr) => beta_reduces z body2) \
+                 (_ih : @Eq KExpr body {lt} -> @Eq KExpr body2 e2 -> C) \
+                 (hx : @Eq KExpr (KExpr.let_ ty val body) {lt}) \
+                 (hy : @Eq KExpr (KExpr.let_ ty val body2) e2) => \
+                 kbody body2 (@Eq.substType KExpr (fun (z : KExpr) => beta_reduces z body2) \
                  body b (let_inj_thd ty val body A a b hx) hs) \
-                 (Eq.substType KExpr \
-                 (fun (z : KExpr) => Eq KExpr e2 (KExpr.let_ A z body2)) val a \
+                 (@Eq.substType KExpr \
+                 (fun (z : KExpr) => @Eq KExpr e2 (KExpr.let_ A z body2)) val a \
                  (let_inj_snd ty val body A a b hx) \
-                 (Eq.substType KExpr \
-                 (fun (w : KExpr) => Eq KExpr e2 (KExpr.let_ w val body2)) ty A \
+                 (@Eq.substType KExpr \
+                 (fun (w : KExpr) => @Eq KExpr e2 (KExpr.let_ w val body2)) ty A \
                  (let_inj_fst ty val body A a b hx) \
-                 (Eq.symm KExpr (KExpr.let_ ty val body2) e2 hy))))"
+                 (@Eq.symm KExpr (KExpr.let_ ty val body2) e2 hy))))"
             ),
             // --- the two carried arms: variable left index ---
             a_iota = format_args!(
                 "(fun (x : KExpr) (y : KExpr) (hir : iota_reduces x y) \
-                 (hx : Eq KExpr x {lt}) (hy : Eq KExpr y e2) => \
-                 kiota (Eq.substType KExpr (fun (z : KExpr) => iota_reduces {lt} z) \
-                 y e2 hy (Eq.substType KExpr (fun (z : KExpr) => iota_reduces z y) \
+                 (hx : @Eq KExpr x {lt}) (hy : @Eq KExpr y e2) => \
+                 kiota (@Eq.substType KExpr (fun (z : KExpr) => iota_reduces {lt} z) \
+                 y e2 hy (@Eq.substType KExpr (fun (z : KExpr) => iota_reduces z y) \
                  x {lt} hx hir)))"
             ),
         )
@@ -495,7 +495,7 @@ impl Specification {
     pub(super) fn whnf_acc_step_src() -> String {
         "def whnf_acc_step (e : KExpr) (e2 : KExpr) (h : whnf_acc e) \
          (s : whnf_step e e2) : whnf_acc e2 := \
-         whnf_acc.rec \
+         @whnf_acc.rec \
          (fun (x : KExpr) (_hx : whnf_acc x) => \
          forall (y : KExpr), whnf_step x y -> whnf_acc y) \
          (fun (x : KExpr) \
@@ -521,15 +521,15 @@ impl Specification {
          iota_reduces p q -> beta_reduces (psubst t p) (psubst t q)) \
          (b : KExpr) (b2 : KExpr) (hs : beta_reduces b b2) (x : KExpr) : \
          beta_reduces (instantiate b x) (instantiate b2 x) := \
-         Eq.substType KExpr \
+         @Eq.substType KExpr \
          (fun (z : KExpr) => beta_reduces (instantiate b x) z) \
          (psubst (scons x idsubst) b2) (instantiate b2 x) \
-         (Eq.symm KExpr (instantiate b2 x) (psubst (scons x idsubst) b2) \
+         (@Eq.symm KExpr (instantiate b2 x) (psubst (scons x idsubst) b2) \
          (instantiate_eq_psubst b2 x)) \
-         (Eq.substType KExpr \
+         (@Eq.substType KExpr \
          (fun (z : KExpr) => beta_reduces z (psubst (scons x idsubst) b2)) \
          (psubst (scons x idsubst) b) (instantiate b x) \
-         (Eq.symm KExpr (instantiate b x) (psubst (scons x idsubst) b) \
+         (@Eq.symm KExpr (instantiate b x) (psubst (scons x idsubst) b) \
          (instantiate_eq_psubst b x)) \
          (beta_reduces_psubst_congr hiota b b2 hs (scons x idsubst)))"
             .to_string()
@@ -624,21 +624,21 @@ impl Specification {
              (A : KExpr) (hA : whnf_acc A) : \
              forall (aa : KExpr), whnf_acc aa -> forall (bb : KExpr), whnf_acc bb -> \
              ({hyp_bb}) -> whnf_acc (KExpr.let_ A aa bb) := \
-             whnf_acc.rec {m_ty} \
+             @whnf_acc.rec {m_ty} \
              (fun (AA : KExpr) \
              (fA : forall (A2 : KExpr), whnf_step AA A2 -> whnf_acc A2) \
              (ihA : forall (A2 : KExpr) (_s : whnf_step AA A2), \
              forall (aa : KExpr), whnf_acc aa -> forall (bb : KExpr), whnf_acc bb -> \
              ({hyp_bb}) -> whnf_acc (KExpr.let_ A2 aa bb)) \
              (a0 : KExpr) (ha0 : whnf_acc a0) => \
-             whnf_acc.rec {m_a} \
+             @whnf_acc.rec {m_a} \
              (fun (aa : KExpr) \
              (fa : forall (a2 : KExpr), whnf_step aa a2 -> whnf_acc a2) \
              (iha : forall (a2 : KExpr) (_s : whnf_step aa a2), \
              forall (bb : KExpr), whnf_acc bb -> ({hyp_bb}) -> \
              whnf_acc (KExpr.let_ AA a2 bb)) \
              (b0 : KExpr) (hb0 : whnf_acc b0) => \
-             whnf_acc.rec {m_b} \
+             @whnf_acc.rec {m_b} \
              (fun (bb : KExpr) \
              (fb : forall (b2 : KExpr), whnf_step bb b2 -> whnf_acc b2) \
              (ihb : forall (b2 : KExpr) (_s : whnf_step bb b2), \
@@ -690,7 +690,7 @@ impl Specification {
          delta_reduces p q -> whnf_step (KExpr.app p r) (KExpr.app q r)) \
          (f : KExpr) (f2 : KExpr) (aa : KExpr) (s : whnf_step f f2) : \
          whnf_step (KExpr.app f aa) (KExpr.app f2 aa) := \
-         whnf_step.rec f f2 \
+         @whnf_step.rec f f2 \
          (fun (_h : whnf_step f f2) => \
          whnf_step (KExpr.app f aa) (KExpr.app f2 aa)) \
          (fun (hb : beta_reduces f f2) => \
@@ -715,22 +715,22 @@ impl Specification {
          (hdapp : forall (p : KExpr) (q : KExpr) (r : KExpr), \
          delta_reduces p q -> whnf_step (KExpr.app p r) (KExpr.app q r)) \
          (y : KExpr) (hy : whnf_acc y) : \
-         forall (ff : KExpr) (aa : KExpr), Eq KExpr y (KExpr.app ff aa) -> whnf_acc ff := \
-         whnf_acc.rec \
+         forall (ff : KExpr) (aa : KExpr), @Eq KExpr y (KExpr.app ff aa) -> whnf_acc ff := \
+         @whnf_acc.rec \
          (fun (z : KExpr) (_hz : whnf_acc z) => \
-         forall (ff : KExpr) (aa : KExpr), Eq KExpr z (KExpr.app ff aa) -> whnf_acc ff) \
+         forall (ff : KExpr) (aa : KExpr), @Eq KExpr z (KExpr.app ff aa) -> whnf_acc ff) \
          (fun (z : KExpr) \
          (fz : forall (z2 : KExpr), whnf_step z z2 -> whnf_acc z2) \
          (ih : forall (z2 : KExpr) (_s : whnf_step z z2), \
-         forall (ff : KExpr) (aa : KExpr), Eq KExpr z2 (KExpr.app ff aa) -> whnf_acc ff) \
-         (ff : KExpr) (aa : KExpr) (heq : Eq KExpr z (KExpr.app ff aa)) => \
+         forall (ff : KExpr) (aa : KExpr), @Eq KExpr z2 (KExpr.app ff aa) -> whnf_acc ff) \
+         (ff : KExpr) (aa : KExpr) (heq : @Eq KExpr z (KExpr.app ff aa)) => \
          whnf_acc.intro ff (fun (f2 : KExpr) (st : whnf_step ff f2) => \
          ih (KExpr.app f2 aa) \
-         (Eq.substType KExpr \
+         (@Eq.substType KExpr \
          (fun (w : KExpr) => whnf_step w (KExpr.app f2 aa)) \
-         (KExpr.app ff aa) z (Eq.symm KExpr z (KExpr.app ff aa) heq) \
+         (KExpr.app ff aa) z (@Eq.symm KExpr z (KExpr.app ff aa) heq) \
          (whnf_step_app_left hdapp ff f2 aa st)) \
-         f2 aa (Eq.refl KExpr (KExpr.app f2 aa)))) \
+         f2 aa (@Eq.refl KExpr (KExpr.app f2 aa)))) \
          y hy"
             .to_string()
     }
@@ -799,7 +799,7 @@ impl Specification {
          whnf_acc_app_fn hdapp (KExpr.app ff (KExpr.bvar Nat.zero)) \
          (hpt (KExpr.bvar Nat.zero) (whnf_acc_bvar Nat.zero)) \
          ff (KExpr.bvar Nat.zero) \
-         (Eq.refl KExpr (KExpr.app ff (KExpr.bvar Nat.zero)))"
+         (@Eq.refl KExpr (KExpr.app ff (KExpr.bvar Nat.zero)))"
             .to_string()
     }
 

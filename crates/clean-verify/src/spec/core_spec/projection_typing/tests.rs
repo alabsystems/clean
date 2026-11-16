@@ -46,7 +46,7 @@ fn projection_typing_explicit_motive_registers_without_expected_type() {
         let proof = DeclarationInput::Proof(
             "MotiveExplicit",
             "forall (tag : MotiveTag), MotiveFamily tag",
-            r"fun (tag : MotiveTag) => MotiveTag.rec
+            r"fun (tag : MotiveTag) => @MotiveTag.rec
  (fun (tag0 : MotiveTag) => MotiveFamily tag0)
  MotiveLeft.mk MotiveRight.mk tag",
         );

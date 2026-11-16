@@ -88,12 +88,16 @@ macro_rules! environment_schema {
         impl FromWire<WireEnvironment> for Environment {
             fn from_wire(wire:WireEnvironment,r:&mut Restoration)->Result<Self> {
                 let WireEnvironment { $($pre:$pb,)* lean_level_profile:__wire_env_profile, $($post:$ab,)* }=wire;
-                Ok(Self {
+                let mut environment=Self {
                     $($pre:FromWire::from_wire($pb,r)?,)*
                     lean_level_profile:FromWire::from_wire(__wire_env_profile,r)?,
                     $($post:FromWire::from_wire($ab,r)?,)*
                     $($skip:Default::default(),)*
-                })
+                };
+                // Transients restart at their defaults; the matcher index is
+                // derived from persisted fields, so it is re-derived from them.
+                environment.rebuild_matcher_index();
+                Ok(environment)
             }
         }
     };

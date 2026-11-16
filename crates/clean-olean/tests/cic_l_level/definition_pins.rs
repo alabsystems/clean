@@ -1,33 +1,37 @@
 // Copyright 2026 Andrew Yates
 // SPDX-License-Identifier: Apache-2.0
 
-//! Plan unit E2 meaning-pinning follow-up for `theories/cic_l`:
+//! Plan unit E2's meaning pins for the declarations of `theories/cic_l` that
+//! are not theorems.
 //!
-//! `evidence.rs` pins `(level_params, type_)` for every `ConstantKind::Theorem`
-//! among the replayable targets of `theories/cic_l`, and explicitly notes that a
-//! theorem statement pin alone does not bind the definitions or inductive
-//! families that statement mentions.
-//!
-//! This module closes that gap on `theories/cic_l` without altering the
-//! gate-pinned `evidence.rs` file: every non-theorem target admitted by the
-//! fenced reference replay (`Definition`, `Inductive`, `Constructor`,
-//! `Recursor`, `Opaque`, `Axiom`, `Quot`) has its full kernel meaning pinned in
-//! `definition_pins.json` — keyed by `Name::to_unambiguous_string()`, binding
-//! origin module, `ConstantKind`, `level_params`, `type_`, `value`,
-//! `is_reducible`, and any `InductiveVal`, `ConstructorVal`, or `RecursorVal`
-//! table entry. Planted controls verify that an unlisted target, a missing
-//! target, a mutated definition body, a mutated universe parameter list, or a
-//! mutated inductive/constructor/recursor table entry each fails closed.
+//! `evidence.rs` pins every theorem target of `theories/cic_l` by its meaning
+//! digest (`../support/meaning_digest.rs`). Every other target the fenced
+//! reference replay admits (definition, opaque, axiom, inductive type,
+//! constructor, recursor) is pinned here, in `definition_pins.json`, by the
+//! same digest: keyed by `Name::to_unambiguous_string()`, each row binds the
+//! origin module, the kind and the meaning digest, which holds the
+//! declaration's own kernel record (universe parameters, type, value and the
+//! unfolding flag and hint; the inductive, constructor and recursor tables)
+//! and the record of every package constant it reaches, down to Init.
+//! `evidence.rs` measures and compares both pin files before anything else
+//! is checked, so one re-pin run (`CLEAN_REPIN_STATEMENT_PINS=1`) rewrites
+//! both. Planted controls here verify that an unlisted target, a missing
+//! target, a mutated definition body and a renamed universe parameter each
+//! fail closed, and that the selection partitions into theorem and
+//! non-theorem pins.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::Path;
 
 use clean_kernel::env::Environment;
 use clean_kernel::{ConstantKind, Expr, Name};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
+
+use super::evidence::meaning_digest::{MeaningDigests, Package};
 
 const DEFINITION_PINS: &str = include_str!("definition_pins.json");
+
+/// The committed pin file, relative to the workspace root.
+pub(crate) const PIN_FILE: &str = "crates/clean-olean/tests/cic_l_level/definition_pins.json";
 const LAKEFILE: &str = include_str!("../../../../theories/cic_l/lakefile.toml");
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -83,13 +87,6 @@ pub(crate) fn check_lakefile_roots_order(
     }
 }
 
-fn hex_sha256(bytes: &[u8]) -> String {
-    Sha256::digest(bytes)
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect()
-}
-
 pub(crate) fn non_theorem_kind(env: &Environment, subject: &Name) -> Option<String> {
     if let Some(constant) = env.get_const(subject) {
         if constant.kind == ConstantKind::Theorem {
@@ -109,35 +106,10 @@ pub(crate) fn non_theorem_kind(env: &Environment, subject: &Name) -> Option<Stri
     panic!("replayable target {subject} missing from all admitted environment tables");
 }
 
-pub(crate) fn meaning_digest(env: &Environment, subject: &Name) -> String {
-    let const_part = env.get_const(subject).map(|constant| {
-        let level_params: Vec<String> = constant
-            .level_params
-            .iter()
-            .map(Name::to_unambiguous_string)
-            .collect();
-        (
-            format!("{:?}", constant.kind),
-            level_params,
-            constant.is_reducible,
-            &constant.type_,
-            &constant.value,
-        )
-    });
-    let ind_part = env.get_inductive(subject);
-    let ctor_part = env.get_constructor(subject);
-    let rec_part = env.get_recursor(subject);
-    assert!(
-        const_part.is_some() || ind_part.is_some() || ctor_part.is_some() || rec_part.is_some(),
-        "non-theorem target {subject} must reside in at least one kernel table"
-    );
-    let payload = (const_part, ind_part, ctor_part, rec_part);
-    let bytes = bincode::serde::encode_to_vec(&payload, bincode::config::standard())
-        .expect("serialize non-theorem declaration meaning");
-    hex_sha256(&bytes)
-}
-
+/// Unambiguous name → pin row, for every replayable non-theorem target of
+/// `modules`, each digest taken by `digests` over `env`.
 pub(crate) fn non_theorem_inventory(
+    digests: &MeaningDigests<'_>,
     env: &Environment,
     modules: &BTreeMap<String, Vec<Name>>,
     not_replayable: &BTreeSet<String>,
@@ -155,7 +127,9 @@ pub(crate) fn non_theorem_inventory(
             let row = DefinitionPinRow {
                 module: module.clone(),
                 kind,
-                meaning_sha256: meaning_digest(env, subject),
+                meaning_sha256: digests
+                    .digest(subject)
+                    .unwrap_or_else(|error| panic!("{error}")),
             };
             let prev = out.insert(key.clone(), row);
             assert!(
@@ -237,18 +211,15 @@ pub(crate) fn committed_pins() -> BTreeMap<String, DefinitionPinRow> {
         .expect("definition_pins.json maps unambiguous names to DefinitionPinRow")
 }
 
-fn write_measured_pins(actual: &BTreeMap<String, DefinitionPinRow>) -> String {
-    let path = Path::new(env!("CARGO_TARGET_TMPDIR")).join("cic_l_level_definition_pins.json");
-    let json = serde_json::to_string_pretty(actual).expect("serialize definition pins") + "\n";
-    std::fs::write(&path, json).expect("write measured definition pins");
-    path.display().to_string()
-}
-
+/// The checks and planted controls of the non-theorem pins over the
+/// measured rows `actual`, which `evidence.rs` has already compared with the
+/// committed file.
 pub(crate) fn verify_and_run_controls(
     admitted: &Environment,
-    compiled: &Path,
     modules: &BTreeMap<String, Vec<Name>>,
+    not_replayable: &BTreeSet<String>,
     theorem_inventory: &BTreeMap<String, String>,
+    actual: &BTreeMap<String, DefinitionPinRow>,
 ) {
     let order_modules = super::evidence::order_modules();
     let lakefile_roots = parse_lakefile_roots(LAKEFILE);
@@ -265,28 +236,15 @@ pub(crate) fn verify_and_run_controls(
         "out-of-order lakefile roots must fail closed"
     );
 
-    let not_replayable = super::evidence::stored_not_replayable(compiled, modules.keys());
-    let actual = non_theorem_inventory(admitted, modules, &not_replayable);
     assert!(
         !actual.is_empty(),
         "CIC_L non-theorem definition inventory cannot be empty"
     );
-    check_target_partition(
-        admitted,
-        modules,
-        &not_replayable,
-        theorem_inventory,
-        &actual,
-    )
-    .expect("every replayable CIC_L target is pinned as either a theorem or a non-theorem");
+    check_target_partition(admitted, modules, not_replayable, theorem_inventory, actual)
+        .expect("every replayable CIC_L target is pinned as either a theorem or a non-theorem");
     let pins = committed_pins();
-    if let Err(refusal) = check_definition_pins(&actual, &pins) {
-        let measured = write_measured_pins(&actual);
-        panic!(
-            "CIC_L non-theorem definition/inductive meaning pins failed: {refusal:?}\n\
-             measured pins written to {measured}"
-        );
-    }
+    check_definition_pins(actual, &pins)
+        .expect("evidence.rs compared the measured non-theorem pins first");
 
     // Planted controls:
     // 1. Partition control: dropping a non-theorem row leaves its target uncovered.
@@ -301,7 +259,7 @@ pub(crate) fn verify_and_run_controls(
         check_target_partition(
             admitted,
             modules,
-            &not_replayable,
+            not_replayable,
             theorem_inventory,
             &dropped_actual
         ),
@@ -314,7 +272,7 @@ pub(crate) fn verify_and_run_controls(
 
     // 2. Pin-set controls: unlisted, missing, and mutated meaning/kind/module.
     assert_eq!(
-        check_definition_pins(&actual, &dropped_actual),
+        check_definition_pins(actual, &dropped_actual),
         Err(DefinitionPinRefusal::Pins {
             unlisted: vec![sample_key.clone()],
             missing: vec![],
@@ -333,9 +291,9 @@ pub(crate) fn verify_and_run_controls(
     );
 
     // 3. Kernel-meaning sensitivity controls on real declarations:
-    //    mutating a definition body, mutating `level_params`, or mutating an
-    //    inductive's constructor list in a scratch environment must change
-    //    `meaning_digest` and fail `check_definition_pins`.
+    //    mutating a definition body or renaming a universe parameter in a
+    //    scratch environment must change the meaning digest and fail
+    //    `check_definition_pins`.
     let def_name = Name::from_string("CICL.BaseFamilies.Eq.type");
     let def_key = def_name.to_unambiguous_string();
     assert!(
@@ -377,16 +335,22 @@ pub(crate) fn verify_and_run_controls(
             is_reducible: orig_def.is_reducible,
         })
         .expect("scratch definition with altered body and identical type/levels");
-    let base_digest = meaning_digest(&body_mut_env, &def_name);
-    let level_digest = meaning_digest(&level_mut_env, &def_name);
-    let val_digest = meaning_digest(&val_mut_env, &def_name);
+    let scratch = Package::of_names(BTreeSet::from([def_name.clone()]));
+    let digest_in = |env: &Environment| {
+        MeaningDigests::new(env, &scratch)
+            .digest(&def_name)
+            .unwrap_or_else(|error| panic!("{error}"))
+    };
+    let base_digest = digest_in(&body_mut_env);
+    let level_digest = digest_in(&level_mut_env);
+    let val_digest = digest_in(&val_mut_env);
     assert_ne!(
         base_digest, level_digest,
-        "renaming level_params must move meaning_digest"
+        "renaming level_params must move the meaning digest"
     );
     assert_ne!(
         base_digest, val_digest,
-        "changing a definition body while keeping type and level_params fixed must move meaning_digest"
+        "changing a definition body while keeping type and level_params fixed must move the meaning digest"
     );
     let mut mutated_actual = actual.clone();
     mutated_actual.get_mut(&def_key).unwrap().meaning_sha256 = val_digest;
@@ -402,8 +366,8 @@ pub(crate) fn verify_and_run_controls(
 
     eprintln!(
         "E2 definition pins: {} non-theorem CIC_L targets pinned by unambiguous name, \
-         origin module, kind, level_params, type, value and inductive/constructor/recursor \
-         tables; partition + unlisted/missing/body/level_params controls passed",
+         origin module, kind and meaning digest; partition + unlisted/missing/body/level_params \
+         controls passed",
         actual.len()
     );
 }

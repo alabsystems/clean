@@ -98,7 +98,7 @@ fn run(heap: &str, na: &str) -> String {
 /// A witness proved by `Eq.refl`: the kernel runs the machine and compares.
 fn witness(name: &str, binder: &str, heap: &str, na: &str, outcome: &str) -> String {
     format!(
-        "def {name} {binder}: Eq IROutcome {} {outcome} := @Eq.refl IROutcome {outcome}",
+        "def {name} {binder}: @Eq IROutcome {} {outcome} := @Eq.refl IROutcome {outcome}",
         run(heap, na)
     )
 }
@@ -109,11 +109,11 @@ const STUCK_NO_FUNC: &str = "(IROutcome.stuck IRFault.no_func)";
 
 /// The A4 sentence, verbatim from `ir_lzm_correct`'s statement with
 /// `ir_lz_module` in place of the model, as the TYPE of a hypothesis.
-const A4_OVER_MINTED: &str = "forall (mem : IRList IRMemSlot) (fuel : Nat) (na : Nat) (r : IRScalar) (l : Level) (href : EncodesLiveLevelRef mem r l), Le (ir_lzm_cost l) fuel -> Eq IROutcome (ir_eval fuel ir_lz_module ir_d0 (ir_vl1 r) mem na) (IROutcome.ret (ir_vl1 (IRScalar.bool_ (level_is_zero l))))";
+const A4_OVER_MINTED: &str = "forall (mem : IRList IRMemSlot) (fuel : Nat) (na : Nat) (r : IRScalar) (l : Level) (href : EncodesLiveLevelRef mem r l), Le (ir_lzm_cost l) fuel -> @Eq IROutcome (ir_eval fuel ir_lz_module ir_d0 (ir_vl1 r) mem na) (IROutcome.ret (ir_vl1 (IRScalar.bool_ (level_is_zero l))))";
 
 /// The representation derivation the model's A2 relation gives the
 /// `Max(Zero, Zero)` heap — every premise an `Eq.refl` on a concrete lookup.
-const SRC_MAXZZ_REF: &str = "def encodes_live_ref_maxzz_witness : EncodesLiveLevelRef (ir_cell ir_d0 (ir_var ir_d2 (ir_sp2 (IRScalar.ptr_ ir_d1) (IRScalar.ptr_ ir_d2))) (ir_cell ir_d1 (ir_var ir_d0 ir_sp0) (ir_cell ir_d2 (ir_var ir_d0 ir_sp0) ir_mem0))) (IRScalar.ptr_ ir_d0) (Level.max Level.zero Level.zero) := EncodesLiveLevelRef.mk (ir_cell ir_d0 (ir_var ir_d2 (ir_sp2 (IRScalar.ptr_ ir_d1) (IRScalar.ptr_ ir_d2))) (ir_cell ir_d1 (ir_var ir_d0 ir_sp0) (ir_cell ir_d2 (ir_var ir_d0 ir_sp0) ir_mem0))) ir_d0 (Level.max Level.zero Level.zero) (EncodesLevelArc.max (ir_cell ir_d0 (ir_var ir_d2 (ir_sp2 (IRScalar.ptr_ ir_d1) (IRScalar.ptr_ ir_d2))) (ir_cell ir_d1 (ir_var ir_d0 ir_sp0) (ir_cell ir_d2 (ir_var ir_d0 ir_sp0) ir_mem0))) ir_d0 ir_d1 ir_d2 Level.zero Level.zero (@Eq.refl (IROption IRMemSlot) (@IROption.some IRMemSlot (IRMemSlot.mk ir_d0 (ir_var ir_d2 (ir_sp2 (IRScalar.ptr_ ir_d1) (IRScalar.ptr_ ir_d2))) Bool.true))) (EncodesLevelArc.zero (ir_cell ir_d0 (ir_var ir_d2 (ir_sp2 (IRScalar.ptr_ ir_d1) (IRScalar.ptr_ ir_d2))) (ir_cell ir_d1 (ir_var ir_d0 ir_sp0) (ir_cell ir_d2 (ir_var ir_d0 ir_sp0) ir_mem0))) ir_d1 (@Eq.refl (IROption IRMemSlot) (@IROption.some IRMemSlot (IRMemSlot.mk ir_d1 (ir_var ir_d0 ir_sp0) Bool.true)))) (EncodesLevelArc.zero (ir_cell ir_d0 (ir_var ir_d2 (ir_sp2 (IRScalar.ptr_ ir_d1) (IRScalar.ptr_ ir_d2))) (ir_cell ir_d1 (ir_var ir_d0 ir_sp0) (ir_cell ir_d2 (ir_var ir_d0 ir_sp0) ir_mem0))) ir_d2 (@Eq.refl (IROption IRMemSlot) (@IROption.some IRMemSlot (IRMemSlot.mk ir_d2 (ir_var ir_d0 ir_sp0) Bool.true)))))";
+const SRC_MAXZZ_REF: &str = "def encodes_live_ref_maxzz_witness : EncodesLiveLevelRef (ir_cell ir_d0 (ir_var ir_d2 (ir_sp2 (IRScalar.ptr_ ir_d1) (IRScalar.ptr_ ir_d2))) (ir_cell ir_d1 (ir_var ir_d0 ir_sp0) (ir_cell ir_d2 (ir_var ir_d0 ir_sp0) ir_mem0))) (IRScalar.ptr_ ir_d0) (Level.max Level.zero Level.zero) := @EncodesLiveLevelRef.mk (ir_cell ir_d0 (ir_var ir_d2 (ir_sp2 (IRScalar.ptr_ ir_d1) (IRScalar.ptr_ ir_d2))) (ir_cell ir_d1 (ir_var ir_d0 ir_sp0) (ir_cell ir_d2 (ir_var ir_d0 ir_sp0) ir_mem0))) ir_d0 (Level.max Level.zero Level.zero) (@EncodesLevelArc.max (ir_cell ir_d0 (ir_var ir_d2 (ir_sp2 (IRScalar.ptr_ ir_d1) (IRScalar.ptr_ ir_d2))) (ir_cell ir_d1 (ir_var ir_d0 ir_sp0) (ir_cell ir_d2 (ir_var ir_d0 ir_sp0) ir_mem0))) ir_d0 ir_d1 ir_d2 Level.zero Level.zero (@Eq.refl (IROption IRMemSlot) (@IROption.some IRMemSlot (IRMemSlot.mk ir_d0 (ir_var ir_d2 (ir_sp2 (IRScalar.ptr_ ir_d1) (IRScalar.ptr_ ir_d2))) Bool.true))) (@EncodesLevelArc.zero (ir_cell ir_d0 (ir_var ir_d2 (ir_sp2 (IRScalar.ptr_ ir_d1) (IRScalar.ptr_ ir_d2))) (ir_cell ir_d1 (ir_var ir_d0 ir_sp0) (ir_cell ir_d2 (ir_var ir_d0 ir_sp0) ir_mem0))) ir_d1 (@Eq.refl (IROption IRMemSlot) (@IROption.some IRMemSlot (IRMemSlot.mk ir_d1 (ir_var ir_d0 ir_sp0) Bool.true)))) (@EncodesLevelArc.zero (ir_cell ir_d0 (ir_var ir_d2 (ir_sp2 (IRScalar.ptr_ ir_d1) (IRScalar.ptr_ ir_d2))) (ir_cell ir_d1 (ir_var ir_d0 ir_sp0) (ir_cell ir_d2 (ir_var ir_d0 ir_sp0) ir_mem0))) ir_d2 (@Eq.refl (IROption IRMemSlot) (@IROption.some IRMemSlot (IRMemSlot.mk ir_d2 (ir_var ir_d0 ir_sp0) Bool.true)))))";
 
 impl Specification {
     /// The minted module and its five computed witnesses. Needs only the IR
@@ -153,7 +153,7 @@ impl Specification {
         let ret_a4 = "(IROutcome.ret (ir_vl1 (IRScalar.bool_ (level_is_zero (Level.max Level.zero Level.zero)))))";
         let src = format!(
             "def ir_lz_minted_refutes_a4_on_max (C : Type) (a4 : {A4_OVER_MINTED}) : C := \
-             bool_true_ne_false C (Eq.cong IROutcome Bool ir_outcome_is_ret {ret_a4} {run_maxzz} \
+             bool_true_ne_false C (@Eq.cong IROutcome Bool ir_outcome_is_ret {ret_a4} {run_maxzz} \
              (@Eq.symm IROutcome {run_maxzz} {ret_a4} \
              (a4 (ir_cell ir_d0 (ir_var ir_d2 (ir_sp2 (IRScalar.ptr_ ir_d1) (IRScalar.ptr_ ir_d2))) (ir_cell ir_d1 (ir_var ir_d0 ir_sp0) (ir_cell ir_d2 (ir_var ir_d0 ir_sp0) ir_mem0))) \
              (ir_lzm_cost (Level.max Level.zero Level.zero)) ir_d3 (IRScalar.ptr_ ir_d0) (Level.max Level.zero Level.zero) \
@@ -161,7 +161,7 @@ impl Specification {
         );
         self.add_recursive_def(&src, "ir_lz_minted_refutes_a4_on_max: *** A4 OVER THE MINTED MODULE IS FALSE, KERNEL-CHECKED. *** The hypothesis a4 is ir_lzm_correct's statement VERBATIM with ir_lz_module (the minted module) in place of ir_lzm_module (the hand model): for every heap, fuel, counter, pointer and Level, representation plus enough fuel gives ret [bool (level_is_zero l)]. From it, every C : Type follows -- so it is refutable, which is the strongest negative the calculus states. \
 \
-The instantiation is at a REPRESENTED input, not junk: the heap is the three-cell Max(Zero, Zero) the model's A2 relation accepts (encodes_live_ref_maxzz_witness), and the fuel is the model's own cost ir_lzm_cost (Max Zero Zero) = 25, with Le.refl. On that input a4 promises ret [bool true] (level_is_zero (max zero zero) computes to true); the machine computes stuck no_func at step 8 (ir_lz_on_max_stuck). Applying ir_outcome_is_ret to both sides by Eq.cong yields Eq Bool true false, and bool_true_ne_false finishes. \
+The instantiation is at a REPRESENTED input, not junk: the heap is the three-cell Max(Zero, Zero) the model's A2 relation accepts (encodes_live_ref_maxzz_witness), and the fuel is the model's own cost ir_lzm_cost (Max Zero Zero) = 25, with Le.refl. On that input a4 promises ret [bool true] (level_is_zero (max zero zero) computes to true); the machine computes stuck no_func at step 8 (ir_lz_on_max_stuck). Applying ir_outcome_is_ret to both sides by @Eq.cong yields @Eq Bool true false, and bool_true_ne_false finishes. \
 \
 WHAT THIS MEANS FOR THE PAGE: link 4 of the designated target is OPEN. ir_lzm_correct is a theorem about the model; this is the theorem that says the model's statement does not transfer to the emitted body as it stands. The route that can close it -- a deref model in the module and a re-derivation over the emitted CFG -- is scoped in designs/2026-08-22-is-zero-model-vs-minted-decision.md, and its residual assumption (the bodies of Option::as_deref and Option::expect, which the artifact carries as declarations only) is architectural. DerivedProved, zero axiom_deps.")?;
         Ok(())

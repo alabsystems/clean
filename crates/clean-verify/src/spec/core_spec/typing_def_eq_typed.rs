@@ -93,7 +93,7 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (e : KExpr) (e' : KExpr) (h : TypedDefEq e e') => ",
-                    "TypedDefEq.rec ",
+                    "@TypedDefEq.rec ",
                     // Motive: P(a, b, _) = DefEq a b
                     "(fun (a : KExpr) (b : KExpr) (_h : TypedDefEq a b) => DefEq a b) ",
                     // Case: refl

@@ -4119,7 +4119,7 @@ pub fn replay_inductive_family_checked(
             reader.constants.len()
         ));
     };
-    if constant.decl_kind() != Ok(crate::types::DeclKind::Inductive) {
+    if constant.decl_kind() != Ok(DeclKind::Inductive) {
         // Constructors and recursors are installed BY the family replay, never
         // individually — asking for one directly is a caller error, not a
         // failure to replay.
@@ -4133,9 +4133,7 @@ pub fn replay_inductive_family_checked(
         ));
     };
     let name = name.clone();
-    let reconstructed = match crate::inductive_replay::reconstruct_constant(
-        &name, reader, &constant,
-    ) {
+    let reconstructed = match reconstruct_constant(&name, reader, &constant) {
         Ok(r) => r,
         // Reconstruction failure is NOT an internal fault: a shard can
         // legitimately lack the sibling rows a family needs. Fail closed.

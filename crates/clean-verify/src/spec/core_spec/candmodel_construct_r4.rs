@@ -179,7 +179,7 @@ const YS: [&str; 4] = ["y1", "y2", "y3", "y4"];
 /// constrains what the real env does at that name (module docs, B).
 pub(super) fn hdead_ty(k: usize) -> String {
     format!(
-        "forall {}, Eq (OptionType KExpr) (iota_reduct (red_rec the_red_env) {}) (OptionType.none KExpr)",
+        "forall {}, @Eq (OptionType KExpr) (iota_reduct (red_rec the_red_env) {}) (@OptionType.none KExpr)",
         kexpr_binders(k),
         spc(&YS[..k])
     )
@@ -220,7 +220,7 @@ fn hyp_args(n: usize) -> String {
 /// `Eq.refl` (whose truth depends on the head being the concrete `Nat.rec`).
 fn iota_kill_hyp(redex: &str, hyp: &str) -> String {
     format!(
-        "option_none_ne_some_type KExpr qe2 C (Eq.trans (OptionType KExpr) (OptionType.none KExpr) (iota_reduct (red_rec the_red_env) qe) (OptionType.some KExpr qe2) (Eq.symm (OptionType KExpr) (iota_reduct (red_rec the_red_env) qe) (OptionType.none KExpr) (Eq.trans (OptionType KExpr) (iota_reduct (red_rec the_red_env) qe) (iota_reduct (red_rec the_red_env) {redex}) (OptionType.none KExpr) (Eq.cong KExpr (OptionType KExpr) (fun (qz : KExpr) => iota_reduct (red_rec the_red_env) qz) qe {redex} heq) {hyp})) (iota_reduces_to_step qe qe2 qio))"
+        "option_none_ne_some_type KExpr qe2 C (@Eq.trans (OptionType KExpr) (@OptionType.none KExpr) (iota_reduct (red_rec the_red_env) qe) (@OptionType.some KExpr qe2) (@Eq.symm (OptionType KExpr) (iota_reduct (red_rec the_red_env) qe) (@OptionType.none KExpr) (@Eq.trans (OptionType KExpr) (iota_reduct (red_rec the_red_env) qe) (iota_reduct (red_rec the_red_env) {redex}) (@OptionType.none KExpr) (@Eq.cong KExpr (OptionType KExpr) (fun (qz : KExpr) => iota_reduct (red_rec the_red_env) qz) qe {redex} heq) {hyp})) (iota_reduces_to_step qe qe2 qio))"
     )
 }
 
@@ -228,7 +228,7 @@ fn iota_kill_hyp(redex: &str, hyp: &str) -> String {
 /// transport needed) — used for the arity-1 sub-inversion's LIVE ι arm.
 fn iota_kill_direct(redex: &str, reduct: &str, hvar: &str, hyp: &str) -> String {
     format!(
-        "option_none_ne_some_type KExpr {reduct} C (Eq.trans (OptionType KExpr) (OptionType.none KExpr) (iota_reduct (red_rec the_red_env) {redex}) (OptionType.some KExpr {reduct}) (Eq.symm (OptionType KExpr) (iota_reduct (red_rec the_red_env) {redex}) (OptionType.none KExpr) {hyp}) (iota_reduces_to_step {redex} {reduct} {hvar}))"
+        "option_none_ne_some_type KExpr {reduct} C (@Eq.trans (OptionType KExpr) (@OptionType.none KExpr) (iota_reduct (red_rec the_red_env) {redex}) (@OptionType.some KExpr {reduct}) (@Eq.symm (OptionType KExpr) (iota_reduct (red_rec the_red_env) {redex}) (@OptionType.none KExpr) {hyp}) (iota_reduces_to_step {redex} {reduct} {hvar}))"
     )
 }
 
@@ -257,7 +257,7 @@ fn spc_conts(args: &[&str]) -> Vec<Cont> {
             Cont {
                 name,
                 ty: format!(
-                    "forall (qy : KExpr), beta_reduces {} qy -> Eq KExpr @R@ {} -> C",
+                    "forall (qy : KExpr), beta_reduces {} qy -> @Eq KExpr @R@ {} -> C",
                     args[i],
                     spc(&repl)
                 ),
@@ -282,7 +282,7 @@ fn spc_live_arms(n: usize) -> (String, String, String, String) {
     );
     // 2 app_left: recurse into the (n-1)-argument spine.
     let step_transport = format!(
-        "(Eq.rec KExpr qf (fun (qx : KExpr) (_ : Eq KExpr qf qx) => beta_reduces qx qf2) qstep {head} (app_inj_fst qf qa {head} {arg} heq))"
+        "(@Eq.rec KExpr qf (fun (qx : KExpr) (_ : @Eq KExpr qf qx) => beta_reduces qx qf2) qstep {head} (app_inj_fst qf qa {head} {arg} heq))"
     );
     let sub_conts: Vec<String> = (0..n - 1)
         .map(|i| {
@@ -296,7 +296,7 @@ fn spc_live_arms(n: usize) -> (String, String, String, String) {
                 _ => "k3",
             };
             format!(
-                "(fun (qy : KExpr) (hy : beta_reduces {} qy) (heq2 : Eq KExpr qf2 {inner}) => {kname} qy hy (Eq.trans KExpr (KExpr.app qf2 qa) (KExpr.app {inner} qa) {outer} (Eq.cong KExpr KExpr (fun (qz : KExpr) => KExpr.app qz qa) qf2 {inner} heq2) (Eq.cong KExpr KExpr (fun (qz : KExpr) => KExpr.app {inner} qz) qa {arg} (app_inj_snd qf qa {head} {arg} heq))))",
+                "(fun (qy : KExpr) (hy : beta_reduces {} qy) (heq2 : @Eq KExpr qf2 {inner}) => {kname} qy hy (@Eq.trans KExpr (KExpr.app qf2 qa) (KExpr.app {inner} qa) {outer} (@Eq.cong KExpr KExpr (fun (qz : KExpr) => KExpr.app qz qa) qf2 {inner} heq2) (@Eq.cong KExpr KExpr (fun (qz : KExpr) => KExpr.app {inner} qz) qa {arg} (app_inj_snd qf qa {head} {arg} heq))))",
                 args[i]
             )
         })
@@ -327,12 +327,12 @@ fn spc_live_arms(n: usize) -> (String, String, String, String) {
         _ => "k4",
     };
     let live_appr = format!(
-        "{kname} qa2 (Eq.rec KExpr qa (fun (qx : KExpr) (_ : Eq KExpr qa qx) => beta_reduces qx qa2) qstep {arg} (app_inj_snd qf qa {head} {arg} heq)) (Eq.cong KExpr KExpr (fun (qz : KExpr) => KExpr.app qz qa2) qf {head} (app_inj_fst qf qa {head} {arg} heq))"
+        "{kname} qa2 (@Eq.rec KExpr qa (fun (qx : KExpr) (_ : @Eq KExpr qa qx) => beta_reduces qx qa2) qstep {arg} (app_inj_snd qf qa {head} {arg} heq)) (@Eq.cong KExpr KExpr (fun (qz : KExpr) => KExpr.app qz qa2) qf {head} (app_inj_fst qf qa {head} {arg} heq))"
     );
     // 14 iota: LIVE at arity 4, killed by the caller's h_n below it.
     let live_iota = if n == 4 {
         format!(
-            "kIota (Eq.substType KExpr (fun (qz : KExpr) => iota_reduces qz qe2) qe {redex} heq qio)"
+            "kIota (@Eq.substType KExpr (fun (qz : KExpr) => iota_reduces qz qe2) qe {redex} heq qio)"
         )
     } else {
         iota_kill_hyp(&redex, &format!("(h{n} {})", args.join(" ")))
@@ -430,7 +430,7 @@ pub(super) fn val_const_spine4_whnf_inv() -> String {
         .collect::<Vec<_>>()
         .join("");
     format!(
-        "fun (c : Name) (us : ListType Level) {}{xb}(g2 : KExpr) (C : Type) (hs : whnf_step {redex} g2){} => whnf_step.rec {redex} g2 (fun (_ : whnf_step {redex} g2) => C) (fun (hbr : beta_reduces {redex} g2) => constSpine4_beta_inv c us h1 h2 h3 x1 x2 x3 x4 g2 C hbr k1 k2 k3 k4 kIota) (fun (hdr : delta_reduces {redex} g2) => kDelta (delta_reduces_to_step {redex} g2 hdr)) hs",
+        "fun (c : Name) (us : ListType Level) {}{xb}(g2 : KExpr) (C : Type) (hs : whnf_step {redex} g2){} => @whnf_step.rec {redex} g2 (fun (_ : whnf_step {redex} g2) => C) (fun (hbr : beta_reduces {redex} g2) => constSpine4_beta_inv c us h1 h2 h3 x1 x2 x3 x4 g2 C hbr k1 k2 k3 k4 kIota) (fun (hdr : delta_reduces {redex} g2) => kDelta (delta_reduces_to_step {redex} g2 hdr)) hs",
         hyp_binders(4),
         conts_at(&cs, "g2", "")
     )
@@ -442,7 +442,7 @@ pub(super) fn val_const_spine4_whnf_inv() -> String {
 /// case analysis, hence no Type-valued eliminator anywhere near the Prop `Eq`.
 pub(super) fn ty_const_spine4_delta_none() -> String {
     format!(
-        "forall (c : Name) (us : ListType Level), Eq (OptionType KExpr) (defval_for (red_def the_red_env) c) (OptionType.none KExpr) -> forall (x1 : KExpr) (x2 : KExpr) (x3 : KExpr) (x4 : KExpr), Eq (OptionType KExpr) (delta_reduct (red_def the_red_env) {}) (OptionType.none KExpr)",
+        "forall (c : Name) (us : ListType Level), @Eq (OptionType KExpr) (defval_for (red_def the_red_env) c) (@OptionType.none KExpr) -> forall (x1 : KExpr) (x2 : KExpr) (x3 : KExpr) (x4 : KExpr), @Eq (OptionType KExpr) (delta_reduct (red_def the_red_env) {}) (@OptionType.none KExpr)",
         spc(&XS)
     )
 }
@@ -450,7 +450,7 @@ pub(super) fn ty_const_spine4_delta_none() -> String {
 pub(super) fn val_const_spine4_delta_none() -> String {
     let redex = spc(&XS);
     format!(
-        "fun (c : Name) (us : ListType Level) (hdef : Eq (OptionType KExpr) (defval_for (red_def the_red_env) c) (OptionType.none KExpr)) (x1 : KExpr) (x2 : KExpr) (x3 : KExpr) (x4 : KExpr) => delta_reduct_no_raw_value (red_def the_red_env) {redex} c (Eq.refl (OptionType Name) (OptionType.some Name c)) hdef"
+        "fun (c : Name) (us : ListType Level) (hdef : @Eq (OptionType KExpr) (defval_for (red_def the_red_env) c) (@OptionType.none KExpr)) (x1 : KExpr) (x2 : KExpr) (x3 : KExpr) (x4 : KExpr) => delta_reduct_no_raw_value (red_def the_red_env) {redex} c (@Eq.refl (OptionType Name) (@OptionType.some Name c)) hdef"
     )
 }
 
@@ -501,7 +501,7 @@ fn engine_motive(i: usize, a: &str) -> String {
 pub(super) fn ty_candexp_iota_spine4() -> String {
     let z = ["x1", "x2", "x3", "x4"];
     format!(
-        "forall (S : KExpr -> Type), IsCandSet S -> forall (c : Name) (us : ListType Level) {}(hdef : Eq (OptionType KExpr) (defval_for (red_def the_red_env) c) (OptionType.none KExpr)) (K : KExpr -> KExpr -> KExpr -> KExpr -> KExpr) (x1 : KExpr), whnf_acc x1 -> forall (x2 : KExpr), whnf_acc x2 -> forall (x3 : KExpr), whnf_acc x3 -> forall (x4 : KExpr), whnf_acc x4 -> ({}) -> ({}) -> S {}",
+        "forall (S : KExpr -> Type), IsCandSet S -> forall (c : Name) (us : ListType Level) {}(hdef : @Eq (OptionType KExpr) (defval_for (red_def the_red_env) c) (@OptionType.none KExpr)) (K : KExpr -> KExpr -> KExpr -> KExpr -> KExpr) (x1 : KExpr), whnf_acc x1 -> forall (x2 : KExpr), whnf_acc x2 -> forall (x3 : KExpr), whnf_acc x3 -> forall (x4 : KExpr), whnf_acc x4 -> ({}) -> ({}) -> S {}",
         hyp_binders(4),
         fire_ty(&z),
         fam_ty(&z),
@@ -550,16 +550,16 @@ pub(super) fn val_candexp_iota_spine4() -> String {
             shift("hfam")
         );
         format!(
-            "(fun (qy : KExpr) (hy : beta_reduces {src} qy) (heq : Eq KExpr e2 {target}) => Eq.substType KExpr (fun (qw : KExpr) => S qw) {target} e2 (Eq.symm KExpr e2 {target} heq) ({ih}))"
+            "(fun (qy : KExpr) (hy : beta_reduces {src} qy) (heq : @Eq KExpr e2 {target}) => @Eq.substType KExpr (fun (qw : KExpr) => S qw) {target} e2 (@Eq.symm KExpr e2 {target} heq) ({ih}))"
         )
     };
     let fire_refl = "hfire t1 t2 t3 t4 (betaStar.refl t1) (betaStar.refl t2) (betaStar.refl t3) (betaStar.refl t4)";
     let fam_refl = "hfam t1 t2 t3 t4 (betaStar.refl t1) (betaStar.refl t2) (betaStar.refl t3) (betaStar.refl t4)";
     let k_iota = format!(
-        "(fun (hio : iota_reduces {redex} e2) => Eq.substType KExpr (fun (qw : KExpr) => S qw) {kc} e2 (option_some_inj KExpr {kc} e2 (Eq.trans (OptionType KExpr) (OptionType.some KExpr {kc}) (iota_reduct (red_rec the_red_env) {redex}) (OptionType.some KExpr e2) (Eq.symm (OptionType KExpr) (iota_reduct (red_rec the_red_env) {redex}) (OptionType.some KExpr {kc}) (iota_reduces_to_step {redex} {kc} ({fire_refl}))) (iota_reduces_to_step {redex} e2 hio))) ({fam_refl}))"
+        "(fun (hio : iota_reduces {redex} e2) => @Eq.substType KExpr (fun (qw : KExpr) => S qw) {kc} e2 (option_some_inj KExpr {kc} e2 (@Eq.trans (OptionType KExpr) (@OptionType.some KExpr {kc}) (iota_reduct (red_rec the_red_env) {redex}) (@OptionType.some KExpr e2) (@Eq.symm (OptionType KExpr) (iota_reduct (red_rec the_red_env) {redex}) (@OptionType.some KExpr {kc}) (iota_reduces_to_step {redex} {kc} ({fire_refl}))) (iota_reduces_to_step {redex} e2 hio))) ({fam_refl}))"
     );
     let k_delta = format!(
-        "(fun (hdl : delta_step (red_def the_red_env) {redex} e2) => option_none_ne_some_type KExpr e2 (S e2) (Eq.trans (OptionType KExpr) (OptionType.none KExpr) (delta_reduct (red_def the_red_env) {redex}) (OptionType.some KExpr e2) (Eq.symm (OptionType KExpr) (delta_reduct (red_def the_red_env) {redex}) (OptionType.none KExpr) (constSpine4_delta_none c us hdef t1 t2 t3 t4)) hdl))"
+        "(fun (hdl : delta_step (red_def the_red_env) {redex} e2) => option_none_ne_some_type KExpr e2 (S e2) (@Eq.trans (OptionType KExpr) (@OptionType.none KExpr) (delta_reduct (red_def the_red_env) {redex}) (@OptionType.some KExpr e2) (@Eq.symm (OptionType KExpr) (delta_reduct (red_def the_red_env) {redex}) (@OptionType.none KExpr) (constSpine4_delta_none c us hdef t1 t2 t3 t4)) hdl))"
     );
     let core = format!(
         "isCandSet_cr3 S hS {redex} ConstFreeUnit.triv (fun (e2 : KExpr) (hstep : whnf_step {redex} e2) => constSpine4_whnf_inv c us h1 h2 h3 t1 t2 t3 t4 e2 (S e2) hstep {} {} {} {} {k_iota} {k_delta})",
@@ -576,23 +576,23 @@ pub(super) fn val_candexp_iota_spine4() -> String {
         fam_ty(&ts)
     );
     let arm3 = format!(
-        "(fun (t3 : KExpr) (st3f : forall (w : KExpr), whnf_step t3 w -> whnf_acc w) (ih3 : forall (w : KExpr), whnf_step t3 w -> {}) (a4 : KExpr) (ha4 : whnf_acc a4) => whnf_acc.rec (fun (t4 : KExpr) (_ : whnf_acc t4) => {}) {arm4} a4 ha4)",
+        "(fun (t3 : KExpr) (st3f : forall (w : KExpr), whnf_step t3 w -> whnf_acc w) (ih3 : forall (w : KExpr), whnf_step t3 w -> {}) (a4 : KExpr) (ha4 : whnf_acc a4) => @whnf_acc.rec (fun (t4 : KExpr) (_ : whnf_acc t4) => {}) {arm4} a4 ha4)",
         engine_motive(3, "w"),
         engine_motive(4, "t4")
     );
     let arm2 = format!(
-        "(fun (t2 : KExpr) (st2f : forall (w : KExpr), whnf_step t2 w -> whnf_acc w) (ih2 : forall (w : KExpr), whnf_step t2 w -> {}) (a3 : KExpr) (ha3 : whnf_acc a3) => whnf_acc.rec (fun (t3 : KExpr) (_ : whnf_acc t3) => {}) {arm3} a3 ha3)",
+        "(fun (t2 : KExpr) (st2f : forall (w : KExpr), whnf_step t2 w -> whnf_acc w) (ih2 : forall (w : KExpr), whnf_step t2 w -> {}) (a3 : KExpr) (ha3 : whnf_acc a3) => @whnf_acc.rec (fun (t3 : KExpr) (_ : whnf_acc t3) => {}) {arm3} a3 ha3)",
         engine_motive(2, "w"),
         engine_motive(3, "t3")
     );
     let arm1 = format!(
-        "(fun (t1 : KExpr) (st1f : forall (w : KExpr), whnf_step t1 w -> whnf_acc w) (ih1 : forall (w : KExpr), whnf_step t1 w -> {}) (a2 : KExpr) (ha2 : whnf_acc a2) => whnf_acc.rec (fun (t2 : KExpr) (_ : whnf_acc t2) => {}) {arm2} a2 ha2)",
+        "(fun (t1 : KExpr) (st1f : forall (w : KExpr), whnf_step t1 w -> whnf_acc w) (ih1 : forall (w : KExpr), whnf_step t1 w -> {}) (a2 : KExpr) (ha2 : whnf_acc a2) => @whnf_acc.rec (fun (t2 : KExpr) (_ : whnf_acc t2) => {}) {arm2} a2 ha2)",
         engine_motive(1, "w"),
         engine_motive(2, "t2")
     );
     let z = ["x1", "x2", "x3", "x4"];
     format!(
-        "fun (S : KExpr -> Type) (hS : IsCandSet S) (c : Name) (us : ListType Level) {}(hdef : Eq (OptionType KExpr) (defval_for (red_def the_red_env) c) (OptionType.none KExpr)) (K : KExpr -> KExpr -> KExpr -> KExpr -> KExpr) (x1 : KExpr) (hx1 : whnf_acc x1) (x2 : KExpr) (hx2 : whnf_acc x2) (x3 : KExpr) (hx3 : whnf_acc x3) (x4 : KExpr) (hx4 : whnf_acc x4) (hfire0 : {}) (hfam0 : {}) => whnf_acc.rec (fun (t1 : KExpr) (_ : whnf_acc t1) => {}) {arm1} x1 hx1 x2 hx2 x3 hx3 x4 hx4 hfire0 hfam0",
+        "fun (S : KExpr -> Type) (hS : IsCandSet S) (c : Name) (us : ListType Level) {}(hdef : @Eq (OptionType KExpr) (defval_for (red_def the_red_env) c) (@OptionType.none KExpr)) (K : KExpr -> KExpr -> KExpr -> KExpr -> KExpr) (x1 : KExpr) (hx1 : whnf_acc x1) (x2 : KExpr) (hx2 : whnf_acc x2) (x3 : KExpr) (hx3 : whnf_acc x3) (x4 : KExpr) (hx4 : whnf_acc x4) (hfire0 : {}) (hfam0 : {}) => @whnf_acc.rec (fun (t1 : KExpr) (_ : whnf_acc t1) => {}) {arm1} x1 hx1 x2 hx2 x3 hx3 x4 hx4 hfire0 hfam0",
         hyp_binders(4),
         fire_ty(&z),
         fam_ty(&z),
@@ -611,7 +611,7 @@ pub(super) fn val_candexp_iota_spine4() -> String {
 /// engine needs them as first-class terms.
 pub(super) fn ty_natrec_spine_iota_none(k: usize) -> String {
     format!(
-        "forall {}, Eq (OptionType KExpr) (iota_reduct (red_rec the_red_env) {}) (OptionType.none KExpr)",
+        "forall {}, @Eq (OptionType KExpr) (iota_reduct (red_rec the_red_env) {}) (@OptionType.none KExpr)",
         kexpr_binders(k),
         sp(&YS[..k])
     )
@@ -623,29 +623,29 @@ pub(super) fn val_natrec_spine_iota_none(k: usize) -> String {
         .map(|y| format!("({y} : KExpr) "))
         .collect::<Vec<_>>()
         .join("");
-    format!("fun {binders}=> Eq.refl (OptionType KExpr) (OptionType.none KExpr)")
+    format!("fun {binders}=> @Eq.refl (OptionType KExpr) (@OptionType.none KExpr)")
 }
 
 pub const TY_NATREC_DEFVAL_NONE: &str =
-    "Eq (OptionType KExpr) (defval_for (red_def the_red_env) fixture_nat_rec_name) (OptionType.none KExpr)";
-pub const VAL_NATREC_DEFVAL_NONE: &str = "Eq.refl (OptionType KExpr) (OptionType.none KExpr)";
+    "@Eq (OptionType KExpr) (defval_for (red_def the_red_env) fixture_nat_rec_name) (@OptionType.none KExpr)";
+pub const VAL_NATREC_DEFVAL_NONE: &str = "@Eq.refl (OptionType KExpr) (@OptionType.none KExpr)";
 
 pub(super) fn ty_succapp_iota_none() -> String {
     format!(
-        "forall (a : KExpr), Eq (OptionType KExpr) (iota_reduct (red_rec the_red_env) {}) (OptionType.none KExpr)",
+        "forall (a : KExpr), @Eq (OptionType KExpr) (iota_reduct (red_rec the_red_env) {}) (@OptionType.none KExpr)",
         ap(NSUCC, "a")
     )
 }
 
 pub(super) fn ty_succapp_delta_none() -> String {
     format!(
-        "forall (a : KExpr), Eq (OptionType KExpr) (delta_reduct (red_def the_red_env) {}) (OptionType.none KExpr)",
+        "forall (a : KExpr), @Eq (OptionType KExpr) (delta_reduct (red_def the_red_env) {}) (@OptionType.none KExpr)",
         ap(NSUCC, "a")
     )
 }
 
 pub const VAL_SUCCAPP_NONE: &str =
-    "fun (a : KExpr) => Eq.refl (OptionType KExpr) (OptionType.none KExpr)";
+    "fun (a : KExpr) => @Eq.refl (OptionType KExpr) (@OptionType.none KExpr)";
 
 // ================================================================
 // Group D — the successor major: its one-step classification, its development
@@ -657,7 +657,7 @@ pub const VAL_SUCCAPP_NONE: &str =
 /// (ι dead by `rfl`) and is not δ-defined (δ dead by `rfl`).
 pub(super) fn ty_succapp_whnf_inv() -> String {
     format!(
-        "forall (n : KExpr) (g2 : KExpr) (C : Type), whnf_step {} g2 -> (forall (n2 : KExpr), beta_reduces n n2 -> Eq KExpr g2 {} -> C) -> C",
+        "forall (n : KExpr) (g2 : KExpr) (C : Type), whnf_step {} g2 -> (forall (n2 : KExpr), beta_reduces n n2 -> @Eq KExpr g2 {} -> C) -> C",
         ap(NSUCC, "n"),
         ap(NSUCC, "n2")
     )
@@ -666,7 +666,7 @@ pub(super) fn ty_succapp_whnf_inv() -> String {
 pub(super) fn val_succapp_whnf_inv() -> String {
     let r = ap(NSUCC, "n");
     format!(
-        "fun (n : KExpr) (g2 : KExpr) (C : Type) (hs : whnf_step {r} g2) (k : forall (n2 : KExpr), beta_reduces n n2 -> Eq KExpr g2 {} -> C) => constApp1_whnf_inv fixture_nat_succ_name (ListType.nil Level) n g2 C hs k (fun (hio : iota_reduces {r} g2) => {}) (fun (hdl : delta_step (red_def the_red_env) {r} g2) => option_none_ne_some_type KExpr g2 C (Eq.trans (OptionType KExpr) (OptionType.none KExpr) (delta_reduct (red_def the_red_env) {r}) (OptionType.some KExpr g2) (Eq.symm (OptionType KExpr) (delta_reduct (red_def the_red_env) {r}) (OptionType.none KExpr) (natSuccApp_delta_none n)) hdl))",
+        "fun (n : KExpr) (g2 : KExpr) (C : Type) (hs : whnf_step {r} g2) (k : forall (n2 : KExpr), beta_reduces n n2 -> @Eq KExpr g2 {} -> C) => constApp1_whnf_inv fixture_nat_succ_name (@ListType.nil Level) n g2 C hs k (fun (hio : iota_reduces {r} g2) => {}) (fun (hdl : delta_step (red_def the_red_env) {r} g2) => option_none_ne_some_type KExpr g2 C (@Eq.trans (OptionType KExpr) (@OptionType.none KExpr) (delta_reduct (red_def the_red_env) {r}) (@OptionType.some KExpr g2) (@Eq.symm (OptionType KExpr) (delta_reduct (red_def the_red_env) {r}) (@OptionType.none KExpr) (natSuccApp_delta_none n)) hdl))",
         ap(NSUCC, "n2"),
         iota_kill_direct(&r, "g2", "hio", "(natSuccApp_iota_none n)")
     )
@@ -679,7 +679,7 @@ pub(super) fn val_succapp_whnf_inv() -> String {
 /// (never at the Prop-valued `iota_step` — the measured Prop/Type trap).
 pub(super) fn ty_succapp_betastar_shape() -> String {
     format!(
-        "forall (n : KExpr) (b : KExpr) (C : Type), betaStar {} b -> (forall (n2 : KExpr), betaStar n n2 -> Eq KExpr b {} -> C) -> C",
+        "forall (n : KExpr) (b : KExpr) (C : Type), betaStar {} b -> (forall (n2 : KExpr), betaStar n n2 -> @Eq KExpr b {} -> C) -> C",
         ap(NSUCC, "n"),
         ap(NSUCC, "n2")
     )
@@ -688,18 +688,18 @@ pub(super) fn ty_succapp_betastar_shape() -> String {
 pub(super) fn val_succapp_betastar_shape() -> String {
     let rn0 = ap(NSUCC, "n0");
     let mot = format!(
-        "(fun (qs : KExpr) (qt : KExpr) (_ : betaStar qs qt) => forall (n0 : KExpr), Eq KExpr qs {rn0} -> (forall (n2 : KExpr), betaStar n0 n2 -> Eq KExpr qt {} -> C) -> C)",
+        "(fun (qs : KExpr) (qt : KExpr) (_ : betaStar qs qt) => forall (n0 : KExpr), @Eq KExpr qs {rn0} -> (forall (n2 : KExpr), betaStar n0 n2 -> @Eq KExpr qt {} -> C) -> C)",
         ap(NSUCC, "n2")
     );
-    let arm_refl = "(fun (qe : KExpr) (n0 : KExpr) (heq : Eq KExpr qe (KExpr.app (KExpr.const fixture_nat_succ_name (ListType.nil Level)) n0)) (k : forall (n2 : KExpr), betaStar n0 n2 -> Eq KExpr qe (KExpr.app (KExpr.const fixture_nat_succ_name (ListType.nil Level)) n2) -> C) => k n0 (betaStar.refl n0) heq)";
+    let arm_refl = "(fun (qe : KExpr) (n0 : KExpr) (heq : @Eq KExpr qe (KExpr.app (KExpr.const fixture_nat_succ_name (@ListType.nil Level)) n0)) (k : forall (n2 : KExpr), betaStar n0 n2 -> @Eq KExpr qe (KExpr.app (KExpr.const fixture_nat_succ_name (@ListType.nil Level)) n2) -> C) => k n0 (betaStar.refl n0) heq)";
     let arm_step = format!(
-        "(fun (qe : KExpr) (qe2 : KExpr) (qe3 : KExpr) (qstep : beta_reduces qe qe2) (_qrest : betaStar qe2 qe3) (qih : forall (n0 : KExpr), Eq KExpr qe2 {rn0} -> (forall (n2 : KExpr), betaStar n0 n2 -> Eq KExpr qe3 {rn2} -> C) -> C) (n0 : KExpr) (heq : Eq KExpr qe {rn0}) (k : forall (n2 : KExpr), betaStar n0 n2 -> Eq KExpr qe3 {rn2} -> C) => constApp1_beta_inv fixture_nat_succ_name (ListType.nil Level) n0 qe2 C (Eq.rec KExpr qe (fun (qx : KExpr) (_ : Eq KExpr qe qx) => beta_reduces qx qe2) qstep {rn0} heq) (fun (qy : KExpr) (hy : beta_reduces n0 qy) (heq2 : Eq KExpr qe2 {ry}) => qih qy heq2 (fun (n2 : KExpr) (hst : betaStar qy n2) (heq3 : Eq KExpr qe3 {rn2}) => k n2 (betaStar.step n0 qy n2 hy hst) heq3)) (fun (qio : iota_reduces {rn0} qe2) => {}))",
+        "(fun (qe : KExpr) (qe2 : KExpr) (qe3 : KExpr) (qstep : beta_reduces qe qe2) (_qrest : betaStar qe2 qe3) (qih : forall (n0 : KExpr), @Eq KExpr qe2 {rn0} -> (forall (n2 : KExpr), betaStar n0 n2 -> @Eq KExpr qe3 {rn2} -> C) -> C) (n0 : KExpr) (heq : @Eq KExpr qe {rn0}) (k : forall (n2 : KExpr), betaStar n0 n2 -> @Eq KExpr qe3 {rn2} -> C) => constApp1_beta_inv fixture_nat_succ_name (@ListType.nil Level) n0 qe2 C (@Eq.rec KExpr qe (fun (qx : KExpr) (_ : @Eq KExpr qe qx) => beta_reduces qx qe2) qstep {rn0} heq) (fun (qy : KExpr) (hy : beta_reduces n0 qy) (heq2 : @Eq KExpr qe2 {ry}) => qih qy heq2 (fun (n2 : KExpr) (hst : betaStar qy n2) (heq3 : @Eq KExpr qe3 {rn2}) => k n2 (betaStar.step n0 qy n2 hy hst) heq3)) (fun (qio : iota_reduces {rn0} qe2) => {}))",
         iota_kill_direct(&rn0, "qe2", "qio", "(natSuccApp_iota_none n0)"),
         rn2 = ap(NSUCC, "n2"),
         ry = ap(NSUCC, "qy")
     );
     format!(
-        "fun (n : KExpr) (b : KExpr) (C : Type) (hstar : betaStar {} b) (k0 : forall (n2 : KExpr), betaStar n n2 -> Eq KExpr b {} -> C) => betaStar.rec {mot} {arm_refl} {arm_step} {} b hstar n (Eq.refl KExpr {}) k0",
+        "fun (n : KExpr) (b : KExpr) (C : Type) (hstar : betaStar {} b) (k0 : forall (n2 : KExpr), betaStar n n2 -> @Eq KExpr b {} -> C) => @betaStar.rec {mot} {arm_refl} {arm_step} {} b hstar n (@Eq.refl KExpr {}) k0",
         ap(NSUCC, "n"),
         ap(NSUCC, "n2"),
         ap(NSUCC, "n"),
@@ -741,21 +741,21 @@ pub(super) fn ty_candexp_iota_natrec_succ() -> String {
 
 pub(super) fn val_candexp_iota_natrec_succ() -> String {
     let kfam = succ_family();
-    let prem = "(p1 : betaStar mot b1) (p2 : betaStar m0 b2) (p3 : betaStar m1 b3) (p4 : betaStar (KExpr.app (KExpr.const fixture_nat_succ_name (ListType.nil Level)) n) b4)";
+    let prem = "(p1 : betaStar mot b1) (p2 : betaStar m0 b2) (p3 : betaStar m1 b3) (p4 : betaStar (KExpr.app (KExpr.const fixture_nat_succ_name (@ListType.nil Level)) n) b4)";
     let binders = "(b1 : KExpr) (b2 : KExpr) (b3 : KExpr) (b4 : KExpr)";
     let fire_goal = format!(
         "iota_reduces {} ({kfam} b1 b2 b3 b4)",
         sp(&["b1", "b2", "b3", "b4"])
     );
     let fire = format!(
-        "(fun {binders} {prem} => succApp_betaStar_shape n b4 ({fire_goal}) p4 (fun (n2 : KExpr) (hst : betaStar n n2) (heq : Eq KExpr b4 {rn2}) => Eq.substType KExpr (fun (qw : KExpr) => iota_reduces {} ({kfam} b1 b2 b3 qw)) {rn2} b4 (Eq.symm KExpr b4 {rn2} heq) (iota_step_to_reduces {} {} (natRecS_iota_fires b1 b2 b3 n2))))",
+        "(fun {binders} {prem} => succApp_betaStar_shape n b4 ({fire_goal}) p4 (fun (n2 : KExpr) (hst : betaStar n n2) (heq : @Eq KExpr b4 {rn2}) => @Eq.substType KExpr (fun (qw : KExpr) => iota_reduces {} ({kfam} b1 b2 b3 qw)) {rn2} b4 (@Eq.symm KExpr b4 {rn2} heq) (iota_step_to_reduces {} {} (natRecS_iota_fires b1 b2 b3 n2))))",
         sp(&["b1", "b2", "b3", "qw"]),
         sp(&["b1", "b2", "b3", &ap(NSUCC, "n2")]),
         scontract("b1", "b2", "b3", "n2"),
         rn2 = ap(NSUCC, "n2")
     );
     let fam = format!(
-        "(fun {binders} {prem} => succApp_betaStar_shape n b4 (S ({kfam} b1 b2 b3 b4)) p4 (fun (n2 : KExpr) (hst : betaStar n n2) (heq : Eq KExpr b4 {rn2}) => Eq.substType KExpr (fun (qw : KExpr) => S ({kfam} b1 b2 b3 qw)) {rn2} b4 (Eq.symm KExpr b4 {rn2} heq) (hfam0 b1 p1 b2 p2 b3 p3 n2 hst)))",
+        "(fun {binders} {prem} => succApp_betaStar_shape n b4 (S ({kfam} b1 b2 b3 b4)) p4 (fun (n2 : KExpr) (hst : betaStar n n2) (heq : @Eq KExpr b4 {rn2}) => @Eq.substType KExpr (fun (qw : KExpr) => S ({kfam} b1 b2 b3 qw)) {rn2} b4 (@Eq.symm KExpr b4 {rn2} heq) (hfam0 b1 p1 b2 p2 b3 p3 n2 hst)))",
         rn2 = ap(NSUCC, "n2")
     );
     format!(
@@ -772,7 +772,7 @@ pub(super) fn val_candexp_iota_natrec_succ() -> String {
 // ================================================================
 
 fn gsp(m: &str, z: &str, s: &str, t: &str) -> String {
-    format!("(genRecApp fam sig u {m} (ListType.cons KExpr {z} (ListType.cons KExpr {s} (ListType.nil KExpr))) {t})")
+    format!("(genRecApp fam sig u {m} (@ListType.cons KExpr {z} (@ListType.cons KExpr {s} (@ListType.nil KExpr))) {t})")
 }
 
 /// The generic-recursor spine head, arity `k`.
@@ -786,7 +786,7 @@ fn gspine(args: &[&str]) -> String {
 
 fn ghdead_ty(k: usize) -> String {
     format!(
-        "forall {}, Eq (OptionType KExpr) (iota_reduct (red_rec the_red_env) {}) (OptionType.none KExpr)",
+        "forall {}, @Eq (OptionType KExpr) (iota_reduct (red_rec the_red_env) {}) (@OptionType.none KExpr)",
         kexpr_binders(k),
         gspine(&YS[..k])
     )
@@ -803,7 +803,7 @@ const GFAM_TY: &str = "forall (b1 : KExpr) (b2 : KExpr) (b3 : KExpr) (b4 : KExpr
 
 pub(super) fn ty_candexp_iota_genrec2() -> String {
     format!(
-        "forall (S : KExpr -> Type), IsCandSet S -> forall (fam : Name) (sig : ListType Nat) (u : Level) (h1 : {}) (h2 : {}) (h3 : {}) (hdef : Eq (OptionType KExpr) (defval_for (red_def the_red_env) (genRecName fam sig)) (OptionType.none KExpr)) (K : KExpr -> KExpr -> KExpr -> KExpr -> KExpr) (m : KExpr), whnf_acc m -> forall (z : KExpr), whnf_acc z -> forall (s : KExpr), whnf_acc s -> forall (t : KExpr), whnf_acc t -> ({}) -> ({GFAM_TY}) -> S {}",
+        "forall (S : KExpr -> Type), IsCandSet S -> forall (fam : Name) (sig : ListType Nat) (u : Level) (h1 : {}) (h2 : {}) (h3 : {}) (hdef : @Eq (OptionType KExpr) (defval_for (red_def the_red_env) (genRecName fam sig)) (@OptionType.none KExpr)) (K : KExpr -> KExpr -> KExpr -> KExpr -> KExpr) (m : KExpr), whnf_acc m -> forall (z : KExpr), whnf_acc z -> forall (s : KExpr), whnf_acc s -> forall (t : KExpr), whnf_acc t -> ({}) -> ({GFAM_TY}) -> S {}",
         ghdead_ty(1),
         ghdead_ty(2),
         ghdead_ty(3),
@@ -814,7 +814,7 @@ pub(super) fn ty_candexp_iota_genrec2() -> String {
 
 pub(super) fn val_candexp_iota_genrec2() -> String {
     format!(
-        "fun (S : KExpr -> Type) (hS : IsCandSet S) (fam : Name) (sig : ListType Nat) (u : Level) (h1 : {}) (h2 : {}) (h3 : {}) (hdef : Eq (OptionType KExpr) (defval_for (red_def the_red_env) (genRecName fam sig)) (OptionType.none KExpr)) (K : KExpr -> KExpr -> KExpr -> KExpr -> KExpr) (m : KExpr) (hm : whnf_acc m) (z : KExpr) (hz : whnf_acc z) (s : KExpr) (hs : whnf_acc s) (t : KExpr) (ht : whnf_acc t) (hfire : {}) (hfam : {GFAM_TY}) => candExp_iota_spine4 S hS (genRecName fam sig) (ListType.cons Level u (ListType.nil Level)) h1 h2 h3 hdef K m hm z hz s hs t ht hfire hfam",
+        "fun (S : KExpr -> Type) (hS : IsCandSet S) (fam : Name) (sig : ListType Nat) (u : Level) (h1 : {}) (h2 : {}) (h3 : {}) (hdef : @Eq (OptionType KExpr) (defval_for (red_def the_red_env) (genRecName fam sig)) (@OptionType.none KExpr)) (K : KExpr -> KExpr -> KExpr -> KExpr -> KExpr) (m : KExpr) (hm : whnf_acc m) (z : KExpr) (hz : whnf_acc z) (s : KExpr) (hs : whnf_acc s) (t : KExpr) (ht : whnf_acc t) (hfire : {}) (hfam : {GFAM_TY}) => candExp_iota_spine4 S hS (genRecName fam sig) (@ListType.cons Level u (@ListType.nil Level)) h1 h2 h3 hdef K m hm z hz s hs t ht hfire hfam",
         ghdead_ty(1),
         ghdead_ty(2),
         ghdead_ty(3),
@@ -828,25 +828,25 @@ pub(super) fn val_candexp_iota_genrec2() -> String {
 /// A non-flat or anonymous selected name would fail that checked equation.
 fn sig_of_reflected_atom(name: &str) -> String {
     format!(
-        "(Name.rec (fun (_ : Name) => ListType Nat) (ListType.nil Nat) (fun (_parent : Name) (tag : Nat) (_parent_sig : ListType Nat) => Nat.rec (fun (_ : Nat) => ListType Nat) (ListType.nil Nat) (fun (_i : Nat) (rest : ListType Nat) => ListType.cons Nat Nat.zero rest) tag) {name})"
+        "(@Name.rec (fun (_ : Name) => ListType Nat) (@ListType.nil Nat) (fun (_parent : Name) (tag : Nat) (_parent_sig : ListType Nat) => @Nat.rec (fun (_ : Nat) => ListType Nat) (@ListType.nil Nat) (fun (_i : Nat) (rest : ListType Nat) => @ListType.cons Nat Nat.zero rest) tag) {name})"
     )
 }
 
 pub const TY_R4_GENFRESH_EMPTY: &str =
     "forall (fam : Name) (sig : ListType Nat), GenFresh fam sig DefEnv.empty";
-pub const VAL_R4_GENFRESH_EMPTY: &str = "fun (fam : Name) (sig : ListType Nat) => GenFresh.mk fam sig DefEnv.empty (Eq.refl (OptionType KExpr) (OptionType.none KExpr)) (fun (j : Nat) (_ : Lt j (sigLength sig)) => Eq.refl (OptionType KExpr) (OptionType.none KExpr)) (Eq.refl (OptionType KExpr) (OptionType.none KExpr))";
+pub const VAL_R4_GENFRESH_EMPTY: &str = "fun (fam : Name) (sig : ListType Nat) => @GenFresh.mk fam sig DefEnv.empty (@Eq.refl (OptionType KExpr) (@OptionType.none KExpr)) (fun (j : Nat) (_ : Lt j (sigLength sig)) => @Eq.refl (OptionType KExpr) (@OptionType.none KExpr)) (@Eq.refl (OptionType KExpr) (@OptionType.none KExpr))";
 
 pub(super) fn ty_r4_genrecname_aliases_delta_head() -> String {
     format!(
-        "Eq Name (genRecName Name.anonymous {}) kcre_witness_delta_head",
+        "@Eq Name (genRecName Name.anonymous {}) kcre_witness_delta_head",
         sig_of_reflected_atom("kcre_witness_delta_head")
     )
 }
-pub const VAL_R4_GENRECNAME_ALIASES_DELTA_HEAD: &str = "Eq.refl Name kcre_witness_delta_head";
+pub const VAL_R4_GENRECNAME_ALIASES_DELTA_HEAD: &str = "@Eq.refl Name kcre_witness_delta_head";
 
 pub(super) fn ty_r4_genrechead_delta_live() -> String {
     format!(
-        "delta_step (red_def the_red_env) (KExpr.const (genRecName Name.anonymous {}) (ListType.nil Level)) kcre_witness_delta_value",
+        "delta_step (red_def the_red_env) (KExpr.const (genRecName Name.anonymous {}) (@ListType.nil Level)) kcre_witness_delta_value",
         sig_of_reflected_atom("kcre_witness_delta_head")
     )
 }
@@ -854,18 +854,18 @@ pub const VAL_R4_GENRECHEAD_DELTA_LIVE: &str = "the_red_env_delta_nonvacuous";
 
 pub(super) fn ty_r4_genrecname_aliases_natrec() -> String {
     format!(
-        "Eq Name (genRecName Name.anonymous {}) fixture_nat_rec_name",
+        "@Eq Name (genRecName Name.anonymous {}) fixture_nat_rec_name",
         sig_of_reflected_atom("fixture_nat_rec_name")
     )
 }
-pub const VAL_R4_GENRECNAME_ALIASES_NATREC: &str = "Eq.refl Name fixture_nat_rec_name";
+pub const VAL_R4_GENRECNAME_ALIASES_NATREC: &str = "@Eq.refl Name fixture_nat_rec_name";
 
 /// The reflected zero rule at the caller's actual universe, not R3's fixed
 /// universe-zero witness instance. The schematic RHS and signature are both
 /// aliases emitted from the same actual reflected Nat.rec metadata.
 fn r4_nat_zero_contract_at(u: &str, x1: &str, x2: &str, x3: &str) -> String {
     let rhs = format!(
-        "(recursor_rhs_instance (recmeta_signature fixture_nat_rec_meta) kcre_witness_nat_zero_rhs (ListType.cons Level {u} (ListType.nil Level)))"
+        "(recursor_rhs_instance (recmeta_signature fixture_nat_rec_meta) kcre_witness_nat_zero_rhs (@ListType.cons Level {u} (@ListType.nil Level)))"
     );
     ap(&ap(&ap(&rhs, x1), x2), x3)
 }
@@ -888,7 +888,7 @@ pub(super) fn ty_r4_genrecc_iota_fires_natrec() -> String {
 
 pub(super) fn val_r4_genrecc_iota_fires_natrec() -> String {
     format!(
-        "fun (u : Level) (x1 : KExpr) (x2 : KExpr) (x3 : KExpr) => Eq.refl (OptionType KExpr) (OptionType.some KExpr {})",
+        "fun (u : Level) (x1 : KExpr) (x2 : KExpr) (x3 : KExpr) => @Eq.refl (OptionType KExpr) (@OptionType.some KExpr {})",
         r4_nat_zero_contract_at("u", "x1", "x2", "x3")
     )
 }
@@ -897,18 +897,18 @@ pub(super) fn val_r4_genrecc_iota_fires_natrec() -> String {
 // Group F — the §6 discriminating witnesses and the necessity guards.
 // ================================================================
 
-pub const TY_BETASTAR_CONST_COLLAPSE: &str = "forall (c : Name) (us : ListType Level) (b2 : KExpr), betaStar (KExpr.const c us) b2 -> Eq KExpr b2 (KExpr.const c us)";
-pub const VAL_BETASTAR_CONST_COLLAPSE: &str = "fun (c : Name) (us : ListType Level) (b2 : KExpr) (h : betaStar (KExpr.const c us) b2) => betaStar.rec (fun (qs : KExpr) (qt : KExpr) (_ : betaStar qs qt) => Eq KExpr qs (KExpr.const c us) -> Eq KExpr qt (KExpr.const c us)) (fun (qe : KExpr) (heq : Eq KExpr qe (KExpr.const c us)) => heq) (fun (qe : KExpr) (qe2 : KExpr) (qe3 : KExpr) (qstep : beta_reduces qe qe2) (_qrest : betaStar qe2 qe3) (_qih : Eq KExpr qe2 (KExpr.const c us) -> Eq KExpr qe3 (KExpr.const c us)) (heq : Eq KExpr qe (KExpr.const c us)) => Empty.rec (fun (_ : Empty) => Eq KExpr qe3 (KExpr.const c us)) (r2_const_no_beta_reduces c us qe2 Empty (Eq.rec KExpr qe (fun (qx : KExpr) (_ : Eq KExpr qe qx) => beta_reduces qx qe2) qstep (KExpr.const c us) heq))) (KExpr.const c us) b2 h (Eq.refl KExpr (KExpr.const c us))";
+pub const TY_BETASTAR_CONST_COLLAPSE: &str = "forall (c : Name) (us : ListType Level) (b2 : KExpr), betaStar (KExpr.const c us) b2 -> @Eq KExpr b2 (KExpr.const c us)";
+pub const VAL_BETASTAR_CONST_COLLAPSE: &str = "fun (c : Name) (us : ListType Level) (b2 : KExpr) (h : betaStar (KExpr.const c us) b2) => @betaStar.rec (fun (qs : KExpr) (qt : KExpr) (_ : betaStar qs qt) => @Eq KExpr qs (KExpr.const c us) -> @Eq KExpr qt (KExpr.const c us)) (fun (qe : KExpr) (heq : @Eq KExpr qe (KExpr.const c us)) => heq) (fun (qe : KExpr) (qe2 : KExpr) (qe3 : KExpr) (qstep : beta_reduces qe qe2) (_qrest : betaStar qe2 qe3) (_qih : @Eq KExpr qe2 (KExpr.const c us) -> @Eq KExpr qe3 (KExpr.const c us)) (heq : @Eq KExpr qe (KExpr.const c us)) => @Empty.rec (fun (_ : Empty) => @Eq KExpr qe3 (KExpr.const c us)) (r2_const_no_beta_reduces c us qe2 Empty (@Eq.rec KExpr qe (fun (qx : KExpr) (_ : @Eq KExpr qe qx) => beta_reduces qx qe2) qstep (KExpr.const c us) heq))) (KExpr.const c us) b2 h (@Eq.refl KExpr (KExpr.const c us))";
 
-pub const TY_R4_DEADCONST_ACC: &str = "forall (c : Name) (us : ListType Level), Eq (OptionType KExpr) (delta_reduct (red_def the_red_env) (KExpr.const c us)) (OptionType.none KExpr) -> whnf_acc (KExpr.const c us)";
-pub const VAL_R4_DEADCONST_ACC: &str = "fun (c : Name) (us : ListType Level) (hd : Eq (OptionType KExpr) (delta_reduct (red_def the_red_env) (KExpr.const c us)) (OptionType.none KExpr)) => whnf_acc.intro (KExpr.const c us) (fun (e2 : KExpr) (hs : whnf_step (KExpr.const c us) e2) => constRedex_whnf_inv c us e2 (whnf_acc e2) hs (fun (hdl : delta_step (red_def the_red_env) (KExpr.const c us) e2) => option_none_ne_some_type KExpr e2 (whnf_acc e2) (Eq.trans (OptionType KExpr) (OptionType.none KExpr) (delta_reduct (red_def the_red_env) (KExpr.const c us)) (OptionType.some KExpr e2) (Eq.symm (OptionType KExpr) (delta_reduct (red_def the_red_env) (KExpr.const c us)) (OptionType.none KExpr) hd) hdl)))";
+pub const TY_R4_DEADCONST_ACC: &str = "forall (c : Name) (us : ListType Level), @Eq (OptionType KExpr) (delta_reduct (red_def the_red_env) (KExpr.const c us)) (@OptionType.none KExpr) -> whnf_acc (KExpr.const c us)";
+pub const VAL_R4_DEADCONST_ACC: &str = "fun (c : Name) (us : ListType Level) (hd : @Eq (OptionType KExpr) (delta_reduct (red_def the_red_env) (KExpr.const c us)) (@OptionType.none KExpr)) => whnf_acc.intro (KExpr.const c us) (fun (e2 : KExpr) (hs : whnf_step (KExpr.const c us) e2) => constRedex_whnf_inv c us e2 (whnf_acc e2) hs (fun (hdl : delta_step (red_def the_red_env) (KExpr.const c us) e2) => option_none_ne_some_type KExpr e2 (whnf_acc e2) (@Eq.trans (OptionType KExpr) (@OptionType.none KExpr) (delta_reduct (red_def the_red_env) (KExpr.const c us)) (@OptionType.some KExpr e2) (@Eq.symm (OptionType KExpr) (delta_reduct (red_def the_red_env) (KExpr.const c us)) (@OptionType.none KExpr) hd) hdl)))";
 
-pub const TY_R4_CONSTAPP1_INERT_ACC: &str = "forall (c : Name) (us : ListType Level) (a : KExpr), Eq (OptionType KExpr) (delta_reduct (red_def the_red_env) (KExpr.app (KExpr.const c us) a)) (OptionType.none KExpr) -> Eq (OptionType KExpr) (iota_reduct (red_rec the_red_env) (KExpr.app (KExpr.const c us) a)) (OptionType.none KExpr) -> (forall (a2 : KExpr) (C : Type), beta_reduces a a2 -> C) -> whnf_acc (KExpr.app (KExpr.const c us) a)";
+pub const TY_R4_CONSTAPP1_INERT_ACC: &str = "forall (c : Name) (us : ListType Level) (a : KExpr), @Eq (OptionType KExpr) (delta_reduct (red_def the_red_env) (KExpr.app (KExpr.const c us) a)) (@OptionType.none KExpr) -> @Eq (OptionType KExpr) (iota_reduct (red_rec the_red_env) (KExpr.app (KExpr.const c us) a)) (@OptionType.none KExpr) -> (forall (a2 : KExpr) (C : Type), beta_reduces a a2 -> C) -> whnf_acc (KExpr.app (KExpr.const c us) a)";
 
 pub(super) fn val_r4_constapp1_inert_acc() -> String {
     let r = "(KExpr.app (KExpr.const c us) a)";
     format!(
-        "fun (c : Name) (us : ListType Level) (a : KExpr) (hdn : Eq (OptionType KExpr) (delta_reduct (red_def the_red_env) {r}) (OptionType.none KExpr)) (hin : Eq (OptionType KExpr) (iota_reduct (red_rec the_red_env) {r}) (OptionType.none KExpr)) (hno : forall (a2 : KExpr) (C : Type), beta_reduces a a2 -> C) => whnf_acc.intro {r} (fun (e2 : KExpr) (hs : whnf_step {r} e2) => constApp1_whnf_inv c us a e2 (whnf_acc e2) hs (fun (qy : KExpr) (hy : beta_reduces a qy) (_heq : Eq KExpr e2 (KExpr.app (KExpr.const c us) qy)) => hno qy (whnf_acc e2) hy) (fun (hio : iota_reduces {r} e2) => option_none_ne_some_type KExpr e2 (whnf_acc e2) (Eq.trans (OptionType KExpr) (OptionType.none KExpr) (iota_reduct (red_rec the_red_env) {r}) (OptionType.some KExpr e2) (Eq.symm (OptionType KExpr) (iota_reduct (red_rec the_red_env) {r}) (OptionType.none KExpr) hin) (iota_reduces_to_step {r} e2 hio))) (fun (hdl : delta_step (red_def the_red_env) {r} e2) => option_none_ne_some_type KExpr e2 (whnf_acc e2) (Eq.trans (OptionType KExpr) (OptionType.none KExpr) (delta_reduct (red_def the_red_env) {r}) (OptionType.some KExpr e2) (Eq.symm (OptionType KExpr) (delta_reduct (red_def the_red_env) {r}) (OptionType.none KExpr) hdn) hdl)))"
+        "fun (c : Name) (us : ListType Level) (a : KExpr) (hdn : @Eq (OptionType KExpr) (delta_reduct (red_def the_red_env) {r}) (@OptionType.none KExpr)) (hin : @Eq (OptionType KExpr) (iota_reduct (red_rec the_red_env) {r}) (@OptionType.none KExpr)) (hno : forall (a2 : KExpr) (C : Type), beta_reduces a a2 -> C) => whnf_acc.intro {r} (fun (e2 : KExpr) (hs : whnf_step {r} e2) => constApp1_whnf_inv c us a e2 (whnf_acc e2) hs (fun (qy : KExpr) (hy : beta_reduces a qy) (_heq : @Eq KExpr e2 (KExpr.app (KExpr.const c us) qy)) => hno qy (whnf_acc e2) hy) (fun (hio : iota_reduces {r} e2) => option_none_ne_some_type KExpr e2 (whnf_acc e2) (@Eq.trans (OptionType KExpr) (@OptionType.none KExpr) (iota_reduct (red_rec the_red_env) {r}) (@OptionType.some KExpr e2) (@Eq.symm (OptionType KExpr) (iota_reduct (red_rec the_red_env) {r}) (@OptionType.none KExpr) hin) (iota_reduces_to_step {r} e2 hio))) (fun (hdl : delta_step (red_def the_red_env) {r} e2) => option_none_ne_some_type KExpr e2 (whnf_acc e2) (@Eq.trans (OptionType KExpr) (@OptionType.none KExpr) (delta_reduct (red_def the_red_env) {r}) (@OptionType.some KExpr e2) (@Eq.symm (OptionType KExpr) (delta_reduct (red_def the_red_env) {r}) (@OptionType.none KExpr) hdn) hdl)))"
     )
 }
 
@@ -918,7 +918,7 @@ pub(super) fn ty_succzero_whnf_acc() -> String {
 
 pub(super) fn val_succzero_whnf_acc() -> String {
     format!(
-        "r4_constApp1_inert_acc fixture_nat_succ_name (ListType.nil Level) {NZERO} (natSuccApp_delta_none {NZERO}) (natSuccApp_iota_none {NZERO}) (fun (a2 : KExpr) (C : Type) (hb : beta_reduces {NZERO} a2) => r2_const_no_beta_reduces fixture_nat_zero_name (ListType.nil Level) a2 C hb)"
+        "r4_constApp1_inert_acc fixture_nat_succ_name (@ListType.nil Level) {NZERO} (natSuccApp_delta_none {NZERO}) (natSuccApp_iota_none {NZERO}) (fun (a2 : KExpr) (C : Type) (hb : beta_reduces {NZERO} a2) => r2_const_no_beta_reduces fixture_nat_zero_name (@ListType.nil Level) a2 C hb)"
     )
 }
 
@@ -940,10 +940,10 @@ pub(super) fn val_natrecs_major_acc_necessary() -> String {
     let mn0 = ap(NSUCC, "n0");
     let mn2 = ap(NSUCC, "n2");
     let step = format!(
-        "(Eq.substType KExpr (fun (qz : KExpr) => whnf_step qz {r2}) {r0} qe0 (Eq.symm KExpr qe0 {r0} heq) (whnf_step.beta {r0} {r2} (beta_reduces.app_right {sp3} {mn0} {mn2} (beta_reduces.app_right {NSUCC} n0 n2 hb))))"
+        "(@Eq.substType KExpr (fun (qz : KExpr) => whnf_step qz {r2}) {r0} qe0 (@Eq.symm KExpr qe0 {r0} heq) (whnf_step.beta {r0} {r2} (beta_reduces.app_right {sp3} {mn0} {mn2} (beta_reduces.app_right {NSUCC} n0 n2 hb))))"
     );
     format!(
-        "fun (x1 : KExpr) (x2 : KExpr) (x3 : KExpr) (n : KExpr) (hacc : whnf_acc {}) => whnf_acc.rec (fun (qe : KExpr) (_ : whnf_acc qe) => forall (n0 : KExpr), Eq KExpr qe {r0} -> whnf_acc {mn0}) (fun (qe0 : KExpr) (_qsteps : forall (qw : KExpr), whnf_step qe0 qw -> whnf_acc qw) (qih : forall (qw : KExpr), whnf_step qe0 qw -> forall (n0 : KExpr), Eq KExpr qw {r0} -> whnf_acc {mn0}) (n0 : KExpr) (heq : Eq KExpr qe0 {r0}) => whnf_acc.intro {mn0} (fun (qw : KExpr) (hw : whnf_step {mn0} qw) => succApp_whnf_inv n0 qw (whnf_acc qw) hw (fun (n2 : KExpr) (hb : beta_reduces n0 n2) (heqw : Eq KExpr qw {mn2}) => Eq.substType KExpr (fun (qv : KExpr) => whnf_acc qv) {mn2} qw (Eq.symm KExpr qw {mn2} heqw) (qih {r2} {step} n2 (Eq.refl KExpr {r2}))))) {} hacc n (Eq.refl KExpr {})",
+        "fun (x1 : KExpr) (x2 : KExpr) (x3 : KExpr) (n : KExpr) (hacc : whnf_acc {}) => @whnf_acc.rec (fun (qe : KExpr) (_ : whnf_acc qe) => forall (n0 : KExpr), @Eq KExpr qe {r0} -> whnf_acc {mn0}) (fun (qe0 : KExpr) (_qsteps : forall (qw : KExpr), whnf_step qe0 qw -> whnf_acc qw) (qih : forall (qw : KExpr), whnf_step qe0 qw -> forall (n0 : KExpr), @Eq KExpr qw {r0} -> whnf_acc {mn0}) (n0 : KExpr) (heq : @Eq KExpr qe0 {r0}) => whnf_acc.intro {mn0} (fun (qw : KExpr) (hw : whnf_step {mn0} qw) => succApp_whnf_inv n0 qw (whnf_acc qw) hw (fun (n2 : KExpr) (hb : beta_reduces n0 n2) (heqw : @Eq KExpr qw {mn2}) => @Eq.substType KExpr (fun (qv : KExpr) => whnf_acc qv) {mn2} qw (@Eq.symm KExpr qw {mn2} heqw) (qih {r2} {step} n2 (@Eq.refl KExpr {r2}))))) {} hacc n (@Eq.refl KExpr {})",
         sredex("x1", "x2", "x3", "n"),
         sredex("x1", "x2", "x3", "n"),
         sredex("x1", "x2", "x3", "n")
@@ -982,26 +982,26 @@ pub(super) fn ty_natrecs_engine_concrete() -> String {
 pub(super) fn val_natrecs_engine_concrete() -> String {
     let b0 = "(KExpr.bvar Nat.zero)";
     let collapse_bvar =
-        |v: &str| format!("(Eq.symm KExpr {v} {b0} (betaStar_bvar_collapse Nat.zero {v} h{v}))");
+        |v: &str| format!("(@Eq.symm KExpr {v} {b0} (betaStar_bvar_collapse Nat.zero {v} h{v}))");
     let collapse_zero = format!(
-        "(Eq.symm KExpr b4 {NZERO} (betaStar_const_collapse fixture_nat_zero_name (ListType.nil Level) b4 hb4))"
+        "(@Eq.symm KExpr b4 {NZERO} (betaStar_const_collapse fixture_nat_zero_name (@ListType.nil Level) b4 hb4))"
     );
     let s0 = format!(
-        "(Eq.substType KExpr (fun (qw : KExpr) => whnf_acc {}) {NZERO} b4 {collapse_zero} hc)",
+        "(@Eq.substType KExpr (fun (qw : KExpr) => whnf_acc {}) {NZERO} b4 {collapse_zero} hc)",
         scontract(b0, b0, b0, "qw")
     );
     let s1 = format!(
-        "(Eq.substType KExpr (fun (qw : KExpr) => whnf_acc {}) {b0} b3 {} {s0})",
+        "(@Eq.substType KExpr (fun (qw : KExpr) => whnf_acc {}) {b0} b3 {} {s0})",
         scontract(b0, b0, "qw", "b4"),
         collapse_bvar("b3")
     );
     let s2 = format!(
-        "(Eq.substType KExpr (fun (qw : KExpr) => whnf_acc {}) {b0} b2 {} {s1})",
+        "(@Eq.substType KExpr (fun (qw : KExpr) => whnf_acc {}) {b0} b2 {} {s1})",
         scontract(b0, "qw", "b3", "b4"),
         collapse_bvar("b2")
     );
     let s3 = format!(
-        "(Eq.substType KExpr (fun (qw : KExpr) => whnf_acc {}) {b0} b1 {} {s2})",
+        "(@Eq.substType KExpr (fun (qw : KExpr) => whnf_acc {}) {b0} b1 {} {s2})",
         scontract("qw", "b2", "b3", "b4"),
         collapse_bvar("b1")
     );
@@ -1036,9 +1036,9 @@ pub(super) fn val_r4_natrecz_via_spine4() -> String {
     );
     let binders = "(b1 : KExpr) (b2 : KExpr) (b3 : KExpr) (b4 : KExpr)";
     let prem = format!("(p1 : betaStar mot b1) (p2 : betaStar m0 b2) (p3 : betaStar m1 b3) (p4 : betaStar {NZERO} b4)");
-    let collapse = format!("(Eq.symm KExpr b4 {NZERO} (betaStar_const_collapse fixture_nat_zero_name (ListType.nil Level) b4 p4))");
+    let collapse = format!("(@Eq.symm KExpr b4 {NZERO} (betaStar_const_collapse fixture_nat_zero_name (@ListType.nil Level) b4 p4))");
     let fire = format!(
-        "(fun {binders} {prem} => Eq.substType KExpr (fun (qw : KExpr) => iota_reduces {} {}) {NZERO} b4 {collapse} (iota_step_to_reduces {} {} (natRecZ_iota_fires b1 b2 b3)))",
+        "(fun {binders} {prem} => @Eq.substType KExpr (fun (qw : KExpr) => iota_reduces {} {}) {NZERO} b4 {collapse} (iota_step_to_reduces {} {} (natRecZ_iota_fires b1 b2 b3)))",
         sp(&["b1", "b2", "b3", "qw"]),
         zcontract("b1", "b2", "b3"),
         sp(&["b1", "b2", "b3", NZERO]),
@@ -1046,7 +1046,7 @@ pub(super) fn val_r4_natrecz_via_spine4() -> String {
     );
     let fam = format!("(fun {binders} {prem} => hfam0 b1 p1 b2 p2 b3 p3)");
     format!(
-        "fun (S : KExpr -> Type) (hS : IsCandSet S) (mot : KExpr) (hmot : whnf_acc mot) (m0 : KExpr) (hm0 : whnf_acc m0) (m1 : KExpr) (hm1 : whnf_acc m1) (hfam0 : {}) => candExp_iota_spine4 S hS fixture_nat_rec_name kcre_witness_rec_levels natRecSpine1_iota_none natRecSpine2_iota_none natRecSpine3_iota_none natRec_defval_none {kfam} mot hmot m0 hm0 m1 hm1 {NZERO} (r4_deadConst_acc fixture_nat_zero_name (ListType.nil Level) (Eq.refl (OptionType KExpr) (OptionType.none KExpr))) {fire} {fam}",
+        "fun (S : KExpr -> Type) (hS : IsCandSet S) (mot : KExpr) (hmot : whnf_acc mot) (m0 : KExpr) (hm0 : whnf_acc m0) (m1 : KExpr) (hm1 : whnf_acc m1) (hfam0 : {}) => candExp_iota_spine4 S hS fixture_nat_rec_name kcre_witness_rec_levels natRecSpine1_iota_none natRecSpine2_iota_none natRecSpine3_iota_none natRec_defval_none {kfam} mot hmot m0 hm0 m1 hm1 {NZERO} (r4_deadConst_acc fixture_nat_zero_name (@ListType.nil Level) (@Eq.refl (OptionType KExpr) (@OptionType.none KExpr))) {fire} {fam}",
         zfam("mot", "m0", "m1")
     )
 }
@@ -1722,7 +1722,7 @@ mod tests {
         let value = val_r4_genrecc_iota_fires_natrec();
         for source in [&ty, &value] {
             assert!(source.contains("(u : Level)"));
-            assert!(source.contains("recursor_rhs_instance (recmeta_signature fixture_nat_rec_meta) kcre_witness_nat_zero_rhs (ListType.cons Level u (ListType.nil Level))"));
+            assert!(source.contains("recursor_rhs_instance (recmeta_signature fixture_nat_rec_meta) kcre_witness_nat_zero_rhs (@ListType.cons Level u (@ListType.nil Level))"));
             assert!(!source.contains("kapp_fn kcre_witness_nat_zero_reduct"));
         }
         assert!(ty.contains("genRecC Name.anonymous"));
@@ -1775,11 +1775,12 @@ mod tests {
         }
         let v4 = val_const_spine_beta_inv(4);
         assert!(
-            v4.contains("kIota (Eq.substType"),
+            v4.contains("kIota (@Eq.substType"),
             "constSpine4_beta_inv must pass its LIVE iota arm to the continuation"
         );
         assert!(
-            !v4.contains("Eq.refl (OptionType KExpr) (OptionType.none KExpr)"),
+            !v4.contains("Eq.refl (OptionType KExpr) (OptionType.none KExpr)")
+                && !v4.contains("@Eq.refl (OptionType KExpr) (@OptionType.none KExpr)"),
             "no generic-head inversion may refute a reduct by computing the real env"
         );
         // (3) The engine really is FOUR Acc layers and consumes the fire and

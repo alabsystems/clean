@@ -1,0 +1,7 @@
+# C5's proof-only actual framed-run provenance package.  Compile each complete
+# prerequisite package first, then the fresh package in its own ORDER.
+theory cic_l
+theory cic_l_model
+theory kcheck_spec
+theory kcheck_labelled
+theory kcheck_framed_run

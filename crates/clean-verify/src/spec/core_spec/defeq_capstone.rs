@@ -118,7 +118,7 @@ impl Specification {
         let goal = "DefEqFuelAccepts x bb";
         let motive = |z: &str| {
             format!(
-                "Eq (OptionType KExpr) (whnf_fuel_red the_red_env n x) (OptionType.some KExpr {z}) \
+                "@Eq (OptionType KExpr) (whnf_fuel_red the_red_env n x) (@OptionType.some KExpr {z}) \
                  -> par_strips_witness_cd_star the_red_env {z} nb -> {goal}"
             )
         };
@@ -126,19 +126,19 @@ impl Specification {
         // The two application leaves, which must shape-force the other side.
         let app_leaf = |binders: &str, form: &str, f1: &str, a1: &str, wit1: &str| {
             format!(
-                "(fun {binders} (hxz : Eq (OptionType KExpr) \
-                 (whnf_fuel_red the_red_env n x) (OptionType.some KExpr {form})) \
+                "(fun {binders} (hxz : @Eq (OptionType KExpr) \
+                 (whnf_fuel_red the_red_env n x) (@OptionType.some KExpr {form})) \
                  (hjz : par_strips_witness_cd_star the_red_env {form} nb) => \
                  @par_strips_witness_cd_star.rec the_red_env {form} nb \
                  (fun (_j : par_strips_witness_cd_star the_red_env {form} nb) => {goal}) \
                  (fun (w : KExpr) (hlw : par_reduces_cd_star the_red_env {form} w) \
                  (hrw : par_reduces_cd_star the_red_env nb w) => \
-                 AppShape.rec nb (fun (_s : AppShape nb) => {goal}) \
-                 (fun (f2 : KExpr) (a2 : KExpr) (hshape : Eq KExpr nb (KExpr.app f2 a2)) => \
+                 @AppShape.rec nb (fun (_s : AppShape nb) => {goal}) \
+                 (fun (f2 : KExpr) (a2 : KExpr) (hshape : @Eq KExpr nb (KExpr.app f2 a2)) => \
                  def_eq_round_app n x bb {f1} {a1} f2 a2 w hxz \
                  (Eq.substType KExpr \
-                 (fun (z : KExpr) => Eq (OptionType KExpr) (whnf_fuel_red the_red_env n bb) \
-                 (OptionType.some KExpr z)) nb (KExpr.app f2 a2) hshape hb) \
+                 (fun (z : KExpr) => @Eq (OptionType KExpr) (whnf_fuel_red the_red_env n bb) \
+                 (@OptionType.some KExpr z)) nb (KExpr.app f2 a2) hshape hb) \
                  ({wit1}) \
                  (nf_app_leg_inv w nb (hnf n bb nb hb) f2 a2 hshape hrw) \
                  accb recur) \
@@ -152,41 +152,41 @@ impl Specification {
         let neutral_form = "(KExpr.app nfh nag)";
 
         let rigid_arms = format!(
-            "(fun (rn : Level) (hxz : Eq (OptionType KExpr) (whnf_fuel_red the_red_env n x) \
-             (OptionType.some KExpr (KExpr.sort rn))) \
+            "(fun (rn : Level) (hxz : @Eq (OptionType KExpr) (whnf_fuel_red the_red_env n x) \
+             (@OptionType.some KExpr (KExpr.sort rn))) \
              (hjz : par_strips_witness_cd_star the_red_env (KExpr.sort rn) nb) => \
              def_eq_round_sort hnf n x bb nb rn hxz hb hjz) \
              (fun (rpty : KExpr) (rpbody : KExpr) \
-             (hxz : Eq (OptionType KExpr) (whnf_fuel_red the_red_env n x) \
-             (OptionType.some KExpr (KExpr.pi rpty rpbody))) \
+             (hxz : @Eq (OptionType KExpr) (whnf_fuel_red the_red_env n x) \
+             (@OptionType.some KExpr (KExpr.pi rpty rpbody))) \
              (hjz : par_strips_witness_cd_star the_red_env (KExpr.pi rpty rpbody) nb) => \
              def_eq_round_pi hnf n x bb nb rpty rpbody hxz hb hjz accb recur) \
-             (fun (rv : Nat) (hxz : Eq (OptionType KExpr) (whnf_fuel_red the_red_env n x) \
-             (OptionType.some KExpr (KExpr.lit rv))) \
+             (fun (rv : Nat) (hxz : @Eq (OptionType KExpr) (whnf_fuel_red the_red_env n x) \
+             (@OptionType.some KExpr (KExpr.lit rv))) \
              (hjz : par_strips_witness_cd_star the_red_env (KExpr.lit rv) nb) => \
              def_eq_round_lit hnf n x bb nb rv hxz hb hjz) \
              {app} \
              (fun (rs : Name) (ri : Nat) (rsub : KExpr) \
-             (hxz : Eq (OptionType KExpr) (whnf_fuel_red the_red_env n x) \
-             (OptionType.some KExpr (KExpr.proj rs ri rsub))) \
+             (hxz : @Eq (OptionType KExpr) (whnf_fuel_red the_red_env n x) \
+             (@OptionType.some KExpr (KExpr.proj rs ri rsub))) \
              (hjz : par_strips_witness_cd_star the_red_env (KExpr.proj rs ri rsub) nb) => \
              def_eq_round_proj hnf n x bb nb rs ri rsub hxz hb hjz accb recur) \
              (fun (rbi : Nat) \
-             (hxz : Eq (OptionType KExpr) (whnf_fuel_red the_red_env n x) \
-             (OptionType.some KExpr (KExpr.bvar rbi))) \
+             (hxz : @Eq (OptionType KExpr) (whnf_fuel_red the_red_env n x) \
+             (@OptionType.some KExpr (KExpr.bvar rbi))) \
              (hjz : par_strips_witness_cd_star the_red_env (KExpr.bvar rbi) nb) => \
              def_eq_round_bvar hnf n x bb nb rbi hxz hb hjz) ",
             app = app_leaf(
                 "(raf : KExpr) (raa : KExpr) (hraf : rigid_app_head raf) \
-                 (_ihr : Eq (OptionType KExpr) (whnf_fuel_red the_red_env n x) \
-                 (OptionType.some KExpr raf) -> \
+                 (_ihr : @Eq (OptionType KExpr) (whnf_fuel_red the_red_env n x) \
+                 (@OptionType.some KExpr raf) -> \
                  par_strips_witness_cd_star the_red_env raf nb -> DefEqFuelAccepts x bb)",
                 rigid_app_form,
                 "raf",
                 "raa",
                 "nf_app_leg_inv w (KExpr.app raf raa) \
                  (nf_head.rigid (KExpr.app raf raa) (rigid_app_head.app raf raa hraf)) \
-                 raf raa (Eq.refl KExpr (KExpr.app raf raa)) hlw",
+                 raf raa (@Eq.refl KExpr (KExpr.app raf raa)) hlw",
             ),
         )
         // Strip the readability markers.
@@ -198,32 +198,32 @@ impl Specification {
         format!(
             "def def_eq_dispatch {HNF}(n : Nat) (x : KExpr) (bb : KExpr) (nx : KExpr) \
              (nb : KExpr) \
-             (hx : Eq (OptionType KExpr) (whnf_fuel_red the_red_env n x) \
-             (OptionType.some KExpr nx)) \
-             (hb : Eq (OptionType KExpr) (whnf_fuel_red the_red_env n bb) \
-             (OptionType.some KExpr nb)) \
+             (hx : @Eq (OptionType KExpr) (whnf_fuel_red the_red_env n x) \
+             (@OptionType.some KExpr nx)) \
+             (hb : @Eq (OptionType KExpr) (whnf_fuel_red the_red_env n bb) \
+             (@OptionType.some KExpr nb)) \
              (hj : par_strips_witness_cd_star the_red_env nx nb) \
              (accb : rbelow_plus_acc bb) {RECUR}: {goal} := \
-             nf_head.rec (fun (z : KExpr) (_h : nf_head z) => {mz}) \
+             @nf_head.rec (fun (z : KExpr) (_h : nf_head z) => {mz}) \
              (fun (qty : KExpr) (qbody : KExpr) \
-             (hxz : Eq (OptionType KExpr) (whnf_fuel_red the_red_env n x) \
-             (OptionType.some KExpr (KExpr.lam qty qbody))) \
+             (hxz : @Eq (OptionType KExpr) (whnf_fuel_red the_red_env n x) \
+             (@OptionType.some KExpr (KExpr.lam qty qbody))) \
              (hjz : par_strips_witness_cd_star the_red_env (KExpr.lam qty qbody) nb) => \
              def_eq_round_lam hnf n x bb nb qty qbody hxz hb hjz accb recur) \
              (fun (e0 : KExpr) (hr : rigid_app_head e0) => \
-             rigid_app_head.rec (fun (z : KExpr) (_h : rigid_app_head z) => {mz}) \
+             @rigid_app_head.rec (fun (z : KExpr) (_h : rigid_app_head z) => {mz}) \
              {rigid_arms}e0 hr) \
              {neutral} \
              (fun (cn : Name) (cus : ListType Level) \
-             (_hdd : Eq (OptionType KExpr) \
-             (delta_reduct (red_def the_red_env) (KExpr.const cn cus)) (OptionType.none KExpr)) \
-             (hxz : Eq (OptionType KExpr) (whnf_fuel_red the_red_env n x) \
-             (OptionType.some KExpr (KExpr.const cn cus))) \
+             (_hdd : @Eq (OptionType KExpr) \
+             (delta_reduct (red_def the_red_env) (KExpr.const cn cus)) (@OptionType.none KExpr)) \
+             (hxz : @Eq (OptionType KExpr) (whnf_fuel_red the_red_env n x) \
+             (@OptionType.some KExpr (KExpr.const cn cus))) \
              (hjz : par_strips_witness_cd_star the_red_env (KExpr.const cn cus) nb) => \
              def_eq_round_const hnf n x bb nb cn cus hxz hb hjz) \
              (fun (bi : Nat) \
-             (hxz : Eq (OptionType KExpr) (whnf_fuel_red the_red_env n x) \
-             (OptionType.some KExpr (KExpr.bvar bi))) \
+             (hxz : @Eq (OptionType KExpr) (whnf_fuel_red the_red_env n x) \
+             (@OptionType.some KExpr (KExpr.bvar bi))) \
              (hjz : par_strips_witness_cd_star the_red_env (KExpr.bvar bi) nb) => \
              def_eq_round_bvar hnf n x bb nb bi hxz hb hjz) \
              nx (hnf n x nx hx) hx hj",
@@ -236,7 +236,7 @@ impl Specification {
                 "nag",
                 "nf_app_leg_inv w (KExpr.app nfh nag) \
                  (nf_head.neutral nfh nag hin hii) \
-                 nfh nag (Eq.refl KExpr (KExpr.app nfh nag)) hlw",
+                 nfh nag (@Eq.refl KExpr (KExpr.app nfh nag)) hlw",
             ),
         )
     }
@@ -247,7 +247,7 @@ impl Specification {
                 "def def_eq_fuel_complete {I_BINDERS}{HNF}(a : KExpr) \
                  (acca : rbelow_plus_acc a) : \
                  forall (b : KExpr), DefEq a b -> rbelow_plus_acc b -> DefEqFuelAccepts a b := \
-                 rbelow_plus_acc.rec \
+                 @rbelow_plus_acc.rec \
                  (fun (z : KExpr) (_h : rbelow_plus_acc z) => \
                  forall (b : KExpr), DefEq z b -> rbelow_plus_acc b -> DefEqFuelAccepts z b) \
                  (fun (x : KExpr) \
@@ -255,13 +255,13 @@ impl Specification {
                  (ih : forall (y : KExpr), rbelow_plus y x -> \
                  forall (b : KExpr), DefEq y b -> rbelow_plus_acc b -> DefEqFuelAccepts y b) \
                  (bb : KExpr) (hde : DefEq x bb) (accb : rbelow_plus_acc bb) => \
-                 WhnfFuelPair.rec x bb \
+                 @WhnfFuelPair.rec x bb \
                  (fun (_p : WhnfFuelPair x bb) => DefEqFuelAccepts x bb) \
                  (fun (n : Nat) (nx : KExpr) (nb : KExpr) \
-                 (hx : Eq (OptionType KExpr) (whnf_fuel_red the_red_env n x) \
-                 (OptionType.some KExpr nx)) \
-                 (hb : Eq (OptionType KExpr) (whnf_fuel_red the_red_env n bb) \
-                 (OptionType.some KExpr nb)) => \
+                 (hx : @Eq (OptionType KExpr) (whnf_fuel_red the_red_env n x) \
+                 (@OptionType.some KExpr nx)) \
+                 (hb : @Eq (OptionType KExpr) (whnf_fuel_red the_red_env n bb) \
+                 (@OptionType.some KExpr nb)) => \
                  def_eq_dispatch hnf n x bb nx nb hx hb \
                  (def_eq_whnf_join i1 i2 i3 i4 i5 i6 i7 i8 n x bb nx nb hde hx hb) \
                  accb \

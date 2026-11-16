@@ -5,9 +5,9 @@ use super::*;
 
 fn endpoint(frame: &str, old: u64, memory: &str) -> String {
     format!(
-        "IRByteConfigV1.running Nat
+        "@IRByteConfigV1.running Nat
   (atomic_step_machine (ir_frame_advance (ir_frame_set_many {frame} {RESULTS}
-    (IRList.cons IRScalar (IRScalar.int_ {old}) (IRList.nil IRScalar))))) {}",
+    (@IRList.cons IRScalar (IRScalar.int_ {old}) (@IRList.nil IRScalar))))) {}",
         world(memory)
     )
 }
@@ -20,8 +20,8 @@ fn byte_atomic_live_pointer_substitution_changes_only_the_fetched_operand() {
         // frame/world. The changed program chooses SSA56 rather than SSA40.
         let current = format!(
             "(ir_frame_set_many {BEFORE}
-  (IRList.cons Nat 56 (IRList.nil Nat))
-  (IRList.cons IRScalar (IRScalar.ptr_ 32) (IRList.nil IRScalar)))"
+  (@IRList.cons Nat 56 (@IRList.nil Nat))
+  (@IRList.cons IRScalar (IRScalar.ptr_ 32) (@IRList.nil IRScalar)))"
         );
         let baseline = step("atomic_step_context", &current, MEMORY);
         let baseline_result = endpoint(&current, 41, UPDATED);
@@ -73,7 +73,7 @@ fn byte_atomic_live_pointer_substitution_changes_only_the_fetched_operand() {
                 &format!("atomic_step_two_live_read_{address}"),
                 "IROption Nat",
                 &format!("ir_byte_read_word_v1 (ir_byte_mem_bytes_v1 ({memory})) 8 {address}"),
-                &format!("IROption.some Nat {value}"),
+                &format!("@IROption.some Nat {value}"),
             );
         }
     });
@@ -106,7 +106,7 @@ fn byte_atomic_fetched_step_mutations_cannot_replay_the_original_endpoint() {
             (
                 "destination",
                 INSTRUCTION,
-                "(IRList.cons Nat 100 (IRList.nil Nat))",
+                "(@IRList.cons Nat 100 (@IRList.nil Nat))",
             ),
         ] {
             let changed = step(
@@ -145,7 +145,7 @@ fn byte_atomic_fetched_step_mutations_cannot_replay_the_original_endpoint() {
                     &mut spec,
                     "atomic_step_machine_without_tail (frame : IRFrame)",
                     "IRMachine",
-                    "IRMachine.mk (IRList.cons IRFrame frame (IRList.nil IRFrame)) (IRList.nil IRMemSlot) 17",
+                    "IRMachine.mk (@IRList.cons IRFrame frame (@IRList.nil IRFrame)) (@IRList.nil IRMemSlot) 17",
                 );
             }
             assert_ne!(wrong, expected);

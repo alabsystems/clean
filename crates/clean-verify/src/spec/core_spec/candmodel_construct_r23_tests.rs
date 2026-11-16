@@ -222,7 +222,7 @@ fn test_candmodel_r23_reuses_r12_candidate_machinery() {
 fn test_candmodel_r23_new_arms_are_what_the_doc_says() {
     let src = val_xval_good();
     assert!(
-        src.contains("(qhrm : Eq (OptionType RecMeta)") && src.contains("=> goodSet_whnfAcc)"),
+        src.contains("(qhrm : @Eq (OptionType RecMeta)") && src.contains("=> goodSet_whnfAcc)"),
         "the konst arm lost its inertness premises or is no longer goodSet_whnfAcc"
     );
     assert!(

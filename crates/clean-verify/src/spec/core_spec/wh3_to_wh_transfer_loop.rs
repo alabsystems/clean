@@ -35,9 +35,9 @@ impl Specification {
     pub(super) fn wh3_to_wh_head_stuck_src() -> String {
         let o = "OptionType KExpr";
         let hyp = |z: &str| {
-            format!("Eq WhStepR (reduce_app_head_red_wh3 renv wh3 a {z} c3) WhStepR.wstuck")
+            format!("@Eq WhStepR (reduce_app_head_red_wh3 renv wh3 a {z} c3) WhStepR.wstuck")
         };
-        let concl = "Eq WhStepR c3 WhStepR.wstuck";
+        let concl = "@Eq WhStepR c3 WhStepR.wstuck";
         let motive = format!("(fun (z : KExpr) => {} -> {concl})", hyp("z"));
         let arm = |binders: &str, z: &str| {
             format!(
@@ -49,7 +49,7 @@ impl Specification {
         format!(
             "def wh3_app_head_stuck_gives_head_stuck (renv : RedEnv) (wh3 : KExpr -> {o}) \
              (a : KExpr) (c3 : WhStepR) (f : KExpr) (h : {hyp_f}) : {concl} := \
-             KExpr.rec {motive} \
+             @KExpr.rec {motive} \
              {a_sort} {a_bvar} {a_app} {a_lam} {a_pi} {a_const} {a_let} {a_proj} {a_lit} \
              f h",
             hyp_f = hyp("f"),
@@ -65,7 +65,7 @@ impl Specification {
             ),
             a_lam = format_args!(
                 "(fun (ty : KExpr) (b : KExpr) (_cty : {mt}) (_cb : {mb}) \
-                 (hz : Eq WhStepR (WhStepR.wstep (instantiate b a)) WhStepR.wstuck) => \
+                 (hz : @Eq WhStepR (WhStepR.wstep (instantiate b a)) WhStepR.wstuck) => \
                  wh_stuck_ne_step (instantiate b a) ({concl}) \
                  (Eq.symm WhStepR (WhStepR.wstep (instantiate b a)) WhStepR.wstuck hz))",
                 mt = at("ty"),
@@ -116,14 +116,14 @@ impl Specification {
         let o = "OptionType KExpr";
         let hyp = |z: &str| {
             format!(
-                "Eq WhStepR (reduce_app_head_red_wh3 renv wh3 a {z} WhStepR.wstuck) \
+                "@Eq WhStepR (reduce_app_head_red_wh3 renv wh3 a {z} WhStepR.wstuck) \
                  WhStepR.wstuck"
             )
         };
         let goal = |z: &str| {
             format!(
-                "Eq ({o}) (reduce_app_head_red_wh renv wh2 a {z} (OptionType.none KExpr)) \
-                 (OptionType.none KExpr)"
+                "@Eq ({o}) (reduce_app_head_red_wh renv wh2 a {z} (@OptionType.none KExpr)) \
+                 (@OptionType.none KExpr)"
             )
         };
         let motive = format!("(fun (z : KExpr) => {} -> {})", hyp("z"), goal("z"));
@@ -138,10 +138,10 @@ impl Specification {
         format!(
             "def wh3_app_head_stuck_gives_none_at_lit (renv : RedEnv) (wh3 : KExpr -> {o}) \
              (wh2 : KExpr -> {o}) \
-             (hw : forall (x : KExpr) (y : KExpr), Eq ({o}) (wh3 x) (OptionType.some KExpr y) -> \
-             Eq ({o}) (wh2 x) (OptionType.some KExpr y)) \
+             (hw : forall (x : KExpr) (y : KExpr), @Eq ({o}) (wh3 x) (@OptionType.some KExpr y) -> \
+             @Eq ({o}) (wh2 x) (@OptionType.some KExpr y)) \
              (a : KExpr) (f : KExpr) (h : {hyp_f}) : {goal_f} := \
-             KExpr.rec {motive} \
+             @KExpr.rec {motive} \
              {a_sort} {a_bvar} {a_app} {a_lam} {a_pi} {a_const} {a_let} {a_proj} {a_lit} \
              f h",
             hyp_f = hyp("f"),
@@ -158,7 +158,7 @@ impl Specification {
             ),
             a_lam = format_args!(
                 "(fun (ty : KExpr) (b : KExpr) (_cty : {mt}) (_cb : {mb}) \
-                 (hz : Eq WhStepR (WhStepR.wstep (instantiate b a)) WhStepR.wstuck) => \
+                 (hz : @Eq WhStepR (WhStepR.wstep (instantiate b a)) WhStepR.wstuck) => \
                  wh_stuck_ne_step (instantiate b a) ({g}) \
                  (Eq.symm WhStepR (WhStepR.wstep (instantiate b a)) WhStepR.wstuck hz))",
                 mt = at("ty"),
@@ -204,23 +204,23 @@ impl Specification {
         format!(
             "def wh3_app_head_stuck_gives_none (renv : RedEnv) (wh3 : KExpr -> {o}) \
              (wh2 : KExpr -> {o}) \
-             (hw : forall (x : KExpr) (y : KExpr), Eq ({o}) (wh3 x) (OptionType.some KExpr y) -> \
-             Eq ({o}) (wh2 x) (OptionType.some KExpr y)) \
+             (hw : forall (x : KExpr) (y : KExpr), @Eq ({o}) (wh3 x) (@OptionType.some KExpr y) -> \
+             @Eq ({o}) (wh2 x) (@OptionType.some KExpr y)) \
              (a : KExpr) (c3 : WhStepR) (c2 : {o}) \
-             (ih : Eq WhStepR c3 WhStepR.wstuck -> Eq ({o}) c2 (OptionType.none KExpr)) \
+             (ih : @Eq WhStepR c3 WhStepR.wstuck -> @Eq ({o}) c2 (@OptionType.none KExpr)) \
              (f : KExpr) \
-             (h : Eq WhStepR (reduce_app_head_red_wh3 renv wh3 a f c3) WhStepR.wstuck) : \
-             Eq ({o}) (reduce_app_head_red_wh renv wh2 a f c2) (OptionType.none KExpr) := \
+             (h : @Eq WhStepR (reduce_app_head_red_wh3 renv wh3 a f c3) WhStepR.wstuck) : \
+             @Eq ({o}) (reduce_app_head_red_wh renv wh2 a f c2) (@OptionType.none KExpr) := \
              Eq.substType ({o}) \
              (fun (z : {o}) => \
-             Eq ({o}) (reduce_app_head_red_wh renv wh2 a f z) (OptionType.none KExpr)) \
-             (OptionType.none KExpr) c2 \
-             (Eq.symm ({o}) c2 (OptionType.none KExpr) \
+             @Eq ({o}) (reduce_app_head_red_wh renv wh2 a f z) (@OptionType.none KExpr)) \
+             (@OptionType.none KExpr) c2 \
+             (Eq.symm ({o}) c2 (@OptionType.none KExpr) \
              (ih (wh3_app_head_stuck_gives_head_stuck renv wh3 a c3 f h))) \
              (wh3_app_head_stuck_gives_none_at_lit renv wh3 wh2 hw a f \
              (Eq.substType WhStepR \
              (fun (q : WhStepR) => \
-             Eq WhStepR (reduce_app_head_red_wh3 renv wh3 a f q) WhStepR.wstuck) \
+             @Eq WhStepR (reduce_app_head_red_wh3 renv wh3 a f q) WhStepR.wstuck) \
              c3 WhStepR.wstuck \
              (wh3_app_head_stuck_gives_head_stuck renv wh3 a c3 f h) h))"
         )
@@ -269,29 +269,29 @@ impl Specification {
         let ih2 = "(fun (e2 : KExpr) => whnf_fuel_red_wh renv k e2)";
         let s3 = format!("(reduce_once_red_wh3 renv {ih3} e)");
         let s2 = format!("(reduce_once_red_wh renv {ih2} e)");
-        let goal = format!("Eq ({o}) (loop_dispatch {s2} e {ih2}) (OptionType.some KExpr y)");
+        let goal = format!("@Eq ({o}) (loop_dispatch {s2} e {ih2}) (@OptionType.some KExpr y)");
         let motive_n = |m: &str| {
             format!(
                 "(fun ({m} : Nat) => forall (e : KExpr) (y : KExpr), \
-                 Eq ({o}) (whnf_fuel_red_wh3 renv {m} e) (OptionType.some KExpr y) -> \
-                 Eq ({o}) (whnf_fuel_red_wh renv {m} e) (OptionType.some KExpr y))"
+                 @Eq ({o}) (whnf_fuel_red_wh3 renv {m} e) (@OptionType.some KExpr y) -> \
+                 @Eq ({o}) (whnf_fuel_red_wh renv {m} e) (@OptionType.some KExpr y))"
             )
         };
         let dispatched = |q: &str| format!("(wh_dispatch3 {q} e {ih3})");
         let conv_motive = format!(
-            "(fun (q : WhStepR) => Eq WhStepR {s3} q -> \
-             Eq ({o}) {d} (OptionType.some KExpr y) -> {goal})",
+            "(fun (q : WhStepR) => @Eq WhStepR {s3} q -> \
+             @Eq ({o}) {d} (@OptionType.some KExpr y) -> {goal})",
             d = dispatched("q"),
         );
         // wstuck: the three-way loop announces normality, so the two-way step
         // declines by item 2 and the two-way dispatch announces the SAME term.
         let arm_stuck = format!(
-            "(fun (heq : Eq WhStepR {s3} WhStepR.wstuck) \
-             (hd : Eq ({o}) {d} (OptionType.some KExpr y)) => \
+            "(fun (heq : @Eq WhStepR {s3} WhStepR.wstuck) \
+             (hd : @Eq ({o}) {d} (@OptionType.some KExpr y)) => \
              Eq.substType ({o}) \
-             (fun (z : {o}) => Eq ({o}) (loop_dispatch z e {ih2}) (OptionType.some KExpr y)) \
-             (OptionType.none KExpr) {s2} \
-             (Eq.symm ({o}) {s2} (OptionType.none KExpr) \
+             (fun (z : {o}) => @Eq ({o}) (loop_dispatch z e {ih2}) (@OptionType.some KExpr y)) \
+             (@OptionType.none KExpr) {s2} \
+             (Eq.symm ({o}) {s2} (@OptionType.none KExpr) \
              (wh_step3_stuck_to_none renv {ih3} {ih2} ihn e heq)) hd)",
             d = dispatched("WhStepR.wstuck"),
         );
@@ -300,19 +300,19 @@ impl Specification {
         // is the arm the two-way loop cannot express, and it is why the
         // transfer is one-directional.
         let arm_starved = format!(
-            "(fun (_heq : Eq WhStepR {s3} WhStepR.wstarved) \
-             (hd : Eq ({o}) {d} (OptionType.some KExpr y)) => \
+            "(fun (_heq : @Eq WhStepR {s3} WhStepR.wstarved) \
+             (hd : @Eq ({o}) {d} (@OptionType.some KExpr y)) => \
              option_none_ne_some KExpr y ({goal}) hd)",
             d = dispatched("WhStepR.wstarved"),
         );
         // wstep: both loops continue at the same reduct and the SAME budget.
         let arm_step = format!(
-            "(fun (e2 : KExpr) (heq : Eq WhStepR {s3} (WhStepR.wstep e2)) \
-             (hd : Eq ({o}) {d} (OptionType.some KExpr y)) => \
+            "(fun (e2 : KExpr) (heq : @Eq WhStepR {s3} (WhStepR.wstep e2)) \
+             (hd : @Eq ({o}) {d} (@OptionType.some KExpr y)) => \
              Eq.substType ({o}) \
-             (fun (z : {o}) => Eq ({o}) (loop_dispatch z e {ih2}) (OptionType.some KExpr y)) \
-             (OptionType.some KExpr e2) {s2} \
-             (Eq.symm ({o}) {s2} (OptionType.some KExpr e2) \
+             (fun (z : {o}) => @Eq ({o}) (loop_dispatch z e {ih2}) (@OptionType.some KExpr y)) \
+             (@OptionType.some KExpr e2) {s2} \
+             (Eq.symm ({o}) {s2} (@OptionType.some KExpr e2) \
              (wh_step3_step_to_some renv {ih3} {ih2} ihn e e2 heq)) \
              (ihn e2 y hd))",
             d = dispatched("(WhStepR.wstep e2)"),
@@ -320,23 +320,23 @@ impl Specification {
         format!(
             "def whnf_fuel_red_wh3_to_wh (renv : RedEnv) (n : Nat) : \
              forall (e : KExpr) (y : KExpr), \
-             Eq ({o}) (whnf_fuel_red_wh3 renv n e) (OptionType.some KExpr y) -> \
-             Eq ({o}) (whnf_fuel_red_wh renv n e) (OptionType.some KExpr y) := \
-             Nat.rec {motive} \
+             @Eq ({o}) (whnf_fuel_red_wh3 renv n e) (@OptionType.some KExpr y) -> \
+             @Eq ({o}) (whnf_fuel_red_wh renv n e) (@OptionType.some KExpr y) := \
+             @Nat.rec {motive} \
              (fun (e : KExpr) (y : KExpr) \
-             (h : Eq ({o}) (OptionType.none KExpr) (OptionType.some KExpr y)) => \
+             (h : @Eq ({o}) (@OptionType.none KExpr) (@OptionType.some KExpr y)) => \
              option_none_ne_some KExpr y \
-             (Eq ({o}) (whnf_fuel_red_wh renv Nat.zero e) (OptionType.some KExpr y)) h) \
+             (@Eq ({o}) (whnf_fuel_red_wh renv Nat.zero e) (@OptionType.some KExpr y)) h) \
              (fun (k : Nat) (ihn : {motive_k}) (e : KExpr) (y : KExpr) \
-             (h : Eq ({o}) {d3} (OptionType.some KExpr y)) => \
-             WhStepR.rec {conv_motive} {arm_stuck} {arm_starved} {arm_step} \
-             {s3} (Eq.refl WhStepR {s3}) h) \
+             (h : @Eq ({o}) {d3} (@OptionType.some KExpr y)) => \
+             @WhStepR.rec {conv_motive} {arm_stuck} {arm_starved} {arm_step} \
+             {s3} (@Eq.refl WhStepR {s3}) h) \
              n",
             motive = motive_n("m"),
             motive_k = format_args!(
                 "forall (e : KExpr) (y : KExpr), \
-                 Eq ({o}) (whnf_fuel_red_wh3 renv k e) (OptionType.some KExpr y) -> \
-                 Eq ({o}) (whnf_fuel_red_wh renv k e) (OptionType.some KExpr y)"
+                 @Eq ({o}) (whnf_fuel_red_wh3 renv k e) (@OptionType.some KExpr y) -> \
+                 @Eq ({o}) (whnf_fuel_red_wh renv k e) (@OptionType.some KExpr y)"
             ),
             d3 = dispatched(&s3),
         )
@@ -395,16 +395,16 @@ impl Specification {
         let o = "OptionType KExpr";
         let env = "the_red_env";
         let leg3 = |x: &str| format!("(whnf_fuel_red_wh3 {env} k {x})");
-        let goal = format!("Eq Bool (def_eq_fuel_wh {env} (Nat.succ k) a b) Bool.true");
+        let goal = format!("@Eq Bool (def_eq_fuel_wh {env} (Nat.succ k) a b) Bool.true");
         let grid = |na: &str, nb: &str| {
-            format!("Eq Bool (def_eq_struct (def_eq_fuel_wh3 {env} k) {na} {nb}) Bool.true")
+            format!("@Eq Bool (def_eq_struct (def_eq_fuel_wh3 {env} k) {na} {nb}) Bool.true")
         };
         // The body of `def_eq_fuel_wh3 env (succ k) a b`, with the outer
         // scrutinee abstracted so the convoy's motive can name it.
         let body = |oa: &str| {
             format!(
-                "(OptionType.rec KExpr (fun (_ : {o}) => Bool) Bool.false \
-                 (fun (na : KExpr) => OptionType.rec KExpr (fun (_ : {o}) => Bool) Bool.false \
+                "(@OptionType.rec KExpr (fun (_ : {o}) => Bool) Bool.false \
+                 (fun (na : KExpr) => @OptionType.rec KExpr (fun (_ : {o}) => Bool) Bool.false \
                  (fun (nb : KExpr) => def_eq_struct (def_eq_fuel_wh3 {env} k) na nb) \
                  {legb}) {oa})",
                 legb = leg3("b"),
@@ -412,53 +412,53 @@ impl Specification {
         };
         let inner_body = |ob: &str| {
             format!(
-                "(OptionType.rec KExpr (fun (_ : {o}) => Bool) Bool.false \
+                "(@OptionType.rec KExpr (fun (_ : {o}) => Bool) Bool.false \
                  (fun (nb : KExpr) => def_eq_struct (def_eq_fuel_wh3 {env} k) na nb) {ob})"
             )
         };
         let inner = format!(
-            "(OptionType.rec KExpr \
-             (fun (ob : {o}) => Eq ({o}) {legb} ob -> Eq Bool {ib} Bool.true -> {goal}) \
-             (fun (_hb : Eq ({o}) {legb} (OptionType.none KExpr)) \
-             (hf : Eq Bool Bool.false Bool.true) => bool_false_ne_true ({goal}) hf) \
-             (fun (nb : KExpr) (hb3 : Eq ({o}) {legb} (OptionType.some KExpr nb)) \
+            "(@OptionType.rec KExpr \
+             (fun (ob : {o}) => @Eq ({o}) {legb} ob -> @Eq Bool {ib} Bool.true -> {goal}) \
+             (fun (_hb : @Eq ({o}) {legb} (@OptionType.none KExpr)) \
+             (hf : @Eq Bool Bool.false Bool.true) => bool_false_ne_true ({goal}) hf) \
+             (fun (nb : KExpr) (hb3 : @Eq ({o}) {legb} (@OptionType.some KExpr nb)) \
              (hg : {grid}) => \
              def_eq_fuel_wh_of_struct k a b na nb \
              (whnf_fuel_red_wh3_to_wh {env} k a na ha3) \
              (whnf_fuel_red_wh3_to_wh {env} k b nb hb3) \
              (def_eq_struct_mono (def_eq_fuel_wh3 {env} k) (def_eq_fuel_wh {env} k) ihn \
              na nb hg)) \
-             {legb} (Eq.refl ({o}) {legb}) hi)",
+             {legb} (@Eq.refl ({o}) {legb}) hi)",
             legb = leg3("b"),
             ib = inner_body("ob"),
             grid = grid("na", "nb"),
         );
         format!(
             "def def_eq_fuel_wh3_to_wh (n : Nat) : forall (a : KExpr) (b : KExpr), \
-             Eq Bool (def_eq_fuel_wh3 {env} n a b) Bool.true -> \
-             Eq Bool (def_eq_fuel_wh {env} n a b) Bool.true := \
-             Nat.rec {motive} \
-             (fun (a : KExpr) (b : KExpr) (h : Eq Bool Bool.false Bool.true) => \
-             bool_false_ne_true (Eq Bool (def_eq_fuel_wh {env} Nat.zero a b) Bool.true) h) \
+             @Eq Bool (def_eq_fuel_wh3 {env} n a b) Bool.true -> \
+             @Eq Bool (def_eq_fuel_wh {env} n a b) Bool.true := \
+             @Nat.rec {motive} \
+             (fun (a : KExpr) (b : KExpr) (h : @Eq Bool Bool.false Bool.true) => \
+             bool_false_ne_true (@Eq Bool (def_eq_fuel_wh {env} Nat.zero a b) Bool.true) h) \
              (fun (k : Nat) (ihn : {motive_k}) (a : KExpr) (b : KExpr) \
-             (h : Eq Bool {body_a} Bool.true) => \
-             OptionType.rec KExpr \
-             (fun (oa : {o}) => Eq ({o}) {lega} oa -> Eq Bool {body_oa} Bool.true -> {goal}) \
-             (fun (_ha : Eq ({o}) {lega} (OptionType.none KExpr)) \
-             (hf : Eq Bool Bool.false Bool.true) => bool_false_ne_true ({goal}) hf) \
-             (fun (na : KExpr) (ha3 : Eq ({o}) {lega} (OptionType.some KExpr na)) \
-             (hi : Eq Bool {ib_legb} Bool.true) => {inner}) \
-             {lega} (Eq.refl ({o}) {lega}) h) \
+             (h : @Eq Bool {body_a} Bool.true) => \
+             @OptionType.rec KExpr \
+             (fun (oa : {o}) => @Eq ({o}) {lega} oa -> @Eq Bool {body_oa} Bool.true -> {goal}) \
+             (fun (_ha : @Eq ({o}) {lega} (@OptionType.none KExpr)) \
+             (hf : @Eq Bool Bool.false Bool.true) => bool_false_ne_true ({goal}) hf) \
+             (fun (na : KExpr) (ha3 : @Eq ({o}) {lega} (@OptionType.some KExpr na)) \
+             (hi : @Eq Bool {ib_legb} Bool.true) => {inner}) \
+             {lega} (@Eq.refl ({o}) {lega}) h) \
              n",
             motive = format_args!(
                 "(fun (m : Nat) => forall (a : KExpr) (b : KExpr), \
-                 Eq Bool (def_eq_fuel_wh3 {env} m a b) Bool.true -> \
-                 Eq Bool (def_eq_fuel_wh {env} m a b) Bool.true)"
+                 @Eq Bool (def_eq_fuel_wh3 {env} m a b) Bool.true -> \
+                 @Eq Bool (def_eq_fuel_wh {env} m a b) Bool.true)"
             ),
             motive_k = format_args!(
                 "forall (a : KExpr) (b : KExpr), \
-                 Eq Bool (def_eq_fuel_wh3 {env} k a b) Bool.true -> \
-                 Eq Bool (def_eq_fuel_wh {env} k a b) Bool.true"
+                 @Eq Bool (def_eq_fuel_wh3 {env} k a b) Bool.true -> \
+                 @Eq Bool (def_eq_fuel_wh {env} k a b) Bool.true"
             ),
             lega = leg3("a"),
             body_a = body(&leg3("a")),
@@ -477,11 +477,11 @@ impl Specification {
     pub(super) fn wh3_to_wh_accepts_src() -> String {
         "def def_eq_accepts_wh3_to_wh (a : KExpr) (b : KExpr) \
          (h : DefEqFuelAcceptsWh3 a b) : DefEqFuelAcceptsWh a b := \
-         DefEqFuelAcceptsWh3.rec a b \
+         @DefEqFuelAcceptsWh3.rec a b \
          (fun (_q : DefEqFuelAcceptsWh3 a b) => DefEqFuelAcceptsWh a b) \
          (fun (n : Nat) \
-         (hn : Eq Bool (def_eq_fuel_wh3 the_red_env n a b) Bool.true) => \
-         DefEqFuelAcceptsWh.mk a b n (def_eq_fuel_wh3_to_wh n a b hn)) h"
+         (hn : @Eq Bool (def_eq_fuel_wh3 the_red_env n a b) Bool.true) => \
+         @DefEqFuelAcceptsWh.mk a b n (def_eq_fuel_wh3_to_wh n a b hn)) h"
             .to_string()
     }
 
@@ -556,7 +556,7 @@ impl Specification {
         format!(
             "def def_eq_wh_sound_and_complete (a : KExpr) (acca : Wh3NormAcc a) (b : KExpr) \
              (accb : Wh3NormAcc b) : AndType ({fwd}) ({bwd}) := \
-             AndType.intro ({fwd}) ({bwd}) \
+             @AndType.intro ({fwd}) ({bwd}) \
              (fun (hd : DefEq a b) => def_eq_fuel_complete_wh a acca b hd accb) \
              (fun (hx : DefEqFuelAcceptsWh a b) => def_eq_fuel_wh_accepts_sound a b hx)"
         )
@@ -591,9 +591,9 @@ impl Specification {
     /// two-way algorithm in general.
     pub(super) fn wh3_to_wh_upward_closed_src() -> String {
         "def def_eq_fuel_wh_accepts_at_every_larger (k : Nat) (a : KExpr) (b : KExpr) \
-         (h : Eq Bool (def_eq_fuel_wh3 the_red_env k a b) Bool.true) : \
+         (h : @Eq Bool (def_eq_fuel_wh3 the_red_env k a b) Bool.true) : \
          forall (m : Nat), Le k m -> \
-         Eq Bool (def_eq_fuel_wh the_red_env m a b) Bool.true := \
+         @Eq Bool (def_eq_fuel_wh the_red_env m a b) Bool.true := \
          fun (m : Nat) (hle : Le k m) => \
          def_eq_fuel_wh3_to_wh m a b (def_eq_fuel_wh3_le k m hle a b h)"
             .to_string()
@@ -609,9 +609,9 @@ impl Specification {
     pub(super) fn wh3_to_wh_accepts_sound_src() -> String {
         "def def_eq_fuel_wh_accepts_sound (a : KExpr) (b : KExpr) \
          (h : DefEqFuelAcceptsWh a b) : DefEq a b := \
-         DefEqFuelAcceptsWh.rec a b (fun (_q : DefEqFuelAcceptsWh a b) => DefEq a b) \
+         @DefEqFuelAcceptsWh.rec a b (fun (_q : DefEqFuelAcceptsWh a b) => DefEq a b) \
          (fun (n : Nat) \
-         (hn : Eq Bool (def_eq_fuel_wh the_red_env n a b) Bool.true) => \
+         (hn : @Eq Bool (def_eq_fuel_wh the_red_env n a b) Bool.true) => \
          def_eq_fuel_wh_sound_final n a b hn) h"
             .to_string()
     }

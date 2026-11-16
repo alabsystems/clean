@@ -23,7 +23,7 @@ pr = _pr
 
 NAT, ZERO, SUCC = N.NAT, N.ZERO, N.SUCC
 BOOL, TRUE, FALSE = C('Bool'), C('Bool.true'), C('Bool.false')
-LV00 = '(ListType.cons Level Level.zero (ListType.cons Level Level.zero (ListType.nil Level)))'
+LV00 = '(@ListType.cons Level Level.zero (@ListType.cons Level Level.zero (@ListType.nil Level)))'
 PROD = app(C('Prod', LV00), NAT, NAT)
 PRODMK = C('Prod.mk', LV00)
 FST = C('Prod.fst', LV00)
@@ -56,15 +56,15 @@ BOOLREC = Rec('Bool.rec', 'kcre_rec_meta_@@Bool.rec@@', {'Bool.false': BR_F, 'Bo
               'kcre_name_@@u@@', 'hbm', {'Bool.false': 'hbf', 'Bool.true': 'hbt'})
 BOOLREC.prefix = 3
 BOOLREC_RULES = {'Bool.false': 'accepts_tc_bool_rec_false_rule', 'Bool.true': 'accepts_tc_bool_rec_true_rule'}
-P_BOOLREC = ('(hbm : Eq (OptionType RecMeta) (recmeta_for (red_rec R) kcre_name_@@Bool.rec@@) '
-             '(OptionType.some RecMeta kcre_rec_meta_@@Bool.rec@@)) '
-             '(hbf : Eq (OptionType RecRule) (recrule_for (red_rec R) kcre_name_@@Bool.rec@@ kcre_name_@@Bool.false@@) '
-             '(OptionType.some RecRule accepts_tc_bool_rec_false_rule)) '
-             '(hbt : Eq (OptionType RecRule) (recrule_for (red_rec R) kcre_name_@@Bool.rec@@ kcre_name_@@Bool.true@@) '
-             '(OptionType.some RecRule accepts_tc_bool_rec_true_rule))')
+P_BOOLREC = ('(hbm : @Eq (OptionType RecMeta) (recmeta_for (red_rec R) kcre_name_@@Bool.rec@@) '
+             '(@OptionType.some RecMeta kcre_rec_meta_@@Bool.rec@@)) '
+             '(hbf : @Eq (OptionType RecRule) (recrule_for (red_rec R) kcre_name_@@Bool.rec@@ kcre_name_@@Bool.false@@) '
+             '(@OptionType.some RecRule accepts_tc_bool_rec_false_rule)) '
+             '(hbt : @Eq (OptionType RecRule) (recrule_for (red_rec R) kcre_name_@@Bool.rec@@ kcre_name_@@Bool.true@@) '
+             '(@OptionType.some RecRule accepts_tc_bool_rec_true_rule))')
 A_BOOLREC = 'hbm hbf hbt'
-P_PRODMK = ('(cm : KCtorMeta) (hpm : Eq (OptionType KCtorMeta) (kctor_for (red_ind_ctor R) kcre_name_@@Prod.mk@@) '
-            '(OptionType.some KCtorMeta cm)) (hpn : Eq Nat (kctor_num_params cm) (Nat.succ (Nat.succ Nat.zero)))')
+P_PRODMK = ('(cm : KCtorMeta) (hpm : @Eq (OptionType KCtorMeta) (kctor_for (red_ind_ctor R) kcre_name_@@Prod.mk@@) '
+            '(@OptionType.some KCtorMeta cm)) (hpn : @Eq Nat (kctor_num_params cm) (Nat.succ (Nat.succ Nat.zero)))')
 A_PRODMK = 'cm hpm hpn'
 
 
@@ -124,8 +124,8 @@ def bbody_const(op):
 def bp_body(op):
     if op in ('Nat.add', 'Nat.sub', 'Nat.pred'):
         return N.p_body(op)
-    return '(%s : Eq (OptionType KExpr) (kdef_value_at (red_def R) kcre_name_@@%s@@ %s) (OptionType.some KExpr %s))' % (
-        bhyp(op), op, LEVELS.get(op, '(ListType.nil Level)'), bbody_const(op))
+    return '(%s : @Eq (OptionType KExpr) (kdef_value_at (red_def R) kcre_name_@@%s@@ %s) (@OptionType.some KExpr %s))' % (
+        bhyp(op), op, LEVELS.get(op, '(@ListType.nil Level)'), bbody_const(op))
 
 
 def bh(op):
@@ -222,52 +222,52 @@ def at_path(term, path, c):
 
 
 def bool_case(var, mot, false_proof, true_proof):
-    return '(Bool.rec (fun (%s : Bool) => %s) (%s) (%s) %s)' % (var, mot(var), false_proof, true_proof, var)
+    return '(@Bool.rec (fun (%s : Bool) => %s) (%s) (%s) %s)' % (var, mot(var), false_proof, true_proof, var)
 
 
 # ---------------------------------------------------------------- helpers registered once
 def base():
     N.add_def('def accepts_tc_nat_pair_lit (p : Prod Nat Nat) : KExpr := KExpr.app (KExpr.app (KExpr.app (KExpr.app '
-              '(KExpr.const kcre_name_@@Prod.mk@@ %s) (KExpr.const kcre_name_@@Nat@@ (ListType.nil Level))) '
-              '(KExpr.const kcre_name_@@Nat@@ (ListType.nil Level))) (literal_nat (Prod.fst Nat Nat p))) '
-              '(literal_nat (Prod.snd Nat Nat p))' % LV00, 'accepts_tc_nat_pair_lit')
+              '(KExpr.const kcre_name_@@Prod.mk@@ %s) (KExpr.const kcre_name_@@Nat@@ (@ListType.nil Level))) '
+              '(KExpr.const kcre_name_@@Nat@@ (@ListType.nil Level))) (literal_nat (@Prod.fst Nat Nat p))) '
+              '(literal_nat (@Prod.snd Nat Nat p))' % LV00, 'accepts_tc_nat_pair_lit')
     for ctor, (nf, rhs) in (('Bool.false', BR_F), ('Bool.true', BR_T)):
         const = BOOLREC_RULES[ctor]
         N.add_def('def %s : RecRule := RecRule.mk kcre_name_@@%s@@ kcre_nat_%d %s' % (const, ctor, nf, pr(rhs)), const)
         N.add_thm(const + '_reflected',
-                  'Eq (OptionType RecRule) (recrule_for (red_rec kernel_core_red_env) kcre_name_@@Bool.rec@@ kcre_name_@@%s@@) (OptionType.some RecRule %s)' % (ctor, const),
-                  'Eq.refl (OptionType RecRule) (OptionType.some RecRule %s)' % const)
+                  '@Eq (OptionType RecRule) (recrule_for (red_rec kernel_core_red_env) kcre_name_@@Bool.rec@@ kcre_name_@@%s@@) (@OptionType.some RecRule %s)' % (ctor, const),
+                  '@Eq.refl (OptionType RecRule) (@OptionType.some RecRule %s)' % const)
     from kx import inst_levels
     for nm, (nf, rhs) in (('accepts_tc_bool_rec_false_rhs1', BR_F), ('accepts_tc_bool_rec_true_rhs1', BR_T)):
         t = inst_levels(rhs, 'kcre_name_@@u@@', '(Level.succ Level.zero)')
         N.add_def('def %s : KExpr := %s' % (nm, pr(t)), nm)
         name_term(nm, t)
     # projection of a Prod.mk application: the projection-beta step, over R's constructor table
-    ty = ('forall %s (cm : KCtorMeta) (hpm : Eq (OptionType KCtorMeta) (kctor_for (red_ind_ctor R) kcre_name_@@Prod.mk@@) (OptionType.some KCtorMeta cm)) '
-          '(hpn : Eq Nat (kctor_num_params cm) (Nat.succ (Nat.succ Nat.zero))) (us : ListType Level) (A : KExpr) (B : KExpr) (a : KExpr) (b : KExpr) (i : Nat), '
+    ty = ('forall %s (cm : KCtorMeta) (hpm : @Eq (OptionType KCtorMeta) (kctor_for (red_ind_ctor R) kcre_name_@@Prod.mk@@) (@OptionType.some KCtorMeta cm)) '
+          '(hpn : @Eq Nat (kctor_num_params cm) (Nat.succ (Nat.succ Nat.zero))) (us : ListType Level) (A : KExpr) (B : KExpr) (a : KExpr) (b : KExpr) (i : Nat), '
           'KernelAcceptsTcIn R tenv Bool.false G (KExpr.proj kcre_name_@@Prod@@ i (KExpr.app (KExpr.app (KExpr.app (KExpr.app (KExpr.const kcre_name_@@Prod.mk@@ us) A) B) a) b)) '
           '(OptionType.rec KExpr (fun (_ : OptionType KExpr) => KExpr) (KExpr.sort Level.zero) (fun (x : KExpr) => x) '
-          '(list_head (list_drop i (ListType.cons KExpr a (ListType.cons KExpr b (ListType.nil KExpr))))))') % N.HDR
+          '(list_head (list_drop i (@ListType.cons KExpr a (@ListType.cons KExpr b (@ListType.nil KExpr))))))') % N.HDR
     # proved per index below; the general form needs the Option read-off, so register the two used indices directly
     for idx, fld in ((0, 'a'), (1, 'b')):
         sub = '(KExpr.app (KExpr.app (KExpr.app (KExpr.app (KExpr.const kcre_name_@@Prod.mk@@ us) A) B) a) b)'
         e = '(KExpr.proj kcre_name_@@Prod@@ kcre_nat_%d %s)' % (idx, sub)
-        sel_ty = ('Eq (OptionType KExpr) (list_head (list_drop (Nat.add (kctor_num_params cm) kcre_nat_%d) (kapp_args %s))) (OptionType.some KExpr %s)' % (idx, sub, fld))
-        sel_goal = ('Eq (OptionType KExpr) (list_head (list_drop (Nat.add (Nat.succ (Nat.succ Nat.zero)) kcre_nat_%d) (kapp_args %s))) (OptionType.some KExpr %s)' % (idx, sub, fld))
-        selected = ('(Eq.substType Nat (fun (k : Nat) => Eq (OptionType KExpr) (list_head (list_drop (Nat.add k kcre_nat_%d) (kapp_args %s))) (OptionType.some KExpr %s)) '
+        sel_ty = ('@Eq (OptionType KExpr) (list_head (list_drop (Nat.add (kctor_num_params cm) kcre_nat_%d) (kapp_args %s))) (@OptionType.some KExpr %s)' % (idx, sub, fld))
+        sel_goal = ('@Eq (OptionType KExpr) (list_head (list_drop (Nat.add (Nat.succ (Nat.succ Nat.zero)) kcre_nat_%d) (kapp_args %s))) (@OptionType.some KExpr %s)' % (idx, sub, fld))
+        selected = ('(Eq.substType Nat (fun (k : Nat) => @Eq (OptionType KExpr) (list_head (list_drop (Nat.add k kcre_nat_%d) (kapp_args %s))) (@OptionType.some KExpr %s)) '
                     '(Nat.succ (Nat.succ Nat.zero)) (kctor_num_params cm) (Eq.symm Nat (kctor_num_params cm) (Nat.succ (Nat.succ Nat.zero)) hpn) '
-                    '(Eq.refl (OptionType KExpr) (OptionType.some KExpr %s)))') % (idx, sub, fld, fld)
-        proof = ('KernelAcceptsTcIn.cdp R tenv G %s %s (DefEqCDPIn.raw R %s %s (par_reduces_cdp.projection_beta R kcre_name_@@Prod@@ kcre_nat_%d %s %s '
-                 '(Eq.trans (OptionType KExpr) (projection_post_whnf_reduct R %s) (projection_post_whnf_field R kcre_nat_%d %s) (OptionType.some KExpr %s) '
+                    '(@Eq.refl (OptionType KExpr) (@OptionType.some KExpr %s)))') % (idx, sub, fld, fld)
+        proof = ('@KernelAcceptsTcIn.cdp R tenv G %s %s (@DefEqCDPIn.raw R %s %s (@par_reduces_cdp.projection_beta R kcre_name_@@Prod@@ kcre_nat_%d %s %s '
+                 '(Eq.trans (OptionType KExpr) (projection_post_whnf_reduct R %s) (projection_post_whnf_field R kcre_nat_%d %s) (@OptionType.some KExpr %s) '
                  '(projection_post_whnf_proj R kcre_name_@@Prod@@ kcre_nat_%d %s) '
-                 '(projection_post_whnf_field_intro R kcre_nat_%d %s kcre_name_@@Prod.mk@@ cm %s (Eq.refl (OptionType Name) (OptionType.some Name kcre_name_@@Prod.mk@@)) hpm %s))))') % (
+                 '(projection_post_whnf_field_intro R kcre_nat_%d %s kcre_name_@@Prod.mk@@ cm %s (@Eq.refl (OptionType Name) (@OptionType.some Name kcre_name_@@Prod.mk@@)) hpm %s))))') % (
             e, fld, e, fld, idx, sub, fld, e, idx, sub, fld, idx, sub, idx, sub, fld, selected)
-        ty_i = ('forall %s (cm : KCtorMeta) (hpm : Eq (OptionType KCtorMeta) (kctor_for (red_ind_ctor R) kcre_name_@@Prod.mk@@) (OptionType.some KCtorMeta cm)) '
-                '(hpn : Eq Nat (kctor_num_params cm) (Nat.succ (Nat.succ Nat.zero))) (us : ListType Level) (A : KExpr) (B : KExpr) (a : KExpr) (b : KExpr), '
+        ty_i = ('forall %s (cm : KCtorMeta) (hpm : @Eq (OptionType KCtorMeta) (kctor_for (red_ind_ctor R) kcre_name_@@Prod.mk@@) (@OptionType.some KCtorMeta cm)) '
+                '(hpn : @Eq Nat (kctor_num_params cm) (Nat.succ (Nat.succ Nat.zero))) (us : ListType Level) (A : KExpr) (B : KExpr) (a : KExpr) (b : KExpr), '
                 'KernelAcceptsTcIn R tenv Bool.false G %s %s') % (N.HDR, e, fld)
         N.add_thm('accepts_tc_prod_proj_%d' % idx, ty_i,
-                  'fun %s (cm : KCtorMeta) (hpm : Eq (OptionType KCtorMeta) (kctor_for (red_ind_ctor R) kcre_name_@@Prod.mk@@) (OptionType.some KCtorMeta cm)) '
-                  '(hpn : Eq Nat (kctor_num_params cm) (Nat.succ (Nat.succ Nat.zero))) (us : ListType Level) (A : KExpr) (B : KExpr) (a : KExpr) (b : KExpr) => %s' % (N.HDR, proof))
+                  'fun %s (cm : KCtorMeta) (hpm : @Eq (OptionType KCtorMeta) (kctor_for (red_ind_ctor R) kcre_name_@@Prod.mk@@) (@OptionType.some KCtorMeta cm)) '
+                  '(hpn : @Eq Nat (kctor_num_params cm) (Nat.succ (Nat.succ Nat.zero))) (us : ListType Level) (A : KExpr) (B : KExpr) (a : KExpr) (b : KExpr) => %s' % (N.HDR, proof))
     _ = ty
 
 

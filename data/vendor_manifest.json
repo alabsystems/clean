@@ -1,9 +1,9 @@
 {
   "note": "Provenance + tamper-evidence manifest for the `cargo vendor` source tree (paragon axis 1: 'every third-party dependency vendored AND verified'). Each vendored crate is pinned by name+version+checksum. For crates.io crates the checksum is the registry sha256 (verified equal to Cargo.lock's `checksum =` field at generation time); for the git-sourced crate it is a deterministic sha256 over cargo's per-file checksum map. Restage external sources and re-run scripts/gen_vendor_manifest.py, then diff against this file to detect any third-party source drift. Internal AY/NY repositories are first-party subrepos and are rejected by this generator. The vendor/ tree itself is GITIGNORED and released as an artifact (vendor-sources-v*.tar.zst), mirroring the .mathverse shard release convention \u2014 see docs and scripts/package_vendor.sh.",
   "schema_version": 1,
-  "generated_at": "2026-11-15T21:46:35Z",
+  "generated_at": "2026-11-16T05:22:12Z",
   "generator": "scripts/gen_vendor_manifest.py",
-  "cargo_lock_sha256": "e91ba8540ed7769316a20bd88004c53f1eb9d6cbae9271c6cd9397960bbca674",
+  "cargo_lock_sha256": "822f786dfb0593edf16c6b25061c26638b045f3a167ac7c1589a2f37ead107fc",
   "summary": {
     "total_crates": 394,
     "registry_crates": 394,

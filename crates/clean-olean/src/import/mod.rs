@@ -134,8 +134,8 @@ pub use path::{
 };
 pub use policy::{ImportKinds, OleanImportPolicy, UnpinnedOleanImportPolicy};
 pub use project_world::{
-    import_world_for_file, search_paths_in_world, source_world_for_file, source_world_of,
-    ImportWorld, ImportWorldRefusal, SourceWorldDecision, SourceWorldRefusal,
+    import_world_for_file, search_paths_in_world, source_world_for_file, source_world_for_snapshot,
+    source_world_of, ImportWorld, ImportWorldRefusal, SourceWorldDecision, SourceWorldRefusal,
 };
 pub use stored_families::{stored_family_members, StoredFamilyMembers};
 pub use typed_imports::{parse_typed_imports, TypedImport, TypedImportFlags};

@@ -15,13 +15,13 @@ use crate::spec::Specification;
 
 const COMMON: &[(&str, &str)] = &[
     (
-        r"def recursor_schematic_params : ListType Name := ListType.cons Name Name.anonymous (ListType.nil Name)",
+        r"def recursor_schematic_params : ListType Name := @ListType.cons Name Name.anonymous (@ListType.nil Name)",
         "The singleton parameter convention of the existing synthetic Nat/W fixtures, not a reflected production Name claim.",
     ),
     (
         r"def recursor_schematic_parameter_supported : LevelParamSupport recursor_schematic_params (Level.param Name.anonymous) :=
- LevelParamSupport.param recursor_schematic_params Name.anonymous Nat.zero
-  (Eq.refl (OptionType Nat) (OptionType.some Nat Nat.zero))",
+ @LevelParamSupport.param recursor_schematic_params Name.anonymous Nat.zero
+  (@Eq.refl (OptionType Nat) (@OptionType.some Nat Nat.zero))",
         "Support is proved by the actual first-match membership calculation.",
     ),
     (
@@ -33,34 +33,34 @@ const COMMON: &[(&str, &str)] = &[
 const NAT: &[(&str, &str)] = &[
     (
         r"def nat_rec_rhs_zero_instLevels (u : Level) :
- Eq KExpr (instLevels recursor_schematic_params (natRecRhsZero (Level.param Name.anonymous)) (ListType.cons Level u (ListType.nil Level))) (natRecRhsZero u) :=
- Eq.refl KExpr (natRecRhsZero u)",
+ @Eq KExpr (instLevels recursor_schematic_params (natRecRhsZero (Level.param Name.anonymous)) (@ListType.cons Level u (@ListType.nil Level))) (natRecRhsZero u) :=
+ @Eq.refl KExpr (natRecRhsZero u)",
         "Exact existing schematic RHS instantiated once at arbitrary u equals its existing RHS(u) builder. No closure, parameter-freedom or output-equality premise.",
     ),
     (
         r"def nat_rec_rhs_zero_param_support (ps : ListType Name) (u : Level)
  (hu : LevelParamSupport ps u) : KExprParamSupport ps (natRecRhsZero u) :=
- (KExprParamSupport.lam ps (KExpr.pi (KExpr.const natName (ListType.nil Level)) (KExpr.sort u)) (KExpr.lam (KExpr.app (KExpr.bvar Nat.zero) (KExpr.const zeroName (ListType.nil Level))) (KExpr.lam (KExpr.pi (KExpr.const natName (ListType.nil Level)) (KExpr.pi (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)) (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.app (KExpr.const succName (ListType.nil Level)) (KExpr.bvar (Nat.succ Nat.zero)))))) (KExpr.bvar (Nat.succ Nat.zero))))
-  (KExprParamSupport.pi ps (KExpr.const natName (ListType.nil Level)) (KExpr.sort u)
-  (KExprParamSupport.const ps natName (ListType.nil Level) (LevelListParamSupport.nil ps))
-  (KExprParamSupport.sort ps u hu))
-  (KExprParamSupport.lam ps (KExpr.app (KExpr.bvar Nat.zero) (KExpr.const zeroName (ListType.nil Level))) (KExpr.lam (KExpr.pi (KExpr.const natName (ListType.nil Level)) (KExpr.pi (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)) (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.app (KExpr.const succName (ListType.nil Level)) (KExpr.bvar (Nat.succ Nat.zero)))))) (KExpr.bvar (Nat.succ Nat.zero)))
-  (KExprParamSupport.app ps (KExpr.bvar Nat.zero) (KExpr.const zeroName (ListType.nil Level))
-  (KExprParamSupport.bvar ps Nat.zero)
-  (KExprParamSupport.const ps zeroName (ListType.nil Level) (LevelListParamSupport.nil ps)))
-  (KExprParamSupport.lam ps (KExpr.pi (KExpr.const natName (ListType.nil Level)) (KExpr.pi (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)) (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.app (KExpr.const succName (ListType.nil Level)) (KExpr.bvar (Nat.succ Nat.zero)))))) (KExpr.bvar (Nat.succ Nat.zero))
-  (KExprParamSupport.pi ps (KExpr.const natName (ListType.nil Level)) (KExpr.pi (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)) (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.app (KExpr.const succName (ListType.nil Level)) (KExpr.bvar (Nat.succ Nat.zero)))))
-  (KExprParamSupport.const ps natName (ListType.nil Level) (LevelListParamSupport.nil ps))
-  (KExprParamSupport.pi ps (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)) (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.app (KExpr.const succName (ListType.nil Level)) (KExpr.bvar (Nat.succ Nat.zero))))
-  (KExprParamSupport.app ps (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)
-  (KExprParamSupport.bvar ps (Nat.succ (Nat.succ Nat.zero)))
-  (KExprParamSupport.bvar ps Nat.zero))
-  (KExprParamSupport.app ps (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.app (KExpr.const succName (ListType.nil Level)) (KExpr.bvar (Nat.succ Nat.zero)))
-  (KExprParamSupport.bvar ps (Nat.succ (Nat.succ (Nat.succ Nat.zero))))
-  (KExprParamSupport.app ps (KExpr.const succName (ListType.nil Level)) (KExpr.bvar (Nat.succ Nat.zero))
-  (KExprParamSupport.const ps succName (ListType.nil Level) (LevelListParamSupport.nil ps))
-  (KExprParamSupport.bvar ps (Nat.succ Nat.zero))))))
-  (KExprParamSupport.bvar ps (Nat.succ Nat.zero)))))",
+ (@KExprParamSupport.lam ps (KExpr.pi (KExpr.const natName (@ListType.nil Level)) (KExpr.sort u)) (KExpr.lam (KExpr.app (KExpr.bvar Nat.zero) (KExpr.const zeroName (@ListType.nil Level))) (KExpr.lam (KExpr.pi (KExpr.const natName (@ListType.nil Level)) (KExpr.pi (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)) (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.app (KExpr.const succName (@ListType.nil Level)) (KExpr.bvar (Nat.succ Nat.zero)))))) (KExpr.bvar (Nat.succ Nat.zero))))
+  (@KExprParamSupport.pi ps (KExpr.const natName (@ListType.nil Level)) (KExpr.sort u)
+  (@KExprParamSupport.const ps natName (@ListType.nil Level) (@LevelListParamSupport.nil ps))
+  (@KExprParamSupport.sort ps u hu))
+  (@KExprParamSupport.lam ps (KExpr.app (KExpr.bvar Nat.zero) (KExpr.const zeroName (@ListType.nil Level))) (KExpr.lam (KExpr.pi (KExpr.const natName (@ListType.nil Level)) (KExpr.pi (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)) (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.app (KExpr.const succName (@ListType.nil Level)) (KExpr.bvar (Nat.succ Nat.zero)))))) (KExpr.bvar (Nat.succ Nat.zero)))
+  (@KExprParamSupport.app ps (KExpr.bvar Nat.zero) (KExpr.const zeroName (@ListType.nil Level))
+  (@KExprParamSupport.bvar ps Nat.zero)
+  (@KExprParamSupport.const ps zeroName (@ListType.nil Level) (@LevelListParamSupport.nil ps)))
+  (@KExprParamSupport.lam ps (KExpr.pi (KExpr.const natName (@ListType.nil Level)) (KExpr.pi (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)) (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.app (KExpr.const succName (@ListType.nil Level)) (KExpr.bvar (Nat.succ Nat.zero)))))) (KExpr.bvar (Nat.succ Nat.zero))
+  (@KExprParamSupport.pi ps (KExpr.const natName (@ListType.nil Level)) (KExpr.pi (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)) (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.app (KExpr.const succName (@ListType.nil Level)) (KExpr.bvar (Nat.succ Nat.zero)))))
+  (@KExprParamSupport.const ps natName (@ListType.nil Level) (@LevelListParamSupport.nil ps))
+  (@KExprParamSupport.pi ps (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)) (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.app (KExpr.const succName (@ListType.nil Level)) (KExpr.bvar (Nat.succ Nat.zero))))
+  (@KExprParamSupport.app ps (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)
+  (@KExprParamSupport.bvar ps (Nat.succ (Nat.succ Nat.zero)))
+  (@KExprParamSupport.bvar ps Nat.zero))
+  (@KExprParamSupport.app ps (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.app (KExpr.const succName (@ListType.nil Level)) (KExpr.bvar (Nat.succ Nat.zero)))
+  (@KExprParamSupport.bvar ps (Nat.succ (Nat.succ (Nat.succ Nat.zero))))
+  (@KExprParamSupport.app ps (KExpr.const succName (@ListType.nil Level)) (KExpr.bvar (Nat.succ Nat.zero))
+  (@KExprParamSupport.const ps succName (@ListType.nil Level) (@LevelListParamSupport.nil ps))
+  (@KExprParamSupport.bvar ps (Nat.succ Nat.zero))))))
+  (@KExprParamSupport.bvar ps (Nat.succ Nat.zero)))))",
         "Explicit support constructors over the exact current RHS definition, including every binder type and recursive-call universe. Only support of its supplied universe is assumed.",
     ),
     (
@@ -70,80 +70,80 @@ const NAT: &[(&str, &str)] = &[
     ),
     (
         r"def nat_rec_rhs_zero_stored_closed : is_closed_at (natRecRhsZero (Level.param Name.anonymous)) Nat.zero :=
- closed_at_b_sound (natRecRhsZero (Level.param Name.anonymous)) Nat.zero (Eq.refl Bool Bool.true)",
+ closed_at_b_sound (natRecRhsZero (Level.param Name.anonymous)) Nat.zero (@Eq.refl Bool Bool.true)",
         "Actual depth checker computation plus existing proved reflection establishes schematic de Bruijn closure; universe support is not conflated with term closedness.",
     ),
     (
         r"def nat_rec_rhs_zero_guarded (u : Level) :
- Eq (OptionType KExpr) (recursor_rhs_at (KConstSig.mk recursor_schematic_params (natRecTy (Level.param Name.anonymous))) (natRecRhsZero (Level.param Name.anonymous)) (ListType.cons Level u (ListType.nil Level)))
-  (OptionType.some KExpr (natRecRhsZero u)) :=
- Eq.trans (OptionType KExpr) (recursor_rhs_at (KConstSig.mk recursor_schematic_params (natRecTy (Level.param Name.anonymous))) (natRecRhsZero (Level.param Name.anonymous)) (ListType.cons Level u (ListType.nil Level)))
-  (OptionType.some KExpr (recursor_rhs_instance (KConstSig.mk recursor_schematic_params (natRecTy (Level.param Name.anonymous))) (natRecRhsZero (Level.param Name.anonymous)) (ListType.cons Level u (ListType.nil Level))))
-  (OptionType.some KExpr (natRecRhsZero u))
-  (recursor_rhs_at_intro (KConstSig.mk recursor_schematic_params (natRecTy (Level.param Name.anonymous))) (natRecRhsZero (Level.param Name.anonymous)) (ListType.cons Level u (ListType.nil Level)) (Eq.refl Nat (Nat.succ Nat.zero)))
-  (Eq.cong KExpr (OptionType KExpr) (fun (e : KExpr) => OptionType.some KExpr e)
-    (recursor_rhs_instance (KConstSig.mk recursor_schematic_params (natRecTy (Level.param Name.anonymous))) (natRecRhsZero (Level.param Name.anonymous)) (ListType.cons Level u (ListType.nil Level))) (natRecRhsZero u) (nat_rec_rhs_zero_instLevels u))",
+ @Eq (OptionType KExpr) (recursor_rhs_at (KConstSig.mk recursor_schematic_params (natRecTy (Level.param Name.anonymous))) (natRecRhsZero (Level.param Name.anonymous)) (@ListType.cons Level u (@ListType.nil Level)))
+  (@OptionType.some KExpr (natRecRhsZero u)) :=
+ Eq.trans (OptionType KExpr) (recursor_rhs_at (KConstSig.mk recursor_schematic_params (natRecTy (Level.param Name.anonymous))) (natRecRhsZero (Level.param Name.anonymous)) (@ListType.cons Level u (@ListType.nil Level)))
+  (@OptionType.some KExpr (recursor_rhs_instance (KConstSig.mk recursor_schematic_params (natRecTy (Level.param Name.anonymous))) (natRecRhsZero (Level.param Name.anonymous)) (@ListType.cons Level u (@ListType.nil Level))))
+  (@OptionType.some KExpr (natRecRhsZero u))
+  (recursor_rhs_at_intro (KConstSig.mk recursor_schematic_params (natRecTy (Level.param Name.anonymous))) (natRecRhsZero (Level.param Name.anonymous)) (@ListType.cons Level u (@ListType.nil Level)) (@Eq.refl Nat (Nat.succ Nat.zero)))
+  (Eq.cong KExpr (OptionType KExpr) (fun (e : KExpr) => @OptionType.some KExpr e)
+    (recursor_rhs_instance (KConstSig.mk recursor_schematic_params (natRecTy (Level.param Name.anonymous))) (natRecRhsZero (Level.param Name.anonymous)) (@ListType.cons Level u (@ListType.nil Level))) (natRecRhsZero u) (nat_rec_rhs_zero_instLevels u))",
         "Direct caller of the guarded RHS operation and the exact instance equation. The successful output is derived, not assumed.",
     ),
     (
         r"def nat_rec_rhs_zero_instance_closed (u : Level) : is_closed_at (natRecRhsZero u) Nat.zero :=
- recursor_rhs_at_preserves_closed_at (KConstSig.mk recursor_schematic_params (natRecTy (Level.param Name.anonymous))) (natRecRhsZero (Level.param Name.anonymous)) (ListType.cons Level u (ListType.nil Level)) (natRecRhsZero u)
+ recursor_rhs_at_preserves_closed_at (KConstSig.mk recursor_schematic_params (natRecTy (Level.param Name.anonymous))) (natRecRhsZero (Level.param Name.anonymous)) (@ListType.cons Level u (@ListType.nil Level)) (natRecRhsZero u)
   (nat_rec_rhs_zero_guarded u) Nat.zero nat_rec_rhs_zero_stored_closed",
         "The guarded helper derives returned RHS closure from one stored closure proof, for every supplied universe.",
     ),
     (
         r"def nat_rec_rhs_zero_self_parameter :
- Eq (OptionType KExpr)
+ @Eq (OptionType KExpr)
   (recursor_rhs_at (KConstSig.mk recursor_schematic_params (natRecTy (Level.param Name.anonymous))) (natRecRhsZero (Level.param Name.anonymous))
-    (ListType.cons Level recursor_schematic_self_level (ListType.nil Level)))
-  (OptionType.some KExpr (natRecRhsZero recursor_schematic_self_level)) :=
+    (@ListType.cons Level recursor_schematic_self_level (@ListType.nil Level)))
+  (@OptionType.some KExpr (natRecRhsZero recursor_schematic_self_level)) :=
  nat_rec_rhs_zero_guarded recursor_schematic_self_level",
         "Positive actual guarded caller at succ(param anonymous), a nonclosed universe that would reveal a second substitution.",
     ),
     (
         r"def nat_rec_rhs_succ_instLevels (u : Level) :
- Eq KExpr (instLevels recursor_schematic_params (natRecRhsSucc (Level.param Name.anonymous)) (ListType.cons Level u (ListType.nil Level))) (natRecRhsSucc u) :=
- Eq.refl KExpr (natRecRhsSucc u)",
+ @Eq KExpr (instLevels recursor_schematic_params (natRecRhsSucc (Level.param Name.anonymous)) (@ListType.cons Level u (@ListType.nil Level))) (natRecRhsSucc u) :=
+ @Eq.refl KExpr (natRecRhsSucc u)",
         "Exact existing schematic RHS instantiated once at arbitrary u equals its existing RHS(u) builder. No closure, parameter-freedom or output-equality premise.",
     ),
     (
         r"def nat_rec_rhs_succ_param_support (ps : ListType Name) (u : Level)
  (hu : LevelParamSupport ps u) : KExprParamSupport ps (natRecRhsSucc u) :=
- (KExprParamSupport.lam ps (KExpr.pi (KExpr.const natName (ListType.nil Level)) (KExpr.sort u)) (KExpr.lam (KExpr.app (KExpr.bvar Nat.zero) (KExpr.const zeroName (ListType.nil Level))) (KExpr.lam (KExpr.pi (KExpr.const natName (ListType.nil Level)) (KExpr.pi (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)) (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.app (KExpr.const succName (ListType.nil Level)) (KExpr.bvar (Nat.succ Nat.zero)))))) (KExpr.lam (KExpr.const natName (ListType.nil Level)) (KExpr.app (KExpr.app (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.app (KExpr.app (KExpr.app (KExpr.app (KExpr.const recName (ListType.cons Level u (ListType.nil Level))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))))))
-  (KExprParamSupport.pi ps (KExpr.const natName (ListType.nil Level)) (KExpr.sort u)
-  (KExprParamSupport.const ps natName (ListType.nil Level) (LevelListParamSupport.nil ps))
-  (KExprParamSupport.sort ps u hu))
-  (KExprParamSupport.lam ps (KExpr.app (KExpr.bvar Nat.zero) (KExpr.const zeroName (ListType.nil Level))) (KExpr.lam (KExpr.pi (KExpr.const natName (ListType.nil Level)) (KExpr.pi (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)) (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.app (KExpr.const succName (ListType.nil Level)) (KExpr.bvar (Nat.succ Nat.zero)))))) (KExpr.lam (KExpr.const natName (ListType.nil Level)) (KExpr.app (KExpr.app (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.app (KExpr.app (KExpr.app (KExpr.app (KExpr.const recName (ListType.cons Level u (ListType.nil Level))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)))))
-  (KExprParamSupport.app ps (KExpr.bvar Nat.zero) (KExpr.const zeroName (ListType.nil Level))
-  (KExprParamSupport.bvar ps Nat.zero)
-  (KExprParamSupport.const ps zeroName (ListType.nil Level) (LevelListParamSupport.nil ps)))
-  (KExprParamSupport.lam ps (KExpr.pi (KExpr.const natName (ListType.nil Level)) (KExpr.pi (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)) (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.app (KExpr.const succName (ListType.nil Level)) (KExpr.bvar (Nat.succ Nat.zero)))))) (KExpr.lam (KExpr.const natName (ListType.nil Level)) (KExpr.app (KExpr.app (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.app (KExpr.app (KExpr.app (KExpr.app (KExpr.const recName (ListType.cons Level u (ListType.nil Level))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))))
-  (KExprParamSupport.pi ps (KExpr.const natName (ListType.nil Level)) (KExpr.pi (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)) (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.app (KExpr.const succName (ListType.nil Level)) (KExpr.bvar (Nat.succ Nat.zero)))))
-  (KExprParamSupport.const ps natName (ListType.nil Level) (LevelListParamSupport.nil ps))
-  (KExprParamSupport.pi ps (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)) (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.app (KExpr.const succName (ListType.nil Level)) (KExpr.bvar (Nat.succ Nat.zero))))
-  (KExprParamSupport.app ps (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)
-  (KExprParamSupport.bvar ps (Nat.succ (Nat.succ Nat.zero)))
-  (KExprParamSupport.bvar ps Nat.zero))
-  (KExprParamSupport.app ps (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.app (KExpr.const succName (ListType.nil Level)) (KExpr.bvar (Nat.succ Nat.zero)))
-  (KExprParamSupport.bvar ps (Nat.succ (Nat.succ (Nat.succ Nat.zero))))
-  (KExprParamSupport.app ps (KExpr.const succName (ListType.nil Level)) (KExpr.bvar (Nat.succ Nat.zero))
-  (KExprParamSupport.const ps succName (ListType.nil Level) (LevelListParamSupport.nil ps))
-  (KExprParamSupport.bvar ps (Nat.succ Nat.zero))))))
-  (KExprParamSupport.lam ps (KExpr.const natName (ListType.nil Level)) (KExpr.app (KExpr.app (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.app (KExpr.app (KExpr.app (KExpr.app (KExpr.const recName (ListType.cons Level u (ListType.nil Level))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)))
-  (KExprParamSupport.const ps natName (ListType.nil Level) (LevelListParamSupport.nil ps))
-  (KExprParamSupport.app ps (KExpr.app (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.app (KExpr.app (KExpr.app (KExpr.app (KExpr.const recName (ListType.cons Level u (ListType.nil Level))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))
-  (KExprParamSupport.app ps (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)
-  (KExprParamSupport.bvar ps (Nat.succ Nat.zero))
-  (KExprParamSupport.bvar ps Nat.zero))
-  (KExprParamSupport.app ps (KExpr.app (KExpr.app (KExpr.app (KExpr.const recName (ListType.cons Level u (ListType.nil Level))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)
-  (KExprParamSupport.app ps (KExpr.app (KExpr.app (KExpr.const recName (ListType.cons Level u (ListType.nil Level))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar (Nat.succ Nat.zero))
-  (KExprParamSupport.app ps (KExpr.app (KExpr.const recName (ListType.cons Level u (ListType.nil Level))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero)))
-  (KExprParamSupport.app ps (KExpr.const recName (ListType.cons Level u (ListType.nil Level))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero))))
-  (KExprParamSupport.const ps recName (ListType.cons Level u (ListType.nil Level)) (LevelListParamSupport.cons ps u (ListType.nil Level) hu (LevelListParamSupport.nil ps)))
-  (KExprParamSupport.bvar ps (Nat.succ (Nat.succ (Nat.succ Nat.zero)))))
-  (KExprParamSupport.bvar ps (Nat.succ (Nat.succ Nat.zero))))
-  (KExprParamSupport.bvar ps (Nat.succ Nat.zero)))
-  (KExprParamSupport.bvar ps Nat.zero)))))))",
+ (@KExprParamSupport.lam ps (KExpr.pi (KExpr.const natName (@ListType.nil Level)) (KExpr.sort u)) (KExpr.lam (KExpr.app (KExpr.bvar Nat.zero) (KExpr.const zeroName (@ListType.nil Level))) (KExpr.lam (KExpr.pi (KExpr.const natName (@ListType.nil Level)) (KExpr.pi (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)) (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.app (KExpr.const succName (@ListType.nil Level)) (KExpr.bvar (Nat.succ Nat.zero)))))) (KExpr.lam (KExpr.const natName (@ListType.nil Level)) (KExpr.app (KExpr.app (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.app (KExpr.app (KExpr.app (KExpr.app (KExpr.const recName (@ListType.cons Level u (@ListType.nil Level))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))))))
+  (@KExprParamSupport.pi ps (KExpr.const natName (@ListType.nil Level)) (KExpr.sort u)
+  (@KExprParamSupport.const ps natName (@ListType.nil Level) (@LevelListParamSupport.nil ps))
+  (@KExprParamSupport.sort ps u hu))
+  (@KExprParamSupport.lam ps (KExpr.app (KExpr.bvar Nat.zero) (KExpr.const zeroName (@ListType.nil Level))) (KExpr.lam (KExpr.pi (KExpr.const natName (@ListType.nil Level)) (KExpr.pi (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)) (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.app (KExpr.const succName (@ListType.nil Level)) (KExpr.bvar (Nat.succ Nat.zero)))))) (KExpr.lam (KExpr.const natName (@ListType.nil Level)) (KExpr.app (KExpr.app (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.app (KExpr.app (KExpr.app (KExpr.app (KExpr.const recName (@ListType.cons Level u (@ListType.nil Level))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)))))
+  (@KExprParamSupport.app ps (KExpr.bvar Nat.zero) (KExpr.const zeroName (@ListType.nil Level))
+  (@KExprParamSupport.bvar ps Nat.zero)
+  (@KExprParamSupport.const ps zeroName (@ListType.nil Level) (@LevelListParamSupport.nil ps)))
+  (@KExprParamSupport.lam ps (KExpr.pi (KExpr.const natName (@ListType.nil Level)) (KExpr.pi (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)) (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.app (KExpr.const succName (@ListType.nil Level)) (KExpr.bvar (Nat.succ Nat.zero)))))) (KExpr.lam (KExpr.const natName (@ListType.nil Level)) (KExpr.app (KExpr.app (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.app (KExpr.app (KExpr.app (KExpr.app (KExpr.const recName (@ListType.cons Level u (@ListType.nil Level))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))))
+  (@KExprParamSupport.pi ps (KExpr.const natName (@ListType.nil Level)) (KExpr.pi (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)) (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.app (KExpr.const succName (@ListType.nil Level)) (KExpr.bvar (Nat.succ Nat.zero)))))
+  (@KExprParamSupport.const ps natName (@ListType.nil Level) (@LevelListParamSupport.nil ps))
+  (@KExprParamSupport.pi ps (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)) (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.app (KExpr.const succName (@ListType.nil Level)) (KExpr.bvar (Nat.succ Nat.zero))))
+  (@KExprParamSupport.app ps (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)
+  (@KExprParamSupport.bvar ps (Nat.succ (Nat.succ Nat.zero)))
+  (@KExprParamSupport.bvar ps Nat.zero))
+  (@KExprParamSupport.app ps (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.app (KExpr.const succName (@ListType.nil Level)) (KExpr.bvar (Nat.succ Nat.zero)))
+  (@KExprParamSupport.bvar ps (Nat.succ (Nat.succ (Nat.succ Nat.zero))))
+  (@KExprParamSupport.app ps (KExpr.const succName (@ListType.nil Level)) (KExpr.bvar (Nat.succ Nat.zero))
+  (@KExprParamSupport.const ps succName (@ListType.nil Level) (@LevelListParamSupport.nil ps))
+  (@KExprParamSupport.bvar ps (Nat.succ Nat.zero))))))
+  (@KExprParamSupport.lam ps (KExpr.const natName (@ListType.nil Level)) (KExpr.app (KExpr.app (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.app (KExpr.app (KExpr.app (KExpr.app (KExpr.const recName (@ListType.cons Level u (@ListType.nil Level))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)))
+  (@KExprParamSupport.const ps natName (@ListType.nil Level) (@LevelListParamSupport.nil ps))
+  (@KExprParamSupport.app ps (KExpr.app (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.app (KExpr.app (KExpr.app (KExpr.app (KExpr.const recName (@ListType.cons Level u (@ListType.nil Level))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))
+  (@KExprParamSupport.app ps (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)
+  (@KExprParamSupport.bvar ps (Nat.succ Nat.zero))
+  (@KExprParamSupport.bvar ps Nat.zero))
+  (@KExprParamSupport.app ps (KExpr.app (KExpr.app (KExpr.app (KExpr.const recName (@ListType.cons Level u (@ListType.nil Level))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)
+  (@KExprParamSupport.app ps (KExpr.app (KExpr.app (KExpr.const recName (@ListType.cons Level u (@ListType.nil Level))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar (Nat.succ Nat.zero))
+  (@KExprParamSupport.app ps (KExpr.app (KExpr.const recName (@ListType.cons Level u (@ListType.nil Level))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero)))
+  (@KExprParamSupport.app ps (KExpr.const recName (@ListType.cons Level u (@ListType.nil Level))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero))))
+  (@KExprParamSupport.const ps recName (@ListType.cons Level u (@ListType.nil Level)) (@LevelListParamSupport.cons ps u (@ListType.nil Level) hu (@LevelListParamSupport.nil ps)))
+  (@KExprParamSupport.bvar ps (Nat.succ (Nat.succ (Nat.succ Nat.zero)))))
+  (@KExprParamSupport.bvar ps (Nat.succ (Nat.succ Nat.zero))))
+  (@KExprParamSupport.bvar ps (Nat.succ Nat.zero)))
+  (@KExprParamSupport.bvar ps Nat.zero)))))))",
         "Explicit support constructors over the exact current RHS definition, including every binder type and recursive-call universe. Only support of its supplied universe is assumed.",
     ),
     (
@@ -153,33 +153,33 @@ const NAT: &[(&str, &str)] = &[
     ),
     (
         r"def nat_rec_rhs_succ_stored_closed : is_closed_at (natRecRhsSucc (Level.param Name.anonymous)) Nat.zero :=
- closed_at_b_sound (natRecRhsSucc (Level.param Name.anonymous)) Nat.zero (Eq.refl Bool Bool.true)",
+ closed_at_b_sound (natRecRhsSucc (Level.param Name.anonymous)) Nat.zero (@Eq.refl Bool Bool.true)",
         "Actual depth checker computation plus existing proved reflection establishes schematic de Bruijn closure; universe support is not conflated with term closedness.",
     ),
     (
         r"def nat_rec_rhs_succ_guarded (u : Level) :
- Eq (OptionType KExpr) (recursor_rhs_at (KConstSig.mk recursor_schematic_params (natRecTy (Level.param Name.anonymous))) (natRecRhsSucc (Level.param Name.anonymous)) (ListType.cons Level u (ListType.nil Level)))
-  (OptionType.some KExpr (natRecRhsSucc u)) :=
- Eq.trans (OptionType KExpr) (recursor_rhs_at (KConstSig.mk recursor_schematic_params (natRecTy (Level.param Name.anonymous))) (natRecRhsSucc (Level.param Name.anonymous)) (ListType.cons Level u (ListType.nil Level)))
-  (OptionType.some KExpr (recursor_rhs_instance (KConstSig.mk recursor_schematic_params (natRecTy (Level.param Name.anonymous))) (natRecRhsSucc (Level.param Name.anonymous)) (ListType.cons Level u (ListType.nil Level))))
-  (OptionType.some KExpr (natRecRhsSucc u))
-  (recursor_rhs_at_intro (KConstSig.mk recursor_schematic_params (natRecTy (Level.param Name.anonymous))) (natRecRhsSucc (Level.param Name.anonymous)) (ListType.cons Level u (ListType.nil Level)) (Eq.refl Nat (Nat.succ Nat.zero)))
-  (Eq.cong KExpr (OptionType KExpr) (fun (e : KExpr) => OptionType.some KExpr e)
-    (recursor_rhs_instance (KConstSig.mk recursor_schematic_params (natRecTy (Level.param Name.anonymous))) (natRecRhsSucc (Level.param Name.anonymous)) (ListType.cons Level u (ListType.nil Level))) (natRecRhsSucc u) (nat_rec_rhs_succ_instLevels u))",
+ @Eq (OptionType KExpr) (recursor_rhs_at (KConstSig.mk recursor_schematic_params (natRecTy (Level.param Name.anonymous))) (natRecRhsSucc (Level.param Name.anonymous)) (@ListType.cons Level u (@ListType.nil Level)))
+  (@OptionType.some KExpr (natRecRhsSucc u)) :=
+ Eq.trans (OptionType KExpr) (recursor_rhs_at (KConstSig.mk recursor_schematic_params (natRecTy (Level.param Name.anonymous))) (natRecRhsSucc (Level.param Name.anonymous)) (@ListType.cons Level u (@ListType.nil Level)))
+  (@OptionType.some KExpr (recursor_rhs_instance (KConstSig.mk recursor_schematic_params (natRecTy (Level.param Name.anonymous))) (natRecRhsSucc (Level.param Name.anonymous)) (@ListType.cons Level u (@ListType.nil Level))))
+  (@OptionType.some KExpr (natRecRhsSucc u))
+  (recursor_rhs_at_intro (KConstSig.mk recursor_schematic_params (natRecTy (Level.param Name.anonymous))) (natRecRhsSucc (Level.param Name.anonymous)) (@ListType.cons Level u (@ListType.nil Level)) (@Eq.refl Nat (Nat.succ Nat.zero)))
+  (Eq.cong KExpr (OptionType KExpr) (fun (e : KExpr) => @OptionType.some KExpr e)
+    (recursor_rhs_instance (KConstSig.mk recursor_schematic_params (natRecTy (Level.param Name.anonymous))) (natRecRhsSucc (Level.param Name.anonymous)) (@ListType.cons Level u (@ListType.nil Level))) (natRecRhsSucc u) (nat_rec_rhs_succ_instLevels u))",
         "Direct caller of the guarded RHS operation and the exact instance equation. The successful output is derived, not assumed.",
     ),
     (
         r"def nat_rec_rhs_succ_instance_closed (u : Level) : is_closed_at (natRecRhsSucc u) Nat.zero :=
- recursor_rhs_at_preserves_closed_at (KConstSig.mk recursor_schematic_params (natRecTy (Level.param Name.anonymous))) (natRecRhsSucc (Level.param Name.anonymous)) (ListType.cons Level u (ListType.nil Level)) (natRecRhsSucc u)
+ recursor_rhs_at_preserves_closed_at (KConstSig.mk recursor_schematic_params (natRecTy (Level.param Name.anonymous))) (natRecRhsSucc (Level.param Name.anonymous)) (@ListType.cons Level u (@ListType.nil Level)) (natRecRhsSucc u)
   (nat_rec_rhs_succ_guarded u) Nat.zero nat_rec_rhs_succ_stored_closed",
         "The guarded helper derives returned RHS closure from one stored closure proof, for every supplied universe.",
     ),
     (
         r"def nat_rec_rhs_succ_self_parameter :
- Eq (OptionType KExpr)
+ @Eq (OptionType KExpr)
   (recursor_rhs_at (KConstSig.mk recursor_schematic_params (natRecTy (Level.param Name.anonymous))) (natRecRhsSucc (Level.param Name.anonymous))
-    (ListType.cons Level recursor_schematic_self_level (ListType.nil Level)))
-  (OptionType.some KExpr (natRecRhsSucc recursor_schematic_self_level)) :=
+    (@ListType.cons Level recursor_schematic_self_level (@ListType.nil Level)))
+  (@OptionType.some KExpr (natRecRhsSucc recursor_schematic_self_level)) :=
  nat_rec_rhs_succ_guarded recursor_schematic_self_level",
         "Positive actual guarded caller at succ(param anonymous), a nonclosed universe that would reveal a second substitution.",
     ),
@@ -188,54 +188,54 @@ const NAT: &[(&str, &str)] = &[
 const W: &[(&str, &str)] = &[
     (
         r"def w_rec_rhs_instLevels (u : Level) :
- Eq KExpr (instLevels recursor_schematic_params (wRecRhs (Level.param Name.anonymous)) (ListType.cons Level u (ListType.nil Level))) (wRecRhs u) :=
- Eq.refl KExpr (wRecRhs u)",
+ @Eq KExpr (instLevels recursor_schematic_params (wRecRhs (Level.param Name.anonymous)) (@ListType.cons Level u (@ListType.nil Level))) (wRecRhs u) :=
+ @Eq.refl KExpr (wRecRhs u)",
         "Exact existing schematic RHS instantiated once at arbitrary u equals its existing RHS(u) builder. No closure, parameter-freedom or output-equality premise.",
     ),
     (
         r"def w_rec_rhs_param_support (ps : ListType Name) (u : Level)
  (hu : LevelParamSupport ps u) : KExprParamSupport ps (wRecRhs u) :=
- (KExprParamSupport.lam ps (KExpr.pi (KExpr.const wName (ListType.nil Level)) (KExpr.sort u)) (KExpr.lam (KExpr.pi (KExpr.pi (KExpr.const dName (ListType.nil Level)) (KExpr.const wName (ListType.nil Level))) (KExpr.pi (KExpr.pi (KExpr.const dName (ListType.nil Level)) (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.app (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)))) (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.app (KExpr.const supName (ListType.nil Level)) (KExpr.bvar (Nat.succ Nat.zero)))))) (KExpr.lam (KExpr.pi (KExpr.const dName (ListType.nil Level)) (KExpr.const wName (ListType.nil Level))) (KExpr.app (KExpr.app (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.lam (KExpr.const dName (ListType.nil Level)) (KExpr.app (KExpr.app (KExpr.app (KExpr.const wRecName (ListType.cons Level u (ListType.nil Level))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero)))) (KExpr.app (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)))))))
-  (KExprParamSupport.pi ps (KExpr.const wName (ListType.nil Level)) (KExpr.sort u)
-  (KExprParamSupport.const ps wName (ListType.nil Level) (LevelListParamSupport.nil ps))
-  (KExprParamSupport.sort ps u hu))
-  (KExprParamSupport.lam ps (KExpr.pi (KExpr.pi (KExpr.const dName (ListType.nil Level)) (KExpr.const wName (ListType.nil Level))) (KExpr.pi (KExpr.pi (KExpr.const dName (ListType.nil Level)) (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.app (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)))) (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.app (KExpr.const supName (ListType.nil Level)) (KExpr.bvar (Nat.succ Nat.zero)))))) (KExpr.lam (KExpr.pi (KExpr.const dName (ListType.nil Level)) (KExpr.const wName (ListType.nil Level))) (KExpr.app (KExpr.app (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.lam (KExpr.const dName (ListType.nil Level)) (KExpr.app (KExpr.app (KExpr.app (KExpr.const wRecName (ListType.cons Level u (ListType.nil Level))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero)))) (KExpr.app (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero))))))
-  (KExprParamSupport.pi ps (KExpr.pi (KExpr.const dName (ListType.nil Level)) (KExpr.const wName (ListType.nil Level))) (KExpr.pi (KExpr.pi (KExpr.const dName (ListType.nil Level)) (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.app (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)))) (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.app (KExpr.const supName (ListType.nil Level)) (KExpr.bvar (Nat.succ Nat.zero)))))
-  (KExprParamSupport.pi ps (KExpr.const dName (ListType.nil Level)) (KExpr.const wName (ListType.nil Level))
-  (KExprParamSupport.const ps dName (ListType.nil Level) (LevelListParamSupport.nil ps))
-  (KExprParamSupport.const ps wName (ListType.nil Level) (LevelListParamSupport.nil ps)))
-  (KExprParamSupport.pi ps (KExpr.pi (KExpr.const dName (ListType.nil Level)) (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.app (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)))) (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.app (KExpr.const supName (ListType.nil Level)) (KExpr.bvar (Nat.succ Nat.zero))))
-  (KExprParamSupport.pi ps (KExpr.const dName (ListType.nil Level)) (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.app (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)))
-  (KExprParamSupport.const ps dName (ListType.nil Level) (LevelListParamSupport.nil ps))
-  (KExprParamSupport.app ps (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.app (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero))
-  (KExprParamSupport.bvar ps (Nat.succ (Nat.succ Nat.zero)))
-  (KExprParamSupport.app ps (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)
-  (KExprParamSupport.bvar ps (Nat.succ Nat.zero))
-  (KExprParamSupport.bvar ps Nat.zero))))
-  (KExprParamSupport.app ps (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.app (KExpr.const supName (ListType.nil Level)) (KExpr.bvar (Nat.succ Nat.zero)))
-  (KExprParamSupport.bvar ps (Nat.succ (Nat.succ Nat.zero)))
-  (KExprParamSupport.app ps (KExpr.const supName (ListType.nil Level)) (KExpr.bvar (Nat.succ Nat.zero))
-  (KExprParamSupport.const ps supName (ListType.nil Level) (LevelListParamSupport.nil ps))
-  (KExprParamSupport.bvar ps (Nat.succ Nat.zero))))))
-  (KExprParamSupport.lam ps (KExpr.pi (KExpr.const dName (ListType.nil Level)) (KExpr.const wName (ListType.nil Level))) (KExpr.app (KExpr.app (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.lam (KExpr.const dName (ListType.nil Level)) (KExpr.app (KExpr.app (KExpr.app (KExpr.const wRecName (ListType.cons Level u (ListType.nil Level))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero)))) (KExpr.app (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)))))
-  (KExprParamSupport.pi ps (KExpr.const dName (ListType.nil Level)) (KExpr.const wName (ListType.nil Level))
-  (KExprParamSupport.const ps dName (ListType.nil Level) (LevelListParamSupport.nil ps))
-  (KExprParamSupport.const ps wName (ListType.nil Level) (LevelListParamSupport.nil ps)))
-  (KExprParamSupport.app ps (KExpr.app (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.lam (KExpr.const dName (ListType.nil Level)) (KExpr.app (KExpr.app (KExpr.app (KExpr.const wRecName (ListType.cons Level u (ListType.nil Level))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero)))) (KExpr.app (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero))))
-  (KExprParamSupport.app ps (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)
-  (KExprParamSupport.bvar ps (Nat.succ Nat.zero))
-  (KExprParamSupport.bvar ps Nat.zero))
-  (KExprParamSupport.lam ps (KExpr.const dName (ListType.nil Level)) (KExpr.app (KExpr.app (KExpr.app (KExpr.const wRecName (ListType.cons Level u (ListType.nil Level))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero)))) (KExpr.app (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)))
-  (KExprParamSupport.const ps dName (ListType.nil Level) (LevelListParamSupport.nil ps))
-  (KExprParamSupport.app ps (KExpr.app (KExpr.app (KExpr.const wRecName (ListType.cons Level u (ListType.nil Level))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero)))) (KExpr.app (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero))
-  (KExprParamSupport.app ps (KExpr.app (KExpr.const wRecName (ListType.cons Level u (ListType.nil Level))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero)))
-  (KExprParamSupport.app ps (KExpr.const wRecName (ListType.cons Level u (ListType.nil Level))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero))))
-  (KExprParamSupport.const ps wRecName (ListType.cons Level u (ListType.nil Level)) (LevelListParamSupport.cons ps u (ListType.nil Level) hu (LevelListParamSupport.nil ps)))
-  (KExprParamSupport.bvar ps (Nat.succ (Nat.succ (Nat.succ Nat.zero)))))
-  (KExprParamSupport.bvar ps (Nat.succ (Nat.succ Nat.zero))))
-  (KExprParamSupport.app ps (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)
-  (KExprParamSupport.bvar ps (Nat.succ Nat.zero))
-  (KExprParamSupport.bvar ps Nat.zero))))))))",
+ (@KExprParamSupport.lam ps (KExpr.pi (KExpr.const wName (@ListType.nil Level)) (KExpr.sort u)) (KExpr.lam (KExpr.pi (KExpr.pi (KExpr.const dName (@ListType.nil Level)) (KExpr.const wName (@ListType.nil Level))) (KExpr.pi (KExpr.pi (KExpr.const dName (@ListType.nil Level)) (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.app (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)))) (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.app (KExpr.const supName (@ListType.nil Level)) (KExpr.bvar (Nat.succ Nat.zero)))))) (KExpr.lam (KExpr.pi (KExpr.const dName (@ListType.nil Level)) (KExpr.const wName (@ListType.nil Level))) (KExpr.app (KExpr.app (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.lam (KExpr.const dName (@ListType.nil Level)) (KExpr.app (KExpr.app (KExpr.app (KExpr.const wRecName (@ListType.cons Level u (@ListType.nil Level))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero)))) (KExpr.app (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)))))))
+  (@KExprParamSupport.pi ps (KExpr.const wName (@ListType.nil Level)) (KExpr.sort u)
+  (@KExprParamSupport.const ps wName (@ListType.nil Level) (@LevelListParamSupport.nil ps))
+  (@KExprParamSupport.sort ps u hu))
+  (@KExprParamSupport.lam ps (KExpr.pi (KExpr.pi (KExpr.const dName (@ListType.nil Level)) (KExpr.const wName (@ListType.nil Level))) (KExpr.pi (KExpr.pi (KExpr.const dName (@ListType.nil Level)) (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.app (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)))) (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.app (KExpr.const supName (@ListType.nil Level)) (KExpr.bvar (Nat.succ Nat.zero)))))) (KExpr.lam (KExpr.pi (KExpr.const dName (@ListType.nil Level)) (KExpr.const wName (@ListType.nil Level))) (KExpr.app (KExpr.app (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.lam (KExpr.const dName (@ListType.nil Level)) (KExpr.app (KExpr.app (KExpr.app (KExpr.const wRecName (@ListType.cons Level u (@ListType.nil Level))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero)))) (KExpr.app (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero))))))
+  (@KExprParamSupport.pi ps (KExpr.pi (KExpr.const dName (@ListType.nil Level)) (KExpr.const wName (@ListType.nil Level))) (KExpr.pi (KExpr.pi (KExpr.const dName (@ListType.nil Level)) (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.app (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)))) (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.app (KExpr.const supName (@ListType.nil Level)) (KExpr.bvar (Nat.succ Nat.zero)))))
+  (@KExprParamSupport.pi ps (KExpr.const dName (@ListType.nil Level)) (KExpr.const wName (@ListType.nil Level))
+  (@KExprParamSupport.const ps dName (@ListType.nil Level) (@LevelListParamSupport.nil ps))
+  (@KExprParamSupport.const ps wName (@ListType.nil Level) (@LevelListParamSupport.nil ps)))
+  (@KExprParamSupport.pi ps (KExpr.pi (KExpr.const dName (@ListType.nil Level)) (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.app (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)))) (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.app (KExpr.const supName (@ListType.nil Level)) (KExpr.bvar (Nat.succ Nat.zero))))
+  (@KExprParamSupport.pi ps (KExpr.const dName (@ListType.nil Level)) (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.app (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)))
+  (@KExprParamSupport.const ps dName (@ListType.nil Level) (@LevelListParamSupport.nil ps))
+  (@KExprParamSupport.app ps (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.app (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero))
+  (@KExprParamSupport.bvar ps (Nat.succ (Nat.succ Nat.zero)))
+  (@KExprParamSupport.app ps (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)
+  (@KExprParamSupport.bvar ps (Nat.succ Nat.zero))
+  (@KExprParamSupport.bvar ps Nat.zero))))
+  (@KExprParamSupport.app ps (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.app (KExpr.const supName (@ListType.nil Level)) (KExpr.bvar (Nat.succ Nat.zero)))
+  (@KExprParamSupport.bvar ps (Nat.succ (Nat.succ Nat.zero)))
+  (@KExprParamSupport.app ps (KExpr.const supName (@ListType.nil Level)) (KExpr.bvar (Nat.succ Nat.zero))
+  (@KExprParamSupport.const ps supName (@ListType.nil Level) (@LevelListParamSupport.nil ps))
+  (@KExprParamSupport.bvar ps (Nat.succ Nat.zero))))))
+  (@KExprParamSupport.lam ps (KExpr.pi (KExpr.const dName (@ListType.nil Level)) (KExpr.const wName (@ListType.nil Level))) (KExpr.app (KExpr.app (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.lam (KExpr.const dName (@ListType.nil Level)) (KExpr.app (KExpr.app (KExpr.app (KExpr.const wRecName (@ListType.cons Level u (@ListType.nil Level))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero)))) (KExpr.app (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)))))
+  (@KExprParamSupport.pi ps (KExpr.const dName (@ListType.nil Level)) (KExpr.const wName (@ListType.nil Level))
+  (@KExprParamSupport.const ps dName (@ListType.nil Level) (@LevelListParamSupport.nil ps))
+  (@KExprParamSupport.const ps wName (@ListType.nil Level) (@LevelListParamSupport.nil ps)))
+  (@KExprParamSupport.app ps (KExpr.app (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.lam (KExpr.const dName (@ListType.nil Level)) (KExpr.app (KExpr.app (KExpr.app (KExpr.const wRecName (@ListType.cons Level u (@ListType.nil Level))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero)))) (KExpr.app (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero))))
+  (@KExprParamSupport.app ps (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)
+  (@KExprParamSupport.bvar ps (Nat.succ Nat.zero))
+  (@KExprParamSupport.bvar ps Nat.zero))
+  (@KExprParamSupport.lam ps (KExpr.const dName (@ListType.nil Level)) (KExpr.app (KExpr.app (KExpr.app (KExpr.const wRecName (@ListType.cons Level u (@ListType.nil Level))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero)))) (KExpr.app (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)))
+  (@KExprParamSupport.const ps dName (@ListType.nil Level) (@LevelListParamSupport.nil ps))
+  (@KExprParamSupport.app ps (KExpr.app (KExpr.app (KExpr.const wRecName (@ListType.cons Level u (@ListType.nil Level))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero)))) (KExpr.app (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero))
+  (@KExprParamSupport.app ps (KExpr.app (KExpr.const wRecName (@ListType.cons Level u (@ListType.nil Level))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (KExpr.bvar (Nat.succ (Nat.succ Nat.zero)))
+  (@KExprParamSupport.app ps (KExpr.const wRecName (@ListType.cons Level u (@ListType.nil Level))) (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero))))
+  (@KExprParamSupport.const ps wRecName (@ListType.cons Level u (@ListType.nil Level)) (@LevelListParamSupport.cons ps u (@ListType.nil Level) hu (@LevelListParamSupport.nil ps)))
+  (@KExprParamSupport.bvar ps (Nat.succ (Nat.succ (Nat.succ Nat.zero)))))
+  (@KExprParamSupport.bvar ps (Nat.succ (Nat.succ Nat.zero))))
+  (@KExprParamSupport.app ps (KExpr.bvar (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)
+  (@KExprParamSupport.bvar ps (Nat.succ Nat.zero))
+  (@KExprParamSupport.bvar ps Nat.zero))))))))",
         "Explicit support constructors over the exact current RHS definition, including every binder type and recursive-call universe. Only support of its supplied universe is assumed.",
     ),
     (
@@ -245,33 +245,33 @@ const W: &[(&str, &str)] = &[
     ),
     (
         r"def w_rec_rhs_stored_closed : is_closed_at (wRecRhs (Level.param Name.anonymous)) Nat.zero :=
- closed_at_b_sound (wRecRhs (Level.param Name.anonymous)) Nat.zero (Eq.refl Bool Bool.true)",
+ closed_at_b_sound (wRecRhs (Level.param Name.anonymous)) Nat.zero (@Eq.refl Bool Bool.true)",
         "Actual depth checker computation plus existing proved reflection establishes schematic de Bruijn closure; universe support is not conflated with term closedness.",
     ),
     (
         r"def w_rec_rhs_guarded (u : Level) :
- Eq (OptionType KExpr) (recursor_rhs_at (KConstSig.mk recursor_schematic_params (wRecTy (Level.param Name.anonymous))) (wRecRhs (Level.param Name.anonymous)) (ListType.cons Level u (ListType.nil Level)))
-  (OptionType.some KExpr (wRecRhs u)) :=
- Eq.trans (OptionType KExpr) (recursor_rhs_at (KConstSig.mk recursor_schematic_params (wRecTy (Level.param Name.anonymous))) (wRecRhs (Level.param Name.anonymous)) (ListType.cons Level u (ListType.nil Level)))
-  (OptionType.some KExpr (recursor_rhs_instance (KConstSig.mk recursor_schematic_params (wRecTy (Level.param Name.anonymous))) (wRecRhs (Level.param Name.anonymous)) (ListType.cons Level u (ListType.nil Level))))
-  (OptionType.some KExpr (wRecRhs u))
-  (recursor_rhs_at_intro (KConstSig.mk recursor_schematic_params (wRecTy (Level.param Name.anonymous))) (wRecRhs (Level.param Name.anonymous)) (ListType.cons Level u (ListType.nil Level)) (Eq.refl Nat (Nat.succ Nat.zero)))
-  (Eq.cong KExpr (OptionType KExpr) (fun (e : KExpr) => OptionType.some KExpr e)
-    (recursor_rhs_instance (KConstSig.mk recursor_schematic_params (wRecTy (Level.param Name.anonymous))) (wRecRhs (Level.param Name.anonymous)) (ListType.cons Level u (ListType.nil Level))) (wRecRhs u) (w_rec_rhs_instLevels u))",
+ @Eq (OptionType KExpr) (recursor_rhs_at (KConstSig.mk recursor_schematic_params (wRecTy (Level.param Name.anonymous))) (wRecRhs (Level.param Name.anonymous)) (@ListType.cons Level u (@ListType.nil Level)))
+  (@OptionType.some KExpr (wRecRhs u)) :=
+ Eq.trans (OptionType KExpr) (recursor_rhs_at (KConstSig.mk recursor_schematic_params (wRecTy (Level.param Name.anonymous))) (wRecRhs (Level.param Name.anonymous)) (@ListType.cons Level u (@ListType.nil Level)))
+  (@OptionType.some KExpr (recursor_rhs_instance (KConstSig.mk recursor_schematic_params (wRecTy (Level.param Name.anonymous))) (wRecRhs (Level.param Name.anonymous)) (@ListType.cons Level u (@ListType.nil Level))))
+  (@OptionType.some KExpr (wRecRhs u))
+  (recursor_rhs_at_intro (KConstSig.mk recursor_schematic_params (wRecTy (Level.param Name.anonymous))) (wRecRhs (Level.param Name.anonymous)) (@ListType.cons Level u (@ListType.nil Level)) (@Eq.refl Nat (Nat.succ Nat.zero)))
+  (Eq.cong KExpr (OptionType KExpr) (fun (e : KExpr) => @OptionType.some KExpr e)
+    (recursor_rhs_instance (KConstSig.mk recursor_schematic_params (wRecTy (Level.param Name.anonymous))) (wRecRhs (Level.param Name.anonymous)) (@ListType.cons Level u (@ListType.nil Level))) (wRecRhs u) (w_rec_rhs_instLevels u))",
         "Direct caller of the guarded RHS operation and the exact instance equation. The successful output is derived, not assumed.",
     ),
     (
         r"def w_rec_rhs_instance_closed (u : Level) : is_closed_at (wRecRhs u) Nat.zero :=
- recursor_rhs_at_preserves_closed_at (KConstSig.mk recursor_schematic_params (wRecTy (Level.param Name.anonymous))) (wRecRhs (Level.param Name.anonymous)) (ListType.cons Level u (ListType.nil Level)) (wRecRhs u)
+ recursor_rhs_at_preserves_closed_at (KConstSig.mk recursor_schematic_params (wRecTy (Level.param Name.anonymous))) (wRecRhs (Level.param Name.anonymous)) (@ListType.cons Level u (@ListType.nil Level)) (wRecRhs u)
   (w_rec_rhs_guarded u) Nat.zero w_rec_rhs_stored_closed",
         "The guarded helper derives returned RHS closure from one stored closure proof, for every supplied universe.",
     ),
     (
         r"def w_rec_rhs_self_parameter :
- Eq (OptionType KExpr)
+ @Eq (OptionType KExpr)
   (recursor_rhs_at (KConstSig.mk recursor_schematic_params (wRecTy (Level.param Name.anonymous))) (wRecRhs (Level.param Name.anonymous))
-    (ListType.cons Level recursor_schematic_self_level (ListType.nil Level)))
-  (OptionType.some KExpr (wRecRhs recursor_schematic_self_level)) :=
+    (@ListType.cons Level recursor_schematic_self_level (@ListType.nil Level)))
+  (@OptionType.some KExpr (wRecRhs recursor_schematic_self_level)) :=
  w_rec_rhs_guarded recursor_schematic_self_level",
         "Positive actual guarded caller at succ(param anonymous), a nonclosed universe that would reveal a second substitution.",
     ),
@@ -280,7 +280,7 @@ const W: &[(&str, &str)] = &[
 const CONTROLS: &[(&str, &str)] = &[
     (
         r"def recursor_rhs_motive_level (e : KExpr) : Level :=
- KExpr.rec (fun (_e : KExpr) => Level)
+ @KExpr.rec (fun (_e : KExpr) => Level)
   (fun (u : Level) => u) (fun (_i : Nat) => Level.zero)
   (fun (_f : KExpr) (_a : KExpr) (_ihf : Level) (_iha : Level) => Level.zero)
   (fun (_A : KExpr) (_b : KExpr) (ihA : Level) (_ihb : Level) => ihA)
@@ -293,25 +293,25 @@ const CONTROLS: &[(&str, &str)] = &[
     ),
     (
         r"def nat_rec_rhs_old_storage_double_instantiates :
- Eq KExpr
+ @Eq KExpr
   (instLevels recursor_schematic_params (natRecRhsZero recursor_schematic_self_level)
-    (ListType.cons Level recursor_schematic_self_level (ListType.nil Level)))
+    (@ListType.cons Level recursor_schematic_self_level (@ListType.nil Level)))
   (natRecRhsZero (Level.succ recursor_schematic_self_level)) :=
- Eq.refl KExpr (natRecRhsZero (Level.succ recursor_schematic_self_level))",
+ @Eq.refl KExpr (natRecRhsZero (Level.succ recursor_schematic_self_level))",
         "Constructive counterexample computation: the old already-instantiated storage really acquires a second successor.",
     ),
     (
         r"def nat_rec_rhs_old_storage_not_once :
- Eq KExpr
+ @Eq KExpr
   (instLevels recursor_schematic_params (natRecRhsZero recursor_schematic_self_level)
-    (ListType.cons Level recursor_schematic_self_level (ListType.nil Level)))
+    (@ListType.cons Level recursor_schematic_self_level (@ListType.nil Level)))
   (natRecRhsZero recursor_schematic_self_level) -> Empty :=
- fun (bad : Eq KExpr
+ fun (bad : @Eq KExpr
   (instLevels recursor_schematic_params (natRecRhsZero recursor_schematic_self_level)
-    (ListType.cons Level recursor_schematic_self_level (ListType.nil Level)))
+    (@ListType.cons Level recursor_schematic_self_level (@ListType.nil Level)))
   (natRecRhsZero recursor_schematic_self_level)) =>
  Eq.substType Nat
-  (fun (n : Nat) => Nat.rec (fun (_n : Nat) => Type) Nat
+  (fun (n : Nat) => @Nat.rec (fun (_n : Nat) => Type) Nat
     (fun (_n : Nat) (_ih : Type) => Empty) n)
   Nat.zero (Nat.succ Nat.zero)
   (Eq.symm Nat (Nat.succ Nat.zero) Nat.zero
@@ -319,7 +319,7 @@ const CONTROLS: &[(&str, &str)] = &[
       (Eq.cong KExpr Nat
         (fun (e : KExpr) => evalL (fun (_n : Name) => Nat.zero) (recursor_rhs_motive_level e))
         (instLevels recursor_schematic_params (natRecRhsZero recursor_schematic_self_level)
-          (ListType.cons Level recursor_schematic_self_level (ListType.nil Level)))
+          (@ListType.cons Level recursor_schematic_self_level (@ListType.nil Level)))
         (natRecRhsZero recursor_schematic_self_level) bad)))
   Nat.zero",
         "The false once-instantiated result implies Empty by observing the actual motive universe and discriminating two from one. No syntactic-injectivity axiom or hoped-for output theorem.",
@@ -406,9 +406,9 @@ mod tests {
         run_with_stack(|| {
             let mut spec = build_spec_with_stack();
             for source in [
-                "def schematic_rhs_forged_old_once : Eq KExpr (instLevels recursor_schematic_params (natRecRhsZero recursor_schematic_self_level) (ListType.cons Level recursor_schematic_self_level (ListType.nil Level))) (natRecRhsZero recursor_schematic_self_level) := Eq.refl KExpr (natRecRhsZero recursor_schematic_self_level)",
-                "def schematic_rhs_forged_w_erased : Eq KExpr (instLevels recursor_schematic_params (wRecRhs (Level.param Name.anonymous)) (ListType.cons Level recursor_schematic_self_level (ListType.nil Level))) (wRecRhs Level.zero) := Eq.refl KExpr (wRecRhs Level.zero)",
-                "def schematic_rhs_forged_parameter_free : KExprParamSupport (ListType.nil Name) (natRecRhsZero (Level.param Name.anonymous)) := nat_rec_rhs_zero_stored_support",
+                "def schematic_rhs_forged_old_once : @Eq KExpr (instLevels recursor_schematic_params (natRecRhsZero recursor_schematic_self_level) (@ListType.cons Level recursor_schematic_self_level (@ListType.nil Level))) (natRecRhsZero recursor_schematic_self_level) := @Eq.refl KExpr (natRecRhsZero recursor_schematic_self_level)",
+                "def schematic_rhs_forged_w_erased : @Eq KExpr (instLevels recursor_schematic_params (wRecRhs (Level.param Name.anonymous)) (@ListType.cons Level recursor_schematic_self_level (@ListType.nil Level))) (wRecRhs Level.zero) := @Eq.refl KExpr (wRecRhs Level.zero)",
+                "def schematic_rhs_forged_parameter_free : KExprParamSupport (@ListType.nil Name) (natRecRhsZero (Level.param Name.anonymous)) := nat_rec_rhs_zero_stored_support",
             ] {
                 assert!(
                     spec.add_recursive_def(source, "Planted schematic RHS claim must be rejected").is_err()

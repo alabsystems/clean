@@ -2143,7 +2143,47 @@ pub struct CheckerSettings {
     pub profile_heartbeats: bool,
 }
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+// One field table defines the public environment and its private serde input.
+// Only the private input derives Deserialize: the public trait implementation
+// rebuilds the derived matcher index before publishing a restored environment.
+// Keeping the field table shared preserves serde order, skips and defaults.
+macro_rules! environment_with_private_deserialize {
+    (
+        $(#[$environment_attr:meta])*
+        $visibility:vis struct $name:ident {
+            $($(#[$field_attr:meta])* $field_visibility:vis $field:ident: $ty:ty,)*
+        }
+    ) => {
+        $(#[$environment_attr])*
+        $visibility struct $name {
+            $($(#[$field_attr])* $field_visibility $field: $ty,)*
+        }
+
+        #[derive(Deserialize)]
+        #[doc(hidden)]
+        #[serde(rename = "Environment")]
+        struct EnvironmentDeserialize {
+            $($(#[$field_attr])* $field_visibility $field: $ty,)*
+        }
+
+        impl EnvironmentDeserialize {
+            fn into_environment(self) -> $name {
+                let Self { $($field,)* } = self;
+                $name { $($field,)* }
+            }
+        }
+
+        // The fact-delta census reads compiler-produced field metadata rather
+        // than depending on physical indentation of this macro invocation.
+        #[cfg(test)]
+        const ENVIRONMENT_FIELD_ATTRIBUTES: &[(&str, &[&str])] = &[
+            $((stringify!($field), &[$(stringify!($field_attr)),*]),)*
+        ];
+    };
+}
+
+environment_with_private_deserialize! {
+#[derive(Clone, Debug, Default, Serialize)]
 pub struct Environment {
     /// The mode this environment operates in (Constructive, Classical, etc.)
     /// This affects which expressions and axioms are valid.
@@ -3595,13 +3635,17 @@ pub struct Environment {
     /// naming a header by unknown-constant. This set is defence in depth.
     #[serde(default)]
     staged_headers: hashbrown::HashSet<Name>,
-    /// Measured match-compiler metadata, used only by frontend reduction.
-    /// Derived lazily from the existing persistent-extension storage.
-    /// Keep the synchronization state out of Environment's inline layout.
-    /// Box clones the cache deeply when environments diverge. Append this
-    /// transient field so existing fields retain their Trust IR ordinals.
+    /// Measured match-compiler metadata, used only by frontend reduction:
+    /// the decoded view of its persistent-extension storage, kept equal to
+    /// that storage at every write and re-derived on restore
+    /// (`matcher::MatcherIndex`). Plain data, with no lazily filled cell: a
+    /// `OnceLock` holds a `union` (`MaybeUninit`), and an `Environment` that
+    /// holds one by value stops its methods splicing into Trust IR
+    /// (`docs/DECISIONS.md`, 2026-11-15). The last field, so every other
+    /// field keeps its Trust IR ordinal.
     #[serde(skip)]
-    matcher_info: Box<std::sync::OnceLock<HashMap<Name, Option<MatcherInfo>>>>,
+    matcher_info: matcher::MatcherIndex,
+}
 }
 
 impl Environment {
@@ -5484,10 +5528,10 @@ impl Environment {
         module_idx: usize,
         entries: Vec<EnvExtensionEntry>,
     ) {
-        // The matcher index is derived from these exact persisted entries.
-        // Generic import paths can also update its storage, so invalidate here
-        // rather than relying only on the dedicated registration helper.
-        self.matcher_info.take();
+        // The matcher index is derived from these exact persisted entries, and
+        // generic import paths append to its storage too: index them here, on
+        // the one funnel every append takes.
+        self.index_matcher_entries(name, &entries);
         let state = self.persistent_extensions.entry(name.clone()).or_default();
 
         if state.imported_entries.len() <= module_idx {

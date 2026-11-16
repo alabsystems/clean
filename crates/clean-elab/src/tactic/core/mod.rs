@@ -689,13 +689,16 @@ impl ProofState {
 
     /// Get the instantiated proof term with all metavariables resolved
     ///
+    /// Resolve solved universe constraints as well as expression metavariables,
+    /// using the same representation passed to kernel checks during tactics.
+    ///
     /// # Contract
     ///
     /// REQUIRES: none
     /// ENSURES: If `Some`, all metavariable placeholders in the returned expression are resolved
     /// ENSURES: Returns `None` when `proof_term()` returns `None`
     pub fn instantiated_proof(&self) -> Option<Expr> {
-        self.proof_term().map(|p| self.metas.instantiate(&p))
+        self.proof_term().map(|p| self.instantiate_for_kernel(&p))
     }
 
     /// Get the closed proof term (FVars converted to BVars)

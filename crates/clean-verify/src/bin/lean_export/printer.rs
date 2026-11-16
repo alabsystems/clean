@@ -33,7 +33,7 @@ use clean_kernel::{Expr, ExprKind, Level, Literal, Name};
 
 pub const NAMESPACE: &str = "CleanVerify";
 
-pub struct Printer<'a> {
+pub(crate) struct Printer<'a> {
     /// Clean-name -> Lean-name remaps (reserved-name collisions).
     pub renames: &'a HashMap<String, String>,
     /// Inductives emitted as Lean `structure`s (field access is printable).
@@ -43,7 +43,7 @@ pub struct Printer<'a> {
 }
 
 impl<'a> Printer<'a> {
-    pub fn new(renames: &'a HashMap<String, String>, structs: &'a HashSet<String>) -> Self {
+    pub(crate) fn new(renames: &'a HashMap<String, String>, structs: &'a HashSet<String>) -> Self {
         Printer {
             renames,
             structs,
@@ -58,7 +58,7 @@ impl<'a> Printer<'a> {
     }
 
     /// Print a constant reference (without `@`), namespaced and renamed.
-    pub fn const_ref(&self, n: &Name) -> String {
+    pub(crate) fn const_ref(&self, n: &Name) -> String {
         let s = n.to_string();
         let mapped = self.renames.get(&s).cloned().unwrap_or(s);
         format!("{NAMESPACE}.{}", escape_name(&mapped))
@@ -66,7 +66,7 @@ impl<'a> Printer<'a> {
 
     /// Print an expression. `ctx` maps de Bruijn depth to binder names
     /// (innermost last).
-    pub fn expr(&mut self, e: &Expr, ctx: &mut Vec<String>) -> Result<String, String> {
+    pub(crate) fn expr(&mut self, e: &Expr, ctx: &mut Vec<String>) -> Result<String, String> {
         match e.kind() {
             ExprKind::BVar(i) => {
                 let i = *i as usize;
@@ -178,7 +178,7 @@ impl<'a> Printer<'a> {
     /// Print a Pi telescope's first `n` binders as Lean binder groups,
     /// returning (binder_string, remainder_expr, binder_names_pushed).
     /// Used for inductive headers and constructor parameter stripping.
-    pub fn telescope<'e>(
+    pub(crate) fn telescope<'e>(
         &mut self,
         e: &'e Expr,
         n: usize,
@@ -242,7 +242,7 @@ const LEAN_KEYWORDS: [&str; 30] = [
 ];
 
 /// Escape each dot-component of a name that is not a plain Lean identifier.
-pub fn escape_name(s: &str) -> String {
+pub(crate) fn escape_name(s: &str) -> String {
     s.split('.')
         .map(|c| {
             let ok = !c.is_empty()
@@ -263,7 +263,7 @@ pub fn escape_name(s: &str) -> String {
 }
 
 /// Print a universe level as a Lean level ATOM (parenthesized if compound).
-pub fn level_atom(l: &Level) -> String {
+pub(crate) fn level_atom(l: &Level) -> String {
     let s = level_str(l);
     if s.chars()
         .all(|c| c.is_alphanumeric() || c == '_' || c == '\'')
@@ -312,7 +312,7 @@ fn level_str(l: &Level) -> String {
 }
 
 /// Print a `.{u, v}` universe-parameter binder suffix (empty if none).
-pub fn level_params_suffix(params: &[Name]) -> String {
+pub(crate) fn level_params_suffix(params: &[Name]) -> String {
     if params.is_empty() {
         String::new()
     } else {

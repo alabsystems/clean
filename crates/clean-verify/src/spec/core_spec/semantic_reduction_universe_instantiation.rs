@@ -30,7 +30,7 @@ const PROOFS: &[(&str, &str)] = &[
     (
         r"def DefEnvBodyParamSupported (env : DefEnv) : Prop :=
  forall (n : Name) (defn : KDefSig),
- Eq (OptionType KDefSig) (kdef_for env n) (OptionType.some KDefSig defn) ->
+ @Eq (OptionType KDefSig) (kdef_for env n) (@OptionType.some KDefSig defn) ->
  KExprParamSupport (kconst_params (kdef_signature defn)) (kdef_value defn)",
         "Structural support of each actually selected schematic definition body under its own ordered signature parameters. This is not an output-step or typing contract, NoDup, or production admission evidence.",
     ),
@@ -39,9 +39,9 @@ const PROOFS: &[(&str, &str)] = &[
  (hd : DefEnvBodyParamSupported (red_def R)) (hi : RecEnvRhsParamSupported (red_rec R))
  (s : Name -> Level) (e : KExpr) (r : KExpr) (h : par_reduces_cd R e r) :
  par_reduces_cd R (instL s e) (instL s r) :=
- par_reduces_cd.rec R
+ @par_reduces_cd.rec R
   (fun (x : KExpr) (y : KExpr) (_h : par_reduces_cd R x y) => par_reduces_cd R (instL s x) (instL s y))
- (fun (x : KExpr) => par_reduces_cd.refl R (instL s x))
+ (fun (x : KExpr) => @par_reduces_cd.refl R (instL s x))
  (fun (A : KExpr) (A2 : KExpr) (b : KExpr) (b2 : KExpr) (a : KExpr) (a2 : KExpr)
  (_hA : par_reduces_cd R A A2) (_hb : par_reduces_cd R b b2) (_ha : par_reduces_cd R a a2)
  (ihA : par_reduces_cd R (instL s A) (instL s A2)) (ihb : par_reduces_cd R (instL s b) (instL s b2)) (iha : par_reduces_cd R (instL s a) (instL s a2)) =>
@@ -50,24 +50,24 @@ const PROOFS: &[(&str, &str)] = &[
   (instantiate (instL s b2) (instL s a2)) (instL s (instantiate b2 a2))
   (Eq.symm KExpr (instL s (instantiate b2 a2)) (instantiate (instL s b2) (instL s a2))
     (instL_instantiate s b2 a2))
-  (par_reduces_cd.beta R (instL s A) (instL s A2) (instL s b) (instL s b2)
+  (@par_reduces_cd.beta R (instL s A) (instL s A2) (instL s b) (instL s b2)
     (instL s a) (instL s a2) ihA ihb iha))
  (fun (a : KExpr) (a2 : KExpr) (b : KExpr) (b2 : KExpr)
  (_ha : par_reduces_cd R a a2) (_hb : par_reduces_cd R b b2)
  (iha : par_reduces_cd R (instL s a) (instL s a2)) (ihb : par_reduces_cd R (instL s b) (instL s b2)) =>
- par_reduces_cd.app R (instL s a) (instL s a2) (instL s b) (instL s b2) iha ihb)
+ @par_reduces_cd.app R (instL s a) (instL s a2) (instL s b) (instL s b2) iha ihb)
  (fun (a : KExpr) (a2 : KExpr) (b : KExpr) (b2 : KExpr)
  (_ha : par_reduces_cd R a a2) (_hb : par_reduces_cd R b b2)
  (iha : par_reduces_cd R (instL s a) (instL s a2)) (ihb : par_reduces_cd R (instL s b) (instL s b2)) =>
- par_reduces_cd.lam R (instL s a) (instL s a2) (instL s b) (instL s b2) iha ihb)
+ @par_reduces_cd.lam R (instL s a) (instL s a2) (instL s b) (instL s b2) iha ihb)
  (fun (a : KExpr) (a2 : KExpr) (b : KExpr) (b2 : KExpr)
  (_ha : par_reduces_cd R a a2) (_hb : par_reduces_cd R b b2)
  (iha : par_reduces_cd R (instL s a) (instL s a2)) (ihb : par_reduces_cd R (instL s b) (instL s b2)) =>
- par_reduces_cd.pi R (instL s a) (instL s a2) (instL s b) (instL s b2) iha ihb)
+ @par_reduces_cd.pi R (instL s a) (instL s a2) (instL s b) (instL s b2) iha ihb)
  (fun (a : KExpr) (a2 : KExpr) (b : KExpr) (b2 : KExpr)
  (_ha : par_reduces_cd R a a2) (_hb : par_reduces_cd R b b2)
  (iha : par_reduces_cd R (instL s a) (instL s a2)) (ihb : par_reduces_cd R (instL s b) (instL s b2)) =>
- par_reduces_cd.forall_ R (instL s a) (instL s a2) (instL s b) (instL s b2) iha ihb)
+ @par_reduces_cd.forall_ R (instL s a) (instL s a2) (instL s b) (instL s b2) iha ihb)
  (fun (A : KExpr) (A2 : KExpr) (v : KExpr) (v2 : KExpr) (b : KExpr) (b2 : KExpr)
  (_hA : par_reduces_cd R A A2) (_hv : par_reduces_cd R v v2) (_hb : par_reduces_cd R b b2)
  (ihA : par_reduces_cd R (instL s A) (instL s A2)) (ihv : par_reduces_cd R (instL s v) (instL s v2)) (ihb : par_reduces_cd R (instL s b) (instL s b2)) =>
@@ -76,21 +76,21 @@ const PROOFS: &[(&str, &str)] = &[
   (instantiate (instL s b2) (instL s v2)) (instL s (instantiate b2 v2))
   (Eq.symm KExpr (instL s (instantiate b2 v2)) (instantiate (instL s b2) (instL s v2))
     (instL_instantiate s b2 v2))
-  (par_reduces_cd.let_ R (instL s A) (instL s A2) (instL s v) (instL s v2)
+  (@par_reduces_cd.let_ R (instL s A) (instL s A2) (instL s v) (instL s v2)
     (instL s b) (instL s b2) ihA ihv ihb))
  (fun (x : KExpr) (y : KExpr) (step : iota_step (red_rec R) x y) =>
- par_reduces_cd.iota R (instL s x) (instL s y)
+ @par_reduces_cd.iota R (instL s x) (instL s y)
   (iota_step_instL_supported (red_rec R) hi s x y step))
  (fun (x : KExpr) (y : KExpr) (step : delta_step (red_def R) x y) =>
- par_reduces_cd.delta R (instL s x) (instL s y)
+ @par_reduces_cd.delta R (instL s x) (instL s y)
   (delta_step_instL_supported (red_def R) hd s x y step))
  (fun (A : KExpr) (A2 : KExpr) (v : KExpr) (v2 : KExpr) (b : KExpr) (b2 : KExpr)
  (_hA : par_reduces_cd R A A2) (_hv : par_reduces_cd R v v2) (_hb : par_reduces_cd R b b2)
  (ihA : par_reduces_cd R (instL s A) (instL s A2)) (ihv : par_reduces_cd R (instL s v) (instL s v2)) (ihb : par_reduces_cd R (instL s b) (instL s b2)) =>
- par_reduces_cd.let_cong R (instL s A) (instL s A2) (instL s v) (instL s v2)
+ @par_reduces_cd.let_cong R (instL s A) (instL s A2) (instL s v) (instL s v2)
   (instL s b) (instL s b2) ihA ihv ihb)
  (fun (n : Name) (i : Nat) (b : KExpr) (b2 : KExpr) (_hb : par_reduces_cd R b b2)
- (ihb : par_reduces_cd R (instL s b) (instL s b2)) => par_reduces_cd.proj R n i (instL s b) (instL s b2) ihb) e r h",
+ (ihb : par_reduces_cd R (instL s b) (instL s b2)) => @par_reduces_cd.proj R n i (instL s b) (instL s b2) ihb) e r h",
         "All eleven actual raw parallel constructors commute with instL under schematic definition-body and signature-relative stored iota RHS support. Beta/zeta use proved instL/instantiate commutation; delta/iota invoke actual supported evaluator proofs. No resulting-step premise, environment faithfulness, or output typing is assumed.",
     ),
     (
@@ -98,36 +98,36 @@ const PROOFS: &[(&str, &str)] = &[
  (hd : DefEnvBodyParamSupported (red_def R)) (hi : RecEnvRhsParamSupported (red_rec R))
  (s : Name -> Level) (a : KExpr) (b : KExpr) (h : DefEqIn R a b) :
  DefEqIn R (instL s a) (instL s b) :=
- DefEqIn.rec R
+ @DefEqIn.rec R
   (fun (x : KExpr) (y : KExpr) (_h : DefEqIn R x y) => DefEqIn R (instL s x) (instL s y))
- (fun (x : KExpr) => DefEqIn.refl R (instL s x))
+ (fun (x : KExpr) => @DefEqIn.refl R (instL s x))
  (fun (x : KExpr) (y : KExpr) (_h : DefEqIn R x y) (ih : DefEqIn R (instL s x) (instL s y)) =>
- DefEqIn.symm R (instL s x) (instL s y) ih)
+ @DefEqIn.symm R (instL s x) (instL s y) ih)
  (fun (x : KExpr) (m : KExpr) (y : KExpr) (_hx : DefEqIn R x m) (_hy : DefEqIn R m y)
  (ihx : DefEqIn R (instL s x) (instL s m)) (ihy : DefEqIn R (instL s m) (instL s y)) =>
- DefEqIn.trans R (instL s x) (instL s m) (instL s y) ihx ihy)
+ @DefEqIn.trans R (instL s x) (instL s m) (instL s y) ihx ihy)
  (fun (x : KExpr) (y : KExpr) (raw : par_reduces_cd R x y) =>
- DefEqIn.raw R (instL s x) (instL s y) (par_reduces_cd_instL_supported R hd hi s x y raw))
+ @DefEqIn.raw R (instL s x) (instL s y) (par_reduces_cd_instL_supported R hd hi s x y raw))
  (fun (x : KExpr) (y : KExpr) (levels : KExprUniverseEq x y) =>
- DefEqIn.levels R (instL s x) (instL s y) (kexprUniverseEq_instL s x y levels))
+ @DefEqIn.levels R (instL s x) (instL s y) (kexprUniverseEq_instL s x y levels))
  (fun (a : KExpr) (a2 : KExpr) (b : KExpr) (b2 : KExpr)
  (_ha : DefEqIn R a a2) (_hb : DefEqIn R b b2)
  (iha : DefEqIn R (instL s a) (instL s a2)) (ihb : DefEqIn R (instL s b) (instL s b2)) =>
- DefEqIn.app R (instL s a) (instL s a2) (instL s b) (instL s b2) iha ihb)
+ @DefEqIn.app R (instL s a) (instL s a2) (instL s b) (instL s b2) iha ihb)
  (fun (a : KExpr) (a2 : KExpr) (b : KExpr) (b2 : KExpr)
  (_ha : DefEqIn R a a2) (_hb : DefEqIn R b b2)
  (iha : DefEqIn R (instL s a) (instL s a2)) (ihb : DefEqIn R (instL s b) (instL s b2)) =>
- DefEqIn.lam R (instL s a) (instL s a2) (instL s b) (instL s b2) iha ihb)
+ @DefEqIn.lam R (instL s a) (instL s a2) (instL s b) (instL s b2) iha ihb)
  (fun (a : KExpr) (a2 : KExpr) (b : KExpr) (b2 : KExpr)
  (_ha : DefEqIn R a a2) (_hb : DefEqIn R b b2)
  (iha : DefEqIn R (instL s a) (instL s a2)) (ihb : DefEqIn R (instL s b) (instL s b2)) =>
- DefEqIn.pi R (instL s a) (instL s a2) (instL s b) (instL s b2) iha ihb)
+ @DefEqIn.pi R (instL s a) (instL s a2) (instL s b) (instL s b2) iha ihb)
  (fun (A : KExpr) (A2 : KExpr) (v : KExpr) (v2 : KExpr) (b : KExpr) (b2 : KExpr)
  (_hA : DefEqIn R A A2) (_hv : DefEqIn R v v2) (_hb : DefEqIn R b b2)
  (ihA : DefEqIn R (instL s A) (instL s A2)) (ihv : DefEqIn R (instL s v) (instL s v2)) (ihb : DefEqIn R (instL s b) (instL s b2)) =>
- DefEqIn.let_ R (instL s A) (instL s A2) (instL s v) (instL s v2) (instL s b) (instL s b2) ihA ihv ihb)
+ @DefEqIn.let_ R (instL s A) (instL s A2) (instL s v) (instL s v2) (instL s b) (instL s b2) ihA ihv ihb)
  (fun (n : Name) (i : Nat) (b : KExpr) (b2 : KExpr) (_h : DefEqIn R b b2)
- (ih : DefEqIn R (instL s b) (instL s b2)) => DefEqIn.proj R n i (instL s b) (instL s b2) ih) a b h",
+ (ih : DefEqIn R (instL s b) (instL s b2)) => @DefEqIn.proj R n i (instL s b) (instL s b2) ih) a b h",
         "All ten additive semantic conversion constructors preserve actual same-universe substitution. The raw arm uses the proved eleven-case supported reduction theorem and levels uses semantic same-substitution preservation; no pre-assumed substituted conversion or legacy DefEq transport is used.",
     ),
 ];
@@ -136,7 +136,7 @@ const CONTROLS: &[(&str, &str)] = &[
     (
         r"def def_env_body_param_supported_empty : DefEnvBodyParamSupported DefEnv.empty :=
  fun (n : Name) (defn : KDefSig)
-   (found : Eq (OptionType KDefSig) (kdef_for DefEnv.empty n) (OptionType.some KDefSig defn)) =>
+   (found : @Eq (OptionType KDefSig) (kdef_for DefEnv.empty n) (@OptionType.some KDefSig defn)) =>
  option_none_ne_some KDefSig defn
    (KExprParamSupport (kconst_params (kdef_signature defn)) (kdef_value defn)) found",
         "Actual empty definition environment discharges schematic body support because every successful lookup is impossible, by the computed lookup graph.",
@@ -158,23 +158,23 @@ const CONTROLS: &[(&str, &str)] = &[
     (
         r"def semantic_reduction_mixed_conversion :
  DefEqIn semantic_reduction_fixture_env semantic_reduction_mixed_source semantic_reduction_mixed_target :=
- DefEqIn.trans semantic_reduction_fixture_env semantic_reduction_mixed_source
+ @DefEqIn.trans semantic_reduction_fixture_env semantic_reduction_mixed_source
   (iota_inst_supported_output (Level.imax (Level.param Name.anonymous) Level.zero)) semantic_reduction_mixed_target
-  (DefEqIn.raw semantic_reduction_fixture_env semantic_reduction_mixed_source
+  (@DefEqIn.raw semantic_reduction_fixture_env semantic_reduction_mixed_source
     (iota_inst_supported_output (Level.imax (Level.param Name.anonymous) Level.zero))
-    (par_reduces_cd.iota semantic_reduction_fixture_env semantic_reduction_mixed_source
+    (@par_reduces_cd.iota semantic_reduction_fixture_env semantic_reduction_mixed_source
       (iota_inst_supported_output (Level.imax (Level.param Name.anonymous) Level.zero)) (iota_inst_supported_initial_step (Level.imax (Level.param Name.anonymous) Level.zero))))
-  (DefEqIn.trans semantic_reduction_fixture_env (iota_inst_supported_output (Level.imax (Level.param Name.anonymous) Level.zero)) (KExpr.app (KExpr.sort (Level.imax (Level.param Name.anonymous) Level.zero)) (KExpr.lit Nat.zero))
+  (@DefEqIn.trans semantic_reduction_fixture_env (iota_inst_supported_output (Level.imax (Level.param Name.anonymous) Level.zero)) (KExpr.app (KExpr.sort (Level.imax (Level.param Name.anonymous) Level.zero)) (KExpr.lit Nat.zero))
     semantic_reduction_mixed_target
-    (DefEqIn.raw semantic_reduction_fixture_env (iota_inst_supported_output (Level.imax (Level.param Name.anonymous) Level.zero)) (KExpr.app (KExpr.sort (Level.imax (Level.param Name.anonymous) Level.zero)) (KExpr.lit Nat.zero))
-      (par_reduces_cd.app semantic_reduction_fixture_env (KExpr.app iota_inst_supported_rhs (KExpr.sort (Level.imax (Level.param Name.anonymous) Level.zero))) (KExpr.sort (Level.imax (Level.param Name.anonymous) Level.zero)) (KExpr.lit Nat.zero) (KExpr.lit Nat.zero)
-  (par_reduces_cd.beta semantic_reduction_fixture_env (KExpr.sort Level.zero) (KExpr.sort Level.zero)
+    (@DefEqIn.raw semantic_reduction_fixture_env (iota_inst_supported_output (Level.imax (Level.param Name.anonymous) Level.zero)) (KExpr.app (KExpr.sort (Level.imax (Level.param Name.anonymous) Level.zero)) (KExpr.lit Nat.zero))
+      (@par_reduces_cd.app semantic_reduction_fixture_env (KExpr.app iota_inst_supported_rhs (KExpr.sort (Level.imax (Level.param Name.anonymous) Level.zero))) (KExpr.sort (Level.imax (Level.param Name.anonymous) Level.zero)) (KExpr.lit Nat.zero) (KExpr.lit Nat.zero)
+  (@par_reduces_cd.beta semantic_reduction_fixture_env (KExpr.sort Level.zero) (KExpr.sort Level.zero)
     (KExpr.bvar Nat.zero) (KExpr.bvar Nat.zero) (KExpr.sort (Level.imax (Level.param Name.anonymous) Level.zero)) (KExpr.sort (Level.imax (Level.param Name.anonymous) Level.zero))
-    (par_reduces_cd.refl semantic_reduction_fixture_env (KExpr.sort Level.zero))
-    (par_reduces_cd.refl semantic_reduction_fixture_env (KExpr.bvar Nat.zero))
-    (par_reduces_cd.refl semantic_reduction_fixture_env (KExpr.sort (Level.imax (Level.param Name.anonymous) Level.zero))))
-  (par_reduces_cd.refl semantic_reduction_fixture_env (KExpr.lit Nat.zero))))
-    (DefEqIn.levels semantic_reduction_fixture_env (KExpr.app (KExpr.sort (Level.imax (Level.param Name.anonymous) Level.zero)) (KExpr.lit Nat.zero)) semantic_reduction_mixed_target
+    (@par_reduces_cd.refl semantic_reduction_fixture_env (KExpr.sort Level.zero))
+    (@par_reduces_cd.refl semantic_reduction_fixture_env (KExpr.bvar Nat.zero))
+    (@par_reduces_cd.refl semantic_reduction_fixture_env (KExpr.sort (Level.imax (Level.param Name.anonymous) Level.zero))))
+  (@par_reduces_cd.refl semantic_reduction_fixture_env (KExpr.lit Nat.zero))))
+    (@DefEqIn.levels semantic_reduction_fixture_env (KExpr.app (KExpr.sort (Level.imax (Level.param Name.anonymous) Level.zero)) (KExpr.lit Nat.zero)) semantic_reduction_mixed_target
       (KExprUniverseEq.app (KExpr.sort (Level.imax (Level.param Name.anonymous) Level.zero)) (KExpr.sort Level.zero) (KExpr.lit Nat.zero) (KExpr.lit Nat.zero)
         (kexprUniverseEq_imax_zero (Level.param Name.anonymous)) (KExprUniverseEq.lit Nat.zero))))",
         "An inhabited conversion chain with an actual iota step, actual beta under the outer application, then semantic universe normalization. No assumed conversion or support capability.",
@@ -198,7 +198,7 @@ const CONTROLS: &[(&str, &str)] = &[
   def_env_body_param_supported_empty (rec_env_rhs_paramfree_supported iota_inst_supported_env iota_inst_supported_env_support)
   (fun (_n : Name) => Level.succ Level.zero)
   (iota_inst_supported_input (Level.param Name.anonymous)) (iota_inst_supported_output (Level.param Name.anonymous))
-  (par_reduces_cd.iota semantic_reduction_fixture_env
+  (@par_reduces_cd.iota semantic_reduction_fixture_env
     (iota_inst_supported_input (Level.param Name.anonymous)) (iota_inst_supported_output (Level.param Name.anonymous))
     (iota_inst_supported_initial_step (Level.param Name.anonymous)))",
         "Actual raw-parallel caller with nonzero instantiated field universe, using the generic eleven-constructor theorem and a concrete successful original iota step.",

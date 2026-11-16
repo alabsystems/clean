@@ -207,7 +207,7 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (e0 : KExpr) (e0' : KExpr) (h0 : par_reduces_bd e0 e0') => ",
-                    "par_reduces_bd.rec ",
+                    "@par_reduces_bd.rec ",
                     "(fun (e : KExpr) (e' : KExpr) (_h : par_reduces_bd e e') => par_reduces e e') ",
                     // refl : e
                     "(fun (e : KExpr) => par_reduces.refl e) ",
@@ -764,7 +764,7 @@ impl Specification {
                     "fun (e1 : KExpr) (e2 : KExpr) (e3 : KExpr) ",
                     "(h1 : beta_reduces_star e1 e2) ",
                     "(h2 : beta_reduces_star e2 e3) => ",
-                    "beta_reduces_star.rec ",
+                    "@beta_reduces_star.rec ",
                     "(fun (a : KExpr) (b : KExpr) ",
                     "(_ : beta_reduces_star a b) => ",
                     "beta_reduces_star b e3 -> beta_reduces_star a e3) ",
@@ -840,7 +840,7 @@ impl Specification {
                 concat!(
                     "fun (f : KExpr) (f' : KExpr) (a : KExpr) ",
                     "(h : beta_reduces_star f f') => ",
-                    "beta_reduces_star.rec ",
+                    "@beta_reduces_star.rec ",
                     "(fun (x : KExpr) (y : KExpr) ",
                     "(_ : beta_reduces_star x y) => ",
                     "beta_reduces_star (KExpr.app x a) (KExpr.app y a)) ",
@@ -894,7 +894,7 @@ impl Specification {
                 concat!(
                     "fun (s : Name) (i : Nat) (sub : KExpr) (sub' : KExpr) ",
                     "(h : beta_reduces_star sub sub') => ",
-                    "beta_reduces_star.rec ",
+                    "@beta_reduces_star.rec ",
                     "(fun (x : KExpr) (y : KExpr) (_ : beta_reduces_star x y) => ",
                     "beta_reduces_star (KExpr.proj s i x) (KExpr.proj s i y)) ",
                     "(fun (e : KExpr) => beta_reduces_star.refl (KExpr.proj s i e)) ",
@@ -936,7 +936,7 @@ impl Specification {
                 concat!(
                     "fun (f : KExpr) (a : KExpr) (a' : KExpr) ",
                     "(h : beta_reduces_star a a') => ",
-                    "beta_reduces_star.rec ",
+                    "@beta_reduces_star.rec ",
                     "(fun (x : KExpr) (y : KExpr) ",
                     "(_ : beta_reduces_star x y) => ",
                     "beta_reduces_star (KExpr.app f x) (KExpr.app f y)) ",
@@ -989,7 +989,7 @@ impl Specification {
                 concat!(
                     "fun (ty : KExpr) (ty' : KExpr) (body : KExpr) ",
                     "(h : beta_reduces_star ty ty') => ",
-                    "beta_reduces_star.rec ",
+                    "@beta_reduces_star.rec ",
                     "(fun (x : KExpr) (y : KExpr) ",
                     "(_ : beta_reduces_star x y) => ",
                     "beta_reduces_star (KExpr.lam x body) (KExpr.lam y body)) ",
@@ -1040,7 +1040,7 @@ impl Specification {
                 concat!(
                     "fun (ty : KExpr) (body : KExpr) (body' : KExpr) ",
                     "(h : beta_reduces_star body body') => ",
-                    "beta_reduces_star.rec ",
+                    "@beta_reduces_star.rec ",
                     "(fun (x : KExpr) (y : KExpr) ",
                     "(_ : beta_reduces_star x y) => ",
                     "beta_reduces_star (KExpr.lam ty x) (KExpr.lam ty y)) ",
@@ -1091,7 +1091,7 @@ impl Specification {
                 concat!(
                     "fun (dom : KExpr) (dom' : KExpr) (body : KExpr) ",
                     "(h : beta_reduces_star dom dom') => ",
-                    "beta_reduces_star.rec ",
+                    "@beta_reduces_star.rec ",
                     "(fun (x : KExpr) (y : KExpr) ",
                     "(_ : beta_reduces_star x y) => ",
                     "beta_reduces_star (KExpr.pi x body) (KExpr.pi y body)) ",
@@ -1141,7 +1141,7 @@ impl Specification {
                 concat!(
                     "fun (dom : KExpr) (body : KExpr) (body' : KExpr) ",
                     "(h : beta_reduces_star body body') => ",
-                    "beta_reduces_star.rec ",
+                    "@beta_reduces_star.rec ",
                     "(fun (x : KExpr) (y : KExpr) ",
                     "(_ : beta_reduces_star x y) => ",
                     "beta_reduces_star (KExpr.pi dom x) (KExpr.pi dom y)) ",
@@ -1235,7 +1235,7 @@ impl Specification {
                     concat!(
                         "fun {params} ",
                         "(h : beta_reduces_star {src_lhs} {src_rhs}) => ",
-                        "beta_reduces_star.rec ",
+                        "@beta_reduces_star.rec ",
                         "(fun (x : KExpr) (y : KExpr) ",
                         "(_ : beta_reduces_star x y) => ",
                         "beta_reduces_star {frame_x} {frame_y}) ",
@@ -1336,7 +1336,7 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (e0 : KExpr) (e0' : KExpr) (h0 : par_reduces e0 e0') => ",
-                    "par_reduces.rec ",
+                    "@par_reduces.rec ",
                     "(fun (e : KExpr) (e' : KExpr) (_ : par_reduces e e') => ",
                     "beta_reduces_star e e') ",
                     // refl
@@ -1575,7 +1575,7 @@ impl Specification {
                     "fun (e1 : KExpr) (e2 : KExpr) (e3 : KExpr) ",
                     "(h1 : par_reduces_star e1 e2) ",
                     "(h2 : par_reduces_star e2 e3) => ",
-                    "par_reduces_star.rec ",
+                    "@par_reduces_star.rec ",
                     "(fun (a : KExpr) (b : KExpr) ",
                     "(_ : par_reduces_star a b) => ",
                     "par_reduces_star b e3 -> par_reduces_star a e3) ",
@@ -1780,7 +1780,7 @@ impl Specification {
                 concat!(
                     "fun (f : KExpr) (f' : KExpr) (a : KExpr) ",
                     "(h : par_reduces_star f f') => ",
-                    "par_reduces_star.rec ",
+                    "@par_reduces_star.rec ",
                     "(fun (x : KExpr) (y : KExpr) ",
                     "(_ : par_reduces_star x y) => ",
                     "par_reduces_star (KExpr.app x a) (KExpr.app y a)) ",
@@ -1832,7 +1832,7 @@ impl Specification {
                 concat!(
                     "fun (f : KExpr) (a : KExpr) (a' : KExpr) ",
                     "(h : par_reduces_star a a') => ",
-                    "par_reduces_star.rec ",
+                    "@par_reduces_star.rec ",
                     "(fun (x : KExpr) (y : KExpr) ",
                     "(_ : par_reduces_star x y) => ",
                     "par_reduces_star (KExpr.app f x) (KExpr.app f y)) ",
@@ -1884,7 +1884,7 @@ impl Specification {
                 concat!(
                     "fun (ty : KExpr) (ty' : KExpr) (body : KExpr) ",
                     "(h : par_reduces_star ty ty') => ",
-                    "par_reduces_star.rec ",
+                    "@par_reduces_star.rec ",
                     "(fun (x : KExpr) (y : KExpr) ",
                     "(_ : par_reduces_star x y) => ",
                     "par_reduces_star (KExpr.lam x body) (KExpr.lam y body)) ",
@@ -1935,7 +1935,7 @@ impl Specification {
                 concat!(
                     "fun (ty : KExpr) (body : KExpr) (body' : KExpr) ",
                     "(h : par_reduces_star body body') => ",
-                    "par_reduces_star.rec ",
+                    "@par_reduces_star.rec ",
                     "(fun (x : KExpr) (y : KExpr) ",
                     "(_ : par_reduces_star x y) => ",
                     "par_reduces_star (KExpr.lam ty x) (KExpr.lam ty y)) ",
@@ -1985,7 +1985,7 @@ impl Specification {
                 concat!(
                     "fun (dom : KExpr) (dom' : KExpr) (body : KExpr) ",
                     "(h : par_reduces_star dom dom') => ",
-                    "par_reduces_star.rec ",
+                    "@par_reduces_star.rec ",
                     "(fun (x : KExpr) (y : KExpr) ",
                     "(_ : par_reduces_star x y) => ",
                     "par_reduces_star (KExpr.pi x body) (KExpr.pi y body)) ",
@@ -2035,7 +2035,7 @@ impl Specification {
                 concat!(
                     "fun (dom : KExpr) (body : KExpr) (body' : KExpr) ",
                     "(h : par_reduces_star body body') => ",
-                    "par_reduces_star.rec ",
+                    "@par_reduces_star.rec ",
                     "(fun (x : KExpr) (y : KExpr) ",
                     "(_ : par_reduces_star x y) => ",
                     "par_reduces_star (KExpr.pi dom x) (KExpr.pi dom y)) ",
@@ -2136,7 +2136,7 @@ impl Specification {
                     concat!(
                         "fun {params} ",
                         "(h : par_reduces_star {src_lhs} {src_rhs}) => ",
-                        "par_reduces_star.rec ",
+                        "@par_reduces_star.rec ",
                         "(fun (x : KExpr) (y : KExpr) ",
                         "(_ : par_reduces_star x y) => ",
                         "par_reduces_star {frame_x} {frame_y}) ",
@@ -2200,7 +2200,7 @@ impl Specification {
                 concat!(
                     "fun (s : Name) (i : Nat) (sub : KExpr) (sub' : KExpr) ",
                     "(h : par_reduces_star sub sub') => ",
-                    "par_reduces_star.rec ",
+                    "@par_reduces_star.rec ",
                     "(fun (x : KExpr) (y : KExpr) ",
                     "(_ : par_reduces_star x y) => ",
                     "par_reduces_star (KExpr.proj s i x) (KExpr.proj s i y)) ",
@@ -2280,7 +2280,7 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (e0 : KExpr) (e0' : KExpr) (h0 : beta_reduces e0 e0') => ",
-                    "beta_reduces.rec ",
+                    "@beta_reduces.rec ",
                     "(fun (e : KExpr) (e' : KExpr) (_ : beta_reduces e e') => ",
                     "par_reduces_star e e') ",
                     // beta : A body arg
@@ -2449,7 +2449,7 @@ impl Specification {
                 "(forall (f' : KExpr) (a' : KExpr), ",
                 "par_reduces_bd f f' -> par_reduces_bd a a' -> C (KExpr.app f' a')) -> ",
                 "(forall (A : KExpr) (A' : KExpr) (body : KExpr) (body' : KExpr) ",
-                "(arg' : KExpr), Eq KExpr f (KExpr.lam A body) -> ",
+                "(arg' : KExpr), @Eq KExpr f (KExpr.lam A body) -> ",
                 "par_reduces_bd A A' -> par_reduces_bd body body' -> par_reduces_bd a arg' -> ",
                 "C (instantiate body' arg')) -> ",
                 "C t"
@@ -2751,7 +2751,7 @@ impl Specification {
                 "forall (ty : KExpr) (body : KExpr) (t : KExpr) (C : Type), ",
                 "par_reduces_bd (KExpr.lam ty body) t -> ",
                 "(forall (ty' : KExpr) (body' : KExpr), ",
-                "Eq KExpr t (KExpr.lam ty' body') -> ",
+                "@Eq KExpr t (KExpr.lam ty' body') -> ",
                 "par_reduces_bd ty ty' -> par_reduces_bd body body' -> C) -> ",
                 "C"
             )
@@ -3519,7 +3519,7 @@ impl Specification {
                     "fun (e1 : KExpr) (e2 : KExpr) (e3 : KExpr) ",
                     "(h1 : par_reduces_bd_star e1 e2) ",
                     "(h2 : par_reduces_bd_star e2 e3) => ",
-                    "par_reduces_bd_star.rec ",
+                    "@par_reduces_bd_star.rec ",
                     "(fun (a : KExpr) (b : KExpr) ",
                     "(_ : par_reduces_bd_star a b) => ",
                     "par_reduces_bd_star b e3 -> par_reduces_bd_star a e3) ",
@@ -3735,7 +3735,7 @@ impl Specification {
                 "forall (dom : KExpr) (body : KExpr) (t : KExpr) (C : Type), ",
                 "par_reduces_bd (KExpr.pi dom body) t -> ",
                 "(forall (dom' : KExpr) (body' : KExpr), ",
-                "Eq KExpr t (KExpr.pi dom' body') -> ",
+                "@Eq KExpr t (KExpr.pi dom' body') -> ",
                 "par_reduces_bd dom dom' -> par_reduces_bd body body' -> C) -> ",
                 "C"
             )
@@ -3858,7 +3858,7 @@ impl Specification {
                 "forall (dom : KExpr) (body : KExpr) (w : KExpr) (C : Type), ",
                 "par_reduces_bd_star (KExpr.pi dom body) w -> ",
                 "(forall (dom' : KExpr) (body' : KExpr), ",
-                "Eq KExpr w (KExpr.pi dom' body') -> ",
+                "@Eq KExpr w (KExpr.pi dom' body') -> ",
                 "par_reduces_bd_star dom dom' -> par_reduces_bd_star body body' -> C) -> ",
                 "C"
             )
@@ -4365,7 +4365,7 @@ impl Specification {
                     "fun (e1 : KExpr) (e2 : KExpr) (e3 : KExpr) ",
                     "(h1 : beta_reduces_bd_star e1 e2) ",
                     "(h2 : beta_reduces_bd_star e2 e3) => ",
-                    "beta_reduces_bd_star.rec ",
+                    "@beta_reduces_bd_star.rec ",
                     "(fun (a : KExpr) (b : KExpr) ",
                     "(_ : beta_reduces_bd_star a b) => ",
                     "beta_reduces_bd_star b e3 -> beta_reduces_bd_star a e3) ",
@@ -4616,7 +4616,7 @@ impl Specification {
                 concat!(
                     "fun (e0 : KExpr) (e0' : KExpr) ",
                     "(h0 : beta_reduces_bd_star e0 e0') => ",
-                    "beta_reduces_bd_star.rec ",
+                    "@beta_reduces_bd_star.rec ",
                     "(fun (a : KExpr) (b : KExpr) ",
                     "(_ : beta_reduces_bd_star a b) => par_reduces_bd_star a b) ",
                     "(fun (e : KExpr) => par_reduces_bd_star.refl e) ",
@@ -4672,7 +4672,7 @@ impl Specification {
                 concat!(
                     "fun (e0 : KExpr) (e0' : KExpr) ",
                     "(h0 : par_reduces_bd_star e0 e0') => ",
-                    "par_reduces_bd_star.rec ",
+                    "@par_reduces_bd_star.rec ",
                     "(fun (a : KExpr) (b : KExpr) ",
                     "(_ : par_reduces_bd_star a b) => beta_reduces_bd_star a b) ",
                     "(fun (e : KExpr) => beta_reduces_bd_star.refl e) ",
@@ -5102,10 +5102,10 @@ fn par_lift_bd_proof() -> String {
         // cong_lhs : goal_lhs = swap_lhs (rewrite c -> Nat.add Nat.zero c via symm nat_zero_add)
         let cong_lhs = format!(
             concat!(
-                "(Eq.cong Nat KExpr ",
+                "(@Eq.cong Nat KExpr ",
                 "(fun (n : Nat) => lift_at (instantiate_at {bodyp} {argp} Nat.zero) n a) ",
                 "c (Nat.add Nat.zero c) ",
-                "(Eq.symm Nat (Nat.add Nat.zero c) c (nat_zero_add c)))"
+                "(@Eq.symm Nat (Nat.add Nat.zero c) c (nat_zero_add c)))"
             ),
             bodyp = bodyp,
             argp = argp,
@@ -5113,7 +5113,7 @@ fn par_lift_bd_proof() -> String {
         // cong_rhs : swap_rhs = goal_rhs (rewrite Nat.add Nat.zero c -> c via nat_zero_add)
         let cong_rhs = format!(
             concat!(
-                "(Eq.cong Nat KExpr ",
+                "(@Eq.cong Nat KExpr ",
                 "(fun (n : Nat) => instantiate_at (lift_at {bodyp} (Nat.succ n) a) ",
                 "(lift_at {argp} c a) Nat.zero) ",
                 "(Nat.add Nat.zero c) c (nat_zero_add c))"
@@ -5124,8 +5124,8 @@ fn par_lift_bd_proof() -> String {
         // eq : goal_lhs = goal_rhs
         let eq = format!(
             concat!(
-                "(Eq.trans KExpr {goal_lhs} {swap_lhs} {goal_rhs} {cong_lhs} ",
-                "(Eq.trans KExpr {swap_lhs} {swap_rhs} {goal_rhs} {swap_raw} {cong_rhs}))"
+                "(@Eq.trans KExpr {goal_lhs} {swap_lhs} {goal_rhs} {cong_lhs} ",
+                "(@Eq.trans KExpr {swap_lhs} {swap_rhs} {goal_rhs} {swap_raw} {cong_rhs}))"
             ),
             goal_lhs = goal_lhs,
             swap_lhs = swap_lhs,
@@ -5144,8 +5144,8 @@ fn par_lift_bd_proof() -> String {
         // Eq.substType KExpr P goal_rhs goal_lhs (Eq.symm eq) ctor_term : P goal_lhs.
         format!(
             concat!(
-                "(Eq.substType KExpr {p} {goal_rhs} {goal_lhs} ",
-                "(Eq.symm KExpr {goal_lhs} {goal_rhs} {eq}) ",
+                "(@Eq.substType KExpr {p} {goal_rhs} {goal_lhs} ",
+                "(@Eq.symm KExpr {goal_lhs} {goal_rhs} {eq}) ",
                 "{ctor_term})"
             ),
             p = p,
@@ -5263,7 +5263,7 @@ fn par_lift_bd_proof() -> String {
         concat!(
             "fun (v0 : KExpr) (v0' : KExpr) (c0 : Nat) (a0 : Nat) ",
             "(h0 : par_reduces_bd v0 v0') => ",
-            "par_reduces_bd.rec {motive} ",
+            "@par_reduces_bd.rec {motive} ",
             "{refl_arm} {beta_arm} {app_arm} ",
             "{lam_arm} {pi_arm} {forall_arm} {let_arm} {let_cong_arm} {proj_arm} ",
             "v0 v0' h0 c0 a0"
@@ -5419,8 +5419,8 @@ fn par_subst_bd_proof() -> String {
         // ctor_term : P ctor_rhs ; want P goal_rhs ; transport with Eq.symm eq.
         format!(
             concat!(
-                "(Eq.substType KExpr {p} {ctor_rhs} {goal_rhs} ",
-                "(Eq.symm KExpr {goal_rhs} {ctor_rhs} {eq}) ",
+                "(@Eq.substType KExpr {p} {ctor_rhs} {goal_rhs} ",
+                "(@Eq.symm KExpr {goal_rhs} {ctor_rhs} {eq}) ",
                 "{ctor_term})"
             ),
             p = p,
@@ -5526,7 +5526,7 @@ fn par_subst_bd_proof() -> String {
         concat!(
             "fun (e0 : KExpr) (e0' : KExpr) (v0 : KExpr) (v0' : KExpr) ",
             "(h_ee : par_reduces_bd e0 e0') (h_vv : par_reduces_bd v0 v0') => ",
-            "par_reduces_bd.rec {motive} ",
+            "@par_reduces_bd.rec {motive} ",
             "{refl_arm} {beta_arm} {app_arm} ",
             "{lam_arm} {pi_arm} {forall_arm} {let_arm} {let_cong_arm} {proj_arm} ",
             "e0 e0' h_ee v0 v0' Nat.zero h_vv"
@@ -5609,9 +5609,9 @@ fn par_subst_refl_bd_proof() -> String {
         // inner : par_reduces_bd goal_l X'  (rewrite X -> goal_l on first index)
         let inner = format!(
             concat!(
-                "(Eq.substType KExpr (fun (y : KExpr) => par_reduces_bd y {xr}) ",
+                "(@Eq.substType KExpr (fun (y : KExpr) => par_reduces_bd y {xr}) ",
                 "{xl} {goal_l} ",
-                "(Eq.symm KExpr {goal_l} {xl} {eql}) {t})"
+                "(@Eq.symm KExpr {goal_l} {xl} {eql}) {t})"
             ),
             xr = xr,
             xl = xl,
@@ -5622,10 +5622,10 @@ fn par_subst_refl_bd_proof() -> String {
         // outer : par_reduces_bd goal_l goal_r (rewrite X' -> goal_r on 2nd index)
         format!(
             concat!(
-                "(Eq.substType KExpr ",
+                "(@Eq.substType KExpr ",
                 "(fun (y : KExpr) => par_reduces_bd {goal_l} y) ",
                 "{xr} {goal_r} ",
-                "(Eq.symm KExpr {goal_r} {xr} {eqr}) {inner})"
+                "(@Eq.symm KExpr {goal_r} {xr} {eqr}) {inner})"
             ),
             goal_l = goal_l,
             xr = xr,
@@ -5652,7 +5652,7 @@ fn par_subst_refl_bd_proof() -> String {
         let xr = "(KExpr.bvar i)";
         let eql = format!(
             concat!(
-                "(Eq.trans KExpr {goal_l} (instantiate_bvar_at i d v) (KExpr.bvar i) ",
+                "(@Eq.trans KExpr {goal_l} (instantiate_bvar_at i d v) (KExpr.bvar i) ",
                 "(instantiate_at_bvar i v d) ",
                 "(instantiate_bvar_at_below i d v {w_di}))"
             ),
@@ -5661,7 +5661,7 @@ fn par_subst_refl_bd_proof() -> String {
         );
         let eqr = format!(
             concat!(
-                "(Eq.trans KExpr {goal_r} (instantiate_bvar_at i d v') (KExpr.bvar i) ",
+                "(@Eq.trans KExpr {goal_r} (instantiate_bvar_at i d v') (KExpr.bvar i) ",
                 "(instantiate_at_bvar i v' d) ",
                 "(instantiate_bvar_at_below i d v' {w_di}))"
             ),
@@ -5680,7 +5680,7 @@ fn par_subst_refl_bd_proof() -> String {
         let xr = "(KExpr.bvar (Nat.sub i (Nat.succ Nat.zero)))";
         let eql = format!(
             concat!(
-                "(Eq.trans KExpr {goal_l} (instantiate_bvar_at i d v) ",
+                "(@Eq.trans KExpr {goal_l} (instantiate_bvar_at i d v) ",
                 "(KExpr.bvar (Nat.sub i (Nat.succ Nat.zero))) ",
                 "(instantiate_at_bvar i v d) ",
                 "(instantiate_bvar_at_above i d v {h_di0} {w_id}))"
@@ -5691,7 +5691,7 @@ fn par_subst_refl_bd_proof() -> String {
         );
         let eqr = format!(
             concat!(
-                "(Eq.trans KExpr {goal_r} (instantiate_bvar_at i d v') ",
+                "(@Eq.trans KExpr {goal_r} (instantiate_bvar_at i d v') ",
                 "(KExpr.bvar (Nat.sub i (Nat.succ Nat.zero))) ",
                 "(instantiate_at_bvar i v' d) ",
                 "(instantiate_bvar_at_above i d v' {h_di0} {w_id}))"
@@ -5710,27 +5710,27 @@ fn par_subst_refl_bd_proof() -> String {
             "(fun (i : Nat) (v : KExpr) (v' : KExpr) (d : Nat) ",
             "(h : par_reduces_bd v v') => ",
             // OUTER Nat.rec on sub(i, d)
-            "Nat.rec ",
-            "(fun (g : Nat) => Eq Nat (Nat.sub i d) g -> ",
+            "@Nat.rec ",
+            "(fun (g : Nat) => @Eq Nat (Nat.sub i d) g -> ",
             "par_reduces_bd {goal_l} {goal_r}) ",
             // OUTER ZERO: sub(i,d) = 0
-            "(fun (h_id : Eq Nat (Nat.sub i d) Nat.zero) => ",
+            "(fun (h_id : @Eq Nat (Nat.sub i d) Nat.zero) => ",
             // MIDDLE Nat.rec on sub(d, i)
-            "Nat.rec ",
-            "(fun (g2 : Nat) => Eq Nat (Nat.sub d i) g2 -> ",
+            "@Nat.rec ",
+            "(fun (g2 : Nat) => @Eq Nat (Nat.sub d i) g2 -> ",
             "par_reduces_bd {goal_l} {goal_r}) ",
             // MIDDLE ZERO: sub(d,i) = 0 (i = d)
-            "(fun (h_di0 : Eq Nat (Nat.sub d i) Nat.zero) => {leaf_eq}) ",
+            "(fun (h_di0 : @Eq Nat (Nat.sub d i) Nat.zero) => {leaf_eq}) ",
             // MIDDLE SUCC: sub(d,i) = succ k2 (i < d)
             "(fun (k2 : Nat) ",
-            "(_ : Eq Nat (Nat.sub d i) k2 -> par_reduces_bd {goal_l} {goal_r}) ",
-            "(h_di : Eq Nat (Nat.sub d i) (Nat.succ k2)) => {leaf_below}) ",
-            "(Nat.sub d i) (Eq.refl Nat (Nat.sub d i))) ",
+            "(_ : @Eq Nat (Nat.sub d i) k2 -> par_reduces_bd {goal_l} {goal_r}) ",
+            "(h_di : @Eq Nat (Nat.sub d i) (Nat.succ k2)) => {leaf_below}) ",
+            "(Nat.sub d i) (@Eq.refl Nat (Nat.sub d i))) ",
             // OUTER SUCC: sub(i,d) = succ k4 (i > d)
             "(fun (k4 : Nat) ",
-            "(_ : Eq Nat (Nat.sub i d) k4 -> par_reduces_bd {goal_l} {goal_r}) ",
-            "(h_id : Eq Nat (Nat.sub i d) (Nat.succ k4)) => {leaf_above}) ",
-            "(Nat.sub i d) (Eq.refl Nat (Nat.sub i d)))"
+            "(_ : @Eq Nat (Nat.sub i d) k4 -> par_reduces_bd {goal_l} {goal_r}) ",
+            "(h_id : @Eq Nat (Nat.sub i d) (Nat.succ k4)) => {leaf_above}) ",
+            "(Nat.sub i d) (@Eq.refl Nat (Nat.sub i d)))"
         ),
         goal_l = goal_l,
         goal_r = goal_r,
@@ -5820,7 +5820,7 @@ fn par_subst_refl_bd_proof() -> String {
     format!(
         concat!(
             "fun (e0 : KExpr) => ",
-            "KExpr.rec {motive} ",
+            "@KExpr.rec {motive} ",
             "{sort_arm} {bvar_arm} {app_arm} ",
             "{lam_arm} {pi_arm} {const_arm} {let_arm} {proj_arm} {lit_arm} ",
             "e0"
@@ -5886,15 +5886,15 @@ fn par_reduces_bd_app_inv_proof() -> String {
     // outer parameters in scope.
     let motive = concat!(
         "(fun (e : KExpr) (e' : KExpr) (_h : par_reduces_bd e e') => ",
-        "Eq KExpr e (KExpr.app f a) -> C e')"
+        "@Eq KExpr e (KExpr.app f a) -> C e')"
     );
 
     // refl arm: reduct e; goal C e. Build C (app f a) from kapp with refl
     // sub-derivations, then transport along (symm eq) to C e.
     let refl_arm = concat!(
-        "(fun (e : KExpr) (eq : Eq KExpr e (KExpr.app f a)) => ",
-        "Eq.substType KExpr C (KExpr.app f a) e ",
-        "(Eq.symm KExpr e (KExpr.app f a) eq) ",
+        "(fun (e : KExpr) (eq : @Eq KExpr e (KExpr.app f a)) => ",
+        "@Eq.substType KExpr C (KExpr.app f a) e ",
+        "(@Eq.symm KExpr e (KExpr.app f a) eq) ",
         "(kapp f a (par_reduces_bd.refl f) (par_reduces_bd.refl a)))"
     );
 
@@ -5906,15 +5906,15 @@ fn par_reduces_bd_app_inv_proof() -> String {
         "(arg : KExpr) (arg' : KExpr) ",
         "(hA : par_reduces_bd A A') (hbody : par_reduces_bd body body') ",
         "(harg : par_reduces_bd arg arg') ",
-        "(_ihA : Eq KExpr A (KExpr.app f a) -> C A') ",
-        "(_ihbody : Eq KExpr body (KExpr.app f a) -> C body') ",
-        "(_iharg : Eq KExpr arg (KExpr.app f a) -> C arg') ",
-        "(eq : Eq KExpr (KExpr.app (KExpr.lam A body) arg) (KExpr.app f a)) => ",
+        "(_ihA : @Eq KExpr A (KExpr.app f a) -> C A') ",
+        "(_ihbody : @Eq KExpr body (KExpr.app f a) -> C body') ",
+        "(_iharg : @Eq KExpr arg (KExpr.app f a) -> C arg') ",
+        "(eq : @Eq KExpr (KExpr.app (KExpr.lam A body) arg) (KExpr.app f a)) => ",
         "kbeta A A' body body' arg' ",
-        "(Eq.symm KExpr (KExpr.lam A body) f ",
+        "(@Eq.symm KExpr (KExpr.lam A body) f ",
         "(app_inj_fst (KExpr.lam A body) arg f a eq)) ",
         "hA hbody ",
-        "(Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd x arg') arg a ",
+        "(@Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd x arg') arg a ",
         "(app_inj_snd (KExpr.lam A body) arg f a eq) harg))"
     );
 
@@ -5922,13 +5922,13 @@ fn par_reduces_bd_app_inv_proof() -> String {
     let app_arm = concat!(
         "(fun (g : KExpr) (g' : KExpr) (b : KExpr) (b' : KExpr) ",
         "(hg : par_reduces_bd g g') (hb : par_reduces_bd b b') ",
-        "(_ihg : Eq KExpr g (KExpr.app f a) -> C g') ",
-        "(_ihb : Eq KExpr b (KExpr.app f a) -> C b') ",
-        "(eq : Eq KExpr (KExpr.app g b) (KExpr.app f a)) => ",
+        "(_ihg : @Eq KExpr g (KExpr.app f a) -> C g') ",
+        "(_ihb : @Eq KExpr b (KExpr.app f a) -> C b') ",
+        "(eq : @Eq KExpr (KExpr.app g b) (KExpr.app f a)) => ",
         "kapp g' b' ",
-        "(Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd x g') g f ",
+        "(@Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd x g') g f ",
         "(app_inj_fst g b f a eq) hg) ",
-        "(Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd x b') b a ",
+        "(@Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd x b') b a ",
         "(app_inj_snd g b f a eq) hb))"
     );
 
@@ -5936,9 +5936,9 @@ fn par_reduces_bd_app_inv_proof() -> String {
     let lam_arm = concat!(
         "(fun (ty : KExpr) (ty' : KExpr) (body : KExpr) (body' : KExpr) ",
         "(_hty : par_reduces_bd ty ty') (_hbody : par_reduces_bd body body') ",
-        "(_ihty : Eq KExpr ty (KExpr.app f a) -> C ty') ",
-        "(_ihbody : Eq KExpr body (KExpr.app f a) -> C body') ",
-        "(eq : Eq KExpr (KExpr.lam ty body) (KExpr.app f a)) => ",
+        "(_ihty : @Eq KExpr ty (KExpr.app f a) -> C ty') ",
+        "(_ihbody : @Eq KExpr body (KExpr.app f a) -> C body') ",
+        "(eq : @Eq KExpr (KExpr.lam ty body) (KExpr.app f a)) => ",
         "lam_ne_app ty body f a (C (KExpr.lam ty' body')) eq)"
     );
 
@@ -5946,9 +5946,9 @@ fn par_reduces_bd_app_inv_proof() -> String {
     let pi_arm = concat!(
         "(fun (dom : KExpr) (dom' : KExpr) (body : KExpr) (body' : KExpr) ",
         "(_hd : par_reduces_bd dom dom') (_hbody : par_reduces_bd body body') ",
-        "(_ihd : Eq KExpr dom (KExpr.app f a) -> C dom') ",
-        "(_ihbody : Eq KExpr body (KExpr.app f a) -> C body') ",
-        "(eq : Eq KExpr (KExpr.pi dom body) (KExpr.app f a)) => ",
+        "(_ihd : @Eq KExpr dom (KExpr.app f a) -> C dom') ",
+        "(_ihbody : @Eq KExpr body (KExpr.app f a) -> C body') ",
+        "(eq : @Eq KExpr (KExpr.pi dom body) (KExpr.app f a)) => ",
         "pi_ne_app dom body f a (C (KExpr.pi dom' body')) eq)"
     );
 
@@ -5956,9 +5956,9 @@ fn par_reduces_bd_app_inv_proof() -> String {
     let forall_arm = concat!(
         "(fun (dom : KExpr) (dom' : KExpr) (body : KExpr) (body' : KExpr) ",
         "(_hd : par_reduces_bd dom dom') (_hbody : par_reduces_bd body body') ",
-        "(_ihd : Eq KExpr dom (KExpr.app f a) -> C dom') ",
-        "(_ihbody : Eq KExpr body (KExpr.app f a) -> C body') ",
-        "(eq : Eq KExpr (KExpr.forall_ dom body) (KExpr.app f a)) => ",
+        "(_ihd : @Eq KExpr dom (KExpr.app f a) -> C dom') ",
+        "(_ihbody : @Eq KExpr body (KExpr.app f a) -> C body') ",
+        "(eq : @Eq KExpr (KExpr.forall_ dom body) (KExpr.app f a)) => ",
         "pi_ne_app dom body f a (C (KExpr.forall_ dom' body')) eq)"
     );
 
@@ -5969,10 +5969,10 @@ fn par_reduces_bd_app_inv_proof() -> String {
         "(body : KExpr) (body' : KExpr) ",
         "(_hty : par_reduces_bd ty ty') (_hval : par_reduces_bd val val') ",
         "(_hbody : par_reduces_bd body body') ",
-        "(_ihty : Eq KExpr ty (KExpr.app f a) -> C ty') ",
-        "(_ihval : Eq KExpr val (KExpr.app f a) -> C val') ",
-        "(_ihbody : Eq KExpr body (KExpr.app f a) -> C body') ",
-        "(eq : Eq KExpr (KExpr.let_ ty val body) (KExpr.app f a)) => ",
+        "(_ihty : @Eq KExpr ty (KExpr.app f a) -> C ty') ",
+        "(_ihval : @Eq KExpr val (KExpr.app f a) -> C val') ",
+        "(_ihbody : @Eq KExpr body (KExpr.app f a) -> C body') ",
+        "(eq : @Eq KExpr (KExpr.let_ ty val body) (KExpr.app f a)) => ",
         "let_ne_app ty val body f a (C (instantiate body' val')) eq)"
     );
 
@@ -5982,10 +5982,10 @@ fn par_reduces_bd_app_inv_proof() -> String {
         "(body : KExpr) (body' : KExpr) ",
         "(_hty : par_reduces_bd ty ty') (_hval : par_reduces_bd val val') ",
         "(_hbody : par_reduces_bd body body') ",
-        "(_ihty : Eq KExpr ty (KExpr.app f a) -> C ty') ",
-        "(_ihval : Eq KExpr val (KExpr.app f a) -> C val') ",
-        "(_ihbody : Eq KExpr body (KExpr.app f a) -> C body') ",
-        "(eq : Eq KExpr (KExpr.let_ ty val body) (KExpr.app f a)) => ",
+        "(_ihty : @Eq KExpr ty (KExpr.app f a) -> C ty') ",
+        "(_ihval : @Eq KExpr val (KExpr.app f a) -> C val') ",
+        "(_ihbody : @Eq KExpr body (KExpr.app f a) -> C body') ",
+        "(eq : @Eq KExpr (KExpr.let_ ty val body) (KExpr.app f a)) => ",
         "let_ne_app ty val body f a (C (KExpr.let_ ty' val' body')) eq)"
     );
 
@@ -5993,8 +5993,8 @@ fn par_reduces_bd_app_inv_proof() -> String {
     let proj_arm = concat!(
         "(fun (s : Name) (i : Nat) (sub : KExpr) (sub' : KExpr) ",
         "(_hsub : par_reduces_bd sub sub') ",
-        "(_ihsub : Eq KExpr sub (KExpr.app f a) -> C sub') ",
-        "(eq : Eq KExpr (KExpr.proj s i sub) (KExpr.app f a)) => ",
+        "(_ihsub : @Eq KExpr sub (KExpr.app f a) -> C sub') ",
+        "(eq : @Eq KExpr (KExpr.proj s i sub) (KExpr.app f a)) => ",
         "proj_ne_app s i sub f a (C (KExpr.proj s i sub')) eq)"
     );
 
@@ -6005,13 +6005,13 @@ fn par_reduces_bd_app_inv_proof() -> String {
             "(kapp : forall (f' : KExpr) (a' : KExpr), ",
             "par_reduces_bd f f' -> par_reduces_bd a a' -> C (KExpr.app f' a')) ",
             "(kbeta : forall (A : KExpr) (A' : KExpr) (body : KExpr) (body' : KExpr) ",
-            "(arg' : KExpr), Eq KExpr f (KExpr.lam A body) -> ",
+            "(arg' : KExpr), @Eq KExpr f (KExpr.lam A body) -> ",
             "par_reduces_bd A A' -> par_reduces_bd body body' -> par_reduces_bd a arg' -> ",
             "C (instantiate body' arg')) => ",
-            "par_reduces_bd.rec {motive} ",
+            "@par_reduces_bd.rec {motive} ",
             "{refl_arm} {beta_arm} {app_arm} ",
             "{lam_arm} {pi_arm} {forall_arm} {let_arm} {let_cong_arm} {proj_arm} ",
-            "(KExpr.app f a) t h (Eq.refl KExpr (KExpr.app f a))"
+            "(KExpr.app f a) t h (@Eq.refl KExpr (KExpr.app f a))"
         ),
         motive = motive,
         refl_arm = refl_arm,
@@ -6037,14 +6037,14 @@ fn par_reduces_bd_app_inv_proof() -> String {
 fn par_reduces_bd_lam_inv_proof() -> String {
     let motive = concat!(
         "(fun (e : KExpr) (e' : KExpr) (_h : par_reduces_bd e e') => ",
-        "Eq KExpr e (KExpr.lam ty body) -> C e')"
+        "@Eq KExpr e (KExpr.lam ty body) -> C e')"
     );
 
     // refl: reduct e; build C (lam ty body), transport to C e.
     let refl_arm = concat!(
-        "(fun (e : KExpr) (eq : Eq KExpr e (KExpr.lam ty body)) => ",
-        "Eq.substType KExpr C (KExpr.lam ty body) e ",
-        "(Eq.symm KExpr e (KExpr.lam ty body) eq) ",
+        "(fun (e : KExpr) (eq : @Eq KExpr e (KExpr.lam ty body)) => ",
+        "@Eq.substType KExpr C (KExpr.lam ty body) e ",
+        "(@Eq.symm KExpr e (KExpr.lam ty body) eq) ",
         "(klam ty body (par_reduces_bd.refl ty) (par_reduces_bd.refl body)))"
     );
 
@@ -6054,10 +6054,10 @@ fn par_reduces_bd_lam_inv_proof() -> String {
         "(arg : KExpr) (arg' : KExpr) ",
         "(_hA : par_reduces_bd A A') (_hb0 : par_reduces_bd b0 b0') ",
         "(_harg : par_reduces_bd arg arg') ",
-        "(_ihA : Eq KExpr A (KExpr.lam ty body) -> C A') ",
-        "(_ihb0 : Eq KExpr b0 (KExpr.lam ty body) -> C b0') ",
-        "(_iharg : Eq KExpr arg (KExpr.lam ty body) -> C arg') ",
-        "(eq : Eq KExpr (KExpr.app (KExpr.lam A b0) arg) (KExpr.lam ty body)) => ",
+        "(_ihA : @Eq KExpr A (KExpr.lam ty body) -> C A') ",
+        "(_ihb0 : @Eq KExpr b0 (KExpr.lam ty body) -> C b0') ",
+        "(_iharg : @Eq KExpr arg (KExpr.lam ty body) -> C arg') ",
+        "(eq : @Eq KExpr (KExpr.app (KExpr.lam A b0) arg) (KExpr.lam ty body)) => ",
         "app_ne_lam (KExpr.lam A b0) arg ty body (C (instantiate b0' arg')) eq)"
     );
 
@@ -6065,9 +6065,9 @@ fn par_reduces_bd_lam_inv_proof() -> String {
     let app_arm = concat!(
         "(fun (g : KExpr) (g' : KExpr) (b : KExpr) (b' : KExpr) ",
         "(_hg : par_reduces_bd g g') (_hb : par_reduces_bd b b') ",
-        "(_ihg : Eq KExpr g (KExpr.lam ty body) -> C g') ",
-        "(_ihb : Eq KExpr b (KExpr.lam ty body) -> C b') ",
-        "(eq : Eq KExpr (KExpr.app g b) (KExpr.lam ty body)) => ",
+        "(_ihg : @Eq KExpr g (KExpr.lam ty body) -> C g') ",
+        "(_ihb : @Eq KExpr b (KExpr.lam ty body) -> C b') ",
+        "(eq : @Eq KExpr (KExpr.app g b) (KExpr.lam ty body)) => ",
         "app_ne_lam g b ty body (C (KExpr.app g' b')) eq)"
     );
 
@@ -6075,13 +6075,13 @@ fn par_reduces_bd_lam_inv_proof() -> String {
     let lam_arm = concat!(
         "(fun (t0 : KExpr) (t0' : KExpr) (b0 : KExpr) (b0' : KExpr) ",
         "(ht : par_reduces_bd t0 t0') (hb : par_reduces_bd b0 b0') ",
-        "(_iht : Eq KExpr t0 (KExpr.lam ty body) -> C t0') ",
-        "(_ihb : Eq KExpr b0 (KExpr.lam ty body) -> C b0') ",
-        "(eq : Eq KExpr (KExpr.lam t0 b0) (KExpr.lam ty body)) => ",
+        "(_iht : @Eq KExpr t0 (KExpr.lam ty body) -> C t0') ",
+        "(_ihb : @Eq KExpr b0 (KExpr.lam ty body) -> C b0') ",
+        "(eq : @Eq KExpr (KExpr.lam t0 b0) (KExpr.lam ty body)) => ",
         "klam t0' b0' ",
-        "(Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd x t0') t0 ty ",
+        "(@Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd x t0') t0 ty ",
         "(lam_inj_fst t0 b0 ty body eq) ht) ",
-        "(Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd x b0') b0 body ",
+        "(@Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd x b0') b0 body ",
         "(lam_inj_snd t0 b0 ty body eq) hb))"
     );
 
@@ -6089,9 +6089,9 @@ fn par_reduces_bd_lam_inv_proof() -> String {
     let pi_arm = concat!(
         "(fun (dom : KExpr) (dom' : KExpr) (b0 : KExpr) (b0' : KExpr) ",
         "(_hd : par_reduces_bd dom dom') (_hb0 : par_reduces_bd b0 b0') ",
-        "(_ihd : Eq KExpr dom (KExpr.lam ty body) -> C dom') ",
-        "(_ihb0 : Eq KExpr b0 (KExpr.lam ty body) -> C b0') ",
-        "(eq : Eq KExpr (KExpr.pi dom b0) (KExpr.lam ty body)) => ",
+        "(_ihd : @Eq KExpr dom (KExpr.lam ty body) -> C dom') ",
+        "(_ihb0 : @Eq KExpr b0 (KExpr.lam ty body) -> C b0') ",
+        "(eq : @Eq KExpr (KExpr.pi dom b0) (KExpr.lam ty body)) => ",
         "pi_ne_lam dom b0 ty body (C (KExpr.pi dom' b0')) eq)"
     );
 
@@ -6099,9 +6099,9 @@ fn par_reduces_bd_lam_inv_proof() -> String {
     let forall_arm = concat!(
         "(fun (dom : KExpr) (dom' : KExpr) (b0 : KExpr) (b0' : KExpr) ",
         "(_hd : par_reduces_bd dom dom') (_hb0 : par_reduces_bd b0 b0') ",
-        "(_ihd : Eq KExpr dom (KExpr.lam ty body) -> C dom') ",
-        "(_ihb0 : Eq KExpr b0 (KExpr.lam ty body) -> C b0') ",
-        "(eq : Eq KExpr (KExpr.forall_ dom b0) (KExpr.lam ty body)) => ",
+        "(_ihd : @Eq KExpr dom (KExpr.lam ty body) -> C dom') ",
+        "(_ihb0 : @Eq KExpr b0 (KExpr.lam ty body) -> C b0') ",
+        "(eq : @Eq KExpr (KExpr.forall_ dom b0) (KExpr.lam ty body)) => ",
         "pi_ne_lam dom b0 ty body (C (KExpr.forall_ dom' b0')) eq)"
     );
 
@@ -6112,10 +6112,10 @@ fn par_reduces_bd_lam_inv_proof() -> String {
         "(b0 : KExpr) (b0' : KExpr) ",
         "(_ht0 : par_reduces_bd t0 t0') (_hv : par_reduces_bd v v') ",
         "(_hb0 : par_reduces_bd b0 b0') ",
-        "(_iht0 : Eq KExpr t0 (KExpr.lam ty body) -> C t0') ",
-        "(_ihv : Eq KExpr v (KExpr.lam ty body) -> C v') ",
-        "(_ihb0 : Eq KExpr b0 (KExpr.lam ty body) -> C b0') ",
-        "(eq : Eq KExpr (KExpr.let_ t0 v b0) (KExpr.lam ty body)) => ",
+        "(_iht0 : @Eq KExpr t0 (KExpr.lam ty body) -> C t0') ",
+        "(_ihv : @Eq KExpr v (KExpr.lam ty body) -> C v') ",
+        "(_ihb0 : @Eq KExpr b0 (KExpr.lam ty body) -> C b0') ",
+        "(eq : @Eq KExpr (KExpr.let_ t0 v b0) (KExpr.lam ty body)) => ",
         "let_ne_lam t0 v b0 ty body (C (instantiate b0' v')) eq)"
     );
 
@@ -6125,10 +6125,10 @@ fn par_reduces_bd_lam_inv_proof() -> String {
         "(b0 : KExpr) (b0' : KExpr) ",
         "(_ht0 : par_reduces_bd t0 t0') (_hv : par_reduces_bd v v') ",
         "(_hb0 : par_reduces_bd b0 b0') ",
-        "(_iht0 : Eq KExpr t0 (KExpr.lam ty body) -> C t0') ",
-        "(_ihv : Eq KExpr v (KExpr.lam ty body) -> C v') ",
-        "(_ihb0 : Eq KExpr b0 (KExpr.lam ty body) -> C b0') ",
-        "(eq : Eq KExpr (KExpr.let_ t0 v b0) (KExpr.lam ty body)) => ",
+        "(_iht0 : @Eq KExpr t0 (KExpr.lam ty body) -> C t0') ",
+        "(_ihv : @Eq KExpr v (KExpr.lam ty body) -> C v') ",
+        "(_ihb0 : @Eq KExpr b0 (KExpr.lam ty body) -> C b0') ",
+        "(eq : @Eq KExpr (KExpr.let_ t0 v b0) (KExpr.lam ty body)) => ",
         "let_ne_lam t0 v b0 ty body (C (KExpr.let_ t0' v' b0')) eq)"
     );
 
@@ -6136,8 +6136,8 @@ fn par_reduces_bd_lam_inv_proof() -> String {
     let proj_arm = concat!(
         "(fun (s : Name) (i : Nat) (sub : KExpr) (sub' : KExpr) ",
         "(_hsub : par_reduces_bd sub sub') ",
-        "(_ihsub : Eq KExpr sub (KExpr.lam ty body) -> C sub') ",
-        "(eq : Eq KExpr (KExpr.proj s i sub) (KExpr.lam ty body)) => ",
+        "(_ihsub : @Eq KExpr sub (KExpr.lam ty body) -> C sub') ",
+        "(eq : @Eq KExpr (KExpr.proj s i sub) (KExpr.lam ty body)) => ",
         "proj_ne_lam s i sub ty body (C (KExpr.proj s i sub')) eq)"
     );
 
@@ -6148,10 +6148,10 @@ fn par_reduces_bd_lam_inv_proof() -> String {
             "(klam : forall (ty' : KExpr) (body' : KExpr), ",
             "par_reduces_bd ty ty' -> par_reduces_bd body body' -> ",
             "C (KExpr.lam ty' body')) => ",
-            "par_reduces_bd.rec {motive} ",
+            "@par_reduces_bd.rec {motive} ",
             "{refl_arm} {beta_arm} {app_arm} ",
             "{lam_arm} {pi_arm} {forall_arm} {let_arm} {let_cong_arm} {proj_arm} ",
-            "(KExpr.lam ty body) t h (Eq.refl KExpr (KExpr.lam ty body))"
+            "(KExpr.lam ty body) t h (@Eq.refl KExpr (KExpr.lam ty body))"
         ),
         motive = motive,
         refl_arm = refl_arm,
@@ -6183,7 +6183,7 @@ fn par_reduces_bd_pi_like_inv_proof(head: &str, red_head: &str) -> String {
     let motive = format!(
         concat!(
             "(fun (e : KExpr) (e' : KExpr) (_h : par_reduces_bd e e') => ",
-            "Eq KExpr e ({head} dom body) -> C e')"
+            "@Eq KExpr e ({head} dom body) -> C e')"
         ),
         head = head,
     );
@@ -6193,9 +6193,9 @@ fn par_reduces_bd_pi_like_inv_proof(head: &str, red_head: &str) -> String {
     // matches the motive equation's RHS.
     let refl_arm = format!(
         concat!(
-            "(fun (e : KExpr) (eq : Eq KExpr e ({head} dom body)) => ",
-            "Eq.substType KExpr C ({head} dom body) e ",
-            "(Eq.symm KExpr e ({head} dom body) eq) ",
+            "(fun (e : KExpr) (eq : @Eq KExpr e ({head} dom body)) => ",
+            "@Eq.substType KExpr C ({head} dom body) e ",
+            "(@Eq.symm KExpr e ({head} dom body) eq) ",
             "(kpi dom body (par_reduces_bd.refl dom) (par_reduces_bd.refl body)))"
         ),
         head = head,
@@ -6208,10 +6208,10 @@ fn par_reduces_bd_pi_like_inv_proof(head: &str, red_head: &str) -> String {
             "(arg : KExpr) (arg' : KExpr) ",
             "(_hA : par_reduces_bd A A') (_hb0 : par_reduces_bd b0 b0') ",
             "(_harg : par_reduces_bd arg arg') ",
-            "(_ihA : Eq KExpr A ({head} dom body) -> C A') ",
-            "(_ihb0 : Eq KExpr b0 ({head} dom body) -> C b0') ",
-            "(_iharg : Eq KExpr arg ({head} dom body) -> C arg') ",
-            "(eq : Eq KExpr (KExpr.app (KExpr.lam A b0) arg) ({head} dom body)) => ",
+            "(_ihA : @Eq KExpr A ({head} dom body) -> C A') ",
+            "(_ihb0 : @Eq KExpr b0 ({head} dom body) -> C b0') ",
+            "(_iharg : @Eq KExpr arg ({head} dom body) -> C arg') ",
+            "(eq : @Eq KExpr (KExpr.app (KExpr.lam A b0) arg) ({head} dom body)) => ",
             "app_ne_pi (KExpr.lam A b0) arg dom body (C (instantiate b0' arg')) eq)"
         ),
         head = head,
@@ -6222,9 +6222,9 @@ fn par_reduces_bd_pi_like_inv_proof(head: &str, red_head: &str) -> String {
         concat!(
             "(fun (g : KExpr) (g' : KExpr) (b : KExpr) (b' : KExpr) ",
             "(_hg : par_reduces_bd g g') (_hb : par_reduces_bd b b') ",
-            "(_ihg : Eq KExpr g ({head} dom body) -> C g') ",
-            "(_ihb : Eq KExpr b ({head} dom body) -> C b') ",
-            "(eq : Eq KExpr (KExpr.app g b) ({head} dom body)) => ",
+            "(_ihg : @Eq KExpr g ({head} dom body) -> C g') ",
+            "(_ihb : @Eq KExpr b ({head} dom body) -> C b') ",
+            "(eq : @Eq KExpr (KExpr.app g b) ({head} dom body)) => ",
             "app_ne_pi g b dom body (C (KExpr.app g' b')) eq)"
         ),
         head = head,
@@ -6235,9 +6235,9 @@ fn par_reduces_bd_pi_like_inv_proof(head: &str, red_head: &str) -> String {
         concat!(
             "(fun (t0 : KExpr) (t0' : KExpr) (b0 : KExpr) (b0' : KExpr) ",
             "(_ht : par_reduces_bd t0 t0') (_hb : par_reduces_bd b0 b0') ",
-            "(_iht : Eq KExpr t0 ({head} dom body) -> C t0') ",
-            "(_ihb : Eq KExpr b0 ({head} dom body) -> C b0') ",
-            "(eq : Eq KExpr (KExpr.lam t0 b0) ({head} dom body)) => ",
+            "(_iht : @Eq KExpr t0 ({head} dom body) -> C t0') ",
+            "(_ihb : @Eq KExpr b0 ({head} dom body) -> C b0') ",
+            "(eq : @Eq KExpr (KExpr.lam t0 b0) ({head} dom body)) => ",
             "lam_ne_pi t0 b0 dom body (C (KExpr.lam t0' b0')) eq)"
         ),
         head = head,
@@ -6250,13 +6250,13 @@ fn par_reduces_bd_pi_like_inv_proof(head: &str, red_head: &str) -> String {
         concat!(
             "(fun (d0 : KExpr) (d0' : KExpr) (b0 : KExpr) (b0' : KExpr) ",
             "(hd : par_reduces_bd d0 d0') (hb : par_reduces_bd b0 b0') ",
-            "(_ihd : Eq KExpr d0 ({head} dom body) -> C d0') ",
-            "(_ihb : Eq KExpr b0 ({head} dom body) -> C b0') ",
-            "(eq : Eq KExpr (KExpr.pi d0 b0) ({head} dom body)) => ",
+            "(_ihd : @Eq KExpr d0 ({head} dom body) -> C d0') ",
+            "(_ihb : @Eq KExpr b0 ({head} dom body) -> C b0') ",
+            "(eq : @Eq KExpr (KExpr.pi d0 b0) ({head} dom body)) => ",
             "kpi d0' b0' ",
-            "(Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd x d0') d0 dom ",
+            "(@Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd x d0') d0 dom ",
             "(pi_inj_fst d0 b0 dom body eq) hd) ",
-            "(Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd x b0') b0 body ",
+            "(@Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd x b0') b0 body ",
             "(pi_inj_snd d0 b0 dom body eq) hb))"
         ),
         head = head,
@@ -6269,13 +6269,13 @@ fn par_reduces_bd_pi_like_inv_proof(head: &str, red_head: &str) -> String {
         concat!(
             "(fun (d0 : KExpr) (d0' : KExpr) (b0 : KExpr) (b0' : KExpr) ",
             "(hd : par_reduces_bd d0 d0') (hb : par_reduces_bd b0 b0') ",
-            "(_ihd : Eq KExpr d0 ({head} dom body) -> C d0') ",
-            "(_ihb : Eq KExpr b0 ({head} dom body) -> C b0') ",
-            "(eq : Eq KExpr (KExpr.forall_ d0 b0) ({head} dom body)) => ",
+            "(_ihd : @Eq KExpr d0 ({head} dom body) -> C d0') ",
+            "(_ihb : @Eq KExpr b0 ({head} dom body) -> C b0') ",
+            "(eq : @Eq KExpr (KExpr.forall_ d0 b0) ({head} dom body)) => ",
             "kpi d0' b0' ",
-            "(Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd x d0') d0 dom ",
+            "(@Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd x d0') d0 dom ",
             "(pi_inj_fst d0 b0 dom body eq) hd) ",
-            "(Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd x b0') b0 body ",
+            "(@Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd x b0') b0 body ",
             "(pi_inj_snd d0 b0 dom body eq) hb))"
         ),
         head = head,
@@ -6290,10 +6290,10 @@ fn par_reduces_bd_pi_like_inv_proof(head: &str, red_head: &str) -> String {
             "(b0 : KExpr) (b0' : KExpr) ",
             "(_ht0 : par_reduces_bd t0 t0') (_hv : par_reduces_bd v v') ",
             "(_hb0 : par_reduces_bd b0 b0') ",
-            "(_iht0 : Eq KExpr t0 ({head} dom body) -> C t0') ",
-            "(_ihv : Eq KExpr v ({head} dom body) -> C v') ",
-            "(_ihb0 : Eq KExpr b0 ({head} dom body) -> C b0') ",
-            "(eq : Eq KExpr (KExpr.let_ t0 v b0) ({head} dom body)) => ",
+            "(_iht0 : @Eq KExpr t0 ({head} dom body) -> C t0') ",
+            "(_ihv : @Eq KExpr v ({head} dom body) -> C v') ",
+            "(_ihb0 : @Eq KExpr b0 ({head} dom body) -> C b0') ",
+            "(eq : @Eq KExpr (KExpr.let_ t0 v b0) ({head} dom body)) => ",
             "let_ne_pi t0 v b0 dom body (C (instantiate b0' v')) eq)"
         ),
         head = head,
@@ -6306,10 +6306,10 @@ fn par_reduces_bd_pi_like_inv_proof(head: &str, red_head: &str) -> String {
             "(b0 : KExpr) (b0' : KExpr) ",
             "(_ht0 : par_reduces_bd t0 t0') (_hv : par_reduces_bd v v') ",
             "(_hb0 : par_reduces_bd b0 b0') ",
-            "(_iht0 : Eq KExpr t0 ({head} dom body) -> C t0') ",
-            "(_ihv : Eq KExpr v ({head} dom body) -> C v') ",
-            "(_ihb0 : Eq KExpr b0 ({head} dom body) -> C b0') ",
-            "(eq : Eq KExpr (KExpr.let_ t0 v b0) ({head} dom body)) => ",
+            "(_iht0 : @Eq KExpr t0 ({head} dom body) -> C t0') ",
+            "(_ihv : @Eq KExpr v ({head} dom body) -> C v') ",
+            "(_ihb0 : @Eq KExpr b0 ({head} dom body) -> C b0') ",
+            "(eq : @Eq KExpr (KExpr.let_ t0 v b0) ({head} dom body)) => ",
             "let_ne_pi t0 v b0 dom body (C (KExpr.let_ t0' v' b0')) eq)"
         ),
         head = head,
@@ -6321,8 +6321,8 @@ fn par_reduces_bd_pi_like_inv_proof(head: &str, red_head: &str) -> String {
         concat!(
             "(fun (s : Name) (i : Nat) (sub : KExpr) (sub' : KExpr) ",
             "(_hsub : par_reduces_bd sub sub') ",
-            "(_ihsub : Eq KExpr sub ({head} dom body) -> C sub') ",
-            "(eq : Eq KExpr (KExpr.proj s i sub) ({head} dom body)) => ",
+            "(_ihsub : @Eq KExpr sub ({head} dom body) -> C sub') ",
+            "(eq : @Eq KExpr (KExpr.proj s i sub) ({head} dom body)) => ",
             "proj_ne_pi s i sub dom body (C (KExpr.proj s i sub')) eq)"
         ),
         head = head,
@@ -6335,10 +6335,10 @@ fn par_reduces_bd_pi_like_inv_proof(head: &str, red_head: &str) -> String {
             "(kpi : forall (dom' : KExpr) (body' : KExpr), ",
             "par_reduces_bd dom dom' -> par_reduces_bd body body' -> ",
             "C ({red_head} dom' body')) => ",
-            "par_reduces_bd.rec {motive} ",
+            "@par_reduces_bd.rec {motive} ",
             "{refl_arm} {beta_arm} {app_arm} ",
             "{lam_arm} {pi_arm} {forall_arm} {let_arm} {let_cong_arm} {proj_arm} ",
-            "({head} dom body) t h (Eq.refl KExpr ({head} dom body))"
+            "({head} dom body) t h (@Eq.refl KExpr ({head} dom body))"
         ),
         head = head,
         red_head = red_head,
@@ -6373,15 +6373,15 @@ fn par_reduces_bd_let_inv_proof() -> String {
     // outer parameters in scope.
     let motive = concat!(
         "(fun (e : KExpr) (e' : KExpr) (_h : par_reduces_bd e e') => ",
-        "Eq KExpr e (KExpr.let_ ty val body) -> C e')"
+        "@Eq KExpr e (KExpr.let_ ty val body) -> C e')"
     );
 
     // refl arm: reduct e; build C (let_ ty val body) from kcong with refl
     // sub-derivations, then transport along (symm eq) to C e.
     let refl_arm = concat!(
-        "(fun (e : KExpr) (eq : Eq KExpr e (KExpr.let_ ty val body)) => ",
-        "Eq.substType KExpr C (KExpr.let_ ty val body) e ",
-        "(Eq.symm KExpr e (KExpr.let_ ty val body) eq) ",
+        "(fun (e : KExpr) (eq : @Eq KExpr e (KExpr.let_ ty val body)) => ",
+        "@Eq.substType KExpr C (KExpr.let_ ty val body) e ",
+        "(@Eq.symm KExpr e (KExpr.let_ ty val body) eq) ",
         "(kcong ty val body (par_reduces_bd.refl ty) (par_reduces_bd.refl val) ",
         "(par_reduces_bd.refl body)))"
     );
@@ -6392,10 +6392,10 @@ fn par_reduces_bd_let_inv_proof() -> String {
         "(arg : KExpr) (arg' : KExpr) ",
         "(_hA : par_reduces_bd A A') (_hb0 : par_reduces_bd b0 b0') ",
         "(_harg : par_reduces_bd arg arg') ",
-        "(_ihA : Eq KExpr A (KExpr.let_ ty val body) -> C A') ",
-        "(_ihb0 : Eq KExpr b0 (KExpr.let_ ty val body) -> C b0') ",
-        "(_iharg : Eq KExpr arg (KExpr.let_ ty val body) -> C arg') ",
-        "(eq : Eq KExpr (KExpr.app (KExpr.lam A b0) arg) (KExpr.let_ ty val body)) => ",
+        "(_ihA : @Eq KExpr A (KExpr.let_ ty val body) -> C A') ",
+        "(_ihb0 : @Eq KExpr b0 (KExpr.let_ ty val body) -> C b0') ",
+        "(_iharg : @Eq KExpr arg (KExpr.let_ ty val body) -> C arg') ",
+        "(eq : @Eq KExpr (KExpr.app (KExpr.lam A b0) arg) (KExpr.let_ ty val body)) => ",
         "app_ne_let (KExpr.lam A b0) arg ty val body (C (instantiate b0' arg')) eq)"
     );
 
@@ -6403,9 +6403,9 @@ fn par_reduces_bd_let_inv_proof() -> String {
     let app_arm = concat!(
         "(fun (g : KExpr) (g' : KExpr) (b : KExpr) (b' : KExpr) ",
         "(_hg : par_reduces_bd g g') (_hb : par_reduces_bd b b') ",
-        "(_ihg : Eq KExpr g (KExpr.let_ ty val body) -> C g') ",
-        "(_ihb : Eq KExpr b (KExpr.let_ ty val body) -> C b') ",
-        "(eq : Eq KExpr (KExpr.app g b) (KExpr.let_ ty val body)) => ",
+        "(_ihg : @Eq KExpr g (KExpr.let_ ty val body) -> C g') ",
+        "(_ihb : @Eq KExpr b (KExpr.let_ ty val body) -> C b') ",
+        "(eq : @Eq KExpr (KExpr.app g b) (KExpr.let_ ty val body)) => ",
         "app_ne_let g b ty val body (C (KExpr.app g' b')) eq)"
     );
 
@@ -6413,9 +6413,9 @@ fn par_reduces_bd_let_inv_proof() -> String {
     let lam_arm = concat!(
         "(fun (t0 : KExpr) (t0' : KExpr) (b0 : KExpr) (b0' : KExpr) ",
         "(_ht : par_reduces_bd t0 t0') (_hb : par_reduces_bd b0 b0') ",
-        "(_iht : Eq KExpr t0 (KExpr.let_ ty val body) -> C t0') ",
-        "(_ihb : Eq KExpr b0 (KExpr.let_ ty val body) -> C b0') ",
-        "(eq : Eq KExpr (KExpr.lam t0 b0) (KExpr.let_ ty val body)) => ",
+        "(_iht : @Eq KExpr t0 (KExpr.let_ ty val body) -> C t0') ",
+        "(_ihb : @Eq KExpr b0 (KExpr.let_ ty val body) -> C b0') ",
+        "(eq : @Eq KExpr (KExpr.lam t0 b0) (KExpr.let_ ty val body)) => ",
         "lam_ne_let t0 b0 ty val body (C (KExpr.lam t0' b0')) eq)"
     );
 
@@ -6423,9 +6423,9 @@ fn par_reduces_bd_let_inv_proof() -> String {
     let pi_arm = concat!(
         "(fun (d0 : KExpr) (d0' : KExpr) (b0 : KExpr) (b0' : KExpr) ",
         "(_hd : par_reduces_bd d0 d0') (_hb : par_reduces_bd b0 b0') ",
-        "(_ihd : Eq KExpr d0 (KExpr.let_ ty val body) -> C d0') ",
-        "(_ihb : Eq KExpr b0 (KExpr.let_ ty val body) -> C b0') ",
-        "(eq : Eq KExpr (KExpr.pi d0 b0) (KExpr.let_ ty val body)) => ",
+        "(_ihd : @Eq KExpr d0 (KExpr.let_ ty val body) -> C d0') ",
+        "(_ihb : @Eq KExpr b0 (KExpr.let_ ty val body) -> C b0') ",
+        "(eq : @Eq KExpr (KExpr.pi d0 b0) (KExpr.let_ ty val body)) => ",
         "pi_ne_let d0 b0 ty val body (C (KExpr.pi d0' b0')) eq)"
     );
 
@@ -6433,9 +6433,9 @@ fn par_reduces_bd_let_inv_proof() -> String {
     let forall_arm = concat!(
         "(fun (d0 : KExpr) (d0' : KExpr) (b0 : KExpr) (b0' : KExpr) ",
         "(_hd : par_reduces_bd d0 d0') (_hb : par_reduces_bd b0 b0') ",
-        "(_ihd : Eq KExpr d0 (KExpr.let_ ty val body) -> C d0') ",
-        "(_ihb : Eq KExpr b0 (KExpr.let_ ty val body) -> C b0') ",
-        "(eq : Eq KExpr (KExpr.forall_ d0 b0) (KExpr.let_ ty val body)) => ",
+        "(_ihd : @Eq KExpr d0 (KExpr.let_ ty val body) -> C d0') ",
+        "(_ihb : @Eq KExpr b0 (KExpr.let_ ty val body) -> C b0') ",
+        "(eq : @Eq KExpr (KExpr.forall_ d0 b0) (KExpr.let_ ty val body)) => ",
         "pi_ne_let d0 b0 ty val body (C (KExpr.forall_ d0' b0')) eq)"
     );
 
@@ -6443,11 +6443,11 @@ fn par_reduces_bd_let_inv_proof() -> String {
     // from eq : Eq (let_ t0 v0 b0) (let_ ty val body) recover the component
     // equations and transport each sub-derivation onto the outer components.
     let transported = concat!(
-        "(Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd x t0') t0 ty ",
+        "(@Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd x t0') t0 ty ",
         "(let_inj_fst t0 v0 b0 ty val body eq) ht0) ",
-        "(Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd x v0') v0 val ",
+        "(@Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd x v0') v0 val ",
         "(let_inj_snd t0 v0 b0 ty val body eq) hv0) ",
-        "(Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd x b0') b0 body ",
+        "(@Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd x b0') b0 body ",
         "(let_inj_thd t0 v0 b0 ty val body eq) hb0)"
     );
 
@@ -6459,10 +6459,10 @@ fn par_reduces_bd_let_inv_proof() -> String {
             "(b0 : KExpr) (b0' : KExpr) ",
             "(ht0 : par_reduces_bd t0 t0') (hv0 : par_reduces_bd v0 v0') ",
             "(hb0 : par_reduces_bd b0 b0') ",
-            "(_iht0 : Eq KExpr t0 (KExpr.let_ ty val body) -> C t0') ",
-            "(_ihv0 : Eq KExpr v0 (KExpr.let_ ty val body) -> C v0') ",
-            "(_ihb0 : Eq KExpr b0 (KExpr.let_ ty val body) -> C b0') ",
-            "(eq : Eq KExpr (KExpr.let_ t0 v0 b0) (KExpr.let_ ty val body)) => ",
+            "(_iht0 : @Eq KExpr t0 (KExpr.let_ ty val body) -> C t0') ",
+            "(_ihv0 : @Eq KExpr v0 (KExpr.let_ ty val body) -> C v0') ",
+            "(_ihb0 : @Eq KExpr b0 (KExpr.let_ ty val body) -> C b0') ",
+            "(eq : @Eq KExpr (KExpr.let_ t0 v0 b0) (KExpr.let_ ty val body)) => ",
             "kzeta t0' v0' b0' ",
             "{transported})"
         ),
@@ -6477,10 +6477,10 @@ fn par_reduces_bd_let_inv_proof() -> String {
             "(b0 : KExpr) (b0' : KExpr) ",
             "(ht0 : par_reduces_bd t0 t0') (hv0 : par_reduces_bd v0 v0') ",
             "(hb0 : par_reduces_bd b0 b0') ",
-            "(_iht0 : Eq KExpr t0 (KExpr.let_ ty val body) -> C t0') ",
-            "(_ihv0 : Eq KExpr v0 (KExpr.let_ ty val body) -> C v0') ",
-            "(_ihb0 : Eq KExpr b0 (KExpr.let_ ty val body) -> C b0') ",
-            "(eq : Eq KExpr (KExpr.let_ t0 v0 b0) (KExpr.let_ ty val body)) => ",
+            "(_iht0 : @Eq KExpr t0 (KExpr.let_ ty val body) -> C t0') ",
+            "(_ihv0 : @Eq KExpr v0 (KExpr.let_ ty val body) -> C v0') ",
+            "(_ihb0 : @Eq KExpr b0 (KExpr.let_ ty val body) -> C b0') ",
+            "(eq : @Eq KExpr (KExpr.let_ t0 v0 b0) (KExpr.let_ ty val body)) => ",
             "kcong t0' v0' b0' ",
             "{transported})"
         ),
@@ -6491,8 +6491,8 @@ fn par_reduces_bd_let_inv_proof() -> String {
     let proj_arm = concat!(
         "(fun (s : Name) (i : Nat) (sub : KExpr) (sub' : KExpr) ",
         "(_hsub : par_reduces_bd sub sub') ",
-        "(_ihsub : Eq KExpr sub (KExpr.let_ ty val body) -> C sub') ",
-        "(eq : Eq KExpr (KExpr.proj s i sub) (KExpr.let_ ty val body)) => ",
+        "(_ihsub : @Eq KExpr sub (KExpr.let_ ty val body) -> C sub') ",
+        "(eq : @Eq KExpr (KExpr.proj s i sub) (KExpr.let_ ty val body)) => ",
         "proj_ne_let s i sub ty val body (C (KExpr.proj s i sub')) eq)"
     );
 
@@ -6507,10 +6507,10 @@ fn par_reduces_bd_let_inv_proof() -> String {
             "(kzeta : forall (ty' : KExpr) (val' : KExpr) (body' : KExpr), ",
             "par_reduces_bd ty ty' -> par_reduces_bd val val' -> ",
             "par_reduces_bd body body' -> C (instantiate body' val')) => ",
-            "par_reduces_bd.rec {motive} ",
+            "@par_reduces_bd.rec {motive} ",
             "{refl_arm} {beta_arm} {app_arm} ",
             "{lam_arm} {pi_arm} {forall_arm} {let_arm} {let_cong_arm} {proj_arm} ",
-            "(KExpr.let_ ty val body) t h (Eq.refl KExpr (KExpr.let_ ty val body))"
+            "(KExpr.let_ ty val body) t h (@Eq.refl KExpr (KExpr.let_ ty val body))"
         ),
         motive = motive,
         refl_arm = refl_arm,
@@ -6538,15 +6538,15 @@ fn par_reduces_bd_let_inv_proof() -> String {
 fn par_reduces_bd_proj_inv_proof() -> String {
     let motive = concat!(
         "(fun (e : KExpr) (e' : KExpr) (_h : par_reduces_bd e e') => ",
-        "Eq KExpr e (KExpr.proj s i sub) -> C e')"
+        "@Eq KExpr e (KExpr.proj s i sub) -> C e')"
     );
 
     // refl arm: reduct e; build C (proj s i sub) from kproj with a reflexive
     // scrutinee derivation, then transport along (symm eq) to C e.
     let refl_arm = concat!(
-        "(fun (e : KExpr) (eq : Eq KExpr e (KExpr.proj s i sub)) => ",
-        "Eq.substType KExpr C (KExpr.proj s i sub) e ",
-        "(Eq.symm KExpr e (KExpr.proj s i sub) eq) ",
+        "(fun (e : KExpr) (eq : @Eq KExpr e (KExpr.proj s i sub)) => ",
+        "@Eq.substType KExpr C (KExpr.proj s i sub) e ",
+        "(@Eq.symm KExpr e (KExpr.proj s i sub) eq) ",
         "(kproj sub (par_reduces_bd.refl sub)))"
     );
 
@@ -6556,10 +6556,10 @@ fn par_reduces_bd_proj_inv_proof() -> String {
         "(arg : KExpr) (arg' : KExpr) ",
         "(_hA : par_reduces_bd A A') (_hbody : par_reduces_bd body body') ",
         "(_harg : par_reduces_bd arg arg') ",
-        "(_ihA : Eq KExpr A (KExpr.proj s i sub) -> C A') ",
-        "(_ihbody : Eq KExpr body (KExpr.proj s i sub) -> C body') ",
-        "(_iharg : Eq KExpr arg (KExpr.proj s i sub) -> C arg') ",
-        "(eq : Eq KExpr (KExpr.app (KExpr.lam A body) arg) (KExpr.proj s i sub)) => ",
+        "(_ihA : @Eq KExpr A (KExpr.proj s i sub) -> C A') ",
+        "(_ihbody : @Eq KExpr body (KExpr.proj s i sub) -> C body') ",
+        "(_iharg : @Eq KExpr arg (KExpr.proj s i sub) -> C arg') ",
+        "(eq : @Eq KExpr (KExpr.app (KExpr.lam A body) arg) (KExpr.proj s i sub)) => ",
         "app_ne_proj (KExpr.lam A body) arg s i sub (C (instantiate body' arg')) eq)"
     );
 
@@ -6567,9 +6567,9 @@ fn par_reduces_bd_proj_inv_proof() -> String {
     let app_arm = concat!(
         "(fun (g : KExpr) (g' : KExpr) (b : KExpr) (b' : KExpr) ",
         "(_hg : par_reduces_bd g g') (_hb : par_reduces_bd b b') ",
-        "(_ihg : Eq KExpr g (KExpr.proj s i sub) -> C g') ",
-        "(_ihb : Eq KExpr b (KExpr.proj s i sub) -> C b') ",
-        "(eq : Eq KExpr (KExpr.app g b) (KExpr.proj s i sub)) => ",
+        "(_ihg : @Eq KExpr g (KExpr.proj s i sub) -> C g') ",
+        "(_ihb : @Eq KExpr b (KExpr.proj s i sub) -> C b') ",
+        "(eq : @Eq KExpr (KExpr.app g b) (KExpr.proj s i sub)) => ",
         "app_ne_proj g b s i sub (C (KExpr.app g' b')) eq)"
     );
 
@@ -6577,9 +6577,9 @@ fn par_reduces_bd_proj_inv_proof() -> String {
     let lam_arm = concat!(
         "(fun (t0 : KExpr) (t0' : KExpr) (b0 : KExpr) (b0' : KExpr) ",
         "(_ht : par_reduces_bd t0 t0') (_hb : par_reduces_bd b0 b0') ",
-        "(_iht : Eq KExpr t0 (KExpr.proj s i sub) -> C t0') ",
-        "(_ihb : Eq KExpr b0 (KExpr.proj s i sub) -> C b0') ",
-        "(eq : Eq KExpr (KExpr.lam t0 b0) (KExpr.proj s i sub)) => ",
+        "(_iht : @Eq KExpr t0 (KExpr.proj s i sub) -> C t0') ",
+        "(_ihb : @Eq KExpr b0 (KExpr.proj s i sub) -> C b0') ",
+        "(eq : @Eq KExpr (KExpr.lam t0 b0) (KExpr.proj s i sub)) => ",
         "lam_ne_proj t0 b0 s i sub (C (KExpr.lam t0' b0')) eq)"
     );
 
@@ -6587,9 +6587,9 @@ fn par_reduces_bd_proj_inv_proof() -> String {
     let pi_arm = concat!(
         "(fun (d0 : KExpr) (d0' : KExpr) (b0 : KExpr) (b0' : KExpr) ",
         "(_hd : par_reduces_bd d0 d0') (_hb : par_reduces_bd b0 b0') ",
-        "(_ihd : Eq KExpr d0 (KExpr.proj s i sub) -> C d0') ",
-        "(_ihb : Eq KExpr b0 (KExpr.proj s i sub) -> C b0') ",
-        "(eq : Eq KExpr (KExpr.pi d0 b0) (KExpr.proj s i sub)) => ",
+        "(_ihd : @Eq KExpr d0 (KExpr.proj s i sub) -> C d0') ",
+        "(_ihb : @Eq KExpr b0 (KExpr.proj s i sub) -> C b0') ",
+        "(eq : @Eq KExpr (KExpr.pi d0 b0) (KExpr.proj s i sub)) => ",
         "pi_ne_proj d0 b0 s i sub (C (KExpr.pi d0' b0')) eq)"
     );
 
@@ -6597,9 +6597,9 @@ fn par_reduces_bd_proj_inv_proof() -> String {
     let forall_arm = concat!(
         "(fun (d0 : KExpr) (d0' : KExpr) (b0 : KExpr) (b0' : KExpr) ",
         "(_hd : par_reduces_bd d0 d0') (_hb : par_reduces_bd b0 b0') ",
-        "(_ihd : Eq KExpr d0 (KExpr.proj s i sub) -> C d0') ",
-        "(_ihb : Eq KExpr b0 (KExpr.proj s i sub) -> C b0') ",
-        "(eq : Eq KExpr (KExpr.forall_ d0 b0) (KExpr.proj s i sub)) => ",
+        "(_ihd : @Eq KExpr d0 (KExpr.proj s i sub) -> C d0') ",
+        "(_ihb : @Eq KExpr b0 (KExpr.proj s i sub) -> C b0') ",
+        "(eq : @Eq KExpr (KExpr.forall_ d0 b0) (KExpr.proj s i sub)) => ",
         "pi_ne_proj d0 b0 s i sub (C (KExpr.forall_ d0' b0')) eq)"
     );
 
@@ -6609,10 +6609,10 @@ fn par_reduces_bd_proj_inv_proof() -> String {
         "(b0 : KExpr) (b0' : KExpr) ",
         "(_ht0 : par_reduces_bd t0 t0') (_hv : par_reduces_bd v v') ",
         "(_hb0 : par_reduces_bd b0 b0') ",
-        "(_iht0 : Eq KExpr t0 (KExpr.proj s i sub) -> C t0') ",
-        "(_ihv : Eq KExpr v (KExpr.proj s i sub) -> C v') ",
-        "(_ihb0 : Eq KExpr b0 (KExpr.proj s i sub) -> C b0') ",
-        "(eq : Eq KExpr (KExpr.let_ t0 v b0) (KExpr.proj s i sub)) => ",
+        "(_iht0 : @Eq KExpr t0 (KExpr.proj s i sub) -> C t0') ",
+        "(_ihv : @Eq KExpr v (KExpr.proj s i sub) -> C v') ",
+        "(_ihb0 : @Eq KExpr b0 (KExpr.proj s i sub) -> C b0') ",
+        "(eq : @Eq KExpr (KExpr.let_ t0 v b0) (KExpr.proj s i sub)) => ",
         "let_ne_proj t0 v b0 s i sub (C (instantiate b0' v')) eq)"
     );
 
@@ -6622,10 +6622,10 @@ fn par_reduces_bd_proj_inv_proof() -> String {
         "(b0 : KExpr) (b0' : KExpr) ",
         "(_ht0 : par_reduces_bd t0 t0') (_hv : par_reduces_bd v v') ",
         "(_hb0 : par_reduces_bd b0 b0') ",
-        "(_iht0 : Eq KExpr t0 (KExpr.proj s i sub) -> C t0') ",
-        "(_ihv : Eq KExpr v (KExpr.proj s i sub) -> C v') ",
-        "(_ihb0 : Eq KExpr b0 (KExpr.proj s i sub) -> C b0') ",
-        "(eq : Eq KExpr (KExpr.let_ t0 v b0) (KExpr.proj s i sub)) => ",
+        "(_iht0 : @Eq KExpr t0 (KExpr.proj s i sub) -> C t0') ",
+        "(_ihv : @Eq KExpr v (KExpr.proj s i sub) -> C v') ",
+        "(_ihb0 : @Eq KExpr b0 (KExpr.proj s i sub) -> C b0') ",
+        "(eq : @Eq KExpr (KExpr.let_ t0 v b0) (KExpr.proj s i sub)) => ",
         "let_ne_proj t0 v b0 s i sub (C (KExpr.let_ t0' v' b0')) eq)"
     );
 
@@ -6636,14 +6636,14 @@ fn par_reduces_bd_proj_inv_proof() -> String {
     let proj_arm = concat!(
         "(fun (s0 : Name) (i0 : Nat) (sub0 : KExpr) (sub0' : KExpr) ",
         "(hsub0 : par_reduces_bd sub0 sub0') ",
-        "(_ihsub0 : Eq KExpr sub0 (KExpr.proj s i sub) -> C sub0') ",
-        "(eq : Eq KExpr (KExpr.proj s0 i0 sub0) (KExpr.proj s i sub)) => ",
-        "Eq.substType Nat (fun (x : Nat) => C (KExpr.proj s0 x sub0')) i i0 ",
-        "(Eq.symm Nat i0 i (proj_inj_idx s0 i0 sub0 s i sub eq)) ",
-        "(Eq.substType Name (fun (x : Name) => C (KExpr.proj x i sub0')) s s0 ",
-        "(Eq.symm Name s0 s (proj_inj_name s0 i0 sub0 s i sub eq)) ",
+        "(_ihsub0 : @Eq KExpr sub0 (KExpr.proj s i sub) -> C sub0') ",
+        "(eq : @Eq KExpr (KExpr.proj s0 i0 sub0) (KExpr.proj s i sub)) => ",
+        "@Eq.substType Nat (fun (x : Nat) => C (KExpr.proj s0 x sub0')) i i0 ",
+        "(@Eq.symm Nat i0 i (proj_inj_idx s0 i0 sub0 s i sub eq)) ",
+        "(@Eq.substType Name (fun (x : Name) => C (KExpr.proj x i sub0')) s s0 ",
+        "(@Eq.symm Name s0 s (proj_inj_name s0 i0 sub0 s i sub eq)) ",
         "(kproj sub0' ",
-        "(Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd x sub0') sub0 sub ",
+        "(@Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd x sub0') sub0 sub ",
         "(proj_inj_sub s0 i0 sub0 s i sub eq) hsub0))))"
     );
 
@@ -6654,10 +6654,10 @@ fn par_reduces_bd_proj_inv_proof() -> String {
             "(h : par_reduces_bd (KExpr.proj s i sub) t) ",
             "(kproj : forall (sub' : KExpr), ",
             "par_reduces_bd sub sub' -> C (KExpr.proj s i sub')) => ",
-            "par_reduces_bd.rec {motive} ",
+            "@par_reduces_bd.rec {motive} ",
             "{refl_arm} {beta_arm} {app_arm} ",
             "{lam_arm} {pi_arm} {forall_arm} {let_arm} {let_cong_arm} {proj_arm} ",
-            "(KExpr.proj s i sub) t h (Eq.refl KExpr (KExpr.proj s i sub))"
+            "(KExpr.proj s i sub) t h (@Eq.refl KExpr (KExpr.proj s i sub))"
         ),
         motive = motive,
         refl_arm = refl_arm,
@@ -6767,7 +6767,7 @@ fn par_strips_bd_proof() -> String {
         // wf' : par_strips_witness_bd (lam Af bodyf) (lam A' bdy')
         "(par_strips_bd_app_beta Af bodyf a0' bdy' arg' ",
         "(par_strips_witness_bd_lam_meet Af A' bodyf bdy' ",
-        "(Eq.substType KExpr ",
+        "(@Eq.substType KExpr ",
         "(fun (x : KExpr) => par_strips_witness_bd x (KExpr.lam A' bdy')) f' (KExpr.lam Af bodyf) eqfp wf) ",
         ") ",
         "wa)"
@@ -6775,7 +6775,7 @@ fn par_strips_bd_proof() -> String {
     let app_kbeta = format!(
         concat!(
             "(fun (A : KExpr) (A' : KExpr) (bdy : KExpr) (bdy' : KExpr) (arg' : KExpr) ",
-            "(eqf : Eq KExpr f (KExpr.lam A bdy)) ",
+            "(eqf : @Eq KExpr f (KExpr.lam A bdy)) ",
             "(hA : par_reduces_bd A A') (hbody : par_reduces_bd bdy bdy') ",
             "(harg : par_reduces_bd a0 arg') => ",
             // hf_lam : par_reduces_bd (lam A bdy) f'
@@ -6786,19 +6786,19 @@ fn par_strips_bd_proof() -> String {
             "(par_strips_witness_bd (KExpr.app f' a0') (instantiate bdy' arg')) ",
             "hf_lam ",
             "(fun (Af : KExpr) (bodyf : KExpr) ",
-            "(eqfp : Eq KExpr f' (KExpr.lam Af bodyf)) ",
+            "(eqfp : @Eq KExpr f' (KExpr.lam Af bodyf)) ",
             "(hAf : par_reduces_bd A Af) (hbf : par_reduces_bd bdy bodyf) => ",
             // result : par_strips_witness_bd (app (lam Af bodyf) a0') (instantiate bdy' arg')
             // transport app (lam Af bodyf) a0' -> app f' a0' via symm eqfp.
-            "Eq.substType KExpr ",
+            "@Eq.substType KExpr ",
             "(fun (x : KExpr) => par_strips_witness_bd (KExpr.app x a0') (instantiate bdy' arg')) ",
-            "(KExpr.lam Af bodyf) f' (Eq.symm KExpr f' (KExpr.lam Af bodyf) eqfp) ",
+            "(KExpr.lam Af bodyf) f' (@Eq.symm KExpr f' (KExpr.lam Af bodyf) eqfp) ",
             "{app_kbeta_inner})) ",
             // supply hf_lam, wf, wa:
-            "(Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd x f') f (KExpr.lam A bdy) eqf hf) ",
+            "(@Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd x f') f (KExpr.lam A bdy) eqf hf) ",
             "(ihf (KExpr.lam A' bdy') ",
-            "(Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd x (KExpr.lam A' bdy')) ",
-            "(KExpr.lam A bdy) f (Eq.symm KExpr f (KExpr.lam A bdy) eqf) ",
+            "(@Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd x (KExpr.lam A' bdy')) ",
+            "(KExpr.lam A bdy) f (@Eq.symm KExpr f (KExpr.lam A bdy) eqf) ",
             "(par_reduces_bd.lam A A' bdy bdy' hA hbody))) ",
             "(iha arg' harg))"
         ),
@@ -6881,9 +6881,9 @@ fn par_strips_bd_proof() -> String {
         let wb_term = format!(
             concat!(
                 "({ihbody} ibodyp ",
-                "(Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd x ibodyp) ibody bdy ",
+                "(@Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd x ibodyp) ibody bdy ",
                 "(lam_inj_snd A2 ibody A bdy ",
-                "(Eq.symm KExpr (KExpr.lam A bdy) (KExpr.lam A2 ibody) eq2)) ",
+                "(@Eq.symm KExpr (KExpr.lam A bdy) (KExpr.lam A2 ibody) eq2)) ",
                 "hib))"
             ),
             ihbody = ihbody,
@@ -6893,7 +6893,7 @@ fn par_strips_bd_proof() -> String {
             concat!(
                 "(fun (A2 : KExpr) (A2p : KExpr) (ibody : KExpr) (ibodyp : KExpr) ",
                 "(iarg : KExpr) ",
-                "(eq2 : Eq KExpr (KExpr.lam A bdy) (KExpr.lam A2 ibody)) ",
+                "(eq2 : @Eq KExpr (KExpr.lam A bdy) (KExpr.lam A2 ibody)) ",
                 "(hA2 : par_reduces_bd A2 A2p) (hib : par_reduces_bd ibody ibodyp) ",
                 "(hia : par_reduces_bd {arg_src} iarg) => ",
                 "{join})"
@@ -6911,11 +6911,11 @@ fn par_strips_bd_proof() -> String {
                 "(par_strips_witness_bd (instantiate bdy' {arg_red}) (KExpr.app g0 b0)) ",
                 "hg ",
                 "(fun (Ag : KExpr) (bodyg : KExpr) ",
-                "(eqg : Eq KExpr g0 (KExpr.lam Ag bodyg)) ",
+                "(eqg : @Eq KExpr g0 (KExpr.lam Ag bodyg)) ",
                 "(hAg : par_reduces_bd A Ag) (hbg : par_reduces_bd bdy bodyg) => ",
-                "Eq.substType KExpr ",
+                "@Eq.substType KExpr ",
                 "(fun (x : KExpr) => par_strips_witness_bd (instantiate bdy' {arg_red}) (KExpr.app x b0)) ",
-                "(KExpr.lam Ag bodyg) g0 (Eq.symm KExpr g0 (KExpr.lam Ag bodyg) eqg) ",
+                "(KExpr.lam Ag bodyg) g0 (@Eq.symm KExpr g0 (KExpr.lam Ag bodyg) eqg) ",
                 "(par_strips_witness_bd_symm ",
                 "(KExpr.app (KExpr.lam Ag bodyg) b0) (instantiate bdy' {arg_red}) ",
                 "(par_strips_bd_app_beta Ag bodyg b0 bdy' {arg_red} ",
@@ -7101,7 +7101,7 @@ fn par_strips_bd_proof() -> String {
         concat!(
             "fun (e0 : KExpr) (e1_0 : KExpr) (e2_0 : KExpr) ",
             "(h1 : par_reduces_bd e0 e1_0) (h2_0 : par_reduces_bd e0 e2_0) => ",
-            "par_reduces_bd.rec {motive} ",
+            "@par_reduces_bd.rec {motive} ",
             "{refl_arm} {beta_arm} {app_arm} ",
             "{lam_arm} {pi_arm} {forall_arm} {let_arm} {let_cong_arm} {proj_outer_arm} ",
             "e0 e1_0 h1 e2_0 h2_0"
@@ -7170,7 +7170,7 @@ fn par_reduces_bd_lam_inv_eq_proof() -> String {
         format!(
             concat!(
                 "(forall (ty' : KExpr) (body' : KExpr), ",
-                "Eq KExpr {reduct} (KExpr.lam ty' body') -> ",
+                "@Eq KExpr {reduct} (KExpr.lam ty' body') -> ",
                 "par_reduces_bd ty ty' -> par_reduces_bd body body' -> C)"
             ),
             reduct = reduct,
@@ -7179,7 +7179,7 @@ fn par_reduces_bd_lam_inv_eq_proof() -> String {
     let motive = format!(
         concat!(
             "(fun (e : KExpr) (e' : KExpr) (_h : par_reduces_bd e e') => ",
-            "Eq KExpr e (KExpr.lam ty body) -> {kont} -> C)"
+            "@Eq KExpr e (KExpr.lam ty body) -> {kont} -> C)"
         ),
         kont = kont("e'"),
     );
@@ -7188,7 +7188,7 @@ fn par_reduces_bd_lam_inv_eq_proof() -> String {
     // ty' = ty, body' = body so the equation is exactly eq, sub-derivs refl.
     let refl_arm = format!(
         concat!(
-            "(fun (e : KExpr) (eq : Eq KExpr e (KExpr.lam ty body)) ",
+            "(fun (e : KExpr) (eq : @Eq KExpr e (KExpr.lam ty body)) ",
             "(k : {kont}) => ",
             "k ty body eq (par_reduces_bd.refl ty) (par_reduces_bd.refl body))"
         ),
@@ -7202,14 +7202,14 @@ fn par_reduces_bd_lam_inv_eq_proof() -> String {
         concat!(
             "(fun (t0 : KExpr) (t0' : KExpr) (b0 : KExpr) (b0' : KExpr) ",
             "(ht : par_reduces_bd t0 t0') (hb : par_reduces_bd b0 b0') ",
-            "(_iht : Eq KExpr t0 (KExpr.lam ty body) -> {kont_t0} -> C) ",
-            "(_ihb : Eq KExpr b0 (KExpr.lam ty body) -> {kont_b0} -> C) ",
-            "(eq : Eq KExpr (KExpr.lam t0 b0) (KExpr.lam ty body)) ",
+            "(_iht : @Eq KExpr t0 (KExpr.lam ty body) -> {kont_t0} -> C) ",
+            "(_ihb : @Eq KExpr b0 (KExpr.lam ty body) -> {kont_b0} -> C) ",
+            "(eq : @Eq KExpr (KExpr.lam t0 b0) (KExpr.lam ty body)) ",
             "(k : {kont_red}) => ",
-            "k t0' b0' (Eq.refl KExpr (KExpr.lam t0' b0')) ",
-            "(Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd x t0') t0 ty ",
+            "k t0' b0' (@Eq.refl KExpr (KExpr.lam t0' b0')) ",
+            "(@Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd x t0') t0 ty ",
             "(lam_inj_fst t0 b0 ty body eq) ht) ",
-            "(Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd x b0') b0 body ",
+            "(@Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd x b0') b0 body ",
             "(lam_inj_snd t0 b0 ty body eq) hb))"
         ),
         kont_t0 = kont("t0'"),
@@ -7224,10 +7224,10 @@ fn par_reduces_bd_lam_inv_eq_proof() -> String {
             "(arg : KExpr) (arg' : KExpr) ",
             "(_hA : par_reduces_bd A A') (_hb0 : par_reduces_bd b0 b0') ",
             "(_harg : par_reduces_bd arg arg') ",
-            "(_ihA : Eq KExpr A (KExpr.lam ty body) -> {kont_A} -> C) ",
-            "(_ihb0 : Eq KExpr b0 (KExpr.lam ty body) -> {kont_b0} -> C) ",
-            "(_iharg : Eq KExpr arg (KExpr.lam ty body) -> {kont_arg} -> C) ",
-            "(eq : Eq KExpr (KExpr.app (KExpr.lam A b0) arg) (KExpr.lam ty body)) ",
+            "(_ihA : @Eq KExpr A (KExpr.lam ty body) -> {kont_A} -> C) ",
+            "(_ihb0 : @Eq KExpr b0 (KExpr.lam ty body) -> {kont_b0} -> C) ",
+            "(_iharg : @Eq KExpr arg (KExpr.lam ty body) -> {kont_arg} -> C) ",
+            "(eq : @Eq KExpr (KExpr.app (KExpr.lam A b0) arg) (KExpr.lam ty body)) ",
             "(_k : {kont_red}) => ",
             "app_ne_lam (KExpr.lam A b0) arg ty body C eq)"
         ),
@@ -7242,9 +7242,9 @@ fn par_reduces_bd_lam_inv_eq_proof() -> String {
         concat!(
             "(fun (g : KExpr) (g' : KExpr) (b : KExpr) (b' : KExpr) ",
             "(_hg : par_reduces_bd g g') (_hb : par_reduces_bd b b') ",
-            "(_ihg : Eq KExpr g (KExpr.lam ty body) -> {kont_g} -> C) ",
-            "(_ihb : Eq KExpr b (KExpr.lam ty body) -> {kont_b} -> C) ",
-            "(eq : Eq KExpr (KExpr.app g b) (KExpr.lam ty body)) ",
+            "(_ihg : @Eq KExpr g (KExpr.lam ty body) -> {kont_g} -> C) ",
+            "(_ihb : @Eq KExpr b (KExpr.lam ty body) -> {kont_b} -> C) ",
+            "(eq : @Eq KExpr (KExpr.app g b) (KExpr.lam ty body)) ",
             "(_k : {kont_red}) => ",
             "app_ne_lam g b ty body C eq)"
         ),
@@ -7258,9 +7258,9 @@ fn par_reduces_bd_lam_inv_eq_proof() -> String {
         concat!(
             "(fun (dom : KExpr) (dom' : KExpr) (b0 : KExpr) (b0' : KExpr) ",
             "(_hd : par_reduces_bd dom dom') (_hb0 : par_reduces_bd b0 b0') ",
-            "(_ihd : Eq KExpr dom (KExpr.lam ty body) -> {kont_d} -> C) ",
-            "(_ihb0 : Eq KExpr b0 (KExpr.lam ty body) -> {kont_b0} -> C) ",
-            "(eq : Eq KExpr (KExpr.pi dom b0) (KExpr.lam ty body)) ",
+            "(_ihd : @Eq KExpr dom (KExpr.lam ty body) -> {kont_d} -> C) ",
+            "(_ihb0 : @Eq KExpr b0 (KExpr.lam ty body) -> {kont_b0} -> C) ",
+            "(eq : @Eq KExpr (KExpr.pi dom b0) (KExpr.lam ty body)) ",
             "(_k : {kont_red}) => ",
             "pi_ne_lam dom b0 ty body C eq)"
         ),
@@ -7274,9 +7274,9 @@ fn par_reduces_bd_lam_inv_eq_proof() -> String {
         concat!(
             "(fun (dom : KExpr) (dom' : KExpr) (b0 : KExpr) (b0' : KExpr) ",
             "(_hd : par_reduces_bd dom dom') (_hb0 : par_reduces_bd b0 b0') ",
-            "(_ihd : Eq KExpr dom (KExpr.lam ty body) -> {kont_d} -> C) ",
-            "(_ihb0 : Eq KExpr b0 (KExpr.lam ty body) -> {kont_b0} -> C) ",
-            "(eq : Eq KExpr (KExpr.forall_ dom b0) (KExpr.lam ty body)) ",
+            "(_ihd : @Eq KExpr dom (KExpr.lam ty body) -> {kont_d} -> C) ",
+            "(_ihb0 : @Eq KExpr b0 (KExpr.lam ty body) -> {kont_b0} -> C) ",
+            "(eq : @Eq KExpr (KExpr.forall_ dom b0) (KExpr.lam ty body)) ",
             "(_k : {kont_red}) => ",
             "pi_ne_lam dom b0 ty body C eq)"
         ),
@@ -7293,10 +7293,10 @@ fn par_reduces_bd_lam_inv_eq_proof() -> String {
             "(b0 : KExpr) (b0' : KExpr) ",
             "(_ht0 : par_reduces_bd t0 t0') (_hv : par_reduces_bd v v') ",
             "(_hb0 : par_reduces_bd b0 b0') ",
-            "(_iht0 : Eq KExpr t0 (KExpr.lam ty body) -> {kont_t0} -> C) ",
-            "(_ihv : Eq KExpr v (KExpr.lam ty body) -> {kont_v} -> C) ",
-            "(_ihb0 : Eq KExpr b0 (KExpr.lam ty body) -> {kont_b0} -> C) ",
-            "(eq : Eq KExpr (KExpr.let_ t0 v b0) (KExpr.lam ty body)) ",
+            "(_iht0 : @Eq KExpr t0 (KExpr.lam ty body) -> {kont_t0} -> C) ",
+            "(_ihv : @Eq KExpr v (KExpr.lam ty body) -> {kont_v} -> C) ",
+            "(_ihb0 : @Eq KExpr b0 (KExpr.lam ty body) -> {kont_b0} -> C) ",
+            "(eq : @Eq KExpr (KExpr.let_ t0 v b0) (KExpr.lam ty body)) ",
             "(_k : {kont_red}) => ",
             "let_ne_lam t0 v b0 ty body C eq)"
         ),
@@ -7313,10 +7313,10 @@ fn par_reduces_bd_lam_inv_eq_proof() -> String {
             "(b0 : KExpr) (b0' : KExpr) ",
             "(_ht0 : par_reduces_bd t0 t0') (_hv : par_reduces_bd v v') ",
             "(_hb0 : par_reduces_bd b0 b0') ",
-            "(_iht0 : Eq KExpr t0 (KExpr.lam ty body) -> {kont_t0} -> C) ",
-            "(_ihv : Eq KExpr v (KExpr.lam ty body) -> {kont_v} -> C) ",
-            "(_ihb0 : Eq KExpr b0 (KExpr.lam ty body) -> {kont_b0} -> C) ",
-            "(eq : Eq KExpr (KExpr.let_ t0 v b0) (KExpr.lam ty body)) ",
+            "(_iht0 : @Eq KExpr t0 (KExpr.lam ty body) -> {kont_t0} -> C) ",
+            "(_ihv : @Eq KExpr v (KExpr.lam ty body) -> {kont_v} -> C) ",
+            "(_ihb0 : @Eq KExpr b0 (KExpr.lam ty body) -> {kont_b0} -> C) ",
+            "(eq : @Eq KExpr (KExpr.let_ t0 v b0) (KExpr.lam ty body)) ",
             "(_k : {kont_red}) => ",
             "let_ne_lam t0 v b0 ty body C eq)"
         ),
@@ -7331,8 +7331,8 @@ fn par_reduces_bd_lam_inv_eq_proof() -> String {
         concat!(
             "(fun (s : Name) (i : Nat) (sub : KExpr) (sub' : KExpr) ",
             "(_hsub : par_reduces_bd sub sub') ",
-            "(_ihsub : Eq KExpr sub (KExpr.lam ty body) -> {kont_sub} -> C) ",
-            "(eq : Eq KExpr (KExpr.proj s i sub) (KExpr.lam ty body)) ",
+            "(_ihsub : @Eq KExpr sub (KExpr.lam ty body) -> {kont_sub} -> C) ",
+            "(eq : @Eq KExpr (KExpr.proj s i sub) (KExpr.lam ty body)) ",
             "(_k : {kont_red}) => ",
             "proj_ne_lam s i sub ty body C eq)"
         ),
@@ -7345,10 +7345,10 @@ fn par_reduces_bd_lam_inv_eq_proof() -> String {
             "fun (ty : KExpr) (body : KExpr) (t : KExpr) (C : Type) ",
             "(h : par_reduces_bd (KExpr.lam ty body) t) ",
             "(klam : {kont_t}) => ",
-            "par_reduces_bd.rec {motive} ",
+            "@par_reduces_bd.rec {motive} ",
             "{refl_arm} {beta_arm} {app_arm} ",
             "{lam_arm} {pi_arm} {forall_arm} {let_arm} {let_cong_arm} {proj_arm} ",
-            "(KExpr.lam ty body) t h (Eq.refl KExpr (KExpr.lam ty body)) klam"
+            "(KExpr.lam ty body) t h (@Eq.refl KExpr (KExpr.lam ty body)) klam"
         ),
         kont_t = kont("t"),
         motive = motive,
@@ -7378,20 +7378,20 @@ fn par_strips_witness_bd_lam_meet_proof() -> String {
     // Inner continuation (after both inversions): build the body meet at bA.
     let inner_k = concat!(
         "(fun (tB : KExpr) (bB : KExpr) ",
-        "(eqB : Eq KExpr g3 (KExpr.lam tB bB)) ",
+        "(eqB : @Eq KExpr g3 (KExpr.lam tB bB)) ",
         "(_ht2 : par_reduces_bd t2 tB) (hb2 : par_reduces_bd b2 bB) => ",
         "par_strips_witness_bd.intro b1 b2 bA hb1 ",
-        "(Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd b2 x) bB bA ",
+        "(@Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd b2 x) bB bA ",
         "(lam_inj_snd tB bB tA bA ",
-        "(Eq.trans KExpr (KExpr.lam tB bB) g3 (KExpr.lam tA bA) ",
-        "(Eq.symm KExpr g3 (KExpr.lam tB bB) eqB) eqA)) ",
+        "(@Eq.trans KExpr (KExpr.lam tB bB) g3 (KExpr.lam tA bA) ",
+        "(@Eq.symm KExpr g3 (KExpr.lam tB bB) eqB) eqA)) ",
         "hb2))"
     );
     // Outer continuation (after inverting p1): invert p2 at the same reduct g3.
     let outer_k = format!(
         concat!(
             "(fun (tA : KExpr) (bA : KExpr) ",
-            "(eqA : Eq KExpr g3 (KExpr.lam tA bA)) ",
+            "(eqA : @Eq KExpr g3 (KExpr.lam tA bA)) ",
             "(_ht1 : par_reduces_bd t1 tA) (hb1 : par_reduces_bd b1 bA) => ",
             "par_reduces_bd_lam_inv_eq t2 b2 g3 (par_strips_witness_bd b1 b2) p2 {inner_k})"
         ),
@@ -7549,7 +7549,7 @@ fn par_strips_bd_star_strip_proof() -> String {
         concat!(
             "fun (e : KExpr) (e1 : KExpr) (e2 : KExpr) ",
             "(h1 : par_reduces_bd_star e e1) (h2 : par_reduces_bd e e2) => ",
-            "par_reduces_bd_star.rec {motive} {refl_arm} {step_arm} ",
+            "@par_reduces_bd_star.rec {motive} {refl_arm} {step_arm} ",
             "e e1 h1 e2 h2"
         ),
         motive = motive,
@@ -7628,7 +7628,7 @@ fn par_reduces_bd_star_diamond_proof() -> String {
         concat!(
             "fun (e : KExpr) (e1 : KExpr) (e2 : KExpr) ",
             "(h1 : par_reduces_bd_star e e1) (h2 : par_reduces_bd_star e e2) => ",
-            "par_reduces_bd_star.rec {motive} {refl_arm} {step_arm} ",
+            "@par_reduces_bd_star.rec {motive} {refl_arm} {step_arm} ",
             "e e1 h1 e2 h2"
         ),
         motive = motive,
@@ -7664,7 +7664,7 @@ fn par_reduces_bd_pi_inv_eq_proof() -> String {
         format!(
             concat!(
                 "(forall (dom' : KExpr) (body' : KExpr), ",
-                "Eq KExpr {reduct} (KExpr.pi dom' body') -> ",
+                "@Eq KExpr {reduct} (KExpr.pi dom' body') -> ",
                 "par_reduces_bd dom dom' -> par_reduces_bd body body' -> C)"
             ),
             reduct = reduct,
@@ -7673,7 +7673,7 @@ fn par_reduces_bd_pi_inv_eq_proof() -> String {
     let motive = format!(
         concat!(
             "(fun (e : KExpr) (e' : KExpr) (_h : par_reduces_bd e e') => ",
-            "Eq KExpr e (KExpr.pi dom body) -> {kont} -> C)"
+            "@Eq KExpr e (KExpr.pi dom body) -> {kont} -> C)"
         ),
         kont = kont("e'"),
     );
@@ -7682,7 +7682,7 @@ fn par_reduces_bd_pi_inv_eq_proof() -> String {
     // dom' = dom, body' = body so the equation is exactly eq, sub-derivs refl.
     let refl_arm = format!(
         concat!(
-            "(fun (e : KExpr) (eq : Eq KExpr e (KExpr.pi dom body)) ",
+            "(fun (e : KExpr) (eq : @Eq KExpr e (KExpr.pi dom body)) ",
             "(k : {kont}) => ",
             "k dom body eq (par_reduces_bd.refl dom) (par_reduces_bd.refl body))"
         ),
@@ -7696,10 +7696,10 @@ fn par_reduces_bd_pi_inv_eq_proof() -> String {
             "(arg : KExpr) (arg' : KExpr) ",
             "(_hA : par_reduces_bd A A') (_hb0 : par_reduces_bd b0 b0') ",
             "(_harg : par_reduces_bd arg arg') ",
-            "(_ihA : Eq KExpr A (KExpr.pi dom body) -> {kont_A} -> C) ",
-            "(_ihb0 : Eq KExpr b0 (KExpr.pi dom body) -> {kont_b0} -> C) ",
-            "(_iharg : Eq KExpr arg (KExpr.pi dom body) -> {kont_arg} -> C) ",
-            "(eq : Eq KExpr (KExpr.app (KExpr.lam A b0) arg) (KExpr.pi dom body)) ",
+            "(_ihA : @Eq KExpr A (KExpr.pi dom body) -> {kont_A} -> C) ",
+            "(_ihb0 : @Eq KExpr b0 (KExpr.pi dom body) -> {kont_b0} -> C) ",
+            "(_iharg : @Eq KExpr arg (KExpr.pi dom body) -> {kont_arg} -> C) ",
+            "(eq : @Eq KExpr (KExpr.app (KExpr.lam A b0) arg) (KExpr.pi dom body)) ",
             "(_k : {kont_red}) => ",
             "app_ne_pi (KExpr.lam A b0) arg dom body C eq)"
         ),
@@ -7714,9 +7714,9 @@ fn par_reduces_bd_pi_inv_eq_proof() -> String {
         concat!(
             "(fun (g : KExpr) (g' : KExpr) (b : KExpr) (b' : KExpr) ",
             "(_hg : par_reduces_bd g g') (_hb : par_reduces_bd b b') ",
-            "(_ihg : Eq KExpr g (KExpr.pi dom body) -> {kont_g} -> C) ",
-            "(_ihb : Eq KExpr b (KExpr.pi dom body) -> {kont_b} -> C) ",
-            "(eq : Eq KExpr (KExpr.app g b) (KExpr.pi dom body)) ",
+            "(_ihg : @Eq KExpr g (KExpr.pi dom body) -> {kont_g} -> C) ",
+            "(_ihb : @Eq KExpr b (KExpr.pi dom body) -> {kont_b} -> C) ",
+            "(eq : @Eq KExpr (KExpr.app g b) (KExpr.pi dom body)) ",
             "(_k : {kont_red}) => ",
             "app_ne_pi g b dom body C eq)"
         ),
@@ -7730,9 +7730,9 @@ fn par_reduces_bd_pi_inv_eq_proof() -> String {
         concat!(
             "(fun (t0 : KExpr) (t0' : KExpr) (b0 : KExpr) (b0' : KExpr) ",
             "(_ht : par_reduces_bd t0 t0') (_hb : par_reduces_bd b0 b0') ",
-            "(_iht : Eq KExpr t0 (KExpr.pi dom body) -> {kont_t0} -> C) ",
-            "(_ihb : Eq KExpr b0 (KExpr.pi dom body) -> {kont_b0} -> C) ",
-            "(eq : Eq KExpr (KExpr.lam t0 b0) (KExpr.pi dom body)) ",
+            "(_iht : @Eq KExpr t0 (KExpr.pi dom body) -> {kont_t0} -> C) ",
+            "(_ihb : @Eq KExpr b0 (KExpr.pi dom body) -> {kont_b0} -> C) ",
+            "(eq : @Eq KExpr (KExpr.lam t0 b0) (KExpr.pi dom body)) ",
             "(_k : {kont_red}) => ",
             "lam_ne_pi t0 b0 dom body C eq)"
         ),
@@ -7748,14 +7748,14 @@ fn par_reduces_bd_pi_inv_eq_proof() -> String {
         concat!(
             "(fun (d0 : KExpr) (d0' : KExpr) (b0 : KExpr) (b0' : KExpr) ",
             "(hd : par_reduces_bd d0 d0') (hb : par_reduces_bd b0 b0') ",
-            "(_ihd : Eq KExpr d0 (KExpr.pi dom body) -> {kont_d} -> C) ",
-            "(_ihb : Eq KExpr b0 (KExpr.pi dom body) -> {kont_b0} -> C) ",
-            "(eq : Eq KExpr (KExpr.pi d0 b0) (KExpr.pi dom body)) ",
+            "(_ihd : @Eq KExpr d0 (KExpr.pi dom body) -> {kont_d} -> C) ",
+            "(_ihb : @Eq KExpr b0 (KExpr.pi dom body) -> {kont_b0} -> C) ",
+            "(eq : @Eq KExpr (KExpr.pi d0 b0) (KExpr.pi dom body)) ",
             "(k : {kont_red}) => ",
-            "k d0' b0' (Eq.refl KExpr (KExpr.pi d0' b0')) ",
-            "(Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd x d0') d0 dom ",
+            "k d0' b0' (@Eq.refl KExpr (KExpr.pi d0' b0')) ",
+            "(@Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd x d0') d0 dom ",
             "(pi_inj_fst d0 b0 dom body eq) hd) ",
-            "(Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd x b0') b0 body ",
+            "(@Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd x b0') b0 body ",
             "(pi_inj_snd d0 b0 dom body eq) hb))"
         ),
         kont_d = kont("d0'"),
@@ -7771,14 +7771,14 @@ fn par_reduces_bd_pi_inv_eq_proof() -> String {
         concat!(
             "(fun (d0 : KExpr) (d0' : KExpr) (b0 : KExpr) (b0' : KExpr) ",
             "(hd : par_reduces_bd d0 d0') (hb : par_reduces_bd b0 b0') ",
-            "(_ihd : Eq KExpr d0 (KExpr.pi dom body) -> {kont_d} -> C) ",
-            "(_ihb : Eq KExpr b0 (KExpr.pi dom body) -> {kont_b0} -> C) ",
-            "(eq : Eq KExpr (KExpr.forall_ d0 b0) (KExpr.pi dom body)) ",
+            "(_ihd : @Eq KExpr d0 (KExpr.pi dom body) -> {kont_d} -> C) ",
+            "(_ihb : @Eq KExpr b0 (KExpr.pi dom body) -> {kont_b0} -> C) ",
+            "(eq : @Eq KExpr (KExpr.forall_ d0 b0) (KExpr.pi dom body)) ",
             "(k : {kont_red}) => ",
-            "k d0' b0' (Eq.refl KExpr (KExpr.pi d0' b0')) ",
-            "(Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd x d0') d0 dom ",
+            "k d0' b0' (@Eq.refl KExpr (KExpr.pi d0' b0')) ",
+            "(@Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd x d0') d0 dom ",
             "(pi_inj_fst d0 b0 dom body eq) hd) ",
-            "(Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd x b0') b0 body ",
+            "(@Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd x b0') b0 body ",
             "(pi_inj_snd d0 b0 dom body eq) hb))"
         ),
         kont_d = kont("d0'"),
@@ -7794,10 +7794,10 @@ fn par_reduces_bd_pi_inv_eq_proof() -> String {
             "(b0 : KExpr) (b0' : KExpr) ",
             "(_ht0 : par_reduces_bd t0 t0') (_hv : par_reduces_bd v v') ",
             "(_hb0 : par_reduces_bd b0 b0') ",
-            "(_iht0 : Eq KExpr t0 (KExpr.pi dom body) -> {kont_t0} -> C) ",
-            "(_ihv : Eq KExpr v (KExpr.pi dom body) -> {kont_v} -> C) ",
-            "(_ihb0 : Eq KExpr b0 (KExpr.pi dom body) -> {kont_b0} -> C) ",
-            "(eq : Eq KExpr (KExpr.let_ t0 v b0) (KExpr.pi dom body)) ",
+            "(_iht0 : @Eq KExpr t0 (KExpr.pi dom body) -> {kont_t0} -> C) ",
+            "(_ihv : @Eq KExpr v (KExpr.pi dom body) -> {kont_v} -> C) ",
+            "(_ihb0 : @Eq KExpr b0 (KExpr.pi dom body) -> {kont_b0} -> C) ",
+            "(eq : @Eq KExpr (KExpr.let_ t0 v b0) (KExpr.pi dom body)) ",
             "(_k : {kont_red}) => ",
             "let_ne_pi t0 v b0 dom body C eq)"
         ),
@@ -7814,10 +7814,10 @@ fn par_reduces_bd_pi_inv_eq_proof() -> String {
             "(b0 : KExpr) (b0' : KExpr) ",
             "(_ht0 : par_reduces_bd t0 t0') (_hv : par_reduces_bd v v') ",
             "(_hb0 : par_reduces_bd b0 b0') ",
-            "(_iht0 : Eq KExpr t0 (KExpr.pi dom body) -> {kont_t0} -> C) ",
-            "(_ihv : Eq KExpr v (KExpr.pi dom body) -> {kont_v} -> C) ",
-            "(_ihb0 : Eq KExpr b0 (KExpr.pi dom body) -> {kont_b0} -> C) ",
-            "(eq : Eq KExpr (KExpr.let_ t0 v b0) (KExpr.pi dom body)) ",
+            "(_iht0 : @Eq KExpr t0 (KExpr.pi dom body) -> {kont_t0} -> C) ",
+            "(_ihv : @Eq KExpr v (KExpr.pi dom body) -> {kont_v} -> C) ",
+            "(_ihb0 : @Eq KExpr b0 (KExpr.pi dom body) -> {kont_b0} -> C) ",
+            "(eq : @Eq KExpr (KExpr.let_ t0 v b0) (KExpr.pi dom body)) ",
             "(_k : {kont_red}) => ",
             "let_ne_pi t0 v b0 dom body C eq)"
         ),
@@ -7832,8 +7832,8 @@ fn par_reduces_bd_pi_inv_eq_proof() -> String {
         concat!(
             "(fun (s : Name) (i : Nat) (sub : KExpr) (sub' : KExpr) ",
             "(_hsub : par_reduces_bd sub sub') ",
-            "(_ihsub : Eq KExpr sub (KExpr.pi dom body) -> {kont_sub} -> C) ",
-            "(eq : Eq KExpr (KExpr.proj s i sub) (KExpr.pi dom body)) ",
+            "(_ihsub : @Eq KExpr sub (KExpr.pi dom body) -> {kont_sub} -> C) ",
+            "(eq : @Eq KExpr (KExpr.proj s i sub) (KExpr.pi dom body)) ",
             "(_k : {kont_red}) => ",
             "proj_ne_pi s i sub dom body C eq)"
         ),
@@ -7846,10 +7846,10 @@ fn par_reduces_bd_pi_inv_eq_proof() -> String {
             "fun (dom : KExpr) (body : KExpr) (t : KExpr) (C : Type) ",
             "(h : par_reduces_bd (KExpr.pi dom body) t) ",
             "(kpi : {kont_t}) => ",
-            "par_reduces_bd.rec {motive} ",
+            "@par_reduces_bd.rec {motive} ",
             "{refl_arm} {beta_arm} {app_arm} ",
             "{lam_arm} {pi_arm} {forall_arm} {let_arm} {let_cong_arm} {proj_arm} ",
-            "(KExpr.pi dom body) t h (Eq.refl KExpr (KExpr.pi dom body)) kpi"
+            "(KExpr.pi dom body) t h (@Eq.refl KExpr (KExpr.pi dom body)) kpi"
         ),
         kont_t = kont("t"),
         motive = motive,
@@ -7889,17 +7889,17 @@ fn par_reduces_bd_star_pi_inv_proof() -> String {
     //   pi dom body componentwise; r is the running target.)
     let motive = concat!(
         "(fun (s : KExpr) (r : KExpr) (_h : par_reduces_bd_star s r) => ",
-        "forall (A : KExpr) (B : KExpr), Eq KExpr s (KExpr.pi A B) -> ",
+        "forall (A : KExpr) (B : KExpr), @Eq KExpr s (KExpr.pi A B) -> ",
         "par_reduces_bd_star dom A -> par_reduces_bd_star body B -> C r)"
     );
     // refl arm (s = r = e): hand kpi the accumulated prefixes at C (pi A B),
     // transported onto C e via eq.symm.
     let refl_arm = concat!(
         "(fun (e : KExpr) => ",
-        "fun (A : KExpr) (B : KExpr) (eq : Eq KExpr e (KExpr.pi A B)) ",
+        "fun (A : KExpr) (B : KExpr) (eq : @Eq KExpr e (KExpr.pi A B)) ",
         "(hd : par_reduces_bd_star dom A) (hb : par_reduces_bd_star body B) => ",
-        "Eq.substType KExpr C (KExpr.pi A B) e ",
-        "(Eq.symm KExpr e (KExpr.pi A B) eq) (kpi A B hd hb))"
+        "@Eq.substType KExpr C (KExpr.pi A B) e ",
+        "(@Eq.symm KExpr e (KExpr.pi A B) eq) (kpi A B hd hb))"
     );
     // step arm: hstep : e ⇒ e', _htail : e' ⇒* e'', ih : forall A B,
     //   Eq e' (pi A B) -> dom ⇒* A -> body ⇒* B -> C e''. Transport hstep onto
@@ -7909,13 +7909,13 @@ fn par_reduces_bd_star_pi_inv_proof() -> String {
         "(fun (e : KExpr) (e' : KExpr) (e'' : KExpr) ",
         "(hstep : par_reduces_bd e e') ",
         "(_htail : par_reduces_bd_star e' e'') ",
-        "(ih : forall (A : KExpr) (B : KExpr), Eq KExpr e' (KExpr.pi A B) -> ",
+        "(ih : forall (A : KExpr) (B : KExpr), @Eq KExpr e' (KExpr.pi A B) -> ",
         "par_reduces_bd_star dom A -> par_reduces_bd_star body B -> C e'') => ",
-        "fun (A : KExpr) (B : KExpr) (eq : Eq KExpr e (KExpr.pi A B)) ",
+        "fun (A : KExpr) (B : KExpr) (eq : @Eq KExpr e (KExpr.pi A B)) ",
         "(hd : par_reduces_bd_star dom A) (hb : par_reduces_bd_star body B) => ",
         "par_reduces_bd_pi_inv_eq A B e' (C e'') ",
-        "(Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd x e') e (KExpr.pi A B) eq hstep) ",
-        "(fun (A' : KExpr) (B' : KExpr) (eq' : Eq KExpr e' (KExpr.pi A' B')) ",
+        "(@Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd x e') e (KExpr.pi A B) eq hstep) ",
+        "(fun (A' : KExpr) (B' : KExpr) (eq' : @Eq KExpr e' (KExpr.pi A' B')) ",
         "(hAA' : par_reduces_bd A A') (hBB' : par_reduces_bd B B') => ",
         "ih A' B' eq' ",
         "(par_reduces_bd_star_trans dom A A' hd (par_subsumes_bd_star A A' hAA')) ",
@@ -7928,9 +7928,9 @@ fn par_reduces_bd_star_pi_inv_proof() -> String {
             "(kpi : forall (dom' : KExpr) (body' : KExpr), ",
             "par_reduces_bd_star dom dom' -> par_reduces_bd_star body body' -> ",
             "C (KExpr.pi dom' body')) => ",
-            "par_reduces_bd_star.rec {motive} {refl_arm} {step_arm} ",
+            "@par_reduces_bd_star.rec {motive} {refl_arm} {step_arm} ",
             "(KExpr.pi dom body) w h ",
-            "dom body (Eq.refl KExpr (KExpr.pi dom body)) ",
+            "dom body (@Eq.refl KExpr (KExpr.pi dom body)) ",
             "(par_reduces_bd_star.refl dom) (par_reduces_bd_star.refl body)"
         ),
         motive = motive,
@@ -7958,14 +7958,14 @@ fn par_reduces_bd_star_pi_inv_eq_proof() -> String {
         "fun (dom : KExpr) (body : KExpr) (w : KExpr) (C : Type) ",
         "(h : par_reduces_bd_star (KExpr.pi dom body) w) ",
         "(k : forall (dom' : KExpr) (body' : KExpr), ",
-        "Eq KExpr w (KExpr.pi dom' body') -> ",
+        "@Eq KExpr w (KExpr.pi dom' body') -> ",
         "par_reduces_bd_star dom dom' -> par_reduces_bd_star body body' -> C) => ",
         "par_reduces_bd_star_pi_inv dom body w ",
-        "(fun (ww : KExpr) => Eq KExpr w ww -> C) h ",
+        "(fun (ww : KExpr) => @Eq KExpr w ww -> C) h ",
         "(fun (dom' : KExpr) (body' : KExpr) ",
         "(hd : par_reduces_bd_star dom dom') (hb : par_reduces_bd_star body body') => ",
-        "fun (eqw : Eq KExpr w (KExpr.pi dom' body')) => k dom' body' eqw hd hb) ",
-        "(Eq.refl KExpr w)"
+        "fun (eqw : @Eq KExpr w (KExpr.pi dom' body')) => k dom' body' eqw hd hb) ",
+        "(@Eq.refl KExpr w)"
     )
     .to_string()
 }
@@ -8002,14 +8002,14 @@ fn par_bd_pi_injectivity_proof(
     // package the join witness at meet1.
     let inner_k = format!(
         concat!(
-            "(fun (a2' : KExpr) (b2' : KExpr) (eq2 : Eq KExpr e3 (KExpr.pi a2' b2')) ",
+            "(fun (a2' : KExpr) (b2' : KExpr) (eq2 : @Eq KExpr e3 (KExpr.pi a2' b2')) ",
             "(hda2 : par_reduces_bd_star a2 a2') (hdb2 : par_reduces_bd_star b2 b2') => ",
             "par_strips_witness_bd_star.intro {clhs} {crhs} {meet1} {leg1} ",
-            "(Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd_star {crhs} x) {meet2} {meet1} ",
-            "(Eq.symm KExpr {meet1} {meet2} ",
+            "(@Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd_star {crhs} x) {meet2} {meet1} ",
+            "(@Eq.symm KExpr {meet1} {meet2} ",
             "({pi_inj} a1' b1' a2' b2' ",
-            "(Eq.trans KExpr (KExpr.pi a1' b1') e3 (KExpr.pi a2' b2') ",
-            "(Eq.symm KExpr e3 (KExpr.pi a1' b1') eq1) eq2))) ",
+            "(@Eq.trans KExpr (KExpr.pi a1' b1') e3 (KExpr.pi a2' b2') ",
+            "(@Eq.symm KExpr e3 (KExpr.pi a1' b1') eq1) eq2))) ",
             "{leg2}))"
         ),
         clhs = clhs,
@@ -8024,7 +8024,7 @@ fn par_bd_pi_injectivity_proof(
     // same reduct e3.
     let outer_k = format!(
         concat!(
-            "(fun (a1' : KExpr) (b1' : KExpr) (eq1 : Eq KExpr e3 (KExpr.pi a1' b1')) ",
+            "(fun (a1' : KExpr) (b1' : KExpr) (eq1 : @Eq KExpr e3 (KExpr.pi a1' b1')) ",
             "(hda1 : par_reduces_bd_star a1 a1') (hdb1 : par_reduces_bd_star b1 b1') => ",
             "par_reduces_bd_star_pi_inv_eq a2 b2 e3 ",
             "(par_strips_witness_bd_star {clhs} {crhs}) p2 {inner_k})"
@@ -8334,7 +8334,7 @@ fn bd_star_congruence_proof(spec: &BdStarCongruenceSpec) -> String {
     format!(
         concat!(
             "fun {params} (h : {star} {src_red}) => ",
-            "{star}.rec ",
+            "@{star}.rec ",
             "(fun (x : KExpr) (y : KExpr) (_ : {star} x y) => ",
             "{star} {frame_x} {frame_y}) ",
             "(fun (e : KExpr) => {star}.refl {frame_e}) ",
@@ -8373,7 +8373,7 @@ fn bd_star_congruence_proof(spec: &BdStarCongruenceSpec) -> String {
 fn beta_subsumes_par_bd_star_proof() -> String {
     concat!(
         "fun (e0 : KExpr) (e0' : KExpr) (h0 : beta_reduces_bd e0 e0') => ",
-        "beta_reduces_bd.rec ",
+        "@beta_reduces_bd.rec ",
         "(fun (e : KExpr) (e' : KExpr) (_ : beta_reduces_bd e e') => ",
         "par_reduces_bd_star e e') ",
         // beta : A body arg
@@ -8460,7 +8460,7 @@ fn beta_subsumes_par_bd_star_proof() -> String {
 fn par_subsumes_beta_bd_star_proof() -> String {
     concat!(
         "fun (e0 : KExpr) (e0' : KExpr) (h0 : par_reduces_bd e0 e0') => ",
-        "par_reduces_bd.rec ",
+        "@par_reduces_bd.rec ",
         "(fun (e : KExpr) (e' : KExpr) (_ : par_reduces_bd e e') => ",
         "beta_reduces_bd_star e e') ",
         // refl

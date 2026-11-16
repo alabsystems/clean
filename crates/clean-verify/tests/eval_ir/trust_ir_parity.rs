@@ -37,7 +37,7 @@
 
 use clean_kernel::Name;
 use clean_verify::spec::Specification;
-use clean_verify::test_utils::run_with_stack;
+use clean_verify::test_utils::{build_eval_ir_spec_with_stack, run_with_stack};
 
 /// Inspect the vocabulary installed for actual source/IR consumers. Historical
 /// Crystal worked examples are independent of these enum coverage claims.
@@ -283,6 +283,12 @@ fn eval_ir_operator_alphabet_claims_match_the_trust_ir_enums() {
     assert_operator_contract(execution_spec());
 }
 
+/// Preserve the original EvalIR constructor context alongside the production prelude.
+#[test]
+fn eval_ir_full_constructor_operator_alphabet_claims_match_the_trust_ir_enums() {
+    assert_operator_contract(build_eval_ir_spec_with_stack());
+}
+
 /// The same enum/constructor/description assertions, with the producer context explicit.
 pub(super) fn assert_operator_contract(spec: Specification) {
     let mut wrong = Vec::new();
@@ -344,9 +350,9 @@ pub(super) fn assert_operator_contract(spec: Specification) {
 fn ty_variant_total() -> usize {
     ty_variant_count!(
         I8, I16, I32, I64, I128, U8, U16, U32, U64, U128, Isize, Usize, Char, Error, F16, F32, F64,
-        Bool, Vector, Ptr, FatPtr, Unit, Never, Struct, Array, Tuple, Enum, Func, Ref, RefMut,
-        PtrConst, PtrMut, Rc, Set, Sequence, Record, Closure, Refine, Dialect, Handle, Storage,
-        Tensor,
+        Bool, Vector, Ptr, FatPtr, Unit, Never, Struct, Array, Tuple, Enum, Func, FnItem, Ref,
+        RefMut, PtrConst, PtrMut, Rc, Set, Sequence, Record, Closure, Refine, Dialect, Handle,
+        Storage, Tensor,
     )
 }
 
@@ -355,6 +361,12 @@ fn ty_variant_total() -> usize {
 #[test]
 fn eval_ir_ty_description_states_the_trust_ir_ty_variant_count() {
     assert_ty_contract(execution_spec());
+}
+
+/// Check the same exhaustive Ty contract in the original EvalIR constructor context.
+#[test]
+fn eval_ir_full_constructor_ty_description_states_the_trust_ir_ty_variant_count() {
+    assert_ty_contract(build_eval_ir_spec_with_stack());
 }
 
 /// The same exhaustive Ty denominator and registered-description assertion.

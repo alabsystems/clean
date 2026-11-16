@@ -28,7 +28,7 @@ use clean_kernel::FVarId;
 use clean_parser::{SurfaceExpr, SurfaceName, SurfaceTactic};
 
 mod name_argument;
-pub use name_argument::{decode_name_argument, encode_name_argument};
+pub(crate) use name_argument::{decode_name_argument, encode_name_argument};
 
 // Re-export TacticArgPattern from the parser crate where it is canonically defined.
 // The parser owns this type because it controls how arguments are parsed.

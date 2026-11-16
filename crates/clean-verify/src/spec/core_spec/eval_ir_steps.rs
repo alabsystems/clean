@@ -58,31 +58,31 @@
 use crate::spec::error::SpecError;
 use crate::spec::Specification;
 
-const SRC_CONFIG_OUTCOME: &str = "def ir_config_outcome (c : IRConfig) : IROutcome := IRConfig.rec (fun (_ : IRConfig) => IROutcome) (fun (_ : IRMachine) => IROutcome.fuel_out) (fun (o : IROutcome) => o) c";
+const SRC_CONFIG_OUTCOME: &str = "def ir_config_outcome (c : IRConfig) : IROutcome := @IRConfig.rec (fun (_ : IRConfig) => IROutcome) (fun (_ : IRMachine) => IROutcome.fuel_out) (fun (o : IROutcome) => o) c";
 
-const SRC_STEPS: &str = "def ir_steps (fuel : Nat) (m : IRModule) (c : IRConfig) : IRConfig := Nat.rec (fun (_ : Nat) => IRConfig -> IRConfig) (fun (c0 : IRConfig) => c0) (fun (_ : Nat) (ih : IRConfig -> IRConfig) => fun (c0 : IRConfig) => IRConfig.rec (fun (_ : IRConfig) => IRConfig) (fun (s : IRMachine) => ih (ir_step m s)) (fun (o : IROutcome) => IRConfig.halted o) c0) fuel c";
+const SRC_STEPS: &str = "def ir_steps (fuel : Nat) (m : IRModule) (c : IRConfig) : IRConfig := @Nat.rec (fun (_ : Nat) => IRConfig -> IRConfig) (fun (c0 : IRConfig) => c0) (fun (_ : Nat) (ih : IRConfig -> IRConfig) => fun (c0 : IRConfig) => @IRConfig.rec (fun (_ : IRConfig) => IRConfig) (fun (s : IRMachine) => ih (ir_step m s)) (fun (o : IROutcome) => IRConfig.halted o) c0) fuel c";
 
-const IR_STEPS_SHARED_DRIVER_TYPE: &str = r"forall (m : IRModule) (fuel : Nat) (c : IRConfig), Eq IRConfig (ir_steps fuel m c) (ir_drive_v1 IRConfig (fun (c0 : IRConfig) => IRConfig.rec (fun (_ : IRConfig) => Bool) (fun (_ : IRMachine) => Bool.false) (fun (_ : IROutcome) => Bool.true) c0) (fun (c0 : IRConfig) => IRConfig.rec (fun (_ : IRConfig) => IRConfig) (fun (s : IRMachine) => ir_step m s) (fun (o : IROutcome) => IRConfig.halted o) c0) fuel c)";
+const IR_STEPS_SHARED_DRIVER_TYPE: &str = r"forall (m : IRModule) (fuel : Nat) (c : IRConfig), @Eq IRConfig (ir_steps fuel m c) (ir_drive_v1 IRConfig (fun (c0 : IRConfig) => @IRConfig.rec (fun (_ : IRConfig) => Bool) (fun (_ : IRMachine) => Bool.false) (fun (_ : IROutcome) => Bool.true) c0) (fun (c0 : IRConfig) => @IRConfig.rec (fun (_ : IRConfig) => IRConfig) (fun (s : IRMachine) => ir_step m s) (fun (o : IROutcome) => IRConfig.halted o) c0) fuel c)";
 
 const IR_STEPS_SHARED_DRIVER_PROOF: &str = r"fun (m : IRModule) (fuel : Nat) =>
- Nat.rec
-  (fun (k : Nat) => forall (c : IRConfig), Eq IRConfig (ir_steps k m c) (ir_drive_v1 IRConfig (fun (c0 : IRConfig) => IRConfig.rec (fun (_ : IRConfig) => Bool) (fun (_ : IRMachine) => Bool.false) (fun (_ : IROutcome) => Bool.true) c0) (fun (c0 : IRConfig) => IRConfig.rec (fun (_ : IRConfig) => IRConfig) (fun (s : IRMachine) => ir_step m s) (fun (o : IROutcome) => IRConfig.halted o) c0) k c))
-  (fun (c : IRConfig) => Eq.refl IRConfig c)
-  (fun (k : Nat) (ih : forall (c : IRConfig), Eq IRConfig (ir_steps k m c) (ir_drive_v1 IRConfig (fun (c0 : IRConfig) => IRConfig.rec (fun (_ : IRConfig) => Bool) (fun (_ : IRMachine) => Bool.false) (fun (_ : IROutcome) => Bool.true) c0) (fun (c0 : IRConfig) => IRConfig.rec (fun (_ : IRConfig) => IRConfig) (fun (s : IRMachine) => ir_step m s) (fun (o : IROutcome) => IRConfig.halted o) c0) k c)) =>
-   fun (c : IRConfig) => IRConfig.rec
-    (fun (c0 : IRConfig) => Eq IRConfig (ir_steps (Nat.succ k) m c0) (ir_drive_v1 IRConfig (fun (c0 : IRConfig) => IRConfig.rec (fun (_ : IRConfig) => Bool) (fun (_ : IRMachine) => Bool.false) (fun (_ : IROutcome) => Bool.true) c0) (fun (c0 : IRConfig) => IRConfig.rec (fun (_ : IRConfig) => IRConfig) (fun (s : IRMachine) => ir_step m s) (fun (o : IROutcome) => IRConfig.halted o) c0) (Nat.succ k) c0))
+ @Nat.rec
+  (fun (k : Nat) => forall (c : IRConfig), @Eq IRConfig (ir_steps k m c) (ir_drive_v1 IRConfig (fun (c0 : IRConfig) => @IRConfig.rec (fun (_ : IRConfig) => Bool) (fun (_ : IRMachine) => Bool.false) (fun (_ : IROutcome) => Bool.true) c0) (fun (c0 : IRConfig) => @IRConfig.rec (fun (_ : IRConfig) => IRConfig) (fun (s : IRMachine) => ir_step m s) (fun (o : IROutcome) => IRConfig.halted o) c0) k c))
+  (fun (c : IRConfig) => @Eq.refl IRConfig c)
+  (fun (k : Nat) (ih : forall (c : IRConfig), @Eq IRConfig (ir_steps k m c) (ir_drive_v1 IRConfig (fun (c0 : IRConfig) => @IRConfig.rec (fun (_ : IRConfig) => Bool) (fun (_ : IRMachine) => Bool.false) (fun (_ : IROutcome) => Bool.true) c0) (fun (c0 : IRConfig) => @IRConfig.rec (fun (_ : IRConfig) => IRConfig) (fun (s : IRMachine) => ir_step m s) (fun (o : IROutcome) => IRConfig.halted o) c0) k c)) =>
+   fun (c : IRConfig) => @IRConfig.rec
+    (fun (c0 : IRConfig) => @Eq IRConfig (ir_steps (Nat.succ k) m c0) (ir_drive_v1 IRConfig (fun (c0 : IRConfig) => @IRConfig.rec (fun (_ : IRConfig) => Bool) (fun (_ : IRMachine) => Bool.false) (fun (_ : IROutcome) => Bool.true) c0) (fun (c0 : IRConfig) => @IRConfig.rec (fun (_ : IRConfig) => IRConfig) (fun (s : IRMachine) => ir_step m s) (fun (o : IROutcome) => IRConfig.halted o) c0) (Nat.succ k) c0))
     (fun (s : IRMachine) => ih (ir_step m s))
-    (fun (o : IROutcome) => Eq.refl IRConfig (IRConfig.halted o)) c) fuel";
+    (fun (o : IROutcome) => @Eq.refl IRConfig (IRConfig.halted o)) c) fuel";
 
-const SRC_RUN_HALTED: &str = "def ir_run_halted (m : IRModule) (o : IROutcome) (g : Nat) : Eq IROutcome (ir_run g m (IRConfig.halted o)) o := Nat.rec (fun (k : Nat) => Eq IROutcome (ir_run k m (IRConfig.halted o)) o) (Eq.refl IROutcome o) (fun (k : Nat) (_ih : Eq IROutcome (ir_run k m (IRConfig.halted o)) o) => Eq.refl IROutcome o) g";
+const SRC_RUN_HALTED: &str = "def ir_run_halted (m : IRModule) (o : IROutcome) (g : Nat) : @Eq IROutcome (ir_run g m (IRConfig.halted o)) o := @Nat.rec (fun (k : Nat) => @Eq IROutcome (ir_run k m (IRConfig.halted o)) o) (@Eq.refl IROutcome o) (fun (k : Nat) (_ih : @Eq IROutcome (ir_run k m (IRConfig.halted o)) o) => @Eq.refl IROutcome o) g";
 
-const SRC_STEPS_HALTED: &str = "def ir_steps_halted (m : IRModule) (o : IROutcome) (f : Nat) : Eq IRConfig (ir_steps f m (IRConfig.halted o)) (IRConfig.halted o) := Nat.rec (fun (k : Nat) => Eq IRConfig (ir_steps k m (IRConfig.halted o)) (IRConfig.halted o)) (Eq.refl IRConfig (IRConfig.halted o)) (fun (k : Nat) (_ih : Eq IRConfig (ir_steps k m (IRConfig.halted o)) (IRConfig.halted o)) => Eq.refl IRConfig (IRConfig.halted o)) f";
+const SRC_STEPS_HALTED: &str = "def ir_steps_halted (m : IRModule) (o : IROutcome) (f : Nat) : @Eq IRConfig (ir_steps f m (IRConfig.halted o)) (IRConfig.halted o) := @Nat.rec (fun (k : Nat) => @Eq IRConfig (ir_steps k m (IRConfig.halted o)) (IRConfig.halted o)) (@Eq.refl IRConfig (IRConfig.halted o)) (fun (k : Nat) (_ih : @Eq IRConfig (ir_steps k m (IRConfig.halted o)) (IRConfig.halted o)) => @Eq.refl IRConfig (IRConfig.halted o)) f";
 
-const SRC_RUN_OF_STEPS: &str = "def ir_run_of_steps (m : IRModule) (f : Nat) : forall (c : IRConfig), Eq IROutcome (ir_run f m c) (ir_config_outcome (ir_steps f m c)) := Nat.rec (fun (k : Nat) => forall (c : IRConfig), Eq IROutcome (ir_run k m c) (ir_config_outcome (ir_steps k m c))) (fun (c : IRConfig) => Eq.refl IROutcome (ir_run Nat.zero m c)) (fun (k : Nat) (ih : forall (c : IRConfig), Eq IROutcome (ir_run k m c) (ir_config_outcome (ir_steps k m c))) => fun (c : IRConfig) => IRConfig.rec (fun (c0 : IRConfig) => Eq IROutcome (ir_run (Nat.succ k) m c0) (ir_config_outcome (ir_steps (Nat.succ k) m c0))) (fun (s : IRMachine) => ih (ir_step m s)) (fun (o : IROutcome) => Eq.refl IROutcome o) c) f";
+const SRC_RUN_OF_STEPS: &str = "def ir_run_of_steps (m : IRModule) (f : Nat) : forall (c : IRConfig), @Eq IROutcome (ir_run f m c) (ir_config_outcome (ir_steps f m c)) := @Nat.rec (fun (k : Nat) => forall (c : IRConfig), @Eq IROutcome (ir_run k m c) (ir_config_outcome (ir_steps k m c))) (fun (c : IRConfig) => @Eq.refl IROutcome (ir_run Nat.zero m c)) (fun (k : Nat) (ih : forall (c : IRConfig), @Eq IROutcome (ir_run k m c) (ir_config_outcome (ir_steps k m c))) => fun (c : IRConfig) => @IRConfig.rec (fun (c0 : IRConfig) => @Eq IROutcome (ir_run (Nat.succ k) m c0) (ir_config_outcome (ir_steps (Nat.succ k) m c0))) (fun (s : IRMachine) => ih (ir_step m s)) (fun (o : IROutcome) => @Eq.refl IROutcome o) c) f";
 
-const SRC_RUN_STEPS_SPLIT: &str = "def ir_run_steps_split (m : IRModule) (g : Nat) (f : Nat) : forall (c : IRConfig), Eq IROutcome (ir_run (Nat.add g f) m c) (ir_run g m (ir_steps f m c)) := Nat.rec (fun (k : Nat) => forall (c : IRConfig), Eq IROutcome (ir_run (Nat.add g k) m c) (ir_run g m (ir_steps k m c))) (fun (c : IRConfig) => Eq.refl IROutcome (ir_run g m c)) (fun (k : Nat) (ih : forall (c : IRConfig), Eq IROutcome (ir_run (Nat.add g k) m c) (ir_run g m (ir_steps k m c))) => fun (c : IRConfig) => IRConfig.rec (fun (c0 : IRConfig) => Eq IROutcome (ir_run (Nat.add g (Nat.succ k)) m c0) (ir_run g m (ir_steps (Nat.succ k) m c0))) (fun (s : IRMachine) => ih (ir_step m s)) (fun (o : IROutcome) => Eq.symm IROutcome (ir_run g m (IRConfig.halted o)) o (ir_run_halted m o g)) c) f";
+const SRC_RUN_STEPS_SPLIT: &str = "def ir_run_steps_split (m : IRModule) (g : Nat) (f : Nat) : forall (c : IRConfig), @Eq IROutcome (ir_run (Nat.add g f) m c) (ir_run g m (ir_steps f m c)) := @Nat.rec (fun (k : Nat) => forall (c : IRConfig), @Eq IROutcome (ir_run (Nat.add g k) m c) (ir_run g m (ir_steps k m c))) (fun (c : IRConfig) => @Eq.refl IROutcome (ir_run g m c)) (fun (k : Nat) (ih : forall (c : IRConfig), @Eq IROutcome (ir_run (Nat.add g k) m c) (ir_run g m (ir_steps k m c))) => fun (c : IRConfig) => @IRConfig.rec (fun (c0 : IRConfig) => @Eq IROutcome (ir_run (Nat.add g (Nat.succ k)) m c0) (ir_run g m (ir_steps (Nat.succ k) m c0))) (fun (s : IRMachine) => ih (ir_step m s)) (fun (o : IROutcome) => @Eq.symm IROutcome (ir_run g m (IRConfig.halted o)) o (ir_run_halted m o g)) c) f";
 
-const SRC_STEPS_ADD: &str = "def ir_steps_add (m : IRModule) (b : Nat) (a : Nat) : forall (c : IRConfig), Eq IRConfig (ir_steps (Nat.add b a) m c) (ir_steps b m (ir_steps a m c)) := Nat.rec (fun (k : Nat) => forall (c : IRConfig), Eq IRConfig (ir_steps (Nat.add b k) m c) (ir_steps b m (ir_steps k m c))) (fun (c : IRConfig) => Eq.refl IRConfig (ir_steps b m c)) (fun (k : Nat) (ih : forall (c : IRConfig), Eq IRConfig (ir_steps (Nat.add b k) m c) (ir_steps b m (ir_steps k m c))) => fun (c : IRConfig) => IRConfig.rec (fun (c0 : IRConfig) => Eq IRConfig (ir_steps (Nat.add b (Nat.succ k)) m c0) (ir_steps b m (ir_steps (Nat.succ k) m c0))) (fun (s : IRMachine) => ih (ir_step m s)) (fun (o : IROutcome) => Eq.symm IRConfig (ir_steps b m (IRConfig.halted o)) (IRConfig.halted o) (ir_steps_halted m o b)) c) a";
+const SRC_STEPS_ADD: &str = "def ir_steps_add (m : IRModule) (b : Nat) (a : Nat) : forall (c : IRConfig), @Eq IRConfig (ir_steps (Nat.add b a) m c) (ir_steps b m (ir_steps a m c)) := @Nat.rec (fun (k : Nat) => forall (c : IRConfig), @Eq IRConfig (ir_steps (Nat.add b k) m c) (ir_steps b m (ir_steps k m c))) (fun (c : IRConfig) => @Eq.refl IRConfig (ir_steps b m c)) (fun (k : Nat) (ih : forall (c : IRConfig), @Eq IRConfig (ir_steps (Nat.add b k) m c) (ir_steps b m (ir_steps k m c))) => fun (c : IRConfig) => @IRConfig.rec (fun (c0 : IRConfig) => @Eq IRConfig (ir_steps (Nat.add b (Nat.succ k)) m c0) (ir_steps b m (ir_steps (Nat.succ k) m c0))) (fun (s : IRMachine) => ih (ir_step m s)) (fun (o : IROutcome) => @Eq.symm IRConfig (ir_steps b m (IRConfig.halted o)) (IRConfig.halted o) (ir_steps_halted m o b)) c) a";
 
 impl Specification {
     /// The configuration-level iterator and its faithfulness to `ir_run`.
@@ -102,23 +102,23 @@ Same recursion as ir_run with the projection removed: zero is the identity, succ
             "For every module, fuel and configuration, the directly case-split iterator equals the unchanged shared driver with its actual terminal and step adapters. This is a model specialization theorem, not Rust/compiler refinement.",
         )?;
         self.verify_definition("ir_steps_shared_driver_agreement")?;
-        self.add_recursive_def(SRC_RUN_HALTED, "ir_run_halted: a halted configuration returns its outcome at ANY fuel. Nat.rec on the fuel; both arms are Eq.refl and neither needs the induction hypothesis, because ir_run's zero and succ cases agree on halted. This is the absorption that makes surplus fuel harmless at the OUTCOME level -- and the reason A4 can take a Le premise rather than an exact count. DerivedProved, zero axiom_deps.")?;
+        self.add_recursive_def(SRC_RUN_HALTED, "ir_run_halted: a halted configuration returns its outcome at ANY fuel. @Nat.rec on the fuel; both arms are @Eq.refl and neither needs the induction hypothesis, because ir_run's zero and succ cases agree on halted. This is the absorption that makes surplus fuel harmless at the OUTCOME level -- and the reason A4 can take a Le premise rather than an exact count. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_STEPS_HALTED, "ir_steps_halted: a halted configuration is a fixed point of the iterator. \
 \
 Note how much weaker this is than ir_run_halted's absorption: it holds only because a HALTED configuration has no frames left to resume into. A still-running callee that has just returned does have a caller underneath, and stepping past its return keeps executing THE CALLER. That is why the activation lemma cannot use an over-approximated step count the way A4's fuel premise can. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_RUN_OF_STEPS, "ir_run_of_steps: THE FAITHFULNESS EQUATION. ir_run f m c = ir_config_outcome (ir_steps f m c). \
 \
-A second iterator is worth nothing unless it is the same machine, and this is what pins it: ir_steps cannot drift from ir_run without this equation failing to typecheck. Nat.rec on the fuel with an IRConfig.rec convoy; the zero arm is Eq.refl because ir_run's zero case IS ir_config_outcome, and the succ/halted arm is Eq.refl because both sides compute to the outcome. DerivedProved, zero axiom_deps.")?;
+A second iterator is worth nothing unless it is the same machine, and this is what pins it: ir_steps cannot drift from ir_run without this equation failing to typecheck. @Nat.rec on the fuel with an @IRConfig.rec convoy; the zero arm is @Eq.refl because ir_run's zero case IS ir_config_outcome, and the succ/halted arm is @Eq.refl because both sides compute to the outcome. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_STEPS_ADD, "ir_steps_add: composition for the configuration iterator. ir_steps (Nat.add b a) m c = ir_steps b m (ir_steps a m c). \
 \
 This is what lets the activation lemma be assembled from segments -- run to the Call, apply the induction hypothesis for the callee, run the one node after it returns -- instead of being one monolithic computation. \
 \
-Induct on a, not on b: ir_steps peels from the FRONT of its fuel, so only the leading segment can be stripped a step at a time. Nat.add recurses on its second argument, which is why a sits there. The succ/halted arm needs Eq.symm over ir_steps_halted. DerivedProved, zero axiom_deps.")?;
+Induct on a, not on b: ir_steps peels from the FRONT of its fuel, so only the leading segment can be stripped a step at a time. Nat.add recurses on its second argument, which is why a sits there. The succ/halted arm needs @Eq.symm over ir_steps_halted. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_RUN_STEPS_SPLIT, "ir_run_steps_split: run the first f steps as a configuration transformer, then finish. ir_run (Nat.add g f) m c = ir_run g m (ir_steps f m c). \
 \
 This is the shape the activation lemma consumes: it converts a fact about where the machine IS after a known number of steps into a fact about what it RETURNS. \
 \
-Argument order is forced, not stylistic. Nat.add recurses on its SECOND argument, so the step count f must sit there; with the arguments swapped, Nat.add g Nat.zero stops reducing to g and the base case dies. The succ/halted arm needs Eq.symm over ir_run_halted, because the induction leaves the equation pointing the other way. DerivedProved, zero axiom_deps.")?;
+Argument order is forced, not stylistic. Nat.add recurses on its SECOND argument, so the step count f must sit there; with the arguments swapped, Nat.add g Nat.zero stops reducing to g and the base case dies. The succ/halted arm needs @Eq.symm over ir_run_halted, because the induction leaves the equation pointing the other way. DerivedProved, zero axiom_deps.")?;
         Ok(())
     }
 }
@@ -156,7 +156,7 @@ mod tests {
             "step count must be Nat.add's second argument"
         );
         assert!(
-            SRC_RUN_STEPS_SPLIT.contains("Eq.symm IROutcome"),
+            SRC_RUN_STEPS_SPLIT.contains("@Eq.symm IROutcome"),
             "the succ/halted arm needs the equation reversed"
         );
     }
@@ -166,9 +166,9 @@ mod tests {
     /// Keep both, and keep them distinct.
     #[test]
     fn test_absorption_is_stated_at_both_levels() {
-        assert!(SRC_RUN_HALTED.contains("Eq IROutcome (ir_run g m (IRConfig.halted o)) o"));
+        assert!(SRC_RUN_HALTED.contains("@Eq IROutcome (ir_run g m (IRConfig.halted o)) o"));
         assert!(SRC_STEPS_HALTED
-            .contains("Eq IRConfig (ir_steps f m (IRConfig.halted o)) (IRConfig.halted o)"));
+            .contains("@Eq IRConfig (ir_steps f m (IRConfig.halted o)) (IRConfig.halted o)"));
     }
 
     #[test]

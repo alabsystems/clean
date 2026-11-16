@@ -406,25 +406,30 @@ theorem w_pushneg_exact (P Q : Prop) (h : ¬(P ∨ Q)) : ¬P ∧ ¬Q := by
 theorem w_pushneg_unused (P Q : Prop) (h : ¬(P ∨ Q)) : True := by
   push_neg at h
   trivial
+theorem w_pushneg_wrong_exact (P Q : Prop) (h : ¬(P ∨ Q)) : ¬P ∧ Q := by
+  push_neg at h
+  exact h
+theorem w_pushneg_wrong_simp (P Q : Prop) (h : ¬(P ∨ Q)) : P = True := by
+  push_neg at h
+  simp only [h]
 "#;
 
 /// Mathlib's `push_neg` turns `h : ¬(P ∨ Q)` into `h : ¬P ∧ ¬Q`, after which
 /// `simp only [h]` closes `P = False` (`w_pushneg`) and `exact h` closes
-/// `¬P ∧ ¬Q` (`w_pushneg_exact`). Clean's `push_neg at h` now states the
-/// `Not` head, so `simp only [h]` does rewrite (with the old `P → False`
-/// spelling it made no progress), but a KNOWN GAP remains: once the
-/// rewritten `h` is USED, the assembled proof is missing
-/// (`ProofNotProduced`), with either spelling — `w_pushneg_exact` fails the
-/// same way, while `w_pushneg_unused`, which never reads `h`, closes. Pinned
-/// as refusals so this fails loudly the day `push_neg at`'s hypothesis cast
-/// is fixed; then both move to accepted.
+/// `¬P ∧ ¬Q` (`w_pushneg_exact`). Both were a known gap, refused with
+/// `ProofNotProduced` once the pushed `h` was USED (`w_pushneg_unused`, which
+/// never reads `h`, always closed); the pin said to move them to accepted the
+/// day `push_neg at`'s hypothesis cast was fixed, and both now close and
+/// kernel-check, as in Lean. The negative controls are what pinned Lean
+/// refuses: `exact h` against a goal the pushed `h` does not state, and
+/// `simp only [h]` driving `P = True` to `False = True`.
 #[test]
-fn test_push_neg_at_used_hypothesis_known_gap_is_refused() {
+fn test_push_neg_at_used_hypothesis_closes_as_in_lean() {
     assert_refused_exactly(
         PUSH_NEG_AT,
         &[
-            ("w_pushneg", "ProofNotProduced"),
-            ("w_pushneg_exact", "ProofNotProduced"),
+            ("w_pushneg_wrong_exact", "TypeMismatch"),
+            ("w_pushneg_wrong_simp", "UnsolvedGoals"),
         ],
     );
 }

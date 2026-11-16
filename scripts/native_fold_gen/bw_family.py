@@ -17,18 +17,18 @@ def gen_fst_snd():
         NEEDS[op] = {'prod'}
         b = bbody(op)
         fr = bfront(op, b, [NAT, NAT, plit('p')])
-        sub = pair(lit('(Prod.fst Nat Nat p)'), lit('(Prod.snd Nat Nat p)'))
+        sub = pair(lit('(@Prod.fst Nat Nat p)'), lit('(@Prod.snd Nat Nat p)'))
         assert fr.rhs[0] == 'proj', pr(fr.rhs)
         pb = proj_beta(idx, sub)
         pb = retype_lhs(pb, fr.rhs)
         whole = trans(fr, pb)
-        whole = retype_rhs(whole, lit('(%s Nat Nat p)' % op))
+        whole = retype_rhs(whole, lit('(@%s Nat Nat p)' % op))
         bregister(op, '(p : Prod Nat Nat)', whole)
 
 
 def call_fst(idx, x):
     op = 'Prod.fst' if idx == 0 else 'Prod.snd'
-    return bcall(op, [x], app(C(op, LV00), NAT, NAT, plit(x)), lit('(%s Nat Nat %s)' % (op, x)))
+    return bcall(op, [x], app(C(op, LV00), NAT, NAT, plit(x)), lit('(@%s Nat Nat %s)' % (op, x)))
 
 
 def gen_div2pair():
@@ -59,7 +59,7 @@ def gen_div2pair():
     rec_k = lhs('k')
     ih = Conv(rec_k, plit(X), 'ih')
     t = d3.rhs
-    fx, sx = '(Prod.fst Nat Nat %s)' % X, '(Prod.snd Nat Nat %s)' % X
+    fx, sx = '(@Prod.fst Nat Nat %s)' % X, '(@Prod.snd Nat Nat %s)' % X
     convs = []
     # first field: add (fst REC) (snd REC)
     for path in ([2, 0, 2], [2, 1, 2], [3, 1, 2]):

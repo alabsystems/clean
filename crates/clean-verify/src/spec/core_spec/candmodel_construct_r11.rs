@@ -431,7 +431,7 @@ impl Specification {
                  rule reaches a const at a PI type at all' as the newest gap and R10 closed it \
                  SEMANTICALLY; this is the same fact inside the JUDGMENT. Both side conditions — \
                  no definitional value, no recursor metadata, over the real environment — are one \
-                 Eq.refl each, so a regeneration of the reflection that defined that name would \
+                 @Eq.refl each, so a regeneration of the reflection that defined that name would \
                  fail this CLOSED.",
             ),
             (
@@ -451,7 +451,7 @@ impl Specification {
                 "THE CONVERSION RULE AT A CONCRETE TERM: the identity lambda typed at pi (sort 0) \
                  (bvar 0), a Pi type whose CODOMAIN IS A VARIABLE. Both codomains are non-Pi \
                  formers, so both interpretations are the top candidate and the premise is one \
-                 Eq.refl — but the two types are different KExprs and R9's conv-free judgment \
+                 @Eq.refl — but the two types are different KExprs and R9's conv-free judgment \
                  reaches only the first of them.",
             ),
             (
@@ -467,7 +467,7 @@ impl Specification {
                 TY_R11_SYNTYP_UNLIFT_TYPE.to_string(),
                 VAL_R11_SYNTYP_UNLIFT_TYPE.to_string(),
                 vec!["SynTyP", "candInterp_lift_eq"],
-                "THE CONVERSION RULE'S GENERAL CONTENT, and the answer to `is convI just Eq.refl \
+                "THE CONVERSION RULE'S GENERAL CONTENT, and the answer to `is convI just @Eq.refl \
                  decoration?': R8's candInterp_lift_eq equates the two membership PREDICATES at an \
                  ARBITRARY type, so SynTyP is closed under UN-LIFTING the type. That is exactly \
                  the conversion TypingCtx.var's lifted conclusion needs, and SynTyC cannot perform \

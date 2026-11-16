@@ -3,7 +3,28 @@
 
 //! Statement and core-witness inventory for the CIC_L qualification.
 
-pub(super) const THEOREMS: &[&str] = &[
+#[path = "tables_extended.rs"]
+mod extended;
+
+/// Every statement the qualification checks, in one order: the base table,
+/// then the extended-rule waves of `tables_extended.rs`. Joined at compile
+/// time so every reader keeps a single `&[&str]`.
+pub(super) const THEOREMS: &[&str] = &{
+    let mut all = [""; BASE_THEOREMS.len() + extended::EXTENDED_THEOREMS.len()];
+    let mut i = 0;
+    while i < BASE_THEOREMS.len() {
+        all[i] = BASE_THEOREMS[i];
+        i += 1;
+    }
+    let mut j = 0;
+    while j < extended::EXTENDED_THEOREMS.len() {
+        all[BASE_THEOREMS.len() + j] = extended::EXTENDED_THEOREMS[j];
+        j += 1;
+    }
+    all
+};
+
+const BASE_THEOREMS: &[&str] = &[
     "CICL.BaseFamily.fold_constants_lookup",
     "CICL.BaseFamily.extendSignature_lookup",
     "CICL.BaseFamily.fold_constants_other",
@@ -659,6 +680,45 @@ pub(super) const THEOREMS: &[&str] = &[
     "CICL.SafetyBoundary.empty_admitted",
     "CICL.SafetyBoundary.empty_refuses_unsafePropId",
     "CICL.SafetyBoundary.empty_refuses_partialPropId",
+    // Plan Unit S6 literal schemas and native-reduction exclusion boundary.
+    "CICL.LiteralRules.litType_natVal",
+    "CICL.LiteralRules.litType_strVal",
+    "CICL.LiteralRules.litType_closed",
+    "CICL.LiteralRules.litType_levelScoped",
+    "CICL.LiteralRules.quickDefEqLit_refl",
+    "CICL.LiteralRules.quickDefEqLit_natVal_inj",
+    "CICL.LiteralRules.quickDefEqLit_nat_ne_str",
+    "CICL.LiteralRules.natLitToConstructor_zero",
+    "CICL.LiteralRules.natLitToConstructor_succ",
+    "CICL.LiteralRules.natLitToConstructor_closed",
+    "CICL.LiteralRules.natLitToConstructor_levelScoped",
+    "CICL.LiteralRules.natLitToConstructor_injective",
+    "CICL.LiteralRules.natLitToConstructor_typed",
+    "CICL.LiteralRules.codepointListExpr_closed",
+    "CICL.LiteralRules.stringLitToConstructor_closed",
+    "CICL.LiteralRules.codepointListExpr_injective",
+    "CICL.LiteralRules.stringCodepointsToConstructor_injective",
+    "CICL.LiteralRules.natLitExtVal_deterministic",
+    "CICL.LiteralRules.reduceNatSucc_zero",
+    "CICL.LiteralRules.reduceNatSucc_lit",
+    "CICL.LiteralRules.reduceNatSucc_refuses_strLit",
+    "CICL.LiteralRules.natGcd_zero_left",
+    "CICL.LiteralRules.natGcd_zero_right",
+    "CICL.LiteralRules.reduceBinNatOp_deterministic",
+    "CICL.LiteralRules.reduceNatPow_within_bound",
+    "CICL.LiteralRules.reduceNatPow_refuses_above_maxExp",
+    "CICL.LiteralRules.reduceBinNatPred_beq_refl",
+    "CICL.LiteralRules.natOffsetEquiv_lit_constructor",
+    "CICL.LiteralRules.not_defEqNatOffset_zero_succ",
+    "CICL.NativeReductionBoundary.emptySignature_nativeEvalExcluded",
+    "CICL.NativeReductionBoundary.insertOpaque_reduceBool_excluded",
+    "CICL.NativeReductionBoundary.insertOpaque_reduceNat_excluded",
+    "CICL.NativeReductionBoundary.no_coreHeadStep_const_of_not_transparent",
+    "CICL.NativeReductionBoundary.no_coreHeadStep_reduceBool",
+    "CICL.NativeReductionBoundary.no_coreHeadStep_reduceNat",
+    "CICL.NativeReductionBoundary.miscompiled_native_oracle_inconsistent",
+    "CICL.NativeReductionBoundary.opaqueReduceBoolSig_excluded",
+    "CICL.NativeReductionBoundary.opaqueReduceBool_no_headStep",
 ];
 
 pub(super) const CORE_WITNESSES: &[(&str, &str)] = &[

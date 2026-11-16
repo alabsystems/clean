@@ -411,7 +411,7 @@ impl ProofLibrary {
             "lift_at_sort".to_string(),
             ProofTerm::new(
                 "lift_at_sort",
-                "fun (n : Level) (cutoff : Nat) (amount : Nat) => Eq.refl KExpr (KExpr.sort n)",
+                "fun (n : Level) (cutoff : Nat) (amount : Nat) => @Eq.refl KExpr (KExpr.sort n)",
                 "lift_at on sort is identity. DerivedProved via Eq.refl. Part of #3309.",
             ),
         );
@@ -423,7 +423,7 @@ impl ProofLibrary {
             "lift_at_app".to_string(),
             ProofTerm::new(
                 "lift_at_app",
-                "fun (f : KExpr) (a : KExpr) (cutoff : Nat) (amount : Nat) => Eq.refl KExpr (KExpr.app (lift_at f cutoff amount) (lift_at a cutoff amount))",
+                "fun (f : KExpr) (a : KExpr) (cutoff : Nat) (amount : Nat) => @Eq.refl KExpr (KExpr.app (lift_at f cutoff amount) (lift_at a cutoff amount))",
                 "lift_at distributes over app. DerivedProved via Eq.refl. Part of #3309.",
             ),
         );
@@ -435,7 +435,7 @@ impl ProofLibrary {
             "lift_at_lam".to_string(),
             ProofTerm::new(
                 "lift_at_lam",
-                "fun (ty : KExpr) (body : KExpr) (cutoff : Nat) (amount : Nat) => Eq.refl KExpr (KExpr.lam (lift_at ty cutoff amount) (lift_at body (Nat.succ cutoff) amount))",
+                "fun (ty : KExpr) (body : KExpr) (cutoff : Nat) (amount : Nat) => @Eq.refl KExpr (KExpr.lam (lift_at ty cutoff amount) (lift_at body (Nat.succ cutoff) amount))",
                 "lift_at distributes over lam (incrementing cutoff). DerivedProved via Eq.refl. Part of #3309.",
             ),
         );
@@ -447,7 +447,7 @@ impl ProofLibrary {
             "lift_at_pi".to_string(),
             ProofTerm::new(
                 "lift_at_pi",
-                "fun (ty : KExpr) (body : KExpr) (cutoff : Nat) (amount : Nat) => Eq.refl KExpr (KExpr.pi (lift_at ty cutoff amount) (lift_at body (Nat.succ cutoff) amount))",
+                "fun (ty : KExpr) (body : KExpr) (cutoff : Nat) (amount : Nat) => @Eq.refl KExpr (KExpr.pi (lift_at ty cutoff amount) (lift_at body (Nat.succ cutoff) amount))",
                 "lift_at distributes over pi (incrementing cutoff). DerivedProved via Eq.refl. Part of #3309.",
             ),
         );
@@ -483,7 +483,7 @@ impl ProofLibrary {
             "instantiate_sort".to_string(),
             ProofTerm::new(
                 "instantiate_sort",
-                "fun (n : Level) (val : KExpr) => Eq.refl KExpr (KExpr.sort n)",
+                "fun (n : Level) (val : KExpr) => @Eq.refl KExpr (KExpr.sort n)",
                 "instantiate (sort n) val = sort n. DerivedProved via Eq.refl. Part of #3309.",
             ),
         );

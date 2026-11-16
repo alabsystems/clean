@@ -64,16 +64,16 @@ impl Specification {
     /// lookups reduce.
     pub(super) fn r29_inertty_witness_src() -> String {
         "def r29_inertTy_witness : \
-         InertTy (KExpr.const Name.anonymous (ListType.nil Level)) := \
-         InertTy.konst Name.anonymous (ListType.nil Level) \
-         (Eq.refl (OptionType KExpr) (OptionType.none KExpr)) \
-         (Eq.refl (OptionType RecMeta) (OptionType.none RecMeta))"
+         InertTy (KExpr.const Name.anonymous (@ListType.nil Level)) := \
+         InertTy.konst Name.anonymous (@ListType.nil Level) \
+         (@Eq.refl (OptionType KExpr) (@OptionType.none KExpr)) \
+         (@Eq.refl (OptionType RecMeta) (@OptionType.none RecMeta))"
             .to_string()
     }
 
     /// `r29_ctxOK` at the constant context built from that inert type.
     pub(super) fn r29_ctxok_witness_src() -> String {
-        let ctx = "(fun (_qi : Nat) => KExpr.const Name.anonymous (ListType.nil Level))";
+        let ctx = "(fun (_qi : Nat) => KExpr.const Name.anonymous (@ListType.nil Level))";
         format!(
             "def r29_ctxOK_witness : r29_ctxOK {ctx} := \
              fun (qi : Nat) => r29_inertTy_witness"

@@ -59,31 +59,31 @@ impl Specification {
 
     /// The per-level CPS inverter for `opt_step_bind`, in BOTH universes.
     fn add_opt_step_bind_inverter_at(&mut self, suffix: &str, univ: &str) -> Result<(), SpecError> {
-        let kont = "(forall (w : A), Eq (OptionType A) o (OptionType.some A w) -> \
-                    Eq WhStepR (f w) (WhStepR.wstep r) -> C)";
-        let kont0 = "(forall (w : A), Eq (OptionType A) o0 (OptionType.some A w) -> \
-                     Eq WhStepR (f w) (WhStepR.wstep r) -> C)";
+        let kont = "(forall (w : A), @Eq (OptionType A) o (@OptionType.some A w) -> \
+                    @Eq WhStepR (f w) (WhStepR.wstep r) -> C)";
+        let kont0 = "(forall (w : A), @Eq (OptionType A) o0 (@OptionType.some A w) -> \
+                     @Eq WhStepR (f w) (WhStepR.wstep r) -> C)";
         let src = format!(
             "def opt_step_bind_some_inv{suffix} (A : Type) (o : OptionType A) \
              (d : WhStepR) (f : A -> WhStepR) (r : KExpr) (C : {univ}) \
-             (hd : Eq WhStepR d (WhStepR.wstep r) -> C) \
-             (h : Eq WhStepR (opt_step_bind A o d f) (WhStepR.wstep r)) \
+             (hd : @Eq WhStepR d (WhStepR.wstep r) -> C) \
+             (h : @Eq WhStepR (opt_step_bind A o d f) (WhStepR.wstep r)) \
              (k : {kont}) : C := \
-             OptionType.rec A \
+             @OptionType.rec A \
              (fun (o0 : OptionType A) => \
-             Eq WhStepR (opt_step_bind A o0 d f) (WhStepR.wstep r) -> {kont0} -> C) \
-             (fun (h0 : Eq WhStepR (opt_step_bind A (OptionType.none A) d f) \
+             @Eq WhStepR (opt_step_bind A o0 d f) (WhStepR.wstep r) -> {kont0} -> C) \
+             (fun (h0 : @Eq WhStepR (opt_step_bind A (@OptionType.none A) d f) \
              (WhStepR.wstep r)) \
-             (_k0 : forall (w : A), Eq (OptionType A) (OptionType.none A) \
-             (OptionType.some A w) -> \
-             Eq WhStepR (f w) (WhStepR.wstep r) -> C) => hd h0) \
+             (_k0 : forall (w : A), @Eq (OptionType A) (@OptionType.none A) \
+             (@OptionType.some A w) -> \
+             @Eq WhStepR (f w) (WhStepR.wstep r) -> C) => hd h0) \
              (fun (w : A) \
-             (h0 : Eq WhStepR (opt_step_bind A (OptionType.some A w) d f) \
+             (h0 : @Eq WhStepR (opt_step_bind A (@OptionType.some A w) d f) \
              (WhStepR.wstep r)) \
-             (k0 : forall (w0 : A), Eq (OptionType A) (OptionType.some A w) \
-             (OptionType.some A w0) -> \
-             Eq WhStepR (f w0) (WhStepR.wstep r) -> C) => \
-             k0 w (Eq.refl (OptionType A) (OptionType.some A w)) h0) \
+             (k0 : forall (w0 : A), @Eq (OptionType A) (@OptionType.some A w) \
+             (@OptionType.some A w0) -> \
+             @Eq WhStepR (f w0) (WhStepR.wstep r) -> C) => \
+             k0 w (@Eq.refl (OptionType A) (@OptionType.some A w)) h0) \
              o h k"
         );
         debug_assert!(Self::balanced(&src), "opt_step_bind inverter parens");
@@ -120,9 +120,9 @@ impl Specification {
     /// convoys, so it dodged the need rather than supplying it.
     fn add_wh_step_inj(&mut self) -> Result<(), SpecError> {
         let src = "def wh_step_inj (x : KExpr) (y : KExpr) \
-             (h : Eq WhStepR (WhStepR.wstep x) (WhStepR.wstep y)) : Eq KExpr x y := \
+             (h : @Eq WhStepR (WhStepR.wstep x) (WhStepR.wstep y)) : @Eq KExpr x y := \
              Eq.cong WhStepR KExpr \
-             (fun (o : WhStepR) => WhStepR.rec (fun (_o : WhStepR) => KExpr) x x \
+             (fun (o : WhStepR) => @WhStepR.rec (fun (_o : WhStepR) => KExpr) x x \
              (fun (z : KExpr) => z) o) \
              (WhStepR.wstep x) (WhStepR.wstep y) h";
         debug_assert!(Self::balanced(src), "wh_step_inj parens");
@@ -173,71 +173,71 @@ impl Specification {
         let kont = format!(
             "(forall (recname : Name) (meta : RecMeta) (major : KExpr) (wmajor : KExpr) \
              (cname : Name) (rule : RecRule), \
-             Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) \
-             (OptionType.some Name recname) -> \
-             Eq (OptionType RecMeta) (recmeta_for env recname) (OptionType.some RecMeta meta) -> \
-             Eq (OptionType KExpr) (list_head (list_drop {mi} (kapp_args e))) \
-             (OptionType.some KExpr major) -> \
-             Eq (OptionType KExpr) (wh major) (OptionType.some KExpr wmajor) -> \
-             Eq (OptionType Name) (kexpr_const_name (kapp_fn wmajor)) \
-             (OptionType.some Name cname) -> \
-             Eq (OptionType RecRule) (recrule_for env recname cname) \
-             (OptionType.some RecRule rule) -> \
-             Eq (OptionType KExpr) {tail} (OptionType.some KExpr e2) -> \
+             @Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) \
+             (@OptionType.some Name recname) -> \
+             @Eq (OptionType RecMeta) (recmeta_for env recname) (@OptionType.some RecMeta meta) -> \
+             @Eq (OptionType KExpr) (list_head (list_drop {mi} (kapp_args e))) \
+             (@OptionType.some KExpr major) -> \
+             @Eq (OptionType KExpr) (wh major) (@OptionType.some KExpr wmajor) -> \
+             @Eq (OptionType Name) (kexpr_const_name (kapp_fn wmajor)) \
+             (@OptionType.some Name cname) -> \
+             @Eq (OptionType RecRule) (recrule_for env recname cname) \
+             (@OptionType.some RecRule rule) -> \
+             @Eq (OptionType KExpr) {tail} (@OptionType.some KExpr e2) -> \
              C)"
         );
         let src = format!(
             "def iota_reduct_whc3_some_inv{suffix} (env : RecEnv) \
              (wh : KExpr -> OptionType KExpr) \
              (e : KExpr) (e2 : KExpr) (C : {univ}) \
-             (h : Eq WhStepR (iota_reduct_whc3 env wh e) (WhStepR.wstep e2)) \
+             (h : @Eq WhStepR (iota_reduct_whc3 env wh e) (WhStepR.wstep e2)) \
              (k : {kont}) : C := \
              {inv} Name (kexpr_const_name (kapp_fn e)) WhStepR.wstuck {l2} e2 C \
              ({stuck} e2 C) h \
              (fun (recname : Name) \
-             (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) \
-             (OptionType.some Name recname)) \
-             (h1r : Eq WhStepR ({l2} recname) (WhStepR.wstep e2)) => \
+             (h1 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) \
+             (@OptionType.some Name recname)) \
+             (h1r : @Eq WhStepR ({l2} recname) (WhStepR.wstep e2)) => \
              {inv} RecMeta (recmeta_for env recname) WhStepR.wstuck {l3} e2 C \
              ({stuck} e2 C) h1r \
              (fun (meta : RecMeta) \
-             (h2 : Eq (OptionType RecMeta) (recmeta_for env recname) \
-             (OptionType.some RecMeta meta)) \
-             (h2r : Eq WhStepR ({l3} meta) (WhStepR.wstep e2)) => \
+             (h2 : @Eq (OptionType RecMeta) (recmeta_for env recname) \
+             (@OptionType.some RecMeta meta)) \
+             (h2r : @Eq WhStepR ({l3} meta) (WhStepR.wstep e2)) => \
              {inv} KExpr (list_head (list_drop {mi} (kapp_args e))) WhStepR.wstuck \
              {l4} e2 C ({stuck} e2 C) h2r \
              (fun (major : KExpr) \
-             (h3 : Eq (OptionType KExpr) (list_head (list_drop {mi} (kapp_args e))) \
-             (OptionType.some KExpr major)) \
-             (h3r : Eq WhStepR ({l4} major) (WhStepR.wstep e2)) => \
+             (h3 : @Eq (OptionType KExpr) (list_head (list_drop {mi} (kapp_args e))) \
+             (@OptionType.some KExpr major)) \
+             (h3r : @Eq WhStepR ({l4} major) (WhStepR.wstep e2)) => \
              {inv} KExpr (wh major) WhStepR.wstarved {l5} e2 C \
              ({starved} e2 C) h3r \
              (fun (wmajor : KExpr) \
-             (hw : Eq (OptionType KExpr) (wh major) (OptionType.some KExpr wmajor)) \
-             (h4r : Eq WhStepR ({l5} wmajor) (WhStepR.wstep e2)) => \
+             (hw : @Eq (OptionType KExpr) (wh major) (@OptionType.some KExpr wmajor)) \
+             (h4r : @Eq WhStepR ({l5} wmajor) (WhStepR.wstep e2)) => \
              {inv} Name (kexpr_const_name (kapp_fn wmajor)) WhStepR.wstuck {l6} e2 C \
              ({stuck} e2 C) h4r \
              (fun (cname : Name) \
-             (h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn wmajor)) \
-             (OptionType.some Name cname)) \
-             (h5r : Eq WhStepR ({l6} cname) (WhStepR.wstep e2)) => \
+             (h4 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn wmajor)) \
+             (@OptionType.some Name cname)) \
+             (h5r : @Eq WhStepR ({l6} cname) (WhStepR.wstep e2)) => \
              {inv} RecRule (recrule_for env recname cname) WhStepR.wstuck {l7} e2 C \
              ({stuck} e2 C) h5r \
              (fun (rule : RecRule) \
-             (h5 : Eq (OptionType RecRule) (recrule_for env recname cname) \
-             (OptionType.some RecRule rule)) \
-             (h6r : Eq WhStepR ({l7} rule) (WhStepR.wstep e2)) => \
+             (h5 : @Eq (OptionType RecRule) (recrule_for env recname cname) \
+             (@OptionType.some RecRule rule)) \
+             (h6r : @Eq WhStepR ({l7} rule) (WhStepR.wstep e2)) => \
              {inv} KExpr {tail} WhStepR.wstuck \
              (fun (result : KExpr) => WhStepR.wstep result) e2 C \
              ({stuck} e2 C) h6r \
              (fun (result : KExpr) \
-             (htail : Eq (OptionType KExpr) {tail} (OptionType.some KExpr result)) \
-             (hstep : Eq WhStepR (WhStepR.wstep result) (WhStepR.wstep e2)) => \
+             (htail : @Eq (OptionType KExpr) {tail} (@OptionType.some KExpr result)) \
+             (hstep : @Eq WhStepR (WhStepR.wstep result) (WhStepR.wstep e2)) => \
              k recname meta major wmajor cname rule h1 h2 h3 hw h4 h5 \
-               (Eq.trans (OptionType KExpr) {tail} (OptionType.some KExpr result) \
-                 (OptionType.some KExpr e2) htail \
+               (Eq.trans (OptionType KExpr) {tail} (@OptionType.some KExpr result) \
+                 (@OptionType.some KExpr e2) htail \
                  (Eq.cong KExpr (OptionType KExpr) \
-                   (fun (r : KExpr) => OptionType.some KExpr r) result e2 \
+                   (fun (r : KExpr) => @OptionType.some KExpr r) result e2 \
                    (wh_step_inj result e2 hstep))))))))))"
         );
         src

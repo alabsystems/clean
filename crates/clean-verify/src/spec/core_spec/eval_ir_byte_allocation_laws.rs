@@ -51,7 +51,7 @@ const LT_FALSE: &str = r"def ir_byte_allocation_ltb_false_v1
         (fun (z : Nat) => Nat.le z (Nat.succ x) -> @Eq Bool (ir_nat_ltb_walk (Nat.succ x) z) Bool.false)
         (fun (_ : Nat.le 0 (Nat.succ x)) => @Eq.refl Bool Bool.false)
         (fun (z : Nat) (_ : Nat.le z (Nat.succ x) -> @Eq Bool (ir_nat_ltb_walk (Nat.succ x) z) Bool.false) =>
-          fun (h : Nat.le (Nat.succ z) (Nat.succ x)) => ih z (Nat.le_of_succ_le_succ z x h)) y)
+          fun (h : Nat.le (Nat.succ z) (Nat.succ x)) => ih z (@Nat.le_of_succ_le_succ z x h)) y)
     a b ge)";
 
 const LE_FALSE: &str = r"def ir_byte_allocation_leb_false_v1
@@ -68,7 +68,7 @@ const LE_FALSE: &str = r"def ir_byte_allocation_leb_false_v1
         (fun (z : Nat) => Nat.lt z (Nat.succ x) -> @Eq Bool (ir_nat_leb_walk (Nat.succ x) z) Bool.false)
         (fun (_ : Nat.lt 0 (Nat.succ x)) => @Eq.refl Bool Bool.false)
         (fun (z : Nat) (_ : Nat.lt z (Nat.succ x) -> @Eq Bool (ir_nat_leb_walk (Nat.succ x) z) Bool.false) =>
-          fun (h : Nat.lt (Nat.succ z) (Nat.succ x)) => ih z (Nat.le_of_succ_le_succ (Nat.succ z) x h)) y)
+          fun (h : Nat.lt (Nat.succ z) (Nat.succ x)) => ih z (@Nat.le_of_succ_le_succ (Nat.succ z) x h)) y)
     a b gt)";
 
 const AND_FALSE: &str = r"def ir_byte_allocation_and_false_v1 (a b : Bool)

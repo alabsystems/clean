@@ -67,7 +67,7 @@ use crate::spec::Specification;
 /// specialised to the 7th (let_) constructor. Local, uniquely named to avoid
 /// collision with the B3 discrimination-lemma lane.
 const BRP_KEXPR_NOT_LET: &str = concat!(
-    "(KExpr.rec (fun (_ : KExpr) => Type) ",
+    "(@KExpr.rec (fun (_ : KExpr) => Type) ",
     "(fun (_ : Level) => Nat) ",
     "(fun (_ : Nat) => Nat) ",
     "(fun (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) => Nat) ",
@@ -86,7 +86,7 @@ const BRP_KEXPR_NOT_LET: &str = concat!(
 /// context-free `Typing` judgment (sort/pi/lam/app/conv) has NO `proj` rule,
 /// so no well-typed term is proj-headed — exactly as for `let_`.
 const BRP_KEXPR_NOT_PROJ: &str = concat!(
-    "(KExpr.rec (fun (_ : KExpr) => Type) ",
+    "(@KExpr.rec (fun (_ : KExpr) => Type) ",
     "(fun (_ : Level) => Nat) ",
     "(fun (_ : Nat) => Nat) ",
     "(fun (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) => Nat) ",
@@ -129,53 +129,53 @@ impl Specification {
             value_src: Some(format!(
                 "fun (ty : KExpr) (val : KExpr) (body : KExpr) (S : KExpr) (C : Type) \
                  (h : Typing (KExpr.let_ ty val body) S) => \
-                 Typing.rec \
+                 @Typing.rec \
                  (fun (e : KExpr) (T0 : KExpr) (_ : Typing e T0) => \
                  forall (lty : KExpr) (lval : KExpr) (lbody : KExpr), \
-                 Eq KExpr e (KExpr.let_ lty lval lbody) -> C) \
+                 @Eq KExpr e (KExpr.let_ lty lval lbody) -> C) \
                  (fun (n : Level) (lty : KExpr) (lval : KExpr) (lbody : KExpr) \
-                 (eq : Eq KExpr (KExpr.sort n) (KExpr.let_ lty lval lbody)) => \
-                 Empty.rec (fun (_ : Empty) => C) \
-                 (Eq.substType KExpr {discr} (KExpr.sort n) (KExpr.let_ lty lval lbody) eq Nat.zero)) \
+                 (eq : @Eq KExpr (KExpr.sort n) (KExpr.let_ lty lval lbody)) => \
+                 @Empty.rec (fun (_ : Empty) => C) \
+                 (@Eq.substType KExpr {discr} (KExpr.sort n) (KExpr.let_ lty lval lbody) eq Nat.zero)) \
                  (fun (A1 : KExpr) (B1 : KExpr) (n1 : Level) (m1 : Level) \
                  (_hA : Typing A1 (KExpr.sort n1)) (_hB : Typing B1 (KExpr.sort m1)) \
                  (_ihA : forall (lty : KExpr) (lval : KExpr) (lbody : KExpr), \
-                 Eq KExpr A1 (KExpr.let_ lty lval lbody) -> C) \
+                 @Eq KExpr A1 (KExpr.let_ lty lval lbody) -> C) \
                  (_ihB : forall (lty : KExpr) (lval : KExpr) (lbody : KExpr), \
-                 Eq KExpr B1 (KExpr.let_ lty lval lbody) -> C) \
+                 @Eq KExpr B1 (KExpr.let_ lty lval lbody) -> C) \
                  (lty : KExpr) (lval : KExpr) (lbody : KExpr) \
-                 (eq : Eq KExpr (KExpr.pi A1 B1) (KExpr.let_ lty lval lbody)) => \
-                 Empty.rec (fun (_ : Empty) => C) \
-                 (Eq.substType KExpr {discr} (KExpr.pi A1 B1) (KExpr.let_ lty lval lbody) eq Nat.zero)) \
+                 (eq : @Eq KExpr (KExpr.pi A1 B1) (KExpr.let_ lty lval lbody)) => \
+                 @Empty.rec (fun (_ : Empty) => C) \
+                 (@Eq.substType KExpr {discr} (KExpr.pi A1 B1) (KExpr.let_ lty lval lbody) eq Nat.zero)) \
                  (fun (A2 : KExpr) (b2 : KExpr) (B2 : KExpr) (u2 : Level) \
                  (_hA : Typing A2 (KExpr.sort u2)) (_hb : Typing b2 B2) \
                  (_ihA : forall (lty : KExpr) (lval : KExpr) (lbody : KExpr), \
-                 Eq KExpr A2 (KExpr.let_ lty lval lbody) -> C) \
+                 @Eq KExpr A2 (KExpr.let_ lty lval lbody) -> C) \
                  (_ihb : forall (lty : KExpr) (lval : KExpr) (lbody : KExpr), \
-                 Eq KExpr b2 (KExpr.let_ lty lval lbody) -> C) \
+                 @Eq KExpr b2 (KExpr.let_ lty lval lbody) -> C) \
                  (lty : KExpr) (lval : KExpr) (lbody : KExpr) \
-                 (eq : Eq KExpr (KExpr.lam A2 b2) (KExpr.let_ lty lval lbody)) => \
-                 Empty.rec (fun (_ : Empty) => C) \
-                 (Eq.substType KExpr {discr} (KExpr.lam A2 b2) (KExpr.let_ lty lval lbody) eq Nat.zero)) \
+                 (eq : @Eq KExpr (KExpr.lam A2 b2) (KExpr.let_ lty lval lbody)) => \
+                 @Empty.rec (fun (_ : Empty) => C) \
+                 (@Eq.substType KExpr {discr} (KExpr.lam A2 b2) (KExpr.let_ lty lval lbody) eq Nat.zero)) \
                  (fun (f1 : KExpr) (a1 : KExpr) (A2 : KExpr) (B2 : KExpr) \
                  (_hf : Typing f1 (KExpr.pi A2 B2)) (_ha : Typing a1 A2) \
                  (_ihf : forall (lty : KExpr) (lval : KExpr) (lbody : KExpr), \
-                 Eq KExpr f1 (KExpr.let_ lty lval lbody) -> C) \
+                 @Eq KExpr f1 (KExpr.let_ lty lval lbody) -> C) \
                  (_iha : forall (lty : KExpr) (lval : KExpr) (lbody : KExpr), \
-                 Eq KExpr a1 (KExpr.let_ lty lval lbody) -> C) \
+                 @Eq KExpr a1 (KExpr.let_ lty lval lbody) -> C) \
                  (lty : KExpr) (lval : KExpr) (lbody : KExpr) \
-                 (eq : Eq KExpr (KExpr.app f1 a1) (KExpr.let_ lty lval lbody)) => \
-                 Empty.rec (fun (_ : Empty) => C) \
-                 (Eq.substType KExpr {discr} (KExpr.app f1 a1) (KExpr.let_ lty lval lbody) eq Nat.zero)) \
+                 (eq : @Eq KExpr (KExpr.app f1 a1) (KExpr.let_ lty lval lbody)) => \
+                 @Empty.rec (fun (_ : Empty) => C) \
+                 (@Eq.substType KExpr {discr} (KExpr.app f1 a1) (KExpr.let_ lty lval lbody) eq Nat.zero)) \
                  (fun (e0 : KExpr) (T1 : KExpr) (T2 : KExpr) \
                  (_he : Typing e0 T1) (_deq : DefEq T1 T2) \
                  (ih : forall (lty : KExpr) (lval : KExpr) (lbody : KExpr), \
-                 Eq KExpr e0 (KExpr.let_ lty lval lbody) -> C) \
+                 @Eq KExpr e0 (KExpr.let_ lty lval lbody) -> C) \
                  (lty : KExpr) (lval : KExpr) (lbody : KExpr) \
-                 (eq : Eq KExpr e0 (KExpr.let_ lty lval lbody)) => \
+                 (eq : @Eq KExpr e0 (KExpr.let_ lty lval lbody)) => \
                  ih lty lval lbody eq) \
                  (KExpr.let_ ty val body) S h ty val body \
-                 (Eq.refl KExpr (KExpr.let_ ty val body))",
+                 (@Eq.refl KExpr (KExpr.let_ ty val body))",
                 discr = BRP_KEXPR_NOT_LET,
             )),
             is_axiom: false,
@@ -216,53 +216,53 @@ impl Specification {
             value_src: Some(format!(
                 "fun (s : Name) (i : Nat) (sub : KExpr) (S : KExpr) (C : Type) \
                  (h : Typing (KExpr.proj s i sub) S) => \
-                 Typing.rec \
+                 @Typing.rec \
                  (fun (e : KExpr) (T0 : KExpr) (_ : Typing e T0) => \
                  forall (ps : Name) (pidx : Nat) (psub : KExpr), \
-                 Eq KExpr e (KExpr.proj ps pidx psub) -> C) \
+                 @Eq KExpr e (KExpr.proj ps pidx psub) -> C) \
                  (fun (n : Level) (ps : Name) (pidx : Nat) (psub : KExpr) \
-                 (eq : Eq KExpr (KExpr.sort n) (KExpr.proj ps pidx psub)) => \
-                 Empty.rec (fun (_ : Empty) => C) \
-                 (Eq.substType KExpr {discr} (KExpr.sort n) (KExpr.proj ps pidx psub) eq Nat.zero)) \
+                 (eq : @Eq KExpr (KExpr.sort n) (KExpr.proj ps pidx psub)) => \
+                 @Empty.rec (fun (_ : Empty) => C) \
+                 (@Eq.substType KExpr {discr} (KExpr.sort n) (KExpr.proj ps pidx psub) eq Nat.zero)) \
                  (fun (A1 : KExpr) (B1 : KExpr) (n1 : Level) (m1 : Level) \
                  (_hA : Typing A1 (KExpr.sort n1)) (_hB : Typing B1 (KExpr.sort m1)) \
                  (_ihA : forall (ps : Name) (pidx : Nat) (psub : KExpr), \
-                 Eq KExpr A1 (KExpr.proj ps pidx psub) -> C) \
+                 @Eq KExpr A1 (KExpr.proj ps pidx psub) -> C) \
                  (_ihB : forall (ps : Name) (pidx : Nat) (psub : KExpr), \
-                 Eq KExpr B1 (KExpr.proj ps pidx psub) -> C) \
+                 @Eq KExpr B1 (KExpr.proj ps pidx psub) -> C) \
                  (ps : Name) (pidx : Nat) (psub : KExpr) \
-                 (eq : Eq KExpr (KExpr.pi A1 B1) (KExpr.proj ps pidx psub)) => \
-                 Empty.rec (fun (_ : Empty) => C) \
-                 (Eq.substType KExpr {discr} (KExpr.pi A1 B1) (KExpr.proj ps pidx psub) eq Nat.zero)) \
+                 (eq : @Eq KExpr (KExpr.pi A1 B1) (KExpr.proj ps pidx psub)) => \
+                 @Empty.rec (fun (_ : Empty) => C) \
+                 (@Eq.substType KExpr {discr} (KExpr.pi A1 B1) (KExpr.proj ps pidx psub) eq Nat.zero)) \
                  (fun (A2 : KExpr) (b2 : KExpr) (B2 : KExpr) (u2 : Level) \
                  (_hA : Typing A2 (KExpr.sort u2)) (_hb : Typing b2 B2) \
                  (_ihA : forall (ps : Name) (pidx : Nat) (psub : KExpr), \
-                 Eq KExpr A2 (KExpr.proj ps pidx psub) -> C) \
+                 @Eq KExpr A2 (KExpr.proj ps pidx psub) -> C) \
                  (_ihb : forall (ps : Name) (pidx : Nat) (psub : KExpr), \
-                 Eq KExpr b2 (KExpr.proj ps pidx psub) -> C) \
+                 @Eq KExpr b2 (KExpr.proj ps pidx psub) -> C) \
                  (ps : Name) (pidx : Nat) (psub : KExpr) \
-                 (eq : Eq KExpr (KExpr.lam A2 b2) (KExpr.proj ps pidx psub)) => \
-                 Empty.rec (fun (_ : Empty) => C) \
-                 (Eq.substType KExpr {discr} (KExpr.lam A2 b2) (KExpr.proj ps pidx psub) eq Nat.zero)) \
+                 (eq : @Eq KExpr (KExpr.lam A2 b2) (KExpr.proj ps pidx psub)) => \
+                 @Empty.rec (fun (_ : Empty) => C) \
+                 (@Eq.substType KExpr {discr} (KExpr.lam A2 b2) (KExpr.proj ps pidx psub) eq Nat.zero)) \
                  (fun (f1 : KExpr) (a1 : KExpr) (A2 : KExpr) (B2 : KExpr) \
                  (_hf : Typing f1 (KExpr.pi A2 B2)) (_ha : Typing a1 A2) \
                  (_ihf : forall (ps : Name) (pidx : Nat) (psub : KExpr), \
-                 Eq KExpr f1 (KExpr.proj ps pidx psub) -> C) \
+                 @Eq KExpr f1 (KExpr.proj ps pidx psub) -> C) \
                  (_iha : forall (ps : Name) (pidx : Nat) (psub : KExpr), \
-                 Eq KExpr a1 (KExpr.proj ps pidx psub) -> C) \
+                 @Eq KExpr a1 (KExpr.proj ps pidx psub) -> C) \
                  (ps : Name) (pidx : Nat) (psub : KExpr) \
-                 (eq : Eq KExpr (KExpr.app f1 a1) (KExpr.proj ps pidx psub)) => \
-                 Empty.rec (fun (_ : Empty) => C) \
-                 (Eq.substType KExpr {discr} (KExpr.app f1 a1) (KExpr.proj ps pidx psub) eq Nat.zero)) \
+                 (eq : @Eq KExpr (KExpr.app f1 a1) (KExpr.proj ps pidx psub)) => \
+                 @Empty.rec (fun (_ : Empty) => C) \
+                 (@Eq.substType KExpr {discr} (KExpr.app f1 a1) (KExpr.proj ps pidx psub) eq Nat.zero)) \
                  (fun (e0 : KExpr) (T1 : KExpr) (T2 : KExpr) \
                  (_he : Typing e0 T1) (_deq : DefEq T1 T2) \
                  (ih : forall (ps : Name) (pidx : Nat) (psub : KExpr), \
-                 Eq KExpr e0 (KExpr.proj ps pidx psub) -> C) \
+                 @Eq KExpr e0 (KExpr.proj ps pidx psub) -> C) \
                  (ps : Name) (pidx : Nat) (psub : KExpr) \
-                 (eq : Eq KExpr e0 (KExpr.proj ps pidx psub)) => \
+                 (eq : @Eq KExpr e0 (KExpr.proj ps pidx psub)) => \
                  ih ps pidx psub eq) \
                  (KExpr.proj s i sub) S h s i sub \
-                 (Eq.refl KExpr (KExpr.proj s i sub))",
+                 (@Eq.refl KExpr (KExpr.proj s i sub))",
                 discr = BRP_KEXPR_NOT_PROJ,
             )),
             is_axiom: false,
@@ -354,7 +354,7 @@ impl Specification {
                     "(wd : DefEnvWellformed the_red_env) ",
                     "(wr : RecEnvWellformed (red_rec the_red_env)) ",
                     "(hbr : beta_reduces e0 e0') => ",
-                    "beta_reduces.rec ",
+                    "@beta_reduces.rec ",
                     "(fun (x : KExpr) (y : KExpr) (_ : beta_reduces x y) => ",
                     "forall (S : KExpr), has_type x S -> DefEq x y) ",
                     // beta: redex DefEq
@@ -547,7 +547,7 @@ impl Specification {
                     "(wd : DefEnvWellformed the_red_env) ",
                     "(wr : RecEnvWellformed (red_rec the_red_env)) ",
                     "(hbr : beta_reduces e0 e0') (ht0 : has_type e0 T0) => ",
-                    "beta_reduces.rec ",
+                    "@beta_reduces.rec ",
                     "(fun (x : KExpr) (y : KExpr) (_ : beta_reduces x y) => ",
                     "forall (S : KExpr), has_type x S -> has_type y S) ",
                     // beta
@@ -796,7 +796,7 @@ impl Specification {
                     "(wd : DefEnvWellformed the_red_env) ",
                     "(wr : RecEnvWellformed (red_rec the_red_env)) ",
                     "(hs : whnf_step e0 e0') (ht0 : has_type e0 T0) => ",
-                    "whnf_step.rec e0 e0' ",
+                    "@whnf_step.rec e0 e0' ",
                     "(whnf_step_preserves_typing_motive e0 e0') ",
                     "(fun (hb : beta_reduces e0 e0') => ",
                     "fun (S : KExpr) (hts : has_type e0 S) => ",
@@ -879,7 +879,7 @@ impl Specification {
                     "(wd : DefEnvWellformed the_red_env) ",
                     "(wr : RecEnvWellformed (red_rec the_red_env)) ",
                     "(hwt : whnf_to e0 v0) (ht0 : has_type e0 T0) => ",
-                    "whnf_to.rec ",
+                    "@whnf_to.rec ",
                     "whnf_to_preserves_typing_motive ",
                     // refl: identity
                     "(fun (a : KExpr) (_hw : is_whnf a) => ",

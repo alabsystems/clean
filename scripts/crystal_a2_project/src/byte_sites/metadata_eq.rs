@@ -49,6 +49,7 @@ pub(super) fn ty_matches(a: &Ty, b: &Ty) -> bool {
         (Ty::Tuple(a), Ty::Tuple(b)) => tys_match(a, b),
         (Ty::Enum(a), Ty::Enum(b)) => a == b,
         (Ty::Func(a), Ty::Func(b)) => a == b,
+        (Ty::FnItem(a), Ty::FnItem(b)) => a == b,
         (Ty::Ref(a), Ty::Ref(b)) => ty_matches(a, b),
         (Ty::RefMut(a), Ty::RefMut(b)) => ty_matches(a, b),
         (Ty::PtrConst(a), Ty::PtrConst(b)) => ty_matches(a, b),
@@ -112,6 +113,7 @@ pub(super) fn ty_matches(a: &Ty, b: &Ty) -> bool {
             | Ty::Tuple(_)
             | Ty::Enum(_)
             | Ty::Func(_)
+            | Ty::FnItem(_)
             | Ty::Ref(_)
             | Ty::RefMut(_)
             | Ty::PtrConst(_)
@@ -156,6 +158,7 @@ pub(super) fn ty_matches(a: &Ty, b: &Ty) -> bool {
             | Ty::Tuple(_)
             | Ty::Enum(_)
             | Ty::Func(_)
+            | Ty::FnItem(_)
             | Ty::Ref(_)
             | Ty::RefMut(_)
             | Ty::PtrConst(_)

@@ -646,14 +646,94 @@ def const_of(name: str) -> str:
     return "SRC_" + name.upper()
 
 
+def _explicit_prefix_source(source: str) -> str:
+    """Print complete parameter prefixes in this emitter's closed def sources.
+
+    This is untrusted source spelling. The ordinary initializer must still
+    elaborate and kernel-check every emitted declaration. Historical nested
+    output bypasses this production printer and keeps its original bytes.
+    """
+    arities = {
+        "Eq": 3,
+        "Eq.refl": 2,
+        "IRList.cons": 3,
+        "IRList.nil": 1,
+        "IROption.some": 2,
+        "LiftP.up": 2,
+        "LiftP.rec": 4,
+        "IRItIn.rec": 5,
+    }
+    if not source.startswith("def ") or not source.isascii() or '"' in source or "\\" in source:
+        raise ValueError("explicit-prefix printer requires this emitter's ASCII def source")
+
+    def next_argument(position: int) -> int:
+        while position < len(source) and source[position].isspace():
+            position += 1
+        if position == len(source):
+            raise ValueError("incomplete explicit-prefix application")
+        if source[position] == "(":
+            depth = 1
+            position += 1
+            while position < len(source) and depth:
+                depth += (source[position] == "(") - (source[position] == ")")
+                position += 1
+            if depth:
+                raise ValueError("unbalanced explicit-prefix argument")
+            return position
+        argument = re.match(r"(?:[A-Za-z_][A-Za-z0-9_.]*|[0-9]+)", source[position:])
+        if argument is None or argument[0] in {"fun", "forall"}:
+            raise ValueError("incomplete or ungrouped explicit-prefix argument")
+        return position + argument.end()
+
+    pattern = r"(?<![A-Za-z0-9_.@])(" + "|".join(
+        re.escape(head) for head in sorted(arities, key=len, reverse=True)
+    ) + r")(?![A-Za-z0-9_.])"
+    positions = []
+    for match in re.finditer(pattern, source):
+        position = match.end()
+        for _ in range(arities[match[1]]):
+            position = next_argument(position)
+        positions.append(match.start())
+    for position in reversed(positions):
+        source = source[:position] + "@" + source[position:]
+    return source
+
+
+def _explicit_prefix_self_test() -> list:
+    failures = []
+    unchanged = "def unchanged : Type := Other.Eq Nat x y"
+    explicit = "def explicit : Type := @Eq Nat x y"
+    nested = "def nested : Type := Eq Nat (IRList.nil Nat) (IRList.nil Nat)"
+    if _explicit_prefix_source(unchanged) != unchanged:
+        failures.append("explicit-prefix printer rewrote a foreign head")
+    if _explicit_prefix_source(explicit) != explicit:
+        failures.append("explicit-prefix printer changed already explicit source")
+    wanted = "def nested : Type := @Eq Nat (@IRList.nil Nat) (@IRList.nil Nat)"
+    if _explicit_prefix_source(nested) != wanted:
+        failures.append("explicit-prefix printer lost a complete nested argument")
+    for malformed in [
+        "def short : Type := Eq Nat x",
+        "def short : Type := IRList.cons Nat x",
+        "def short : Type := LiftP.rec P motive minor",
+        "def unbalanced : Type := Eq Nat (x y",
+        "def ungrouped : Type := Eq Nat fun (x : Nat) => x",
+    ]:
+        try:
+            _explicit_prefix_source(malformed)
+        except ValueError:
+            continue
+        failures.append("explicit-prefix printer accepted malformed application: " + malformed)
+    return failures
+
+
 def minted() -> dict:
     """Every emitted term, const name -> source, in registration order."""
     out = {}
     for family in FAMILIES:
         for name, src in family():
-            out[const_of(name)] = src
+            out[const_of(name)] = _explicit_prefix_source(src)
     for k, f in SINGLES.items():
-        out[k] = f()
+        out[k] = _explicit_prefix_source(f())
     return out
 
 
@@ -685,19 +765,19 @@ def legacy() -> dict:
 # digests, so a refactor that changes the emitted SHAPE fails in a second
 # rather than in a spec build.
 PINNED_DIGESTS: dict = {
-    "SRC_IR_IT_AG_RETURNS": "4b014c9805c8749485edad4822180c180b2c8586fad28e26fecbd65eb582cf3e",
-    "SRC_IR_IT_CTR": "ea8f2216355f7c6efbd1b73aa9135960060e5c37d9525c96598452e7de536fd5",
-    "SRC_IR_IT_LOCAL": "69468aaa2c5fcf17960099ecb2d42b232482d71000f0eb23ddc241c2e9d58946",
-    "SRC_IR_IT_PC": "cc882da5fd030449dc9d21ce06d8ef27d8d2565bf33cd1073d5da25f2817def5",
-    "SRC_IR_IT_PC_A4_CROSSCHECK": "1f6a24bdb65046575424e48f7a6b1f92d4fb370073baeea10c8f0e7a94dcc3c3",
-    "SRC_IR_IT_PC_CROSSCHECK_ITD": "db4b38aa928159fc7517412dd02d9ce690ab2992019ae411485a2f4a845335bd",
-    "SRC_IR_IT_PC_NEVER_UNREACHABLE": "6ce26c8aee6a167bfcd8c0ce62e0f5c7d80cc543afece990021ec03d7ca94bdc",
-    "SRC_IR_IT_PC_NO_BAD_HALT": "89c4557fa57e0046dcd3daaa626cd43f19b2a70f028bb1e6efe687088da1e82a",
-    "SRC_IR_IT_PC_OF_EXACT": "04ee2f5a48d23eadf880468d4e9d33369ceb308e0f2c1f1ea508017e6aa79588",
-    "SRC_IR_IT_PC_WITNESS_ITD": "c534819580c076e8238baff6dfeef0db199c84221feaab0e29169273b35ff630",
-    "SRC_IR_IT_TOP_SSEG": "0ab4844557ecf39b2aae2c87483c446060246df93a35185adc0baea96a35fbe8",
-    "SRC_IR_IT_TOP_SSEG_R1": "cef3494760df61c48ebce0ef8a61ec32b1b168557f671ac1cdaf942048ef4934",
-    "SRC_IR_IT_TOP_SSEG_R2": "338c42a61c7216947b3eacc89a2d6b49c9778d6536633cce6c3b478530d781dc",
+    "SRC_IR_IT_AG_RETURNS": "a8168ebb666bc8782d62c5f8b7924dad975768b1daf65348cc17cc44b5ffbf9b",
+    "SRC_IR_IT_CTR": "e8b7c83067b66a1931a4ae2327c4b0211ae37813ece56a86a5110f0efe5f2a21",
+    "SRC_IR_IT_LOCAL": "f4a73493888858e242aad57f9141ab1624249888416ec6a9d1c74c9a2511f7d6",
+    "SRC_IR_IT_PC": "c8af55f4ae54db29cdeeed2a652cc99d87887d45ee8d1c335547a39ca5ac5012",
+    "SRC_IR_IT_PC_A4_CROSSCHECK": "419f7f6245eb99e4c2042c10816d0dfc0d61d20c172cfa3e9aeb87086bbfebbe",
+    "SRC_IR_IT_PC_CROSSCHECK_ITD": "7b87d5f5984807148ee4194ba22a85afefe707f69ee2e5065b4ea86a05e7bb05",
+    "SRC_IR_IT_PC_NEVER_UNREACHABLE": "208b867e358c3b55e199d3cdd6d93e6aca896052c47cf050097a3b03b3a36b28",
+    "SRC_IR_IT_PC_NO_BAD_HALT": "304013a42d165176229a1fd44cf1031e20960c6128ea2805a652e49891186486",
+    "SRC_IR_IT_PC_OF_EXACT": "407d9aa0785aa403a8d5d70d2da634c6f3165369397059eca01097c6ec1fa26a",
+    "SRC_IR_IT_PC_WITNESS_ITD": "a23bc77da115432e23404127dde884fffc6e2eca7bf7da48ce1263b84a82acb7",
+    "SRC_IR_IT_TOP_SSEG": "26cf2cc5d3d09ea3853755fd526665e62b08343ef21e04ba89af806e54ed0a43",
+    "SRC_IR_IT_TOP_SSEG_R1": "1ee13a7ba57d3019884f53182bcc9cb8f175bec4ee8725fae2aac6609599e8a8",
+    "SRC_IR_IT_TOP_SSEG_R2": "f3ff64360528ed816090b1ebdf47f436c6a9772cb7a50e84c7ce585e9f50049f",
 }
 
 
@@ -800,7 +880,7 @@ def main() -> int:
         bad = [k for k, v in PINNED_DIGESTS.items() if have.get(k) != v]
         old = digests(legacy())
         moved = [k for k, v in LEGACY_DIGESTS.items() if old.get(k) != v]
-        drift = _coverage_invariant(built) + _ascii_balanced(built)
+        drift = _coverage_invariant(built) + _ascii_balanced(built) + _explicit_prefix_self_test()
         for k in bad:
             print(f"DIGEST MOVED: {k}")
         for k in moved:

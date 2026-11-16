@@ -2961,7 +2961,7 @@ fn test_par_reduces_p_preserves_head_const_below_boundary_is_zero_axiom_derived_
     // Conclusion: head(kapp_fn f') = some nm.
     assert!(
         def.type_src
-            .contains("par_reduces_p env f f' -> Eq (OptionType Name) (kexpr_const_name (kapp_fn f')) (OptionType.some Name nm)"),
+            .contains("par_reduces_p env f f' -> @Eq (OptionType Name) (kexpr_const_name (kapp_fn f')) (@OptionType.some Name nm)"),
         "par_reduces_p_preserves_head_const_below_boundary signature surface drift: {}",
         def.type_src
     );
@@ -3019,7 +3019,7 @@ fn test_par_reduces_p_preserves_head_const_no_recmeta_is_zero_axiom_derived_prov
     );
     assert!(
         def.type_src
-            .contains("par_reduces_p env f f' -> Eq (OptionType Name) (kexpr_const_name (kapp_fn f')) (OptionType.some Name nm)"),
+            .contains("par_reduces_p env f f' -> @Eq (OptionType Name) (kexpr_const_name (kapp_fn f')) (@OptionType.some Name nm)"),
         "par_reduces_p_preserves_head_const_no_recmeta signature surface drift: {}",
         def.type_src
     );
@@ -3416,7 +3416,7 @@ fn test_par_reduces_p_marked_reduct_cong_is_zero_axiom_derived_proved() {
     );
     assert!(
         def.type_src
-            .contains("Eq (OptionType KExpr) (iota_reduct env f) (OptionType.some KExpr f1) ->"),
+            .contains("@Eq (OptionType KExpr) (iota_reduct env f) (@OptionType.some KExpr f1) ->"),
         "par_reduces_pL_reduct_cong should isolate the OVER-APPLICATION residual happ_over (guarded by iota_reduct env f = some f1): {}",
         def.type_src
     );
@@ -4050,7 +4050,7 @@ fn test_recenv_defenv_disjoint_recmeta_is_zero_axiom_derived_proved() {
     );
     assert!(
         def.type_src.contains(
-            "Eq (OptionType RecMeta) (recmeta_for (red_rec env) dname) (OptionType.none RecMeta)"
+            "@Eq (OptionType RecMeta) (recmeta_for (red_rec env) dname) (@OptionType.none RecMeta)"
         ),
         "recenv_defenv_disjoint_recmeta should conclude recmeta_for (red_rec env) dname = none: {}",
         def.type_src

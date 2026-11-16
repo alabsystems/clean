@@ -68,8 +68,8 @@ impl Specification {
                 concat!(
                     "fun (env : RedEnv) (e : KExpr) (e' : KExpr) (c : Nat) (a : Nat) ",
                     "(dliftclosed : DefEnvLiftClosed (red_def env)) (h : delta_step (red_def env) e e') => ",
-                    "par_reduces_pd.delta_p env (lift_at e c a) (lift_at e c a) (lift_at e' c a) ",
-                    "(par_reduces_pd.refl env (lift_at e c a)) ",
+                    "@par_reduces_pd.delta_p env (lift_at e c a) (lift_at e c a) (lift_at e' c a) ",
+                    "(@par_reduces_pd.refl env (lift_at e c a)) ",
                     "(delta_lift_commutes (red_def env) e e' c a dliftclosed h)"
                 )
                 .to_string(),
@@ -116,8 +116,8 @@ impl Specification {
                 concat!(
                     "fun (env : RedEnv) (e : KExpr) (e' : KExpr) (v : KExpr) (d : Nat) ",
                     "(dclosed : DefEnvClosed (red_def env)) (h : delta_step (red_def env) e e') => ",
-                    "par_reduces_pd.delta_p env (instantiate_at e v d) (instantiate_at e v d) (instantiate_at e' v d) ",
-                    "(par_reduces_pd.refl env (instantiate_at e v d)) ",
+                    "@par_reduces_pd.delta_p env (instantiate_at e v d) (instantiate_at e v d) (instantiate_at e' v d) ",
+                    "(@par_reduces_pd.refl env (instantiate_at e v d)) ",
                     "(delta_subst_commutes (red_def env) e e' v d dclosed h)"
                 )
                 .to_string(),
@@ -234,7 +234,7 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (env : RedEnv) (e : KExpr) (e' : KExpr) (h : par_reduces_pd env e e') => ",
-                    "par_reduces_pd_star.step env e e' e' h (par_reduces_pd_star.refl env e')"
+                    "@par_reduces_pd_star.step env e e' e' h (@par_reduces_pd_star.refl env e')"
                 )
                 .to_string(),
             ),
@@ -266,7 +266,7 @@ impl Specification {
                 concat!(
                     "fun (env : RedEnv) (e1 : KExpr) (e2 : KExpr) (e3 : KExpr) ",
                     "(h1 : par_reduces_pd_star env e1 e2) (h2 : par_reduces_pd_star env e2 e3) => ",
-                    "par_reduces_pd_star.rec env ",
+                    "@par_reduces_pd_star.rec env ",
                     "(fun (a : KExpr) (b : KExpr) (_ : par_reduces_pd_star env a b) => ",
                     "par_reduces_pd_star env b e3 -> par_reduces_pd_star env a e3) ",
                     "(fun (e : KExpr) (k : par_reduces_pd_star env e e3) => k) ",
@@ -275,7 +275,7 @@ impl Specification {
                     "(_htail : par_reduces_pd_star env e' e'') ",
                     "(ih : par_reduces_pd_star env e'' e3 -> par_reduces_pd_star env e' e3) ",
                     "(k : par_reduces_pd_star env e'' e3) => ",
-                    "par_reduces_pd_star.step env e e' e3 hstep (ih k)) ",
+                    "@par_reduces_pd_star.step env e e' e3 hstep (ih k)) ",
                     "e1 e2 h1 h2"
                 )
                 .to_string(),
@@ -309,7 +309,7 @@ impl Specification {
                     "@par_strips_witness_pd.rec env e1 e2 ",
                     "(fun (_w : par_strips_witness_pd env e1 e2) => par_strips_witness_pd_star env e1 e2) ",
                     "(fun (e3 : KExpr) (l1 : par_reduces_pd env e1 e3) (l2 : par_reduces_pd env e2 e3) => ",
-                    "par_strips_witness_pd_star.intro env e1 e2 e3 ",
+                    "@par_strips_witness_pd_star.intro env e1 e2 e3 ",
                     "(par_subsumes_par_pd_star env e1 e3 l1) (par_subsumes_par_pd_star env e2 e3 l2)) ",
                     "w"
                 )
@@ -422,7 +422,7 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (env : RedEnv) (e : KExpr) (e' : KExpr) (h : par_reduces_cd env e e') => ",
-                    "par_reduces_cd_star.step env e e' e' h (par_reduces_cd_star.refl env e')"
+                    "@par_reduces_cd_star.step env e e' e' h (@par_reduces_cd_star.refl env e')"
                 )
                 .to_string(),
             ),
@@ -454,7 +454,7 @@ impl Specification {
                 concat!(
                     "fun (env : RedEnv) (e1 : KExpr) (e2 : KExpr) (e3 : KExpr) ",
                     "(h1 : par_reduces_cd_star env e1 e2) (h2 : par_reduces_cd_star env e2 e3) => ",
-                    "par_reduces_cd_star.rec env ",
+                    "@par_reduces_cd_star.rec env ",
                     "(fun (a : KExpr) (b : KExpr) (_ : par_reduces_cd_star env a b) => ",
                     "par_reduces_cd_star env b e3 -> par_reduces_cd_star env a e3) ",
                     "(fun (e : KExpr) (k : par_reduces_cd_star env e e3) => k) ",
@@ -463,7 +463,7 @@ impl Specification {
                     "(_htail : par_reduces_cd_star env e' e'') ",
                     "(ih : par_reduces_cd_star env e'' e3 -> par_reduces_cd_star env e' e3) ",
                     "(k : par_reduces_cd_star env e'' e3) => ",
-                    "par_reduces_cd_star.step env e e' e3 hstep (ih k)) ",
+                    "@par_reduces_cd_star.step env e e' e3 hstep (ih k)) ",
                     "e1 e2 h1 h2"
                 )
                 .to_string(),
@@ -499,25 +499,25 @@ impl Specification {
                     "fun (env : RedEnv) (f : KExpr) (f' : KExpr) (a : KExpr) (a' : KExpr) ",
                     "(hf : par_reduces_cd_star env f f') (ha : par_reduces_cd_star env a a') => ",
                     "par_reduces_cd_star_trans env (KExpr.app f a) (KExpr.app f' a) (KExpr.app f' a') ",
-                    "(par_reduces_cd_star.rec env ",
+                    "(@par_reduces_cd_star.rec env ",
                     "(fun (x : KExpr) (y : KExpr) (_ : par_reduces_cd_star env x y) => ",
                     "par_reduces_cd_star env (KExpr.app x a) (KExpr.app y a)) ",
-                    "(fun (x : KExpr) => par_reduces_cd_star.refl env (KExpr.app x a)) ",
+                    "(fun (x : KExpr) => @par_reduces_cd_star.refl env (KExpr.app x a)) ",
                     "(fun (x : KExpr) (x' : KExpr) (x'' : KExpr) ",
                     "(hstep : par_reduces_cd env x x') (_htail : par_reduces_cd_star env x' x'') ",
                     "(ih : par_reduces_cd_star env (KExpr.app x' a) (KExpr.app x'' a)) => ",
-                    "par_reduces_cd_star.step env (KExpr.app x a) (KExpr.app x' a) (KExpr.app x'' a) ",
-                    "(par_reduces_cd.app env x x' a a hstep (par_reduces_cd.refl env a)) ih) ",
+                    "@par_reduces_cd_star.step env (KExpr.app x a) (KExpr.app x' a) (KExpr.app x'' a) ",
+                    "(@par_reduces_cd.app env x x' a a hstep (@par_reduces_cd.refl env a)) ih) ",
                     "f f' hf) ",
-                    "(par_reduces_cd_star.rec env ",
+                    "(@par_reduces_cd_star.rec env ",
                     "(fun (x : KExpr) (y : KExpr) (_ : par_reduces_cd_star env x y) => ",
                     "par_reduces_cd_star env (KExpr.app f' x) (KExpr.app f' y)) ",
-                    "(fun (x : KExpr) => par_reduces_cd_star.refl env (KExpr.app f' x)) ",
+                    "(fun (x : KExpr) => @par_reduces_cd_star.refl env (KExpr.app f' x)) ",
                     "(fun (x : KExpr) (x' : KExpr) (x'' : KExpr) ",
                     "(hstep : par_reduces_cd env x x') (_htail : par_reduces_cd_star env x' x'') ",
                     "(ih : par_reduces_cd_star env (KExpr.app f' x') (KExpr.app f' x'')) => ",
-                    "par_reduces_cd_star.step env (KExpr.app f' x) (KExpr.app f' x') (KExpr.app f' x'') ",
-                    "(par_reduces_cd.app env f' f' x x' (par_reduces_cd.refl env f') hstep) ih) ",
+                    "@par_reduces_cd_star.step env (KExpr.app f' x) (KExpr.app f' x') (KExpr.app f' x'') ",
+                    "(@par_reduces_cd.app env f' f' x x' (@par_reduces_cd.refl env f') hstep) ih) ",
                     "a a' ha)"
                 )
                 .to_string(),
@@ -556,15 +556,15 @@ impl Specification {
                 concat!(
                     "fun (env : RedEnv) (s : Name) (i : Nat) (sub1 : KExpr) (sub2 : KExpr) ",
                     "(hsub : par_reduces_cd_star env sub1 sub2) => ",
-                    "par_reduces_cd_star.rec env ",
+                    "@par_reduces_cd_star.rec env ",
                     "(fun (x : KExpr) (y : KExpr) (_ : par_reduces_cd_star env x y) => ",
                     "par_reduces_cd_star env (KExpr.proj s i x) (KExpr.proj s i y)) ",
-                    "(fun (x : KExpr) => par_reduces_cd_star.refl env (KExpr.proj s i x)) ",
+                    "(fun (x : KExpr) => @par_reduces_cd_star.refl env (KExpr.proj s i x)) ",
                     "(fun (x : KExpr) (x' : KExpr) (x'' : KExpr) ",
                     "(hstep : par_reduces_cd env x x') (_htail : par_reduces_cd_star env x' x'') ",
                     "(ih : par_reduces_cd_star env (KExpr.proj s i x') (KExpr.proj s i x'')) => ",
-                    "par_reduces_cd_star.step env (KExpr.proj s i x) (KExpr.proj s i x') (KExpr.proj s i x'') ",
-                    "(par_reduces_cd.proj env s i x x' hstep) ih) ",
+                    "@par_reduces_cd_star.step env (KExpr.proj s i x) (KExpr.proj s i x') (KExpr.proj s i x'') ",
+                    "(@par_reduces_cd.proj env s i x x' hstep) ih) ",
                     "sub1 sub2 hsub"
                 )
                 .to_string(),
@@ -624,25 +624,25 @@ impl Specification {
                         "fun (env : RedEnv) (ty : KExpr) (ty' : KExpr) (body : KExpr) (body' : KExpr) ",
                         "(hty : par_reduces_cd_star env ty ty') (hbody : par_reduces_cd_star env body body') => ",
                         "par_reduces_cd_star_trans env ({head} ty body) ({head} ty' body) ({head} ty' body') ",
-                        "(par_reduces_cd_star.rec env ",
+                        "(@par_reduces_cd_star.rec env ",
                         "(fun (x : KExpr) (y : KExpr) (_ : par_reduces_cd_star env x y) => ",
                         "par_reduces_cd_star env ({head} x body) ({head} y body)) ",
-                        "(fun (x : KExpr) => par_reduces_cd_star.refl env ({head} x body)) ",
+                        "(fun (x : KExpr) => @par_reduces_cd_star.refl env ({head} x body)) ",
                         "(fun (x : KExpr) (x' : KExpr) (x'' : KExpr) ",
                         "(hstep : par_reduces_cd env x x') (_htail : par_reduces_cd_star env x' x'') ",
                         "(ih : par_reduces_cd_star env ({head} x' body) ({head} x'' body)) => ",
-                        "par_reduces_cd_star.step env ({head} x body) ({head} x' body) ({head} x'' body) ",
-                        "({ctor} env x x' body body hstep (par_reduces_cd.refl env body)) ih) ",
+                        "@par_reduces_cd_star.step env ({head} x body) ({head} x' body) ({head} x'' body) ",
+                        "(@{ctor} env x x' body body hstep (@par_reduces_cd.refl env body)) ih) ",
                         "ty ty' hty) ",
-                        "(par_reduces_cd_star.rec env ",
+                        "(@par_reduces_cd_star.rec env ",
                         "(fun (x : KExpr) (y : KExpr) (_ : par_reduces_cd_star env x y) => ",
                         "par_reduces_cd_star env ({head} ty' x) ({head} ty' y)) ",
-                        "(fun (x : KExpr) => par_reduces_cd_star.refl env ({head} ty' x)) ",
+                        "(fun (x : KExpr) => @par_reduces_cd_star.refl env ({head} ty' x)) ",
                         "(fun (x : KExpr) (x' : KExpr) (x'' : KExpr) ",
                         "(hstep : par_reduces_cd env x x') (_htail : par_reduces_cd_star env x' x'') ",
                         "(ih : par_reduces_cd_star env ({head} ty' x') ({head} ty' x'')) => ",
-                        "par_reduces_cd_star.step env ({head} ty' x) ({head} ty' x') ({head} ty' x'') ",
-                        "({ctor} env ty' ty' x x' (par_reduces_cd.refl env ty') hstep) ih) ",
+                        "@par_reduces_cd_star.step env ({head} ty' x) ({head} ty' x') ({head} ty' x'') ",
+                        "(@{ctor} env ty' ty' x x' (@par_reduces_cd.refl env ty') hstep) ih) ",
                         "body body' hbody)"
                     ),
                     head = head,
@@ -690,8 +690,8 @@ impl Specification {
                     "(par_reduces_cd_star_app env (KExpr.lam A body) (KExpr.lam A' body') arg arg' ",
                     "(par_reduces_cd_star_lam env A A' body body' hA hbody) harg) ",
                     "(par_subsumes_par_cd_star env (KExpr.app (KExpr.lam A' body') arg') (instantiate body' arg') ",
-                    "(par_reduces_cd.beta env A' A' body' body' arg' arg' ",
-                    "(par_reduces_cd.refl env A') (par_reduces_cd.refl env body') (par_reduces_cd.refl env arg')))"
+                    "(@par_reduces_cd.beta env A' A' body' body' arg' arg' ",
+                    "(@par_reduces_cd.refl env A') (@par_reduces_cd.refl env body') (@par_reduces_cd.refl env arg')))"
                 )
                 .to_string(),
             ),
@@ -737,39 +737,39 @@ impl Specification {
                     "par_reduces_cd_star_trans env ",
                     "(KExpr.let_ ty val body) (KExpr.let_ ty' val body) (KExpr.let_ ty' val' body') ",
                     // phase 1: reduce ty, val/body fixed.
-                    "(par_reduces_cd_star.rec env ",
+                    "(@par_reduces_cd_star.rec env ",
                     "(fun (x : KExpr) (y : KExpr) (_ : par_reduces_cd_star env x y) => ",
                     "par_reduces_cd_star env (KExpr.let_ x val body) (KExpr.let_ y val body)) ",
-                    "(fun (x : KExpr) => par_reduces_cd_star.refl env (KExpr.let_ x val body)) ",
+                    "(fun (x : KExpr) => @par_reduces_cd_star.refl env (KExpr.let_ x val body)) ",
                     "(fun (x : KExpr) (x' : KExpr) (x'' : KExpr) ",
                     "(hstep : par_reduces_cd env x x') (_htail : par_reduces_cd_star env x' x'') ",
                     "(ih : par_reduces_cd_star env (KExpr.let_ x' val body) (KExpr.let_ x'' val body)) => ",
-                    "par_reduces_cd_star.step env (KExpr.let_ x val body) (KExpr.let_ x' val body) (KExpr.let_ x'' val body) ",
-                    "(par_reduces_cd.let_cong env x x' val val body body hstep (par_reduces_cd.refl env val) (par_reduces_cd.refl env body)) ih) ",
+                    "@par_reduces_cd_star.step env (KExpr.let_ x val body) (KExpr.let_ x' val body) (KExpr.let_ x'' val body) ",
+                    "(@par_reduces_cd.let_cong env x x' val val body body hstep (@par_reduces_cd.refl env val) (@par_reduces_cd.refl env body)) ih) ",
                     "ty ty' hty) ",
                     "(par_reduces_cd_star_trans env ",
                     "(KExpr.let_ ty' val body) (KExpr.let_ ty' val' body) (KExpr.let_ ty' val' body') ",
                     // phase 2: reduce val, ty'/body fixed.
-                    "(par_reduces_cd_star.rec env ",
+                    "(@par_reduces_cd_star.rec env ",
                     "(fun (x : KExpr) (y : KExpr) (_ : par_reduces_cd_star env x y) => ",
                     "par_reduces_cd_star env (KExpr.let_ ty' x body) (KExpr.let_ ty' y body)) ",
-                    "(fun (x : KExpr) => par_reduces_cd_star.refl env (KExpr.let_ ty' x body)) ",
+                    "(fun (x : KExpr) => @par_reduces_cd_star.refl env (KExpr.let_ ty' x body)) ",
                     "(fun (x : KExpr) (x' : KExpr) (x'' : KExpr) ",
                     "(hstep : par_reduces_cd env x x') (_htail : par_reduces_cd_star env x' x'') ",
                     "(ih : par_reduces_cd_star env (KExpr.let_ ty' x' body) (KExpr.let_ ty' x'' body)) => ",
-                    "par_reduces_cd_star.step env (KExpr.let_ ty' x body) (KExpr.let_ ty' x' body) (KExpr.let_ ty' x'' body) ",
-                    "(par_reduces_cd.let_cong env ty' ty' x x' body body (par_reduces_cd.refl env ty') hstep (par_reduces_cd.refl env body)) ih) ",
+                    "@par_reduces_cd_star.step env (KExpr.let_ ty' x body) (KExpr.let_ ty' x' body) (KExpr.let_ ty' x'' body) ",
+                    "(@par_reduces_cd.let_cong env ty' ty' x x' body body (@par_reduces_cd.refl env ty') hstep (@par_reduces_cd.refl env body)) ih) ",
                     "val val' hval) ",
                     // phase 3: reduce body, ty'/val' fixed.
-                    "(par_reduces_cd_star.rec env ",
+                    "(@par_reduces_cd_star.rec env ",
                     "(fun (x : KExpr) (y : KExpr) (_ : par_reduces_cd_star env x y) => ",
                     "par_reduces_cd_star env (KExpr.let_ ty' val' x) (KExpr.let_ ty' val' y)) ",
-                    "(fun (x : KExpr) => par_reduces_cd_star.refl env (KExpr.let_ ty' val' x)) ",
+                    "(fun (x : KExpr) => @par_reduces_cd_star.refl env (KExpr.let_ ty' val' x)) ",
                     "(fun (x : KExpr) (x' : KExpr) (x'' : KExpr) ",
                     "(hstep : par_reduces_cd env x x') (_htail : par_reduces_cd_star env x' x'') ",
                     "(ih : par_reduces_cd_star env (KExpr.let_ ty' val' x') (KExpr.let_ ty' val' x'')) => ",
-                    "par_reduces_cd_star.step env (KExpr.let_ ty' val' x) (KExpr.let_ ty' val' x') (KExpr.let_ ty' val' x'') ",
-                    "(par_reduces_cd.let_cong env ty' ty' val' val' x x' (par_reduces_cd.refl env ty') (par_reduces_cd.refl env val') hstep) ih) ",
+                    "@par_reduces_cd_star.step env (KExpr.let_ ty' val' x) (KExpr.let_ ty' val' x') (KExpr.let_ ty' val' x'') ",
+                    "(@par_reduces_cd.let_cong env ty' ty' val' val' x x' (@par_reduces_cd.refl env ty') (@par_reduces_cd.refl env val') hstep) ih) ",
                     "body body' hbody))"
                 )
                 .to_string(),
@@ -813,8 +813,8 @@ impl Specification {
                     "(KExpr.let_ ty val body) (KExpr.let_ ty' val' body') (instantiate body' val') ",
                     "(par_reduces_cd_star_let_cong env ty ty' val val' body body' hty hval hbody) ",
                     "(par_subsumes_par_cd_star env (KExpr.let_ ty' val' body') (instantiate body' val') ",
-                    "(par_reduces_cd.let_ env ty' ty' val' val' body' body' ",
-                    "(par_reduces_cd.refl env ty') (par_reduces_cd.refl env val') (par_reduces_cd.refl env body')))"
+                    "(@par_reduces_cd.let_ env ty' ty' val' val' body' body' ",
+                    "(@par_reduces_cd.refl env ty') (@par_reduces_cd.refl env val') (@par_reduces_cd.refl env body')))"
                 )
                 .to_string(),
             ),
@@ -909,14 +909,14 @@ impl Specification {
                 concat!(
                     "fun (env : RedEnv) (e : KExpr) (e' : KExpr) ",
                     "(h : par_reduces_cd_star env e e') => ",
-                    "par_reduces_cd_star.rec env ",
+                    "@par_reduces_cd_star.rec env ",
                     "(fun (a : KExpr) (b : KExpr) (_ : par_reduces_cd_star env a b) => ",
                     "par_reduces_pd_star env a b) ",
-                    "(fun (s : KExpr) => par_reduces_pd_star.refl env s) ",
+                    "(fun (s : KExpr) => @par_reduces_pd_star.refl env s) ",
                     "(fun (s : KExpr) (s' : KExpr) (s'' : KExpr) ",
                     "(hstep : par_reduces_cd env s s') (_htail : par_reduces_cd_star env s' s'') ",
                     "(ih : par_reduces_pd_star env s' s'') => ",
-                    "par_reduces_pd_star.step env s s' s'' ",
+                    "@par_reduces_pd_star.step env s s' s'' ",
                     "(par_reduces_cd_subsumes_par_pd env s s' hstep) ih) ",
                     "e e' h"
                 )
@@ -959,10 +959,10 @@ impl Specification {
                 concat!(
                     "fun (env : RedEnv) (e : KExpr) (e' : KExpr) ",
                     "(h : par_reduces_pd_star env e e') => ",
-                    "par_reduces_pd_star.rec env ",
+                    "@par_reduces_pd_star.rec env ",
                     "(fun (a : KExpr) (b : KExpr) (_ : par_reduces_pd_star env a b) => ",
                     "par_reduces_cd_star env a b) ",
-                    "(fun (s : KExpr) => par_reduces_cd_star.refl env s) ",
+                    "(fun (s : KExpr) => @par_reduces_cd_star.refl env s) ",
                     "(fun (s : KExpr) (s' : KExpr) (s'' : KExpr) ",
                     "(hstep : par_reduces_pd env s s') (_htail : par_reduces_pd_star env s' s'') ",
                     "(ih : par_reduces_cd_star env s' s'') => ",
@@ -1008,10 +1008,10 @@ impl Specification {
 fn par_reduces_pd_subsumes_par_cd_star_proof() -> String {
     concat!(
         "fun (env : RedEnv) (e : KExpr) (e' : KExpr) (h : par_reduces_pd env e e') => ",
-        "par_reduces_pd.rec env ",
+        "@par_reduces_pd.rec env ",
         "(fun (x : KExpr) (y : KExpr) (_h : par_reduces_pd env x y) => par_reduces_cd_star env x y) ",
         // refl
-        "(fun (a : KExpr) => par_reduces_cd_star.refl env a) ",
+        "(fun (a : KExpr) => @par_reduces_cd_star.refl env a) ",
         // beta
         "(fun (A : KExpr) (A' : KExpr) (body : KExpr) (body' : KExpr) (arg : KExpr) (arg' : KExpr) ",
         "(_hA : par_reduces_pd env A A') (_hbody : par_reduces_pd env body body') (_harg : par_reduces_pd env arg arg') ",
@@ -1047,13 +1047,13 @@ fn par_reduces_pd_subsumes_par_cd_star_proof() -> String {
         "(_hp : par_reduces_pd env a a2) (hi : iota_step (red_rec env) a2 r) ",
         "(ihp : par_reduces_cd_star env a a2) => ",
         "par_reduces_cd_star_trans env a a2 r ihp ",
-        "(par_subsumes_par_cd_star env a2 r (par_reduces_cd.iota env a2 r hi))) ",
+        "(par_subsumes_par_cd_star env a2 r (@par_reduces_cd.iota env a2 r hi))) ",
         // delta_p: e ⇒_pd e2 (IH ⇒*_cd) then delta_step (red_def env) e2 r (⇒_cd subsumed), trans.
         "(fun (a : KExpr) (a2 : KExpr) (r : KExpr) ",
         "(_hp : par_reduces_pd env a a2) (hd : delta_step (red_def env) a2 r) ",
         "(ihp : par_reduces_cd_star env a a2) => ",
         "par_reduces_cd_star_trans env a a2 r ihp ",
-        "(par_subsumes_par_cd_star env a2 r (par_reduces_cd.delta env a2 r hd))) ",
+        "(par_subsumes_par_cd_star env a2 r (@par_reduces_cd.delta env a2 r hd))) ",
         // let_cong: positional congruence over a genuine let_ node -> par_reduces_cd_star_let_cong on the IHs.
         "(fun (ty : KExpr) (ty' : KExpr) (val : KExpr) (val' : KExpr) (body : KExpr) (body' : KExpr) ",
         "(_hty : par_reduces_pd env ty ty') (_hval : par_reduces_pd env val val') (_hbody : par_reduces_pd env body body') ",
@@ -1075,55 +1075,55 @@ fn par_reduces_pd_subsumes_par_cd_star_proof() -> String {
 fn par_reduces_cd_subsumes_par_pd_proof() -> String {
     concat!(
         "fun (env : RedEnv) (e : KExpr) (e' : KExpr) (h : par_reduces_cd env e e') => ",
-        "par_reduces_cd.rec env ",
+        "@par_reduces_cd.rec env ",
         "(fun (x : KExpr) (y : KExpr) (_h : par_reduces_cd env x y) => par_reduces_pd env x y) ",
         // refl
-        "(fun (a : KExpr) => par_reduces_pd.refl env a) ",
+        "(fun (a : KExpr) => @par_reduces_pd.refl env a) ",
         // beta
         "(fun (A : KExpr) (A' : KExpr) (body : KExpr) (body' : KExpr) (arg : KExpr) (arg' : KExpr) ",
         "(_hA : par_reduces_cd env A A') (_hbody : par_reduces_cd env body body') (_harg : par_reduces_cd env arg arg') ",
         "(ihA : par_reduces_pd env A A') (ihbody : par_reduces_pd env body body') (iharg : par_reduces_pd env arg arg') => ",
-        "par_reduces_pd.beta env A A' body body' arg arg' ihA ihbody iharg) ",
+        "@par_reduces_pd.beta env A A' body body' arg arg' ihA ihbody iharg) ",
         // app
         "(fun (f : KExpr) (f' : KExpr) (a : KExpr) (a' : KExpr) ",
         "(_hf : par_reduces_cd env f f') (_ha : par_reduces_cd env a a') ",
         "(ihf : par_reduces_pd env f f') (iha : par_reduces_pd env a a') => ",
-        "par_reduces_pd.app env f f' a a' ihf iha) ",
+        "@par_reduces_pd.app env f f' a a' ihf iha) ",
         // lam
         "(fun (ty : KExpr) (ty' : KExpr) (body : KExpr) (body' : KExpr) ",
         "(_hty : par_reduces_cd env ty ty') (_hbody : par_reduces_cd env body body') ",
         "(ihty : par_reduces_pd env ty ty') (ihbody : par_reduces_pd env body body') => ",
-        "par_reduces_pd.lam env ty ty' body body' ihty ihbody) ",
+        "@par_reduces_pd.lam env ty ty' body body' ihty ihbody) ",
         // pi
         "(fun (dom : KExpr) (dom' : KExpr) (body : KExpr) (body' : KExpr) ",
         "(_hd : par_reduces_cd env dom dom') (_hbody : par_reduces_cd env body body') ",
         "(ihd : par_reduces_pd env dom dom') (ihbody : par_reduces_pd env body body') => ",
-        "par_reduces_pd.pi env dom dom' body body' ihd ihbody) ",
+        "@par_reduces_pd.pi env dom dom' body body' ihd ihbody) ",
         // forall_
         "(fun (dom : KExpr) (dom' : KExpr) (body : KExpr) (body' : KExpr) ",
         "(_hd : par_reduces_cd env dom dom') (_hbody : par_reduces_cd env body body') ",
         "(ihd : par_reduces_pd env dom dom') (ihbody : par_reduces_pd env body body') => ",
-        "par_reduces_pd.forall_ env dom dom' body body' ihd ihbody) ",
+        "@par_reduces_pd.forall_ env dom dom' body body' ihd ihbody) ",
         // let_
         "(fun (ty : KExpr) (ty' : KExpr) (val : KExpr) (val' : KExpr) (body : KExpr) (body' : KExpr) ",
         "(_hty : par_reduces_cd env ty ty') (_hval : par_reduces_cd env val val') (_hbody : par_reduces_cd env body body') ",
         "(ihty : par_reduces_pd env ty ty') (ihval : par_reduces_pd env val val') (ihbody : par_reduces_pd env body body') => ",
-        "par_reduces_pd.let_ env ty ty' val val' body body' ihty ihval ihbody) ",
+        "@par_reduces_pd.let_ env ty ty' val val' body body' ihty ihval ihbody) ",
         // iota (atomic): map to iota_p with a reflexive subterm reduction.
         "(fun (a : KExpr) (a' : KExpr) (hi : iota_step (red_rec env) a a') => ",
-        "par_reduces_pd.iota_p env a a a' (par_reduces_pd.refl env a) hi) ",
+        "@par_reduces_pd.iota_p env a a a' (@par_reduces_pd.refl env a) hi) ",
         // delta (atomic): map to delta_p with a reflexive subterm reduction.
         "(fun (a : KExpr) (a' : KExpr) (hd : delta_step (red_def env) a a') => ",
-        "par_reduces_pd.delta_p env a a a' (par_reduces_pd.refl env a) hd) ",
+        "@par_reduces_pd.delta_p env a a a' (@par_reduces_pd.refl env a) hd) ",
         // let_cong: positional congruence over a genuine let_ node -> par_reduces_pd.let_cong on the IHs.
         "(fun (ty : KExpr) (ty' : KExpr) (val : KExpr) (val' : KExpr) (body : KExpr) (body' : KExpr) ",
         "(_hty : par_reduces_cd env ty ty') (_hval : par_reduces_cd env val val') (_hbody : par_reduces_cd env body body') ",
         "(ihty : par_reduces_pd env ty ty') (ihval : par_reduces_pd env val val') (ihbody : par_reduces_pd env body body') => ",
-        "par_reduces_pd.let_cong env ty ty' val val' body body' ihty ihval ihbody) ",
+        "@par_reduces_pd.let_cong env ty ty' val val' body body' ihty ihval ihbody) ",
         // proj: positional congruence over the scrutinee -> par_reduces_pd.proj on the IH.
         "(fun (s : Name) (i : Nat) (sub : KExpr) (sub' : KExpr) ",
         "(_hsub : par_reduces_cd env sub sub') (ihsub : par_reduces_pd env sub sub') => ",
-        "par_reduces_pd.proj env s i sub sub' ihsub) ",
+        "@par_reduces_pd.proj env s i sub sub' ihsub) ",
         "e e' h"
     )
     .to_string()

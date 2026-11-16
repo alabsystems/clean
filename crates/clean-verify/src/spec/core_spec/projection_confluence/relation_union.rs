@@ -148,12 +148,12 @@ pub(super) const DECLARATIONS: &[DeclarationInput] = &[
  (dr : forall (e a b : A), R e a -> R e b -> RelationJoin A R R a b)
  (ds : forall (e a b : A), S e a -> S e b -> RelationJoin A S S a b)
  (comm : forall (e a b : A), R e a -> S e b -> RelationJoin A S R a b)
- (e a b : A) (ea : RelationUnion A R S e a) (eb : RelationUnion A R S e b) => RelationUnion.rec A R S e a
+ (e a b : A) (ea : RelationUnion A R S e a) (eb : RelationUnion A R S e b) => @RelationUnion.rec A R S e a
  (fun (_union_witness : RelationUnion A R S e a) => (fun (x y : A) (_ : RelationUnion A R S x y) =>
    forall (z : A), RelationUnion A R S x z ->
     RelationJoin A (RelationUnion A R S) (RelationUnion A R S) y z) e a _union_witness)
  (fun (_union_left : R e a) => (fun (x y : A) (xy : R x y) (z : A) (xz : RelationUnion A R S x z) =>
-   RelationUnion.rec A R S x z
+   @RelationUnion.rec A R S x z
  (fun (_union_witness : RelationUnion A R S x z) => (fun (u v : A) (_ : RelationUnion A R S u v) =>
      R u y -> RelationJoin A (RelationUnion A R S) (RelationUnion A R S) y v) x z _union_witness)
  (fun (_union_left : R x z) => (fun (u v : A) (uv : R u v) (uy : R u y) =>
@@ -164,7 +164,7 @@ pub(super) const DECLARATIONS: &[DeclarationInput] = &[
       (fun (union_map_source union_map_target : A) (union_map_edge : S union_map_source union_map_target) => @RelationUnion.right A R S union_map_source union_map_target union_map_edge) (fun (union_map_source union_map_target : A) (union_map_edge : R union_map_source union_map_target) => @RelationUnion.left A R S union_map_source union_map_target union_map_edge) y v (comm u y v uy uv)) x z _union_right)
  xz xy) e a _union_left)
  (fun (_union_right : S e a) => (fun (x y : A) (xy : S x y) (z : A) (xz : RelationUnion A R S x z) =>
-   RelationUnion.rec A R S x z
+   @RelationUnion.rec A R S x z
  (fun (_union_witness : RelationUnion A R S x z) => (fun (u v : A) (_ : RelationUnion A R S u v) =>
      S u y -> RelationJoin A (RelationUnion A R S) (RelationUnion A R S) y v) x z _union_witness)
  (fun (_union_left : R x z) => (fun (u v : A) (uv : R u v) (uy : S u y) =>
@@ -185,7 +185,7 @@ pub(super) const DECLARATIONS: &[DeclarationInput] = &[
  (a b : A) (h : RelationStar A (RelationUnion A R S) a b) => relation_star_bind A (RelationUnion A R S)
   (RelationUnion A (RelationStar A R) (RelationStar A S))
   (fun (x y : A) (xy : RelationUnion A R S x y) =>
-   RelationUnion.rec A R S x y
+   @RelationUnion.rec A R S x y
  (fun (_union_witness : RelationUnion A R S x y) => (fun (u v : A) (_ : RelationUnion A R S u v) =>
      RelationStar A (RelationUnion A (RelationStar A R) (RelationStar A S)) u v) x y _union_witness)
  (fun (_union_left : R x y) => (fun (u v : A) (uv : R u v) =>
@@ -203,7 +203,7 @@ pub(super) const DECLARATIONS: &[DeclarationInput] = &[
         r"fun (A : Type) (R S : A -> A -> Type)
  (a b : A) (h : RelationStar A (RelationUnion A (RelationStar A R) (RelationStar A S)) a b) => relation_star_bind A (RelationUnion A (RelationStar A R) (RelationStar A S)) (RelationUnion A R S)
   (fun (x y : A) (xy : RelationUnion A (RelationStar A R) (RelationStar A S) x y) =>
-   RelationUnion.rec A (RelationStar A R) (RelationStar A S) x y
+   @RelationUnion.rec A (RelationStar A R) (RelationStar A S) x y
  (fun (_union_witness : RelationUnion A (RelationStar A R) (RelationStar A S) x y) => (fun (u v : A) (_ : RelationUnion A (RelationStar A R) (RelationStar A S) u v) =>
      RelationStar A (RelationUnion A R S) u v) x y _union_witness)
  (fun (_union_left : (RelationStar A R) x y) => (fun (u v : A) (uv : RelationStar A R u v) =>

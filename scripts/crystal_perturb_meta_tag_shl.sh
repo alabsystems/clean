@@ -147,9 +147,9 @@ expect PASS "G0: the tree is untouched after the refused substitution"
 
 echo
 echo "== P1: THE ASSERT, DELETED FROM THE PROVED MODULE =="
-sub "$MT_DEFS" "(ir_nd (IRInst.assert ir_d4)) (IRList.cons IRNode (ir_nd1 (IRInst.cast IRCastOp.sext (IRTy.int_ 32) (IRTy.uint_ 64) ir_d1) ir_d5)" "(ir_nd (IRInst.assert ir_d4)) (ir_nd (IRInst.assert ir_d4)) (IRList.cons IRNode (ir_nd1 (IRInst.cast IRCastOp.sext (IRTy.int_ 32) (IRTy.uint_ 64) ir_d1) ir_d5)"
+sub "$MT_DEFS" "(ir_nd (IRInst.assert ir_d4)) (@IRList.cons IRNode (ir_nd1 (IRInst.cast IRCastOp.sext (IRTy.int_ 32) (IRTy.uint_ 64) ir_d1) ir_d5)" "(ir_nd (IRInst.assert ir_d4)) (ir_nd (IRInst.assert ir_d4)) (@IRList.cons IRNode (ir_nd1 (IRInst.cast IRCastOp.sext (IRTy.int_ 32) (IRTy.uint_ 64) ir_d1) ir_d5)"
 expect FAIL "P1 mutated: the proved module asserts TWICE — the assert lane and the order lane both see it, and before the assert lane neither did"; reason
-sub "$MT_DEFS" "(ir_nd (IRInst.assert ir_d4)) (ir_nd (IRInst.assert ir_d4)) (IRList.cons IRNode (ir_nd1 (IRInst.cast IRCastOp.sext (IRTy.int_ 32) (IRTy.uint_ 64) ir_d1) ir_d5)" "(ir_nd (IRInst.assert ir_d4)) (IRList.cons IRNode (ir_nd1 (IRInst.cast IRCastOp.sext (IRTy.int_ 32) (IRTy.uint_ 64) ir_d1) ir_d5)"
+sub "$MT_DEFS" "(ir_nd (IRInst.assert ir_d4)) (ir_nd (IRInst.assert ir_d4)) (@IRList.cons IRNode (ir_nd1 (IRInst.cast IRCastOp.sext (IRTy.int_ 32) (IRTy.uint_ 64) ir_d1) ir_d5)" "(ir_nd (IRInst.assert ir_d4)) (@IRList.cons IRNode (ir_nd1 (IRInst.cast IRCastOp.sext (IRTy.int_ 32) (IRTy.uint_ 64) ir_d1) ir_d5)"
 expect PASS "P1 reverted"
 
 echo
@@ -312,9 +312,9 @@ expect PASS "P21 reverted"
 
 echo
 echo "== P22: PROGRAM ORDER — the assert hoisted above the comparison =="
-sub "$MT_DEFS" "(ir_nd1 (IRInst.icmp IRICmpOp.ult (IRTy.uint_ 32) ir_d2 ir_d3) ir_d4) (IRList.cons IRNode (ir_nd (IRInst.assert ir_d4))" "(ir_nd (IRInst.assert ir_d4)) (IRList.cons IRNode (ir_nd1 (IRInst.icmp IRICmpOp.ult (IRTy.uint_ 32) ir_d2 ir_d3) ir_d4)"
+sub "$MT_DEFS" "(ir_nd1 (IRInst.icmp IRICmpOp.ult (IRTy.uint_ 32) ir_d2 ir_d3) ir_d4) (@IRList.cons IRNode (ir_nd (IRInst.assert ir_d4))" "(ir_nd (IRInst.assert ir_d4)) (@IRList.cons IRNode (ir_nd1 (IRInst.icmp IRICmpOp.ult (IRTy.uint_ 32) ir_d2 ir_d3) ir_d4)"
 expect FAIL "P22 mutated: the assert reads %4 before anything binds it. Every per-KIND lane is bit-identical; only the program-order lane sees the interleaving"; reason
-sub "$MT_DEFS" "(ir_nd (IRInst.assert ir_d4)) (IRList.cons IRNode (ir_nd1 (IRInst.icmp IRICmpOp.ult (IRTy.uint_ 32) ir_d2 ir_d3) ir_d4)" "(ir_nd1 (IRInst.icmp IRICmpOp.ult (IRTy.uint_ 32) ir_d2 ir_d3) ir_d4) (IRList.cons IRNode (ir_nd (IRInst.assert ir_d4))"
+sub "$MT_DEFS" "(ir_nd (IRInst.assert ir_d4)) (@IRList.cons IRNode (ir_nd1 (IRInst.icmp IRICmpOp.ult (IRTy.uint_ 32) ir_d2 ir_d3) ir_d4)" "(ir_nd1 (IRInst.icmp IRICmpOp.ult (IRTy.uint_ 32) ir_d2 ir_d3) ir_d4) (@IRList.cons IRNode (ir_nd (IRInst.assert ir_d4))"
 expect PASS "P22 reverted"
 
 echo

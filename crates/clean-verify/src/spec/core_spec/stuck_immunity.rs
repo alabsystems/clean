@@ -60,14 +60,16 @@ impl Specification {
         // inductive, so it carries none — the distinction that shifts every
         // later binder if got wrong.
         let none_at = |x: &str| {
-            format!("Eq (OptionType Name) (kexpr_const_name (kapp_fn {x})) (OptionType.none Name)")
+            format!(
+                "@Eq (OptionType Name) (kexpr_const_name (kapp_fn {x})) (@OptionType.none Name)"
+            )
         };
-        let refl = "Eq.refl (OptionType Name) (OptionType.none Name)";
+        let refl = "@Eq.refl (OptionType Name) (@OptionType.none Name)";
 
         self.add_recursive_def(
             &format!(
                 "def whnf_stuck_head_no_const (f : KExpr) (hs : whnf_stuck_head f) : {goal} := \
-                 whnf_stuck_head.rec \
+                 @whnf_stuck_head.rec \
                  (fun (x : KExpr) (_h : whnf_stuck_head x) => {motive}) \
                  (fun (n : Level) => {refl}) \
                  (fun (pty : KExpr) (pbody : KExpr) => {refl}) \
@@ -98,13 +100,13 @@ impl Specification {
     fn add_delta_reduct_head_none(&mut self) -> Result<(), SpecError> {
         self.add_recursive_def(
             "def delta_reduct_head_none (env : DefEnv) (x : KExpr) \
-             (hn : Eq (OptionType Name) (kexpr_const_name (kapp_fn x)) (OptionType.none Name)) : \
-             Eq (OptionType KExpr) (delta_reduct env x) (OptionType.none KExpr) := \
+             (hn : @Eq (OptionType Name) (kexpr_const_name (kapp_fn x)) (@OptionType.none Name)) : \
+             @Eq (OptionType KExpr) (delta_reduct env x) (@OptionType.none KExpr) := \
              Eq.cong (OptionType Name) (OptionType KExpr) \
              (fun (o : OptionType Name) => opt_bind Name KExpr o \
              (fun (dname : Name) => opt_bind KExpr KExpr (kdef_value_at env dname (kexpr_const_levels (kapp_fn x))) \
-             (fun (val : KExpr) => OptionType.some KExpr (apply_spine (kapp_args x) val)))) \
-             (kexpr_const_name (kapp_fn x)) (OptionType.none Name) hn",
+             (fun (val : KExpr) => @OptionType.some KExpr (apply_spine (kapp_args x) val)))) \
+             (kexpr_const_name (kapp_fn x)) (@OptionType.none Name) hn",
             "delta_reduct_head_none: if a term's spine head carries no constant name then \
              delta_reduct is none — its outermost opt_bind short-circuits. The delta mirror of \
              the in-tree iota_reduct_head_none (faithful_red_env.rs:1014), proved the same way, \
@@ -139,8 +141,8 @@ impl Specification {
                 &format!(
                     "def {name} (renv : RedEnv) (f : KExpr) (a : KExpr) \
                      (hs : whnf_stuck_head f) : \
-                     Eq (OptionType KExpr) ({reduct} ({envsel}) (KExpr.app f a)) \
-                     (OptionType.none KExpr) := \
+                     @Eq (OptionType KExpr) ({reduct} ({envsel}) (KExpr.app f a)) \
+                     (@OptionType.none KExpr) := \
                      {lemma} ({envsel}) (KExpr.app f a) (whnf_stuck_head_no_const f hs)"
                 ),
                 &format!(

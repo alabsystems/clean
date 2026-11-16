@@ -241,14 +241,14 @@
       {
         "arm": "the kernel tree --emit reads is NOT the one the record measured (its digest differs from the record's clean_kernel_src_sha256) (--emit --check)",
         "mutate": {
-          "file": "data/crystal_chain_revalidation_2026-11-14_athead_6e2c1dab4.json",
+          "file": "data/crystal_chain_revalidation_2026-11-15_athead_35f090bb3.json",
           "op": "regex-sub",
-          "pattern": "\"clean_kernel_src_sha256\": \"c08e1ec76c48c875",
+          "pattern": "\"clean_kernel_src_sha256\": \"86b0e8816245243e",
           "replacement": "\"clean_kernel_src_sha256\": \"0000000000000000"
         },
         "command": "python3 scripts/crystal_freshness_scope.py --emit --check",
         "expect_contains": "not the record's",
-        "why": "Added 2026-09-24 as the WITNESS arm (a kernel_tree_read_at commit whose kernel is not the record's); restated 2026-10-07, when the bound record became a strict v3 record measured at 047ebd051 -- a commit here, so the witness path is unreachable and the scope file carries no kernel_tree_read_at for the old pattern to mutate. The refusal it exercised is the same `emit` equality, reached directly: the tree read at the record's rev must digest to the record's clean_kernel_src_sha256, and a record naming any other digest is refused with `not the record's`. Restated 2026-10-18 onto the AT-HEAD record the scope binds since then (measured at bba5da779, also a commit here). Restated 2026-11-14 onto the appended-cache at-head record, measured at merged source 6e2c1dab4 with a fresh byte-exact producer control."
+        "why": "Added 2026-09-24 as the WITNESS arm (a kernel_tree_read_at commit whose kernel is not the record's); restated 2026-10-07, when the bound record became a strict v3 record measured at 047ebd051 -- a commit here, so the witness path is unreachable and the scope file carries no kernel_tree_read_at for the old pattern to mutate. The refusal it exercised is the same `emit` equality, reached directly: the tree read at the record's rev must digest to the record's clean_kernel_src_sha256, and a record naming any other digest is refused with `not the record's`. Restated 2026-10-18 onto the AT-HEAD record the scope binds since then (measured at bba5da779, also a commit here). Restated 2026-11-14 onto the appended-cache at-head record, measured at merged source 6e2c1dab4 with a fresh byte-exact producer control. Restated 2026-11-15 onto the plain-index at-head record, measured at 35f090bb3 against the same control."
       },
       {
         "arm": "a pinned body digest in the committed scope file is typed over, so the file no longer re-derives (--emit --check)",
@@ -4765,7 +4765,7 @@
         },
         "command": "targo --unverified test -p clean-olean --locked --test cic_l_level -q -- level_theory_rechecks_with_false_computation_controls",
         "expect_contains": "statement changed [\"CICL.ListSupportCases.identity\"]",
-        "why": "The restated theorem is true and its proof term still elaborates, so the pinned Lean compiles it, `leanchecker --fresh` accepts it and the reference entry re-admits it: nothing before E2 could tell that a headline theorem now says something else. The statement digest (universe parameters, then the type, in the kernel's serialized form) no longer matches its pin."
+        "why": "The restated theorem is true and its proof term still elaborates, so the pinned Lean compiles it, `leanchecker --fresh` accepts it and the reference entry re-admits it: nothing before E2 could tell that a headline theorem now says something else. Its meaning digest (the stated type and universe parameters with every package constant the statement reaches; tests/support/meaning_digest.rs) no longer matches its pin."
       },
       {
         "arm": "a private axiom is added to a level module",

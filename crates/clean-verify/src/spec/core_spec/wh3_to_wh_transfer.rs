@@ -507,7 +507,7 @@ impl Specification {
         Self::app_head_some_at(
             "wh3_app_head_step_gives_some_at_stuck",
             "WhStepR.wstuck",
-            "(OptionType.none KExpr)",
+            "(@OptionType.none KExpr)",
             AppHeadSomeArm::Chain,
         )
     }
@@ -539,7 +539,7 @@ impl Specification {
         Self::app_head_some_at(
             "wh3_app_head_step_gives_some_at_step",
             "(WhStepR.wstep f2)",
-            "(OptionType.some KExpr f2)",
+            "(@OptionType.some KExpr f2)",
             AppHeadSomeArm::Congruence,
         )
     }
@@ -557,11 +557,11 @@ impl Specification {
             ""
         };
         let hyp = |z: &str| {
-            format!("Eq WhStepR (reduce_app_head_red_wh3 renv wh3 a {z} {c3}) (WhStepR.wstep r)")
+            format!("@Eq WhStepR (reduce_app_head_red_wh3 renv wh3 a {z} {c3}) (WhStepR.wstep r)")
         };
         let goal = |z: &str| {
             format!(
-                "Eq ({o}) (reduce_app_head_red_wh renv wh2 a {z} {c2}) (OptionType.some KExpr r)"
+                "@Eq ({o}) (reduce_app_head_red_wh renv wh2 a {z} {c2}) (@OptionType.some KExpr r)"
             )
         };
         let motive = format!("(fun (z : KExpr) => {} -> {})", hyp("z"), goal("z"));
@@ -571,10 +571,10 @@ impl Specification {
         // arm needs no case-specific `c2`.
         let lam_body = format!(
             "Eq.substType KExpr \
-             (fun (X : KExpr) => Eq ({o}) (OptionType.some KExpr (instantiate b a)) \
-             (OptionType.some KExpr X)) \
+             (fun (X : KExpr) => @Eq ({o}) (@OptionType.some KExpr (instantiate b a)) \
+             (@OptionType.some KExpr X)) \
              (instantiate b a) r (wh_step_inj (instantiate b a) r hz) \
-             (Eq.refl ({o}) (OptionType.some KExpr (instantiate b a)))"
+             (@Eq.refl ({o}) (@OptionType.some KExpr (instantiate b a)))"
         );
         let arm = |binders: &str, z: &str| {
             let body = match kind {
@@ -584,20 +584,20 @@ impl Specification {
                 AppHeadSomeArm::Absurd => format!("wh_starved_ne_step r ({}) hz", goal(z)),
                 AppHeadSomeArm::Congruence => format!(
                     "Eq.substType KExpr \
-                     (fun (X : KExpr) => Eq ({o}) (OptionType.some KExpr (KExpr.app f2 a)) \
-                     (OptionType.some KExpr X)) \
+                     (fun (X : KExpr) => @Eq ({o}) (@OptionType.some KExpr (KExpr.app f2 a)) \
+                     (@OptionType.some KExpr X)) \
                      (KExpr.app f2 a) r (wh_step_inj (KExpr.app f2 a) r hz) \
-                     (Eq.refl ({o}) (OptionType.some KExpr (KExpr.app f2 a)))"
+                     (@Eq.refl ({o}) (@OptionType.some KExpr (KExpr.app f2 a)))"
                 ),
             };
             format!("(fun {binders} (hz : {}) => {body})", hyp(z))
         };
         format!(
             "def {name} (renv : RedEnv) (wh3 : KExpr -> {o}) (wh2 : KExpr -> {o}) \
-             (hw : forall (x : KExpr) (y : KExpr), Eq ({o}) (wh3 x) (OptionType.some KExpr y) -> \
-             Eq ({o}) (wh2 x) (OptionType.some KExpr y)) \
+             (hw : forall (x : KExpr) (y : KExpr), @Eq ({o}) (wh3 x) (@OptionType.some KExpr y) -> \
+             @Eq ({o}) (wh2 x) (@OptionType.some KExpr y)) \
              (a : KExpr) {extra}(f : KExpr) (r : KExpr) (h : {hyp_f}) : {goal_f} := \
-             KExpr.rec {motive} \
+             @KExpr.rec {motive} \
              {a_sort} {a_bvar} {a_app} {a_lam} {a_pi} {a_const} {a_let} {a_proj} {a_lit} \
              f h",
             hyp_f = hyp("f"),
@@ -614,7 +614,7 @@ impl Specification {
             ),
             a_lam = format_args!(
                 "(fun (ty : KExpr) (b : KExpr) (_cty : {mt}) (_cb : {mb}) \
-                 (hz : Eq WhStepR (WhStepR.wstep (instantiate b a)) (WhStepR.wstep r)) => {body})",
+                 (hz : @Eq WhStepR (WhStepR.wstep (instantiate b a)) (WhStepR.wstep r)) => {body})",
                 mt = at("ty"),
                 mb = at("b"),
                 body = lam_body,
@@ -660,18 +660,19 @@ impl Specification {
     /// the same asymmetry the `proj` arm shows, one level down.
     pub(super) fn wh3_to_wh_app_head_some_via_cases_src() -> String {
         let o = "OptionType KExpr";
-        let goal =
-            format!("Eq ({o}) (reduce_app_head_red_wh renv wh2 a f c2) (OptionType.some KExpr r)");
+        let goal = format!(
+            "@Eq ({o}) (reduce_app_head_red_wh renv wh2 a f c2) (@OptionType.some KExpr r)"
+        );
         let hyp3 = |q: &str| {
-            format!("Eq WhStepR (reduce_app_head_red_wh3 renv wh3 a f {q}) (WhStepR.wstep r)")
+            format!("@Eq WhStepR (reduce_app_head_red_wh3 renv wh3 a f {q}) (WhStepR.wstep r)")
         };
         let ihs_ty = |q: &str| {
-            format!("Eq WhStepR {q} WhStepR.wstuck -> Eq ({o}) c2 (OptionType.none KExpr)")
+            format!("@Eq WhStepR {q} WhStepR.wstuck -> @Eq ({o}) c2 (@OptionType.none KExpr)")
         };
         let ihp_ty = |q: &str| {
             format!(
-                "forall (y : KExpr), Eq WhStepR {q} (WhStepR.wstep y) -> \
-                 Eq ({o}) c2 (OptionType.some KExpr y)"
+                "forall (y : KExpr), @Eq WhStepR {q} (WhStepR.wstep y) -> \
+                 @Eq ({o}) c2 (@OptionType.some KExpr y)"
             )
         };
         // Both computing arms transport the GOAL's `c2` to the literal the
@@ -680,18 +681,18 @@ impl Specification {
             format!(
                 "Eq.substType ({o}) \
                  (fun (z : {o}) => \
-                 Eq ({o}) (reduce_app_head_red_wh renv wh2 a f z) (OptionType.some KExpr r)) \
+                 @Eq ({o}) (reduce_app_head_red_wh renv wh2 a f z) (@OptionType.some KExpr r)) \
                  {lit} c2 (Eq.symm ({o}) c2 {lit} ({proof})) ({sub})"
             )
         };
         format!(
             "def wh3_app_head_step_gives_some (renv : RedEnv) (wh3 : KExpr -> {o}) \
              (wh2 : KExpr -> {o}) \
-             (hw : forall (x : KExpr) (y : KExpr), Eq ({o}) (wh3 x) (OptionType.some KExpr y) -> \
-             Eq ({o}) (wh2 x) (OptionType.some KExpr y)) \
+             (hw : forall (x : KExpr) (y : KExpr), @Eq ({o}) (wh3 x) (@OptionType.some KExpr y) -> \
+             @Eq ({o}) (wh2 x) (@OptionType.some KExpr y)) \
              (a : KExpr) (c3 : WhStepR) (c2 : {o}) \
              (ihs : {ihs_c3}) (ihp : {ihp_c3}) (f : KExpr) (r : KExpr) (h : {hyp_c3}) : {goal} := \
-             WhStepR.rec \
+             @WhStepR.rec \
              (fun (q : WhStepR) => ({ihs_q}) -> ({ihp_q}) -> {hyp_q} -> {goal}) \
              (fun (ihs0 : {ihs_stuck}) (_ihp0 : {ihp_stuck}) (hq : {hyp_stuck}) => {arm_stuck}) \
              (fun (_ihs1 : {ihs_starved}) (_ihp1 : {ihp_starved}) (hq : {hyp_starved}) => \
@@ -715,13 +716,13 @@ impl Specification {
             ihp_step = ihp_ty("(WhStepR.wstep f2)"),
             hyp_step = hyp3("(WhStepR.wstep f2)"),
             arm_stuck = transport(
-                "(OptionType.none KExpr)",
-                "ihs0 (Eq.refl WhStepR WhStepR.wstuck)",
+                "(@OptionType.none KExpr)",
+                "ihs0 (@Eq.refl WhStepR WhStepR.wstuck)",
                 "wh3_app_head_step_gives_some_at_stuck renv wh3 wh2 hw a f r hq",
             ),
             arm_step = transport(
-                "(OptionType.some KExpr f2)",
-                "ihp2 f2 (Eq.refl WhStepR (WhStepR.wstep f2))",
+                "(@OptionType.some KExpr f2)",
+                "ihp2 f2 (@Eq.refl WhStepR (WhStepR.wstep f2))",
                 "wh3_app_head_step_gives_some_at_step renv wh3 wh2 hw a f2 f r hq",
             ),
         )

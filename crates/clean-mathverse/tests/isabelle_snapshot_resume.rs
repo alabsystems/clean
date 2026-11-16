@@ -335,7 +335,7 @@ fn snapshot_resume_matches_full_replay_and_refuses_tampered_prefix() {
         .constants
         .iter()
         .filter(|c| c.decl_kind == clean_mathverse::types::DeclKind::Inductive as u8)
-        .map(|c| hdr_name(c))
+        .map(hdr_name)
         .collect();
     let is_family_member = |n: &str, c: &clean_mathverse::types::MathverseConstantHeader| -> bool {
         matches!(

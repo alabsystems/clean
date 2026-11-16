@@ -101,25 +101,25 @@ const MI: &str = "(Nat.add (Nat.add (Nat.add (recmeta_num_params meta) \
      (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))";
 
 const UNDER_LEVELS_CONTROLS: &[&str] = &[
-    r"def under_levels_fixture_meta : RecMeta := RecMeta.mk (Nat.succ Nat.zero) Nat.zero Nat.zero Nat.zero Bool.false (KConstSig.mk (ListType.cons Name Name.anonymous (ListType.nil Name)) (KExpr.sort Level.zero)) Nat.zero",
+    r"def under_levels_fixture_meta : RecMeta := RecMeta.mk (Nat.succ Nat.zero) Nat.zero Nat.zero Nat.zero Bool.false (KConstSig.mk (@ListType.cons Name Name.anonymous (@ListType.nil Name)) (KExpr.sort Level.zero)) Nat.zero",
     r"def under_levels_fixture_env : RedEnv := RedEnv.mk (RecEnv.addRec RecEnv.empty Name.anonymous under_levels_fixture_meta RecRules.nil) DefEnv.empty IndCtorEnv.empty",
-    r"def under_levels_fixture_head : KExpr := KExpr.const Name.anonymous (ListType.cons Level (Level.succ (Level.param Name.anonymous)) (ListType.nil Level))",
+    r"def under_levels_fixture_head : KExpr := KExpr.const Name.anonymous (@ListType.cons Level (Level.succ (Level.param Name.anonymous)) (@ListType.nil Level))",
     r"def under_levels_fixture_before : KExpr := KExpr.app under_levels_fixture_head (KExpr.app (KExpr.lam (KExpr.sort Level.zero) (KExpr.bvar Nat.zero)) (KExpr.lit Nat.zero))",
     r"def under_levels_fixture_after : KExpr := KExpr.app under_levels_fixture_head (KExpr.lit Nat.zero)",
     r"def under_levels_fixture_trace : par_reduces_cd under_levels_fixture_env under_levels_fixture_before under_levels_fixture_after :=
- par_reduces_cd.app under_levels_fixture_env under_levels_fixture_head under_levels_fixture_head (KExpr.app (KExpr.lam (KExpr.sort Level.zero) (KExpr.bvar Nat.zero)) (KExpr.lit Nat.zero)) (KExpr.lit Nat.zero)
- (par_reduces_cd.refl under_levels_fixture_env under_levels_fixture_head)
- (par_reduces_cd.beta under_levels_fixture_env (KExpr.sort Level.zero) (KExpr.sort Level.zero) (KExpr.bvar Nat.zero) (KExpr.bvar Nat.zero) (KExpr.lit Nat.zero) (KExpr.lit Nat.zero)
- (par_reduces_cd.refl under_levels_fixture_env (KExpr.sort Level.zero))
- (par_reduces_cd.refl under_levels_fixture_env (KExpr.bvar Nat.zero))
- (par_reduces_cd.refl under_levels_fixture_env (KExpr.lit Nat.zero)))",
+ @par_reduces_cd.app under_levels_fixture_env under_levels_fixture_head under_levels_fixture_head (KExpr.app (KExpr.lam (KExpr.sort Level.zero) (KExpr.bvar Nat.zero)) (KExpr.lit Nat.zero)) (KExpr.lit Nat.zero)
+ (@par_reduces_cd.refl under_levels_fixture_env under_levels_fixture_head)
+ (@par_reduces_cd.beta under_levels_fixture_env (KExpr.sort Level.zero) (KExpr.sort Level.zero) (KExpr.bvar Nat.zero) (KExpr.bvar Nat.zero) (KExpr.lit Nat.zero) (KExpr.lit Nat.zero)
+ (@par_reduces_cd.refl under_levels_fixture_env (KExpr.sort Level.zero))
+ (@par_reduces_cd.refl under_levels_fixture_env (KExpr.bvar Nat.zero))
+ (@par_reduces_cd.refl under_levels_fixture_env (KExpr.lit Nat.zero)))",
     r"def under_levels_fixture_preserved :
- Eq (ListType Level) (kexpr_const_levels (kapp_fn under_levels_fixture_after)) (ListType.cons Level (Level.succ (Level.param Name.anonymous)) (ListType.nil Level)) :=
+ @Eq (ListType Level) (kexpr_const_levels (kapp_fn under_levels_fixture_after)) (@ListType.cons Level (Level.succ (Level.param Name.anonymous)) (@ListType.nil Level)) :=
  under_applied_levels_preserved_cd under_levels_fixture_env Name.anonymous under_levels_fixture_meta
- (Eq.refl (OptionType KExpr) (OptionType.none KExpr))
- (Eq.refl (OptionType RecMeta) (OptionType.some RecMeta under_levels_fixture_meta))
+ (@Eq.refl (OptionType KExpr) (@OptionType.none KExpr))
+ (@Eq.refl (OptionType RecMeta) (@OptionType.some RecMeta under_levels_fixture_meta))
  under_levels_fixture_before under_levels_fixture_after under_levels_fixture_trace
- (Eq.refl (OptionType Name) (OptionType.some Name Name.anonymous))
+ (@Eq.refl (OptionType Name) (@OptionType.some Name Name.anonymous))
  (Le.refl (Nat.succ Nat.zero))",
 ];
 
@@ -147,7 +147,7 @@ impl Specification {
 
     /// `kexpr_const_name (kapp_fn {e}) = some nm`.
     fn ua_head_is(e: &str) -> String {
-        format!("Eq (OptionType Name) (kexpr_const_name (kapp_fn {e})) (OptionType.some Name nm)")
+        format!("@Eq (OptionType Name) (kexpr_const_name (kapp_fn {e})) (@OptionType.some Name nm)")
     }
 
     /// `list_length (kapp_args {e})`.
@@ -164,7 +164,7 @@ impl Specification {
     /// kernel as `App` vs `Pi`, which is exactly what happened on the first run.
     fn kont(from: &str, to: &str) -> String {
         format!(
-            "{} -> Eq Nat {} {} -> C",
+            "{} -> @Eq Nat {} {} -> C",
             Self::ua_head_is(to),
             Self::ua_len_of(to),
             Self::ua_len_of(from),
@@ -228,39 +228,39 @@ impl Specification {
         let pre2 = Self::prefix_at("meta2");
         // recname2 = nm, from h1 and the caller's head equation.
         let recname2_eq_nm = "(option_some_inj Name recname2 nm \
-             (Eq.trans (OptionType Name) (OptionType.some Name recname2) \
-             (kexpr_const_name (kapp_fn e)) (OptionType.some Name nm) \
+             (Eq.trans (OptionType Name) (@OptionType.some Name recname2) \
+             (kexpr_const_name (kapp_fn e)) (@OptionType.some Name nm) \
              (Eq.symm (OptionType Name) (kexpr_const_name (kapp_fn e)) \
-             (OptionType.some Name recname2) h1) hhead))";
+             (@OptionType.some Name recname2) h1) hhead))";
         let h2_at_nm = format!(
-            "(Eq.substType Name (fun (N : Name) => Eq (OptionType RecMeta) \
-             (recmeta_for env N) (OptionType.some RecMeta meta2)) recname2 nm \
+            "(Eq.substType Name (fun (N : Name) => @Eq (OptionType RecMeta) \
+             (recmeta_for env N) (@OptionType.some RecMeta meta2)) recname2 nm \
              {recname2_eq_nm} h2)"
         );
         let meta2_eq_meta = format!(
             "(option_some_inj RecMeta meta2 meta \
-             (Eq.trans (OptionType RecMeta) (OptionType.some RecMeta meta2) \
-             (recmeta_for env nm) (OptionType.some RecMeta meta) \
+             (Eq.trans (OptionType RecMeta) (@OptionType.some RecMeta meta2) \
+             (recmeta_for env nm) (@OptionType.some RecMeta meta) \
              (Eq.symm (OptionType RecMeta) (recmeta_for env nm) \
-             (OptionType.some RecMeta meta2) {h2_at_nm}) hmeta))"
+             (@OptionType.some RecMeta meta2) {h2_at_nm}) hmeta))"
         );
         // h3 rewritten so its index is the caller's meta, then major = M.
         let h3_at_meta = format!(
-            "(Eq.substType RecMeta (fun (M2 : RecMeta) => Eq (OptionType KExpr) \
-             (list_head (list_drop {mi} (kapp_args e))) (OptionType.some KExpr major)) \
+            "(Eq.substType RecMeta (fun (M2 : RecMeta) => @Eq (OptionType KExpr) \
+             (list_head (list_drop {mi} (kapp_args e))) (@OptionType.some KExpr major)) \
              meta2 meta {meta2_eq_meta} h3)",
             mi = Self::mi_at("M2"),
         );
         let major_eq_m = format!(
             "(option_some_inj KExpr major mjr \
-             (Eq.trans (OptionType KExpr) (OptionType.some KExpr major) \
-             (list_head (list_drop {mi_meta} (kapp_args e))) (OptionType.some KExpr mjr) \
+             (Eq.trans (OptionType KExpr) (@OptionType.some KExpr major) \
+             (list_head (list_drop {mi_meta} (kapp_args e))) (@OptionType.some KExpr mjr) \
              (Eq.symm (OptionType KExpr) (list_head (list_drop {mi_meta} (kapp_args e))) \
-             (OptionType.some KExpr major) {h3_at_meta}) hmaj))"
+             (@OptionType.some KExpr major) {h3_at_meta}) hmaj))"
         );
         let h4_at_m = format!(
-            "(Eq.substType KExpr (fun (X : KExpr) => Eq (OptionType Name) \
-             (kexpr_const_name (kapp_fn X)) (OptionType.some Name cname2)) \
+            "(Eq.substType KExpr (fun (X : KExpr) => @Eq (OptionType Name) \
+             (kexpr_const_name (kapp_fn X)) (@OptionType.some Name cname2)) \
              major mjr {major_eq_m} h4)"
         );
         let reduct2 = format!(
@@ -274,35 +274,35 @@ impl Specification {
             &format!(
                 "def iota_step_major_head_none_absurd (env : RecEnv) (e : KExpr) (t : KExpr) \
                  (nm : Name) (meta : RecMeta) (mjr : KExpr) (C : Type) \
-                 (hhead : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) \
-                 (OptionType.some Name nm)) \
-                 (hmeta : Eq (OptionType RecMeta) (recmeta_for env nm) \
-                 (OptionType.some RecMeta meta)) \
-                 (hmaj : Eq (OptionType KExpr) (list_head (list_drop {mi_meta} (kapp_args e))) \
-                 (OptionType.some KExpr mjr)) \
-                 (hnone : Eq (OptionType Name) (kexpr_const_name (kapp_fn mjr)) \
-                 (OptionType.none Name)) \
+                 (hhead : @Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) \
+                 (@OptionType.some Name nm)) \
+                 (hmeta : @Eq (OptionType RecMeta) (recmeta_for env nm) \
+                 (@OptionType.some RecMeta meta)) \
+                 (hmaj : @Eq (OptionType KExpr) (list_head (list_drop {mi_meta} (kapp_args e))) \
+                 (@OptionType.some KExpr mjr)) \
+                 (hnone : @Eq (OptionType Name) (kexpr_const_name (kapp_fn mjr)) \
+                 (@OptionType.none Name)) \
                  (hi : iota_step env e t) : C := \
                  iota_reduct_some_inv_type env e t C hi \
                  (fun (recname2 : Name) (meta2 : RecMeta) (major : KExpr) (cname2 : Name) \
                  (rule2 : RecRule) \
-                 (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) \
-                 (OptionType.some Name recname2)) \
-                 (h2 : Eq (OptionType RecMeta) (recmeta_for env recname2) \
-                 (OptionType.some RecMeta meta2)) \
-                 (h3 : Eq (OptionType KExpr) (list_head (list_drop {mi_meta2} (kapp_args e))) \
-                 (OptionType.some KExpr major)) \
-                 (h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) \
-                 (OptionType.some Name cname2)) \
-                 (h5 : Eq (OptionType RecRule) (recrule_for env recname2 cname2) \
-                 (OptionType.some RecRule rule2)) \
-                 (h5r : Eq (OptionType KExpr) (OptionType.some KExpr {reduct2}) \
-                 (OptionType.some KExpr t)) => \
+                 (h1 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) \
+                 (@OptionType.some Name recname2)) \
+                 (h2 : @Eq (OptionType RecMeta) (recmeta_for env recname2) \
+                 (@OptionType.some RecMeta meta2)) \
+                 (h3 : @Eq (OptionType KExpr) (list_head (list_drop {mi_meta2} (kapp_args e))) \
+                 (@OptionType.some KExpr major)) \
+                 (h4 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) \
+                 (@OptionType.some Name cname2)) \
+                 (h5 : @Eq (OptionType RecRule) (recrule_for env recname2 cname2) \
+                 (@OptionType.some RecRule rule2)) \
+                 (h5r : @Eq (OptionType KExpr) (@OptionType.some KExpr {reduct2}) \
+                 (@OptionType.some KExpr t)) => \
                  option_none_ne_some_type Name cname2 C \
-                 (Eq.trans (OptionType Name) (OptionType.none Name) \
-                 (kexpr_const_name (kapp_fn mjr)) (OptionType.some Name cname2) \
+                 (Eq.trans (OptionType Name) (@OptionType.none Name) \
+                 (kexpr_const_name (kapp_fn mjr)) (@OptionType.some Name cname2) \
                  (Eq.symm (OptionType Name) (kexpr_const_name (kapp_fn mjr)) \
-                 (OptionType.none Name) hnone) {h4_at_m}))"
+                 (@OptionType.none Name) hnone) {h4_at_m}))"
             ),
             "iota_step_major_head_none_absurd: a recursor spine whose MAJOR PREMISE has no \
              constant at its head cannot fire a top-level iota. \
@@ -360,7 +360,7 @@ impl Specification {
 
     /// `head {x} = some nm`.
     fn bm_head(x: &str) -> String {
-        format!("Eq (OptionType Name) (kexpr_const_name (kapp_fn {x})) (OptionType.some Name nm)")
+        format!("@Eq (OptionType Name) (kexpr_const_name (kapp_fn {x})) (@OptionType.some Name nm)")
     }
 
     /// `length (kapp_args {x}) = major_idx meta` — EXACT, not a bound. This is
@@ -368,7 +368,7 @@ impl Specification {
     /// `list_head_drop_len_append` finds it with no positional search.
     fn bm_len(x: &str) -> String {
         format!(
-            "Eq Nat (list_length (kapp_args {x})) {mi}",
+            "@Eq Nat (list_length (kapp_args {x})) {mi}",
             mi = Self::mi_at("meta")
         )
     }
@@ -385,7 +385,7 @@ impl Specification {
     /// already validated twice in this module.
     fn bm_inv(x: &str, var: &str) -> String {
         format!(
-            "forall ({var} : KExpr), Eq KExpr {x} (KExpr.app {var} (KExpr.bvar bi)) -> \
+            "forall ({var} : KExpr), @Eq KExpr {x} (KExpr.app {var} (KExpr.bvar bi)) -> \
              {head} -> {len} -> ",
             head = Self::bm_head(var),
             len = Self::bm_len(var),
@@ -406,9 +406,9 @@ impl Specification {
         let mi = Self::mi_at("meta");
         let maj_at = |f: &str, hlen: &str| {
             format!(
-                "(Eq.substType Nat (fun (z : Nat) => Eq (OptionType KExpr) \
+                "(Eq.substType Nat (fun (z : Nat) => @Eq (OptionType KExpr) \
                  (list_head (list_drop z (kapp_args (KExpr.app {f} (KExpr.bvar bi))))) \
-                 (OptionType.some KExpr (KExpr.bvar bi))) \
+                 (@OptionType.some KExpr (KExpr.bvar bi))) \
                  (list_length (kapp_args {f})) {mi} {hlen} \
                  (list_head_drop_len_append (kapp_args {f}) (KExpr.bvar bi)))"
             )
@@ -435,7 +435,7 @@ impl Specification {
             match (slot, entry) {
                 (0, _) => arms.push_str(&format!(
                     "(fun (re : KExpr) (F : KExpr) \
-                     (heq : Eq KExpr re (KExpr.app F (KExpr.bvar bi))) (hhF : {head}) \
+                     (heq : @Eq KExpr re (KExpr.app F (KExpr.bvar bi))) (hhF : {head}) \
                      (hlenF : {len}) (k : {conc}C) => k F heq hhF hlenF) ",
                     head = Self::bm_head("F"),
                     len = Self::bm_len("F"),
@@ -444,11 +444,11 @@ impl Specification {
                 (7, _) => arms.push_str(&format!(
                     "(fun (ie : KExpr) (ie2 : KExpr) \
                      (hstep : iota_step (red_rec env) ie ie2) (F : KExpr) \
-                     (heq : Eq KExpr ie (KExpr.app F (KExpr.bvar bi))) (hhF : {head}) \
+                     (heq : @Eq KExpr ie (KExpr.app F (KExpr.bvar bi))) (hhF : {head}) \
                      (hlenF : {len}) (_k : {conc}C) => \
                      iota_step_major_head_none_absurd (red_rec env) ie ie2 nm meta \
                      (KExpr.bvar bi) C {hh} hrec {hm} \
-                     (Eq.refl (OptionType Name) (OptionType.none Name)) hstep) ",
+                     (@Eq.refl (OptionType Name) (@OptionType.none Name)) hstep) ",
                     head = Self::bm_head("F"),
                     len = Self::bm_len("F"),
                     conc = Self::bm_inv("ie2", "G"),
@@ -456,8 +456,8 @@ impl Specification {
                     hm = onto(
                         "ie",
                         &format!(
-                            "Eq (OptionType KExpr) (list_head (list_drop {mi} (kapp_args X))) \
-                             (OptionType.some KExpr (KExpr.bvar bi))"
+                            "@Eq (OptionType KExpr) (list_head (list_drop {mi} (kapp_args X))) \
+                             (@OptionType.some KExpr (KExpr.bvar bi))"
                         ),
                         &maj_at("F", "hlenF"),
                     ),
@@ -465,13 +465,13 @@ impl Specification {
                 (8, _) => arms.push_str(&format!(
                     "(fun (de : KExpr) (de2 : KExpr) \
                      (hstep : delta_step (red_def env) de de2) (F : KExpr) \
-                     (heq : Eq KExpr de (KExpr.app F (KExpr.bvar bi))) (hhF : {head}) \
+                     (heq : @Eq KExpr de (KExpr.app F (KExpr.bvar bi))) (hhF : {head}) \
                      (hlenF : {len}) (_k : {conc}C) => \
                      option_none_ne_some_type KExpr de2 C \
-                     (Eq.trans (OptionType KExpr) (OptionType.none KExpr) \
-                     (delta_reduct (red_def env) de) (OptionType.some KExpr de2) \
+                     (Eq.trans (OptionType KExpr) (@OptionType.none KExpr) \
+                     (delta_reduct (red_def env) de) (@OptionType.some KExpr de2) \
                      (Eq.symm (OptionType KExpr) (delta_reduct (red_def env) de) \
-                     (OptionType.none KExpr) \
+                     (@OptionType.none KExpr) \
                      (delta_reduct_eq_none_of_defval_none (red_def env) de nm {hh} hdef)) \
                      hstep)) ",
                     head = Self::bm_head("F"),
@@ -510,7 +510,7 @@ impl Specification {
                              (Eq.substType KExpr (fun (X : KExpr) => {lenX}) F af \
                              (Eq.symm KExpr af F {af_eq_f}) hlenF)) (Le.refl {mi})) \
                              (fun (hh2 : {head_af2}) \
-                             (hlen2 : Eq Nat (list_length (kapp_args af2)) \
+                             (hlen2 : @Eq Nat (list_length (kapp_args af2)) \
                              (list_length (kapp_args af))) => \
                              k af2 \
                              (Eq.cong KExpr KExpr (fun (X : KExpr) => KExpr.app af2 X) aa2 \
@@ -548,12 +548,12 @@ impl Specification {
                     } else {
                         format!(
                             "kexpr_discr_t C {src} (KExpr.app F (KExpr.bvar bi)) heq \
-                             (Eq.refl Bool Bool.false)"
+                             (@Eq.refl Bool Bool.false)"
                         )
                     };
                     arms.push_str(&format!(
                         "(fun {payload} {pb}{ib}(F : KExpr) \
-                         (heq : Eq KExpr {src} (KExpr.app F (KExpr.bvar bi))) (hhF : {head}) \
+                         (heq : @Eq KExpr {src} (KExpr.app F (KExpr.bvar bi))) (hhF : {head}) \
                          (hlenF : {len}) (k : {conc}C) => {body}) ",
                         head = Self::bm_head("F"),
                         len = Self::bm_len("F"),
@@ -569,15 +569,15 @@ impl Specification {
     fn add_bvar_major_chain(&mut self) -> Result<(), SpecError> {
         let mi = Self::mi_at("meta");
         let params = "(env : RedEnv) (nm : Name) (meta : RecMeta) (bi : Nat) \
-             (hdef : Eq (OptionType KExpr) (defval_for (red_def env) nm) (OptionType.none KExpr)) \
-             (hrec : Eq (OptionType RecMeta) (recmeta_for (red_rec env) nm) \
-             (OptionType.some RecMeta meta)) (C : Type) ";
+             (hdef : @Eq (OptionType KExpr) (defval_for (red_def env) nm) (@OptionType.none KExpr)) \
+             (hrec : @Eq (OptionType RecMeta) (recmeta_for (red_rec env) nm) \
+             (@OptionType.some RecMeta meta)) (C : Type) ";
         // The major of `app F (bvar bi)` is the bound variable, by computation.
         let maj_at = |f: &str, hlen: &str| {
             format!(
-                "(Eq.substType Nat (fun (z : Nat) => Eq (OptionType KExpr) \
+                "(Eq.substType Nat (fun (z : Nat) => @Eq (OptionType KExpr) \
                  (list_head (list_drop z (kapp_args (KExpr.app {f} (KExpr.bvar bi))))) \
-                 (OptionType.some KExpr (KExpr.bvar bi))) \
+                 (@OptionType.some KExpr (KExpr.bvar bi))) \
                  (list_length (kapp_args {f})) {mi} {hlen} \
                  (list_head_drop_len_append (kapp_args {f}) (KExpr.bvar bi)))"
             )
@@ -597,7 +597,7 @@ impl Specification {
             &format!(
                 "def bvar_major_preserved_cd {params}(e : KExpr) (e2 : KExpr) \
                  (h : par_reduces_cd env e e2) : {goal} := \
-                 par_reduces_cd.rec env \
+                 @par_reduces_cd.rec env \
                  (fun (p : KExpr) (q : KExpr) (_h : par_reduces_cd env p q) => {motive}) \
                  {arms}e e2 h",
                 goal = Self::bm_goal("e", "e2"),
@@ -628,19 +628,19 @@ impl Specification {
             &format!(
                 "def bvar_major_star_preserved {params}(e : KExpr) (e2 : KExpr) \
                  (h : par_reduces_cd_star env e e2) : {goal} := \
-                 par_reduces_cd_star.rec env \
+                 @par_reduces_cd_star.rec env \
                  (fun (p : KExpr) (q : KExpr) (_h : par_reduces_cd_star env p q) => {motive}) \
                  (fun (re : KExpr) (F : KExpr) \
-                 (heq : Eq KExpr re (KExpr.app F (KExpr.bvar bi))) (hhF : {headF}) \
+                 (heq : @Eq KExpr re (KExpr.app F (KExpr.bvar bi))) (hhF : {headF}) \
                  (hlenF : {lenF}) (k : {conc_re}C) => k F heq hhF hlenF) \
                  (fun (sx : KExpr) (sy : KExpr) (sz : KExpr) \
                  (hstep : par_reduces_cd env sx sy) \
                  (_hstar : par_reduces_cd_star env sy sz) \
                  (ih : {ih_ty}) (F : KExpr) \
-                 (heq : Eq KExpr sx (KExpr.app F (KExpr.bvar bi))) (hhF : {headF}) \
+                 (heq : @Eq KExpr sx (KExpr.app F (KExpr.bvar bi))) (hhF : {headF}) \
                  (hlenF : {lenF}) (k : {conc_sz}C) => \
                  bvar_major_preserved_cd env nm meta bi hdef hrec C sx sy hstep F heq hhF hlenF \
-                 (fun (G : KExpr) (heq1 : Eq KExpr sy (KExpr.app G (KExpr.bvar bi))) \
+                 (fun (G : KExpr) (heq1 : @Eq KExpr sy (KExpr.app G (KExpr.bvar bi))) \
                  (hh1 : {headG}) (hlen1 : {lenG}) => ih G heq1 hh1 hlen1 k)) \
                  e e2 h",
                 goal = Self::bm_goal("e", "e2"),
@@ -662,10 +662,10 @@ impl Specification {
         self.add_recursive_def(
             &format!(
                 "def iota_immune_of_bvar_major (nm : Name) (meta : RecMeta) (bi : Nat) \
-                 (hdef : Eq (OptionType KExpr) (defval_for (red_def the_red_env) nm) \
-                 (OptionType.none KExpr)) \
-                 (hrec : Eq (OptionType RecMeta) (recmeta_for (red_rec the_red_env) nm) \
-                 (OptionType.some RecMeta meta)) \
+                 (hdef : @Eq (OptionType KExpr) (defval_for (red_def the_red_env) nm) \
+                 (@OptionType.none KExpr)) \
+                 (hrec : @Eq (OptionType RecMeta) (recmeta_for (red_rec the_red_env) nm) \
+                 (@OptionType.some RecMeta meta)) \
                  (F : KExpr) (hhF : {headF}) (hlenF : {lenF}) : \
                  iota_immune (KExpr.app F (KExpr.bvar bi)) := \
                  fun (e2 : KExpr) (r : KExpr) \
@@ -674,20 +674,20 @@ impl Specification {
                  (hfire : iota_step (red_rec the_red_env) e2 r) => \
                  bvar_major_star_preserved the_red_env nm meta bi hdef hrec Empty \
                  (KExpr.app F (KExpr.bvar bi)) e2 hstar F \
-                 (Eq.refl KExpr (KExpr.app F (KExpr.bvar bi))) hhF hlenF \
-                 (fun (G : KExpr) (heq : Eq KExpr e2 (KExpr.app G (KExpr.bvar bi))) \
+                 (@Eq.refl KExpr (KExpr.app F (KExpr.bvar bi))) hhF hlenF \
+                 (fun (G : KExpr) (heq : @Eq KExpr e2 (KExpr.app G (KExpr.bvar bi))) \
                  (hhG : {headG}) (hlenG : {lenG}) => \
                  iota_step_major_head_none_absurd (red_rec the_red_env) e2 r nm meta \
                  (KExpr.bvar bi) Empty \
                  (Eq.substType KExpr (fun (X : KExpr) => {headX}) \
                  (KExpr.app G (KExpr.bvar bi)) e2 \
                  (Eq.symm KExpr e2 (KExpr.app G (KExpr.bvar bi)) heq) hhG) hrec \
-                 (Eq.substType KExpr (fun (X : KExpr) => Eq (OptionType KExpr) \
+                 (Eq.substType KExpr (fun (X : KExpr) => @Eq (OptionType KExpr) \
                  (list_head (list_drop {mi} (kapp_args X))) \
-                 (OptionType.some KExpr (KExpr.bvar bi))) \
+                 (@OptionType.some KExpr (KExpr.bvar bi))) \
                  (KExpr.app G (KExpr.bvar bi)) e2 \
                  (Eq.symm KExpr e2 (KExpr.app G (KExpr.bvar bi)) heq) {majG}) \
-                 (Eq.refl (OptionType Name) (OptionType.none Name)) hfire)",
+                 (@Eq.refl (OptionType Name) (@OptionType.none Name)) hfire)",
                 headF = Self::bm_head("F"),
                 lenF = Self::bm_len("F"),
                 headG = Self::bm_head("G"),
@@ -736,7 +736,7 @@ impl Specification {
     fn add_under_applied_levels_preserved(&mut self) -> Result<(), SpecError> {
         let levels = |e: &str| format!("(kexpr_const_levels (kapp_fn {e}))");
         let conclusion =
-            |e: &str, e2: &str| format!("Eq (ListType Level) {} {}", levels(e2), levels(e));
+            |e: &str, e2: &str| format!("@Eq (ListType Level) {} {}", levels(e2), levels(e));
         let goal = |e: &str, e2: &str| {
             format!(
                 "{} -> Le {} {MI} -> LiftP ({})",
@@ -778,7 +778,7 @@ impl Specification {
             } else if slot == 0 {
                 format!(
                     "(fun (re : KExpr) (hh : {}) (hl : Le {} {MI}) => \
-                    LiftP.up ({}) (Eq.refl (ListType Level) {}))",
+                    @LiftP.up ({}) (@Eq.refl (ListType Level) {}))",
                     Self::ua_head_is("re"),
                     Self::ua_len_of("re"),
                     conclusion("re", "re"),
@@ -799,9 +799,9 @@ impl Specification {
                 format!("(fun (de : KExpr) (de2 : KExpr) (hd : delta_step (red_def env) de de2) \
                     (hh : {}) (hl : Le {} {MI}) => \
                     option_none_ne_some_type KExpr de2 (LiftP ({})) \
-                    (Eq.trans (OptionType KExpr) (OptionType.none KExpr) \
-                    (delta_reduct (red_def env) de) (OptionType.some KExpr de2) \
-                    (Eq.symm (OptionType KExpr) (delta_reduct (red_def env) de) (OptionType.none KExpr) \
+                    (Eq.trans (OptionType KExpr) (@OptionType.none KExpr) \
+                    (delta_reduct (red_def env) de) (@OptionType.some KExpr de2) \
+                    (Eq.symm (OptionType KExpr) (delta_reduct (red_def env) de) (@OptionType.none KExpr) \
                     (delta_reduct_eq_none_of_defval_none (red_def env) de nm hh hdef)) hd))",
                     Self::ua_head_is("de"), Self::ua_len_of("de"), conclusion("de", "de2"))
             };
@@ -812,13 +812,13 @@ impl Specification {
         self.add_recursive_def(
             &format!("def under_applied_levels_preserved_cd \
                 (env : RedEnv) (nm : Name) (meta : RecMeta) \
-                (hdef : Eq (OptionType KExpr) (defval_for (red_def env) nm) (OptionType.none KExpr)) \
-                (hrec : Eq (OptionType RecMeta) (recmeta_for (red_rec env) nm) (OptionType.some RecMeta meta)) \
+                (hdef : @Eq (OptionType KExpr) (defval_for (red_def env) nm) (@OptionType.none KExpr)) \
+                (hrec : @Eq (OptionType RecMeta) (recmeta_for (red_rec env) nm) (@OptionType.some RecMeta meta)) \
                 (e : KExpr) (e2 : KExpr) (h : par_reduces_cd env e e2) \
                 (hh : {}) (hl : Le {} {MI}) : {proposition} := \
-                LiftP.rec ({proposition}) (fun (_ : LiftP ({proposition})) => {proposition}) \
+                @LiftP.rec ({proposition}) (fun (_ : LiftP ({proposition})) => {proposition}) \
                 (fun (hp : {proposition}) => hp) \
-                (par_reduces_cd.rec env (fun (p : KExpr) (q : KExpr) \
+                (@par_reduces_cd.rec env (fun (p : KExpr) (q : KExpr) \
                 (_h : par_reduces_cd env p q) => {}) {arms} e e2 h hh hl)",
                 Self::ua_head_is("e"), Self::ua_len_of("e"), goal("p", "q")),
             "Under-application preserves the actual head universe list through every parallel-step arm. The slot bound rules out iota inside the induction; raw definition absence rules out delta. No assumed target-head or target-universe equation.",
@@ -851,7 +851,7 @@ impl Specification {
                              (le_succ_weaken {len_af} {MI} \
                              (Eq.subst Nat (fun (z : Nat) => Le z {MI}) {len_src} \
                              (Nat.succ {len_af}) {lenapp_src} hl)) \
-                             (fun (hh2 : {head_af2}) (hlen2 : Eq Nat {len_af2} {len_af}) => \
+                             (fun (hh2 : {head_af2}) (hlen2 : @Eq Nat {len_af2} {len_af}) => \
                              k hh2 \
                              (Eq.trans Nat {len_tgt} (Nat.succ {len_af2}) {len_src} \
                              {lenapp_tgt} \
@@ -889,7 +889,7 @@ impl Specification {
         match slot {
             0 => format!(
                 "(fun (re : KExpr) (hh : {head}) (_hl : Le {len} {MI}) (k : {kont}) => \
-                 k hh (Eq.refl Nat {len})) ",
+                 k hh (@Eq.refl Nat {len})) ",
                 head = Self::ua_head_is("re"),
                 len = Self::ua_len_of("re"),
                 kont = Self::kont("re", "re"),
@@ -908,10 +908,10 @@ impl Specification {
                  (hstep : delta_step (red_def env) de de2) (hh : {head}) \
                  (_hl : Le {len} {MI}) (_k : {kont}) => \
                  option_none_ne_some_type KExpr de2 C \
-                 (Eq.trans (OptionType KExpr) (OptionType.none KExpr) \
-                 (delta_reduct (red_def env) de) (OptionType.some KExpr de2) \
+                 (Eq.trans (OptionType KExpr) (@OptionType.none KExpr) \
+                 (delta_reduct (red_def env) de) (@OptionType.some KExpr de2) \
                  (Eq.symm (OptionType KExpr) (delta_reduct (red_def env) de) \
-                 (OptionType.none KExpr) \
+                 (@OptionType.none KExpr) \
                  (delta_reduct_eq_none_of_defval_none (red_def env) de nm hh hdef)) \
                  hstep)) ",
                 head = Self::ua_head_is("de"),
@@ -925,9 +925,9 @@ impl Specification {
     /// The shared parameter block: the environment, the head name and its metadata.
     fn ua_params() -> String {
         "(env : RedEnv) (nm : Name) (meta : RecMeta) \
-         (hdef : Eq (OptionType KExpr) (defval_for (red_def env) nm) (OptionType.none KExpr)) \
-         (hrec : Eq (OptionType RecMeta) (recmeta_for (red_rec env) nm) \
-         (OptionType.some RecMeta meta)) (C : Type) "
+         (hdef : @Eq (OptionType KExpr) (defval_for (red_def env) nm) (@OptionType.none KExpr)) \
+         (hrec : @Eq (OptionType RecMeta) (recmeta_for (red_rec env) nm) \
+         (@OptionType.some RecMeta meta)) (C : Type) "
             .to_string()
     }
 
@@ -937,7 +937,7 @@ impl Specification {
             &format!(
                 "def under_applied_preserved_cd {params}(e : KExpr) (e2 : KExpr) \
                  (h : par_reduces_cd env e e2) : {goal} := \
-                 par_reduces_cd.rec env \
+                 @par_reduces_cd.rec env \
                  (fun (p : KExpr) (q : KExpr) (_h : par_reduces_cd env p q) => {motive}) \
                  {arms}e e2 h",
                 params = Self::ua_params(),
@@ -972,20 +972,20 @@ impl Specification {
             &format!(
                 "def under_applied_star_preserved {params}(e : KExpr) (e2 : KExpr) \
                  (h : par_reduces_cd_star env e e2) : {goal} := \
-                 par_reduces_cd_star.rec env \
+                 @par_reduces_cd_star.rec env \
                  (fun (p : KExpr) (q : KExpr) (_h : par_reduces_cd_star env p q) => {motive}) \
                  (fun (re : KExpr) (hh : {head_re}) (_hl : Le {len_re} {MI}) \
-                 (k : {kont_re}) => k hh (Eq.refl Nat {len_re})) \
+                 (k : {kont_re}) => k hh (@Eq.refl Nat {len_re})) \
                  (fun (sx : KExpr) (sy : KExpr) (sz : KExpr) \
                  (hstep : par_reduces_cd env sx sy) \
                  (_hstar : par_reduces_cd_star env sy sz) \
                  (ih : {ih_ty}) (hh : {head_sx}) (hl : Le {len_sx} {MI}) \
                  (k : {kont_sx_sz}) => \
                  under_applied_preserved_cd env nm meta hdef hrec C sx sy hstep hh hl \
-                 (fun (hh1 : {head_sy}) (hlen1 : Eq Nat {len_sy} {len_sx}) => \
+                 (fun (hh1 : {head_sy}) (hlen1 : @Eq Nat {len_sy} {len_sx}) => \
                  ih hh1 (Eq.subst Nat (fun (z : Nat) => Le z {MI}) {len_sx} {len_sy} \
                  (Eq.symm Nat {len_sy} {len_sx} hlen1) hl) \
-                 (fun (hh2 : {head_sz}) (hlen2 : Eq Nat {len_sz} {len_sy}) => \
+                 (fun (hh2 : {head_sz}) (hlen2 : @Eq Nat {len_sz} {len_sy}) => \
                  k hh2 (Eq.trans Nat {len_sz} {len_sy} {len_sx} hlen2 hlen1)))) \
                  e e2 h",
                 params = Self::ua_params(),
@@ -1017,16 +1017,16 @@ impl Specification {
         self.add_recursive_def(
             &format!(
                 "def iota_immune_of_under_applied (nm : Name) (meta : RecMeta) \
-                 (hdef : Eq (OptionType KExpr) (defval_for (red_def the_red_env) nm) \
-                 (OptionType.none KExpr)) \
-                 (hrec : Eq (OptionType RecMeta) (recmeta_for (red_rec the_red_env) nm) \
-                 (OptionType.some RecMeta meta)) \
+                 (hdef : @Eq (OptionType KExpr) (defval_for (red_def the_red_env) nm) \
+                 (@OptionType.none KExpr)) \
+                 (hrec : @Eq (OptionType RecMeta) (recmeta_for (red_rec the_red_env) nm) \
+                 (@OptionType.some RecMeta meta)) \
                  (e : KExpr) (hh : {head_e}) (hl : Le {len_e} {MI}) : iota_immune e := \
                  fun (e2 : KExpr) (r : KExpr) \
                  (hstar : par_reduces_cd_star the_red_env e e2) \
                  (hfire : iota_step (red_rec the_red_env) e2 r) => \
                  under_applied_star_preserved the_red_env nm meta hdef hrec Empty e e2 hstar hh hl \
-                 (fun (hh2 : {head_e2}) (hlen2 : Eq Nat {len_e2} {len_e}) => \
+                 (fun (hh2 : {head_e2}) (hlen2 : @Eq Nat {len_e2} {len_e}) => \
                  iota_step_below_boundary_absurd (red_rec the_red_env) e2 r nm meta Empty hh2 hrec \
                  (Eq.subst Nat (fun (z : Nat) => Le z {MI}) {len_e} {len_e2} \
                  (Eq.symm Nat {len_e2} {len_e} hlen2) hl) hfire)",
@@ -1087,8 +1087,8 @@ mod tests {
             }
             for source in [
                 r"def under_levels_forged_erasure :
- Eq (ListType Level) (kexpr_const_levels (kapp_fn under_levels_fixture_after)) (ListType.nil Level) :=
- Eq.refl (ListType Level) (ListType.nil Level)",
+ @Eq (ListType Level) (kexpr_const_levels (kapp_fn under_levels_fixture_after)) (@ListType.nil Level) :=
+ @Eq.refl (ListType Level) (@ListType.nil Level)",
                 r"def under_levels_forged_bound : Le (Nat.succ Nat.zero) Nat.zero :=
  Le.refl Nat.zero",
             ] {

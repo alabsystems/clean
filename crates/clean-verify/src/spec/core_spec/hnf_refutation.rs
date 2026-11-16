@@ -134,7 +134,7 @@ impl Specification {
             self.add_recursive_def(
                 &format!(
                     "def {name} (e : KExpr) : KExpr := \
-                     KExpr.rec (fun (_e : KExpr) => KExpr) {arms}e",
+                     @KExpr.rec (fun (_e : KExpr) => KExpr) {arms}e",
                     arms = Self::spine_arms(pick),
                 ),
                 &format!(
@@ -200,10 +200,10 @@ impl Specification {
         // (1) whnf really does stop on it — pure computation, exactly the shape
         // of the Guard-4 witnesses.
         self.add_recursive_def(
-            "def cx_whnf_stuck : Eq (OptionType KExpr) \
+            "def cx_whnf_stuck : @Eq (OptionType KExpr) \
              (whnf_fuel_red the_red_env (Nat.succ Nat.zero) cx_stuck) \
-             (OptionType.some KExpr cx_stuck) := \
-             Eq.refl (OptionType KExpr) (OptionType.some KExpr cx_stuck)",
+             (@OptionType.some KExpr cx_stuck) := \
+             @Eq.refl (OptionType KExpr) (@OptionType.some KExpr cx_stuck)",
             "cx_whnf_stuck: whnf_fuel_red returns cx_stuck UNCHANGED at one unit of fuel. Proof \
              by refl — the kernel whnf-evaluates reduce_once_red over the real reflected env to \
              none, and loop_dispatch's none branch returns some e0 (whnf_progress.rs:4186). \
@@ -218,15 +218,15 @@ impl Specification {
         self.add_recursive_def(
             &format!(
                 "def cx_reduces : par_reduces_cd_star the_red_env cx_stuck {WITNESS} := \
-                 par_reduces_cd_star.step the_red_env cx_stuck {WITNESS} {WITNESS} \
-                 (par_reduces_cd.app the_red_env cx_prefix cx_prefix \
+                 @par_reduces_cd_star.step the_red_env cx_stuck {WITNESS} {WITNESS} \
+                 (@par_reduces_cd.app the_red_env cx_prefix cx_prefix \
                  (KExpr.app (KExpr.lam {S0} cx_major) {S0}) cx_major \
-                 (par_reduces_cd.refl the_red_env cx_prefix) \
-                 (par_reduces_cd.beta the_red_env {S0} {S0} cx_major cx_major {S0} {S0} \
-                 (par_reduces_cd.refl the_red_env {S0}) \
-                 (par_reduces_cd.refl the_red_env cx_major) \
-                 (par_reduces_cd.refl the_red_env {S0}))) \
-                 (par_reduces_cd_star.refl the_red_env {WITNESS})"
+                 (@par_reduces_cd.refl the_red_env cx_prefix) \
+                 (@par_reduces_cd.beta the_red_env {S0} {S0} cx_major cx_major {S0} {S0} \
+                 (@par_reduces_cd.refl the_red_env {S0}) \
+                 (@par_reduces_cd.refl the_red_env cx_major) \
+                 (@par_reduces_cd.refl the_red_env {S0}))) \
+                 (@par_reduces_cd_star.refl the_red_env {WITNESS})"
             ),
             "cx_reduces: cx_stuck reduces to the generated Guard-4 iota redex in ONE parallel \
              step — par_reduces_cd.app with refl on the spine and beta on the argument. The step's \
@@ -243,7 +243,7 @@ impl Specification {
         // the interned Nat.rec atom.
         self.add_recursive_def(
             "def opt_name_is_none (o : OptionType Name) : Bool := \
-             OptionType.rec Name (fun (_o : OptionType Name) => Bool) Bool.true \
+             @OptionType.rec Name (fun (_o : OptionType Name) => Bool) Bool.true \
              (fun (_v : Name) => Bool.false) o",
             "opt_name_is_none o: whether an optional Name is none. Exists so the refutation's \
              rigid arm can contradict `kexpr_const_name (kapp_fn cx_stuck) = none` WITHOUT naming \
@@ -254,41 +254,41 @@ impl Specification {
     }
 
     fn add_not_nf_head(&mut self) -> Result<(), SpecError> {
-        let goal = "Eq KExpr z cx_stuck -> Empty";
+        let goal = "@Eq KExpr z cx_stuck -> Empty";
         // The two shape-impossible arms: an application is neither a lam nor a
         // const, and kexpr_tag computes, so this is arithmetic.
         let discriminate = |form: &str| {
-            format!("kexpr_discr_t Empty {form} cx_stuck heq (Eq.refl Bool Bool.false)")
+            format!("kexpr_discr_t Empty {form} cx_stuck heq (@Eq.refl Bool Bool.false)")
         };
         self.add_recursive_def(
             &format!(
                 "def cx_not_nf_head (h : nf_head cx_stuck) : Empty := \
-                 nf_head.rec (fun (z : KExpr) (_hz : nf_head z) => {goal}) \
+                 @nf_head.rec (fun (z : KExpr) (_hz : nf_head z) => {goal}) \
                  (fun (lty : KExpr) (lbody : KExpr) \
-                 (heq : Eq KExpr (KExpr.lam lty lbody) cx_stuck) => {lam}) \
+                 (heq : @Eq KExpr (KExpr.lam lty lbody) cx_stuck) => {lam}) \
                  (fun (e0 : KExpr) (hr : rigid_app_head e0) \
-                 (heq : Eq KExpr e0 cx_stuck) => \
+                 (heq : @Eq KExpr e0 cx_stuck) => \
                  bool_false_ne_true_t Empty \
                  (Eq.substType (OptionType Name) \
-                 (fun (o : OptionType Name) => Eq Bool Bool.false (opt_name_is_none o)) \
-                 (kexpr_const_name (kapp_fn cx_stuck)) (OptionType.none Name) \
+                 (fun (o : OptionType Name) => @Eq Bool Bool.false (opt_name_is_none o)) \
+                 (kexpr_const_name (kapp_fn cx_stuck)) (@OptionType.none Name) \
                  (rigid_app_head_no_const cx_stuck \
                  (Eq.substType KExpr (fun (z : KExpr) => rigid_app_head z) e0 cx_stuck heq hr)) \
-                 (Eq.refl Bool Bool.false))) \
+                 (@Eq.refl Bool Bool.false))) \
                  (fun (nff : KExpr) (nfa : KExpr) (_hin : iota_neutral nff) \
                  (hii : iota_immune (KExpr.app nff nfa)) \
-                 (heq : Eq KExpr (KExpr.app nff nfa) cx_stuck) => \
+                 (heq : @Eq KExpr (KExpr.app nff nfa) cx_stuck) => \
                  Eq.substType KExpr (fun (z : KExpr) => iota_immune z) \
                  (KExpr.app nff nfa) cx_stuck heq hii \
                  {WITNESS} kcre_witness_nat_zero_reduct cx_reduces \
                  the_red_env_iota_nonvacuous) \
                  (fun (cn : Name) (cus : ListType Level) \
-                 (_hdd : Eq (OptionType KExpr) \
+                 (_hdd : @Eq (OptionType KExpr) \
                  (delta_reduct (red_def the_red_env) (KExpr.const cn cus)) \
-                 (OptionType.none KExpr)) \
-                 (heq : Eq KExpr (KExpr.const cn cus) cx_stuck) => {constdead}) \
-                 (fun (bi : Nat) (heq : Eq KExpr (KExpr.bvar bi) cx_stuck) => {bvararm}) \
-                 cx_stuck h (Eq.refl KExpr cx_stuck)",
+                 (@OptionType.none KExpr)) \
+                 (heq : @Eq KExpr (KExpr.const cn cus) cx_stuck) => {constdead}) \
+                 (fun (bi : Nat) (heq : @Eq KExpr (KExpr.bvar bi) cx_stuck) => {bvararm}) \
+                 cx_stuck h (@Eq.refl KExpr cx_stuck)",
                 lam = discriminate("(KExpr.lam lty lbody)"),
                 constdead = discriminate("(KExpr.const cn cus)"),
                 bvararm = discriminate("(KExpr.bvar bi)"),
@@ -312,8 +312,8 @@ impl Specification {
     fn add_refutation(&mut self) -> Result<(), SpecError> {
         self.add_recursive_def(
             "def hnf_is_false (hnf : forall (m : Nat) (e : KExpr) (r : KExpr), \
-             Eq (OptionType KExpr) (whnf_fuel_red the_red_env m e) \
-             (OptionType.some KExpr r) -> nf_head r) : Empty := \
+             @Eq (OptionType KExpr) (whnf_fuel_red the_red_env m e) \
+             (@OptionType.some KExpr r) -> nf_head r) : Empty := \
              cx_not_nf_head (hnf (Nat.succ Nat.zero) cx_stuck cx_stuck cx_whnf_stuck)",
             "hnf_is_false: THE REFUTATION — def_eq_fuel_complete's last premise is FALSE, so the \
              capstone is VACUOUS and proves nothing about the conversion algorithm. Its own \

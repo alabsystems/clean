@@ -133,7 +133,7 @@ impl Specification {
             type_src: "forall (nc : Nat) (step : ResolvStep nc), ResolvSound nc step".to_string(),
             value_src: Some(
                 "fun (nc : Nat) (step : ResolvStep nc) => \
-                 ResolvStep.rec nc \
+                 @ResolvStep.rec nc \
                    (fun (s : ResolvStep nc) => ResolvSound nc s) \
                    (fun (idx : Nat) => ResolvSound.input nc idx) \
                    (fun (pivot : Nat) (left : ResolvStep nc) (right : ResolvStep nc) \
@@ -166,7 +166,7 @@ impl Specification {
             type_src: "forall (n : Nat), ResolvComplete n".to_string(),
             value_src: Some(
                 "fun (n : Nat) => \
-                 Nat.rec \
+                 @Nat.rec \
                    (fun (k : Nat) => ResolvComplete k) \
                    (ResolvComplete.base_empty) \
                    (fun (m : Nat) (ih : ResolvComplete m) => \
@@ -197,7 +197,7 @@ impl Specification {
             type_src: "forall (ni : Nat) (step : CPStep ni), CPSound ni step".to_string(),
             value_src: Some(
                 "fun (ni : Nat) (step : CPStep ni) => \
-                 CPStep.rec ni \
+                 @CPStep.rec ni \
                    (fun (s : CPStep ni) => CPSound ni s) \
                    (fun (idx : Nat) => CPSound.input ni idx) \
                    (fun (left : CPStep ni) (right : CPStep ni) \
@@ -234,7 +234,7 @@ impl Specification {
                 .to_string(),
             value_src: Some(
                 "fun (nc : Nat) (step : CPSimResolvStep nc) => \
-                 CPSimResolvStep.rec nc \
+                 @CPSimResolvStep.rec nc \
                    (fun (s : CPSimResolvStep nc) => CPSimResolvSound nc s) \
                    (fun (idx : Nat) => CPSimResolvSound.encode_clause nc idx) \
                    (fun (pivot : Nat) (left : CPSimResolvStep nc) (right : CPSimResolvStep nc) \

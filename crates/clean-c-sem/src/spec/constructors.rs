@@ -100,7 +100,7 @@ impl Spec {
         Spec::Valid(Box::new(ptr))
     }
 
-    pub fn valid_read(ptr: Spec) -> Self {
+    pub(crate) fn valid_read(ptr: Spec) -> Self {
         Spec::ValidRead(Box::new(ptr))
     }
 

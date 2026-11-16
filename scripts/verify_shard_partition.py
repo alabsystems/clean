@@ -2,7 +2,7 @@
 """Independent replay of a shard plan's partition proof.
 
     scripts/verify_shard_partition.py data/suite_plans/clean-verify__lib.json \
-        target/verify-runner-pinned/target/debug/deps/clean_verify-<hash>
+        target/verify-runner-pinned/target/cargo-output/debug/deps/clean_verify-<hash>
 
 Deliberately shares NO code with verify_runner.py. It reads the committed plan,
 re-derives each shard's argv from the stored fields, asks the TEST BINARY itself

@@ -80,7 +80,7 @@ impl Specification {
         let motive_at = |v: &str| {
             format!(
                 "forall (C : Type) (zty : KExpr) (zval : KExpr) (zbody : KExpr), \
-                 Eq KExpr {v} (KExpr.let_ zty zval zbody) -> C"
+                 @Eq KExpr {v} (KExpr.let_ zty zval zbody) -> C"
             )
         };
         let mut arms = String::new();
@@ -94,15 +94,15 @@ impl Specification {
             };
             arms.push_str(&format!(
                 "(fun {payload} {extra}(C : Type) (zty : KExpr) (zval : KExpr) (zbody : KExpr) \
-                 (heq : Eq KExpr {form} (KExpr.let_ zty zval zbody)) => \
+                 (heq : @Eq KExpr {form} (KExpr.let_ zty zval zbody)) => \
                  kexpr_discr_t C {form} (KExpr.let_ zty zval zbody) heq \
-                 (Eq.refl Bool Bool.false)) "
+                 (@Eq.refl Bool Bool.false)) "
             ));
         }
         self.add_recursive_def(
             &format!(
                 "def rigid_app_head_not_let (x : KExpr) (hr : rigid_app_head x) : {motive} := \
-                 rigid_app_head.rec (fun (z : KExpr) (_h : rigid_app_head z) => {m}) \
+                 @rigid_app_head.rec (fun (z : KExpr) (_h : rigid_app_head z) => {m}) \
                  {arms}x hr",
                 motive = motive_at("x"),
                 m = motive_at("z"),
@@ -148,8 +148,8 @@ impl Specification {
                 "(fun {payload} {proofs}{ihs}(hr : rigid_app_head {src}) => \
                  rigid_app_head_not_lam (KExpr.lam bA bbody) \
                  (rigid_app_head_app_inv {src} hr (KExpr.lam bA bbody) barg \
-                 (Eq.refl KExpr {src})) \
-                 (rigid_app_head {tgt}) bA bbody (Eq.refl KExpr (KExpr.lam bA bbody))) "
+                 (@Eq.refl KExpr {src})) \
+                 (rigid_app_head {tgt}) bA bbody (@Eq.refl KExpr (KExpr.lam bA bbody))) "
             ));
         }
 
@@ -160,7 +160,7 @@ impl Specification {
             arms.push_str(&format!(
                 "(fun {payload} {proofs}{ihs}(hr : rigid_app_head {src}) => \
                  rigid_app_head.app af2 aa2 \
-                 (ihf (rigid_app_head_app_inv {src} hr af aa (Eq.refl KExpr {src})))) "
+                 (ihf (rigid_app_head_app_inv {src} hr af aa (@Eq.refl KExpr {src})))) "
             ));
         }
 
@@ -171,7 +171,7 @@ impl Specification {
             arms.push_str(&format!(
                 "(fun {payload} {proofs}{ihs}(hr : rigid_app_head {src}) => \
                  rigid_app_head_not_lam {src} hr (rigid_app_head {tgt}) lty lbody \
-                 (Eq.refl KExpr {src})) "
+                 (@Eq.refl KExpr {src})) "
             ));
         }
 
@@ -193,7 +193,7 @@ impl Specification {
             arms.push_str(&format!(
                 "(fun {payload} {proofs}{ihs}(hr : rigid_app_head {src}) => \
                  rigid_app_head_not_let {src} hr (rigid_app_head {tgt}) zty zval zbody \
-                 (Eq.refl KExpr {src})) "
+                 (@Eq.refl KExpr {src})) "
             ));
         }
 
@@ -206,10 +206,10 @@ impl Specification {
                 "(fun ({var} : KExpr) ({var}2 : KExpr) \
                  (hst : {ctor}_step ({envsel}) {var} {var}2) (hr : rigid_app_head {var}) => \
                  opt_none_ne_some_t KExpr {var}2 (rigid_app_head {var}2) \
-                 (Eq.trans (OptionType KExpr) (OptionType.none KExpr) \
-                 ({ctor}_reduct ({envsel}) {var}) (OptionType.some KExpr {var}2) \
+                 (Eq.trans (OptionType KExpr) (@OptionType.none KExpr) \
+                 ({ctor}_reduct ({envsel}) {var}) (@OptionType.some KExpr {var}2) \
                  (Eq.symm (OptionType KExpr) ({ctor}_reduct ({envsel}) {var}) \
-                 (OptionType.none KExpr) ({immune} env {var} hr)) hst)) "
+                 (@OptionType.none KExpr) ({immune} env {var} hr)) hst)) "
             ));
         }
 
@@ -220,7 +220,7 @@ impl Specification {
             arms.push_str(&format!(
                 "(fun {payload} {proofs}{ihs}(hr : rigid_app_head {src}) => \
                  rigid_app_head_not_let {src} hr (rigid_app_head {tgt}) cty cval cbody \
-                 (Eq.refl KExpr {src})) "
+                 (@Eq.refl KExpr {src})) "
             ));
         }
 
@@ -243,7 +243,7 @@ impl Specification {
             &format!(
                 "def rigid_app_head_preserved (env : RedEnv) (e : KExpr) (e2 : KExpr) \
                  (h : par_reduces_cd env e e2) : rigid_app_head e -> rigid_app_head e2 := \
-                 par_reduces_cd.rec env \
+                 @par_reduces_cd.rec env \
                  (fun (p : KExpr) (q : KExpr) (_h : par_reduces_cd env p q) => \
                  rigid_app_head p -> rigid_app_head q) \
                  {arms}e e2 h"
@@ -265,7 +265,7 @@ impl Specification {
         self.add_recursive_def(
             "def rigid_app_head_star_preserved (env : RedEnv) (e : KExpr) (e2 : KExpr) \
              (h : par_reduces_cd_star env e e2) : rigid_app_head e -> rigid_app_head e2 := \
-             par_reduces_cd_star.rec env \
+             @par_reduces_cd_star.rec env \
              (fun (p : KExpr) (q : KExpr) (_h : par_reduces_cd_star env p q) => \
              rigid_app_head p -> rigid_app_head q) \
              (fun (e0 : KExpr) (hr : rigid_app_head e0) => hr) \

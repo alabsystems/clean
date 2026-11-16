@@ -22,7 +22,7 @@ mod trusted_arith;
 // Re-export public items
 pub use certificate::{CertifiedConstraint, FMCertifiedResult, FMResult, LinarithCertificate};
 #[cfg(test)]
-pub use trusted_arith::arith_lifetime_count;
+pub(crate) use trusted_arith::arith_lifetime_count;
 pub use trusted_arith::{arith_proof_count, reset_arith_counter};
 
 // Re-export pub(crate) items

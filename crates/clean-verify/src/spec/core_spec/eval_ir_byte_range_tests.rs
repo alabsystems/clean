@@ -52,7 +52,7 @@ fn byte_range_disjoint_writes_preserve_undefined_and_invalid_bytes() {
         };
         let source = format!(
             "def {name} (bytes : Nat -> IROption Nat) (base : Nat) :
-          Eq (IROption Nat)
+          @Eq (IROption Nat)
             (ir_byte_read_word_v1 (ir_byte_{operation}_v1 bytes (Nat.add base 8) 8 {args}) 8 base)
             (ir_byte_read_word_v1 bytes 8 base) :=
           {law} bytes base 8 (Nat.add base 8) 8 {args}
@@ -66,7 +66,7 @@ fn byte_range_disjoint_writes_preserve_undefined_and_invalid_bytes() {
         "range_write_before",
         r"def range_write_before
       (bytes : Nat -> IROption Nat) (base word : Nat) :
-      Eq (IROption Nat)
+      @Eq (IROption Nat)
         (ir_byte_read_word_v1 (ir_byte_write_word_v1 bytes base 8 word) 8 (Nat.add base 8))
         (ir_byte_read_word_v1 bytes 8 (Nat.add base 8)) :=
       ir_byte_read_write_disjoint_v1 bytes (Nat.add base 8) 8 base 8 word
@@ -76,23 +76,23 @@ fn byte_range_disjoint_writes_preserve_undefined_and_invalid_bytes() {
     // The actual reader must preserve failure from an interior missing byte or
     // byte >=256, not merely agree on all-successful concrete arrays.
     for (name, interior) in [
-        ("range_none_interior", "IROption.none Nat"),
-        ("range_invalid_interior", "IROption.some Nat 256"),
+        ("range_none_interior", "@IROption.none Nat"),
+        ("range_invalid_interior", "@IROption.some Nat 256"),
     ] {
         let bytes = format!(
-            "(fun (address : Nat) => Bool.rec (fun (_ : Bool) => IROption Nat)
-          (IROption.some Nat 1) ({interior}) (ir_nat_eqb address 3))"
+            "(fun (address : Nat) => @Bool.rec (fun (_ : Bool) => IROption Nat)
+          (@IROption.some Nat 1) ({interior}) (ir_nat_eqb address 3))"
         );
         add_checked(
             &mut spec,
             name,
             &format!(
-                "def {name} : Eq (IROption Nat)
-          (ir_byte_read_word_v1 (ir_byte_write_word_v1 {bytes} 8 8 99) 8 0) (IROption.none Nat) :=
-          Eq.trans (IROption Nat)
+                "def {name} : @Eq (IROption Nat)
+          (ir_byte_read_word_v1 (ir_byte_write_word_v1 {bytes} 8 8 99) 8 0) (@IROption.none Nat) :=
+          @Eq.trans (IROption Nat)
             (ir_byte_read_word_v1 (ir_byte_write_word_v1 {bytes} 8 8 99) 8 0)
-            (ir_byte_read_word_v1 {bytes} 8 0) (IROption.none Nat)
-            (range_write_touching {bytes} 0) (Eq.refl (IROption Nat) (IROption.none Nat))"
+            (ir_byte_read_word_v1 {bytes} 8 0) (@IROption.none Nat)
+            (range_write_touching {bytes} 0) (@Eq.refl (IROption Nat) (@IROption.none Nat))"
             ),
         );
     }
@@ -100,10 +100,10 @@ fn byte_range_disjoint_writes_preserve_undefined_and_invalid_bytes() {
         &mut spec,
         "range_zero_width",
         r"def range_zero_width (left right : Nat -> IROption Nat) (base : Nat) :
-      Eq (IROption Nat) (ir_byte_read_word_v1 left 0 base) (ir_byte_read_word_v1 right 0 base) :=
+      @Eq (IROption Nat) (ir_byte_read_word_v1 left 0 base) (ir_byte_read_word_v1 right 0 base) :=
       ir_byte_read_range_congr_v1 left right 0 base
         (fun (offset : Nat) (bad : Nat.lt offset 0) =>
-          False.elim (Eq (IROption Nat) (left (Nat.add base offset)) (right (Nat.add base offset)))
+          @False.elim (@Eq (IROption Nat) (left (Nat.add base offset)) (right (Nat.add base offset)))
             (Nat.not_succ_le_zero offset bad))",
     );
 }
@@ -111,13 +111,13 @@ fn byte_range_disjoint_writes_preserve_undefined_and_invalid_bytes() {
 #[test]
 fn byte_range_rejects_overlap_changed_values_and_missing_bytes() {
     let mut spec = Specification::new_eval_ir_byte_prelude_spec_v1().unwrap();
-    let bytes = "(fun (_ : Nat) => IROption.some Nat 0)";
+    let bytes = "(fun (_ : Nat) => @IROption.some Nat 0)";
     reject(
         &mut spec,
         "range_overlap",
         &format!(
             "def range_overlap :
-      Eq (IROption Nat) (ir_byte_read_word_v1 (ir_byte_write_word_v1 {bytes} 7 8 1) 8 0)
+      @Eq (IROption Nat) (ir_byte_read_word_v1 (ir_byte_write_word_v1 {bytes} 7 8 1) 8 0)
         (ir_byte_read_word_v1 {bytes} 8 0) :=
       ir_byte_read_write_disjoint_v1 {bytes} 0 8 7 8 1
         (@Or.inl (Nat.le 8 7) (Nat.le 15 0) (Nat.le_refl 8))"
@@ -128,8 +128,8 @@ fn byte_range_rejects_overlap_changed_values_and_missing_bytes() {
         "range_changed_read",
         &format!(
             "def range_changed_read :
-      Eq (IROption Nat) (ir_byte_read_word_v1 (ir_byte_write_word_v1 {bytes} 8 8 1) 8 0)
-        (IROption.some Nat 1) :=
+      @Eq (IROption Nat) (ir_byte_read_word_v1 (ir_byte_write_word_v1 {bytes} 8 8 1) 8 0)
+        (@IROption.some Nat 1) :=
       ir_byte_read_write_disjoint_v1 {bytes} 0 8 8 8 1
         (@Or.inl (Nat.le 8 8) (Nat.le 16 0) (Nat.le_refl 8))"
         ),
@@ -138,13 +138,13 @@ fn byte_range_rejects_overlap_changed_values_and_missing_bytes() {
         &mut spec,
         "range_missing_is_not_zero",
         r"def range_missing_is_not_zero :
-      Eq (IROption Nat) (ir_byte_read_word_v1 (fun (_ : Nat) => IROption.none Nat) 8 0)
-        (IROption.some Nat 0) := Eq.refl (IROption Nat) (IROption.some Nat 0)",
+      @Eq (IROption Nat) (ir_byte_read_word_v1 (fun (_ : Nat) => @IROption.none Nat) 8 0)
+        (@IROption.some Nat 0) := @Eq.refl (IROption Nat) (@IROption.some Nat 0)",
     );
 }
 
 fn layout(ty: &str) -> String {
-    format!("(IRByteLayoutV1.mk ({ty}) 8 8 (IRList.nil IRTy) (IRList.nil Nat))")
+    format!("(IRByteLayoutV1.mk ({ty}) 8 8 (@IRList.nil IRTy) (@IRList.nil Nat))")
 }
 
 /// Independent endpoints: four public operations, with both observations of
@@ -229,15 +229,15 @@ fn byte_range_typed_callback_and_capture_share_final_memory() {
           (base fid sig codeAddress predecessor cc : Nat) (imported : Bool)
           (baseBound : Nat.lt base ir_byte_limit_v1)
           (secondBound : Nat.lt (Nat.add base 8) ir_byte_limit_v1)
-          (forward : Eq (IROption IRByteFunctionV1) (ir_byte_function_v1 ctx fid) (IROption.some IRByteFunctionV1 {binding}))
-          (reverse : Eq (IROption IRByteFunctionV1) (ir_byte_function_address_v1 ctx codeAddress) (IROption.some IRByteFunctionV1 {binding}))
+          (forward : @Eq (IROption IRByteFunctionV1) (ir_byte_function_v1 ctx fid) (@IROption.some IRByteFunctionV1 {binding}))
+          (reverse : @Eq (IROption IRByteFunctionV1) (ir_byte_function_address_v1 ctx codeAddress) (@IROption.some IRByteFunctionV1 {binding}))
           (positive : Nat.lt 0 codeAddress) (codeBound : Nat.lt codeAddress ir_byte_limit_v1)
           (captureBound : Nat.lt (Nat.succ predecessor) ir_byte_limit_v1)
-          (functionLayout : Eq (IROption IRByteLayoutV1) (ir_byte_layout_v1 ctx (IRTy.func_ sig)) (IROption.some IRByteLayoutV1 {fl}))
-          (pointerLayout : Eq (IROption IRByteLayoutV1) (ir_byte_layout_v1 ctx IRTy.ptr_) (IROption.some IRByteLayoutV1 {pl}))
-          (firstAccess : Eq Bool (ir_byte_accessible_v1 (ir_byte_mem_allocs_v1 mem) base 8
+          (functionLayout : @Eq (IROption IRByteLayoutV1) (ir_byte_layout_v1 ctx (IRTy.func_ sig)) (@IROption.some IRByteLayoutV1 {fl}))
+          (pointerLayout : @Eq (IROption IRByteLayoutV1) (ir_byte_layout_v1 ctx IRTy.ptr_) (@IROption.some IRByteLayoutV1 {pl}))
+          (firstAccess : @Eq Bool (ir_byte_accessible_v1 (ir_byte_mem_allocs_v1 mem) base 8
             (ir_byte_effective_align_v1 0 (ir_byte_layout_align_v1 {fl}))) Bool.true)
-          (secondAccess : Eq Bool (ir_byte_accessible_v1 (ir_byte_mem_allocs_v1 mem) (Nat.add base 8) 8
+          (secondAccess : @Eq Bool (ir_byte_accessible_v1 (ir_byte_mem_allocs_v1 mem) (Nat.add base 8) 8
             (ir_byte_effective_align_v1 0 (ir_byte_layout_align_v1 {pl}))) Bool.true) :
           {claim} :=
           ir_byte_store_pair_eight_v1 ctx (IRTy.func_ sig) IRTy.ptr_
@@ -260,28 +260,28 @@ fn byte_range_typed_callback_and_capture_share_final_memory() {
         // Inhabited exact catalog/access premises with arbitrary initial bytes.
         // The empty IRModule is only a memory-catalog fixture, not a callable.
         let layouts = format!(
-            "(IRList.cons IRByteLayoutV1 {} (IRList.cons IRByteLayoutV1 {} (IRList.cons IRByteLayoutV1 {} (IRList.nil IRByteLayoutV1))))",
+            "(@IRList.cons IRByteLayoutV1 {} (@IRList.cons IRByteLayoutV1 {} (@IRList.cons IRByteLayoutV1 {} (@IRList.nil IRByteLayoutV1))))",
             layout("IRTy.func_ 17"),
             layout("IRTy.ptr_"),
             layout("IRTy.func_ 18")
         );
         add_checked(&mut spec, "range_capture_ctx", &format!(
             "def range_capture_ctx : IRByteContextV1 := IRByteContextV1.mk
-          (IRModule.mk (IRList.nil IRFunc) (IRList.nil IRGlobal)) {layouts}
-          (IRList.nil IRByteSignatureV1)
-          (IRList.cons IRByteFunctionV1 (IRByteFunctionV1.mk 41 17 4096 1 Bool.false) (IRList.nil IRByteFunctionV1))
-          (IRList.nil IRByteSiteV1)"));
-        let mem = "(IRByteMemoryV1.mk (IRList.cons IRByteAllocationV1 (IRByteAllocationV1.mk 16 16 7 Bool.true) (IRList.nil IRByteAllocationV1)) bytes 33)";
+          (IRModule.mk (@IRList.nil IRFunc) (@IRList.nil IRGlobal)) {layouts}
+          (@IRList.nil IRByteSignatureV1)
+          (@IRList.cons IRByteFunctionV1 (IRByteFunctionV1.mk 41 17 4096 1 Bool.false) (@IRList.nil IRByteFunctionV1))
+          (@IRList.nil IRByteSiteV1)"));
+        let mem = "(IRByteMemoryV1.mk (@IRList.cons IRByteAllocationV1 (IRByteAllocationV1.mk 16 16 7 Bool.true) (@IRList.nil IRByteAllocationV1)) bytes 33)";
         let claim = capture_claim("range_capture_ctx", mem, "16", "41", "17", "4096", "80");
         let proof = format!("range_capture_generic range_capture_ctx {mem} 16 41 17 4096 79 1 Bool.false
           (Nat.le_add_right 17 18446744073709551599) (Nat.le_add_right 25 18446744073709551591)
-          (Eq.refl (IROption IRByteFunctionV1) (IROption.some IRByteFunctionV1 (IRByteFunctionV1.mk 41 17 4096 1 Bool.false)))
-          (Eq.refl (IROption IRByteFunctionV1) (IROption.some IRByteFunctionV1 (IRByteFunctionV1.mk 41 17 4096 1 Bool.false)))
+          (@Eq.refl (IROption IRByteFunctionV1) (@IROption.some IRByteFunctionV1 (IRByteFunctionV1.mk 41 17 4096 1 Bool.false)))
+          (@Eq.refl (IROption IRByteFunctionV1) (@IROption.some IRByteFunctionV1 (IRByteFunctionV1.mk 41 17 4096 1 Bool.false)))
           (Nat.zero_lt_succ 4095) (Nat.le_add_right 4097 18446744073709547519)
           (Nat.le_add_right 81 18446744073709551535)
-          (Eq.refl (IROption IRByteLayoutV1) (IROption.some IRByteLayoutV1 {}))
-          (Eq.refl (IROption IRByteLayoutV1) (IROption.some IRByteLayoutV1 {}))
-          (Eq.refl Bool Bool.true) (Eq.refl Bool Bool.true)", layout("IRTy.func_ 17"), layout("IRTy.ptr_"));
+          (@Eq.refl (IROption IRByteLayoutV1) (@IROption.some IRByteLayoutV1 {}))
+          (@Eq.refl (IROption IRByteLayoutV1) (@IROption.some IRByteLayoutV1 {}))
+          (@Eq.refl Bool Bool.true) (@Eq.refl Bool Bool.true)", layout("IRTy.func_ 17"), layout("IRTy.ptr_"));
         add_checked(
             &mut spec,
             "range_capture_inhabited",
@@ -302,7 +302,7 @@ fn byte_range_typed_callback_and_capture_share_final_memory() {
             "range_capture_wrong_signature_fault",
             &format!(
                 "def range_capture_wrong_signature_fault (bytes : Nat -> IROption Nat) : {} :=
-              Eq.refl IRByteMemoryResultV1 ({fault})",
+              @Eq.refl IRByteMemoryResultV1 ({fault})",
                 equality("IRByteMemoryResultV1", &wrong_load, &fault)
             ),
         );
@@ -311,7 +311,7 @@ fn byte_range_typed_callback_and_capture_share_final_memory() {
             "range_capture_wrong_signature_success",
             &format!(
                 "def range_capture_wrong_signature_success (bytes : Nat -> IROption Nat) : {} :=
-              Eq.refl IRByteMemoryResultV1 ({fault})",
+              @Eq.refl IRByteMemoryResultV1 ({fault})",
                 equality(
                     "IRByteMemoryResultV1",
                     &wrong_load,

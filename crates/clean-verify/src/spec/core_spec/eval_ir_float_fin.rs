@@ -391,7 +391,7 @@ impl Specification {
                  (ir_f64_qf m bp bn) \
                  (ir_nat_ltb (ir_f64_qf m bp bn) {P52})"
             ),
-            "*** THE MAGNITUDE, WITH BOTH BOUNDARIES. *** Bool.rec minor order is (false, true). \
+            "*** THE MAGNITUDE, WITH BOTH BOUNDARIES. *** @Bool.rec minor order is (false, true). \
              The SECOND minor is the subnormal exit — `qf < 2^52` — where the magnitude bits ARE \
              the significand, because a subnormal encodes `ebits = 0` and no hidden bit; and it \
              is reachable only when the left shift was clamped, which forces the scale to zero, \

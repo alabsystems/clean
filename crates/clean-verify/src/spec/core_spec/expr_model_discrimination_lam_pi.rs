@@ -24,7 +24,7 @@ use crate::spec::Specification;
 
 /// Inline KExpr.rec discriminator: non-Lam -> Nat, Lam -> Empty.
 const KEXPR_NOT_LAM_INLINE: &str = concat!(
-    "(KExpr.rec (fun (_ : KExpr) => Type) ",
+    "(@KExpr.rec (fun (_ : KExpr) => Type) ",
     "(fun (_ : Level) => Nat) ",
     "(fun (_ : Nat) => Nat) ",
     "(fun (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) => Nat) ",
@@ -53,7 +53,7 @@ impl Specification {
             type_src: "KExpr -> Type".to_string(),
             value_src: Some(
                 concat!(
-                    "KExpr.rec (fun (_ : KExpr) => Type) ",
+                    "@KExpr.rec (fun (_ : KExpr) => Type) ",
                     "(fun (_ : Level) => Nat) ",
                     "(fun (_ : Nat) => Nat) ",
                     "(fun (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) => Nat) ",
@@ -81,12 +81,12 @@ impl Specification {
         // sort_ne_lam: Sort n ≠ Lam A b
         self.add_definition(SpecDefinition {
             name: "sort_ne_lam".to_string(),
-            type_src: "forall (n : Level) (A : KExpr) (b : KExpr) (R : Type), Eq KExpr (KExpr.sort n) (KExpr.lam A b) -> R".to_string(),
+            type_src: "forall (n : Level) (A : KExpr) (b : KExpr) (R : Type), @Eq KExpr (KExpr.sort n) (KExpr.lam A b) -> R".to_string(),
             value_src: Some(format!(
                 "fun (n : Level) (A : KExpr) (b : KExpr) (R : Type) \
-                 (h : Eq KExpr (KExpr.sort n) (KExpr.lam A b)) => \
-                 Empty.rec (fun (_ : Empty) => R) \
-                 (Eq.substType KExpr {discr} (KExpr.sort n) (KExpr.lam A b) h Nat.zero)",
+                 (h : @Eq KExpr (KExpr.sort n) (KExpr.lam A b)) => \
+                 @Empty.rec (fun (_ : Empty) => R) \
+                 (@Eq.substType KExpr {discr} (KExpr.sort n) (KExpr.lam A b) h Nat.zero)",
                 discr = KEXPR_NOT_LAM_INLINE,
             )),
             is_axiom: false,
@@ -110,12 +110,12 @@ impl Specification {
         // app_ne_lam: App f a ≠ Lam A b
         self.add_definition(SpecDefinition {
             name: "app_ne_lam".to_string(),
-            type_src: "forall (f : KExpr) (a : KExpr) (A : KExpr) (b : KExpr) (R : Type), Eq KExpr (KExpr.app f a) (KExpr.lam A b) -> R".to_string(),
+            type_src: "forall (f : KExpr) (a : KExpr) (A : KExpr) (b : KExpr) (R : Type), @Eq KExpr (KExpr.app f a) (KExpr.lam A b) -> R".to_string(),
             value_src: Some(format!(
                 "fun (f : KExpr) (a : KExpr) (A : KExpr) (b : KExpr) (R : Type) \
-                 (h : Eq KExpr (KExpr.app f a) (KExpr.lam A b)) => \
-                 Empty.rec (fun (_ : Empty) => R) \
-                 (Eq.substType KExpr {discr} (KExpr.app f a) (KExpr.lam A b) h Nat.zero)",
+                 (h : @Eq KExpr (KExpr.app f a) (KExpr.lam A b)) => \
+                 @Empty.rec (fun (_ : Empty) => R) \
+                 (@Eq.substType KExpr {discr} (KExpr.app f a) (KExpr.lam A b) h Nat.zero)",
                 discr = KEXPR_NOT_LAM_INLINE,
             )),
             is_axiom: false,
@@ -135,12 +135,12 @@ impl Specification {
         // pi_ne_lam: Pi A0 B0 ≠ Lam A b
         self.add_definition(SpecDefinition {
             name: "pi_ne_lam".to_string(),
-            type_src: "forall (A0 : KExpr) (B0 : KExpr) (A : KExpr) (b : KExpr) (R : Type), Eq KExpr (KExpr.pi A0 B0) (KExpr.lam A b) -> R".to_string(),
+            type_src: "forall (A0 : KExpr) (B0 : KExpr) (A : KExpr) (b : KExpr) (R : Type), @Eq KExpr (KExpr.pi A0 B0) (KExpr.lam A b) -> R".to_string(),
             value_src: Some(format!(
                 "fun (A0 : KExpr) (B0 : KExpr) (A : KExpr) (b : KExpr) (R : Type) \
-                 (h : Eq KExpr (KExpr.pi A0 B0) (KExpr.lam A b)) => \
-                 Empty.rec (fun (_ : Empty) => R) \
-                 (Eq.substType KExpr {discr} (KExpr.pi A0 B0) (KExpr.lam A b) h Nat.zero)",
+                 (h : @Eq KExpr (KExpr.pi A0 B0) (KExpr.lam A b)) => \
+                 @Empty.rec (fun (_ : Empty) => R) \
+                 (@Eq.substType KExpr {discr} (KExpr.pi A0 B0) (KExpr.lam A b) h Nat.zero)",
                 discr = KEXPR_NOT_LAM_INLINE,
             )),
             is_axiom: false,
@@ -168,7 +168,7 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (e : KExpr) (default : KExpr) => ",
-                    "KExpr.rec (fun (_ : KExpr) => KExpr) ",
+                    "@KExpr.rec (fun (_ : KExpr) => KExpr) ",
                     "(fun (_ : Level) => default) ",
                     "(fun (_ : Nat) => default) ",
                     "(fun (_ : KExpr) (_ : KExpr) (_ : KExpr) (_ : KExpr) => default) ",
@@ -201,7 +201,7 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (e : KExpr) (default : KExpr) => ",
-                    "KExpr.rec (fun (_ : KExpr) => KExpr) ",
+                    "@KExpr.rec (fun (_ : KExpr) => KExpr) ",
                     "(fun (_ : Level) => default) ",
                     "(fun (_ : Nat) => default) ",
                     "(fun (_ : KExpr) (_ : KExpr) (_ : KExpr) (_ : KExpr) => default) ",
@@ -234,12 +234,12 @@ impl Specification {
         // lam_inj_fst: Lam A1 b1 = Lam A2 b2 -> A1 = A2
         self.add_definition(SpecDefinition {
             name: "lam_inj_fst".to_string(),
-            type_src: "forall (A1 : KExpr) (b1 : KExpr) (A2 : KExpr) (b2 : KExpr), Eq KExpr (KExpr.lam A1 b1) (KExpr.lam A2 b2) -> Eq KExpr A1 A2".to_string(),
+            type_src: "forall (A1 : KExpr) (b1 : KExpr) (A2 : KExpr) (b2 : KExpr), @Eq KExpr (KExpr.lam A1 b1) (KExpr.lam A2 b2) -> @Eq KExpr A1 A2".to_string(),
             value_src: Some(
                 "fun (A1 : KExpr) (b1 : KExpr) (A2 : KExpr) (b2 : KExpr) \
-                 (h : Eq KExpr (KExpr.lam A1 b1) (KExpr.lam A2 b2)) => \
-                 Eq.cong KExpr KExpr \
-                 (fun (e : KExpr) => KExpr.rec (fun (_ : KExpr) => KExpr) \
+                 (h : @Eq KExpr (KExpr.lam A1 b1) (KExpr.lam A2 b2)) => \
+                 @Eq.cong KExpr KExpr \
+                 (fun (e : KExpr) => @KExpr.rec (fun (_ : KExpr) => KExpr) \
                    (fun (_ : Level) => A1) \
                    (fun (_ : Nat) => A1) \
                    (fun (_ : KExpr) (_ : KExpr) (_ : KExpr) (_ : KExpr) => A1) \
@@ -269,12 +269,12 @@ impl Specification {
         // lam_inj_snd: Lam A1 b1 = Lam A2 b2 -> b1 = b2
         self.add_definition(SpecDefinition {
             name: "lam_inj_snd".to_string(),
-            type_src: "forall (A1 : KExpr) (b1 : KExpr) (A2 : KExpr) (b2 : KExpr), Eq KExpr (KExpr.lam A1 b1) (KExpr.lam A2 b2) -> Eq KExpr b1 b2".to_string(),
+            type_src: "forall (A1 : KExpr) (b1 : KExpr) (A2 : KExpr) (b2 : KExpr), @Eq KExpr (KExpr.lam A1 b1) (KExpr.lam A2 b2) -> @Eq KExpr b1 b2".to_string(),
             value_src: Some(
                 "fun (A1 : KExpr) (b1 : KExpr) (A2 : KExpr) (b2 : KExpr) \
-                 (h : Eq KExpr (KExpr.lam A1 b1) (KExpr.lam A2 b2)) => \
-                 Eq.cong KExpr KExpr \
-                 (fun (e : KExpr) => KExpr.rec (fun (_ : KExpr) => KExpr) \
+                 (h : @Eq KExpr (KExpr.lam A1 b1) (KExpr.lam A2 b2)) => \
+                 @Eq.cong KExpr KExpr \
+                 (fun (e : KExpr) => @KExpr.rec (fun (_ : KExpr) => KExpr) \
                    (fun (_ : Level) => b1) \
                    (fun (_ : Nat) => b1) \
                    (fun (_ : KExpr) (_ : KExpr) (_ : KExpr) (_ : KExpr) => b1) \

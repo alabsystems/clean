@@ -100,6 +100,10 @@ test-int-division:
 # process before it reports a verdict. Keep this authority lane serial.
 # The two expensive SemR admission/audit replays are ignored in debug builds;
 # the release target below runs all seven controls and keeps them in this lane.
+# The eqsat_rules replay (PKG-U2: trust-cg's e-graph rules over SemR) and the
+# eqsat_decide replay (PKG-U6: the procedure that proves a discovered rule) are
+# ignored the same way; the last two lines run them, under this lane's own
+# profile.
 # Check the cheap native census and full library before expensive imports. The
 # remaining phases preserve every binary, example build/test, integration and doctest;
 # the library is executed once. Integration failures still finish other binaries
@@ -112,6 +116,8 @@ test-olean-pinned:
     {{olean_pinned_env}} targo --unverified test --locked --profile authority --no-fail-fast -p clean-olean --test '*' -- --nocapture --test-threads=1
     {{olean_pinned_env}} targo --unverified test --locked --profile authority --no-fail-fast -p clean-olean --doc -- --nocapture --test-threads=1
     CLEAN_OLEAN_REQUIRE_PINNED_LEAN=1 targo --unverified test --locked --release -p clean-olean --test semr_reference -- --test-threads=1
+    {{olean_pinned_env}} targo --unverified test --locked --profile authority -p clean-olean --test eqsat_rules -- --include-ignored --nocapture --test-threads=1
+    {{olean_pinned_env}} targo --unverified test --locked --profile authority -p clean-olean --test eqsat_decide -- --include-ignored --nocapture --test-threads=1
 
 # Sorry-bypass lint gate (clean-kernel integration test).
 lint-sorry:

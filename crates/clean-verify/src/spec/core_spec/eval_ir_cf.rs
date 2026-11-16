@@ -76,11 +76,11 @@ pub(crate) fn ir_cf_module_defs() -> &'static [&'static str] {
     &MINTED_IR_CF_LINES
 }
 
-const SRC_CF_MACH0: &str = "def ir_cf_mach0 (mem : IRList IRMemSlot) (na : Nat) : IRMachine := IRMachine.mk (IRList.cons IRFrame (IRFrame.mk ir_d0 ir_d0 Nat.zero (ir_bind_params (ir_nl1 ir_d0) (ir_vl1 IRScalar.unit_) (IRList.nil IRBinding)) (IRList.nil Nat)) (IRList.nil IRFrame)) mem na";
+const SRC_CF_MACH0: &str = "def ir_cf_mach0 (mem : IRList IRMemSlot) (na : Nat) : IRMachine := IRMachine.mk (@IRList.cons IRFrame (IRFrame.mk ir_d0 ir_d0 Nat.zero (ir_bind_params (ir_nl1 ir_d0) (ir_vl1 IRScalar.unit_) (@IRList.nil IRBinding)) (@IRList.nil Nat)) (@IRList.nil IRFrame)) mem na";
 
-const SRC_CF_INIT: &str = "def ir_cf_init_is_mach0 (mem : IRList IRMemSlot) (na : Nat) : Eq IRConfig (ir_init ir_cf_module ir_d0 (ir_vl1 IRScalar.unit_) mem na) (IRConfig.running (ir_cf_mach0 mem na)) := Eq.refl IRConfig (IRConfig.running (ir_cf_mach0 mem na))";
+const SRC_CF_INIT: &str = "def ir_cf_init_is_mach0 (mem : IRList IRMemSlot) (na : Nat) : @Eq IRConfig (ir_init ir_cf_module ir_d0 (ir_vl1 IRScalar.unit_) mem na) (IRConfig.running (ir_cf_mach0 mem na)) := @Eq.refl IRConfig (IRConfig.running (ir_cf_mach0 mem na))";
 
-const SRC_CF_RETURNS: &str = "def ir_cf_returns (mem : IRList IRMemSlot) (na : Nat) : Eq Bool (ir_outcome_is_ret (ir_eval ir_d4 ir_cf_module ir_d0 (ir_vl1 IRScalar.unit_) mem na)) Bool.true := Eq.refl Bool Bool.true";
+const SRC_CF_RETURNS: &str = "def ir_cf_returns (mem : IRList IRMemSlot) (na : Nat) : @Eq Bool (ir_outcome_is_ret (ir_eval ir_d4 ir_cf_module ir_d0 (ir_vl1 IRScalar.unit_) mem na)) Bool.true := @Eq.refl Bool Bool.true";
 
 impl Specification {
     /// `ir_cf` — the phantomdata caller.

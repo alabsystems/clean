@@ -58,14 +58,14 @@ def int_env_and_instances():
     for op in I.INT_ORDER:
         if op not in types:  # Int.toNat is Nat-valued and needs no witness in this int-arith env
             continue
-        defenv = '(DefEnv.addDef %s kcre_name_@@%s@@ (KDefSig.mk (KConstSig.mk (ListType.nil Name) %s) %s))' % (
+        defenv = '(DefEnv.addDef %s kcre_name_@@%s@@ (KDefSig.mk (KConstSig.mk (@ListType.nil Name) %s) %s))' % (
             defenv, op, pr(types[op]), I.ibody_const(op))
     recenv = ('(RecEnv.addRec (red_rec kernel_core_red_env) kcre_name_@@Int.rec@@ accepts_tc_int_rec_meta '
               '(RecRules.cons accepts_tc_int_rec_ofnat_rule (RecRules.cons accepts_tc_int_rec_negsucc_rule RecRules.nil)))')
     N.add_def('def accepts_tc_int_fold_env : RedEnv := RedEnv.mk %s %s (red_ind_ctor kernel_core_red_env)' % (recenv, defenv),
               'accepts_tc_int_fold_env')
     env = 'accepts_tc_int_fold_env'
-    refl = lambda ty, v: '(Eq.refl (OptionType %s) (OptionType.some %s %s))' % (ty, ty, v)
+    refl = lambda ty, v: '(@Eq.refl (OptionType %s) (@OptionType.some %s %s))' % (ty, ty, v)
     base = [refl('RecMeta', 'kcre_rec_meta_@@Nat.rec@@'), refl('RecRule', 'accepts_tc_nat_rec_zero_rule'),
             refl('RecRule', 'accepts_tc_nat_rec_succ_rule'), refl('RecMeta', 'accepts_tc_int_rec_meta'),
             refl('RecRule', 'accepts_tc_int_rec_ofnat_rule'), refl('RecRule', 'accepts_tc_int_rec_negsucc_rule')]
@@ -87,7 +87,7 @@ def int_env_and_instances():
     # the predecessor fold, at a large count's shape (a small count here: the lemma is uniform in it)
     z, c = int_payload(3), nat_term(5)
     lhs = N.natrec_app(lam(NAT, INT), I.ilit(z), I.PRED_STEP, lit(c))
-    rhs = I.ilit('(Nat.rec (fun (_ : Nat) => Int) %s (fun (_ : Nat) (ih : Int) => %s) %s)' % (z, I.pred_step_meta('ih'), c))
+    rhs = I.ilit('(@Nat.rec (fun (_ : Nat) => Int) %s (fun (_ : Nat) (ih : Int) => %s) %s)' % (z, I.pred_step_meta('ih'), c))
     ty = 'forall (tenv : KDeclEnv) (G : ListType CtxEntryIn), KernelAcceptsTcIn %s tenv Bool.false G %s %s' % (env, pr(lhs), pr(rhs))
     N.add_thm('accepts_tc_int_pred_fold_instance', ty,
               'fun (tenv : KDeclEnv) (G : ListType CtxEntryIn) => kernel_accepts_tc_in_int_pred_fold %s tenv G %s %s %s' % (env, z, c, ' '.join(base)))
@@ -97,8 +97,8 @@ BW_IN_CORE = ['Nat.add', 'Nat.sub', 'Nat.pred', 'Bool.and']
 
 
 def bw_types():
-    lvp = ('(ListType.cons Level (Level.param kcre_name_@@u@@) (ListType.cons Level (Level.param kcre_name_@@u_1@@) '
-           '(ListType.nil Level)))')
+    lvp = ('(@ListType.cons Level (Level.param kcre_name_@@u@@) (@ListType.cons Level (Level.param kcre_name_@@u_1@@) '
+           '(@ListType.nil Level)))')
     su = ('sort', '(Level.succ (Level.param kcre_name_@@u@@))')
     su1 = ('sort', '(Level.succ (Level.param kcre_name_@@u_1@@))')
     prod = C('Prod', lvp)
@@ -119,25 +119,25 @@ def bw_types():
 
 def bw_env_and_instances(start):
     types = bw_types()
-    two = '(ListType.cons Name kcre_name_@@u@@ (ListType.cons Name kcre_name_@@u_1@@ (ListType.nil Name)))'
+    two = '(@ListType.cons Name kcre_name_@@u@@ (@ListType.cons Name kcre_name_@@u_1@@ (@ListType.nil Name)))'
     defenv = '(red_def accepts_tc_nat_fold_env)'
     for op in B.ORDER:
         if op in BW_IN_CORE:
             continue
-        params = two if op in B.LEVELS else '(ListType.nil Name)'
+        params = two if op in B.LEVELS else '(@ListType.nil Name)'
         defenv = '(DefEnv.addDef %s kcre_name_@@%s@@ (KDefSig.mk (KConstSig.mk %s %s) %s))' % (
             defenv, op, params, pr(types[op]), B.bbody_const(op))
     # the reflected core already holds Bool.and: its entry IS the canonical body
     N.add_thm('accepts_tc_bool_and_body_reflected',
-              'Eq (OptionType KExpr) (kdef_value_at (red_def kernel_core_red_env) kcre_name_@@Bool.and@@ (ListType.nil Level)) (OptionType.some KExpr %s)' % B.bbody_const('Bool.and'),
-              'Eq.refl (OptionType KExpr) (OptionType.some KExpr %s)' % B.bbody_const('Bool.and'))
+              '@Eq (OptionType KExpr) (kdef_value_at (red_def kernel_core_red_env) kcre_name_@@Bool.and@@ (@ListType.nil Level)) (@OptionType.some KExpr %s)' % B.bbody_const('Bool.and'),
+              '@Eq.refl (OptionType KExpr) (@OptionType.some KExpr %s)' % B.bbody_const('Bool.and'))
     cm = '(KCtorMeta.mk (KConstSig.mk %s %s) kcre_name_@@Prod@@ (Nat.succ (Nat.succ Nat.zero)) (Nat.succ (Nat.succ Nat.zero)) Nat.zero)' % (
         two, pr(types['Prod.mk']))
     ind = '(IndCtorEnv.addCtor (red_ind_ctor kernel_core_red_env) kcre_name_@@Prod.mk@@ %s)' % cm
     N.add_def('def accepts_tc_bw_fold_env : RedEnv := RedEnv.mk (red_rec kernel_core_red_env) %s %s' % (defenv, ind),
               'accepts_tc_bw_fold_env')
     env = 'accepts_tc_bw_fold_env'
-    refl = lambda ty, v: '(Eq.refl (OptionType %s) (OptionType.some %s %s))' % (ty, ty, v)
+    refl = lambda ty, v: '(@Eq.refl (OptionType %s) (@OptionType.some %s %s))' % (ty, ty, v)
     for op, args in (('Nat.land', (6, 3)), ('Nat.lor', (5, 2)), ('Nat.xor', (6, 3)), ('Nat.shiftRight', (8, 1))):
         parts = [refl('RecMeta', 'kcre_rec_meta_@@Nat.rec@@'), refl('RecRule', 'accepts_tc_nat_rec_zero_rule'),
                  refl('RecRule', 'accepts_tc_nat_rec_succ_rule')]
@@ -146,7 +146,7 @@ def bw_env_and_instances(start):
             parts += [refl('RecMeta', 'kcre_rec_meta_@@Bool.rec@@'), refl('RecRule', 'accepts_tc_bool_rec_false_rule'),
                       refl('RecRule', 'accepts_tc_bool_rec_true_rule')]
         if 'prod' in nd:
-            parts += [cm, refl('KCtorMeta', cm), '(Eq.refl Nat (Nat.succ (Nat.succ Nat.zero)))']
+            parts += [cm, refl('KCtorMeta', cm), '(@Eq.refl Nat (Nat.succ (Nat.succ Nat.zero)))']
         parts += [refl('KExpr', N.body_const(o) if o in ('Nat.add', 'Nat.sub', 'Nat.pred') else B.bbody_const(o)) for o in clo]
         ns = [nat_term(a) for a in args]
         lhs = app(C(op), *[lit(n) for n in ns])

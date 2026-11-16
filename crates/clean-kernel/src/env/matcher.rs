@@ -4,7 +4,11 @@
 //! Imported match-compiler metadata. This guides frontend reduction only;
 //! it is not a declaration, a proof, or permission to skip kernel checking.
 
-use super::{ConstantKind, EnvExtensionEntry, EnvExtensionEntryData, Environment};
+use super::{
+    ConstantKind, EnvExtensionEntry, EnvExtensionEntryData, Environment,
+    PersistentEnvExtensionState,
+};
+use crate::serde_budget::{with_decode_resource_limits, DecodeResourceLimits};
 use crate::{ExprKind, Name};
 use hashbrown::HashMap;
 use serde::{Deserialize, Serialize};
@@ -91,6 +95,22 @@ const STORAGE_KEY: &str = "Clean.matcherInfo.v1";
 const PAYLOAD_PREFIX: &[u8] = b"Clean.matcherInfo.v1\0";
 const MAX_PAYLOAD_BYTES: usize = 1 << 20;
 const MAX_BINDERS: usize = 100_000;
+/// Every decoded node and nesting level costs at least one payload byte, so
+/// a payload within [`MAX_PAYLOAD_BYTES`] cannot exhaust this budget.
+const PAYLOAD_DECODE_LIMITS: DecodeResourceLimits = DecodeResourceLimits {
+    max_nodes: MAX_PAYLOAD_BYTES,
+    max_depth: MAX_PAYLOAD_BYTES,
+};
+
+fn storage_key() -> Name {
+    Name::from_string(STORAGE_KEY)
+}
+
+/// Whether `extension` is the persistent extension that stores matcher
+/// metadata, the storage [`MatcherIndex`] is derived from.
+pub(super) fn is_matcher_storage(extension: &Name) -> bool {
+    *extension == storage_key()
+}
 
 fn decode_entry(entry: &EnvExtensionEntry) -> Option<MatcherInfo> {
     let EnvExtensionEntryData::Object(bytes) = &entry.data else {
@@ -100,7 +120,12 @@ fn decode_entry(entry: &EnvExtensionEntry) -> Option<MatcherInfo> {
         return None;
     }
     let payload = bytes.strip_prefix(PAYLOAD_PREFIX)?;
-    let value: MatcherInfo = serde_json::from_slice(payload).ok()?;
+    // A decode is a function of these bytes alone. Its own budget scope keeps
+    // an enclosing one (a restore that runs inside a bounded decode) from
+    // counting it or changing its answer.
+    let value: MatcherInfo = with_decode_resource_limits(PAYLOAD_DECODE_LIMITS, || {
+        serde_json::from_slice(payload).ok()
+    })?;
     if serde_json::to_vec(&value).ok()?.as_slice() != payload {
         return None;
     }
@@ -108,8 +133,54 @@ fn decode_entry(entry: &EnvExtensionEntry) -> Option<MatcherInfo> {
     Some(value)
 }
 
-// These declaration-independent checks run at admission or cache decoding,
-// never once per simplifier lookup. Cached values are borrowed immutably.
+/// The decoded matcher storage, by constant name: `Some(info)` when every
+/// stored entry for the name decodes to `info`, `None` when any of them is
+/// malformed or two disagree.
+///
+/// Plain data, never a lazily filled cell: the trusted kernel's
+/// `Environment` holds no interior mutability for a frontend-only index
+/// (`docs/DECISIONS.md`, 2026-11-14). It equals [`MatcherIndex::decode`] of
+/// the storage at all times: each append updates it
+/// ([`Environment::index_matcher_entries`]), a removal by name drops the
+/// name's row, and a fact delta that replaces the storage and every restore
+/// (serde and the DAG carrier, which leave it at its default) re-derive it
+/// ([`Environment::rebuild_matcher_index`]). Never serialized: the entries are
+/// the persisted form.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(super) struct MatcherIndex(HashMap<Name, Option<MatcherInfo>>);
+
+impl MatcherIndex {
+    /// Fold one stored entry in. A name ends at `Some(info)` exactly when
+    /// every entry for it decodes to `info`, whatever order the entries come
+    /// in, so an append at any module index keeps the index equal to a
+    /// decode of the whole storage.
+    fn absorb(&mut self, entry: &EnvExtensionEntry) {
+        let decoded = decode_entry(entry);
+        self.0
+            .entry(entry.name.clone())
+            .and_modify(|previous| {
+                if previous != &decoded {
+                    *previous = None;
+                }
+            })
+            .or_insert(decoded);
+    }
+
+    /// Decode a whole storage state.
+    pub(super) fn decode(storage: Option<&PersistentEnvExtensionState>) -> Self {
+        let mut index = Self::default();
+        for entry in storage
+            .into_iter()
+            .flat_map(|state| state.imported_entries.iter().flatten())
+        {
+            index.absorb(entry);
+        }
+        index
+    }
+}
+
+// These declaration-independent checks run at admission or index decoding,
+// never once per simplifier lookup. Indexed values are borrowed immutably.
 fn validate_details(info: &MatcherInfo) -> Result<(), &'static str> {
     if let Some(details) = &info.details {
         let equations = u32::try_from(info.discr_names.iter().filter(|n| n.is_some()).count())
@@ -207,10 +278,7 @@ impl Environment {
             .ok_or("matcher definition is absent")?;
         validate_info(declaration, &info)?;
         validate_details(&info)?;
-        let table = self
-            .matcher_info
-            .get_or_init(|| self.decode_matcher_storage());
-        if let Some(previous) = table.get(&name) {
+        if let Some(previous) = self.matcher_info.0.get(&name) {
             return if previous.as_ref() == Some(&info) {
                 Ok(())
             } else {
@@ -224,11 +292,8 @@ impl Environment {
         }
         let mut bytes = PAYLOAD_PREFIX.to_vec();
         bytes.extend(payload);
-        // Carry the derived index across this validated append. Generic raw
-        // imports still invalidate it in add_persistent_extension_entries.
-        let mut table = self.matcher_info.take().expect("lookup initialized above");
-        table.insert(name.clone(), Some(info));
-        let key = Name::from_string(STORAGE_KEY);
+        // The append indexes the entry like any other: it decodes to `info`.
+        let key = storage_key();
         self.register_persistent_extension(key.clone());
         self.add_persistent_extension_entries(
             &key,
@@ -238,50 +303,50 @@ impl Environment {
                 data: EnvExtensionEntryData::Object(bytes),
             }],
         );
-        *self.matcher_info = std::sync::OnceLock::from(table);
         self.generation += 1;
         Ok(())
     }
 
     /// Read metadata explicitly registered for this exact constant name.
     pub fn get_matcher_info(&self, name: &Name) -> Option<&MatcherInfo> {
-        let table = self
-            .matcher_info
-            .get_or_init(|| self.decode_matcher_storage());
-        let info = table.get(name)?.as_ref()?;
+        let info = self.matcher_info.0.get(name)?.as_ref()?;
         let declaration = self.get_const(name)?;
         validate_info(declaration, info).ok()?;
         Some(info)
     }
 
-    fn decode_matcher_storage(&self) -> HashMap<Name, Option<MatcherInfo>> {
-        let mut table = HashMap::new();
-        if let Some(entries) = self.get_persistent_extension_state(&Name::from_string(STORAGE_KEY))
-        {
-            for entry in entries.imported_entries.iter().flatten() {
-                let decoded = decode_entry(entry);
-                table
-                    .entry(entry.name.clone())
-                    .and_modify(|previous| {
-                        if previous != &decoded {
-                            *previous = None;
-                        }
-                    })
-                    .or_insert(decoded);
+    /// Keep the index equal to its storage across an append of `entries` to
+    /// the persistent extension `extension`. Every append funnels through
+    /// [`Environment::add_persistent_extension_entries`], which calls this.
+    pub(super) fn index_matcher_entries(
+        &mut self,
+        extension: &Name,
+        entries: &[EnvExtensionEntry],
+    ) {
+        if is_matcher_storage(extension) {
+            for entry in entries {
+                self.matcher_info.absorb(entry);
             }
         }
-        table
+    }
+
+    /// Re-derive the index from its storage: after a restore, which leaves
+    /// it at its default, and after a fact delta that replaced the storage.
+    pub(super) fn rebuild_matcher_index(&mut self) {
+        self.matcher_info = MatcherIndex::decode(self.persistent_extensions.get(&storage_key()));
     }
 
     pub(super) fn forget_matcher_info(&mut self, name: &Name) {
-        if let Some(entries) = self
-            .persistent_extensions
-            .get_mut(&Name::from_string(STORAGE_KEY))
-        {
+        if let Some(entries) = self.persistent_extensions.get_mut(&storage_key()) {
             for module in &mut entries.imported_entries {
                 module.retain(|entry| &entry.name != name);
             }
         }
-        self.matcher_info.take();
+        // No stored entry for `name` is left, so a decode has no row for it.
+        self.matcher_info.0.remove(name);
     }
 }
+
+#[cfg(test)]
+#[path = "matcher_tests.rs"]
+mod tests;

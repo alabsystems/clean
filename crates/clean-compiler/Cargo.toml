@@ -44,8 +44,8 @@ bincode = { version = "1.3", optional = true }
 # same-named features. The
 # `binary` feature enables the binary IR serializer used to emit artifacts and
 # round-trip in tests.
-trust-ir = { git = "https://github.com/alabsystems/trust-ir.git", rev = "a98dfbbe7f0b7ee8c60f2ee7c2cfd641ba850b87", optional = true, features = ["binary"] }
-trust-ir-build = { git = "https://github.com/alabsystems/trust-ir.git", rev = "a98dfbbe7f0b7ee8c60f2ee7c2cfd641ba850b87", optional = true, features = ["binary"] }
+trust-ir = { git = "https://github.com/alabsystems/trust-ir.git", rev = "8bae728257b123d6394b2dc049b3573ad885049f", optional = true, features = ["binary"] }
+trust-ir-build = { git = "https://github.com/alabsystems/trust-ir.git", rev = "8bae728257b123d6394b2dc049b3573ad885049f", optional = true, features = ["binary"] }
 # Versioned lowering-target conformance-subset checker (trust-ir
 # `docs/lowering-target-subset.md`, subset v1). The library target is
 # sanctioned for dep-light producer self-gates with `default-features = false`:
@@ -53,7 +53,7 @@ trust-ir-build = { git = "https://github.com/alabsystems/trust-ir.git", rev = "a
 # corpus features off this adds NO deps beyond the trust-ir/trust-ir-build
 # Git deps above. The backend's finalization gate and the emit_trust_ir test
 # suite both self-gate on it (trust-ir producer notes, ratified 2026-07-04).
-trust-ir-conformance = { git = "https://github.com/alabsystems/trust-ir.git", rev = "a98dfbbe7f0b7ee8c60f2ee7c2cfd641ba850b87", optional = true, default-features = false }
+trust-ir-conformance = { git = "https://github.com/alabsystems/trust-ir.git", rev = "8bae728257b123d6394b2dc049b3573ad885049f", optional = true, default-features = false }
 # Fragment-2 expression denotation (clean-reflect::denote): the shared
 # Nat-mod-2^w vocabulary under the backend semantics-preservation certificate
 # (`emit_trust_ir_tv`). Optional — only the trust-ir backend mints TV certs.

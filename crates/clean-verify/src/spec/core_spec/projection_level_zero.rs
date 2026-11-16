@@ -45,33 +45,33 @@ const DECLARATIONS: &[(&str, &str, &str)] = &[
     (
         "imaxNat_zero_right",
         r"forall (a : Nat) (b : Nat),
- Eq Nat (imaxNat a b) Nat.zero -> Eq Nat b Nat.zero",
+ @Eq Nat (imaxNat a b) Nat.zero -> @Eq Nat b Nat.zero",
         r"fun (a : Nat) (b : Nat) =>
- Nat.rec (fun (b0 : Nat) => Eq Nat (imaxNat a b0) Nat.zero -> Eq Nat b0 Nat.zero)
-  (fun (_h : Eq Nat (imaxNat a Nat.zero) Nat.zero) => Eq.refl Nat Nat.zero)
-  (fun (k : Nat) (_ih : Eq Nat (imaxNat a k) Nat.zero -> Eq Nat k Nat.zero)
-    (h : Eq Nat (imaxNat a (Nat.succ k)) Nat.zero) =>
+ @Nat.rec (fun (b0 : Nat) => @Eq Nat (imaxNat a b0) Nat.zero -> @Eq Nat b0 Nat.zero)
+  (fun (_h : @Eq Nat (imaxNat a Nat.zero) Nat.zero) => @Eq.refl Nat Nat.zero)
+  (fun (k : Nat) (_ih : @Eq Nat (imaxNat a k) Nat.zero -> @Eq Nat k Nat.zero)
+    (h : @Eq Nat (imaxNat a (Nat.succ k)) Nat.zero) =>
     le_zero_eq_zero (Nat.succ k) (natMax a (Nat.succ k))
       (ugeq_natMax_right a (Nat.succ k)) h) b",
     ),
     (
         "level_is_zero_of_evalL_ones",
         r"forall (l : Level),
- Eq Nat (evalL level_zero_ones l) Nat.zero -> Eq Bool (level_is_zero l) Bool.true",
+ @Eq Nat (evalL level_zero_ones l) Nat.zero -> @Eq Bool (level_is_zero l) Bool.true",
         r"fun (l : Level) =>
- Level.rec (fun (l0 : Level) => Eq Nat (evalL level_zero_ones l0) Nat.zero ->
-   Eq Bool (level_is_zero l0) Bool.true)
-  (fun (_h : Eq Nat (evalL level_zero_ones Level.zero) Nat.zero) => Eq.refl Bool Bool.true)
-  (fun (a : Level) (_ih : Eq Nat (evalL level_zero_ones a) Nat.zero ->
-      Eq Bool (level_is_zero a) Bool.true)
-    (h : Eq Nat (evalL level_zero_ones (Level.succ a)) Nat.zero) =>
+ @Level.rec (fun (l0 : Level) => @Eq Nat (evalL level_zero_ones l0) Nat.zero ->
+   @Eq Bool (level_is_zero l0) Bool.true)
+  (fun (_h : @Eq Nat (evalL level_zero_ones Level.zero) Nat.zero) => @Eq.refl Bool Bool.true)
+  (fun (a : Level) (_ih : @Eq Nat (evalL level_zero_ones a) Nat.zero ->
+      @Eq Bool (level_is_zero a) Bool.true)
+    (h : @Eq Nat (evalL level_zero_ones (Level.succ a)) Nat.zero) =>
     nat_zero_ne_succ_prop (evalL level_zero_ones a)
-      (Eq Bool (level_is_zero (Level.succ a)) Bool.true)
+      (@Eq Bool (level_is_zero (Level.succ a)) Bool.true)
       (Eq.symm Nat (Nat.succ (evalL level_zero_ones a)) Nat.zero h))
   (fun (a : Level) (b : Level)
-    (iha : Eq Nat (evalL level_zero_ones a) Nat.zero -> Eq Bool (level_is_zero a) Bool.true)
-    (ihb : Eq Nat (evalL level_zero_ones b) Nat.zero -> Eq Bool (level_is_zero b) Bool.true)
-    (h : Eq Nat (evalL level_zero_ones (Level.max a b)) Nat.zero) =>
+    (iha : @Eq Nat (evalL level_zero_ones a) Nat.zero -> @Eq Bool (level_is_zero a) Bool.true)
+    (ihb : @Eq Nat (evalL level_zero_ones b) Nat.zero -> @Eq Bool (level_is_zero b) Bool.true)
+    (h : @Eq Nat (evalL level_zero_ones (Level.max a b)) Nat.zero) =>
     Eq.trans Bool (Bool.and (level_is_zero a) (level_is_zero b))
       (Bool.and Bool.true (level_is_zero b)) Bool.true
       (Eq.cong Bool Bool (fun (x : Bool) => Bool.and x (level_is_zero b))
@@ -83,28 +83,28 @@ const DECLARATIONS: &[(&str, &str, &str)] = &[
         (natMax (evalL level_zero_ones a) (evalL level_zero_ones b))
         (ugeq_natMax_right (evalL level_zero_ones a) (evalL level_zero_ones b)) h)))
   (fun (a : Level) (b : Level)
-    (_iha : Eq Nat (evalL level_zero_ones a) Nat.zero -> Eq Bool (level_is_zero a) Bool.true)
-    (ihb : Eq Nat (evalL level_zero_ones b) Nat.zero -> Eq Bool (level_is_zero b) Bool.true)
-    (h : Eq Nat (evalL level_zero_ones (Level.imax a b)) Nat.zero) =>
+    (_iha : @Eq Nat (evalL level_zero_ones a) Nat.zero -> @Eq Bool (level_is_zero a) Bool.true)
+    (ihb : @Eq Nat (evalL level_zero_ones b) Nat.zero -> @Eq Bool (level_is_zero b) Bool.true)
+    (h : @Eq Nat (evalL level_zero_ones (Level.imax a b)) Nat.zero) =>
     ihb (imaxNat_zero_right (evalL level_zero_ones a) (evalL level_zero_ones b) h))
-  (fun (n : Name) (h : Eq Nat (evalL level_zero_ones (Level.param n)) Nat.zero) =>
-    nat_zero_ne_succ_prop Nat.zero (Eq Bool (level_is_zero (Level.param n)) Bool.true)
+  (fun (n : Name) (h : @Eq Nat (evalL level_zero_ones (Level.param n)) Nat.zero) =>
+    nat_zero_ne_succ_prop Nat.zero (@Eq Bool (level_is_zero (Level.param n)) Bool.true)
       (Eq.symm Nat (Nat.succ Nat.zero) Nat.zero h)) l",
     ),
     (
         "level_is_zero_evalL_reflect",
         r"forall (l : Level) (zero : levelEqSem l Level.zero),
- Eq Bool (level_is_zero l) Bool.true",
+ @Eq Bool (level_is_zero l) Bool.true",
         r"fun (l : Level) (zero : levelEqSem l Level.zero) =>
  level_is_zero_of_evalL_ones l (zero level_zero_ones)",
     ),
     (
         "level_is_zero_substL_true",
         r"forall (s : Name -> Level) (l : Level)
- (zero : Eq Bool (level_is_zero l) Bool.true),
- Eq Bool (level_is_zero (substL s l)) Bool.true",
+ (zero : @Eq Bool (level_is_zero l) Bool.true),
+ @Eq Bool (level_is_zero (substL s l)) Bool.true",
         r"fun (s : Name -> Level) (l : Level)
- (zero : Eq Bool (level_is_zero l) Bool.true) =>
+ (zero : @Eq Bool (level_is_zero l) Bool.true) =>
  level_is_zero_evalL_reflect (substL s l) (fun (rho : Name -> Nat) =>
   Eq.trans Nat (evalL rho (substL s l))
    (evalL (fun (n : Name) => evalL rho (s n)) l) Nat.zero
@@ -115,27 +115,27 @@ const DECLARATIONS: &[(&str, &str, &str)] = &[
         "projection_bound_instantiated_bool_zero",
         r"forall (s : Name -> Level)
  (field : Level) (result : Level) (bound : levelLeqSem field result)
- (zero : Eq Bool (level_is_zero (substL s result)) Bool.true),
- Eq Bool (level_is_zero (substL s field)) Bool.true",
+ (zero : @Eq Bool (level_is_zero (substL s result)) Bool.true),
+ @Eq Bool (level_is_zero (substL s field)) Bool.true",
         r"fun (s : Name -> Level)
  (field : Level) (result : Level) (bound : levelLeqSem field result)
- (zero : Eq Bool (level_is_zero (substL s result)) Bool.true) =>
+ (zero : @Eq Bool (level_is_zero (substL s result)) Bool.true) =>
  level_is_zero_evalL_reflect (substL s field)
   (projection_bound_instantiated_zero s field result bound
     (ugeq_level_zero (substL s result) zero))",
     ),
     (
         "level_zero_nested_imax_caller",
-        r"Eq Bool (level_is_zero (Level.imax (Level.param Name.anonymous)
+        r"@Eq Bool (level_is_zero (Level.imax (Level.param Name.anonymous)
   (Level.max Level.zero Level.zero))) Bool.true",
         r"level_is_zero_evalL_reflect
   (Level.imax (Level.param Name.anonymous) (Level.max Level.zero Level.zero))
-  (fun (_rho : Name -> Nat) => Eq.refl Nat Nat.zero)",
+  (fun (_rho : Name -> Nat) => @Eq.refl Nat Nat.zero)",
     ),
     (
         "level_zero_substitution_caller",
         r"forall (s : Name -> Level),
- Eq Bool (level_is_zero (substL s (Level.imax (Level.param Name.anonymous)
+ @Eq Bool (level_is_zero (substL s (Level.imax (Level.param Name.anonymous)
   (Level.max Level.zero Level.zero)))) Bool.true",
         r"fun (s : Name -> Level) =>
  level_is_zero_substL_true s
@@ -144,31 +144,31 @@ const DECLARATIONS: &[(&str, &str, &str)] = &[
     ),
     (
         "level_zero_parameter_before",
-        r"Eq Bool (level_is_zero (Level.param Name.anonymous)) Bool.false",
-        r"Eq.refl Bool Bool.false",
+        r"@Eq Bool (level_is_zero (Level.param Name.anonymous)) Bool.false",
+        r"@Eq.refl Bool Bool.false",
     ),
     (
         "level_zero_parameter_after",
-        r"Eq Bool (level_is_zero (substL (fun (_n : Name) => Level.zero)
+        r"@Eq Bool (level_is_zero (substL (fun (_n : Name) => Level.zero)
   (Level.param Name.anonymous))) Bool.true",
-        r"Eq.refl Bool Bool.true",
+        r"@Eq.refl Bool Bool.true",
     ),
     (
         "level_zero_false_preservation_refuted",
         r"forall (preserved : forall (s : Name -> Level) (l : Level),
-  Eq Bool (level_is_zero l) Bool.false ->
-  Eq Bool (level_is_zero (substL s l)) Bool.false),
+  @Eq Bool (level_is_zero l) Bool.false ->
+  @Eq Bool (level_is_zero (substL s l)) Bool.false),
  Empty",
         r"fun (preserved : forall (s : Name -> Level) (l : Level),
-  Eq Bool (level_is_zero l) Bool.false ->
-  Eq Bool (level_is_zero (substL s l)) Bool.false) =>
+  @Eq Bool (level_is_zero l) Bool.false ->
+  @Eq Bool (level_is_zero (substL s l)) Bool.false) =>
  bool_false_ne_true_t Empty (Eq.symm Bool Bool.true Bool.false
   (preserved (fun (_n : Name) => Level.zero) (Level.param Name.anonymous)
     level_zero_parameter_before))",
     ),
     (
         "level_zero_bound_parameter_caller",
-        r"Eq Bool (level_is_zero (substL (fun (_n : Name) => Level.zero)
+        r"@Eq Bool (level_is_zero (substL (fun (_n : Name) => Level.zero)
   (Level.param Name.anonymous))) Bool.true",
         r"projection_bound_instantiated_bool_zero (fun (_n : Name) => Level.zero)
   (Level.param Name.anonymous) (Level.param Name.anonymous)
@@ -225,16 +225,16 @@ mod tests {
 
     const REFUSALS: &[&str] = &[
         r"def level_zero_forged_false_preserved :
- Eq Bool (level_is_zero (substL (fun (_n : Name) => Level.zero)
-  (Level.param Name.anonymous))) Bool.false := Eq.refl Bool Bool.false",
+ @Eq Bool (level_is_zero (substL (fun (_n : Name) => Level.zero)
+  (Level.param Name.anonymous))) Bool.false := @Eq.refl Bool Bool.false",
         r"def level_zero_forged_imax_left_only :
- Eq Bool (level_is_zero (Level.imax Level.zero (Level.succ Level.zero))) Bool.true :=
+ @Eq Bool (level_is_zero (Level.imax Level.zero (Level.succ Level.zero))) Bool.true :=
  level_is_zero_evalL_reflect (Level.imax Level.zero (Level.succ Level.zero))
-  (fun (_rho : Name -> Nat) => Eq.refl Nat Nat.zero)",
+  (fun (_rho : Name -> Nat) => @Eq.refl Nat Nat.zero)",
         r"def level_zero_forged_zero_valuation :
- Eq Bool (level_is_zero (Level.param Name.anonymous)) Bool.true :=
+ @Eq Bool (level_is_zero (Level.param Name.anonymous)) Bool.true :=
  level_is_zero_of_evalL_ones (Level.param Name.anonymous)
-  (Eq.refl Nat (evalL (fun (_n : Name) => Nat.zero) (Level.param Name.anonymous)))",
+  (@Eq.refl Nat (evalL (fun (_n : Name) => Nat.zero) (Level.param Name.anonymous)))",
     ];
 
     #[test]
@@ -361,7 +361,7 @@ mod tests {
                 ConstantKind::Opaque
             );
             let error = spec.add_recursive_def(
-                "def opaque_level_zero_ones_forged (n : Name) : Eq Nat (opaque_level_zero_ones n) (Nat.succ Nat.zero) := Eq.refl Nat (Nat.succ Nat.zero)",
+                "def opaque_level_zero_ones_forged (n : Name) : @Eq Nat (opaque_level_zero_ones n) (Nat.succ Nat.zero) := @Eq.refl Nat (Nat.succ Nat.zero)",
                 "An opaque valuation must not be unfolded by definitional equality.",
             ).expect_err("old opaque data registration cannot support this computation");
             assert!(format!("{error:?}").contains("Type mismatch"), "{error:?}");
@@ -388,7 +388,7 @@ mod tests {
                 ConstantKind::Definition
             );
             spec.add_recursive_def(
-                "def transparent_level_zero_ones_computes (n : Name) : Eq Nat (level_zero_ones n) (Nat.succ Nat.zero) := Eq.refl Nat (Nat.succ Nat.zero)",
+                "def transparent_level_zero_ones_computes (n : Name) : @Eq Nat (level_zero_ones n) (Nat.succ Nat.zero) := @Eq.refl Nat (Nat.succ Nat.zero)",
                 "Actual symbolic valuation computation after transparent registration.",
             ).expect("transparent symbolic computation");
             spec.verify_definition("transparent_level_zero_ones_computes")

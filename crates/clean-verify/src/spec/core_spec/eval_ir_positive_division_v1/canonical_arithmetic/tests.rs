@@ -98,7 +98,7 @@ fn composition_actual_last_false_source_refuses_and_original_owner_remains_retry
     crate::test_utils::run_with_stack(|| {
         let base = crate::eval_ir::build_byte_prelude_spec_v1_with_stack().unwrap();
         const LAST: &str = "ir_byte_icmp_int_uge_canonical_v1";
-        const FALSE: &str = "def ir_byte_icmp_int_uge_canonical_v1 : Eq Bool Bool.true Bool.false := Eq.refl Bool Bool.false";
+        const FALSE: &str = "def ir_byte_icmp_int_uge_canonical_v1 : @Eq Bool Bool.true Bool.false := @Eq.refl Bool Bool.false";
         assert_eq!(rows().last().unwrap().0, LAST);
         let declarations =
             rows().map(|(name, source)| (name, if name == LAST { FALSE } else { source }));

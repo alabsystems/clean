@@ -16,7 +16,10 @@ use crate::ir::{CtorInfo, IRArg, IRBody, IRExpr, IRType, VarId};
 use crate::lcnf::{Arg, Code, LetDecl, LetValue};
 use crate::rc::pseudo_op;
 use clean_kernel::name::NameInner;
-use clean_kernel::{Expr, ExprKind, FVarId, Name};
+use clean_kernel::{FVarId, Name};
+
+mod args;
+use args::{expect_ctor_name_arg, expect_fvar_arg, expect_index_arg, require_runtime_var};
 
 /// Convert an L5CNF LetDecl to IRBody.
 pub(super) fn lower_let(
@@ -73,6 +76,14 @@ pub(super) fn lower_let(
     if let LetValue::FVar { fvar, args } = &decl.value {
         if args.is_empty() {
             let source = state.get_var(*fvar)?;
+            // RC insertion reasons about the alias's source type, while this
+            // representation-preserving rename keeps the original IR variable.
+            // If that variable is still boxed, its scalar alias did not get
+            // LCNF drops on unused branches. Preserve the scalar binder evidence
+            // for post-boxing repair even though there is no new VDecl.
+            if let IRArg::Var(var) = source {
+                state.note_lcnf_binder_type(var, &decl.ty);
+            }
             state.bind_alias(decl.fvar_id, source);
             return lower_code(body, state);
         }
@@ -928,70 +939,5 @@ fn lower_reset_reuse_op(
             op: name.clone(),
             detail: "unsupported reset/reuse pseudo-op",
         })
-    }
-}
-
-fn expect_fvar_arg(
-    args: &[Arg],
-    index: usize,
-    op: &Name,
-    detail: &'static str,
-) -> Result<FVarId, CompilerError> {
-    match args.get(index) {
-        Some(Arg::FVar(fvar)) => Ok(*fvar),
-        _ => Err(CompilerError::MalformedPseudoOp {
-            op: op.clone(),
-            detail,
-        }),
-    }
-}
-
-fn expect_index_arg(
-    args: &[Arg],
-    index: usize,
-    op: &Name,
-    detail: &'static str,
-) -> Result<u32, CompilerError> {
-    match args.get(index) {
-        Some(Arg::Index(idx)) => Ok(*idx),
-        _ => Err(CompilerError::MalformedPseudoOp {
-            op: op.clone(),
-            detail,
-        }),
-    }
-}
-
-fn expect_ctor_name_arg(args: &[Arg], index: usize, op: &Name) -> Result<Name, CompilerError> {
-    let Some(Arg::Type(expr)) = args.get(index) else {
-        return Err(CompilerError::MalformedPseudoOp {
-            op: op.clone(),
-            detail: "expected constructor type argument",
-        });
-    };
-    ctor_name_from_expr(expr).ok_or_else(|| CompilerError::MalformedPseudoOp {
-        op: op.clone(),
-        detail: "constructor type argument must be a constant head",
-    })
-}
-
-fn ctor_name_from_expr(expr: &Expr) -> Option<Name> {
-    match expr.strip_mdata().get_app_fn().kind() {
-        ExprKind::Const(name, _) => Some(name.clone()),
-        _ => None,
-    }
-}
-
-fn require_runtime_var(
-    state: &ToIRState,
-    fvar: FVarId,
-    op: &Name,
-    detail: &'static str,
-) -> Result<VarId, CompilerError> {
-    match state.get_var(fvar)? {
-        IRArg::Var(var) => Ok(var),
-        IRArg::Erased => Err(CompilerError::MalformedPseudoOp {
-            op: op.clone(),
-            detail,
-        }),
     }
 }

@@ -56,8 +56,8 @@ use crate::spec::Specification;
 /// head. The δ analogue of `DISJOINT_FACT` (rec_env_closed.rs).
 const REC_DEF_DISJOINT_FACT: &str = concat!(
     "forall (dname : Name) (val : KExpr), ",
-    "Eq (OptionType KExpr) (defval_for (red_def env) dname) (OptionType.some KExpr val) -> ",
-    "Eq (OptionType RecMeta) (recmeta_for (red_rec env) dname) (OptionType.none RecMeta)"
+    "@Eq (OptionType KExpr) (defval_for (red_def env) dname) (@OptionType.some KExpr val) -> ",
+    "@Eq (OptionType RecMeta) (recmeta_for (red_rec env) dname) (@OptionType.none RecMeta)"
 );
 
 impl Specification {
@@ -88,18 +88,18 @@ impl Specification {
 
         // red_rec: project the RecEnv component (large elimination into Type).
         self.add_recursive_def(
-            r"def red_rec (env : RedEnv) : RecEnv := RedEnv.rec (fun (_ : RedEnv) => RecEnv) (fun (r : RecEnv) (d : DefEnv) (ic : IndCtorEnv) => r) env",
+            r"def red_rec (env : RedEnv) : RecEnv := @RedEnv.rec (fun (_ : RedEnv) => RecEnv) (fun (r : RecEnv) (d : DefEnv) (ic : IndCtorEnv) => r) env",
             "Project the recursor-environment component of a RedEnv. Part of #2859 (Increment H).",
         )?;
 
         // red_def: project the DefEnv component.
         self.add_recursive_def(
-            r"def red_def (env : RedEnv) : DefEnv := RedEnv.rec (fun (_ : RedEnv) => DefEnv) (fun (r : RecEnv) (d : DefEnv) (ic : IndCtorEnv) => d) env",
+            r"def red_def (env : RedEnv) : DefEnv := @RedEnv.rec (fun (_ : RedEnv) => DefEnv) (fun (r : RecEnv) (d : DefEnv) (ic : IndCtorEnv) => d) env",
             "Project the definition-environment component of a RedEnv. Part of #2859 (Increment H).",
         )?;
 
         self.add_recursive_def(
-            r"def red_ind_ctor (env : RedEnv) : IndCtorEnv := RedEnv.rec (fun (_ : RedEnv) => IndCtorEnv) (fun (r : RecEnv) (d : DefEnv) (ic : IndCtorEnv) => ic) env",
+            r"def red_ind_ctor (env : RedEnv) : IndCtorEnv := @RedEnv.rec (fun (_ : RedEnv) => IndCtorEnv) (fun (r : RecEnv) (d : DefEnv) (ic : IndCtorEnv) => ic) env",
             "Project the stored inductive/constructor table from the same environment used by reduction and inference.",
         )?;
 
@@ -136,16 +136,16 @@ impl Specification {
             name: "recenv_defenv_disjoint_recmeta".to_string(),
             type_src: "forall (env : RedEnv) (dname : Name) (val : KExpr), \
                  RecEnvDefEnvDisjoint env -> \
-                 Eq (OptionType KExpr) (defval_for (red_def env) dname) (OptionType.some KExpr val) -> \
-                 Eq (OptionType RecMeta) (recmeta_for (red_rec env) dname) (OptionType.none RecMeta)"
+                 @Eq (OptionType KExpr) (defval_for (red_def env) dname) (@OptionType.some KExpr val) -> \
+                 @Eq (OptionType RecMeta) (recmeta_for (red_rec env) dname) (@OptionType.none RecMeta)"
                 .to_string(),
             value_src: Some(format!(
                 "fun (env : RedEnv) (dname : Name) (val : KExpr) \
                  (w : RecEnvDefEnvDisjoint env) \
-                 (hlk : Eq (OptionType KExpr) (defval_for (red_def env) dname) (OptionType.some KExpr val)) => \
-                 RecEnvDefEnvDisjoint.rec env \
+                 (hlk : @Eq (OptionType KExpr) (defval_for (red_def env) dname) (@OptionType.some KExpr val)) => \
+                 @RecEnvDefEnvDisjoint.rec env \
                  (fun (_ : RecEnvDefEnvDisjoint env) => \
-                 Eq (OptionType RecMeta) (recmeta_for (red_rec env) dname) (OptionType.none RecMeta)) \
+                 @Eq (OptionType RecMeta) (recmeta_for (red_rec env) dname) (@OptionType.none RecMeta)) \
                  (fun (hc : {REC_DEF_DISJOINT_FACT}) => hc dname val hlk) \
                  w"
             )),
@@ -240,11 +240,11 @@ impl Specification {
                 concat!(
                     "fun (env : RedEnv) (e : KExpr) (e1 : KExpr) (e2 : KExpr) ",
                     "(h1 : delta_step (red_def env) e e1) (h2 : delta_step (red_def env) e e2) => ",
-                    "par_strips_witness_cd.intro env e1 e2 e1 ",
-                    "(par_reduces_cd.refl env e1) ",
-                    "(Eq.substType KExpr (fun (x : KExpr) => par_reduces_cd env e2 x) e2 e1 ",
-                    "(Eq.symm KExpr e1 e2 (delta_step_deterministic (red_def env) e e1 e2 h1 h2)) ",
-                    "(par_reduces_cd.refl env e2))"
+                    "@par_strips_witness_cd.intro env e1 e2 e1 ",
+                    "(@par_reduces_cd.refl env e1) ",
+                    "(@Eq.substType KExpr (fun (x : KExpr) => par_reduces_cd env e2 x) e2 e1 ",
+                    "(@Eq.symm KExpr e1 e2 (delta_step_deterministic (red_def env) e e1 e2 h1 h2)) ",
+                    "(@par_reduces_cd.refl env e2))"
                 )
                 .to_string(),
             ),
@@ -300,7 +300,7 @@ impl Specification {
                     "fun (env : RedEnv) (A : KExpr) (body : KExpr) (arg : KExpr) (e' : KExpr) (C : Prop) ",
                     "(hd : delta_step (red_def env) (KExpr.app (KExpr.lam A body) arg) e') => ",
                     "delta_step_head_none_absurd (red_def env) (KExpr.app (KExpr.lam A body) arg) e' C ",
-                    "(Eq.refl (OptionType Name) (OptionType.none Name)) ",
+                    "(@Eq.refl (OptionType Name) (@OptionType.none Name)) ",
                     "hd"
                 )
                 .to_string(),
@@ -341,30 +341,30 @@ impl Specification {
         {
             let dinv_kont = concat!(
                 "(fun (dname : Name) (val : KExpr) ",
-                "(hd1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name dname)) ",
-                "(hd2 : Eq (OptionType KExpr) (kdef_value_at (red_def env) dname (kexpr_const_levels (kapp_fn e))) (OptionType.some KExpr val)) ",
-                "(_hd2r : Eq (OptionType KExpr) (OptionType.some KExpr (apply_spine (kapp_args e) val)) (OptionType.some KExpr e1)) => ",
+                "(hd1 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (@OptionType.some Name dname)) ",
+                "(hd2 : @Eq (OptionType KExpr) (kdef_value_at (red_def env) dname (kexpr_const_levels (kapp_fn e))) (@OptionType.some KExpr val)) ",
+                "(_hd2r : @Eq (OptionType KExpr) (@OptionType.some KExpr (apply_spine (kapp_args e) val)) (@OptionType.some KExpr e1)) => ",
                 "kdef_value_at_guard_inv (red_def env) dname (kexpr_const_levels (kapp_fn e)) val C hd2 ",
-                "(fun (defn : KDefSig) (hraw : Eq (OptionType KDefSig) (kdef_for (red_def env) dname) (OptionType.some KDefSig defn)) (_harity : Eq Bool (nat_eqb (name_list_len (kconst_params (kdef_signature defn))) (level_list_len (kexpr_const_levels (kapp_fn e)))) Bool.true) (_hval : Eq KExpr val (kdef_inst_value defn (kexpr_const_levels (kapp_fn e)))) => ",
+                "(fun (defn : KDefSig) (hraw : @Eq (OptionType KDefSig) (kdef_for (red_def env) dname) (@OptionType.some KDefSig defn)) (_harity : @Eq Bool (nat_eqb (name_list_len (kconst_params (kdef_signature defn))) (level_list_len (kexpr_const_levels (kapp_fn e)))) Bool.true) (_hval : @Eq KExpr val (kdef_inst_value defn (kexpr_const_levels (kapp_fn e)))) => ",
                 // invert the iota leg
                 "iota_reduct_some_inv (red_rec env) e e2 C hi ",
                 "(fun (recname : Name) (meta : RecMeta) (major : KExpr) (cname : Name) (rule : RecRule) ",
-                "(hi1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name recname)) ",
-                "(hi2 : Eq (OptionType RecMeta) (recmeta_for (red_rec env) recname) (OptionType.some RecMeta meta)) ",
-                "(_hi3 : Eq (OptionType KExpr) (list_head (list_drop (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta)) (kapp_args e))) (OptionType.some KExpr major)) ",
-                "(_hi4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname)) ",
-                "(_hi5 : Eq (OptionType RecRule) (recrule_for (red_rec env) recname cname) (OptionType.some RecRule rule)) ",
-                "(_hi5r : Eq (OptionType KExpr) (OptionType.some KExpr (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args e)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args e)) (recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn e))))))) (OptionType.some KExpr e2)) => ",
+                "(hi1 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (@OptionType.some Name recname)) ",
+                "(hi2 : @Eq (OptionType RecMeta) (recmeta_for (red_rec env) recname) (@OptionType.some RecMeta meta)) ",
+                "(_hi3 : @Eq (OptionType KExpr) (list_head (list_drop (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta)) (kapp_args e))) (@OptionType.some KExpr major)) ",
+                "(_hi4 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (@OptionType.some Name cname)) ",
+                "(_hi5 : @Eq (OptionType RecRule) (recrule_for (red_rec env) recname cname) (@OptionType.some RecRule rule)) ",
+                "(_hi5r : @Eq (OptionType KExpr) (@OptionType.some KExpr (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args e)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args e)) (recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn e))))))) (@OptionType.some KExpr e2)) => ",
                 // dname = recname (both equal the head const name)
                 "option_none_ne_some RecMeta meta C ",
-                "(Eq.trans (OptionType RecMeta) (OptionType.none RecMeta) (recmeta_for (red_rec env) recname) (OptionType.some RecMeta meta) ",
-                "(Eq.symm (OptionType RecMeta) (recmeta_for (red_rec env) recname) (OptionType.none RecMeta) ",
-                "(Eq.trans (OptionType RecMeta) (recmeta_for (red_rec env) recname) (recmeta_for (red_rec env) dname) (OptionType.none RecMeta) ",
-                "(Eq.symm (OptionType RecMeta) (recmeta_for (red_rec env) dname) (recmeta_for (red_rec env) recname) ",
-                "(Eq.cong Name (OptionType RecMeta) (fun (n : Name) => recmeta_for (red_rec env) n) dname recname ",
+                "(@Eq.trans (OptionType RecMeta) (@OptionType.none RecMeta) (recmeta_for (red_rec env) recname) (@OptionType.some RecMeta meta) ",
+                "(@Eq.symm (OptionType RecMeta) (recmeta_for (red_rec env) recname) (@OptionType.none RecMeta) ",
+                "(@Eq.trans (OptionType RecMeta) (recmeta_for (red_rec env) recname) (recmeta_for (red_rec env) dname) (@OptionType.none RecMeta) ",
+                "(@Eq.symm (OptionType RecMeta) (recmeta_for (red_rec env) dname) (recmeta_for (red_rec env) recname) ",
+                "(@Eq.cong Name (OptionType RecMeta) (fun (n : Name) => recmeta_for (red_rec env) n) dname recname ",
                 "(option_some_inj Name dname recname ",
-                "(Eq.trans (OptionType Name) (OptionType.some Name dname) (kexpr_const_name (kapp_fn e)) (OptionType.some Name recname) ",
-                "(Eq.symm (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name dname) hd1) hi1)))) ",
+                "(@Eq.trans (OptionType Name) (@OptionType.some Name dname) (kexpr_const_name (kapp_fn e)) (@OptionType.some Name recname) ",
+                "(@Eq.symm (OptionType Name) (kexpr_const_name (kapp_fn e)) (@OptionType.some Name dname) hd1) hi1)))) ",
                 "(recenv_defenv_disjoint_recmeta env dname (kdef_value defn) w (kdef_raw_value_of_lookup (red_def env) dname defn hraw)))) ",
                 "hi2))))"
             );
@@ -438,51 +438,51 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (env : RedEnv) (e0 : KExpr) (e0' : KExpr) (h0 : par_reduces_c (red_rec env) e0 e0') => ",
-                    "par_reduces_c.rec (red_rec env) ",
+                    "@par_reduces_c.rec (red_rec env) ",
                     "(fun (x : KExpr) (y : KExpr) (_h : par_reduces_c (red_rec env) x y) => par_reduces_cd env x y) ",
                     // refl
-                    "(fun (a : KExpr) => par_reduces_cd.refl env a) ",
+                    "(fun (a : KExpr) => @par_reduces_cd.refl env a) ",
                     // beta
                     "(fun (A : KExpr) (A' : KExpr) (body : KExpr) (body' : KExpr) (arg : KExpr) (arg' : KExpr) ",
                     "(_hA : par_reduces_c (red_rec env) A A') (_hbody : par_reduces_c (red_rec env) body body') (_harg : par_reduces_c (red_rec env) arg arg') ",
                     "(ihA : par_reduces_cd env A A') (ihbody : par_reduces_cd env body body') (iharg : par_reduces_cd env arg arg') => ",
-                    "par_reduces_cd.beta env A A' body body' arg arg' ihA ihbody iharg) ",
+                    "@par_reduces_cd.beta env A A' body body' arg arg' ihA ihbody iharg) ",
                     // app
                     "(fun (f : KExpr) (f' : KExpr) (a : KExpr) (a' : KExpr) ",
                     "(_hf : par_reduces_c (red_rec env) f f') (_ha : par_reduces_c (red_rec env) a a') ",
                     "(ihf : par_reduces_cd env f f') (iha : par_reduces_cd env a a') => ",
-                    "par_reduces_cd.app env f f' a a' ihf iha) ",
+                    "@par_reduces_cd.app env f f' a a' ihf iha) ",
                     // lam
                     "(fun (ty : KExpr) (ty' : KExpr) (body : KExpr) (body' : KExpr) ",
                     "(_hty : par_reduces_c (red_rec env) ty ty') (_hbody : par_reduces_c (red_rec env) body body') ",
                     "(ihty : par_reduces_cd env ty ty') (ihbody : par_reduces_cd env body body') => ",
-                    "par_reduces_cd.lam env ty ty' body body' ihty ihbody) ",
+                    "@par_reduces_cd.lam env ty ty' body body' ihty ihbody) ",
                     // pi
                     "(fun (dom : KExpr) (dom' : KExpr) (body : KExpr) (body' : KExpr) ",
                     "(_hd : par_reduces_c (red_rec env) dom dom') (_hbody : par_reduces_c (red_rec env) body body') ",
                     "(ihd : par_reduces_cd env dom dom') (ihbody : par_reduces_cd env body body') => ",
-                    "par_reduces_cd.pi env dom dom' body body' ihd ihbody) ",
+                    "@par_reduces_cd.pi env dom dom' body body' ihd ihbody) ",
                     // forall_
                     "(fun (dom : KExpr) (dom' : KExpr) (body : KExpr) (body' : KExpr) ",
                     "(_hd : par_reduces_c (red_rec env) dom dom') (_hbody : par_reduces_c (red_rec env) body body') ",
                     "(ihd : par_reduces_cd env dom dom') (ihbody : par_reduces_cd env body body') => ",
-                    "par_reduces_cd.forall_ env dom dom' body body' ihd ihbody) ",
+                    "@par_reduces_cd.forall_ env dom dom' body body' ihd ihbody) ",
                     // let_
                     "(fun (ty : KExpr) (ty' : KExpr) (val : KExpr) (val' : KExpr) (body : KExpr) (body' : KExpr) ",
                     "(_hty : par_reduces_c (red_rec env) ty ty') (_hval : par_reduces_c (red_rec env) val val') (_hbody : par_reduces_c (red_rec env) body body') ",
                     "(ihty : par_reduces_cd env ty ty') (ihval : par_reduces_cd env val val') (ihbody : par_reduces_cd env body body') => ",
-                    "par_reduces_cd.let_ env ty ty' val val' body body' ihty ihval ihbody) ",
+                    "@par_reduces_cd.let_ env ty ty' val val' body body' ihty ihval ihbody) ",
                     // iota
                     "(fun (a : KExpr) (a' : KExpr) (hi : iota_step (red_rec env) a a') => ",
-                    "par_reduces_cd.iota env a a' hi) ",
+                    "@par_reduces_cd.iota env a a' hi) ",
                     // let_cong
                     "(fun (ty : KExpr) (ty' : KExpr) (val : KExpr) (val' : KExpr) (body : KExpr) (body' : KExpr) ",
                     "(_hty : par_reduces_c (red_rec env) ty ty') (_hval : par_reduces_c (red_rec env) val val') (_hbody : par_reduces_c (red_rec env) body body') ",
                     "(ihty : par_reduces_cd env ty ty') (ihval : par_reduces_cd env val val') (ihbody : par_reduces_cd env body body') => ",
-                    "par_reduces_cd.let_cong env ty ty' val val' body body' ihty ihval ihbody) ",
+                    "@par_reduces_cd.let_cong env ty ty' val val' body body' ihty ihval ihbody) ",
                     "(fun (s : Name) (i : Nat) (sub : KExpr) (sub' : KExpr) ",
                     "(_hsub : par_reduces_c (red_rec env) sub sub') (ihsub : par_reduces_cd env sub sub') => ",
-                    "par_reduces_cd.proj env s i sub sub' ihsub) ",
+                    "@par_reduces_cd.proj env s i sub sub' ihsub) ",
                     "e0 e0' h0"
                 )
                 .to_string(),

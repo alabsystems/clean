@@ -63,10 +63,11 @@ pub(crate) mod auto_bound;
 // production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
 #[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod auto_bound_ext;
-// Roadmap prototype (2026-08-10), compiled with its unit tests and, since the shipped
-// binary enables `mathverse-library`, for `tactic::mathverse_use`, which calls its
-// `collect_universe_params`. Mirrors pattern_match_ext / error_recovery* precedent.
-#[cfg(any(test, feature = "mathverse-library"))]
+// Unwired roadmap prototype (2026-08-10): compiled only with its unit tests until the live
+// pipeline owns it. Mirrors pattern_match_ext / error_recovery* precedent. Its one production
+// caller, `tactic::mathverse_use`'s goal-universe pinning, now uses the production
+// `infer::collect_level_params` (no depth cap; this prototype stops at depth 64).
+#[cfg(test)]
 pub(crate) mod auto_param_ext;
 pub mod cert;
 pub mod check_cmd;

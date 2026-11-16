@@ -56,7 +56,7 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (a : KExpr) (b : KExpr) (h : DefEqJoinable a b) => ",
-                    "DefEqJoinable.rec a b ",
+                    "@DefEqJoinable.rec a b ",
                     "(fun (_h : DefEqJoinable a b) => DefEq a b) ",
                     "(fun (nl : KExpr) (nr : KExpr) ",
                     "(h1 : DefEq a nl) (h2 : DefEq b nr) (h3 : DefEq nl nr) => ",
@@ -121,7 +121,7 @@ impl Specification {
                     "(hadm : KernelBinaryInputAdmissible st a b) ",
                     "(haccept : KernelDefEqAccepts st a b) => ",
                     "def_eq_joinable_reflects a b ",
-                    "(KernelDefEqAccepts.rec st a b ",
+                    "(@KernelDefEqAccepts.rec st a b ",
                     "(fun (_h : KernelDefEqAccepts st a b) => DefEqJoinable a b) ",
                     "(fun (field : KernelStateEnvValid st -> ",
                     "KernelStateLocalCtxWellFormed st -> ",

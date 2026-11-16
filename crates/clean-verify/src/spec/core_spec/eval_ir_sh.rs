@@ -78,11 +78,11 @@ pub(crate) fn ir_sh_module_defs() -> &'static [&'static str] {
     &MINTED_IR_SH_LINES
 }
 
-const SRC_SH_MACH0: &str = "def ir_sh_mach0 (mem : IRList IRMemSlot) (p : Nat) (na : Nat) : IRMachine := IRMachine.mk (IRList.cons IRFrame (IRFrame.mk ir_d0 ir_d0 Nat.zero (ir_bind_params (ir_nl1 ir_d0) (ir_vl1 (IRScalar.ptr_ p)) (IRList.nil IRBinding)) (IRList.nil Nat)) (IRList.nil IRFrame)) mem na";
+const SRC_SH_MACH0: &str = "def ir_sh_mach0 (mem : IRList IRMemSlot) (p : Nat) (na : Nat) : IRMachine := IRMachine.mk (@IRList.cons IRFrame (IRFrame.mk ir_d0 ir_d0 Nat.zero (ir_bind_params (ir_nl1 ir_d0) (ir_vl1 (IRScalar.ptr_ p)) (@IRList.nil IRBinding)) (@IRList.nil Nat)) (@IRList.nil IRFrame)) mem na";
 
-const SRC_SH_INIT: &str = "def ir_sh_init_is_mach0 (mem : IRList IRMemSlot) (p : Nat) (na : Nat) : Eq IRConfig (ir_init ir_sh_module ir_d0 (ir_vl1 (IRScalar.ptr_ p)) mem na) (IRConfig.running (ir_sh_mach0 mem p na)) := Eq.refl IRConfig (IRConfig.running (ir_sh_mach0 mem p na))";
+const SRC_SH_INIT: &str = "def ir_sh_init_is_mach0 (mem : IRList IRMemSlot) (p : Nat) (na : Nat) : @Eq IRConfig (ir_init ir_sh_module ir_d0 (ir_vl1 (IRScalar.ptr_ p)) mem na) (IRConfig.running (ir_sh_mach0 mem p na)) := @Eq.refl IRConfig (IRConfig.running (ir_sh_mach0 mem p na))";
 
-const SRC_SH_FAULTS: &str = "def ir_sh_halts_at_the_pack (mem : IRList IRMemSlot) (p : Nat) (na : Nat) : Eq IROutcome (ir_eval ir_d8 ir_sh_module ir_d0 (ir_vl1 (IRScalar.ptr_ p)) mem na) (IROutcome.type_error IRFault.not_agg) := Eq.refl IROutcome (IROutcome.type_error IRFault.not_agg)";
+const SRC_SH_FAULTS: &str = "def ir_sh_halts_at_the_pack (mem : IRList IRMemSlot) (p : Nat) (na : Nat) : @Eq IROutcome (ir_eval ir_d8 ir_sh_module ir_d0 (ir_vl1 (IRScalar.ptr_ p)) mem na) (IROutcome.type_error IRFault.not_agg) := @Eq.refl IROutcome (IROutcome.type_error IRFault.not_agg)";
 
 impl Specification {
     /// `ir_sh` — the tuple caller, and the aggregate gap on a real body.

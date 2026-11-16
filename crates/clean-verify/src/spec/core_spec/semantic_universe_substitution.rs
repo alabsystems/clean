@@ -54,7 +54,7 @@ const PROOFS: &[(&str, &str)] = &[
         r"def levelListEqSem_substL (s : Name -> Level)
  (us : ListType Level) (vs : ListType Level) (h : LevelListEqSem us vs) :
  LevelListEqSem (mapLL (substL s) us) (mapLL (substL s) vs) :=
- LevelListEqSem.rec
+ @LevelListEqSem.rec
   (fun (xs : ListType Level) (ys : ListType Level) (_h : LevelListEqSem xs ys) =>
     LevelListEqSem (mapLL (substL s) xs) (mapLL (substL s) ys))
   LevelListEqSem.nil
@@ -70,7 +70,7 @@ const PROOFS: &[(&str, &str)] = &[
         r"def kexprUniverseEq_instL (s : Name -> Level)
  (e : KExpr) (e2 : KExpr) (h : KExprUniverseEq e e2) :
  KExprUniverseEq (instL s e) (instL s e2) :=
- KExprUniverseEq.rec
+ @KExprUniverseEq.rec
   (fun (a : KExpr) (b : KExpr) (_h : KExprUniverseEq a b) =>
     KExprUniverseEq (instL s a) (instL s b))
   (fun (u : Level) (v : Level) (huv : levelEqSem u v) =>
@@ -123,13 +123,13 @@ const CONTROLS: &[(&str, &str)] = &[
         r"def semantic_universe_subst_input : KExpr :=
  KExpr.lam (KExpr.sort (Level.imax (Level.param Name.anonymous) Level.zero))
    (KExpr.const Name.anonymous
-     (ListType.cons Level (Level.imax (Level.param Name.anonymous) Level.zero) (ListType.nil Level)))",
+     (@ListType.cons Level (Level.imax (Level.param Name.anonymous) Level.zero) (@ListType.nil Level)))",
         "Universe-parametric binder and constant-level-list input for an actual caller of same-substitution semantic stability.",
     ),
     (
         r"def semantic_universe_subst_target : KExpr :=
  KExpr.lam (KExpr.sort Level.zero)
-   (KExpr.const Name.anonymous (ListType.cons Level Level.zero (ListType.nil Level)))",
+   (KExpr.const Name.anonymous (@ListType.cons Level Level.zero (@ListType.nil Level)))",
         "Semantically simplified binder and constant universe arguments; this target is unchanged by the chosen substitution.",
     ),
     (
@@ -137,15 +137,15 @@ const CONTROLS: &[(&str, &str)] = &[
  KExprUniverseEq semantic_universe_subst_input semantic_universe_subst_target :=
  KExprUniverseEq.lam
   (KExpr.sort (Level.imax (Level.param Name.anonymous) Level.zero)) (KExpr.sort Level.zero)
-  (KExpr.const Name.anonymous (ListType.cons Level (Level.imax (Level.param Name.anonymous) Level.zero) (ListType.nil Level)))
-  (KExpr.const Name.anonymous (ListType.cons Level Level.zero (ListType.nil Level)))
+  (KExpr.const Name.anonymous (@ListType.cons Level (Level.imax (Level.param Name.anonymous) Level.zero) (@ListType.nil Level)))
+  (KExpr.const Name.anonymous (@ListType.cons Level Level.zero (@ListType.nil Level)))
   (kexprUniverseEq_imax_zero (Level.param Name.anonymous))
   (KExprUniverseEq.const Name.anonymous
-    (ListType.cons Level (Level.imax (Level.param Name.anonymous) Level.zero) (ListType.nil Level))
-    (ListType.cons Level Level.zero (ListType.nil Level))
+    (@ListType.cons Level (Level.imax (Level.param Name.anonymous) Level.zero) (@ListType.nil Level))
+    (@ListType.cons Level Level.zero (@ListType.nil Level))
     (LevelListEqSem.cons (Level.imax (Level.param Name.anonymous) Level.zero) Level.zero
-      (ListType.nil Level) (ListType.nil Level)
-      (fun (_rho : Name -> Nat) => Eq.refl Nat Nat.zero) LevelListEqSem.nil))",
+      (@ListType.nil Level) (@ListType.nil Level)
+      (fun (_rho : Name -> Nat) => @Eq.refl Nat Nat.zero) LevelListEqSem.nil))",
         "An inhabited source relation simultaneously simplifies an open universe parameter under imax in a binder annotation and a constant's actual level list.",
     ),
     (
@@ -200,7 +200,7 @@ mod tests {
         crate::test_utils::run_with_stack(|| {
             let mut spec = crate::test_utils::build_spec_with_stack();
             assert!(spec.add_recursive_def(
-                "def semantic_universe_subst_forged_unchanged : KExprUniverseEq (instL semantic_universe_subst_nonidentity (KExpr.sort (Level.param Name.anonymous))) (KExpr.sort (Level.param Name.anonymous)) := kexprUniverseEq_instL semantic_universe_subst_nonidentity (KExpr.sort (Level.param Name.anonymous)) (KExpr.sort (Level.param Name.anonymous)) (KExprUniverseEq.sort (Level.param Name.anonymous) (Level.param Name.anonymous) (fun (rho : Name -> Nat) => Eq.refl Nat (evalL rho (Level.param Name.anonymous))))",
+                "def semantic_universe_subst_forged_unchanged : KExprUniverseEq (instL semantic_universe_subst_nonidentity (KExpr.sort (Level.param Name.anonymous))) (KExpr.sort (Level.param Name.anonymous)) := kexprUniverseEq_instL semantic_universe_subst_nonidentity (KExpr.sort (Level.param Name.anonymous)) (KExpr.sort (Level.param Name.anonymous)) (KExprUniverseEq.sort (Level.param Name.anonymous) (Level.param Name.anonymous) (fun (rho : Name -> Nat) => @Eq.refl Nat (evalL rho (Level.param Name.anonymous))))",
                 "Rejected control: preservation applies the same substitution to both sides; successor of a parameter is not semantically the original parameter."
             ).is_err());
         });

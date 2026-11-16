@@ -78,8 +78,8 @@ impl Specification {
     fn add_fuel_leg_bridge(&mut self) -> Result<(), SpecError> {
         self.add_recursive_def(
             "def whnf_fuel_red_par_leg (n : Nat) (e : KExpr) (r : KExpr) \
-             (h : Eq (OptionType KExpr) (whnf_fuel_red the_red_env n e) \
-             (OptionType.some KExpr r)) : par_reduces_cd_star the_red_env e r := \
+             (h : @Eq (OptionType KExpr) (whnf_fuel_red the_red_env n e) \
+             (@OptionType.some KExpr r)) : par_reduces_cd_star the_red_env e r := \
              whnf_red_step_star_to_par_cd_star the_red_env e r \
              (red_step_star_to_whnf_red_step_star the_red_env e r \
              (whnf_fuel_red_reaches_sound the_red_env n e r h))",
@@ -100,22 +100,22 @@ impl Specification {
         let body = "\
              @par_strips_witness_cd_star.rec the_red_env a b \
              (fun (_w0 : par_strips_witness_cd_star the_red_env a b) => \
-             Eq Nat (kexpr_tag na) (kexpr_tag nb)) \
+             @Eq Nat (kexpr_tag na) (kexpr_tag nb)) \
              (fun (m : KExpr) (ham : par_reduces_cd_star the_red_env a m) \
              (hbm : par_reduces_cd_star the_red_env b m) => \
              @par_strips_witness_cd_star.rec the_red_env na m \
              (fun (_w1 : par_strips_witness_cd_star the_red_env na m) => \
-             Eq Nat (kexpr_tag na) (kexpr_tag nb)) \
+             @Eq Nat (kexpr_tag na) (kexpr_tag nb)) \
              (fun (p1 : KExpr) (hnap1 : par_reduces_cd_star the_red_env na p1) \
              (hmp1 : par_reduces_cd_star the_red_env m p1) => \
              @par_strips_witness_cd_star.rec the_red_env nb m \
              (fun (_w2 : par_strips_witness_cd_star the_red_env nb m) => \
-             Eq Nat (kexpr_tag na) (kexpr_tag nb)) \
+             @Eq Nat (kexpr_tag na) (kexpr_tag nb)) \
              (fun (p2 : KExpr) (hnbp2 : par_reduces_cd_star the_red_env nb p2) \
              (hmp2 : par_reduces_cd_star the_red_env m p2) => \
              @par_strips_witness_cd_star.rec the_red_env p1 p2 \
              (fun (_w3 : par_strips_witness_cd_star the_red_env p1 p2) => \
-             Eq Nat (kexpr_tag na) (kexpr_tag nb)) \
+             @Eq Nat (kexpr_tag na) (kexpr_tag nb)) \
              (fun (w : KExpr) (hp1w : par_reduces_cd_star the_red_env p1 w) \
              (hp2w : par_reduces_cd_star the_red_env p2 w) => \
              nf_join_same_tag na nb w hna hnb \
@@ -133,12 +133,12 @@ impl Specification {
             &format!(
                 "def def_eq_nf_head_agree {I_BINDERS}(n : Nat) (a : KExpr) (b : KExpr) \
                  (na : KExpr) (nb : KExpr) (hde : DefEq a b) \
-                 (ha : Eq (OptionType KExpr) (whnf_fuel_red the_red_env n a) \
-                 (OptionType.some KExpr na)) \
-                 (hb : Eq (OptionType KExpr) (whnf_fuel_red the_red_env n b) \
-                 (OptionType.some KExpr nb)) \
+                 (ha : @Eq (OptionType KExpr) (whnf_fuel_red the_red_env n a) \
+                 (@OptionType.some KExpr na)) \
+                 (hb : @Eq (OptionType KExpr) (whnf_fuel_red the_red_env n b) \
+                 (@OptionType.some KExpr nb)) \
                  (hna : nf_head na) (hnb : nf_head nb) : \
-                 Eq Nat (kexpr_tag na) (kexpr_tag nb) := {body}"
+                 @Eq Nat (kexpr_tag na) (kexpr_tag nb) := {body}"
             ),
             "def_eq_nf_head_agree: ONE ROUND of def-eq completeness, over the legs the ALGORITHM \
              actually produces. If a and b are definitionally equal and the executable whnf loop \

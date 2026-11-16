@@ -96,8 +96,8 @@ impl Specification {
                 // b-side leg and the join onto that form.
                 let hb2 = format!(
                     "(Eq.substType KExpr \
-                     (fun (z : KExpr) => Eq (OptionType KExpr) \
-                     (whnf_fuel_red the_red_env n bb) (OptionType.some KExpr z)) \
+                     (fun (z : KExpr) => @Eq (OptionType KExpr) \
+                     (whnf_fuel_red the_red_env n bb) (@OptionType.some KExpr z)) \
                      nb {nb2} hshape hb)"
                 );
                 let hj2 = format!(
@@ -124,10 +124,10 @@ impl Specification {
                 let src = format!(
                     "def def_eq_round_{head} {hnf}(n : Nat) (x : KExpr) (bb : KExpr) \
                      (nb : KExpr) (t1 : KExpr) (b1 : KExpr) \
-                     (hx : Eq (OptionType KExpr) (whnf_fuel_red the_red_env n x) \
-                     (OptionType.some KExpr {na})) \
-                     (hb : Eq (OptionType KExpr) (whnf_fuel_red the_red_env n bb) \
-                     (OptionType.some KExpr nb)) \
+                     (hx : @Eq (OptionType KExpr) (whnf_fuel_red the_red_env n x) \
+                     (@OptionType.some KExpr {na})) \
+                     (hb : @Eq (OptionType KExpr) (whnf_fuel_red the_red_env n bb) \
+                     (@OptionType.some KExpr nb)) \
                      (hj : par_strips_witness_cd_star the_red_env {na} nb) \
                      (accb : rbelow_plus_acc bb) {recur}: DefEqFuelAccepts x bb := \
                      @par_strips_witness_cd_star.rec the_red_env {na} nb \
@@ -136,10 +136,10 @@ impl Specification {
                      (fun (w : KExpr) \
                      (hlw : par_reduces_cd_star the_red_env {na} w) \
                      (hrw : par_reduces_cd_star the_red_env nb w) => \
-                     {shape}.rec nb \
+                     @{shape}.rec nb \
                      (fun (_s : {shape} nb) => DefEqFuelAccepts x bb) \
-                     (fun (t2 : KExpr) (b2 : KExpr) (hshape : Eq KExpr nb {nb2}) => \
-                     BinderJoinComponents.rec t1 b1 t2 b2 \
+                     (fun (t2 : KExpr) (b2 : KExpr) (hshape : @Eq KExpr nb {nb2}) => \
+                     @BinderJoinComponents.rec t1 b1 t2 b2 \
                      (fun (_c : BinderJoinComponents t1 b1 t2 b2) => DefEqFuelAccepts x bb) \
                      (fun (j0 : par_strips_witness_cd_star the_red_env t1 t2) \
                      (j1 : par_strips_witness_cd_star the_red_env b1 b2) => \
@@ -274,8 +274,8 @@ mod tests {
     #[test]
     fn test_shape_is_transported_into_both_leg_and_join() {
         for ((head, ctor, _, _, _, _, _, _), src) in BINDER_ROUNDS.iter().zip(terms()) {
-            let leg_motive = "(fun (z : KExpr) => Eq (OptionType KExpr) \
-                              (whnf_fuel_red the_red_env n bb) (OptionType.some KExpr z))";
+            let leg_motive = "(fun (z : KExpr) => @Eq (OptionType KExpr) \
+                              (whnf_fuel_red the_red_env n bb) (@OptionType.some KExpr z))";
             let join_motive = format!(
                 "(fun (z : KExpr) => par_strips_witness_cd_star the_red_env ({ctor} t1 b1) z)"
             );

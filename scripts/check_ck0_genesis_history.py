@@ -34,6 +34,8 @@ CLEANUP_SECONDS = 2
 RESOURCE_HELPER = 'scripts/resource_transport.py'
 LIFECYCLE_TEST = 'scripts/test_ck0_genesis_lifecycle.py'
 RETENTION_TEST = 'scripts/test_ck0_genesis_retention.py'
+CAPTURE_TEST = 'scripts/test_ck0_genesis_capture.py'
+OWNERSHIP_TEST = 'scripts/test_ck0_genesis_ownership.py'
 ANSWERS_PINNED_INPUTS = True
 TOOLS = ('git', 'trustc', 'targo', 'rustc', 'cargo', 'find', 'sha256sum', 'shasum')
 _ACTIVE_SCRATCH = []
@@ -523,7 +525,7 @@ def selftest():
         refuses('linked-manifest', HISTORY, b'', 'symlink history input', symlink=True)
         refuses('missing-manifest', HISTORY, b'', 'missing history input', absent=True)
         check(root)
-    for controls in (LIFECYCLE_TEST, RETENTION_TEST):
+    for controls in (LIFECYCLE_TEST, RETENTION_TEST, CAPTURE_TEST, OWNERSHIP_TEST):
         lifecycle = subprocess.run([sys.executable, '-B', str(ROOT / controls)],
                                    pass_fds=_resource_fds(os.environ))
         need(lifecycle.returncode == 0, controls + ' genesis lifecycle controls failed')
@@ -538,7 +540,8 @@ def main():
     args = parser.parse_args()
     need(not (args.selftest and args.pinned_inputs), 'conflicting action modes')
     if args.pinned_inputs:
-        print('\n'.join((HISTORY, *ENTRYPOINTS, RESOURCE_HELPER, LIFECYCLE_TEST, RETENTION_TEST)))
+        print('\n'.join((HISTORY, *ENTRYPOINTS, RESOURCE_HELPER, LIFECYCLE_TEST, RETENTION_TEST,
+                         CAPTURE_TEST, OWNERSHIP_TEST)))
     elif args.selftest:
         selftest()
     else:

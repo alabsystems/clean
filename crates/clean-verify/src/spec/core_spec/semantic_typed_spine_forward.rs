@@ -38,7 +38,7 @@ const PROOFS: &[CheckedProof] = &[
  TypingCtxConvIn R tenv G h F -> TypingCtxConvIn R tenv G (apply_spine args h) U",
         value_src: r"fun (R : RedEnv) (tenv : KDeclEnv) (G : ListType KExpr)
  (F : KExpr) (args : ListType KExpr) (U : KExpr)
- (trace : TypedRawPiSpine R tenv G F args U) => TypedRawPiSpine.rec R tenv G
+ (trace : TypedRawPiSpine R tenv G F args U) => @TypedRawPiSpine.rec R tenv G
   (fun (F0 : KExpr) (xs : ListType KExpr) (V : KExpr)
    (_tr : TypedRawPiSpine R tenv G F0 xs V) => forall (h : KExpr),
    TypingCtxConvIn R tenv G h F0 -> TypingCtxConvIn R tenv G (apply_spine xs h) V)
@@ -49,7 +49,7 @@ const PROOFS: &[CheckedProof] = &[
    (ih : forall (h : KExpr), TypingCtxConvIn R tenv G h (instantiate B a) ->
     TypingCtxConvIn R tenv G (apply_spine rest h) V)
    (h : KExpr) (head : TypingCtxConvIn R tenv G h (KExpr.pi A B)) =>
-   ih (KExpr.app h a) (TypingCtxConvIn.app R tenv G h a A B head argument))
+   ih (KExpr.app h a) (@TypingCtxConvIn.app R tenv G h a A B head argument))
   F args U trace",
         description: "Forward reconstruction from the existing typed raw-Pi spine. Each step uses the actual application rule; argument typings come from the supplied trace, not a new oracle.",
     },
@@ -58,14 +58,14 @@ const PROOFS: &[CheckedProof] = &[
         type_src: r"forall (R : RedEnv) (tenv : KDeclEnv)
  (G : ListType KExpr) (n : Name) (us : ListType Level) (F : KExpr)
  (args : ListType KExpr) (U : KExpr)
- (lookup : Eq (OptionType KExpr) (kdecl_type_at tenv n us) (OptionType.some KExpr F))
+ (lookup : @Eq (OptionType KExpr) (kdecl_type_at tenv n us) (@OptionType.some KExpr F))
  (trace : TypedRawPiSpine R tenv G F args U), TypingCtxConvIn R tenv G (apply_spine args (KExpr.const n us)) U",
         value_src: r"fun (R : RedEnv) (tenv : KDeclEnv)
  (G : ListType KExpr) (n : Name) (us : ListType Level) (F : KExpr)
  (args : ListType KExpr) (U : KExpr)
- (lookup : Eq (OptionType KExpr) (kdecl_type_at tenv n us) (OptionType.some KExpr F))
+ (lookup : @Eq (OptionType KExpr) (kdecl_type_at tenv n us) (@OptionType.some KExpr F))
  (trace : TypedRawPiSpine R tenv G F args U) => typed_raw_pi_spine_apply R tenv G F args U trace (KExpr.const n us)
-  (TypingCtxConvIn.const R tenv G n us F lookup)",
+  (@TypingCtxConvIn.const R tenv G n us F lookup)",
         description: "Actual guarded constant lookup constructs the head typing before the existing trace reconstructs its application spine.",
     },
     CheckedProof {
@@ -75,18 +75,18 @@ const PROOFS: &[CheckedProof] = &[
  (typed_spine_identity_type (Level.succ (Level.succ Level.zero)))
  typed_spine_identity_args (KExpr.sort (Level.succ Level.zero))",
         value_src: r"fun (R : RedEnv) (tenv : KDeclEnv)
- (G : ListType KExpr) => TypedRawPiSpine.cons R tenv G
+ (G : ListType KExpr) => @TypedRawPiSpine.cons R tenv G
   (KExpr.sort (Level.succ (Level.succ Level.zero)))
   (KExpr.pi (KExpr.bvar Nat.zero) (KExpr.bvar (Nat.succ Nat.zero)))
   (KExpr.sort (Level.succ Level.zero))
-  (ListType.cons KExpr (KExpr.sort Level.zero) (ListType.nil KExpr))
+  (@ListType.cons KExpr (KExpr.sort Level.zero) (@ListType.nil KExpr))
   (KExpr.sort (Level.succ Level.zero))
-  (TypingCtxConvIn.sort R tenv G (Level.succ Level.zero))
-  (TypedRawPiSpine.cons R tenv G
+  (@TypingCtxConvIn.sort R tenv G (Level.succ Level.zero))
+  (@TypedRawPiSpine.cons R tenv G
    (KExpr.sort (Level.succ Level.zero)) (KExpr.sort (Level.succ Level.zero))
-   (KExpr.sort Level.zero) (ListType.nil KExpr) (KExpr.sort (Level.succ Level.zero))
-   (TypingCtxConvIn.sort R tenv G Level.zero)
-   (TypedRawPiSpine.nil R tenv G (KExpr.sort (Level.succ Level.zero))))",
+   (KExpr.sort Level.zero) (@ListType.nil KExpr) (KExpr.sort (Level.succ Level.zero))
+   (@TypingCtxConvIn.sort R tenv G Level.zero)
+   (@TypedRawPiSpine.nil R tenv G (KExpr.sort (Level.succ Level.zero))))",
         description: "Two real sort-typed arguments form the dependent identity trace; the second domain is the actual instantiated first argument.",
     },
     CheckedProof {
@@ -108,9 +108,9 @@ const PROOFS: &[CheckedProof] = &[
     CheckedProof {
         name: "typed_raw_pi_spine_identity_const_apply",
         type_src: r"forall (R : RedEnv) (G : ListType KExpr), TypingCtxConvIn R typed_spine_identity_tenv G
- (apply_spine typed_spine_identity_args (KExpr.const Name.anonymous (ListType.nil Level)))
+ (apply_spine typed_spine_identity_args (KExpr.const Name.anonymous (@ListType.nil Level)))
  (KExpr.sort (Level.succ Level.zero))",
-        value_src: r"fun (R : RedEnv) (G : ListType KExpr) => typed_raw_pi_spine_const_apply R typed_spine_identity_tenv G Name.anonymous (ListType.nil Level)
+        value_src: r"fun (R : RedEnv) (G : ListType KExpr) => typed_raw_pi_spine_const_apply R typed_spine_identity_tenv G Name.anonymous (@ListType.nil Level)
   (typed_spine_identity_type (Level.succ (Level.succ Level.zero)))
   typed_spine_identity_args (KExpr.sort (Level.succ Level.zero)) typed_spine_identity_lookup
   (typed_raw_pi_spine_identity_trace R typed_spine_identity_tenv G)",
@@ -168,7 +168,7 @@ mod tests {
  (F : KExpr) (args : ListType KExpr) (U : KExpr)
  (trace : TypedRawPiSpine R tenv G F args U) : forall (h : KExpr),
  TypingCtxConvIn R tenv G h F -> TypingCtxConvIn R tenv G (apply_spine args h) U :=
- TypedRawPiSpine.rec R tenv G
+ @TypedRawPiSpine.rec R tenv G
   (fun (F0 : KExpr) (xs : ListType KExpr) (V : KExpr)
    (_tr : TypedRawPiSpine R tenv G F0 xs V) => forall (h : KExpr),
    TypingCtxConvIn R tenv G h F0 -> TypingCtxConvIn R tenv G (apply_spine xs h) V)
@@ -179,32 +179,32 @@ mod tests {
    (ih : forall (h : KExpr), TypingCtxConvIn R tenv G h (instantiate B a) ->
     TypingCtxConvIn R tenv G (apply_spine rest h) V)
    (h : KExpr) (head : TypingCtxConvIn R tenv G h (KExpr.pi A B)) =>
-   ih (KExpr.app h a) (TypingCtxConvIn.app R tenv G h a A B head argument))
+   ih (KExpr.app h a) (@TypingCtxConvIn.app R tenv G h a A B head argument))
   F args U trace",
         r"def typed_raw_pi_spine_const_apply (R : RedEnv) (tenv : KDeclEnv)
  (G : ListType KExpr) (n : Name) (us : ListType Level) (F : KExpr)
  (args : ListType KExpr) (U : KExpr)
- (lookup : Eq (OptionType KExpr) (kdecl_type_at tenv n us) (OptionType.some KExpr F))
+ (lookup : @Eq (OptionType KExpr) (kdecl_type_at tenv n us) (@OptionType.some KExpr F))
  (trace : TypedRawPiSpine R tenv G F args U) :
  TypingCtxConvIn R tenv G (apply_spine args (KExpr.const n us)) U :=
  typed_raw_pi_spine_apply R tenv G F args U trace (KExpr.const n us)
-  (TypingCtxConvIn.const R tenv G n us F lookup)",
+  (@TypingCtxConvIn.const R tenv G n us F lookup)",
         r"def typed_raw_pi_spine_identity_trace (R : RedEnv) (tenv : KDeclEnv)
  (G : ListType KExpr) : TypedRawPiSpine R tenv G
  (typed_spine_identity_type (Level.succ (Level.succ Level.zero)))
  typed_spine_identity_args (KExpr.sort (Level.succ Level.zero)) :=
- TypedRawPiSpine.cons R tenv G
+ @TypedRawPiSpine.cons R tenv G
   (KExpr.sort (Level.succ (Level.succ Level.zero)))
   (KExpr.pi (KExpr.bvar Nat.zero) (KExpr.bvar (Nat.succ Nat.zero)))
   (KExpr.sort (Level.succ Level.zero))
-  (ListType.cons KExpr (KExpr.sort Level.zero) (ListType.nil KExpr))
+  (@ListType.cons KExpr (KExpr.sort Level.zero) (@ListType.nil KExpr))
   (KExpr.sort (Level.succ Level.zero))
-  (TypingCtxConvIn.sort R tenv G (Level.succ Level.zero))
-  (TypedRawPiSpine.cons R tenv G
+  (@TypingCtxConvIn.sort R tenv G (Level.succ Level.zero))
+  (@TypedRawPiSpine.cons R tenv G
    (KExpr.sort (Level.succ Level.zero)) (KExpr.sort (Level.succ Level.zero))
-   (KExpr.sort Level.zero) (ListType.nil KExpr) (KExpr.sort (Level.succ Level.zero))
-   (TypingCtxConvIn.sort R tenv G Level.zero)
-   (TypedRawPiSpine.nil R tenv G (KExpr.sort (Level.succ Level.zero))))",
+   (KExpr.sort Level.zero) (@ListType.nil KExpr) (KExpr.sort (Level.succ Level.zero))
+   (@TypingCtxConvIn.sort R tenv G Level.zero)
+   (@TypedRawPiSpine.nil R tenv G (KExpr.sort (Level.succ Level.zero))))",
         r"def typed_raw_pi_spine_identity_body_apply (R : RedEnv) (tenv : KDeclEnv)
  (G : ListType KExpr) : TypingCtxConvIn R tenv G
  (apply_spine typed_spine_identity_args
@@ -218,9 +218,9 @@ mod tests {
   (typed_spine_identity_body_typed R tenv G (Level.succ (Level.succ Level.zero)))",
         r"def typed_raw_pi_spine_identity_const_apply (R : RedEnv) (G : ListType KExpr) :
  TypingCtxConvIn R typed_spine_identity_tenv G
- (apply_spine typed_spine_identity_args (KExpr.const Name.anonymous (ListType.nil Level)))
+ (apply_spine typed_spine_identity_args (KExpr.const Name.anonymous (@ListType.nil Level)))
  (KExpr.sort (Level.succ Level.zero)) :=
- typed_raw_pi_spine_const_apply R typed_spine_identity_tenv G Name.anonymous (ListType.nil Level)
+ typed_raw_pi_spine_const_apply R typed_spine_identity_tenv G Name.anonymous (@ListType.nil Level)
   (typed_spine_identity_type (Level.succ (Level.succ Level.zero)))
   typed_spine_identity_args (KExpr.sort (Level.succ Level.zero)) typed_spine_identity_lookup
   (typed_raw_pi_spine_identity_trace R typed_spine_identity_tenv G)",
@@ -432,7 +432,7 @@ mod tests {
         run_with_stack(|| {
             let spec = build_spec_with_stack();
             let environment = "(RedEnv.mk RecEnv.empty DefEnv.empty IndCtorEnv.empty)";
-            let context = "(ListType.nil KExpr)";
+            let context = "(@ListType.nil KExpr)";
             for (value_src, head) in [
                 (
                     format!("typed_raw_pi_spine_identity_body_apply {environment} typed_spine_identity_tenv {context}"),
@@ -440,7 +440,7 @@ mod tests {
                 ),
                 (
                     format!("typed_raw_pi_spine_identity_const_apply {environment} {context}"),
-                    "(KExpr.const Name.anonymous (ListType.nil Level))",
+                    "(KExpr.const Name.anonymous (@ListType.nil Level))",
                 ),
             ] {
                 let type_src = format!("TypingCtxConvIn {environment} typed_spine_identity_tenv {context} (apply_spine typed_spine_identity_args {head}) (KExpr.sort (Level.succ Level.zero))");

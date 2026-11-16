@@ -645,7 +645,7 @@ impl TranslationContext {
     /// Translate a C statement to a clean term
     ///
     /// Statements are translated to monadic operations: State → State × Result Unit
-    pub fn translate_stmt(&mut self, stmt: &CStmt) -> Expr {
+    pub(crate) fn translate_stmt(&mut self, stmt: &CStmt) -> Expr {
         match stmt {
             CStmt::Empty => Expr::const_(name("CStmt.skip"), vec![]),
 

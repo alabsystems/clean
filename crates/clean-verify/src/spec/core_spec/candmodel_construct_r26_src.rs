@@ -29,7 +29,7 @@ const XLIFT: &str = "(xval (skcons Sk.ty D) (lift_at B Nat.zero (Nat.succ Nat.ze
 /// `candExpHF_beta`.
 pub(super) const TY_CANDHF_BETASTAR_CLOSED: &str = "forall (S : KExpr -> Type), IsCandHF S -> forall (x : KExpr) (y : KExpr), betaStar x y -> S x -> S y";
 
-pub(super) const VAL_CANDHF_BETASTAR_CLOSED: &str = "fun (S : KExpr -> Type) (hS : IsCandHF S) (x : KExpr) (y : KExpr) (hstar : betaStar x y) => betaStar.rec (fun (x0 : KExpr) (y0 : KExpr) (_ : betaStar x0 y0) => S x0 -> S y0) (fun (xe : KExpr) (hx : S xe) => hx) (fun (xe : KExpr) (xe2 : KExpr) (xe3 : KExpr) (hstep : beta_reduces xe xe2) (_hrest : betaStar xe2 xe3) (ih : S xe2 -> S xe3) (hx : S xe) => ih (isCandHF_cr2 S hS xe xe2 hx (whnf_step.beta xe xe2 hstep))) x y hstar";
+pub(super) const VAL_CANDHF_BETASTAR_CLOSED: &str = "fun (S : KExpr -> Type) (hS : IsCandHF S) (x : KExpr) (y : KExpr) (hstar : betaStar x y) => @betaStar.rec (fun (x0 : KExpr) (y0 : KExpr) (_ : betaStar x0 y0) => S x0 -> S y0) (fun (xe : KExpr) (hx : S xe) => hx) (fun (xe : KExpr) (xe2 : KExpr) (xe3 : KExpr) (hstep : beta_reduces xe xe2) (_hrest : betaStar xe2 xe3) (ih : S xe2 -> S xe3) (hx : S xe) => ih (isCandHF_cr2 S hS xe xe2 hx (whnf_step.beta xe xe2 hstep))) x y hstar";
 
 /// **`r26_candExpHF_beta_subst`** — R2's single-contractum engine at the
 /// HeadFree class.
@@ -75,7 +75,7 @@ pub(super) fn ty_red_lam_one() -> String {
 
 pub(super) fn val_red_lam_one() -> String {
     let redex = "(KExpr.app (KExpr.lam ann b) a)";
-    format!("fun (D : Nat -> Sk) (A : KExpr) (B : KExpr) (hA : WKC D A Sk.ty) (hB : WKC D B Sk.ty) (r : VEnvD D) (hr : GoodEnvD D r) (hcl : RecEnvClosed (red_rec the_red_env)) (ann : KExpr) (hann : whnf_acc ann) (b : KExpr) (hb : whnf_acc b) (hone : forall (a2 : KExpr), r24_RedAt D A hA r a2 -> r24_RedAt D B hB r (instantiate b a2)) (a : KExpr) (ha : r24_RedAt D A hA r a) => Eq.substType (VD Sk.ty) (fun (qv : VD Sk.ty) => qv {redex}) (xval D B Sk.ty hB r) {XLIFT} (Eq.symm (VD Sk.ty) {XLIFT} (xval D B Sk.ty hB r) (r20_xval_lift0 D B Sk.ty hB Sk.ty (junkD Sk.ty) r)) (r26_red_beta_expand_one D A B hA hB r hr hcl ann hann b hb hone a ha)")
+    format!("fun (D : Nat -> Sk) (A : KExpr) (B : KExpr) (hA : WKC D A Sk.ty) (hB : WKC D B Sk.ty) (r : VEnvD D) (hr : GoodEnvD D r) (hcl : RecEnvClosed (red_rec the_red_env)) (ann : KExpr) (hann : whnf_acc ann) (b : KExpr) (hb : whnf_acc b) (hone : forall (a2 : KExpr), r24_RedAt D A hA r a2 -> r24_RedAt D B hB r (instantiate b a2)) (a : KExpr) (ha : r24_RedAt D A hA r a) => @Eq.substType (VD Sk.ty) (fun (qv : VD Sk.ty) => qv {redex}) (xval D B Sk.ty hB r) {XLIFT} (@Eq.symm (VD Sk.ty) {XLIFT} (xval D B Sk.ty hB r) (r20_xval_lift0 D B Sk.ty hB Sk.ty (junkD Sk.ty) r)) (r26_red_beta_expand_one D A B hA hB r hr hcl ann hann b hb hone a ha)")
 }
 
 /// **`r26_lam_premise_is_the_induction_hypothesis`** — the bridge, stated.
@@ -88,7 +88,7 @@ pub(super) fn val_red_lam_one() -> String {
 /// kernel-checked constant rather than a remark in a commit message.
 pub(super) const TY_LAM_PREMISE_IS_IH: &str = "forall (D : Nat -> Sk) (B : KExpr) (hB : WKC D B Sk.ty) (r : VEnvD D) (b : KExpr) (s : Nat -> KExpr) (a : KExpr), r24_RedAt D B hB r (psubst (scons a s) b) -> r24_RedAt D B hB r (instantiate (psubst (up s) b) a)";
 
-pub(super) const VAL_LAM_PREMISE_IS_IH: &str = "fun (D : Nat -> Sk) (B : KExpr) (hB : WKC D B Sk.ty) (r : VEnvD D) (b : KExpr) (s : Nat -> KExpr) (a : KExpr) (h : r24_RedAt D B hB r (psubst (scons a s) b)) => Eq.substType KExpr (fun (qw : KExpr) => r24_RedAt D B hB r qw) (psubst (scons a s) b) (instantiate (psubst (up s) b) a) (psubst_scons_instantiate b a s) h";
+pub(super) const VAL_LAM_PREMISE_IS_IH: &str = "fun (D : Nat -> Sk) (B : KExpr) (hB : WKC D B Sk.ty) (r : VEnvD D) (b : KExpr) (s : Nat -> KExpr) (a : KExpr) (h : r24_RedAt D B hB r (psubst (scons a s) b)) => @Eq.substType KExpr (fun (qw : KExpr) => r24_RedAt D B hB r qw) (psubst (scons a s) b) (instantiate (psubst (up s) b) a) (psubst_scons_instantiate b a s) h";
 
 // ================================================================
 // Group C — negative controls. NOT registered.

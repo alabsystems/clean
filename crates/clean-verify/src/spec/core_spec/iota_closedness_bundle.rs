@@ -47,8 +47,8 @@ impl Specification {
         // ================================================================
         self.add_inductive(
             "inductive AllClosed : ListType KExpr -> Nat -> Type\n\
-             | nil : forall (d : Nat), AllClosed (ListType.nil KExpr) d\n\
-             | cons : forall (x : KExpr) (xs : ListType KExpr) (d : Nat), is_closed_at x d -> AllClosed xs d -> AllClosed (ListType.cons KExpr x xs) d",
+             | nil : forall (d : Nat), AllClosed (@ListType.nil KExpr) d\n\
+             | cons : forall (x : KExpr) (xs : ListType KExpr) (d : Nat), is_closed_at x d -> AllClosed xs d -> AllClosed (@ListType.cons KExpr x xs) d",
             "AllClosed xs d holds if every element of the KExpr list xs is closed at de Bruijn depth d. \
              Structural companion of is_closed_at for application-spine argument lists (the iota reduct \
              is built by apply_spine over kapp_args-derived lists). Part of the census-11 drain (Stage 2B).",
@@ -66,7 +66,7 @@ impl Specification {
                 concat!(
                     "fun (xs : ListType KExpr) (ys : ListType KExpr) (d : Nat) ",
                     "(hxs : AllClosed xs d) (hys : AllClosed ys d) => ",
-                    "AllClosed.rec ",
+                    "@AllClosed.rec ",
                     "(fun (l : ListType KExpr) (n : Nat) (_ : AllClosed l n) => AllClosed ys n -> AllClosed (list_append l ys) n) ",
                     "(fun (d0 : Nat) => fun (hy : AllClosed ys d0) => hy) ",
                     "(fun (x : KExpr) (xs0 : ListType KExpr) (d0 : Nat) (hx : is_closed_at x d0) (hrest : AllClosed xs0 d0) ",
@@ -102,7 +102,7 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (xs : ListType KExpr) (d : Nat) (h : AllClosed xs d) => ",
-                    "AllClosed.rec ",
+                    "@AllClosed.rec ",
                     "(fun (l : ListType KExpr) (n : Nat) (_ : AllClosed l n) => AllClosed (list_tail l) n) ",
                     "(fun (d0 : Nat) => AllClosed.nil d0) ",
                     "(fun (x : KExpr) (xs0 : ListType KExpr) (d0 : Nat) (hx : is_closed_at x d0) (hrest : AllClosed xs0 d0) ",
@@ -137,7 +137,7 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (n : Nat) (xs : ListType KExpr) (d : Nat) (h : AllClosed xs d) => ",
-                    "Nat.rec ",
+                    "@Nat.rec ",
                     "(fun (k : Nat) => forall (l : ListType KExpr), AllClosed l d -> AllClosed (list_drop k l) d) ",
                     "(fun (l : ListType KExpr) (hl : AllClosed l d) => hl) ",
                     "(fun (m : Nat) (ih : forall (l : ListType KExpr), AllClosed l d -> AllClosed (list_drop m l) d) => ",
@@ -173,21 +173,21 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (n : Nat) (xs : ListType KExpr) (d : Nat) (hxs : AllClosed xs d) => ",
-                    "AllClosed.rec ",
+                    "@AllClosed.rec ",
                     "(fun (l : ListType KExpr) (nn : Nat) (_ : AllClosed l nn) => forall (k : Nat), AllClosed (list_take k l) nn) ",
                     // nil branch: list_take k nil = nil for all k.
                     "(fun (d0 : Nat) => fun (k : Nat) => ",
-                    "Nat.rec (fun (kk : Nat) => AllClosed (list_take kk (ListType.nil KExpr)) d0) ",
+                    "@Nat.rec (fun (kk : Nat) => AllClosed (list_take kk (@ListType.nil KExpr)) d0) ",
                     "(AllClosed.nil d0) ",
-                    "(fun (m : Nat) (_ : AllClosed (list_take m (ListType.nil KExpr)) d0) => AllClosed.nil d0) ",
+                    "(fun (m : Nat) (_ : AllClosed (list_take m (@ListType.nil KExpr)) d0) => AllClosed.nil d0) ",
                     "k) ",
                     // cons branch
                     "(fun (x : KExpr) (xs0 : ListType KExpr) (d0 : Nat) (hx : is_closed_at x d0) (hrest : AllClosed xs0 d0) ",
                     "(ih : forall (k : Nat), AllClosed (list_take k xs0) d0) => ",
                     "fun (k : Nat) => ",
-                    "Nat.rec (fun (kk : Nat) => AllClosed (list_take kk (ListType.cons KExpr x xs0)) d0) ",
+                    "@Nat.rec (fun (kk : Nat) => AllClosed (list_take kk (@ListType.cons KExpr x xs0)) d0) ",
                     "(AllClosed.nil d0) ",
-                    "(fun (m : Nat) (_ : AllClosed (list_take m (ListType.cons KExpr x xs0)) d0) => ",
+                    "(fun (m : Nat) (_ : AllClosed (list_take m (@ListType.cons KExpr x xs0)) d0) => ",
                     "AllClosed.cons x (list_take m xs0) d0 hx (ih m)) ",
                     "k) ",
                     "xs d hxs n"
@@ -223,7 +223,7 @@ impl Specification {
                 concat!(
                     "fun (args : ListType KExpr) (head : KExpr) (d : Nat) ",
                     "(hargs : AllClosed args d) (hh : is_closed_at head d) => ",
-                    "AllClosed.rec ",
+                    "@AllClosed.rec ",
                     "(fun (l : ListType KExpr) (n : Nat) (_ : AllClosed l n) => forall (h0 : KExpr), is_closed_at h0 n -> is_closed_at (apply_spine l h0) n) ",
                     "(fun (d0 : Nat) => fun (h0 : KExpr) (hh0 : is_closed_at h0 d0) => hh0) ",
                     "(fun (x : KExpr) (xs0 : ListType KExpr) (d0 : Nat) (hx : is_closed_at x d0) (hrest : AllClosed xs0 d0) ",
@@ -255,7 +255,7 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (e : KExpr) (d : Nat) (hc : is_closed_at e d) => ",
-                    "is_closed_at.rec ",
+                    "@is_closed_at.rec ",
                     "(fun (e0 : KExpr) (D : Nat) (_hc : is_closed_at e0 D) => AllClosed (kapp_args e0) D) ",
                     // sort
                     "(fun (nn : Level) (D : Nat) => AllClosed.nil D) ",
@@ -264,8 +264,8 @@ impl Specification {
                     // app
                     "(fun (f : KExpr) (a : KExpr) (D : Nat) (_hf : is_closed_at f D) (ha : is_closed_at a D) ",
                     "(ihf : AllClosed (kapp_args f) D) (_iha : AllClosed (kapp_args a) D) => ",
-                    "AllClosed_append (kapp_args f) (ListType.cons KExpr a (ListType.nil KExpr)) D ihf ",
-                    "(AllClosed.cons a (ListType.nil KExpr) D ha (AllClosed.nil D))) ",
+                    "AllClosed_append (kapp_args f) (@ListType.cons KExpr a (@ListType.nil KExpr)) D ihf ",
+                    "(AllClosed.cons a (@ListType.nil KExpr) D ha (AllClosed.nil D))) ",
                     // lam
                     "(fun (ty : KExpr) (body : KExpr) (D : Nat) (_hty : is_closed_at ty D) (_hbody : is_closed_at body (Nat.succ D)) ",
                     "(_ihty : AllClosed (kapp_args ty) D) (_ihbody : AllClosed (kapp_args body) (Nat.succ D)) => AllClosed.nil D) ",
@@ -306,29 +306,29 @@ impl Specification {
             name: "list_head_closed".to_string(),
             type_src: concat!(
                 "forall (xs : ListType KExpr) (x : KExpr) (d : Nat), ",
-                "Eq (OptionType KExpr) (list_head xs) (OptionType.some KExpr x) -> ",
+                "@Eq (OptionType KExpr) (list_head xs) (@OptionType.some KExpr x) -> ",
                 "AllClosed xs d -> is_closed_at x d"
             )
             .to_string(),
             value_src: Some(
                 concat!(
                     "fun (xs : ListType KExpr) (x : KExpr) (d : Nat) ",
-                    "(hhd : Eq (OptionType KExpr) (list_head xs) (OptionType.some KExpr x)) ",
+                    "(hhd : @Eq (OptionType KExpr) (list_head xs) (@OptionType.some KExpr x)) ",
                     "(hall : AllClosed xs d) => ",
-                    "AllClosed.rec ",
+                    "@AllClosed.rec ",
                     "(fun (l : ListType KExpr) (n : Nat) (_ : AllClosed l n) => ",
-                    "Eq (OptionType KExpr) (list_head l) (OptionType.some KExpr x) -> is_closed_at x n) ",
+                    "@Eq (OptionType KExpr) (list_head l) (@OptionType.some KExpr x) -> is_closed_at x n) ",
                     // nil branch: list_head nil = none; none = some x is absurd
                     // (Type-valued discrimination via opt_is_none: is_closed_at is
                     // Type, not Prop, so option_none_ne_some (Prop-only) is unusable).
-                    "(fun (d0 : Nat) => fun (hn : Eq (OptionType KExpr) (OptionType.none KExpr) (OptionType.some KExpr x)) => ",
+                    "(fun (d0 : Nat) => fun (hn : @Eq (OptionType KExpr) (@OptionType.none KExpr) (@OptionType.some KExpr x)) => ",
                     "Empty.rec (fun (_ : Empty) => is_closed_at x d0) ",
-                    "(Eq.substType (OptionType KExpr) (opt_is_none KExpr) (OptionType.none KExpr) (OptionType.some KExpr x) hn Nat.zero)) ",
+                    "(@Eq.substType (OptionType KExpr) (opt_is_none KExpr) (@OptionType.none KExpr) (@OptionType.some KExpr x) hn Nat.zero)) ",
                     // cons branch: list_head (cons y rest) = some y; some y = some x => y = x.
                     "(fun (y : KExpr) (rest : ListType KExpr) (d0 : Nat) (hy : is_closed_at y d0) (hrest : AllClosed rest d0) ",
-                    "(_ih : Eq (OptionType KExpr) (list_head rest) (OptionType.some KExpr x) -> is_closed_at x d0) => ",
-                    "fun (hc : Eq (OptionType KExpr) (OptionType.some KExpr y) (OptionType.some KExpr x)) => ",
-                    "Eq.substType KExpr (fun (z : KExpr) => is_closed_at z d0) y x (option_some_inj KExpr y x hc) hy) ",
+                    "(_ih : @Eq (OptionType KExpr) (list_head rest) (@OptionType.some KExpr x) -> is_closed_at x d0) => ",
+                    "fun (hc : @Eq (OptionType KExpr) (@OptionType.some KExpr y) (@OptionType.some KExpr x)) => ",
+                    "@Eq.substType KExpr (fun (z : KExpr) => is_closed_at z d0) y x (option_some_inj KExpr y x hc) hy) ",
                     "xs d hall hhd"
                 )
                 .to_string(),
@@ -354,12 +354,12 @@ impl Specification {
         // kexpr_bvar_inj: bvar injectivity via a KExpr.rec index projector.
         self.add_definition(SpecDefinition {
             name: "kexpr_bvar_inj".to_string(),
-            type_src: "forall (m : Nat) (n : Nat), Eq KExpr (KExpr.bvar m) (KExpr.bvar n) -> Eq Nat m n".to_string(),
+            type_src: "forall (m : Nat) (n : Nat), @Eq KExpr (KExpr.bvar m) (KExpr.bvar n) -> @Eq Nat m n".to_string(),
             value_src: Some(
                 concat!(
-                    "fun (m : Nat) (n : Nat) (h : Eq KExpr (KExpr.bvar m) (KExpr.bvar n)) => ",
-                    "Eq.cong KExpr Nat ",
-                    "(fun (e0 : KExpr) => KExpr.rec (fun (_ : KExpr) => Nat) ",
+                    "fun (m : Nat) (n : Nat) (h : @Eq KExpr (KExpr.bvar m) (KExpr.bvar n)) => ",
+                    "@Eq.cong KExpr Nat ",
+                    "(fun (e0 : KExpr) => @KExpr.rec (fun (_ : KExpr) => Nat) ",
                     "(fun (k : Level) => Nat.zero) ",
                     "(fun (i : Nat) => i) ",
                     "(fun (f : KExpr) (a : KExpr) (_ : Nat) (_ : Nat) => Nat.zero) ",
@@ -390,15 +390,15 @@ impl Specification {
         // nat_lt_ne: Lt a b and Eq a b are incompatible.
         self.add_definition(SpecDefinition {
             name: "nat_lt_ne".to_string(),
-            type_src: "forall (a : Nat) (b : Nat), Lt a b -> Eq Nat a b -> Empty".to_string(),
+            type_src: "forall (a : Nat) (b : Nat), Lt a b -> @Eq Nat a b -> Empty".to_string(),
             value_src: Some(
                 concat!(
                     "fun (a : Nat) (b : Nat) (hlt : Lt a b) => ",
-                    "Lt.rec ",
-                    "(fun (x : Nat) (y : Nat) (_ : Lt x y) => Eq Nat x y -> Empty) ",
-                    "(fun (nn : Nat) => fun (heq : Eq Nat Nat.zero (Nat.succ nn)) => nat_zero_ne_succ nn Empty heq) ",
-                    "(fun (nn : Nat) (mm : Nat) (_hlt : Lt nn mm) (ih : Eq Nat nn mm -> Empty) => ",
-                    "fun (heq : Eq Nat (Nat.succ nn) (Nat.succ mm)) => ih (nat_succ_inj nn mm heq)) ",
+                    "@Lt.rec ",
+                    "(fun (x : Nat) (y : Nat) (_ : Lt x y) => @Eq Nat x y -> Empty) ",
+                    "(fun (nn : Nat) => fun (heq : @Eq Nat Nat.zero (Nat.succ nn)) => nat_zero_ne_succ nn Empty heq) ",
+                    "(fun (nn : Nat) (mm : Nat) (_hlt : Lt nn mm) (ih : @Eq Nat nn mm -> Empty) => ",
+                    "fun (heq : @Eq Nat (Nat.succ nn) (Nat.succ mm)) => ih (nat_succ_inj nn mm heq)) ",
                     "a b hlt"
                 )
                 .to_string(),
@@ -424,66 +424,66 @@ impl Specification {
             name: "lift_invariant_closed".to_string(),
             type_src: concat!(
                 "forall (e : KExpr) (c : Nat) (a : Nat), ",
-                "Eq KExpr (lift_at e c (Nat.succ a)) e -> is_closed_at e c"
+                "@Eq KExpr (lift_at e c (Nat.succ a)) e -> is_closed_at e c"
             )
             .to_string(),
             value_src: Some(
                 concat!(
-                    "fun (e : KExpr) (c : Nat) (a : Nat) (h : Eq KExpr (lift_at e c (Nat.succ a)) e) => ",
-                    "KExpr.rec ",
-                    "(fun (e0 : KExpr) => forall (c0 : Nat) (a0 : Nat), Eq KExpr (lift_at e0 c0 (Nat.succ a0)) e0 -> is_closed_at e0 c0) ",
+                    "fun (e : KExpr) (c : Nat) (a : Nat) (h : @Eq KExpr (lift_at e c (Nat.succ a)) e) => ",
+                    "@KExpr.rec ",
+                    "(fun (e0 : KExpr) => forall (c0 : Nat) (a0 : Nat), @Eq KExpr (lift_at e0 c0 (Nat.succ a0)) e0 -> is_closed_at e0 c0) ",
                     // sort
-                    "(fun (nn : Level) => fun (c0 : Nat) (a0 : Nat) (_h : Eq KExpr (lift_at (KExpr.sort nn) c0 (Nat.succ a0)) (KExpr.sort nn)) => is_closed_at.sort nn c0) ",
+                    "(fun (nn : Level) => fun (c0 : Nat) (a0 : Nat) (_h : @Eq KExpr (lift_at (KExpr.sort nn) c0 (Nat.succ a0)) (KExpr.sort nn)) => is_closed_at.sort nn c0) ",
                     // bvar
-                    "(fun (i : Nat) => fun (c0 : Nat) (a0 : Nat) (hb : Eq KExpr (lift_at (KExpr.bvar i) c0 (Nat.succ a0)) (KExpr.bvar i)) => ",
-                    "NatLtLeDichotomy.rec i c0 ",
+                    "(fun (i : Nat) => fun (c0 : Nat) (a0 : Nat) (hb : @Eq KExpr (lift_at (KExpr.bvar i) c0 (Nat.succ a0)) (KExpr.bvar i)) => ",
+                    "@NatLtLeDichotomy.rec i c0 ",
                     "(fun (_dch : NatLtLeDichotomy i c0) => is_closed_at (KExpr.bvar i) c0) ",
                     "(fun (hic : Lt i c0) => is_closed_at.bvar i c0 hic) ",
                     "(fun (hci : Le c0 i) => ",
                     "Empty.rec (fun (_ : Empty) => is_closed_at (KExpr.bvar i) c0) ",
                     "(nat_lt_ne i (Nat.add i (Nat.succ a0)) ",
-                    "(Eq.substType Nat (fun (z : Nat) => Lt i z) (Nat.add (Nat.succ i) a0) (Nat.succ (Nat.add i a0)) (nat_succ_add i a0) ",
+                    "(@Eq.substType Nat (fun (z : Nat) => Lt i z) (Nat.add (Nat.succ i) a0) (Nat.succ (Nat.add i a0)) (nat_succ_add i a0) ",
                     "(lt_add_weaken_right i (Nat.succ i) a0 (lt_succ_self i))) ",
-                    "(Eq.symm Nat (Nat.add i (Nat.succ a0)) i ",
+                    "(@Eq.symm Nat (Nat.add i (Nat.succ a0)) i ",
                     "(kexpr_bvar_inj (Nat.add i (Nat.succ a0)) i ",
-                    "(Eq.trans KExpr (KExpr.bvar (Nat.add i (Nat.succ a0))) (lift_at (KExpr.bvar i) c0 (Nat.succ a0)) (KExpr.bvar i) ",
-                    "(Eq.symm KExpr (lift_at (KExpr.bvar i) c0 (Nat.succ a0)) (KExpr.bvar (Nat.add i (Nat.succ a0))) ",
+                    "(@Eq.trans KExpr (KExpr.bvar (Nat.add i (Nat.succ a0))) (lift_at (KExpr.bvar i) c0 (Nat.succ a0)) (KExpr.bvar i) ",
+                    "(@Eq.symm KExpr (lift_at (KExpr.bvar i) c0 (Nat.succ a0)) (KExpr.bvar (Nat.add i (Nat.succ a0))) ",
                     "(lift_at_bvar_geq i c0 (Nat.succ a0) (le_sub_zero c0 i hci))) ",
                     "hb))))) ",
                     "(nat_lt_le_dichotomy i c0)) ",
                     // app
-                    "(fun (f : KExpr) (a2 : KExpr) (ihf : forall (c0 : Nat) (a0 : Nat), Eq KExpr (lift_at f c0 (Nat.succ a0)) f -> is_closed_at f c0) ",
-                    "(iha : forall (c0 : Nat) (a0 : Nat), Eq KExpr (lift_at a2 c0 (Nat.succ a0)) a2 -> is_closed_at a2 c0) => ",
-                    "fun (c0 : Nat) (a0 : Nat) (happ : Eq KExpr (lift_at (KExpr.app f a2) c0 (Nat.succ a0)) (KExpr.app f a2)) => ",
+                    "(fun (f : KExpr) (a2 : KExpr) (ihf : forall (c0 : Nat) (a0 : Nat), @Eq KExpr (lift_at f c0 (Nat.succ a0)) f -> is_closed_at f c0) ",
+                    "(iha : forall (c0 : Nat) (a0 : Nat), @Eq KExpr (lift_at a2 c0 (Nat.succ a0)) a2 -> is_closed_at a2 c0) => ",
+                    "fun (c0 : Nat) (a0 : Nat) (happ : @Eq KExpr (lift_at (KExpr.app f a2) c0 (Nat.succ a0)) (KExpr.app f a2)) => ",
                     "is_closed_at.app f a2 c0 ",
                     "(ihf c0 a0 (app_inj_fst (lift_at f c0 (Nat.succ a0)) (lift_at a2 c0 (Nat.succ a0)) f a2 happ)) ",
                     "(iha c0 a0 (app_inj_snd (lift_at f c0 (Nat.succ a0)) (lift_at a2 c0 (Nat.succ a0)) f a2 happ))) ",
                     // lam
-                    "(fun (ty : KExpr) (body : KExpr) (ihty : forall (c0 : Nat) (a0 : Nat), Eq KExpr (lift_at ty c0 (Nat.succ a0)) ty -> is_closed_at ty c0) ",
-                    "(ihbody : forall (c0 : Nat) (a0 : Nat), Eq KExpr (lift_at body c0 (Nat.succ a0)) body -> is_closed_at body c0) => ",
-                    "fun (c0 : Nat) (a0 : Nat) (hlam : Eq KExpr (lift_at (KExpr.lam ty body) c0 (Nat.succ a0)) (KExpr.lam ty body)) => ",
+                    "(fun (ty : KExpr) (body : KExpr) (ihty : forall (c0 : Nat) (a0 : Nat), @Eq KExpr (lift_at ty c0 (Nat.succ a0)) ty -> is_closed_at ty c0) ",
+                    "(ihbody : forall (c0 : Nat) (a0 : Nat), @Eq KExpr (lift_at body c0 (Nat.succ a0)) body -> is_closed_at body c0) => ",
+                    "fun (c0 : Nat) (a0 : Nat) (hlam : @Eq KExpr (lift_at (KExpr.lam ty body) c0 (Nat.succ a0)) (KExpr.lam ty body)) => ",
                     "is_closed_at.lam ty body c0 ",
                     "(ihty c0 a0 (lam_inj_fst (lift_at ty c0 (Nat.succ a0)) (lift_at body (Nat.succ c0) (Nat.succ a0)) ty body hlam)) ",
                     "(ihbody (Nat.succ c0) a0 (lam_inj_snd (lift_at ty c0 (Nat.succ a0)) (lift_at body (Nat.succ c0) (Nat.succ a0)) ty body hlam))) ",
                     // pi
-                    "(fun (ty : KExpr) (body : KExpr) (ihty : forall (c0 : Nat) (a0 : Nat), Eq KExpr (lift_at ty c0 (Nat.succ a0)) ty -> is_closed_at ty c0) ",
-                    "(ihbody : forall (c0 : Nat) (a0 : Nat), Eq KExpr (lift_at body c0 (Nat.succ a0)) body -> is_closed_at body c0) => ",
-                    "fun (c0 : Nat) (a0 : Nat) (hpi : Eq KExpr (lift_at (KExpr.pi ty body) c0 (Nat.succ a0)) (KExpr.pi ty body)) => ",
+                    "(fun (ty : KExpr) (body : KExpr) (ihty : forall (c0 : Nat) (a0 : Nat), @Eq KExpr (lift_at ty c0 (Nat.succ a0)) ty -> is_closed_at ty c0) ",
+                    "(ihbody : forall (c0 : Nat) (a0 : Nat), @Eq KExpr (lift_at body c0 (Nat.succ a0)) body -> is_closed_at body c0) => ",
+                    "fun (c0 : Nat) (a0 : Nat) (hpi : @Eq KExpr (lift_at (KExpr.pi ty body) c0 (Nat.succ a0)) (KExpr.pi ty body)) => ",
                     "is_closed_at.pi ty body c0 ",
                     "(ihty c0 a0 (pi_inj_fst (lift_at ty c0 (Nat.succ a0)) (lift_at body (Nat.succ c0) (Nat.succ a0)) ty body hpi)) ",
                     "(ihbody (Nat.succ c0) a0 (pi_inj_snd (lift_at ty c0 (Nat.succ a0)) (lift_at body (Nat.succ c0) (Nat.succ a0)) ty body hpi))) ",
                     // const
-                    "(fun (nm : Name) (us : ListType Level) => fun (c0 : Nat) (a0 : Nat) (_h : Eq KExpr (lift_at (KExpr.const nm us) c0 (Nat.succ a0)) (KExpr.const nm us)) => is_closed_at.const nm us c0) ",
+                    "(fun (nm : Name) (us : ListType Level) => fun (c0 : Nat) (a0 : Nat) (_h : @Eq KExpr (lift_at (KExpr.const nm us) c0 (Nat.succ a0)) (KExpr.const nm us)) => is_closed_at.const nm us c0) ",
                     // let_ (ty/val at cutoff, body at succ cutoff; field sub-equations
                     // via inline KExpr.rec projector injectivity, the lam_inj technique)
                     "(fun (ty : KExpr) (val : KExpr) (body : KExpr) ",
-                    "(ihty : forall (c0 : Nat) (a0 : Nat), Eq KExpr (lift_at ty c0 (Nat.succ a0)) ty -> is_closed_at ty c0) ",
-                    "(ihval : forall (c0 : Nat) (a0 : Nat), Eq KExpr (lift_at val c0 (Nat.succ a0)) val -> is_closed_at val c0) ",
-                    "(ihbody : forall (c0 : Nat) (a0 : Nat), Eq KExpr (lift_at body c0 (Nat.succ a0)) body -> is_closed_at body c0) => ",
-                    "fun (c0 : Nat) (a0 : Nat) (hlet : Eq KExpr (lift_at (KExpr.let_ ty val body) c0 (Nat.succ a0)) (KExpr.let_ ty val body)) => ",
+                    "(ihty : forall (c0 : Nat) (a0 : Nat), @Eq KExpr (lift_at ty c0 (Nat.succ a0)) ty -> is_closed_at ty c0) ",
+                    "(ihval : forall (c0 : Nat) (a0 : Nat), @Eq KExpr (lift_at val c0 (Nat.succ a0)) val -> is_closed_at val c0) ",
+                    "(ihbody : forall (c0 : Nat) (a0 : Nat), @Eq KExpr (lift_at body c0 (Nat.succ a0)) body -> is_closed_at body c0) => ",
+                    "fun (c0 : Nat) (a0 : Nat) (hlet : @Eq KExpr (lift_at (KExpr.let_ ty val body) c0 (Nat.succ a0)) (KExpr.let_ ty val body)) => ",
                     "is_closed_at.let_ ty val body c0 ",
-                    "(ihty c0 a0 (Eq.cong KExpr KExpr ",
-                    "(fun (e0 : KExpr) => KExpr.rec (fun (_ : KExpr) => KExpr) ",
+                    "(ihty c0 a0 (@Eq.cong KExpr KExpr ",
+                    "(fun (e0 : KExpr) => @KExpr.rec (fun (_ : KExpr) => KExpr) ",
                     "(fun (_ : Level) => ty) (fun (_ : Nat) => ty) ",
                     "(fun (_ : KExpr) (_ : KExpr) (_ : KExpr) (_ : KExpr) => ty) ",
                     "(fun (_ : KExpr) (_ : KExpr) (_ : KExpr) (_ : KExpr) => ty) ",
@@ -494,8 +494,8 @@ impl Specification {
                     "(fun (_ : Nat) => ty) ",
                     "e0) ",
                     "(lift_at (KExpr.let_ ty val body) c0 (Nat.succ a0)) (KExpr.let_ ty val body) hlet)) ",
-                    "(ihval c0 a0 (Eq.cong KExpr KExpr ",
-                    "(fun (e0 : KExpr) => KExpr.rec (fun (_ : KExpr) => KExpr) ",
+                    "(ihval c0 a0 (@Eq.cong KExpr KExpr ",
+                    "(fun (e0 : KExpr) => @KExpr.rec (fun (_ : KExpr) => KExpr) ",
                     "(fun (_ : Level) => val) (fun (_ : Nat) => val) ",
                     "(fun (_ : KExpr) (_ : KExpr) (_ : KExpr) (_ : KExpr) => val) ",
                     "(fun (_ : KExpr) (_ : KExpr) (_ : KExpr) (_ : KExpr) => val) ",
@@ -506,8 +506,8 @@ impl Specification {
                     "(fun (_ : Nat) => val) ",
                     "e0) ",
                     "(lift_at (KExpr.let_ ty val body) c0 (Nat.succ a0)) (KExpr.let_ ty val body) hlet)) ",
-                    "(ihbody (Nat.succ c0) a0 (Eq.cong KExpr KExpr ",
-                    "(fun (e0 : KExpr) => KExpr.rec (fun (_ : KExpr) => KExpr) ",
+                    "(ihbody (Nat.succ c0) a0 (@Eq.cong KExpr KExpr ",
+                    "(fun (e0 : KExpr) => @KExpr.rec (fun (_ : KExpr) => KExpr) ",
                     "(fun (_ : Level) => body) (fun (_ : Nat) => body) ",
                     "(fun (_ : KExpr) (_ : KExpr) (_ : KExpr) (_ : KExpr) => body) ",
                     "(fun (_ : KExpr) (_ : KExpr) (_ : KExpr) (_ : KExpr) => body) ",
@@ -520,11 +520,11 @@ impl Specification {
                     "(lift_at (KExpr.let_ ty val body) c0 (Nat.succ a0)) (KExpr.let_ ty val body) hlet))) ",
                     // proj: extract the sub-field equation via the inline projector, recurse.
                     "(fun (s : Name) (i : Nat) (sub : KExpr) ",
-                    "(ihsub : forall (c0 : Nat) (a0 : Nat), Eq KExpr (lift_at sub c0 (Nat.succ a0)) sub -> is_closed_at sub c0) => ",
-                    "fun (c0 : Nat) (a0 : Nat) (hproj : Eq KExpr (lift_at (KExpr.proj s i sub) c0 (Nat.succ a0)) (KExpr.proj s i sub)) => ",
+                    "(ihsub : forall (c0 : Nat) (a0 : Nat), @Eq KExpr (lift_at sub c0 (Nat.succ a0)) sub -> is_closed_at sub c0) => ",
+                    "fun (c0 : Nat) (a0 : Nat) (hproj : @Eq KExpr (lift_at (KExpr.proj s i sub) c0 (Nat.succ a0)) (KExpr.proj s i sub)) => ",
                     "is_closed_at.proj s i sub c0 ",
-                    "(ihsub c0 a0 (Eq.cong KExpr KExpr ",
-                    "(fun (e0 : KExpr) => KExpr.rec (fun (_ : KExpr) => KExpr) ",
+                    "(ihsub c0 a0 (@Eq.cong KExpr KExpr ",
+                    "(fun (e0 : KExpr) => @KExpr.rec (fun (_ : KExpr) => KExpr) ",
                     "(fun (_ : Level) => sub) (fun (_ : Nat) => sub) ",
                     "(fun (_ : KExpr) (_ : KExpr) (_ : KExpr) (_ : KExpr) => sub) ",
                     "(fun (_ : KExpr) (_ : KExpr) (_ : KExpr) (_ : KExpr) => sub) ",
@@ -536,7 +536,7 @@ impl Specification {
                     "e0) ",
                     "(lift_at (KExpr.proj s i sub) c0 (Nat.succ a0)) (KExpr.proj s i sub) hproj))) ",
                     // lit: literals carry no bvars, so unconditionally closed.
-                    "(fun (v : Nat) => fun (c0 : Nat) (a0 : Nat) (_hlit : Eq KExpr (lift_at (KExpr.lit v) c0 (Nat.succ a0)) (KExpr.lit v)) => is_closed_at.lit v c0) ",
+                    "(fun (v : Nat) => fun (c0 : Nat) (a0 : Nat) (_hlit : @Eq KExpr (lift_at (KExpr.lit v) c0 (Nat.succ a0)) (KExpr.lit v)) => is_closed_at.lit v c0) ",
                     "e c a h"
                 )
                 .to_string(),
@@ -594,32 +594,32 @@ impl Specification {
             name: "opt_bind_some_inv_T".to_string(),
             type_src: concat!(
                 "forall (a : Type) (b : Type) (o : OptionType a) (f : a -> OptionType b) (r : b) (C : Type), ",
-                "Eq (OptionType b) (opt_bind a b o f) (OptionType.some b r) -> ",
-                "(forall (w : a), Eq (OptionType a) o (OptionType.some a w) -> ",
-                "Eq (OptionType b) (f w) (OptionType.some b r) -> C) -> C"
+                "@Eq (OptionType b) (opt_bind a b o f) (@OptionType.some b r) -> ",
+                "(forall (w : a), @Eq (OptionType a) o (@OptionType.some a w) -> ",
+                "@Eq (OptionType b) (f w) (@OptionType.some b r) -> C) -> C"
             )
             .to_string(),
             value_src: Some(
                 concat!(
                     "fun (a : Type) (b : Type) (o : OptionType a) (f : a -> OptionType b) (r : b) (C : Type) ",
-                    "(h : Eq (OptionType b) (opt_bind a b o f) (OptionType.some b r)) ",
-                    "(k : forall (w : a), Eq (OptionType a) o (OptionType.some a w) -> ",
-                    "Eq (OptionType b) (f w) (OptionType.some b r) -> C) => ",
-                    "OptionType.rec a ",
+                    "(h : @Eq (OptionType b) (opt_bind a b o f) (@OptionType.some b r)) ",
+                    "(k : forall (w : a), @Eq (OptionType a) o (@OptionType.some a w) -> ",
+                    "@Eq (OptionType b) (f w) (@OptionType.some b r) -> C) => ",
+                    "@OptionType.rec a ",
                     "(fun (o0 : OptionType a) => ",
-                    "Eq (OptionType b) (opt_bind a b o0 f) (OptionType.some b r) -> ",
-                    "(forall (w : a), Eq (OptionType a) o0 (OptionType.some a w) -> ",
-                    "Eq (OptionType b) (f w) (OptionType.some b r) -> C) -> C) ",
-                    "(fun (h0 : Eq (OptionType b) (opt_bind a b (OptionType.none a) f) (OptionType.some b r)) ",
-                    "(k0 : forall (w : a), Eq (OptionType a) (OptionType.none a) (OptionType.some a w) -> ",
-                    "Eq (OptionType b) (f w) (OptionType.some b r) -> C) => ",
+                    "@Eq (OptionType b) (opt_bind a b o0 f) (@OptionType.some b r) -> ",
+                    "(forall (w : a), @Eq (OptionType a) o0 (@OptionType.some a w) -> ",
+                    "@Eq (OptionType b) (f w) (@OptionType.some b r) -> C) -> C) ",
+                    "(fun (h0 : @Eq (OptionType b) (opt_bind a b (@OptionType.none a) f) (@OptionType.some b r)) ",
+                    "(k0 : forall (w : a), @Eq (OptionType a) (@OptionType.none a) (@OptionType.some a w) -> ",
+                    "@Eq (OptionType b) (f w) (@OptionType.some b r) -> C) => ",
                     "Empty.rec (fun (_ : Empty) => C) ",
-                    "(Eq.substType (OptionType b) (opt_is_none b) (OptionType.none b) (OptionType.some b r) h0 Nat.zero)) ",
+                    "(@Eq.substType (OptionType b) (opt_is_none b) (@OptionType.none b) (@OptionType.some b r) h0 Nat.zero)) ",
                     "(fun (w : a) ",
-                    "(h0 : Eq (OptionType b) (opt_bind a b (OptionType.some a w) f) (OptionType.some b r)) ",
-                    "(k0 : forall (w0 : a), Eq (OptionType a) (OptionType.some a w) (OptionType.some a w0) -> ",
-                    "Eq (OptionType b) (f w0) (OptionType.some b r) -> C) => ",
-                    "k0 w (Eq.refl (OptionType a) (OptionType.some a w)) h0) ",
+                    "(h0 : @Eq (OptionType b) (opt_bind a b (@OptionType.some a w) f) (@OptionType.some b r)) ",
+                    "(k0 : forall (w0 : a), @Eq (OptionType a) (@OptionType.some a w) (@OptionType.some a w0) -> ",
+                    "@Eq (OptionType b) (f w0) (@OptionType.some b r) -> C) => ",
+                    "k0 w (@Eq.refl (OptionType a) (@OptionType.some a w)) h0) ",
                     "o h k"
                 )
                 .to_string(),
@@ -656,12 +656,12 @@ impl Specification {
 
             let kont = format!(
                 "(forall (recname : Name) (meta : RecMeta) (major : KExpr) (cname : Name) (rule : RecRule), \
-                 Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name recname) -> \
-                 Eq (OptionType RecMeta) (recmeta_for env recname) (OptionType.some RecMeta meta) -> \
-                 Eq (OptionType KExpr) (list_head (list_drop {major_idx} (kapp_args e))) (OptionType.some KExpr major) -> \
-                 Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname) -> \
-                 Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule) -> \
-                 Eq (OptionType KExpr) (OptionType.some KExpr {reduct}) (OptionType.some KExpr e') -> \
+                 @Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (@OptionType.some Name recname) -> \
+                 @Eq (OptionType RecMeta) (recmeta_for env recname) (@OptionType.some RecMeta meta) -> \
+                 @Eq (OptionType KExpr) (list_head (list_drop {major_idx} (kapp_args e))) (@OptionType.some KExpr major) -> \
+                 @Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (@OptionType.some Name cname) -> \
+                 @Eq (OptionType RecRule) (recrule_for env recname cname) (@OptionType.some RecRule rule) -> \
+                 @Eq (OptionType KExpr) (@OptionType.some KExpr {reduct}) (@OptionType.some KExpr e') -> \
                  C)"
             );
 
@@ -671,7 +671,7 @@ impl Specification {
                 name: "iota_reduct_some_inv_T".to_string(),
                 type_src: format!(
                     "forall (env : RecEnv) (e : KExpr) (e' : KExpr) (C : Type), \
-                     Eq (OptionType KExpr) (iota_reduct env e) (OptionType.some KExpr e') -> {kont} -> C"
+                     @Eq (OptionType KExpr) (iota_reduct env e) (@OptionType.some KExpr e') -> {kont} -> C"
                 ),
                 value_src: Some(value),
                 is_axiom: false,
@@ -714,13 +714,13 @@ impl Specification {
             // The continuation delivered to iota_reduct_some_inv.
             let kont_body = format!(
                 "fun (recname : Name) (meta : RecMeta) (major : KExpr) (cname : Name) (rule : RecRule) \
-                 (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name recname)) \
-                 (h2 : Eq (OptionType RecMeta) (recmeta_for env recname) (OptionType.some RecMeta meta)) \
-                 (h3 : Eq (OptionType KExpr) (list_head (list_drop {major_idx} (kapp_args e))) (OptionType.some KExpr major)) \
-                 (h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname)) \
-                 (h5 : Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule)) \
-                 (h5r : Eq (OptionType KExpr) (OptionType.some KExpr {reduct}) (OptionType.some KExpr e')) => \
-                 Eq.substType KExpr (fun (z : KExpr) => is_closed_at z d) {reduct} e' \
+                 (h1 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (@OptionType.some Name recname)) \
+                 (h2 : @Eq (OptionType RecMeta) (recmeta_for env recname) (@OptionType.some RecMeta meta)) \
+                 (h3 : @Eq (OptionType KExpr) (list_head (list_drop {major_idx} (kapp_args e))) (@OptionType.some KExpr major)) \
+                 (h4 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (@OptionType.some Name cname)) \
+                 (h5 : @Eq (OptionType RecRule) (recrule_for env recname cname) (@OptionType.some RecRule rule)) \
+                 (h5r : @Eq (OptionType KExpr) (@OptionType.some KExpr {reduct}) (@OptionType.some KExpr e')) => \
+                 @Eq.substType KExpr (fun (z : KExpr) => is_closed_at z d) {reduct} e' \
                  (option_some_inj KExpr {reduct} e' h5r) \
                  (apply_spine_preserves_closed {extras} (apply_spine {fields} (apply_spine {prefix} {rhs})) d \
                  (list_drop_preserves_closed (Nat.succ {major_idx}) (kapp_args e) d (kapp_args_closed e d hc)) \
@@ -843,7 +843,7 @@ impl Specification {
         // IsConst: KExpr.rec discriminator, inhabited (by Nat) iff e is a const,
         // Empty otherwise — the witness that makes const_untypable go through.
         self.add_recursive_def(
-            r"def IsConst (e : KExpr) : Type := KExpr.rec (fun (_ : KExpr) => Type) (fun (n : Level) => Empty) (fun (i : Nat) => Empty) (fun (f : KExpr) (a : KExpr) (_ : Type) (_ : Type) => Empty) (fun (ty : KExpr) (b : KExpr) (_ : Type) (_ : Type) => Empty) (fun (ty : KExpr) (b : KExpr) (_ : Type) (_ : Type) => Empty) (fun (nm : Name) (us : ListType Level) => Nat) (fun (ty : KExpr) (v : KExpr) (b : KExpr) (_ : Type) (_ : Type) (_ : Type) => Empty) (fun (s : Name) (i : Nat) (sub : KExpr) (_ : Type) => Empty) (fun (v : Nat) => Empty) e",
+            r"def IsConst (e : KExpr) : Type := @KExpr.rec (fun (_ : KExpr) => Type) (fun (n : Level) => Empty) (fun (i : Nat) => Empty) (fun (f : KExpr) (a : KExpr) (_ : Type) (_ : Type) => Empty) (fun (ty : KExpr) (b : KExpr) (_ : Type) (_ : Type) => Empty) (fun (ty : KExpr) (b : KExpr) (_ : Type) (_ : Type) => Empty) (fun (nm : Name) (us : ListType Level) => Nat) (fun (ty : KExpr) (v : KExpr) (b : KExpr) (_ : Type) (_ : Type) (_ : Type) => Empty) (fun (s : Name) (i : Nat) (sub : KExpr) (_ : Type) => Empty) (fun (v : Nat) => Empty) e",
             "IsConst e is inhabited (by Nat.zero) exactly when e is a const, and Empty otherwise. \
              KExpr.rec discriminator used to prove const_untypable (the context-free Typing judgment \
              has no const rule). Stage 2B-ii.",
@@ -857,7 +857,7 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (e : KExpr) (T : KExpr) (h : Typing e T) => ",
-                    "Typing.rec ",
+                    "@Typing.rec ",
                     "(fun (e0 : KExpr) (T0 : KExpr) (_ : Typing e0 T0) => IsConst e0 -> Empty) ",
                     "(fun (n : Level) => fun (hc : IsConst (KExpr.sort n)) => hc) ",
                     "(fun (A : KExpr) (B : KExpr) (n : Level) (m : Level) (_hA : Typing A (KExpr.sort n)) (_hB : Typing B (KExpr.sort m)) ",
@@ -916,35 +916,35 @@ impl Specification {
         // 2-level opt_bind chain (the delta mirror of iota_reduct_some_inv_T).
         {
             let reduct = "(apply_spine (kapp_args e) val)";
-            let l3 = format!("(fun (val : KExpr) => OptionType.some KExpr {reduct})");
+            let l3 = format!("(fun (val : KExpr) => @OptionType.some KExpr {reduct})");
             let l2 =
                 format!("(fun (dname : Name) => opt_bind KExpr KExpr (kdef_value_at env dname (kexpr_const_levels (kapp_fn e))) {l3})");
             let kont = format!(
                 "(forall (dname : Name) (val : KExpr), \
-                 Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name dname) -> \
-                 Eq (OptionType KExpr) (kdef_value_at env dname (kexpr_const_levels (kapp_fn e))) (OptionType.some KExpr val) -> \
-                 Eq (OptionType KExpr) (OptionType.some KExpr {reduct}) (OptionType.some KExpr e') -> \
+                 @Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (@OptionType.some Name dname) -> \
+                 @Eq (OptionType KExpr) (kdef_value_at env dname (kexpr_const_levels (kapp_fn e))) (@OptionType.some KExpr val) -> \
+                 @Eq (OptionType KExpr) (@OptionType.some KExpr {reduct}) (@OptionType.some KExpr e') -> \
                  C)"
             );
             let value = format!(
                 "fun (env : DefEnv) (e : KExpr) (e' : KExpr) (C : Type) \
-                 (h : Eq (OptionType KExpr) (delta_reduct env e) (OptionType.some KExpr e')) \
+                 (h : @Eq (OptionType KExpr) (delta_reduct env e) (@OptionType.some KExpr e')) \
                  (k : {kont}) => \
                  opt_bind_some_inv_T Name KExpr (kexpr_const_name (kapp_fn e)) {l2} e' C h \
                  (fun (dname : Name) \
-                 (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name dname)) \
-                 (h1r : Eq (OptionType KExpr) ({l2} dname) (OptionType.some KExpr e')) => \
+                 (h1 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (@OptionType.some Name dname)) \
+                 (h1r : @Eq (OptionType KExpr) ({l2} dname) (@OptionType.some KExpr e')) => \
                  opt_bind_some_inv_T KExpr KExpr (kdef_value_at env dname (kexpr_const_levels (kapp_fn e))) {l3} e' C h1r \
                  (fun (val : KExpr) \
-                 (h2 : Eq (OptionType KExpr) (kdef_value_at env dname (kexpr_const_levels (kapp_fn e))) (OptionType.some KExpr val)) \
-                 (h2r : Eq (OptionType KExpr) ({l3} val) (OptionType.some KExpr e')) => \
+                 (h2 : @Eq (OptionType KExpr) (kdef_value_at env dname (kexpr_const_levels (kapp_fn e))) (@OptionType.some KExpr val)) \
+                 (h2r : @Eq (OptionType KExpr) ({l3} val) (@OptionType.some KExpr e')) => \
                  k dname val h1 h2 h2r))"
             );
             self.add_definition(SpecDefinition {
                 name: "delta_reduct_some_inv_T".to_string(),
                 type_src: format!(
                     "forall (env : DefEnv) (e : KExpr) (e' : KExpr) (C : Type), \
-                     Eq (OptionType KExpr) (delta_reduct env e) (OptionType.some KExpr e') -> {kont} -> C"
+                     @Eq (OptionType KExpr) (delta_reduct env e) (@OptionType.some KExpr e') -> {kont} -> C"
                 ),
                 value_src: Some(value),
                 is_axiom: false,
@@ -979,10 +979,10 @@ impl Specification {
                     "(e : KExpr) (e' : KExpr) (d : Nat) (hstep : delta_step env e e') (hc : is_closed_at e d) => ",
                     "delta_reduct_some_inv_T env e e' (is_closed_at e' d) hstep ",
                     "(fun (dname : Name) (val : KExpr) ",
-                    "(h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name dname)) ",
-                    "(h2 : Eq (OptionType KExpr) (kdef_value_at env dname (kexpr_const_levels (kapp_fn e))) (OptionType.some KExpr val)) ",
-                    "(h2r : Eq (OptionType KExpr) (OptionType.some KExpr (apply_spine (kapp_args e) val)) (OptionType.some KExpr e')) => ",
-                    "Eq.substType KExpr (fun (z : KExpr) => is_closed_at z d) (apply_spine (kapp_args e) val) e' ",
+                    "(h1 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (@OptionType.some Name dname)) ",
+                    "(h2 : @Eq (OptionType KExpr) (kdef_value_at env dname (kexpr_const_levels (kapp_fn e))) (@OptionType.some KExpr val)) ",
+                    "(h2r : @Eq (OptionType KExpr) (@OptionType.some KExpr (apply_spine (kapp_args e) val)) (@OptionType.some KExpr e')) => ",
+                    "@Eq.substType KExpr (fun (z : KExpr) => is_closed_at z d) (apply_spine (kapp_args e) val) e' ",
                     "(option_some_inj KExpr (apply_spine (kapp_args e) val) e' h2r) ",
                     "(apply_spine_preserves_closed (kapp_args e) val d (kapp_args_closed e d hc) ",
                     "(lift_invariant_closed val d Nat.zero ",
@@ -1065,7 +1065,7 @@ impl Specification {
                     // conclusions): they are passed explicitly BEFORE the motive, the
                     // motive ranges over the major premise only, and the beta/delta
                     // arms bind just the reduction witness.
-                    "whnf_step.rec e e' ",
+                    "@whnf_step.rec e e' ",
                     "(fun (_ : whnf_step e e') => forall (d : Nat), is_closed_at e d -> is_closed_at e' d) ",
                     "(fun (hb : beta_reduces e e') => fun (d : Nat) (hc : is_closed_at e d) => ",
                     "beta_reduces_preserves_closed (hiota i3 i4) e e' hb d hc) ",
@@ -1105,7 +1105,7 @@ impl Specification {
                     "fun (i3 : RecEnvClosed (red_rec the_red_env)) (i4 : RecEnvLiftClosed (red_rec the_red_env)) ",
                     "(i5 : DefEnvClosed (red_def the_red_env)) (i6 : DefEnvLiftClosed (red_def the_red_env)) ",
                     "(st : KernelState) (e : KExpr) (w : KExpr) (hacc : KernelWhnfAccepts st e w) => ",
-                    "KernelWhnfAccepts.rec st ",
+                    "@KernelWhnfAccepts.rec st ",
                     "(fun (e0 : KExpr) (w0 : KExpr) (_ : KernelWhnfAccepts st e0 w0) => forall (d : Nat), is_closed_at e0 d -> is_closed_at w0 d) ",
                     "(fun (e0 : KExpr) (hw : is_whnf e0) => fun (d : Nat) (hc : is_closed_at e0 d) => hc) ",
                     "(fun (e0 : KExpr) (e0' : KExpr) (v : KExpr) (hstep : whnf_step e0 e0') (hrec : KernelWhnfAccepts st e0' v) ",
@@ -1148,12 +1148,12 @@ impl Specification {
                     "(st : KernelState) (e : KExpr) (T : KExpr) ",
                     "(henv : KernelStateEnvValid st) (hctx : KernelStateLocalCtxWellFormed st) ",
                     "(hinfer : KernelInferAccepts st e T) => ",
-                    "KernelInferAccepts.rec st ",
+                    "@KernelInferAccepts.rec st ",
                     "(fun (x : KExpr) (y : KExpr) (_ : KernelInferAccepts st x y) => forall (d : Nat), is_closed_at x d -> is_closed_at y d) ",
                     // sort
-                    "(fun (l : Level) (T2 : KExpr) (heq : Eq KExpr (KExpr.sort (Level.succ l)) T2) => ",
+                    "(fun (l : Level) (T2 : KExpr) (heq : @Eq KExpr (KExpr.sort (Level.succ l)) T2) => ",
                     "fun (d : Nat) (_hc : is_closed_at (KExpr.sort l) d) => ",
-                    "Eq.substType KExpr (fun (z : KExpr) => is_closed_at z d) (KExpr.sort (Level.succ l)) T2 heq ",
+                    "@Eq.substType KExpr (fun (z : KExpr) => is_closed_at z d) (KExpr.sort (Level.succ l)) T2 heq ",
                     "(is_closed_at.sort (Level.succ l) d)) ",
                     // const
                     "(fun (n : Name) (us : ListType Level) (T2 : KExpr) ",
@@ -1168,12 +1168,12 @@ impl Specification {
                     "(ihf : forall (d : Nat), is_closed_at f d -> is_closed_at Rf d) ",
                     "(iha : forall (d : Nat), is_closed_at a d -> is_closed_at Ra d) => ",
                     "fun (d : Nat) (hc : is_closed_at (KExpr.app f a) d) => ",
-                    "AppInferWitness.rec st Rf Ra a T2 ",
+                    "@AppInferWitness.rec st Rf Ra a T2 ",
                     "(fun (_w : AppInferWitness st Rf Ra a T2) => is_closed_at T2 d) ",
                     "(fun (dom : KExpr) (cod : KExpr) (hwhnf : KernelWhnfAccepts st Rf (KExpr.pi dom cod)) ",
-                    "(hdefeq : KernelDefEqAccepts st Ra dom) (hresult : Eq KExpr (instantiate cod a) T2) ",
+                    "(hdefeq : KernelDefEqAccepts st Ra dom) (hresult : @Eq KExpr (instantiate cod a) T2) ",
                     "(hchkadm : KernelStateEnvValid st -> KernelStateLocalCtxWellFormed st -> KernelInputAdmissible st a -> KernelBinaryInputAdmissible st Ra dom) => ",
-                    "Eq.substType KExpr (fun (z : KExpr) => is_closed_at z d) (instantiate cod a) T2 hresult ",
+                    "@Eq.substType KExpr (fun (z : KExpr) => is_closed_at z d) (instantiate cod a) T2 hresult ",
                     "(instantiate_preserves_closed cod a d Nat.zero ",
                     "(is_closed_at_pi_body dom cod d ",
                     "(whnf_preserves_closed i3 i4 i5 i6 st Rf (KExpr.pi dom cod) hwhnf d (ihf d (is_closed_at_app_fun f a d hc)))) ",
@@ -1184,20 +1184,20 @@ impl Specification {
                     "(hbody : KernelInferAccepts st body bt) (hwit : LamInferWitness A body bt T2) ",
                     "(ihbody : forall (d : Nat), is_closed_at body d -> is_closed_at bt d) => ",
                     "fun (d : Nat) (hc : is_closed_at (KExpr.lam A body) d) => ",
-                    "LamInferWitness.rec A body bt T2 ",
+                    "@LamInferWitness.rec A body bt T2 ",
                     "(fun (_w : LamInferWitness A body bt T2) => is_closed_at T2 d) ",
-                    "(fun (dl : Level) (hdom : Typing A (KExpr.sort dl)) (hbodyty : Typing body bt) (hresult : Eq KExpr (KExpr.pi A bt) T2) => ",
-                    "Eq.substType KExpr (fun (z : KExpr) => is_closed_at z d) (KExpr.pi A bt) T2 hresult ",
+                    "(fun (dl : Level) (hdom : Typing A (KExpr.sort dl)) (hbodyty : Typing body bt) (hresult : @Eq KExpr (KExpr.pi A bt) T2) => ",
+                    "@Eq.substType KExpr (fun (z : KExpr) => is_closed_at z d) (KExpr.pi A bt) T2 hresult ",
                     "(is_closed_at.pi A bt d (is_closed_at_lam_type A body d hc) (ihbody (Nat.succ d) (is_closed_at_lam_body A body d hc)))) ",
                     "hwit) ",
                     // pi
                     "(fun (A : KExpr) (B : KExpr) (T2 : KExpr) (hwit : PiInferWitness A B T2) => ",
                     "fun (d : Nat) (_hc : is_closed_at (KExpr.pi A B) d) => ",
-                    "PiInferWitness.rec A B T2 ",
+                    "@PiInferWitness.rec A B T2 ",
                     "(fun (_w : PiInferWitness A B T2) => is_closed_at T2 d) ",
                     "(fun (dom : Level) (cod : Level) (hdom : Typing A (KExpr.sort dom)) (hcod : Typing B (KExpr.sort cod)) ",
-                    "(hresult : Eq KExpr (KExpr.sort (Level.imax dom cod)) T2) => ",
-                    "Eq.substType KExpr (fun (z : KExpr) => is_closed_at z d) (KExpr.sort (Level.imax dom cod)) T2 hresult ",
+                    "(hresult : @Eq KExpr (KExpr.sort (Level.imax dom cod)) T2) => ",
+                    "@Eq.substType KExpr (fun (z : KExpr) => is_closed_at z d) (KExpr.sort (Level.imax dom cod)) T2 hresult ",
                     "(is_closed_at.sort (Level.imax dom cod) d)) ",
                     "hwit) ",
                     "e T hinfer"
@@ -1252,7 +1252,7 @@ impl Specification {
                     "(st : KernelState) (e : KExpr) (T : KExpr) ",
                     "(henv : KernelStateEnvValid st) (hctx : KernelStateLocalCtxWellFormed st) ",
                     "(hinfer : KernelInferAccepts st e T) (hadm : KernelInputAdmissible st e) => ",
-                    "AndType.intro (KernelInputAdmissible st T) (KernelInputAdmissible st T) ",
+                    "@AndType.intro (KernelInputAdmissible st T) (KernelInputAdmissible st T) ",
                     "(infer_preserves_closed i3 i4 i5 i6 st e T henv hctx hinfer Nat.zero hadm) ",
                     "(infer_preserves_closed i3 i4 i5 i6 st e T henv hctx hinfer Nat.zero hadm)"
                 )

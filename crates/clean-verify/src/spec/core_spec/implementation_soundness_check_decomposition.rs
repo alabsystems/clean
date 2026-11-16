@@ -107,7 +107,7 @@ impl Specification {
                     // reference the SAME bound R (shared by binding, not by a Skolem):
                     // the infer half feeds hinfer_sound, the defeq half + guard feed
                     // kernel_def_eq_reflects_spec, and raw_type_conversion joins them.
-                    "KernelCheckAccepts.rec st e T ",
+                    "@KernelCheckAccepts.rec st e T ",
                     "(fun (_c : KernelCheckAccepts st e T) => has_type e T) ",
                     "(fun (R : KExpr) ",
                     "(hpair : ProdType (KernelInferAccepts st e R) (KernelDefEqAccepts st R T)) ",

@@ -72,7 +72,7 @@ impl VarDecl {
 
     /// With storage class
     #[must_use]
-    pub fn with_storage(mut self, storage: StorageClass) -> Self {
+    pub(crate) fn with_storage(mut self, storage: StorageClass) -> Self {
         self.storage = storage;
         self
     }
@@ -275,7 +275,7 @@ impl CStmt {
     }
 
     /// Create a declaration with initializer
-    pub fn decl_init(name: impl Into<String>, ty: CType, init: CExpr) -> Self {
+    pub(crate) fn decl_init(name: impl Into<String>, ty: CType, init: CExpr) -> Self {
         CStmt::Decl(VarDecl::new(name, ty).with_init(Initializer::Expr(init)))
     }
 
@@ -294,7 +294,7 @@ impl CStmt {
     }
 
     /// Create an if-else statement
-    pub fn if_else(cond: CExpr, then_stmt: CStmt, else_stmt: CStmt) -> Self {
+    pub(crate) fn if_else(cond: CExpr, then_stmt: CStmt, else_stmt: CStmt) -> Self {
         CStmt::If {
             cond,
             then_stmt: Box::new(then_stmt),
@@ -303,7 +303,7 @@ impl CStmt {
     }
 
     /// Create a while loop
-    pub fn while_loop(cond: CExpr, body: CStmt) -> Self {
+    pub(crate) fn while_loop(cond: CExpr, body: CStmt) -> Self {
         CStmt::While {
             cond,
             body: Box::new(body),
@@ -334,7 +334,7 @@ impl CStmt {
     }
 
     /// Create a return statement
-    pub fn return_stmt(expr: Option<CExpr>) -> Self {
+    pub(crate) fn return_stmt(expr: Option<CExpr>) -> Self {
         CStmt::Return(expr)
     }
 

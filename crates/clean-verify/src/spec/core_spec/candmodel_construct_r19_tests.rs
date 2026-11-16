@@ -216,7 +216,7 @@ fn test_candmodel_r19_reuses_r13_r14_helpers_verbatim() {
 fn test_candmodel_r19_has_the_two_new_arms() {
     let src = val_xval_lift_native();
     assert!(
-        src.contains("qhd : Eq (OptionType KExpr) (defval_for"),
+        src.contains("qhd : @Eq (OptionType KExpr) (defval_for"),
         "the konst arm lost its inertness premises — it is no longer WKC.konst's minor"
     );
     assert!(

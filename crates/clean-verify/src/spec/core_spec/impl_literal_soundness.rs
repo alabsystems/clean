@@ -27,11 +27,11 @@ impl Specification {
             value_src: Some(concat!(
                 "fun (tenvK : KDeclEnv) (Gk : ListType KExpr) ",
                 "(rho : ListType Nat) (l : ImplLit) => ",
-                "ImplLit.rec (fun (v : ImplLit) => ",
+                "@ImplLit.rec (fun (v : ImplLit) => ",
                 "TypingCtxConv tenvK Gk (to_kexpr (ImplExpr.lit v) rho) ",
                 "(to_kexpr (impl_lit_type v) rho)) ",
-                "(fun (n : Nat) => TypingCtxConv.lit_nat tenvK Gk n) ",
-                "(fun (n : Nat) => TypingCtxConv.lit_string tenvK Gk n) l"
+                "(fun (n : Nat) => @TypingCtxConv.lit_nat tenvK Gk n) ",
+                "(fun (n : Nat) => @TypingCtxConv.lit_string tenvK Gk n) l"
             ).to_string()),
             is_axiom: false,
             description: "Both implementation-model literal kinds translate to their exact declarative literal type. There is no impossible premise. Builtin names use the validated shared reflection table; this does not establish the production environment invariant or actual Rust execution correspondence.".to_string(),
@@ -51,8 +51,8 @@ impl Specification {
     }
 
     pub(super) fn add_impl_literal_soundness_witnesses(&mut self) -> Result<(), SpecError> {
-        let tenv = "(fun (_ : Name) => OptionType.none ImplConstInfo)";
-        let tenvk = "(fun (_ : Name) => OptionType.none KConstSig)";
+        let tenv = "(fun (_ : Name) => @OptionType.none ImplConstInfo)";
+        let tenvk = "(fun (_ : Name) => @OptionType.none KConstSig)";
         for (name, kind, literal, literal_type) in [
             (
                 "impl_infer_sound_nat_literal",
@@ -70,15 +70,15 @@ impl Specification {
             self.add_definition(SpecDefinition {
                 name: name.to_string(),
                 type_src: format!(
-                    "forall (n : Nat), TypingCtxConv {tenvk} (ListType.nil KExpr) ({literal} n) {literal_type}"
+                    "forall (n : Nat), TypingCtxConv {tenvk} (@ListType.nil KExpr) ({literal} n) {literal_type}"
                 ),
                 value_src: Some(format!(
                     "fun (n : Nat) => impl_infer_sound {tenv} {tenvk} \
-                     (ListType.nil Name) tenvrepc_empty Nat.zero LCtx.nil \
+                     (@ListType.nil Name) tenvrepc_empty Nat.zero LCtx.nil \
                      (ImplExpr.lit (ImplLit.{kind} n)) \
                      (impl_lit_type (ImplLit.{kind} n)) Nat.zero \
-                     (ImplInfer.lit {tenv} (ListType.nil Name) Nat.zero LCtx.nil (ImplLit.{kind} n)) \
-                     ImplUnit.mk (ListType.nil Nat) (ListType.nil KExpr) ctx_rep_nil_witness"
+                     (@ImplInfer.lit {tenv} (@ListType.nil Name) Nat.zero LCtx.nil (ImplLit.{kind} n)) \
+                     ImplUnit.mk (@ListType.nil Nat) (@ListType.nil KExpr) ctx_rep_nil_witness"
                 )),
                 is_axiom: false,
                 description: format!(

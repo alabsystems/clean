@@ -173,7 +173,7 @@ def gen_pred_fold():
     M = lam(NAT, INT)
 
     def meta(zv, v):
-        return ('(Nat.rec (fun (_ : Nat) => Int) %s (fun (_ : Nat) (ih : Int) => %s) %s)' % (zv, pred_step_meta('ih'), v))
+        return ('(@Nat.rec (fun (_ : Nat) => Int) %s (fun (_ : Nat) (ih : Int) => %s) %s)' % (zv, pred_step_meta('ih'), v))
 
     def lhs(zt, v):
         return N.natrec_app(M, zt, PRED_STEP, lit(v))

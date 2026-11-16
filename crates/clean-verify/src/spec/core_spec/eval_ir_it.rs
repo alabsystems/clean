@@ -196,15 +196,15 @@ pub(crate) fn ir_it_module_defs() -> &'static [&'static str] {
     &MINTED_IR_IT_LINES
 }
 
-const SRC_IT_UNDEF_AGG_GAP: &str = "def ir_undef_then_insertfield_faults (k : Nat) (v : IRScalar) : Eq IRStepResult (ir_insert_field IRScalar.undef_ k v) (IRStepResult.fault (IROutcome.type_error IRFault.not_agg)) := Eq.refl IRStepResult (IRStepResult.fault (IROutcome.type_error IRFault.not_agg))";
+const SRC_IT_UNDEF_AGG_GAP: &str = "def ir_undef_then_insertfield_faults (k : Nat) (v : IRScalar) : @Eq IRStepResult (ir_insert_field IRScalar.undef_ k v) (IRStepResult.fault (IROutcome.type_error IRFault.not_agg)) := @Eq.refl IRStepResult (IRStepResult.fault (IROutcome.type_error IRFault.not_agg))";
 
-const SRC_IT_MACH0: &str = "def ir_it_mach0 (mem : IRList IRMemSlot) (p : Nat) (q : Nat) (na : Nat) : IRMachine := IRMachine.mk (IRList.cons IRFrame (IRFrame.mk ir_d0 ir_d0 Nat.zero (ir_bind_params (ir_nl2 ir_d0 ir_d1) (ir_vl2 (IRScalar.ptr_ p) (IRScalar.ptr_ q)) (IRList.nil IRBinding)) (IRList.nil Nat)) (IRList.nil IRFrame)) mem na";
+const SRC_IT_MACH0: &str = "def ir_it_mach0 (mem : IRList IRMemSlot) (p : Nat) (q : Nat) (na : Nat) : IRMachine := IRMachine.mk (@IRList.cons IRFrame (IRFrame.mk ir_d0 ir_d0 Nat.zero (ir_bind_params (ir_nl2 ir_d0 ir_d1) (ir_vl2 (IRScalar.ptr_ p) (IRScalar.ptr_ q)) (@IRList.nil IRBinding)) (@IRList.nil Nat)) (@IRList.nil IRFrame)) mem na";
 
-const SRC_IT_INIT: &str = "def ir_it_init_is_mach0 (mem : IRList IRMemSlot) (p : Nat) (q : Nat) (na : Nat) : Eq IRConfig (ir_init ir_it_module ir_d0 (ir_vl2 (IRScalar.ptr_ p) (IRScalar.ptr_ q)) mem na) (IRConfig.running (ir_it_mach0 mem p q na)) := Eq.refl IRConfig (IRConfig.running (ir_it_mach0 mem p q na))";
+const SRC_IT_INIT: &str = "def ir_it_init_is_mach0 (mem : IRList IRMemSlot) (p : Nat) (q : Nat) (na : Nat) : @Eq IRConfig (ir_init ir_it_module ir_d0 (ir_vl2 (IRScalar.ptr_ p) (IRScalar.ptr_ q)) mem na) (IRConfig.running (ir_it_mach0 mem p q na)) := @Eq.refl IRConfig (IRConfig.running (ir_it_mach0 mem p q na))";
 
-const SRC_IT_STUCK: &str = "def ir_it_halts_at_the_heartbeat (mem : IRList IRMemSlot) (p : Nat) (q : Nat) (na : Nat) : Eq IROutcome (ir_eval ir_d8 ir_it_module ir_d0 (ir_vl2 (IRScalar.ptr_ p) (IRScalar.ptr_ q)) mem na) (IROutcome.stuck IRFault.no_func) := Eq.refl IROutcome (IROutcome.stuck IRFault.no_func)";
+const SRC_IT_STUCK: &str = "def ir_it_halts_at_the_heartbeat (mem : IRList IRMemSlot) (p : Nat) (q : Nat) (na : Nat) : @Eq IROutcome (ir_eval ir_d8 ir_it_module ir_d0 (ir_vl2 (IRScalar.ptr_ p) (IRScalar.ptr_ q)) mem na) (IROutcome.stuck IRFault.no_func) := @Eq.refl IROutcome (IROutcome.stuck IRFault.no_func)";
 
-const SRC_IT_STUCK_MORE_FUEL: &str = "def ir_it_more_fuel_does_not_help (mem : IRList IRMemSlot) (p : Nat) (q : Nat) (na : Nat) : Eq IROutcome (ir_eval ir_d40 ir_it_module ir_d0 (ir_vl2 (IRScalar.ptr_ p) (IRScalar.ptr_ q)) mem na) (IROutcome.stuck IRFault.no_func) := Eq.refl IROutcome (IROutcome.stuck IRFault.no_func)";
+const SRC_IT_STUCK_MORE_FUEL: &str = "def ir_it_more_fuel_does_not_help (mem : IRList IRMemSlot) (p : Nat) (q : Nat) (na : Nat) : @Eq IROutcome (ir_eval ir_d40 ir_it_module ir_d0 (ir_vl2 (IRScalar.ptr_ p) (IRScalar.ptr_ q)) mem na) (IROutcome.stuck IRFault.no_func) := @Eq.refl IROutcome (IROutcome.stuck IRFault.no_func)";
 
 impl Specification {
     /// `ir_it` — the designated target, minted, and where it stops.

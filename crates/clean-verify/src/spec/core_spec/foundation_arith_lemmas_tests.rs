@@ -8,6 +8,23 @@ use crate::test_utils::run_with_stack;
 use clean_kernel::Environment;
 use std::collections::{HashMap, HashSet};
 
+fn assert_source_value_registers(spec: &Specification, definition: &SpecDefinition) {
+    assert!(!spec.definitions().contains_key(&definition.name));
+    let mut source_context = spec.clone();
+    let mut source_definition = definition.clone();
+    // Exercise the ordinary source consumer as well as the retained cached Expr.
+    // Both registrations keep the original context and declaration policy.
+    source_definition.elaborated_value = None;
+    source_context
+        .add_definition(source_definition)
+        .unwrap_or_else(|error| panic!("{} source value must check: {error}", definition.name));
+    assert!(spec
+        .env()
+        .get_const(&clean_kernel::Name::from_string(&definition.name))
+        .is_none());
+    assert!(!spec.definitions().contains_key(&definition.name));
+}
+
 #[test]
 fn test_arithmetic_lemmas_are_constructive() {
     let spec = build_spec_with_stack();
@@ -87,7 +104,7 @@ fn test_nat_add_zero_right_elaborates_in_isolation() {
         let result = spec.add_definition(SpecDefinition {
             name: "nat_add_zero_right".to_string(),
             type_src: "forall (n : Nat), Eq Nat (Nat.add n Nat.zero) n".to_string(),
-            value_src: Some("fun (n : Nat) => Eq.refl Nat n".to_string()),
+            value_src: Some("fun (n : Nat) => @Eq.refl Nat n".to_string()),
             is_axiom: false,
             description: "Nat.add n 0 = n. DerivedProved via Eq.refl on the concrete zero branch."
                 .to_string(),
@@ -159,7 +176,7 @@ fn test_nat_sub_zero_left_elaborates_in_isolation() {
         .expect("Nat inductive should succeed");
 
         spec.add_recursive_def(
-            r"def Nat.pred (n : Nat) : Nat := Nat.rec (fun (_ : Nat) => Nat) Nat.zero (fun (m : Nat) (_ : Nat) => m) n",
+            r"def Nat.pred (n : Nat) : Nat := @Nat.rec (fun (_ : Nat) => Nat) Nat.zero (fun (m : Nat) (_ : Nat) => m) n",
             "Predecessor on natural numbers.",
         )
         .expect("Nat.pred should succeed");
@@ -172,21 +189,21 @@ fn test_nat_sub_zero_left_elaborates_in_isolation() {
         )
         .expect("Nat.sub should succeed");
 
-        let result = spec.add_definition(SpecDefinition {
+        let definition = SpecDefinition {
             name: "nat_sub_zero_left".to_string(),
             type_src: "forall (n : Nat), Eq Nat (Nat.sub Nat.zero n) Nat.zero".to_string(),
             value_src: Some(
                 concat!(
-                    "fun (n : Nat) => Nat.rec ",
+                    "fun (n : Nat) => @Nat.rec ",
                     "(fun (k : Nat) => Eq Nat (Nat.sub Nat.zero k) Nat.zero) ",
-                    "(Eq.refl Nat Nat.zero) ",
+                    "(@Eq.refl Nat Nat.zero) ",
                     "(fun (k : Nat) (ih : Eq Nat (Nat.sub Nat.zero k) Nat.zero) => ",
                     "Eq.trans Nat ",
                     "(Nat.sub Nat.zero (Nat.succ k)) ",
                     "(Nat.pred Nat.zero) ",
                     "Nat.zero ",
                     "(Eq.cong Nat Nat Nat.pred (Nat.sub Nat.zero k) Nat.zero ih) ",
-                    "(Eq.refl Nat Nat.zero)) ",
+                    "(@Eq.refl Nat Nat.zero)) ",
                     "n",
                 )
                 .to_string(),
@@ -199,7 +216,9 @@ fn test_nat_sub_zero_left_elaborates_in_isolation() {
             elaborated_value: Some(Specification::nat_sub_zero_left_value_expr()),
             dependencies: None,
             axiom_deps: HashSet::new(),
-        });
+        };
+        assert_source_value_registers(&spec, &definition);
+        let result = spec.add_definition(definition);
         assert!(
             result.is_ok(),
             "nat_sub_zero_left should elaborate in isolation: {:?}",
@@ -250,7 +269,7 @@ fn test_nat_sub_succ_succ_elaborates_in_isolation() {
         .expect("Nat inductive should succeed");
 
         spec.add_recursive_def(
-            r"def Nat.pred (n : Nat) : Nat := Nat.rec (fun (_ : Nat) => Nat) Nat.zero (fun (m : Nat) (_ : Nat) => m) n",
+            r"def Nat.pred (n : Nat) : Nat := @Nat.rec (fun (_ : Nat) => Nat) Nat.zero (fun (m : Nat) (_ : Nat) => m) n",
             "Predecessor on natural numbers.",
         )
         .expect("Nat.pred should succeed");
@@ -263,15 +282,15 @@ fn test_nat_sub_succ_succ_elaborates_in_isolation() {
         )
         .expect("Nat.sub should succeed");
 
-        let result = spec.add_definition(SpecDefinition {
+        let definition = SpecDefinition {
             name: "nat_sub_succ_succ".to_string(),
             type_src:
                 "forall (a : Nat) (b : Nat), Eq Nat (Nat.sub (Nat.succ a) (Nat.succ b)) (Nat.sub a b)"
                     .to_string(),
             value_src: Some(concat!(
-                "fun (a : Nat) (b : Nat) => Nat.rec ",
+                "fun (a : Nat) (b : Nat) => @Nat.rec ",
                 "(fun (k : Nat) => Eq Nat (Nat.sub (Nat.succ a) (Nat.succ k)) (Nat.sub a k)) ",
-                "(Eq.refl Nat a) ",
+                "(@Eq.refl Nat a) ",
                 "(fun (k : Nat) (ih : Eq Nat (Nat.sub (Nat.succ a) (Nat.succ k)) (Nat.sub a k)) => ",
                 "Eq.cong Nat Nat Nat.pred ",
                 "(Nat.sub (Nat.succ a) (Nat.succ k)) ",
@@ -288,7 +307,9 @@ fn test_nat_sub_succ_succ_elaborates_in_isolation() {
             elaborated_value: Some(Specification::nat_sub_succ_succ_value_expr()),
             dependencies: None,
             axiom_deps: HashSet::new(),
-        });
+        };
+        assert_source_value_registers(&spec, &definition);
+        let result = spec.add_definition(definition);
         assert!(
             result.is_ok(),
             "nat_sub_succ_succ should elaborate in isolation: {:?}",

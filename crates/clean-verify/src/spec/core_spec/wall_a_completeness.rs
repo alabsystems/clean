@@ -121,7 +121,7 @@ const I_BINDERS: &str = concat!(
 /// other head to `Empty`. KExpr ctor order: sort, bvar, app, lam, pi, const,
 /// let_, proj, lit.
 const KEXPR_IS_SORT: &str = concat!(
-    "(KExpr.rec (fun (_ : KExpr) => Type) ",
+    "(@KExpr.rec (fun (_ : KExpr) => Type) ",
     "(fun (_ : Level) => Nat) ",
     "(fun (_ : Nat) => Empty) ",
     "(fun (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) => Empty) ",
@@ -135,7 +135,7 @@ const KEXPR_IS_SORT: &str = concat!(
 
 /// Inline discriminator: `app` maps to `Nat`, every other head to `Empty`.
 const KEXPR_IS_APP: &str = concat!(
-    "(KExpr.rec (fun (_ : KExpr) => Type) ",
+    "(@KExpr.rec (fun (_ : KExpr) => Type) ",
     "(fun (_ : Level) => Empty) ",
     "(fun (_ : Nat) => Empty) ",
     "(fun (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) => Nat) ",
@@ -149,7 +149,7 @@ const KEXPR_IS_APP: &str = concat!(
 
 /// Inline discriminator: `lam` maps to `Nat`, every other head to `Empty`.
 const KEXPR_IS_LAM: &str = concat!(
-    "(KExpr.rec (fun (_ : KExpr) => Type) ",
+    "(@KExpr.rec (fun (_ : KExpr) => Type) ",
     "(fun (_ : Level) => Empty) ",
     "(fun (_ : Nat) => Empty) ",
     "(fun (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) => Empty) ",
@@ -163,7 +163,7 @@ const KEXPR_IS_LAM: &str = concat!(
 
 /// Inline discriminator: `pi` maps to `Nat`, every other head to `Empty`.
 const KEXPR_IS_PI: &str = concat!(
-    "(KExpr.rec (fun (_ : KExpr) => Type) ",
+    "(@KExpr.rec (fun (_ : KExpr) => Type) ",
     "(fun (_ : Level) => Empty) ",
     "(fun (_ : Nat) => Empty) ",
     "(fun (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) => Empty) ",
@@ -179,7 +179,7 @@ const KEXPR_IS_PI: &str = concat!(
 /// (the complement of `KEXPR_IS_SORT` — kills a sort-vs-nonsort equation in
 /// the direction that needs no `Eq.symm`).
 const KEXPR_NOT_SORT: &str = concat!(
-    "(KExpr.rec (fun (_ : KExpr) => Type) ",
+    "(@KExpr.rec (fun (_ : KExpr) => Type) ",
     "(fun (_ : Level) => Empty) ",
     "(fun (_ : Nat) => Nat) ",
     "(fun (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) => Nat) ",
@@ -193,7 +193,7 @@ const KEXPR_NOT_SORT: &str = concat!(
 
 /// Inline discriminator: `const` maps to `Nat`, every other head to `Empty`.
 const KEXPR_IS_CONST: &str = concat!(
-    "(KExpr.rec (fun (_ : KExpr) => Type) ",
+    "(@KExpr.rec (fun (_ : KExpr) => Type) ",
     "(fun (_ : Level) => Empty) ",
     "(fun (_ : Nat) => Empty) ",
     "(fun (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) => Empty) ",
@@ -210,7 +210,7 @@ const KEXPR_IS_CONST: &str = concat!(
 /// `lam`/`pi`/`const`, so this refutes any equation aligning a let_ with a
 /// rigid head (the genuine 7th ctor is its own spine head, never app-headed).
 const KEXPR_IS_LET: &str = concat!(
-    "(KExpr.rec (fun (_ : KExpr) => Type) ",
+    "(@KExpr.rec (fun (_ : KExpr) => Type) ",
     "(fun (_ : Level) => Empty) ",
     "(fun (_ : Nat) => Empty) ",
     "(fun (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) => Empty) ",
@@ -224,7 +224,7 @@ const KEXPR_IS_LET: &str = concat!(
 
 /// Inline discriminator: `proj` maps to `Nat`, every other head to `Empty`.
 const KEXPR_IS_PROJ: &str = concat!(
-    "(KExpr.rec (fun (_ : KExpr) => Type) ",
+    "(@KExpr.rec (fun (_ : KExpr) => Type) ",
     "(fun (_ : Level) => Empty) ",
     "(fun (_ : Nat) => Empty) ",
     "(fun (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) => Empty) ",
@@ -241,7 +241,7 @@ const KEXPR_IS_PROJ: &str = concat!(
 /// `Empty`, conclude `goal` (any sort — `Empty.rec` is universe-flexible).
 fn shape_discharge(discr: &str, x: &str, y: &str, heq: &str, goal: &str) -> String {
     format!(
-        "(Empty.rec (fun (_ : Empty) => {goal}) (Eq.substType KExpr {discr} {x} {y} {heq} Nat.zero))"
+        "(Empty.rec (fun (_ : Empty) => {goal}) (@Eq.substType KExpr {discr} {x} {y} {heq} Nat.zero))"
     )
 }
 
@@ -251,7 +251,7 @@ fn shape_discharge(discr: &str, x: &str, y: &str, heq: &str, goal: &str) -> Stri
 /// data for consumers that use the equation directly.
 fn delta_dead_eq(n: &str, us: &str) -> String {
     format!(
-        "Eq (OptionType KExpr) (delta_reduct (red_def the_red_env) (KExpr.const {n} {us})) (OptionType.none KExpr)"
+        "@Eq (OptionType KExpr) (delta_reduct (red_def the_red_env) (KExpr.const {n} {us})) (@OptionType.none KExpr)"
     )
 }
 
@@ -365,7 +365,7 @@ impl Specification {
             value_src: Some(format!(
                 concat!(
                     "fun (e : KExpr) (h : iota_neutral e) => ",
-                    "iota_neutral.rec ",
+                    "@iota_neutral.rec ",
                     "(fun (x : KExpr) (_h : iota_neutral x) => is_neutral x) ",
                     "(fun (n : Name) (us : ListType Level) (hw : const_whnf n us) (_hnd : {dd}) => ",
                     "is_neutral.const n us hw) ",
@@ -403,7 +403,7 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (e : KExpr) (h : iota_whnf e) => ",
-                    "iota_whnf.rec ",
+                    "@iota_whnf.rec ",
                     "(fun (x : KExpr) (_h : iota_whnf x) => is_whnf x) ",
                     "(fun (n : Level) => is_whnf.sort n) ",
                     "(fun (ty : KExpr) (body : KExpr) => is_whnf.lam ty body) ",
@@ -446,8 +446,8 @@ impl Specification {
                     "(hstar : par_reduces_cd_star the_red_env (KExpr.sort Level.zero) e2) ",
                     "(hfire : iota_step (red_rec the_red_env) e2 r) => ",
                     "iota_step_head_none_absurd_type (red_rec the_red_env) (KExpr.sort Level.zero) r Empty ",
-                    "(Eq.refl (OptionType Name) (OptionType.none Name)) ",
-                    "(Eq.substType KExpr (fun (x : KExpr) => iota_step (red_rec the_red_env) x r) ",
+                    "(@Eq.refl (OptionType Name) (@OptionType.none Name)) ",
+                    "(@Eq.substType KExpr (fun (x : KExpr) => iota_step (red_rec the_red_env) x r) ",
                     "e2 (KExpr.sort Level.zero) ",
                     "(par_reduces_cd_star_sort_inv_eq the_red_env Level.zero e2 hstar) hfire)"
                 )
@@ -516,14 +516,14 @@ impl Specification {
         let absurd_proof = |target: &str| -> String {
             format!(
                 concat!(
-                    "iota_neutral.rec ",
-                    "(fun (x : KExpr) (_h : iota_neutral x) => Eq KExpr x {target} -> C) ",
+                    "@iota_neutral.rec ",
+                    "(fun (x : KExpr) (_h : iota_neutral x) => @Eq KExpr x {target} -> C) ",
                     "(fun (m : Name) (vs : ListType Level) (_hw : const_whnf m vs) (_hnd : {dd}) ",
-                    "(heq : Eq KExpr (KExpr.const m vs) {target}) => {const_discharge}) ",
+                    "(heq : @Eq KExpr (KExpr.const m vs) {target}) => {const_discharge}) ",
                     "(fun (f : KExpr) (a : KExpr) (_hf : iota_neutral f) ",
-                    "(_him : iota_immune (KExpr.app f a)) (_ih : Eq KExpr f {target} -> C) ",
-                    "(heq : Eq KExpr (KExpr.app f a) {target}) => {app_discharge}) ",
-                    "{target} h (Eq.refl KExpr {target})"
+                    "(_him : iota_immune (KExpr.app f a)) (_ih : @Eq KExpr f {target} -> C) ",
+                    "(heq : @Eq KExpr (KExpr.app f a) {target}) => {app_discharge}) ",
+                    "{target} h (@Eq.refl KExpr {target})"
                 ),
                 target = target,
                 dd = delta_dead_eq("m", "vs"),
@@ -624,103 +624,103 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (e : KExpr) (e2 : KExpr) (h : beta_reduces e e2) => ",
-                    "beta_reduces.rec ",
+                    "@beta_reduces.rec ",
                     "(fun (x : KExpr) (y : KExpr) (_h : beta_reduces x y) => par_reduces_cd_star the_red_env x y) ",
                     // beta
                     "(fun (A : KExpr) (body : KExpr) (arg : KExpr) => ",
                     "par_subsumes_par_cd_star the_red_env (KExpr.app (KExpr.lam A body) arg) (instantiate body arg) ",
-                    "(par_reduces_cd.beta the_red_env A A body body arg arg ",
-                    "(par_reduces_cd.refl the_red_env A) (par_reduces_cd.refl the_red_env body) ",
-                    "(par_reduces_cd.refl the_red_env arg))) ",
+                    "(@par_reduces_cd.beta the_red_env A A body body arg arg ",
+                    "(@par_reduces_cd.refl the_red_env A) (@par_reduces_cd.refl the_red_env body) ",
+                    "(@par_reduces_cd.refl the_red_env arg))) ",
                     // app_left
                     "(fun (f : KExpr) (f2 : KExpr) (a : KExpr) (_hf : beta_reduces f f2) ",
                     "(ih : par_reduces_cd_star the_red_env f f2) => ",
-                    "par_reduces_cd_star_app the_red_env f f2 a a ih (par_reduces_cd_star.refl the_red_env a)) ",
+                    "par_reduces_cd_star_app the_red_env f f2 a a ih (@par_reduces_cd_star.refl the_red_env a)) ",
                     // app_right
                     "(fun (f : KExpr) (a : KExpr) (a2 : KExpr) (_ha : beta_reduces a a2) ",
                     "(ih : par_reduces_cd_star the_red_env a a2) => ",
-                    "par_reduces_cd_star_app the_red_env f f a a2 (par_reduces_cd_star.refl the_red_env f) ih) ",
+                    "par_reduces_cd_star_app the_red_env f f a a2 (@par_reduces_cd_star.refl the_red_env f) ih) ",
                     // lam_ty
                     "(fun (ty : KExpr) (ty2 : KExpr) (body : KExpr) (_hty : beta_reduces ty ty2) ",
                     "(ih : par_reduces_cd_star the_red_env ty ty2) => ",
-                    "par_reduces_cd_star_lam the_red_env ty ty2 body body ih (par_reduces_cd_star.refl the_red_env body)) ",
+                    "par_reduces_cd_star_lam the_red_env ty ty2 body body ih (@par_reduces_cd_star.refl the_red_env body)) ",
                     // lam_body
                     "(fun (ty : KExpr) (body : KExpr) (body2 : KExpr) (_hb : beta_reduces body body2) ",
                     "(ih : par_reduces_cd_star the_red_env body body2) => ",
-                    "par_reduces_cd_star_lam the_red_env ty ty body body2 (par_reduces_cd_star.refl the_red_env ty) ih) ",
+                    "par_reduces_cd_star_lam the_red_env ty ty body body2 (@par_reduces_cd_star.refl the_red_env ty) ih) ",
                     // pi_dom
                     "(fun (dom : KExpr) (dom2 : KExpr) (body : KExpr) (_hd : beta_reduces dom dom2) ",
                     "(ih : par_reduces_cd_star the_red_env dom dom2) => ",
-                    "par_reduces_cd_star_pi the_red_env dom dom2 body body ih (par_reduces_cd_star.refl the_red_env body)) ",
+                    "par_reduces_cd_star_pi the_red_env dom dom2 body body ih (@par_reduces_cd_star.refl the_red_env body)) ",
                     // pi_cod
                     "(fun (dom : KExpr) (body : KExpr) (body2 : KExpr) (_hb : beta_reduces body body2) ",
                     "(ih : par_reduces_cd_star the_red_env body body2) => ",
-                    "par_reduces_cd_star_pi the_red_env dom dom body body2 (par_reduces_cd_star.refl the_red_env dom) ih) ",
+                    "par_reduces_cd_star_pi the_red_env dom dom body body2 (@par_reduces_cd_star.refl the_red_env dom) ih) ",
                     // forall_congr_dom
                     "(fun (dom : KExpr) (dom2 : KExpr) (body : KExpr) (_hd : beta_reduces dom dom2) ",
                     "(ih : par_reduces_cd_star the_red_env dom dom2) => ",
-                    "par_reduces_cd_star_forall the_red_env dom dom2 body body ih (par_reduces_cd_star.refl the_red_env body)) ",
+                    "par_reduces_cd_star_forall the_red_env dom dom2 body body ih (@par_reduces_cd_star.refl the_red_env body)) ",
                     // forall_congr_cod
                     "(fun (dom : KExpr) (body : KExpr) (body2 : KExpr) (_hb : beta_reduces body body2) ",
                     "(ih : par_reduces_cd_star the_red_env body body2) => ",
-                    "par_reduces_cd_star_forall the_red_env dom dom body body2 (par_reduces_cd_star.refl the_red_env dom) ih) ",
+                    "par_reduces_cd_star_forall the_red_env dom dom body body2 (@par_reduces_cd_star.refl the_red_env dom) ih) ",
                     // zeta (top-level let unfolding): one cd let_ (zeta) step to
                     // instantiate body val, embedded via par_subsumes_par_cd_star.
                     "(fun (ty : KExpr) (val : KExpr) (body : KExpr) => ",
                     "par_subsumes_par_cd_star the_red_env (KExpr.let_ ty val body) (instantiate body val) ",
-                    "(par_reduces_cd.let_ the_red_env ty ty val val body body ",
-                    "(par_reduces_cd.refl the_red_env ty) (par_reduces_cd.refl the_red_env val) ",
-                    "(par_reduces_cd.refl the_red_env body))) ",
+                    "(@par_reduces_cd.let_ the_red_env ty ty val val body body ",
+                    "(@par_reduces_cd.refl the_red_env ty) (@par_reduces_cd.refl the_red_env val) ",
+                    "(@par_reduces_cd.refl the_red_env body))) ",
                     // let_ty congruence: one-sided cd_star induction in the ty
                     // position, lifting each step via par_reduces_cd.let_cong with
                     // reflexive val/body companions.
                     "(fun (ty : KExpr) (ty2 : KExpr) (val : KExpr) (body : KExpr) ",
                     "(_hty : beta_reduces ty ty2) (ih : par_reduces_cd_star the_red_env ty ty2) => ",
-                    "par_reduces_cd_star.rec the_red_env ",
+                    "@par_reduces_cd_star.rec the_red_env ",
                     "(fun (x : KExpr) (y : KExpr) (_ : par_reduces_cd_star the_red_env x y) => ",
                     "par_reduces_cd_star the_red_env (KExpr.let_ x val body) (KExpr.let_ y val body)) ",
-                    "(fun (x : KExpr) => par_reduces_cd_star.refl the_red_env (KExpr.let_ x val body)) ",
+                    "(fun (x : KExpr) => @par_reduces_cd_star.refl the_red_env (KExpr.let_ x val body)) ",
                     "(fun (x : KExpr) (x2 : KExpr) (x3 : KExpr) ",
                     "(hstep : par_reduces_cd the_red_env x x2) (_htail : par_reduces_cd_star the_red_env x2 x3) ",
                     "(ih2 : par_reduces_cd_star the_red_env (KExpr.let_ x2 val body) (KExpr.let_ x3 val body)) => ",
-                    "par_reduces_cd_star.step the_red_env (KExpr.let_ x val body) (KExpr.let_ x2 val body) (KExpr.let_ x3 val body) ",
-                    "(par_reduces_cd.let_cong the_red_env x x2 val val body body hstep ",
-                    "(par_reduces_cd.refl the_red_env val) (par_reduces_cd.refl the_red_env body)) ih2) ",
+                    "@par_reduces_cd_star.step the_red_env (KExpr.let_ x val body) (KExpr.let_ x2 val body) (KExpr.let_ x3 val body) ",
+                    "(@par_reduces_cd.let_cong the_red_env x x2 val val body body hstep ",
+                    "(@par_reduces_cd.refl the_red_env val) (@par_reduces_cd.refl the_red_env body)) ih2) ",
                     "ty ty2 ih) ",
                     // let_val congruence: one-sided cd_star induction in the val
                     // position.
                     "(fun (ty : KExpr) (val : KExpr) (val2 : KExpr) (body : KExpr) ",
                     "(_hv : beta_reduces val val2) (ih : par_reduces_cd_star the_red_env val val2) => ",
-                    "par_reduces_cd_star.rec the_red_env ",
+                    "@par_reduces_cd_star.rec the_red_env ",
                     "(fun (x : KExpr) (y : KExpr) (_ : par_reduces_cd_star the_red_env x y) => ",
                     "par_reduces_cd_star the_red_env (KExpr.let_ ty x body) (KExpr.let_ ty y body)) ",
-                    "(fun (x : KExpr) => par_reduces_cd_star.refl the_red_env (KExpr.let_ ty x body)) ",
+                    "(fun (x : KExpr) => @par_reduces_cd_star.refl the_red_env (KExpr.let_ ty x body)) ",
                     "(fun (x : KExpr) (x2 : KExpr) (x3 : KExpr) ",
                     "(hstep : par_reduces_cd the_red_env x x2) (_htail : par_reduces_cd_star the_red_env x2 x3) ",
                     "(ih2 : par_reduces_cd_star the_red_env (KExpr.let_ ty x2 body) (KExpr.let_ ty x3 body)) => ",
-                    "par_reduces_cd_star.step the_red_env (KExpr.let_ ty x body) (KExpr.let_ ty x2 body) (KExpr.let_ ty x3 body) ",
-                    "(par_reduces_cd.let_cong the_red_env ty ty x x2 body body ",
-                    "(par_reduces_cd.refl the_red_env ty) hstep (par_reduces_cd.refl the_red_env body)) ih2) ",
+                    "@par_reduces_cd_star.step the_red_env (KExpr.let_ ty x body) (KExpr.let_ ty x2 body) (KExpr.let_ ty x3 body) ",
+                    "(@par_reduces_cd.let_cong the_red_env ty ty x x2 body body ",
+                    "(@par_reduces_cd.refl the_red_env ty) hstep (@par_reduces_cd.refl the_red_env body)) ih2) ",
                     "val val2 ih) ",
                     // let_body congruence: one-sided cd_star induction in the body
                     // position.
                     "(fun (ty : KExpr) (val : KExpr) (body : KExpr) (body2 : KExpr) ",
                     "(_hb : beta_reduces body body2) (ih : par_reduces_cd_star the_red_env body body2) => ",
-                    "par_reduces_cd_star.rec the_red_env ",
+                    "@par_reduces_cd_star.rec the_red_env ",
                     "(fun (x : KExpr) (y : KExpr) (_ : par_reduces_cd_star the_red_env x y) => ",
                     "par_reduces_cd_star the_red_env (KExpr.let_ ty val x) (KExpr.let_ ty val y)) ",
-                    "(fun (x : KExpr) => par_reduces_cd_star.refl the_red_env (KExpr.let_ ty val x)) ",
+                    "(fun (x : KExpr) => @par_reduces_cd_star.refl the_red_env (KExpr.let_ ty val x)) ",
                     "(fun (x : KExpr) (x2 : KExpr) (x3 : KExpr) ",
                     "(hstep : par_reduces_cd the_red_env x x2) (_htail : par_reduces_cd_star the_red_env x2 x3) ",
                     "(ih2 : par_reduces_cd_star the_red_env (KExpr.let_ ty val x2) (KExpr.let_ ty val x3)) => ",
-                    "par_reduces_cd_star.step the_red_env (KExpr.let_ ty val x) (KExpr.let_ ty val x2) (KExpr.let_ ty val x3) ",
-                    "(par_reduces_cd.let_cong the_red_env ty ty val val x x2 ",
-                    "(par_reduces_cd.refl the_red_env ty) (par_reduces_cd.refl the_red_env val) hstep) ih2) ",
+                    "@par_reduces_cd_star.step the_red_env (KExpr.let_ ty val x) (KExpr.let_ ty val x2) (KExpr.let_ ty val x3) ",
+                    "(@par_reduces_cd.let_cong the_red_env ty ty val val x x2 ",
+                    "(@par_reduces_cd.refl the_red_env ty) (@par_reduces_cd.refl the_red_env val) hstep) ih2) ",
                     "body body2 ih) ",
                     // iota
                     "(fun (x : KExpr) (y : KExpr) (hi : iota_reduces x y) => ",
                     "par_subsumes_par_cd_star the_red_env x y ",
-                    "(par_reduces_cd.iota the_red_env x y (iota_reduces_to_step x y hi))) ",
+                    "(@par_reduces_cd.iota the_red_env x y (iota_reduces_to_step x y hi))) ",
                     // proj: positional congruence lifted through the cd_star chain.
                     "(fun (s : Name) (i : Nat) (sub : KExpr) (sub2 : KExpr) (_hs : beta_reduces sub sub2) ",
                     "(ih : par_reduces_cd_star the_red_env sub sub2) => ",
@@ -815,12 +815,12 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (e : KExpr) (e2 : KExpr) (h : whnf_step e e2) => ",
-                    "whnf_step.rec e e2 ",
+                    "@whnf_step.rec e e2 ",
                     "(whnf_step_cd_star_goal e e2) ",
                     "(fun (hb : beta_reduces e e2) => beta_reduces_to_cd_star e e2 hb) ",
                     "(fun (hd : delta_reduces e e2) => ",
                     "par_subsumes_par_cd_star the_red_env e e2 ",
-                    "(par_reduces_cd.delta the_red_env e e2 (delta_reduces_to_step e e2 hd))) ",
+                    "(@par_reduces_cd.delta the_red_env e e2 (delta_reduces_to_step e e2 hd))) ",
                     "h"
                 )
                 .to_string(),
@@ -891,9 +891,9 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (e : KExpr) (v : KExpr) (h : whnf_to e v) => ",
-                    "whnf_to.rec ",
+                    "@whnf_to.rec ",
                     "whnf_to_cd_star_goal ",
-                    "(fun (e0 : KExpr) (_hw : is_whnf e0) => par_reduces_cd_star.refl the_red_env e0) ",
+                    "(fun (e0 : KExpr) (_hw : is_whnf e0) => @par_reduces_cd_star.refl the_red_env e0) ",
                     "(fun (e0 : KExpr) (e1 : KExpr) (v0 : KExpr) (hs : whnf_step e0 e1) ",
                     "(hrest : whnf_to e1 v0) ",
                     "(ih : whnf_to_cd_star_goal e1 v0 hrest) => ",
@@ -936,11 +936,11 @@ impl Specification {
     /// rigid under `par_reduces_cd` and its star (mirror
     /// `step_const_none_absurd` / `star_const_none_eq`).
     fn add_wall_a_const_rigidity(&mut self) -> Result<(), SpecError> {
-        let goal = |reduct: &str| format!("Eq KExpr {reduct} (KExpr.const n us)");
+        let goal = |reduct: &str| format!("@Eq KExpr {reduct} (KExpr.const n us)");
         // Structural (non-const-headed source) arm discharge into the Prop goal.
         let mk_struct_arm = |binders: &str, hyps: &str, discr: &str, source: &str, reduct: &str| {
             format!(
-                "(fun {binders} {hyps} (heq : Eq KExpr {source} (KExpr.const n us)) => {discharge}) ",
+                "(fun {binders} {hyps} (heq : @Eq KExpr {source} (KExpr.const n us)) => {discharge}) ",
                 binders = binders,
                 hyps = hyps,
                 discharge = shape_discharge(discr, source, "(KExpr.const n us)", "heq", &goal(reduct)),
@@ -949,17 +949,17 @@ impl Specification {
 
         let motive = concat!(
             "(fun (x : KExpr) (y : KExpr) (_h : par_reduces_cd the_red_env x y) => ",
-            "Eq KExpr x (KExpr.const n us) -> Eq KExpr y (KExpr.const n us))"
+            "@Eq KExpr x (KExpr.const n us) -> @Eq KExpr y (KExpr.const n us))"
         );
-        let refl_arm = "(fun (x : KExpr) (heq : Eq KExpr x (KExpr.const n us)) => heq) ";
+        let refl_arm = "(fun (x : KExpr) (heq : @Eq KExpr x (KExpr.const n us)) => heq) ";
         let beta_arm = mk_struct_arm(
             "(A : KExpr) (A2 : KExpr) (b0 : KExpr) (b02 : KExpr) (arg : KExpr) (arg2 : KExpr)",
             concat!(
                 "(_hA : par_reduces_cd the_red_env A A2) (_hb0 : par_reduces_cd the_red_env b0 b02) ",
                 "(_harg : par_reduces_cd the_red_env arg arg2) ",
-                "(_ihA : Eq KExpr A (KExpr.const n us) -> Eq KExpr A2 (KExpr.const n us)) ",
-                "(_ihb0 : Eq KExpr b0 (KExpr.const n us) -> Eq KExpr b02 (KExpr.const n us)) ",
-                "(_iharg : Eq KExpr arg (KExpr.const n us) -> Eq KExpr arg2 (KExpr.const n us))"
+                "(_ihA : @Eq KExpr A (KExpr.const n us) -> @Eq KExpr A2 (KExpr.const n us)) ",
+                "(_ihb0 : @Eq KExpr b0 (KExpr.const n us) -> @Eq KExpr b02 (KExpr.const n us)) ",
+                "(_iharg : @Eq KExpr arg (KExpr.const n us) -> @Eq KExpr arg2 (KExpr.const n us))"
             ),
             KEXPR_IS_APP,
             "(KExpr.app (KExpr.lam A b0) arg)",
@@ -969,8 +969,8 @@ impl Specification {
             "(g : KExpr) (g2 : KExpr) (b : KExpr) (b2 : KExpr)",
             concat!(
                 "(_hg : par_reduces_cd the_red_env g g2) (_hb : par_reduces_cd the_red_env b b2) ",
-                "(_ihg : Eq KExpr g (KExpr.const n us) -> Eq KExpr g2 (KExpr.const n us)) ",
-                "(_ihb : Eq KExpr b (KExpr.const n us) -> Eq KExpr b2 (KExpr.const n us))"
+                "(_ihg : @Eq KExpr g (KExpr.const n us) -> @Eq KExpr g2 (KExpr.const n us)) ",
+                "(_ihb : @Eq KExpr b (KExpr.const n us) -> @Eq KExpr b2 (KExpr.const n us))"
             ),
             KEXPR_IS_APP,
             "(KExpr.app g b)",
@@ -980,8 +980,8 @@ impl Specification {
             "(t0 : KExpr) (t02 : KExpr) (b0 : KExpr) (b02 : KExpr)",
             concat!(
                 "(_ht : par_reduces_cd the_red_env t0 t02) (_hb : par_reduces_cd the_red_env b0 b02) ",
-                "(_iht : Eq KExpr t0 (KExpr.const n us) -> Eq KExpr t02 (KExpr.const n us)) ",
-                "(_ihb : Eq KExpr b0 (KExpr.const n us) -> Eq KExpr b02 (KExpr.const n us))"
+                "(_iht : @Eq KExpr t0 (KExpr.const n us) -> @Eq KExpr t02 (KExpr.const n us)) ",
+                "(_ihb : @Eq KExpr b0 (KExpr.const n us) -> @Eq KExpr b02 (KExpr.const n us))"
             ),
             KEXPR_IS_LAM,
             "(KExpr.lam t0 b0)",
@@ -991,8 +991,8 @@ impl Specification {
             "(d0 : KExpr) (d02 : KExpr) (b0 : KExpr) (b02 : KExpr)",
             concat!(
                 "(_hd : par_reduces_cd the_red_env d0 d02) (_hb : par_reduces_cd the_red_env b0 b02) ",
-                "(_ihd : Eq KExpr d0 (KExpr.const n us) -> Eq KExpr d02 (KExpr.const n us)) ",
-                "(_ihb : Eq KExpr b0 (KExpr.const n us) -> Eq KExpr b02 (KExpr.const n us))"
+                "(_ihd : @Eq KExpr d0 (KExpr.const n us) -> @Eq KExpr d02 (KExpr.const n us)) ",
+                "(_ihb : @Eq KExpr b0 (KExpr.const n us) -> @Eq KExpr b02 (KExpr.const n us))"
             ),
             KEXPR_IS_PI,
             "(KExpr.pi d0 b0)",
@@ -1002,8 +1002,8 @@ impl Specification {
             "(d0 : KExpr) (d02 : KExpr) (b0 : KExpr) (b02 : KExpr)",
             concat!(
                 "(_hd : par_reduces_cd the_red_env d0 d02) (_hb : par_reduces_cd the_red_env b0 b02) ",
-                "(_ihd : Eq KExpr d0 (KExpr.const n us) -> Eq KExpr d02 (KExpr.const n us)) ",
-                "(_ihb : Eq KExpr b0 (KExpr.const n us) -> Eq KExpr b02 (KExpr.const n us))"
+                "(_ihd : @Eq KExpr d0 (KExpr.const n us) -> @Eq KExpr d02 (KExpr.const n us)) ",
+                "(_ihb : @Eq KExpr b0 (KExpr.const n us) -> @Eq KExpr b02 (KExpr.const n us))"
             ),
             KEXPR_IS_PI,
             "(KExpr.forall_ d0 b0)",
@@ -1014,9 +1014,9 @@ impl Specification {
             concat!(
                 "(_ht : par_reduces_cd the_red_env t0 t02) (_hv : par_reduces_cd the_red_env v0 v02) ",
                 "(_hb : par_reduces_cd the_red_env b0 b02) ",
-                "(_iht : Eq KExpr t0 (KExpr.const n us) -> Eq KExpr t02 (KExpr.const n us)) ",
-                "(_ihv : Eq KExpr v0 (KExpr.const n us) -> Eq KExpr v02 (KExpr.const n us)) ",
-                "(_ihb : Eq KExpr b0 (KExpr.const n us) -> Eq KExpr b02 (KExpr.const n us))"
+                "(_iht : @Eq KExpr t0 (KExpr.const n us) -> @Eq KExpr t02 (KExpr.const n us)) ",
+                "(_ihv : @Eq KExpr v0 (KExpr.const n us) -> @Eq KExpr v02 (KExpr.const n us)) ",
+                "(_ihb : @Eq KExpr b0 (KExpr.const n us) -> @Eq KExpr b02 (KExpr.const n us))"
             ),
             KEXPR_IS_LET,
             "(KExpr.let_ t0 v0 b0)",
@@ -1029,9 +1029,9 @@ impl Specification {
             concat!(
                 "(_ht : par_reduces_cd the_red_env t0 t02) (_hv : par_reduces_cd the_red_env v0 v02) ",
                 "(_hb : par_reduces_cd the_red_env b0 b02) ",
-                "(_iht : Eq KExpr t0 (KExpr.const n us) -> Eq KExpr t02 (KExpr.const n us)) ",
-                "(_ihv : Eq KExpr v0 (KExpr.const n us) -> Eq KExpr v02 (KExpr.const n us)) ",
-                "(_ihb : Eq KExpr b0 (KExpr.const n us) -> Eq KExpr b02 (KExpr.const n us))"
+                "(_iht : @Eq KExpr t0 (KExpr.const n us) -> @Eq KExpr t02 (KExpr.const n us)) ",
+                "(_ihv : @Eq KExpr v0 (KExpr.const n us) -> @Eq KExpr v02 (KExpr.const n us)) ",
+                "(_ihb : @Eq KExpr b0 (KExpr.const n us) -> @Eq KExpr b02 (KExpr.const n us))"
             ),
             KEXPR_IS_LET,
             "(KExpr.let_ t0 v0 b0)",
@@ -1041,26 +1041,26 @@ impl Specification {
         // fires (iota_reduct_const_none), so some = none is absurd.
         let iota_arm = concat!(
             "(fun (x0 : KExpr) (y0 : KExpr) (hi : iota_step (red_rec the_red_env) x0 y0) ",
-            "(heq : Eq KExpr x0 (KExpr.const n us)) => ",
-            "option_none_ne_some KExpr y0 (Eq KExpr y0 (KExpr.const n us)) ",
-            "(Eq.trans (OptionType KExpr) (OptionType.none KExpr) ",
-            "(iota_reduct (red_rec the_red_env) (KExpr.const n us)) (OptionType.some KExpr y0) ",
-            "(Eq.symm (OptionType KExpr) (iota_reduct (red_rec the_red_env) (KExpr.const n us)) ",
-            "(OptionType.none KExpr) (iota_reduct_const_none (red_rec the_red_env) n us)) ",
-            "(Eq.substType KExpr (fun (z : KExpr) => iota_step (red_rec the_red_env) z y0) ",
+            "(heq : @Eq KExpr x0 (KExpr.const n us)) => ",
+            "option_none_ne_some KExpr y0 (@Eq KExpr y0 (KExpr.const n us)) ",
+            "(@Eq.trans (OptionType KExpr) (@OptionType.none KExpr) ",
+            "(iota_reduct (red_rec the_red_env) (KExpr.const n us)) (@OptionType.some KExpr y0) ",
+            "(@Eq.symm (OptionType KExpr) (iota_reduct (red_rec the_red_env) (KExpr.const n us)) ",
+            "(@OptionType.none KExpr) (iota_reduct_const_none (red_rec the_red_env) n us)) ",
+            "(@Eq.substType KExpr (fun (z : KExpr) => iota_step (red_rec the_red_env) z y0) ",
             "x0 (KExpr.const n us) heq hi))) "
         );
         // delta arm: transport the unfold onto the const head; the carried raw
         // delta-dead equation makes some = none absurd.
         let delta_arm = concat!(
             "(fun (x0 : KExpr) (y0 : KExpr) (hd : delta_step (red_def the_red_env) x0 y0) ",
-            "(heq : Eq KExpr x0 (KExpr.const n us)) => ",
-            "option_none_ne_some KExpr y0 (Eq KExpr y0 (KExpr.const n us)) ",
-            "(Eq.trans (OptionType KExpr) (OptionType.none KExpr) ",
-            "(delta_reduct (red_def the_red_env) (KExpr.const n us)) (OptionType.some KExpr y0) ",
-            "(Eq.symm (OptionType KExpr) (delta_reduct (red_def the_red_env) (KExpr.const n us)) ",
-            "(OptionType.none KExpr) hnd) ",
-            "(Eq.substType KExpr (fun (z : KExpr) => delta_step (red_def the_red_env) z y0) ",
+            "(heq : @Eq KExpr x0 (KExpr.const n us)) => ",
+            "option_none_ne_some KExpr y0 (@Eq KExpr y0 (KExpr.const n us)) ",
+            "(@Eq.trans (OptionType KExpr) (@OptionType.none KExpr) ",
+            "(delta_reduct (red_def the_red_env) (KExpr.const n us)) (@OptionType.some KExpr y0) ",
+            "(@Eq.symm (OptionType KExpr) (delta_reduct (red_def the_red_env) (KExpr.const n us)) ",
+            "(@OptionType.none KExpr) hnd) ",
+            "(@Eq.substType KExpr (fun (z : KExpr) => delta_step (red_def the_red_env) z y0) ",
             "x0 (KExpr.const n us) heq hd)))"
         );
         // proj arm (trailing 11th ctor): a proj-headed source is never const, so
@@ -1069,7 +1069,7 @@ impl Specification {
             "(s : Name) (i : Nat) (sub0 : KExpr) (sub02 : KExpr)",
             concat!(
                 "(_hsub : par_reduces_cd the_red_env sub0 sub02) ",
-                "(_ihsub : Eq KExpr sub0 (KExpr.const n us) -> Eq KExpr sub02 (KExpr.const n us))"
+                "(_ihsub : @Eq KExpr sub0 (KExpr.const n us) -> @Eq KExpr sub02 (KExpr.const n us))"
             ),
             KEXPR_IS_PROJ,
             "(KExpr.proj s i sub0)",
@@ -1081,7 +1081,7 @@ impl Specification {
             type_src: format!(
                 concat!(
                     "forall (n : Name) (us : ListType Level) (t : KExpr), {dd} -> ",
-                    "par_reduces_cd the_red_env (KExpr.const n us) t -> Eq KExpr t (KExpr.const n us)"
+                    "par_reduces_cd the_red_env (KExpr.const n us) t -> @Eq KExpr t (KExpr.const n us)"
                 ),
                 dd = delta_dead_eq("n", "us"),
             ),
@@ -1089,9 +1089,9 @@ impl Specification {
                 concat!(
                     "fun (n : Name) (us : ListType Level) (t : KExpr) (hnd : {dd}) ",
                     "(h : par_reduces_cd the_red_env (KExpr.const n us) t) => ",
-                    "par_reduces_cd.rec the_red_env {motive} ",
+                    "@par_reduces_cd.rec the_red_env {motive} ",
                     "{refl_arm}{beta_arm}{app_arm}{lam_arm}{pi_arm}{forall_arm}{let_arm}{iota_arm}{delta_arm} {let_cong_arm}{proj_arm}",
-                    "(KExpr.const n us) t h (Eq.refl KExpr (KExpr.const n us))"
+                    "(KExpr.const n us) t h (@Eq.refl KExpr (KExpr.const n us))"
                 ),
                 dd = delta_dead_eq("n", "us"),
                 motive = motive,
@@ -1153,7 +1153,7 @@ impl Specification {
             type_src: format!(
                 concat!(
                     "forall (n : Name) (us : ListType Level) (w : KExpr), {dd} -> ",
-                    "par_reduces_cd_star the_red_env (KExpr.const n us) w -> Eq KExpr w (KExpr.const n us)"
+                    "par_reduces_cd_star the_red_env (KExpr.const n us) w -> @Eq KExpr w (KExpr.const n us)"
                 ),
                 dd = delta_dead_eq("n", "us"),
             ),
@@ -1161,19 +1161,19 @@ impl Specification {
                 concat!(
                     "fun (n : Name) (us : ListType Level) (w : KExpr) (hnd : {dd}) ",
                     "(h : par_reduces_cd_star the_red_env (KExpr.const n us) w) => ",
-                    "par_reduces_cd_star.rec the_red_env ",
+                    "@par_reduces_cd_star.rec the_red_env ",
                     "(fun (s : KExpr) (r : KExpr) (_h : par_reduces_cd_star the_red_env s r) => ",
-                    "Eq KExpr s (KExpr.const n us) -> Eq KExpr r (KExpr.const n us)) ",
-                    "(fun (x : KExpr) (heq : Eq KExpr x (KExpr.const n us)) => heq) ",
+                    "@Eq KExpr s (KExpr.const n us) -> @Eq KExpr r (KExpr.const n us)) ",
+                    "(fun (x : KExpr) (heq : @Eq KExpr x (KExpr.const n us)) => heq) ",
                     "(fun (x : KExpr) (y : KExpr) (z : KExpr) ",
                     "(hstep : par_reduces_cd the_red_env x y) ",
                     "(_htail : par_reduces_cd_star the_red_env y z) ",
-                    "(ih : Eq KExpr y (KExpr.const n us) -> Eq KExpr z (KExpr.const n us)) ",
-                    "(heq : Eq KExpr x (KExpr.const n us)) => ",
+                    "(ih : @Eq KExpr y (KExpr.const n us) -> @Eq KExpr z (KExpr.const n us)) ",
+                    "(heq : @Eq KExpr x (KExpr.const n us)) => ",
                     "ih (par_reduces_cd_const_dead_inv_eq n us y hnd ",
-                    "(Eq.substType KExpr (fun (q : KExpr) => par_reduces_cd the_red_env q y) ",
+                    "(@Eq.substType KExpr (fun (q : KExpr) => par_reduces_cd the_red_env q y) ",
                     "x (KExpr.const n us) heq hstep))) ",
-                    "(KExpr.const n us) w h (Eq.refl KExpr (KExpr.const n us))"
+                    "(KExpr.const n us) w h (@Eq.refl KExpr (KExpr.const n us))"
                 ),
                 dd = delta_dead_eq("n", "us"),
             )),
@@ -1225,23 +1225,23 @@ impl Specification {
                 concat!(
                     "fun (e : KExpr) (e2 : KExpr) (C : Type) (hn : iota_neutral e) ",
                     "(hd : delta_step (red_def the_red_env) e e2) => ",
-                    "iota_neutral.rec ",
+                    "@iota_neutral.rec ",
                     "(fun (x : KExpr) (_h : iota_neutral x) => ",
                     "forall (y : KExpr), delta_step (red_def the_red_env) x y -> C) ",
                     "(fun (m : Name) (vs : ListType Level) (_hw : const_whnf m vs) (hnd : {dd}) => ",
                     "fun (y : KExpr) (hdc : delta_step (red_def the_red_env) (KExpr.const m vs) y) => ",
                     "option_none_ne_some_type KExpr y C ",
-                    "(Eq.trans (OptionType KExpr) (OptionType.none KExpr) ",
-                    "(delta_reduct (red_def the_red_env) (KExpr.const m vs)) (OptionType.some KExpr y) ",
-                    "(Eq.symm (OptionType KExpr) (delta_reduct (red_def the_red_env) (KExpr.const m vs)) ",
-                    "(OptionType.none KExpr) hnd) hdc)) ",
+                    "(@Eq.trans (OptionType KExpr) (@OptionType.none KExpr) ",
+                    "(delta_reduct (red_def the_red_env) (KExpr.const m vs)) (@OptionType.some KExpr y) ",
+                    "(@Eq.symm (OptionType KExpr) (delta_reduct (red_def the_red_env) (KExpr.const m vs)) ",
+                    "(@OptionType.none KExpr) hnd) hdc)) ",
                     "(fun (f : KExpr) (a : KExpr) (_hf : iota_neutral f) ",
                     "(_him : iota_immune (KExpr.app f a)) ",
                     "(ihf : forall (y : KExpr), delta_step (red_def the_red_env) f y -> C) => ",
                     "fun (y : KExpr) (hda : delta_step (red_def the_red_env) (KExpr.app f a) y) => ",
                     "delta_step_app_inv_type (red_def the_red_env) f a y C hda ",
                     "(fun (f0 : KExpr) (hdf : delta_step (red_def the_red_env) f f0) ",
-                    "(_heq : Eq KExpr y (KExpr.app f0 a)) => ihf f0 hdf)) ",
+                    "(_heq : @Eq KExpr y (KExpr.app f0 a)) => ihf f0 hdf)) ",
                     "e hn e2 hd"
                 ),
                 dd = delta_dead_eq("m", "vs"),
@@ -1285,7 +1285,7 @@ impl Specification {
             let kont = |reduct: &str| -> String {
                 format!(
                     concat!(
-                        "(forall (f2 : KExpr) (a2 : KExpr), Eq KExpr {reduct} (KExpr.app f2 a2) -> ",
+                        "(forall (f2 : KExpr) (a2 : KExpr), @Eq KExpr {reduct} (KExpr.app f2 a2) -> ",
                         "par_reduces_cd the_red_env f f2 -> par_reduces_cd the_red_env a a2 -> C)"
                     ),
                     reduct = reduct,
@@ -1294,14 +1294,14 @@ impl Specification {
             let motive = format!(
                 concat!(
                     "(fun (x : KExpr) (y : KExpr) (_h : par_reduces_cd the_red_env x y) => ",
-                    "Eq KExpr x (KExpr.app f a) -> {kont} -> C)"
+                    "@Eq KExpr x (KExpr.app f a) -> {kont} -> C)"
                 ),
                 kont = kont("y"),
             );
             let refl_arm = format!(
                 concat!(
-                    "(fun (x : KExpr) (heq : Eq KExpr x (KExpr.app f a)) (k0 : {kont}) => ",
-                    "k0 f a heq (par_reduces_cd.refl the_red_env f) (par_reduces_cd.refl the_red_env a)) "
+                    "(fun (x : KExpr) (heq : @Eq KExpr x (KExpr.app f a)) (k0 : {kont}) => ",
+                    "k0 f a heq (@par_reduces_cd.refl the_red_env f) (@par_reduces_cd.refl the_red_env a)) "
                 ),
                 kont = kont("x"),
             );
@@ -1312,14 +1312,14 @@ impl Specification {
                     "(fun (A : KExpr) (A2 : KExpr) (b0 : KExpr) (b02 : KExpr) (arg : KExpr) (arg2 : KExpr) ",
                     "(_hA : par_reduces_cd the_red_env A A2) (_hb0 : par_reduces_cd the_red_env b0 b02) ",
                     "(_harg : par_reduces_cd the_red_env arg arg2) ",
-                    "(_ihA : Eq KExpr A (KExpr.app f a) -> {kont_a2} -> C) ",
-                    "(_ihb0 : Eq KExpr b0 (KExpr.app f a) -> {kont_b02} -> C) ",
-                    "(_iharg : Eq KExpr arg (KExpr.app f a) -> {kont_arg2} -> C) ",
-                    "(heq : Eq KExpr (KExpr.app (KExpr.lam A b0) arg) (KExpr.app f a)) ",
+                    "(_ihA : @Eq KExpr A (KExpr.app f a) -> {kont_a2} -> C) ",
+                    "(_ihb0 : @Eq KExpr b0 (KExpr.app f a) -> {kont_b02} -> C) ",
+                    "(_iharg : @Eq KExpr arg (KExpr.app f a) -> {kont_arg2} -> C) ",
+                    "(heq : @Eq KExpr (KExpr.app (KExpr.lam A b0) arg) (KExpr.app f a)) ",
                     "(_k : {kont_red}) => ",
                     "iota_neutral_lam_absurd_type A b0 C ",
-                    "(Eq.substType KExpr (fun (z : KExpr) => iota_neutral z) f (KExpr.lam A b0) ",
-                    "(Eq.symm KExpr (KExpr.lam A b0) f (app_inj_fst (KExpr.lam A b0) arg f a heq)) hnf)) "
+                    "(@Eq.substType KExpr (fun (z : KExpr) => iota_neutral z) f (KExpr.lam A b0) ",
+                    "(@Eq.symm KExpr (KExpr.lam A b0) f (app_inj_fst (KExpr.lam A b0) arg f a heq)) hnf)) "
                 ),
                 kont_a2 = kont("A2"),
                 kont_b02 = kont("b02"),
@@ -1330,14 +1330,14 @@ impl Specification {
                 concat!(
                     "(fun (g : KExpr) (g2 : KExpr) (b : KExpr) (b2 : KExpr) ",
                     "(hg : par_reduces_cd the_red_env g g2) (hb : par_reduces_cd the_red_env b b2) ",
-                    "(_ihg : Eq KExpr g (KExpr.app f a) -> {kont_g2} -> C) ",
-                    "(_ihb : Eq KExpr b (KExpr.app f a) -> {kont_b2} -> C) ",
-                    "(heq : Eq KExpr (KExpr.app g b) (KExpr.app f a)) ",
+                    "(_ihg : @Eq KExpr g (KExpr.app f a) -> {kont_g2} -> C) ",
+                    "(_ihb : @Eq KExpr b (KExpr.app f a) -> {kont_b2} -> C) ",
+                    "(heq : @Eq KExpr (KExpr.app g b) (KExpr.app f a)) ",
                     "(k0 : {kont_red}) => ",
-                    "k0 g2 b2 (Eq.refl KExpr (KExpr.app g2 b2)) ",
-                    "(Eq.substType KExpr (fun (z : KExpr) => par_reduces_cd the_red_env z g2) g f ",
+                    "k0 g2 b2 (@Eq.refl KExpr (KExpr.app g2 b2)) ",
+                    "(@Eq.substType KExpr (fun (z : KExpr) => par_reduces_cd the_red_env z g2) g f ",
                     "(app_inj_fst g b f a heq) hg) ",
-                    "(Eq.substType KExpr (fun (z : KExpr) => par_reduces_cd the_red_env z b2) b a ",
+                    "(@Eq.substType KExpr (fun (z : KExpr) => par_reduces_cd the_red_env z b2) b a ",
                     "(app_inj_snd g b f a heq) hb)) "
                 ),
                 kont_g2 = kont("g2"),
@@ -1348,11 +1348,11 @@ impl Specification {
                 concat!(
                     "(fun (t0 : KExpr) (t02 : KExpr) (b0 : KExpr) (b02 : KExpr) ",
                     "(_ht : par_reduces_cd the_red_env t0 t02) (_hb : par_reduces_cd the_red_env b0 b02) ",
-                    "(_iht : Eq KExpr t0 (KExpr.app f a) -> {kont_t02} -> C) ",
-                    "(_ihb : Eq KExpr b0 (KExpr.app f a) -> {kont_b02} -> C) ",
-                    "(heq : Eq KExpr (KExpr.lam t0 b0) (KExpr.app f a)) ",
+                    "(_iht : @Eq KExpr t0 (KExpr.app f a) -> {kont_t02} -> C) ",
+                    "(_ihb : @Eq KExpr b0 (KExpr.app f a) -> {kont_b02} -> C) ",
+                    "(heq : @Eq KExpr (KExpr.lam t0 b0) (KExpr.app f a)) ",
                     "(_k : {kont_red}) => ",
-                    "app_ne_lam f a t0 b0 C (Eq.symm KExpr (KExpr.lam t0 b0) (KExpr.app f a) heq)) "
+                    "app_ne_lam f a t0 b0 C (@Eq.symm KExpr (KExpr.lam t0 b0) (KExpr.app f a) heq)) "
                 ),
                 kont_t02 = kont("t02"),
                 kont_b02 = kont("b02"),
@@ -1362,11 +1362,11 @@ impl Specification {
                 concat!(
                     "(fun (d0 : KExpr) (d02 : KExpr) (b0 : KExpr) (b02 : KExpr) ",
                     "(_hd : par_reduces_cd the_red_env d0 d02) (_hb : par_reduces_cd the_red_env b0 b02) ",
-                    "(_ihd : Eq KExpr d0 (KExpr.app f a) -> {kont_d02} -> C) ",
-                    "(_ihb : Eq KExpr b0 (KExpr.app f a) -> {kont_b02} -> C) ",
-                    "(heq : Eq KExpr (KExpr.pi d0 b0) (KExpr.app f a)) ",
+                    "(_ihd : @Eq KExpr d0 (KExpr.app f a) -> {kont_d02} -> C) ",
+                    "(_ihb : @Eq KExpr b0 (KExpr.app f a) -> {kont_b02} -> C) ",
+                    "(heq : @Eq KExpr (KExpr.pi d0 b0) (KExpr.app f a)) ",
                     "(_k : {kont_red}) => ",
-                    "app_ne_pi f a d0 b0 C (Eq.symm KExpr (KExpr.pi d0 b0) (KExpr.app f a) heq)) "
+                    "app_ne_pi f a d0 b0 C (@Eq.symm KExpr (KExpr.pi d0 b0) (KExpr.app f a) heq)) "
                 ),
                 kont_d02 = kont("d02"),
                 kont_b02 = kont("b02"),
@@ -1376,11 +1376,11 @@ impl Specification {
                 concat!(
                     "(fun (d0 : KExpr) (d02 : KExpr) (b0 : KExpr) (b02 : KExpr) ",
                     "(_hd : par_reduces_cd the_red_env d0 d02) (_hb : par_reduces_cd the_red_env b0 b02) ",
-                    "(_ihd : Eq KExpr d0 (KExpr.app f a) -> {kont_d02} -> C) ",
-                    "(_ihb : Eq KExpr b0 (KExpr.app f a) -> {kont_b02} -> C) ",
-                    "(heq : Eq KExpr (KExpr.forall_ d0 b0) (KExpr.app f a)) ",
+                    "(_ihd : @Eq KExpr d0 (KExpr.app f a) -> {kont_d02} -> C) ",
+                    "(_ihb : @Eq KExpr b0 (KExpr.app f a) -> {kont_b02} -> C) ",
+                    "(heq : @Eq KExpr (KExpr.forall_ d0 b0) (KExpr.app f a)) ",
                     "(_k : {kont_red}) => ",
-                    "app_ne_pi f a d0 b0 C (Eq.symm KExpr (KExpr.forall_ d0 b0) (KExpr.app f a) heq)) "
+                    "app_ne_pi f a d0 b0 C (@Eq.symm KExpr (KExpr.forall_ d0 b0) (KExpr.app f a) heq)) "
                 ),
                 kont_d02 = kont("d02"),
                 kont_b02 = kont("b02"),
@@ -1395,10 +1395,10 @@ impl Specification {
                     "(fun (t0 : KExpr) (t02 : KExpr) (v0 : KExpr) (v02 : KExpr) (b0 : KExpr) (b02 : KExpr) ",
                     "(_ht : par_reduces_cd the_red_env t0 t02) (_hv : par_reduces_cd the_red_env v0 v02) ",
                     "(_hb : par_reduces_cd the_red_env b0 b02) ",
-                    "(_iht : Eq KExpr t0 (KExpr.app f a) -> {kont_t02} -> C) ",
-                    "(_ihv : Eq KExpr v0 (KExpr.app f a) -> {kont_v02} -> C) ",
-                    "(_ihb : Eq KExpr b0 (KExpr.app f a) -> {kont_b02} -> C) ",
-                    "(heq : Eq KExpr (KExpr.let_ t0 v0 b0) (KExpr.app f a)) ",
+                    "(_iht : @Eq KExpr t0 (KExpr.app f a) -> {kont_t02} -> C) ",
+                    "(_ihv : @Eq KExpr v0 (KExpr.app f a) -> {kont_v02} -> C) ",
+                    "(_ihb : @Eq KExpr b0 (KExpr.app f a) -> {kont_b02} -> C) ",
+                    "(heq : @Eq KExpr (KExpr.let_ t0 v0 b0) (KExpr.app f a)) ",
                     "(_k : {kont_red}) => ",
                     "let_ne_app t0 v0 b0 f a C heq) "
                 ),
@@ -1410,11 +1410,11 @@ impl Specification {
             let iota_arm = format!(
                 concat!(
                     "(fun (x0 : KExpr) (y0 : KExpr) (hi : iota_step (red_rec the_red_env) x0 y0) ",
-                    "(heq : Eq KExpr x0 (KExpr.app f a)) ",
+                    "(heq : @Eq KExpr x0 (KExpr.app f a)) ",
                     "(_k : {kont_red}) => ",
                     "Empty.rec (fun (_ : Empty) => C) ",
-                    "(him (KExpr.app f a) y0 (par_reduces_cd_star.refl the_red_env (KExpr.app f a)) ",
-                    "(Eq.substType KExpr (fun (z : KExpr) => iota_step (red_rec the_red_env) z y0) ",
+                    "(him (KExpr.app f a) y0 (@par_reduces_cd_star.refl the_red_env (KExpr.app f a)) ",
+                    "(@Eq.substType KExpr (fun (z : KExpr) => iota_step (red_rec the_red_env) z y0) ",
                     "x0 (KExpr.app f a) heq hi))) "
                 ),
                 kont_red = kont("y0"),
@@ -1422,10 +1422,10 @@ impl Specification {
             let delta_arm = format!(
                 concat!(
                     "(fun (x0 : KExpr) (y0 : KExpr) (hd : delta_step (red_def the_red_env) x0 y0) ",
-                    "(heq : Eq KExpr x0 (KExpr.app f a)) ",
+                    "(heq : @Eq KExpr x0 (KExpr.app f a)) ",
                     "(_k : {kont_red}) => ",
                     "iota_neutral_no_delta (KExpr.app f a) y0 C (iota_neutral.app f a hnf him) ",
-                    "(Eq.substType KExpr (fun (z : KExpr) => delta_step (red_def the_red_env) z y0) ",
+                    "(@Eq.substType KExpr (fun (z : KExpr) => delta_step (red_def the_red_env) z y0) ",
                     "x0 (KExpr.app f a) heq hd))"
                 ),
                 kont_red = kont("y0"),
@@ -1437,10 +1437,10 @@ impl Specification {
                     "(fun (t0 : KExpr) (t02 : KExpr) (v0 : KExpr) (v02 : KExpr) (b0 : KExpr) (b02 : KExpr) ",
                     "(_ht : par_reduces_cd the_red_env t0 t02) (_hv : par_reduces_cd the_red_env v0 v02) ",
                     "(_hb : par_reduces_cd the_red_env b0 b02) ",
-                    "(_iht : Eq KExpr t0 (KExpr.app f a) -> {kont_t02} -> C) ",
-                    "(_ihv : Eq KExpr v0 (KExpr.app f a) -> {kont_v02} -> C) ",
-                    "(_ihb : Eq KExpr b0 (KExpr.app f a) -> {kont_b02} -> C) ",
-                    "(heq : Eq KExpr (KExpr.let_ t0 v0 b0) (KExpr.app f a)) ",
+                    "(_iht : @Eq KExpr t0 (KExpr.app f a) -> {kont_t02} -> C) ",
+                    "(_ihv : @Eq KExpr v0 (KExpr.app f a) -> {kont_v02} -> C) ",
+                    "(_ihb : @Eq KExpr b0 (KExpr.app f a) -> {kont_b02} -> C) ",
+                    "(heq : @Eq KExpr (KExpr.let_ t0 v0 b0) (KExpr.app f a)) ",
                     "(_k : {kont_red}) => ",
                     "let_ne_app t0 v0 b0 f a C heq)"
                 ),
@@ -1455,8 +1455,8 @@ impl Specification {
                 concat!(
                     "(fun (s : Name) (i : Nat) (sub0 : KExpr) (sub02 : KExpr) ",
                     "(_hsub : par_reduces_cd the_red_env sub0 sub02) ",
-                    "(_ihsub : Eq KExpr sub0 (KExpr.app f a) -> {kont_sub02} -> C) ",
-                    "(heq : Eq KExpr (KExpr.proj s i sub0) (KExpr.app f a)) ",
+                    "(_ihsub : @Eq KExpr sub0 (KExpr.app f a) -> {kont_sub02} -> C) ",
+                    "(heq : @Eq KExpr (KExpr.proj s i sub0) (KExpr.app f a)) ",
                     "(_k : {kont_red}) => ",
                     "proj_ne_app s i sub0 f a C heq)"
                 ),
@@ -1481,9 +1481,9 @@ impl Specification {
                         "(hnf : iota_neutral f) (him : iota_immune (KExpr.app f a)) ",
                         "(h : par_reduces_cd the_red_env (KExpr.app f a) t) ",
                         "(k : {kont_t}) => ",
-                        "par_reduces_cd.rec the_red_env {motive} ",
+                        "@par_reduces_cd.rec the_red_env {motive} ",
                         "{refl_arm}{beta_arm}{app_arm}{lam_arm}{pi_arm}{forall_arm}{let_arm}{iota_arm}{delta_arm} {let_cong_arm} {proj_arm} ",
-                        "(KExpr.app f a) t h (Eq.refl KExpr (KExpr.app f a)) k"
+                        "(KExpr.app f a) t h (@Eq.refl KExpr (KExpr.app f a)) k"
                     ),
                     kont_t = kont("t"),
                     motive = motive,
@@ -1563,7 +1563,7 @@ impl Specification {
                     "(hstep : par_reduces_cd the_red_env e e2) ",
                     "(e3 : KExpr) (r : KExpr) (hstar : par_reduces_cd_star the_red_env e2 e3) ",
                     "(hfire : iota_step (red_rec the_red_env) e3 r) => ",
-                    "him e3 r (par_reduces_cd_star.step the_red_env e e2 e3 hstep hstar) hfire"
+                    "him e3 r (@par_reduces_cd_star.step the_red_env e e2 e3 hstep hstar) hfire"
                 )
                 .to_string(),
             ),
@@ -1602,15 +1602,15 @@ impl Specification {
                 concat!(
                     "fun (e : KExpr) (t : KExpr) (hn : iota_neutral e) ",
                     "(h : par_reduces_cd the_red_env e t) => ",
-                    "iota_neutral.rec ",
+                    "@iota_neutral.rec ",
                     "(fun (x : KExpr) (_h : iota_neutral x) => ",
                     "forall (y : KExpr), par_reduces_cd the_red_env x y -> iota_neutral y) ",
                     // const arm: dead-const rigidity pins y = const, transport
                     // the const ctor back.
                     "(fun (m : Name) (vs : ListType Level) (hw : const_whnf m vs) (hnd : {dd}) => ",
                     "fun (y : KExpr) (hstep : par_reduces_cd the_red_env (KExpr.const m vs) y) => ",
-                    "Eq.substType KExpr (fun (z : KExpr) => iota_neutral z) (KExpr.const m vs) y ",
-                    "(Eq.symm KExpr y (KExpr.const m vs) (par_reduces_cd_const_dead_inv_eq m vs y hnd hstep)) ",
+                    "@Eq.substType KExpr (fun (z : KExpr) => iota_neutral z) (KExpr.const m vs) y ",
+                    "(@Eq.symm KExpr y (KExpr.const m vs) (par_reduces_cd_const_dead_inv_eq m vs y hnd hstep)) ",
                     "(iota_neutral.const m vs hw hnd)) ",
                     // app arm: invert the step, rebuild neutrality of the reduct.
                     "(fun (f : KExpr) (a : KExpr) (hf : iota_neutral f) ",
@@ -1618,13 +1618,13 @@ impl Specification {
                     "(ihf : forall (y : KExpr), par_reduces_cd the_red_env f y -> iota_neutral y) => ",
                     "fun (y : KExpr) (hstep : par_reduces_cd the_red_env (KExpr.app f a) y) => ",
                     "par_reduces_cd_neutral_app_inv f a y (iota_neutral y) hf him hstep ",
-                    "(fun (f2 : KExpr) (a2 : KExpr) (heq : Eq KExpr y (KExpr.app f2 a2)) ",
+                    "(fun (f2 : KExpr) (a2 : KExpr) (heq : @Eq KExpr y (KExpr.app f2 a2)) ",
                     "(hff2 : par_reduces_cd the_red_env f f2) (haa2 : par_reduces_cd the_red_env a a2) => ",
-                    "Eq.substType KExpr (fun (z : KExpr) => iota_neutral z) (KExpr.app f2 a2) y ",
-                    "(Eq.symm KExpr y (KExpr.app f2 a2) heq) ",
+                    "@Eq.substType KExpr (fun (z : KExpr) => iota_neutral z) (KExpr.app f2 a2) y ",
+                    "(@Eq.symm KExpr y (KExpr.app f2 a2) heq) ",
                     "(iota_neutral.app f2 a2 (ihf f2 hff2) ",
                     "(iota_immune_cd_step (KExpr.app f a) (KExpr.app f2 a2) him ",
-                    "(par_reduces_cd.app the_red_env f f2 a a2 hff2 haa2))))) ",
+                    "(@par_reduces_cd.app the_red_env f f2 a a2 hff2 haa2))))) ",
                     "e hn t h"
                 ),
                 dd = delta_dead_eq("m", "vs"),
@@ -1671,7 +1671,7 @@ impl Specification {
                 concat!(
                     "fun (e : KExpr) (w : KExpr) (hn : iota_neutral e) ",
                     "(h : par_reduces_cd_star the_red_env e w) => ",
-                    "par_reduces_cd_star.rec the_red_env ",
+                    "@par_reduces_cd_star.rec the_red_env ",
                     "(fun (s : KExpr) (r : KExpr) (_h : par_reduces_cd_star the_red_env s r) => ",
                     "iota_neutral s -> iota_neutral r) ",
                     "(fun (x : KExpr) (hx : iota_neutral x) => hx) ",
@@ -1715,14 +1715,14 @@ impl Specification {
             (
                 "par_reduces_cd_star_target_cast",
                 concat!(
-                    "forall (x : KExpr) (y : KExpr) (t : KExpr), Eq KExpr y t -> ",
+                    "forall (x : KExpr) (y : KExpr) (t : KExpr), @Eq KExpr y t -> ",
                     "par_reduces_cd_star the_red_env x y -> par_reduces_cd_star the_red_env x t"
                 )
                 .to_string(),
                 concat!(
-                    "fun (x : KExpr) (y : KExpr) (t : KExpr) (e : Eq KExpr y t) ",
+                    "fun (x : KExpr) (y : KExpr) (t : KExpr) (e : @Eq KExpr y t) ",
                     "(h : par_reduces_cd_star the_red_env x y) => ",
-                    "Eq.substType KExpr (fun (z : KExpr) => par_reduces_cd_star the_red_env x z) ",
+                    "@Eq.substType KExpr (fun (z : KExpr) => par_reduces_cd_star the_red_env x z) ",
                     "y t e h"
                 )
                 .to_string(),
@@ -1733,15 +1733,15 @@ impl Specification {
             (
                 "par_reduces_cd_star_target_cast_rev",
                 concat!(
-                    "forall (x : KExpr) (y : KExpr) (t : KExpr), Eq KExpr t y -> ",
+                    "forall (x : KExpr) (y : KExpr) (t : KExpr), @Eq KExpr t y -> ",
                     "par_reduces_cd_star the_red_env x y -> par_reduces_cd_star the_red_env x t"
                 )
                 .to_string(),
                 concat!(
-                    "fun (x : KExpr) (y : KExpr) (t : KExpr) (e : Eq KExpr t y) ",
+                    "fun (x : KExpr) (y : KExpr) (t : KExpr) (e : @Eq KExpr t y) ",
                     "(h : par_reduces_cd_star the_red_env x y) => ",
-                    "Eq.substType KExpr (fun (z : KExpr) => par_reduces_cd_star the_red_env x z) ",
-                    "y t (Eq.symm KExpr t y e) h"
+                    "@Eq.substType KExpr (fun (z : KExpr) => par_reduces_cd_star the_red_env x z) ",
+                    "y t (@Eq.symm KExpr t y e) h"
                 )
                 .to_string(),
                 "Cast the target of a par_reduces_cd_star along a propositional equality \
@@ -1751,15 +1751,15 @@ impl Specification {
             (
                 "head_match_target_cast_rev",
                 concat!(
-                    "forall (x : KExpr) (y : KExpr) (t : KExpr), Eq KExpr t y -> ",
+                    "forall (x : KExpr) (y : KExpr) (t : KExpr), @Eq KExpr t y -> ",
                     "HeadMatch x y -> HeadMatch x t"
                 )
                 .to_string(),
                 concat!(
-                    "fun (x : KExpr) (y : KExpr) (t : KExpr) (e : Eq KExpr t y) ",
+                    "fun (x : KExpr) (y : KExpr) (t : KExpr) (e : @Eq KExpr t y) ",
                     "(h : HeadMatch x y) => ",
-                    "Eq.substType KExpr (fun (z : KExpr) => HeadMatch x z) ",
-                    "y t (Eq.symm KExpr t y e) h"
+                    "@Eq.substType KExpr (fun (z : KExpr) => HeadMatch x z) ",
+                    "y t (@Eq.symm KExpr t y e) h"
                 )
                 .to_string(),
                 "Cast the right-hand side of a HeadMatch along a propositional equality \
@@ -1778,7 +1778,7 @@ impl Specification {
                     "fun (x : KExpr) (y : KExpr) (m : KExpr) ",
                     "(hx : par_reduces_cd_star the_red_env x m) ",
                     "(hy : par_reduces_cd_star the_red_env y m) => ",
-                    "join_to_def_eq x y (par_strips_witness_cd_star.intro the_red_env x y m hx hy)"
+                    "join_to_def_eq x y (@par_strips_witness_cd_star.intro the_red_env x y m hx hy)"
                 )
                 .to_string(),
                 "Two terms meeting at a common cd_star reduct are DefEq (join_to_def_eq over \
@@ -1833,44 +1833,44 @@ impl Specification {
                     "(k : forall (f2 : KExpr) (a2 : KExpr), ",
                     "par_reduces_cd_star the_red_env f f2 -> par_reduces_cd_star the_red_env a a2 -> ",
                     "iota_neutral f2 -> iota_immune (KExpr.app f2 a2) -> C (KExpr.app f2 a2)) => ",
-                    "par_reduces_cd_star.rec the_red_env ",
+                    "@par_reduces_cd_star.rec the_red_env ",
                     "(fun (s : KExpr) (r : KExpr) (_h : par_reduces_cd_star the_red_env s r) => ",
-                    "forall (F : KExpr) (A : KExpr), Eq KExpr s (KExpr.app F A) -> ",
+                    "forall (F : KExpr) (A : KExpr), @Eq KExpr s (KExpr.app F A) -> ",
                     "iota_neutral F -> iota_immune (KExpr.app F A) -> ",
                     "par_reduces_cd_star the_red_env f F -> par_reduces_cd_star the_red_env a A -> C r) ",
                     // refl arm
                     "(fun (x : KExpr) => ",
-                    "fun (F : KExpr) (A : KExpr) (heq : Eq KExpr x (KExpr.app F A)) ",
+                    "fun (F : KExpr) (A : KExpr) (heq : @Eq KExpr x (KExpr.app F A)) ",
                     "(hF : iota_neutral F) (hIm : iota_immune (KExpr.app F A)) ",
                     "(hfF : par_reduces_cd_star the_red_env f F) (haA : par_reduces_cd_star the_red_env a A) => ",
-                    "Eq.substType KExpr C (KExpr.app F A) x (Eq.symm KExpr x (KExpr.app F A) heq) ",
+                    "@Eq.substType KExpr C (KExpr.app F A) x (@Eq.symm KExpr x (KExpr.app F A) heq) ",
                     "(k F A hfF haA hF hIm)) ",
                     // step arm
                     "(fun (x : KExpr) (y : KExpr) (z : KExpr) ",
                     "(hstep : par_reduces_cd the_red_env x y) ",
                     "(_htail : par_reduces_cd_star the_red_env y z) ",
-                    "(ih : forall (F : KExpr) (A : KExpr), Eq KExpr y (KExpr.app F A) -> ",
+                    "(ih : forall (F : KExpr) (A : KExpr), @Eq KExpr y (KExpr.app F A) -> ",
                     "iota_neutral F -> iota_immune (KExpr.app F A) -> ",
                     "par_reduces_cd_star the_red_env f F -> par_reduces_cd_star the_red_env a A -> C z) => ",
-                    "fun (F : KExpr) (A : KExpr) (heq : Eq KExpr x (KExpr.app F A)) ",
+                    "fun (F : KExpr) (A : KExpr) (heq : @Eq KExpr x (KExpr.app F A)) ",
                     "(hF : iota_neutral F) (hIm : iota_immune (KExpr.app F A)) ",
                     "(hfF : par_reduces_cd_star the_red_env f F) (haA : par_reduces_cd_star the_red_env a A) => ",
                     "par_reduces_cd_neutral_app_inv F A y (C z) hF hIm ",
-                    "(Eq.substType KExpr (fun (q : KExpr) => par_reduces_cd the_red_env q y) ",
+                    "(@Eq.substType KExpr (fun (q : KExpr) => par_reduces_cd the_red_env q y) ",
                     "x (KExpr.app F A) heq hstep) ",
-                    "(fun (F2 : KExpr) (A2 : KExpr) (heq2 : Eq KExpr y (KExpr.app F2 A2)) ",
+                    "(fun (F2 : KExpr) (A2 : KExpr) (heq2 : @Eq KExpr y (KExpr.app F2 A2)) ",
                     "(hFF2 : par_reduces_cd the_red_env F F2) (hAA2 : par_reduces_cd the_red_env A A2) => ",
                     "ih F2 A2 heq2 ",
                     "(iota_neutral_cd_step F F2 hF hFF2) ",
                     "(iota_immune_cd_step (KExpr.app F A) (KExpr.app F2 A2) hIm ",
-                    "(par_reduces_cd.app the_red_env F F2 A A2 hFF2 hAA2)) ",
+                    "(@par_reduces_cd.app the_red_env F F2 A A2 hFF2 hAA2)) ",
                     "(par_reduces_cd_star_trans the_red_env f F F2 hfF ",
                     "(par_subsumes_par_cd_star the_red_env F F2 hFF2)) ",
                     "(par_reduces_cd_star_trans the_red_env a A A2 haA ",
                     "(par_subsumes_par_cd_star the_red_env A A2 hAA2)))) ",
                     "(KExpr.app f a) w h ",
-                    "f a (Eq.refl KExpr (KExpr.app f a)) hnf him ",
-                    "(par_reduces_cd_star.refl the_red_env f) (par_reduces_cd_star.refl the_red_env a)"
+                    "f a (@Eq.refl KExpr (KExpr.app f a)) hnf him ",
+                    "(@par_reduces_cd_star.refl the_red_env f) (@par_reduces_cd_star.refl the_red_env a)"
                 )
                 .to_string(),
             ),
@@ -1917,7 +1917,7 @@ impl Specification {
                 "forall (f : KExpr) (a : KExpr) (w : KExpr) (C : Type), ",
                 "iota_neutral f -> iota_immune (KExpr.app f a) -> ",
                 "par_reduces_cd_star the_red_env (KExpr.app f a) w -> ",
-                "(forall (f2 : KExpr) (a2 : KExpr), Eq KExpr w (KExpr.app f2 a2) -> ",
+                "(forall (f2 : KExpr) (a2 : KExpr), @Eq KExpr w (KExpr.app f2 a2) -> ",
                 "par_reduces_cd_star the_red_env f f2 -> par_reduces_cd_star the_red_env a a2 -> ",
                 "iota_neutral f2 -> iota_immune (KExpr.app f2 a2) -> C) -> ",
                 "C"
@@ -1928,17 +1928,17 @@ impl Specification {
                     "fun (f : KExpr) (a : KExpr) (w : KExpr) (C : Type) ",
                     "(hnf : iota_neutral f) (him : iota_immune (KExpr.app f a)) ",
                     "(h : par_reduces_cd_star the_red_env (KExpr.app f a) w) ",
-                    "(k : forall (f2 : KExpr) (a2 : KExpr), Eq KExpr w (KExpr.app f2 a2) -> ",
+                    "(k : forall (f2 : KExpr) (a2 : KExpr), @Eq KExpr w (KExpr.app f2 a2) -> ",
                     "par_reduces_cd_star the_red_env f f2 -> par_reduces_cd_star the_red_env a a2 -> ",
                     "iota_neutral f2 -> iota_immune (KExpr.app f2 a2) -> C) => ",
                     "par_reduces_cd_star_neutral_app_inv f a w ",
-                    "(fun (ww : KExpr) => Eq KExpr w ww -> C) hnf him h ",
+                    "(fun (ww : KExpr) => @Eq KExpr w ww -> C) hnf him h ",
                     "(fun (f2 : KExpr) (a2 : KExpr) ",
                     "(hff2 : par_reduces_cd_star the_red_env f f2) ",
                     "(haa2 : par_reduces_cd_star the_red_env a a2) ",
                     "(hn2 : iota_neutral f2) (him2 : iota_immune (KExpr.app f2 a2)) => ",
-                    "fun (eqw : Eq KExpr w (KExpr.app f2 a2)) => k f2 a2 eqw hff2 haa2 hn2 him2) ",
-                    "(Eq.refl KExpr w)"
+                    "fun (eqw : @Eq KExpr w (KExpr.app f2 a2)) => k f2 a2 eqw hff2 haa2 hn2 him2) ",
+                    "(@Eq.refl KExpr w)"
                 )
                 .to_string(),
             ),
@@ -1971,35 +1971,35 @@ impl Specification {
             name: "iota_neutral_star_const_inv_eq".to_string(),
             type_src: concat!(
                 "forall (e : KExpr) (n : Name) (us : ListType Level), iota_neutral e -> ",
-                "par_reduces_cd_star the_red_env e (KExpr.const n us) -> Eq KExpr e (KExpr.const n us)"
+                "par_reduces_cd_star the_red_env e (KExpr.const n us) -> @Eq KExpr e (KExpr.const n us)"
             )
             .to_string(),
             value_src: Some(format!(
                 concat!(
                     "fun (e : KExpr) (n : Name) (us : ListType Level) (hn : iota_neutral e) ",
                     "(h : par_reduces_cd_star the_red_env e (KExpr.const n us)) => ",
-                    "iota_neutral.rec ",
+                    "@iota_neutral.rec ",
                     "(fun (x : KExpr) (_h : iota_neutral x) => ",
-                    "par_reduces_cd_star the_red_env x (KExpr.const n us) -> Eq KExpr x (KExpr.const n us)) ",
+                    "par_reduces_cd_star the_red_env x (KExpr.const n us) -> @Eq KExpr x (KExpr.const n us)) ",
                     // const arm: dead-const rigidity gives (const n us) = (const m vs).
                     "(fun (m : Name) (vs : ListType Level) (_hw : const_whnf m vs) (hnd : {dd}) => ",
                     "fun (hstar : par_reduces_cd_star the_red_env (KExpr.const m vs) (KExpr.const n us)) => ",
-                    "Eq.symm KExpr (KExpr.const n us) (KExpr.const m vs) ",
+                    "@Eq.symm KExpr (KExpr.const n us) (KExpr.const m vs) ",
                     "(par_reduces_cd_star_const_dead_inv_eq m vs (KExpr.const n us) hnd hstar)) ",
                     // app arm: star inversion pins the const target to an app shape — absurd
                     // (route through C := Empty, then Empty.rec into the Prop goal).
                     "(fun (f : KExpr) (a : KExpr) (hf : iota_neutral f) ",
                     "(him : iota_immune (KExpr.app f a)) ",
                     "(_ihf : par_reduces_cd_star the_red_env f (KExpr.const n us) -> ",
-                    "Eq KExpr f (KExpr.const n us)) => ",
+                    "@Eq KExpr f (KExpr.const n us)) => ",
                     "fun (hstar : par_reduces_cd_star the_red_env (KExpr.app f a) (KExpr.const n us)) => ",
-                    "Empty.rec (fun (_ : Empty) => Eq KExpr (KExpr.app f a) (KExpr.const n us)) ",
+                    "Empty.rec (fun (_ : Empty) => @Eq KExpr (KExpr.app f a) (KExpr.const n us)) ",
                     "(par_reduces_cd_star_neutral_app_inv_eq f a (KExpr.const n us) Empty hf him hstar ",
-                    "(fun (f2 : KExpr) (a2 : KExpr) (eqw : Eq KExpr (KExpr.const n us) (KExpr.app f2 a2)) ",
+                    "(fun (f2 : KExpr) (a2 : KExpr) (eqw : @Eq KExpr (KExpr.const n us) (KExpr.app f2 a2)) ",
                     "(_hff2 : par_reduces_cd_star the_red_env f f2) ",
                     "(_haa2 : par_reduces_cd_star the_red_env a a2) ",
                     "(_hn2 : iota_neutral f2) (_him2 : iota_immune (KExpr.app f2 a2)) => ",
-                    "Eq.substType KExpr {is_const} (KExpr.const n us) (KExpr.app f2 a2) eqw Nat.zero))) ",
+                    "@Eq.substType KExpr {is_const} (KExpr.const n us) (KExpr.app f2 a2) eqw Nat.zero))) ",
                     "e hn h"
                 ),
                 dd = delta_dead_eq("m", "vs"),
@@ -2043,11 +2043,11 @@ impl Specification {
             name: "iota_neutral_star_to_app_kont".to_string(),
             type_src: concat!(
                 "forall (P : KExpr) (Q : KExpr) (f : KExpr) (a : KExpr) (C : Type), ",
-                "(forall (g : KExpr) (d : KExpr), Eq KExpr (KExpr.app f a) (KExpr.app g d) -> ",
+                "(forall (g : KExpr) (d : KExpr), @Eq KExpr (KExpr.app f a) (KExpr.app g d) -> ",
                 "iota_neutral g -> iota_immune (KExpr.app g d) -> ",
                 "par_reduces_cd_star the_red_env g P -> par_reduces_cd_star the_red_env d Q -> C) -> ",
                 "iota_neutral f -> iota_immune (KExpr.app f a) -> ",
-                "forall (f2 : KExpr) (a2 : KExpr), Eq KExpr (KExpr.app P Q) (KExpr.app f2 a2) -> ",
+                "forall (f2 : KExpr) (a2 : KExpr), @Eq KExpr (KExpr.app P Q) (KExpr.app f2 a2) -> ",
                 "par_reduces_cd_star the_red_env f f2 -> par_reduces_cd_star the_red_env a a2 -> ",
                 "iota_neutral f2 -> iota_immune (KExpr.app f2 a2) -> C"
             )
@@ -2055,21 +2055,21 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (P : KExpr) (Q : KExpr) (f : KExpr) (a : KExpr) (C : Type) ",
-                    "(k0 : forall (g : KExpr) (d : KExpr), Eq KExpr (KExpr.app f a) (KExpr.app g d) -> ",
+                    "(k0 : forall (g : KExpr) (d : KExpr), @Eq KExpr (KExpr.app f a) (KExpr.app g d) -> ",
                     "iota_neutral g -> iota_immune (KExpr.app g d) -> ",
                     "par_reduces_cd_star the_red_env g P -> par_reduces_cd_star the_red_env d Q -> C) ",
                     "(hf : iota_neutral f) (him : iota_immune (KExpr.app f a)) ",
-                    "(f2 : KExpr) (a2 : KExpr) (eqw : Eq KExpr (KExpr.app P Q) (KExpr.app f2 a2)) ",
+                    "(f2 : KExpr) (a2 : KExpr) (eqw : @Eq KExpr (KExpr.app P Q) (KExpr.app f2 a2)) ",
                     "(hff2 : par_reduces_cd_star the_red_env f f2) ",
                     "(haa2 : par_reduces_cd_star the_red_env a a2) ",
                     "(_hn2 : iota_neutral f2) (_him2 : iota_immune (KExpr.app f2 a2)) => ",
                     // Applied-lambda double-bind (nesting discipline): bind the
                     // injectivity equations, then the cast legs, so every
                     // application site carries atoms or one-level compounds.
-                    "(fun (eA : Eq KExpr P f2) (eB : Eq KExpr Q a2) => ",
+                    "(fun (eA : @Eq KExpr P f2) (eB : @Eq KExpr Q a2) => ",
                     "(fun (legP : par_reduces_cd_star the_red_env f P) ",
                     "(legQ : par_reduces_cd_star the_red_env a Q) => ",
-                    "k0 f a (Eq.refl KExpr (KExpr.app f a)) hf him legP legQ) ",
+                    "k0 f a (@Eq.refl KExpr (KExpr.app f a)) hf him legP legQ) ",
                     "(par_reduces_cd_star_target_cast_rev f f2 P eA hff2) ",
                     "(par_reduces_cd_star_target_cast_rev a a2 Q eB haa2)) ",
                     "(app_inj_fst P Q f2 a2 eqw) ",
@@ -2111,7 +2111,7 @@ impl Specification {
             type_src: concat!(
                 "forall (nb : KExpr) (P : KExpr) (Q : KExpr) (C : Type), iota_neutral nb -> ",
                 "par_reduces_cd_star the_red_env nb (KExpr.app P Q) -> ",
-                "(forall (g : KExpr) (d : KExpr), Eq KExpr nb (KExpr.app g d) -> ",
+                "(forall (g : KExpr) (d : KExpr), @Eq KExpr nb (KExpr.app g d) -> ",
                 "iota_neutral g -> iota_immune (KExpr.app g d) -> ",
                 "par_reduces_cd_star the_red_env g P -> par_reduces_cd_star the_red_env d Q -> C) -> ",
                 "C"
@@ -2121,39 +2121,39 @@ impl Specification {
                 concat!(
                     "fun (nb : KExpr) (P : KExpr) (Q : KExpr) (C : Type) (hn : iota_neutral nb) ",
                     "(h : par_reduces_cd_star the_red_env nb (KExpr.app P Q)) ",
-                    "(k : forall (g : KExpr) (d : KExpr), Eq KExpr nb (KExpr.app g d) -> ",
+                    "(k : forall (g : KExpr) (d : KExpr), @Eq KExpr nb (KExpr.app g d) -> ",
                     "iota_neutral g -> iota_immune (KExpr.app g d) -> ",
                     "par_reduces_cd_star the_red_env g P -> par_reduces_cd_star the_red_env d Q -> C) => ",
                     // Kont-through-the-motive shape (the single-step-inversion
                     // pattern): the continuation is parameterized by the motive
                     // variable, so the nb-equation is produced at Eq.refl in the
                     // app arm rather than carried as an accumulator.
-                    "iota_neutral.rec ",
+                    "@iota_neutral.rec ",
                     "(fun (x : KExpr) (_h : iota_neutral x) => ",
                     "par_reduces_cd_star the_red_env x (KExpr.app P Q) -> ",
-                    "(forall (g : KExpr) (d : KExpr), Eq KExpr x (KExpr.app g d) -> ",
+                    "(forall (g : KExpr) (d : KExpr), @Eq KExpr x (KExpr.app g d) -> ",
                     "iota_neutral g -> iota_immune (KExpr.app g d) -> ",
                     "par_reduces_cd_star the_red_env g P -> par_reduces_cd_star the_red_env d Q -> C) -> ",
                     "C) ",
                     // const arm: dead-const rigidity pins app P Q = const — absurd.
                     "(fun (m : Name) (vs : ListType Level) (_hw : const_whnf m vs) (hnd : {dd}) => ",
                     "fun (hstar : par_reduces_cd_star the_red_env (KExpr.const m vs) (KExpr.app P Q)) ",
-                    "(_k0 : forall (g : KExpr) (d : KExpr), Eq KExpr (KExpr.const m vs) (KExpr.app g d) -> ",
+                    "(_k0 : forall (g : KExpr) (d : KExpr), @Eq KExpr (KExpr.const m vs) (KExpr.app g d) -> ",
                     "iota_neutral g -> iota_immune (KExpr.app g d) -> ",
                     "par_reduces_cd_star the_red_env g P -> par_reduces_cd_star the_red_env d Q -> C) => ",
                     "Empty.rec (fun (_ : Empty) => C) ",
-                    "(Eq.substType KExpr {is_app} (KExpr.app P Q) (KExpr.const m vs) ",
+                    "(@Eq.substType KExpr {is_app} (KExpr.app P Q) (KExpr.const m vs) ",
                     "(par_reduces_cd_star_const_dead_inv_eq m vs (KExpr.app P Q) hnd hstar) Nat.zero)) ",
                     // app arm: star app inversion aligns the components.
                     "(fun (f : KExpr) (a : KExpr) (hf : iota_neutral f) ",
                     "(him : iota_immune (KExpr.app f a)) ",
                     "(_ihf : par_reduces_cd_star the_red_env f (KExpr.app P Q) -> ",
-                    "(forall (g : KExpr) (d : KExpr), Eq KExpr f (KExpr.app g d) -> ",
+                    "(forall (g : KExpr) (d : KExpr), @Eq KExpr f (KExpr.app g d) -> ",
                     "iota_neutral g -> iota_immune (KExpr.app g d) -> ",
                     "par_reduces_cd_star the_red_env g P -> par_reduces_cd_star the_red_env d Q -> C) -> ",
                     "C) => ",
                     "fun (hstar : par_reduces_cd_star the_red_env (KExpr.app f a) (KExpr.app P Q)) ",
-                    "(k0 : forall (g : KExpr) (d : KExpr), Eq KExpr (KExpr.app f a) (KExpr.app g d) -> ",
+                    "(k0 : forall (g : KExpr) (d : KExpr), @Eq KExpr (KExpr.app f a) (KExpr.app g d) -> ",
                     "iota_neutral g -> iota_immune (KExpr.app g d) -> ",
                     "par_reduces_cd_star the_red_env g P -> par_reduces_cd_star the_red_env d Q -> C) => ",
                     "par_reduces_cd_star_neutral_app_inv_eq f a (KExpr.app P Q) C hf him hstar ",
@@ -2206,7 +2206,7 @@ impl Specification {
                 "par_reduces_cd_star the_red_env f v2 -> par_reduces_cd_star the_red_env y2 v2 -> ",
                 "HeadMatch f y2) -> ",
                 "par_reduces_cd_star the_red_env f f2 -> par_reduces_cd_star the_red_env a a2 -> ",
-                "forall (g : KExpr) (d : KExpr), Eq KExpr y (KExpr.app g d) -> ",
+                "forall (g : KExpr) (d : KExpr), @Eq KExpr y (KExpr.app g d) -> ",
                 "iota_neutral g -> iota_immune (KExpr.app g d) -> ",
                 "par_reduces_cd_star the_red_env g f2 -> par_reduces_cd_star the_red_env d a2 -> ",
                 "HeadMatch (KExpr.app f a) y"
@@ -2220,7 +2220,7 @@ impl Specification {
                     "HeadMatch f y2) ",
                     "(hff2 : par_reduces_cd_star the_red_env f f2) ",
                     "(haa2 : par_reduces_cd_star the_red_env a a2) ",
-                    "(g : KExpr) (d : KExpr) (heqy : Eq KExpr y (KExpr.app g d)) ",
+                    "(g : KExpr) (d : KExpr) (heqy : @Eq KExpr y (KExpr.app g d)) ",
                     "(hg : iota_neutral g) (_himgd : iota_immune (KExpr.app g d)) ",
                     "(hgf2 : par_reduces_cd_star the_red_env g f2) ",
                     "(hda2 : par_reduces_cd_star the_red_env d a2) => ",
@@ -2268,7 +2268,7 @@ impl Specification {
                 "par_reduces_cd_star the_red_env f v2 -> par_reduces_cd_star the_red_env y2 v2 -> ",
                 "HeadMatch f y2) -> ",
                 "iota_neutral y -> par_reduces_cd_star the_red_env y v -> ",
-                "forall (f2 : KExpr) (a2 : KExpr), Eq KExpr v (KExpr.app f2 a2) -> ",
+                "forall (f2 : KExpr) (a2 : KExpr), @Eq KExpr v (KExpr.app f2 a2) -> ",
                 "par_reduces_cd_star the_red_env f f2 -> par_reduces_cd_star the_red_env a a2 -> ",
                 "iota_neutral f2 -> iota_immune (KExpr.app f2 a2) -> ",
                 "HeadMatch (KExpr.app f a) y"
@@ -2281,7 +2281,7 @@ impl Specification {
                     "par_reduces_cd_star the_red_env f v2 -> par_reduces_cd_star the_red_env y2 v2 -> ",
                     "HeadMatch f y2) ",
                     "(hy : iota_neutral y) (hyv : par_reduces_cd_star the_red_env y v) ",
-                    "(f2 : KExpr) (a2 : KExpr) (eqv : Eq KExpr v (KExpr.app f2 a2)) ",
+                    "(f2 : KExpr) (a2 : KExpr) (eqv : @Eq KExpr v (KExpr.app f2 a2)) ",
                     "(hff2 : par_reduces_cd_star the_red_env f f2) ",
                     "(haa2 : par_reduces_cd_star the_red_env a a2) ",
                     "(_hn2 : iota_neutral f2) (_him2 : iota_immune (KExpr.app f2 a2)) => ",
@@ -2334,7 +2334,7 @@ impl Specification {
                     "(hnb : iota_neutral nb) ",
                     "(hnaw : par_reduces_cd_star the_red_env na w) ",
                     "(hnbw : par_reduces_cd_star the_red_env nb w) => ",
-                    "iota_neutral.rec ",
+                    "@iota_neutral.rec ",
                     "(fun (x : KExpr) (_h : iota_neutral x) => ",
                     "forall (y : KExpr) (v : KExpr), iota_neutral y -> ",
                     "par_reduces_cd_star the_red_env x v -> par_reduces_cd_star the_red_env y v -> ",
@@ -2347,8 +2347,8 @@ impl Specification {
                     "fun (y : KExpr) (v : KExpr) (hy : iota_neutral y) ",
                     "(hxv : par_reduces_cd_star the_red_env (KExpr.const m vs) v) ",
                     "(hyv : par_reduces_cd_star the_red_env y v) => ",
-                    "(fun (hveq : Eq KExpr v (KExpr.const m vs)) => ",
-                    "(fun (hyeq : Eq KExpr y (KExpr.const m vs)) => ",
+                    "(fun (hveq : @Eq KExpr v (KExpr.const m vs)) => ",
+                    "(fun (hyeq : @Eq KExpr y (KExpr.const m vs)) => ",
                     "head_match_target_cast_rev (KExpr.const m vs) (KExpr.const m vs) y hyeq ",
                     "(HeadMatch.const m vs hw)) ",
                     "(iota_neutral_star_const_inv_eq y m vs hy ",
@@ -2417,45 +2417,45 @@ impl Specification {
             name: "iota_whnf_star_sort_inv_eq".to_string(),
             type_src: concat!(
                 "forall (e : KExpr) (n : Level), iota_whnf e -> ",
-                "par_reduces_cd_star the_red_env e (KExpr.sort n) -> Eq KExpr e (KExpr.sort n)"
+                "par_reduces_cd_star the_red_env e (KExpr.sort n) -> @Eq KExpr e (KExpr.sort n)"
             )
             .to_string(),
             value_src: Some(format!(
                 concat!(
                     "fun (e : KExpr) (n : Level) (hw : iota_whnf e) ",
                     "(h : par_reduces_cd_star the_red_env e (KExpr.sort n)) => ",
-                    "iota_whnf.rec ",
+                    "@iota_whnf.rec ",
                     "(fun (x : KExpr) (_h : iota_whnf x) => ",
-                    "par_reduces_cd_star the_red_env x (KExpr.sort n) -> Eq KExpr x (KExpr.sort n)) ",
+                    "par_reduces_cd_star the_red_env x (KExpr.sort n) -> @Eq KExpr x (KExpr.sort n)) ",
                     // sort
                     "(fun (m : Level) => ",
                     "fun (hstar : par_reduces_cd_star the_red_env (KExpr.sort m) (KExpr.sort n)) => ",
-                    "Eq.symm KExpr (KExpr.sort n) (KExpr.sort m) ",
+                    "@Eq.symm KExpr (KExpr.sort n) (KExpr.sort m) ",
                     "(par_reduces_cd_star_sort_inv_eq the_red_env m (KExpr.sort n) hstar)) ",
                     // lam
                     "(fun (ty : KExpr) (body : KExpr) => ",
                     "fun (hstar : par_reduces_cd_star the_red_env (KExpr.lam ty body) (KExpr.sort n)) => ",
-                    "Empty.rec (fun (_ : Empty) => Eq KExpr (KExpr.lam ty body) (KExpr.sort n)) ",
+                    "Empty.rec (fun (_ : Empty) => @Eq KExpr (KExpr.lam ty body) (KExpr.sort n)) ",
                     "(par_reduces_cd_star_lam_inv_eq the_red_env ty body (KExpr.sort n) Empty hstar ",
                     "(fun (ty2 : KExpr) (body2 : KExpr) ",
-                    "(eqw : Eq KExpr (KExpr.sort n) (KExpr.lam ty2 body2)) ",
+                    "(eqw : @Eq KExpr (KExpr.sort n) (KExpr.lam ty2 body2)) ",
                     "(_h1 : par_reduces_cd_star the_red_env ty ty2) ",
                     "(_h2 : par_reduces_cd_star the_red_env body body2) => ",
-                    "Eq.substType KExpr {is_sort} (KExpr.sort n) (KExpr.lam ty2 body2) eqw Nat.zero))) ",
+                    "@Eq.substType KExpr {is_sort} (KExpr.sort n) (KExpr.lam ty2 body2) eqw Nat.zero))) ",
                     // pi
                     "(fun (dom : KExpr) (body : KExpr) => ",
                     "fun (hstar : par_reduces_cd_star the_red_env (KExpr.pi dom body) (KExpr.sort n)) => ",
-                    "Empty.rec (fun (_ : Empty) => Eq KExpr (KExpr.pi dom body) (KExpr.sort n)) ",
+                    "Empty.rec (fun (_ : Empty) => @Eq KExpr (KExpr.pi dom body) (KExpr.sort n)) ",
                     "(par_reduces_cd_star_pi_inv_eq the_red_env dom body (KExpr.sort n) Empty hstar ",
                     "(fun (dom2 : KExpr) (body2 : KExpr) ",
-                    "(eqw : Eq KExpr (KExpr.sort n) (KExpr.pi dom2 body2)) ",
+                    "(eqw : @Eq KExpr (KExpr.sort n) (KExpr.pi dom2 body2)) ",
                     "(_h1 : par_reduces_cd_star the_red_env dom dom2) ",
                     "(_h2 : par_reduces_cd_star the_red_env body body2) => ",
-                    "Eq.substType KExpr {is_sort} (KExpr.sort n) (KExpr.pi dom2 body2) eqw Nat.zero))) ",
+                    "@Eq.substType KExpr {is_sort} (KExpr.sort n) (KExpr.pi dom2 body2) eqw Nat.zero))) ",
                     // neutral
                     "(fun (x : KExpr) (hn : iota_neutral x) => ",
                     "fun (hstar : par_reduces_cd_star the_red_env x (KExpr.sort n)) => ",
-                    "iota_neutral_sort_absurd n (Eq KExpr x (KExpr.sort n)) ",
+                    "iota_neutral_sort_absurd n (@Eq KExpr x (KExpr.sort n)) ",
                     "(iota_neutral_cd_star x (KExpr.sort n) hn hstar)) ",
                     "e hw h"
                 ),
@@ -2528,10 +2528,10 @@ impl Specification {
                     concat!(
                         "forall (A : KExpr) (b : KExpr) (ty : KExpr) (body : KExpr) (C : Type), ",
                         "(forall (A2 : KExpr) (b2 : KExpr), ",
-                        "Eq KExpr ({head} ty body) ({head} A2 b2) -> ",
+                        "@Eq KExpr ({head} ty body) ({head} A2 b2) -> ",
                         "par_reduces_cd_star the_red_env A2 A -> par_reduces_cd_star the_red_env b2 b -> C) -> ",
                         "forall (ty2 : KExpr) (body2 : KExpr), ",
-                        "Eq KExpr ({head} A b) ({head} ty2 body2) -> ",
+                        "@Eq KExpr ({head} A b) ({head} ty2 body2) -> ",
                         "par_reduces_cd_star the_red_env ty ty2 -> ",
                         "par_reduces_cd_star the_red_env body body2 -> C"
                     ),
@@ -2541,17 +2541,17 @@ impl Specification {
                     concat!(
                         "fun (A : KExpr) (b : KExpr) (ty : KExpr) (body : KExpr) (C : Type) ",
                         "(k0 : forall (A2 : KExpr) (b2 : KExpr), ",
-                        "Eq KExpr ({head} ty body) ({head} A2 b2) -> ",
+                        "@Eq KExpr ({head} ty body) ({head} A2 b2) -> ",
                         "par_reduces_cd_star the_red_env A2 A -> par_reduces_cd_star the_red_env b2 b -> C) ",
                         "(ty2 : KExpr) (body2 : KExpr) ",
-                        "(eqw : Eq KExpr ({head} A b) ({head} ty2 body2)) ",
+                        "(eqw : @Eq KExpr ({head} A b) ({head} ty2 body2)) ",
                         "(hty : par_reduces_cd_star the_red_env ty ty2) ",
                         "(hbody : par_reduces_cd_star the_red_env body body2) => ",
                         // Applied-lambda double-bind (nesting discipline).
-                        "(fun (eA : Eq KExpr A ty2) (eB : Eq KExpr b body2) => ",
+                        "(fun (eA : @Eq KExpr A ty2) (eB : @Eq KExpr b body2) => ",
                         "(fun (legA : par_reduces_cd_star the_red_env ty A) ",
                         "(legB : par_reduces_cd_star the_red_env body b) => ",
-                        "k0 ty body (Eq.refl KExpr ({head} ty body)) legA legB) ",
+                        "k0 ty body (@Eq.refl KExpr ({head} ty body)) legA legB) ",
                         "(par_reduces_cd_star_target_cast_rev ty ty2 A eA hty) ",
                         "(par_reduces_cd_star_target_cast_rev body body2 b eB hbody)) ",
                         "({inj_fst} A b ty2 body2 eqw) ",
@@ -2597,7 +2597,7 @@ impl Specification {
                     "(fun (ty : KExpr) (body : KExpr) => ",
                     "fun (hstar : par_reduces_cd_star the_red_env ({head} ty body) ({head} A b)) ",
                     "(k0 : forall (A2 : KExpr) (b2 : KExpr), ",
-                    "Eq KExpr ({head} ty body) ({head} A2 b2) -> ",
+                    "@Eq KExpr ({head} ty body) ({head} A2 b2) -> ",
                     "par_reduces_cd_star the_red_env A2 A -> par_reduces_cd_star the_red_env b2 b -> C) => ",
                     "{own_inv} the_red_env ty body ({head} A b) C hstar ",
                     "({kont_name} A b ty body C k0)) "
@@ -2611,15 +2611,15 @@ impl Specification {
                     "(fun (dom : KExpr) (body : KExpr) => ",
                     "fun (hstar : par_reduces_cd_star the_red_env ({other_head} dom body) ({head} A b)) ",
                     "(_k : forall (A2 : KExpr) (b2 : KExpr), ",
-                    "Eq KExpr ({other_head} dom body) ({head} A2 b2) -> ",
+                    "@Eq KExpr ({other_head} dom body) ({head} A2 b2) -> ",
                     "par_reduces_cd_star the_red_env A2 A -> par_reduces_cd_star the_red_env b2 b -> C) => ",
                     "{other_inv} the_red_env dom body ({head} A b) C hstar ",
                     "(fun (dom2 : KExpr) (body2 : KExpr) ",
-                    "(eqw : Eq KExpr ({head} A b) ({other_head} dom2 body2)) ",
+                    "(eqw : @Eq KExpr ({head} A b) ({other_head} dom2 body2)) ",
                     "(_h1 : par_reduces_cd_star the_red_env dom dom2) ",
                     "(_h2 : par_reduces_cd_star the_red_env body body2) => ",
                     "{other_ne} dom2 body2 A b C ",
-                    "(Eq.symm KExpr ({head} A b) ({other_head} dom2 body2) eqw))) "
+                    "(@Eq.symm KExpr ({head} A b) ({other_head} dom2 body2) eqw))) "
                 ),
                 head = head,
                 other_head = other_head,
@@ -2631,10 +2631,10 @@ impl Specification {
                     "(fun (m : Level) => ",
                     "fun (hstar : par_reduces_cd_star the_red_env (KExpr.sort m) ({head} A b)) ",
                     "(_k : forall (A2 : KExpr) (b2 : KExpr), ",
-                    "Eq KExpr (KExpr.sort m) ({head} A2 b2) -> ",
+                    "@Eq KExpr (KExpr.sort m) ({head} A2 b2) -> ",
                     "par_reduces_cd_star the_red_env A2 A -> par_reduces_cd_star the_red_env b2 b -> C) => ",
                     "Empty.rec (fun (_ : Empty) => C) ",
-                    "(Eq.substType KExpr {not_sort} ({head} A b) (KExpr.sort m) ",
+                    "(@Eq.substType KExpr {not_sort} ({head} A b) (KExpr.sort m) ",
                     "(par_reduces_cd_star_sort_inv_eq the_red_env m ({head} A b) hstar) Nat.zero)) "
                 ),
                 head = head,
@@ -2645,7 +2645,7 @@ impl Specification {
                     "(fun (x : KExpr) (hn : iota_neutral x) => ",
                     "fun (hstar : par_reduces_cd_star the_red_env x ({head} A b)) ",
                     "(_k : forall (A2 : KExpr) (b2 : KExpr), ",
-                    "Eq KExpr x ({head} A2 b2) -> ",
+                    "@Eq KExpr x ({head} A2 b2) -> ",
                     "par_reduces_cd_star the_red_env A2 A -> par_reduces_cd_star the_red_env b2 b -> C) => ",
                     "{absurd} A b C (iota_neutral_cd_star x ({head} A b) hn hstar))"
                 ),
@@ -2665,7 +2665,7 @@ impl Specification {
                     concat!(
                         "forall (e : KExpr) (A : KExpr) (b : KExpr) (C : Type), iota_whnf e -> ",
                         "par_reduces_cd_star the_red_env e ({head} A b) -> ",
-                        "(forall (A2 : KExpr) (b2 : KExpr), Eq KExpr e ({head} A2 b2) -> ",
+                        "(forall (A2 : KExpr) (b2 : KExpr), @Eq KExpr e ({head} A2 b2) -> ",
                         "par_reduces_cd_star the_red_env A2 A -> par_reduces_cd_star the_red_env b2 b -> C) -> ",
                         "C"
                     ),
@@ -2675,12 +2675,12 @@ impl Specification {
                     concat!(
                         "fun (e : KExpr) (A : KExpr) (b : KExpr) (C : Type) (hw : iota_whnf e) ",
                         "(h : par_reduces_cd_star the_red_env e ({head} A b)) ",
-                        "(k : forall (A2 : KExpr) (b2 : KExpr), Eq KExpr e ({head} A2 b2) -> ",
+                        "(k : forall (A2 : KExpr) (b2 : KExpr), @Eq KExpr e ({head} A2 b2) -> ",
                         "par_reduces_cd_star the_red_env A2 A -> par_reduces_cd_star the_red_env b2 b -> C) => ",
-                        "iota_whnf.rec ",
+                        "@iota_whnf.rec ",
                         "(fun (x : KExpr) (_h : iota_whnf x) => ",
                         "par_reduces_cd_star the_red_env x ({head} A b) -> ",
-                        "(forall (A2 : KExpr) (b2 : KExpr), Eq KExpr x ({head} A2 b2) -> ",
+                        "(forall (A2 : KExpr) (b2 : KExpr), @Eq KExpr x ({head} A2 b2) -> ",
                         "par_reduces_cd_star the_red_env A2 A -> par_reduces_cd_star the_red_env b2 b -> C) -> ",
                         "C) ",
                         "{sort_arm}{lam_slot}{pi_slot}{neutral_arm} ",
@@ -2744,7 +2744,7 @@ impl Specification {
                 concat!(
                     "fun (e : KExpr) (w : KExpr) (hw : iota_whnf e) ",
                     "(h : par_reduces_cd_star the_red_env e w) (hnw : iota_neutral w) => ",
-                    "iota_whnf.rec ",
+                    "@iota_whnf.rec ",
                     "(fun (x : KExpr) (_h : iota_whnf x) => ",
                     "forall (v : KExpr), par_reduces_cd_star the_red_env x v -> iota_neutral v -> ",
                     "iota_neutral x) ",
@@ -2753,28 +2753,28 @@ impl Specification {
                     "fun (v : KExpr) (hstar : par_reduces_cd_star the_red_env (KExpr.sort m) v) ",
                     "(hnv : iota_neutral v) => ",
                     "iota_neutral_sort_absurd_type m (iota_neutral (KExpr.sort m)) ",
-                    "(Eq.substType KExpr (fun (z : KExpr) => iota_neutral z) v (KExpr.sort m) ",
+                    "(@Eq.substType KExpr (fun (z : KExpr) => iota_neutral z) v (KExpr.sort m) ",
                     "(par_reduces_cd_star_sort_inv_eq the_red_env m v hstar) hnv)) ",
                     // lam: the reduct is a lam — a neutral lam is absurd.
                     "(fun (ty : KExpr) (body : KExpr) => ",
                     "fun (v : KExpr) (hstar : par_reduces_cd_star the_red_env (KExpr.lam ty body) v) ",
                     "(hnv : iota_neutral v) => ",
                     "par_reduces_cd_star_lam_inv_eq the_red_env ty body v (iota_neutral (KExpr.lam ty body)) hstar ",
-                    "(fun (ty2 : KExpr) (body2 : KExpr) (eqv : Eq KExpr v (KExpr.lam ty2 body2)) ",
+                    "(fun (ty2 : KExpr) (body2 : KExpr) (eqv : @Eq KExpr v (KExpr.lam ty2 body2)) ",
                     "(_h1 : par_reduces_cd_star the_red_env ty ty2) ",
                     "(_h2 : par_reduces_cd_star the_red_env body body2) => ",
                     "iota_neutral_lam_absurd_type ty2 body2 (iota_neutral (KExpr.lam ty body)) ",
-                    "(Eq.substType KExpr (fun (z : KExpr) => iota_neutral z) v (KExpr.lam ty2 body2) eqv hnv))) ",
+                    "(@Eq.substType KExpr (fun (z : KExpr) => iota_neutral z) v (KExpr.lam ty2 body2) eqv hnv))) ",
                     // pi: symmetric.
                     "(fun (dom : KExpr) (body : KExpr) => ",
                     "fun (v : KExpr) (hstar : par_reduces_cd_star the_red_env (KExpr.pi dom body) v) ",
                     "(hnv : iota_neutral v) => ",
                     "par_reduces_cd_star_pi_inv_eq the_red_env dom body v (iota_neutral (KExpr.pi dom body)) hstar ",
-                    "(fun (dom2 : KExpr) (body2 : KExpr) (eqv : Eq KExpr v (KExpr.pi dom2 body2)) ",
+                    "(fun (dom2 : KExpr) (body2 : KExpr) (eqv : @Eq KExpr v (KExpr.pi dom2 body2)) ",
                     "(_h1 : par_reduces_cd_star the_red_env dom dom2) ",
                     "(_h2 : par_reduces_cd_star the_red_env body body2) => ",
                     "iota_neutral_pi_absurd_type dom2 body2 (iota_neutral (KExpr.pi dom body)) ",
-                    "(Eq.substType KExpr (fun (z : KExpr) => iota_neutral z) v (KExpr.pi dom2 body2) eqv hnv))) ",
+                    "(@Eq.substType KExpr (fun (z : KExpr) => iota_neutral z) v (KExpr.pi dom2 body2) eqv hnv))) ",
                     // neutral: already neutral.
                     "(fun (x : KExpr) (hn : iota_neutral x) => ",
                     "fun (v : KExpr) (_hstar : par_reduces_cd_star the_red_env x v) ",
@@ -2841,7 +2841,7 @@ impl Specification {
                         "forall (ty : KExpr) (body : KExpr) (nb : KExpr) (A1 : KExpr) (b1 : KExpr), ",
                         "par_reduces_cd_star the_red_env ty A1 -> ",
                         "par_reduces_cd_star the_red_env body b1 -> ",
-                        "forall (A2 : KExpr) (b2 : KExpr), Eq KExpr nb ({head} A2 b2) -> ",
+                        "forall (A2 : KExpr) (b2 : KExpr), @Eq KExpr nb ({head} A2 b2) -> ",
                         "par_reduces_cd_star the_red_env A2 A1 -> par_reduces_cd_star the_red_env b2 b1 -> ",
                         "HeadMatch ({head} ty body) nb"
                     ),
@@ -2852,7 +2852,7 @@ impl Specification {
                         "fun (ty : KExpr) (body : KExpr) (nb : KExpr) (A1 : KExpr) (b1 : KExpr) ",
                         "(hA : par_reduces_cd_star the_red_env ty A1) ",
                         "(hb1 : par_reduces_cd_star the_red_env body b1) ",
-                        "(A2 : KExpr) (b2 : KExpr) (eqnb : Eq KExpr nb ({head} A2 b2)) ",
+                        "(A2 : KExpr) (b2 : KExpr) (eqnb : @Eq KExpr nb ({head} A2 b2)) ",
                         "(hA2 : par_reduces_cd_star the_red_env A2 A1) ",
                         "(hb2 : par_reduces_cd_star the_red_env b2 b1) => ",
                         "head_match_target_cast_rev ({head} ty body) ({head} A2 b2) nb eqnb ",
@@ -2896,7 +2896,7 @@ impl Specification {
                     concat!(
                         "forall (ty : KExpr) (body : KExpr) (nb : KExpr), iota_whnf nb -> ",
                         "forall (v : KExpr), par_reduces_cd_star the_red_env nb v -> ",
-                        "forall (A1 : KExpr) (b1 : KExpr), Eq KExpr v ({head} A1 b1) -> ",
+                        "forall (A1 : KExpr) (b1 : KExpr), @Eq KExpr v ({head} A1 b1) -> ",
                         "par_reduces_cd_star the_red_env ty A1 -> ",
                         "par_reduces_cd_star the_red_env body b1 -> ",
                         "HeadMatch ({head} ty body) nb"
@@ -2907,7 +2907,7 @@ impl Specification {
                     concat!(
                         "fun (ty : KExpr) (body : KExpr) (nb : KExpr) (wb : iota_whnf nb) ",
                         "(v : KExpr) (hnbv : par_reduces_cd_star the_red_env nb v) ",
-                        "(A1 : KExpr) (b1 : KExpr) (eqv : Eq KExpr v ({head} A1 b1)) ",
+                        "(A1 : KExpr) (b1 : KExpr) (eqv : @Eq KExpr v ({head} A1 b1)) ",
                         "(hA : par_reduces_cd_star the_red_env ty A1) ",
                         "(hb1 : par_reduces_cd_star the_red_env body b1) => ",
                         "{own_whnf_inv} nb A1 b1 (HeadMatch ({head} ty body) nb) wb ",
@@ -2956,7 +2956,7 @@ impl Specification {
                 // robust shape for the elaborator's recursor handling.
                 "(fun (naw : par_reduces_cd_star the_red_env na w) ",
                 "(nbw : par_reduces_cd_star the_red_env nb w) => ",
-                "iota_whnf.rec ",
+                "@iota_whnf.rec ",
                 "(fun (x : KExpr) (_h : iota_whnf x) => ",
                 "forall (v : KExpr), par_reduces_cd_star the_red_env x v -> ",
                 "par_reduces_cd_star the_red_env nb v -> HeadMatch x nb) ",
@@ -2964,9 +2964,9 @@ impl Specification {
                 "(fun (sn : Level) => ",
                 "fun (v : KExpr) (hxv : par_reduces_cd_star the_red_env (KExpr.sort sn) v) ",
                 "(hnbv : par_reduces_cd_star the_red_env nb v) => ",
-                "(fun (hveq : Eq KExpr v (KExpr.sort sn)) => ",
+                "(fun (hveq : @Eq KExpr v (KExpr.sort sn)) => ",
                 "(fun (hnbs : par_reduces_cd_star the_red_env nb (KExpr.sort sn)) => ",
-                "(fun (hnbeq : Eq KExpr nb (KExpr.sort sn)) => ",
+                "(fun (hnbeq : @Eq KExpr nb (KExpr.sort sn)) => ",
                 "head_match_target_cast_rev (KExpr.sort sn) (KExpr.sort sn) nb hnbeq ",
                 "(HeadMatch.sort sn)) ",
                 "(iota_whnf_star_sort_inv_eq nb sn wb hnbs)) ",

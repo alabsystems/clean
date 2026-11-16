@@ -50,6 +50,10 @@ impl MintedScript {
 /// A module's `(globals …)` list mints as one `def {prefix}_g{k} : IRGlobal`
 /// per entry, placed after the alias definitions and before the first block
 /// — see [`check_global_namespace`] for what the list must agree with. An
+/// Empty lists retain their explicit element type. Standard `@` syntax spells
+/// that complete constructor telescope under ordinary implicit-binder rules;
+/// canonical core reconstruction and shape checks remain unchanged.
+///
 /// List constructors name their type arguments explicitly with `@`, including
 /// the empty global list. This changes the source spelling and its digest,
 /// while preserving the constructor application and decoded core module.
@@ -136,6 +140,10 @@ pub fn mint(core: &Sx, prefix: &str, tags: &Tags) -> Result<MintedScript, MintEr
     for n in func_names.iter().rev() {
         list = format!("(@IRList.cons IRFunc {n} {list})");
     }
+    // Preserve the original list structure and order. The explicit constructor
+    // syntax is reproduced by the existing M3 mint comparison and independently
+    // decoded from the elaborated kernel term by M4.
+    //
     // The global list is spelled the same way, and its empty case is the
     // explicit literal `(@IRList.nil IRGlobal)`. M3 checks the regenerated
     // source spelling against this renderer as well as its decoded module.

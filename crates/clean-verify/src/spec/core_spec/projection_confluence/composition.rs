@@ -10,38 +10,38 @@ pub(super) const DECLARATIONS: &[DeclarationInput] = &[
     DeclarationInput::Proof(
         "cdp_confluence_cd_star_to_generic",
         r"forall (R : RedEnv) (e r : KExpr) (h : par_reduces_cd_star R e r), RelationStar KExpr (par_reduces_cd R) e r",
-        r"fun (R : RedEnv) (e r : KExpr) (h : par_reduces_cd_star R e r) => par_reduces_cd_star.rec R
+        r"fun (R : RedEnv) (e r : KExpr) (h : par_reduces_cd_star R e r) => @par_reduces_cd_star.rec R
  (fun (x y : KExpr) (_h : par_reduces_cd_star R x y) => RelationStar KExpr (par_reduces_cd R) x y)
- (fun (x : KExpr) => RelationStar.refl KExpr (par_reduces_cd R) x)
+ (fun (x : KExpr) => @RelationStar.refl KExpr (par_reduces_cd R) x)
  (fun (x y z : KExpr) (xy : par_reduces_cd R x y) (_tail : par_reduces_cd_star R y z)
-  (ih : RelationStar KExpr (par_reduces_cd R) y z) => RelationStar.step KExpr (par_reduces_cd R) x y z xy ih) e r h",
+  (ih : RelationStar KExpr (par_reduces_cd R) y z) => @RelationStar.step KExpr (par_reduces_cd R) x y z xy ih) e r h",
     ),
     DeclarationInput::Proof(
         "cdp_confluence_generic_to_cd_star",
         r"forall (R : RedEnv) (e r : KExpr) (h : RelationStar KExpr (par_reduces_cd R) e r), par_reduces_cd_star R e r",
-        r"fun (R : RedEnv) (e r : KExpr) (h : RelationStar KExpr (par_reduces_cd R) e r) => RelationStar.rec KExpr (par_reduces_cd R)
+        r"fun (R : RedEnv) (e r : KExpr) (h : RelationStar KExpr (par_reduces_cd R) e r) => @RelationStar.rec KExpr (par_reduces_cd R)
  (fun (x y : KExpr) (_h : RelationStar KExpr (par_reduces_cd R) x y) => par_reduces_cd_star R x y)
- (fun (x : KExpr) => par_reduces_cd_star.refl R x)
+ (fun (x : KExpr) => @par_reduces_cd_star.refl R x)
  (fun (x y z : KExpr) (xy : par_reduces_cd R x y) (_tail : RelationStar KExpr (par_reduces_cd R) y z)
-  (ih : par_reduces_cd_star R y z) => par_reduces_cd_star.step R x y z xy ih) e r h",
+  (ih : par_reduces_cd_star R y z) => @par_reduces_cd_star.step R x y z xy ih) e r h",
     ),
     DeclarationInput::Proof(
         "cdp_confluence_projection_star_to_generic",
         r"forall (R : RedEnv) (e r : KExpr) (h : projection_parallel_star R e r), RelationStar KExpr (projection_parallel R) e r",
-        r"fun (R : RedEnv) (e r : KExpr) (h : projection_parallel_star R e r) => projection_parallel_star.rec R
+        r"fun (R : RedEnv) (e r : KExpr) (h : projection_parallel_star R e r) => @projection_parallel_star.rec R
  (fun (x y : KExpr) (_h : projection_parallel_star R x y) => RelationStar KExpr (projection_parallel R) x y)
- (fun (x : KExpr) => RelationStar.refl KExpr (projection_parallel R) x)
+ (fun (x : KExpr) => @RelationStar.refl KExpr (projection_parallel R) x)
  (fun (x y z : KExpr) (xy : projection_parallel R x y) (_tail : projection_parallel_star R y z)
-  (ih : RelationStar KExpr (projection_parallel R) y z) => RelationStar.step KExpr (projection_parallel R) x y z xy ih) e r h",
+  (ih : RelationStar KExpr (projection_parallel R) y z) => @RelationStar.step KExpr (projection_parallel R) x y z xy ih) e r h",
     ),
     DeclarationInput::Proof(
         "cdp_confluence_generic_to_projection_star",
         r"forall (R : RedEnv) (e r : KExpr) (h : RelationStar KExpr (projection_parallel R) e r), projection_parallel_star R e r",
-        r"fun (R : RedEnv) (e r : KExpr) (h : RelationStar KExpr (projection_parallel R) e r) => RelationStar.rec KExpr (projection_parallel R)
+        r"fun (R : RedEnv) (e r : KExpr) (h : RelationStar KExpr (projection_parallel R) e r) => @RelationStar.rec KExpr (projection_parallel R)
  (fun (x y : KExpr) (_h : RelationStar KExpr (projection_parallel R) x y) => projection_parallel_star R x y)
- (fun (x : KExpr) => projection_parallel_star.refl R x)
+ (fun (x : KExpr) => @projection_parallel_star.refl R x)
  (fun (x y z : KExpr) (xy : projection_parallel R x y) (_tail : RelationStar KExpr (projection_parallel R) y z)
-  (ih : projection_parallel_star R y z) => projection_parallel_star.step R x y z xy ih) e r h",
+  (ih : projection_parallel_star R y z) => @projection_parallel_star.step R x y z xy ih) e r h",
     ),
     DeclarationInput::Proof(
         "cdp_confluence_cd_corner",
@@ -54,10 +54,10 @@ pub(super) const DECLARATIONS: &[DeclarationInput] = &[
 (i3 : RecEnvClosed (red_rec R)) (i4 : RecEnvLiftClosed (red_rec R))
 (i5 : DefEnvClosed (red_def R)) (i6 : DefEnvLiftClosed (red_def R))
 (i7 : RecEnvDefEnvDisjoint R) (i8 : RecEnvCtorNoDefVal R)
- (e a b : KExpr) (ha : (RelationStar KExpr (par_reduces_cd R)) e a) (hb : (RelationStar KExpr (par_reduces_cd R)) e b) => par_strips_witness_cd_star.rec R a b
+ (e a b : KExpr) (ha : (RelationStar KExpr (par_reduces_cd R)) e a) (hb : (RelationStar KExpr (par_reduces_cd R)) e b) => @par_strips_witness_cd_star.rec R a b
  (fun (_peak : par_strips_witness_cd_star R a b) => RelationJoin KExpr (RelationStar KExpr (par_reduces_cd R)) (RelationStar KExpr (par_reduces_cd R)) a b)
  (fun (meet : KExpr) (am : par_reduces_cd_star R a meet) (bm : par_reduces_cd_star R b meet) =>
-  RelationJoin.mk KExpr (RelationStar KExpr (par_reduces_cd R)) (RelationStar KExpr (par_reduces_cd R)) a b meet
+  @RelationJoin.mk KExpr (RelationStar KExpr (par_reduces_cd R)) (RelationStar KExpr (par_reduces_cd R)) a b meet
    (cdp_confluence_cd_star_to_generic R a meet am) (cdp_confluence_cd_star_to_generic R b meet bm))
  (par_reduces_cd_star_diamond R i1 i2 i3 i4 i5 i6 i7 i8 e a b
   (cdp_confluence_generic_to_cd_star R e a ha) (cdp_confluence_generic_to_cd_star R e b hb))",
@@ -65,10 +65,10 @@ pub(super) const DECLARATIONS: &[DeclarationInput] = &[
     DeclarationInput::Proof(
         "cdp_confluence_projection_corner",
         r"forall (R : RedEnv) (e a b : KExpr) (ha : (RelationStar KExpr (projection_parallel R)) e a) (hb : (RelationStar KExpr (projection_parallel R)) e b), RelationJoin KExpr (RelationStar KExpr (projection_parallel R)) (RelationStar KExpr (projection_parallel R)) a b",
-        r"fun (R : RedEnv) (e a b : KExpr) (ha : (RelationStar KExpr (projection_parallel R)) e a) (hb : (RelationStar KExpr (projection_parallel R)) e b) => ProjectionParallelStarJoin.rec R a b
+        r"fun (R : RedEnv) (e a b : KExpr) (ha : (RelationStar KExpr (projection_parallel R)) e a) (hb : (RelationStar KExpr (projection_parallel R)) e b) => @ProjectionParallelStarJoin.rec R a b
  (fun (_peak : ProjectionParallelStarJoin R a b) => RelationJoin KExpr (RelationStar KExpr (projection_parallel R)) (RelationStar KExpr (projection_parallel R)) a b)
  (fun (meet : KExpr) (am : projection_parallel_star R a meet) (bm : projection_parallel_star R b meet) =>
-  RelationJoin.mk KExpr (RelationStar KExpr (projection_parallel R)) (RelationStar KExpr (projection_parallel R)) a b meet
+  @RelationJoin.mk KExpr (RelationStar KExpr (projection_parallel R)) (RelationStar KExpr (projection_parallel R)) a b meet
    (cdp_confluence_projection_star_to_generic R a meet am)
    (cdp_confluence_projection_star_to_generic R b meet bm))
  (projection_parallel_star_confluent R e a b
@@ -78,10 +78,10 @@ pub(super) const DECLARATIONS: &[DeclarationInput] = &[
     DeclarationInput::Proof(
         "cdp_confluence_mixed_corner",
         r"forall (R : RedEnv) (rigid : CtorMetadataRigid R (red_ind_ctor R)) (e a b : KExpr) (ha : par_reduces_cd R e a) (hb : projection_parallel R e b), RelationJoin KExpr (RelationStar KExpr (projection_parallel R)) (par_reduces_cd R) a b",
-        r"fun (R : RedEnv) (rigid : CtorMetadataRigid R (red_ind_ctor R)) (e a b : KExpr) (ha : par_reduces_cd R e a) (hb : projection_parallel R e b) => CDProjectionPeak.rec R a b
+        r"fun (R : RedEnv) (rigid : CtorMetadataRigid R (red_ind_ctor R)) (e a b : KExpr) (ha : par_reduces_cd R e a) (hb : projection_parallel R e b) => @CDProjectionPeak.rec R a b
  (fun (_peak : CDProjectionPeak R a b) => RelationJoin KExpr (RelationStar KExpr (projection_parallel R)) (par_reduces_cd R) a b)
  (fun (meet : KExpr) (am : projection_parallel_star R a meet) (bm : par_reduces_cd R b meet) =>
-  RelationJoin.mk KExpr (RelationStar KExpr (projection_parallel R)) (par_reduces_cd R) a b meet
+  @RelationJoin.mk KExpr (RelationStar KExpr (projection_parallel R)) (par_reduces_cd R) a b meet
    (cdp_confluence_projection_star_to_generic R a meet am) bm)
  (cd_projection_strong_commute R rigid e a b ha hb)",
     ),
@@ -175,7 +175,7 @@ pub(super) const DECLARATIONS: &[DeclarationInput] = &[
         r"RelationJoin KExpr
  (par_reduces_cdp_star the_red_env) (par_reduces_cdp_star the_red_env)
  (KExpr.proj kcre_prod_type_name Nat.zero kcre_witness_prod_value) ctor_spine_prod_redex",
-        r"RelationJoin.mk KExpr (par_reduces_cdp_star the_red_env) (par_reduces_cdp_star the_red_env)
+        r"@RelationJoin.mk KExpr (par_reduces_cdp_star the_red_env) (par_reduces_cdp_star the_red_env)
   (KExpr.proj kcre_prod_type_name Nat.zero kcre_witness_prod_value) ctor_spine_prod_redex rfnz_zero
   (par_cdp_to_star the_red_env (KExpr.proj kcre_prod_type_name Nat.zero kcre_witness_prod_value)
    rfnz_zero cdp_prod_inner_step)

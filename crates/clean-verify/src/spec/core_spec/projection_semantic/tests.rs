@@ -226,12 +226,12 @@ fn projection_semantic_transparent_data_and_actual_computation() {
         checks::computes(
             spec,
             &format!("projection_post_whnf_reduct the_red_env (cdp_universe_projection {RAW_ONE})"),
-            &format!("OptionType.some KExpr (KExpr.sort {RAW_ONE})"),
+            &format!("@OptionType.some KExpr (KExpr.sort {RAW_ONE})"),
         );
         checks::computes(
             spec,
             "projection_post_whnf_reduct the_red_env (instantiate_at cdp_binding_projection (KExpr.bvar (Nat.succ Nat.zero)) Nat.zero)",
-            "OptionType.some KExpr (KExpr.lam rfnz_nat (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))))",
+            "@OptionType.some KExpr (KExpr.lam rfnz_nat (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))))",
         );
         checks::computes(
             spec,
@@ -286,7 +286,7 @@ fn projection_semantic_transport_consumes_actual_paths() {
             ),
         ] {
             let caller = format!(
-                "{transport} ({result}) (fun (out : KExpr) (step : {relation} the_red_env {target} out) (related : KExprUniverseEq {raw_sort} out) => SemanticJoinCDP.mk the_red_env {target} {raw_sort} out {raw_sort} ({path}) (par_reduces_cdp_star.refl the_red_env {raw_sort}) (kexprUniverseEq_symm {raw_sort} out related))"
+                "{transport} ({result}) (fun (out : KExpr) (step : {relation} the_red_env {target} out) (related : KExprUniverseEq {raw_sort} out) => @SemanticJoinCDP.mk the_red_env {target} {raw_sort} out {raw_sort} ({path}) (@par_reduces_cdp_star.refl the_red_env {raw_sort}) (kexprUniverseEq_symm {raw_sort} out related))"
             );
             checks::caller(spec, &caller, &result);
         }

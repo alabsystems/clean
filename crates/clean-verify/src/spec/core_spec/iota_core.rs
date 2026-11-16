@@ -31,23 +31,23 @@ impl Specification {
             name: "opt_bind_some_intro".to_string(),
             type_src: concat!(
                 "forall (a : Type) (b : Type) (o : OptionType a) (f : a -> OptionType b) (w : a) (r : b), ",
-                "Eq (OptionType a) o (OptionType.some a w) -> ",
-                "Eq (OptionType b) (f w) (OptionType.some b r) -> ",
-                "Eq (OptionType b) (opt_bind a b o f) (OptionType.some b r)"
+                "@Eq (OptionType a) o (@OptionType.some a w) -> ",
+                "@Eq (OptionType b) (f w) (@OptionType.some b r) -> ",
+                "@Eq (OptionType b) (opt_bind a b o f) (@OptionType.some b r)"
             )
             .to_string(),
             value_src: Some(
                 concat!(
                     "fun (a : Type) (b : Type) (o : OptionType a) (f : a -> OptionType b) (w : a) (r : b) ",
-                    "(ho : Eq (OptionType a) o (OptionType.some a w)) ",
-                    "(hfw : Eq (OptionType b) (f w) (OptionType.some b r)) => ",
-                    "Eq.trans (OptionType b) ",
-                    "(opt_bind a b o f) (opt_bind a b (OptionType.some a w) f) (OptionType.some b r) ",
-                    "(Eq.cong (OptionType a) (OptionType b) (fun (O : OptionType a) => opt_bind a b O f) ",
-                    "o (OptionType.some a w) ho) ",
-                    "(Eq.trans (OptionType b) ",
-                    "(opt_bind a b (OptionType.some a w) f) (f w) (OptionType.some b r) ",
-                    "(Eq.refl (OptionType b) (f w)) hfw)"
+                    "(ho : @Eq (OptionType a) o (@OptionType.some a w)) ",
+                    "(hfw : @Eq (OptionType b) (f w) (@OptionType.some b r)) => ",
+                    "@Eq.trans (OptionType b) ",
+                    "(opt_bind a b o f) (opt_bind a b (@OptionType.some a w) f) (@OptionType.some b r) ",
+                    "(@Eq.cong (OptionType a) (OptionType b) (fun (O : OptionType a) => opt_bind a b O f) ",
+                    "o (@OptionType.some a w) ho) ",
+                    "(@Eq.trans (OptionType b) ",
+                    "(opt_bind a b (@OptionType.some a w) f) (f w) (@OptionType.some b r) ",
+                    "(@Eq.refl (OptionType b) (f w)) hfw)"
                 )
                 .to_string(),
             ),
@@ -80,25 +80,25 @@ impl Specification {
             name: "apply_spine3_inst".to_string(),
             type_src: format!(
                 "forall (v : KExpr) (d : Nat) (a : ListType KExpr) (b : ListType KExpr) (c : ListType KExpr) (rhs : KExpr), \
-                 Eq KExpr (instantiate_at (apply_spine a (apply_spine b (apply_spine c rhs))) v d) {final_term}"
+                 @Eq KExpr (instantiate_at (apply_spine a (apply_spine b (apply_spine c rhs))) v d) {final_term}"
             ),
             value_src: Some(format!(
                 concat!(
                     "fun (v : KExpr) (d : Nat) (a : ListType KExpr) (b : ListType KExpr) (c : ListType KExpr) (rhs : KExpr) => ",
-                    "Eq.trans KExpr ",
+                    "@Eq.trans KExpr ",
                     "(instantiate_at (apply_spine a (apply_spine b (apply_spine c rhs))) v d) ",
                     "(apply_spine (list_map {fmap} a) (instantiate_at (apply_spine b (apply_spine c rhs)) v d)) ",
                     "{final_term} ",
                     "(instantiate_at_apply_spine a (apply_spine b (apply_spine c rhs)) v d) ",
-                    "(Eq.trans KExpr ",
+                    "(@Eq.trans KExpr ",
                     "(apply_spine (list_map {fmap} a) (instantiate_at (apply_spine b (apply_spine c rhs)) v d)) ",
                     "(apply_spine (list_map {fmap} a) (apply_spine (list_map {fmap} b) (instantiate_at (apply_spine c rhs) v d))) ",
                     "{final_term} ",
-                    "(Eq.cong KExpr KExpr (fun (Z : KExpr) => apply_spine (list_map {fmap} a) Z) ",
+                    "(@Eq.cong KExpr KExpr (fun (Z : KExpr) => apply_spine (list_map {fmap} a) Z) ",
                     "(instantiate_at (apply_spine b (apply_spine c rhs)) v d) ",
                     "(apply_spine (list_map {fmap} b) (instantiate_at (apply_spine c rhs) v d)) ",
                     "(instantiate_at_apply_spine b (apply_spine c rhs) v d)) ",
-                    "(Eq.cong KExpr KExpr ",
+                    "(@Eq.cong KExpr KExpr ",
                     "(fun (Z : KExpr) => apply_spine (list_map {fmap} a) (apply_spine (list_map {fmap} b) Z)) ",
                     "(instantiate_at (apply_spine c rhs) v d) ",
                     "(apply_spine (list_map {fmap} c) (instantiate_at rhs v d)) ",
@@ -134,43 +134,43 @@ impl Specification {
             name: "iota_major_inst".to_string(),
             type_src: concat!(
                 "forall (v : KExpr) (d : Nat) (recname : Name) (e : KExpr) (kk : Nat) (major : KExpr), ",
-                "Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name recname) -> ",
-                "Eq (OptionType KExpr) (list_head (list_drop kk (kapp_args e))) (OptionType.some KExpr major) -> ",
-                "Eq (OptionType KExpr) (list_head (list_drop kk (kapp_args (instantiate_at e v d)))) (OptionType.some KExpr (instantiate_at major v d))"
+                "@Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (@OptionType.some Name recname) -> ",
+                "@Eq (OptionType KExpr) (list_head (list_drop kk (kapp_args e))) (@OptionType.some KExpr major) -> ",
+                "@Eq (OptionType KExpr) (list_head (list_drop kk (kapp_args (instantiate_at e v d)))) (@OptionType.some KExpr (instantiate_at major v d))"
             )
             .to_string(),
             value_src: Some(format!(
                 concat!(
                     "fun (v : KExpr) (d : Nat) (recname : Name) (e : KExpr) (kk : Nat) (major : KExpr) ",
-                    "(h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name recname)) ",
-                    "(h3 : Eq (OptionType KExpr) (list_head (list_drop kk (kapp_args e))) (OptionType.some KExpr major)) => ",
-                    "Eq.trans (OptionType KExpr) ",
+                    "(h1 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (@OptionType.some Name recname)) ",
+                    "(h3 : @Eq (OptionType KExpr) (list_head (list_drop kk (kapp_args e))) (@OptionType.some KExpr major)) => ",
+                    "@Eq.trans (OptionType KExpr) ",
                     "(list_head (list_drop kk (kapp_args (instantiate_at e v d)))) ",
                     "(opt_map {f} (list_head (list_drop kk (kapp_args e)))) ",
-                    "(OptionType.some KExpr (instantiate_at major v d)) ",
+                    "(@OptionType.some KExpr (instantiate_at major v d)) ",
                     // LHS -> opt_map F (list_head (list_drop kk (kapp_args e)))
-                    "(Eq.trans (OptionType KExpr) ",
+                    "(@Eq.trans (OptionType KExpr) ",
                     "(list_head (list_drop kk (kapp_args (instantiate_at e v d)))) ",
                     "(list_head (list_drop kk (list_map {f} (kapp_args e)))) ",
                     "(opt_map {f} (list_head (list_drop kk (kapp_args e)))) ",
-                    "(Eq.cong (ListType KExpr) (OptionType KExpr) (fun (L : ListType KExpr) => list_head (list_drop kk L)) ",
+                    "(@Eq.cong (ListType KExpr) (OptionType KExpr) (fun (L : ListType KExpr) => list_head (list_drop kk L)) ",
                     "(kapp_args (instantiate_at e v d)) (list_map {f} (kapp_args e)) ",
                     "(instantiate_at_kapp_args_const v d recname e h1)) ",
-                    "(Eq.trans (OptionType KExpr) ",
+                    "(@Eq.trans (OptionType KExpr) ",
                     "(list_head (list_drop kk (list_map {f} (kapp_args e)))) ",
                     "(list_head (list_map {f} (list_drop kk (kapp_args e)))) ",
                     "(opt_map {f} (list_head (list_drop kk (kapp_args e)))) ",
-                    "(Eq.cong (ListType KExpr) (OptionType KExpr) (fun (L : ListType KExpr) => list_head L) ",
+                    "(@Eq.cong (ListType KExpr) (OptionType KExpr) (fun (L : ListType KExpr) => list_head L) ",
                     "(list_drop kk (list_map {f} (kapp_args e))) (list_map {f} (list_drop kk (kapp_args e))) ",
                     "(list_map_drop {f} kk (kapp_args e))) ",
                     "(list_map_head {f} (list_drop kk (kapp_args e))))) ",
                     // opt_map F (...) -> some (inst major)
-                    "(Eq.trans (OptionType KExpr) ",
+                    "(@Eq.trans (OptionType KExpr) ",
                     "(opt_map {f} (list_head (list_drop kk (kapp_args e)))) ",
-                    "(opt_map {f} (OptionType.some KExpr major)) ",
-                    "(OptionType.some KExpr (instantiate_at major v d)) ",
-                    "(Eq.cong (OptionType KExpr) (OptionType KExpr) (fun (O : OptionType KExpr) => opt_map {f} O) ",
-                    "(list_head (list_drop kk (kapp_args e))) (OptionType.some KExpr major) h3) ",
+                    "(opt_map {f} (@OptionType.some KExpr major)) ",
+                    "(@OptionType.some KExpr (instantiate_at major v d)) ",
+                    "(@Eq.cong (OptionType KExpr) (OptionType KExpr) (fun (O : OptionType KExpr) => opt_map {f} O) ",
+                    "(list_head (list_drop kk (kapp_args e))) (@OptionType.some KExpr major) h3) ",
                     "(opt_map_some {f} major))"
                 ),
                 f = fmap2,
@@ -208,20 +208,20 @@ impl Specification {
             name: "kapp_drop_inst".to_string(),
             type_src: concat!(
                 "forall (v : KExpr) (d : Nat) (recname : Name) (e : KExpr) (kk : Nat), ",
-                "Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name recname) -> ",
-                "Eq (ListType KExpr) (list_drop kk (kapp_args (instantiate_at e v d))) ",
+                "@Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (@OptionType.some Name recname) -> ",
+                "@Eq (ListType KExpr) (list_drop kk (kapp_args (instantiate_at e v d))) ",
                 "(list_map (fun (a0 : KExpr) => instantiate_at a0 v d) (list_drop kk (kapp_args e)))"
             )
             .to_string(),
             value_src: Some(format!(
                 concat!(
                     "fun (v : KExpr) (d : Nat) (recname : Name) (e : KExpr) (kk : Nat) ",
-                    "(h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name recname)) => ",
-                    "Eq.trans (ListType KExpr) ",
+                    "(h1 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (@OptionType.some Name recname)) => ",
+                    "@Eq.trans (ListType KExpr) ",
                     "(list_drop kk (kapp_args (instantiate_at e v d))) ",
                     "(list_drop kk (list_map {f} (kapp_args e))) ",
                     "(list_map {f} (list_drop kk (kapp_args e))) ",
-                    "(Eq.cong (ListType KExpr) (ListType KExpr) (fun (L : ListType KExpr) => list_drop kk L) ",
+                    "(@Eq.cong (ListType KExpr) (ListType KExpr) (fun (L : ListType KExpr) => list_drop kk L) ",
                     "(kapp_args (instantiate_at e v d)) (list_map {f} (kapp_args e)) ",
                     "(instantiate_at_kapp_args_const v d recname e h1)) ",
                     "(list_map_drop {f} kk (kapp_args e))"
@@ -251,20 +251,20 @@ impl Specification {
             name: "kapp_take_inst".to_string(),
             type_src: concat!(
                 "forall (v : KExpr) (d : Nat) (recname : Name) (e : KExpr) (pn : Nat), ",
-                "Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name recname) -> ",
-                "Eq (ListType KExpr) (list_take pn (kapp_args (instantiate_at e v d))) ",
+                "@Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (@OptionType.some Name recname) -> ",
+                "@Eq (ListType KExpr) (list_take pn (kapp_args (instantiate_at e v d))) ",
                 "(list_map (fun (a0 : KExpr) => instantiate_at a0 v d) (list_take pn (kapp_args e)))"
             )
             .to_string(),
             value_src: Some(format!(
                 concat!(
                     "fun (v : KExpr) (d : Nat) (recname : Name) (e : KExpr) (pn : Nat) ",
-                    "(h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name recname)) => ",
-                    "Eq.trans (ListType KExpr) ",
+                    "(h1 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (@OptionType.some Name recname)) => ",
+                    "@Eq.trans (ListType KExpr) ",
                     "(list_take pn (kapp_args (instantiate_at e v d))) ",
                     "(list_take pn (list_map {f} (kapp_args e))) ",
                     "(list_map {f} (list_take pn (kapp_args e))) ",
-                    "(Eq.cong (ListType KExpr) (ListType KExpr) (fun (L : ListType KExpr) => list_take pn L) ",
+                    "(@Eq.cong (ListType KExpr) (ListType KExpr) (fun (L : ListType KExpr) => list_take pn L) ",
                     "(kapp_args (instantiate_at e v d)) (list_map {f} (kapp_args e)) ",
                     "(instantiate_at_kapp_args_const v d recname e h1)) ",
                     "(list_map_take {f} pn (kapp_args e))"
@@ -306,16 +306,16 @@ impl Specification {
             name: "list_drop_cong".to_string(),
             type_src: concat!(
                 "forall (m : Nat) (n : Nat) (xs : ListType KExpr), ",
-                "Eq Nat m n -> Eq (ListType KExpr) (list_drop m xs) (list_drop n xs)"
+                "@Eq Nat m n -> @Eq (ListType KExpr) (list_drop m xs) (list_drop n xs)"
             )
             .to_string(),
             value_src: Some(
                 concat!(
-                    "fun (m : Nat) (n : Nat) (xs : ListType KExpr) (h : Eq Nat m n) => ",
-                    "Eq.subst Nat ",
-                    "(fun (k : Nat) => Eq (ListType KExpr) (list_drop m xs) (list_drop k xs)) ",
+                    "fun (m : Nat) (n : Nat) (xs : ListType KExpr) (h : @Eq Nat m n) => ",
+                    "@Eq.subst Nat ",
+                    "(fun (k : Nat) => @Eq (ListType KExpr) (list_drop m xs) (list_drop k xs)) ",
                     "m n h ",
-                    "(Eq.refl (ListType KExpr) (list_drop m xs))"
+                    "(@Eq.refl (ListType KExpr) (list_drop m xs))"
                 )
                 .to_string(),
             ),
@@ -353,8 +353,8 @@ impl Specification {
             type_src: format!(
                 concat!(
                     "forall (v : KExpr) (d : Nat) (cname : Name) (major : KExpr) (nf : Nat), ",
-                    "Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname) -> ",
-                    "Eq (ListType KExpr) (list_drop {off_i} (kapp_args (instantiate_at major v d))) ",
+                    "@Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (@OptionType.some Name cname) -> ",
+                    "@Eq (ListType KExpr) (list_drop {off_i} (kapp_args (instantiate_at major v d))) ",
                     "(list_map (fun (a0 : KExpr) => instantiate_at a0 v d) (list_drop {off} (kapp_args major)))"
                 ),
                 off_i = fields_off_inst,
@@ -363,32 +363,32 @@ impl Specification {
             value_src: Some(format!(
                 concat!(
                     "fun (v : KExpr) (d : Nat) (cname : Name) (major : KExpr) (nf : Nat) ",
-                    "(h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname)) => ",
+                    "(h4 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (@OptionType.some Name cname)) => ",
                     // result = s1 ∘ s2, s1 = s_off ∘ s_list.
-                    "Eq.trans (ListType KExpr) ",
+                    "@Eq.trans (ListType KExpr) ",
                     "(list_drop {off_i} (kapp_args (instantiate_at major v d))) ",
                     "(list_drop {off} (list_map {f} (kapp_args major))) ",
                     "(list_map {f} (list_drop {off} (kapp_args major))) ",
                     // s1 = s_off ∘ s_list
-                    "(Eq.trans (ListType KExpr) ",
+                    "(@Eq.trans (ListType KExpr) ",
                     "(list_drop {off_i} (kapp_args (instantiate_at major v d))) ",
                     "(list_drop {off} (kapp_args (instantiate_at major v d))) ",
                     "(list_drop {off} (list_map {f} (kapp_args major))) ",
                     // s_off: rewrite offset off_i -> off (list fixed at KA_AM), via list_drop_cong.
                     "(list_drop_cong {off_i} {off} (kapp_args (instantiate_at major v d)) ",
                     // eoff : off_i = off  =  eoff1 ∘ eoff2
-                    "(Eq.trans Nat {off_i} {off_mid} {off} ",
+                    "(@Eq.trans Nat {off_i} {off_mid} {off} ",
                     // eoff1: KA_AM -> MAP_KA_M inside list_length (App α, Const β — OK).
-                    "(Eq.cong (ListType KExpr) Nat ",
+                    "(@Eq.cong (ListType KExpr) Nat ",
                     "(fun (L : ListType KExpr) => Nat.sub (list_length L) nf) ",
                     "(kapp_args (instantiate_at major v d)) (list_map {f} (kapp_args major)) ",
                     "(instantiate_at_kapp_args_const v d cname major h4)) ",
                     // eoff2: collapse list_length (list_map F ..) -> list_length .. (Const, Const — OK).
-                    "(Eq.cong Nat Nat (fun (q : Nat) => Nat.sub q nf) ",
+                    "(@Eq.cong Nat Nat (fun (q : Nat) => Nat.sub q nf) ",
                     "(list_length (list_map {f} (kapp_args major))) (list_length (kapp_args major)) ",
                     "(list_map_length {f} (kapp_args major))))) ",
                     // s_list: rewrite list KA_AM -> MAP_KA_M (offset fixed at off; App, App — OK).
-                    "(Eq.cong (ListType KExpr) (ListType KExpr) ",
+                    "(@Eq.cong (ListType KExpr) (ListType KExpr) ",
                     "(fun (L : ListType KExpr) => list_drop {off} L) ",
                     "(kapp_args (instantiate_at major v d)) (list_map {f} (kapp_args major)) ",
                     "(instantiate_at_kapp_args_const v d cname major h4))) ",
@@ -476,75 +476,75 @@ impl Specification {
 
             // inner: apply_spine pre_i rhs = apply_spine (map F pre) (inst rhs).
             let inner = format!(
-                "(Eq.trans KExpr \
+                "(@Eq.trans KExpr \
                  (apply_spine {pre_i} {p_rhs}) (apply_spine {mpre} {p_rhs}) (apply_spine {mpre} {i_rhs}) \
-                 (Eq.cong (ListType KExpr) KExpr (fun (L : ListType KExpr) => apply_spine L {p_rhs}) \
+                 (@Eq.cong (ListType KExpr) KExpr (fun (L : ListType KExpr) => apply_spine L {p_rhs}) \
                  {pre_i} {mpre} (kapp_take_inst v d recname e {prefix_n} h1)) \
-                 (Eq.cong KExpr KExpr (fun (Z : KExpr) => apply_spine {mpre} Z) \
+                 (@Eq.cong KExpr KExpr (fun (Z : KExpr) => apply_spine {mpre} Z) \
                  {p_rhs} {i_rhs} \
-                 (Eq.symm KExpr {i_rhs} {p_rhs} (recenv_closed_rhs_instance env recname cname rule (recmeta_signature meta) (kexpr_const_levels (kapp_fn e)) v d closed h5))))"
+                 (@Eq.symm KExpr {i_rhs} {p_rhs} (recenv_closed_rhs_instance env recname cname rule (recmeta_signature meta) (kexpr_const_levels (kapp_fn e)) v d closed h5))))"
             );
 
             // middle: apply_spine fld_i (apply_spine pre_i rhs)
             //       = apply_spine (map F fld) (apply_spine (map F pre) (inst rhs)).
             let middle = format!(
-                "(Eq.trans KExpr \
+                "(@Eq.trans KExpr \
                  (apply_spine {fld_i} (apply_spine {pre_i} {p_rhs})) \
                  (apply_spine {mfld} (apply_spine {pre_i} {p_rhs})) \
                  (apply_spine {mfld} (apply_spine {mpre} {i_rhs})) \
-                 (Eq.cong (ListType KExpr) KExpr \
+                 (@Eq.cong (ListType KExpr) KExpr \
                  (fun (L : ListType KExpr) => apply_spine L (apply_spine {pre_i} {p_rhs})) \
                  {fld_i} {mfld} (kapp_fields_inst v d cname major {nf} h4)) \
-                 (Eq.cong KExpr KExpr (fun (Z : KExpr) => apply_spine {mfld} Z) \
+                 (@Eq.cong KExpr KExpr (fun (Z : KExpr) => apply_spine {mfld} Z) \
                  (apply_spine {pre_i} {p_rhs}) (apply_spine {mpre} {i_rhs}) {inner}))"
             );
 
             // outer: REDUCT_i = apply_spine (map F ext) (apply_spine (map F fld) (apply_spine (map F pre) (inst rhs))).
             let outer = format!(
-                "(Eq.trans KExpr \
+                "(@Eq.trans KExpr \
                  {reduct_i} \
                  (apply_spine {mext} (apply_spine {fld_i} (apply_spine {pre_i} {p_rhs}))) \
                  {reduct_unfolded} \
-                 (Eq.cong (ListType KExpr) KExpr \
+                 (@Eq.cong (ListType KExpr) KExpr \
                  (fun (L : ListType KExpr) => apply_spine L (apply_spine {fld_i} (apply_spine {pre_i} {p_rhs}))) \
                  {ext_i} {mext} (kapp_drop_inst v d recname e (Nat.succ {major_idx}) h1)) \
-                 (Eq.cong KExpr KExpr (fun (Z : KExpr) => apply_spine {mext} Z) \
+                 (@Eq.cong KExpr KExpr (fun (Z : KExpr) => apply_spine {mext} Z) \
                  (apply_spine {fld_i} (apply_spine {pre_i} {p_rhs})) \
                  (apply_spine {mfld} (apply_spine {mpre} {i_rhs})) {middle}))"
             );
 
             // spine_eq: REDUCT_i = inst REDUCT (outer ∘ symm apply_spine3_inst).
             let spine_eq = format!(
-                "(Eq.trans KExpr {reduct_i} {reduct_unfolded} {inst_reduct} {outer} \
-                 (Eq.symm KExpr {inst_reduct} {reduct_unfolded} \
+                "(@Eq.trans KExpr {reduct_i} {reduct_unfolded} {inst_reduct} {outer} \
+                 (@Eq.symm KExpr {inst_reduct} {reduct_unfolded} \
                  (apply_spine3_inst v d {ext} {fld} {pre} {p_rhs})))"
             );
 
             // inst_eq: inst REDUCT = inst e' (cong inst on option_some_inj h5r).
             let inst_eq = format!(
-                "(Eq.cong KExpr KExpr {fmap} {reduct} e' (option_some_inj KExpr {reduct} e' h5r))"
+                "(@Eq.cong KExpr KExpr {fmap} {reduct} e' (option_some_inj KExpr {reduct} e' h5r))"
             );
 
             let value = format!(
                 "fun (env : RecEnv) (v : KExpr) (d : Nat) (e : KExpr) (e' : KExpr) \
                  (recname : Name) (meta : RecMeta) (major : KExpr) (cname : Name) (rule : RecRule) \
                  (closed : RecEnvClosed env) \
-                 (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name recname)) \
-                 (h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname)) \
-                 (h5 : Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule)) \
-                 (h5r : Eq (OptionType KExpr) (OptionType.some KExpr {reduct}) (OptionType.some KExpr e')) => \
-                 Eq.trans KExpr {reduct_i} {inst_reduct} (instantiate_at e' v d) {spine_eq} {inst_eq}"
+                 (h1 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (@OptionType.some Name recname)) \
+                 (h4 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (@OptionType.some Name cname)) \
+                 (h5 : @Eq (OptionType RecRule) (recrule_for env recname cname) (@OptionType.some RecRule rule)) \
+                 (h5r : @Eq (OptionType KExpr) (@OptionType.some KExpr {reduct}) (@OptionType.some KExpr e')) => \
+                 @Eq.trans KExpr {reduct_i} {inst_reduct} (instantiate_at e' v d) {spine_eq} {inst_eq}"
             );
 
             let type_src = format!(
                 "forall (env : RecEnv) (v : KExpr) (d : Nat) (e : KExpr) (e' : KExpr) \
                  (recname : Name) (meta : RecMeta) (major : KExpr) (cname : Name) (rule : RecRule), \
                  RecEnvClosed env -> \
-                 Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name recname) -> \
-                 Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname) -> \
-                 Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule) -> \
-                 Eq (OptionType KExpr) (OptionType.some KExpr {reduct}) (OptionType.some KExpr e') -> \
-                 Eq KExpr {reduct_i} (instantiate_at e' v d)"
+                 @Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (@OptionType.some Name recname) -> \
+                 @Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (@OptionType.some Name cname) -> \
+                 @Eq (OptionType RecRule) (recrule_for env recname cname) (@OptionType.some RecRule rule) -> \
+                 @Eq (OptionType KExpr) (@OptionType.some KExpr {reduct}) (@OptionType.some KExpr e') -> \
+                 @Eq KExpr {reduct_i} (instantiate_at e' v d)"
             );
 
             self.add_definition(SpecDefinition {
@@ -595,29 +595,29 @@ impl Specification {
                 type_src: concat!(
                     "forall (env : RecEnv) (e : KExpr) (e' : KExpr) (v : KExpr) (d : Nat), ",
                     "RecEnvClosed env -> ",
-                    "Eq (OptionType KExpr) (iota_reduct env e) (OptionType.some KExpr e') -> ",
-                    "Eq (OptionType KExpr) (iota_reduct env (instantiate_at e v d)) (OptionType.some KExpr (instantiate_at e' v d))"
+                    "@Eq (OptionType KExpr) (iota_reduct env e) (@OptionType.some KExpr e') -> ",
+                    "@Eq (OptionType KExpr) (iota_reduct env (instantiate_at e v d)) (@OptionType.some KExpr (instantiate_at e' v d))"
                 )
                 .to_string(),
                 value_src: Some(r"fun (env : RecEnv) (e : KExpr) (e' : KExpr) (v : KExpr) (d : Nat) (closed : RecEnvClosed env)
- (h : Eq (OptionType KExpr) (iota_reduct env e) (OptionType.some KExpr e')) =>
-iota_reduct_full_inv env e e' (Eq (OptionType KExpr) (iota_reduct env (instantiate_at e v d)) (OptionType.some KExpr (instantiate_at e' v d))) h
+ (h : @Eq (OptionType KExpr) (iota_reduct env e) (@OptionType.some KExpr e')) =>
+iota_reduct_full_inv env e e' (@Eq (OptionType KExpr) (iota_reduct env (instantiate_at e v d)) (@OptionType.some KExpr (instantiate_at e' v d))) h
  (fun (recname : Name) (mta : RecMeta) (major : KExpr) (cname : Name) (rule : RecRule)
- (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name recname))
- (h2 : Eq (OptionType RecMeta) (recmeta_for env recname) (OptionType.some RecMeta mta))
- (h3 : Eq (OptionType KExpr) (list_head (list_drop (iota_major_index mta) (kapp_args e))) (OptionType.some KExpr major))
- (h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname))
- (h5 : Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule))
- (fields : Eq Bool (iota_fields_ok rule (kapp_args major)) Bool.true)
- (arity : Eq Bool (nat_eqb (name_list_len (kconst_params (recmeta_signature mta))) (level_list_len (kexpr_const_levels (kapp_fn e)))) Bool.true) (returned : Eq KExpr e' (iota_contractum mta rule (kapp_args e) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn e))))) =>
+ (h1 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (@OptionType.some Name recname))
+ (h2 : @Eq (OptionType RecMeta) (recmeta_for env recname) (@OptionType.some RecMeta mta))
+ (h3 : @Eq (OptionType KExpr) (list_head (list_drop (iota_major_index mta) (kapp_args e))) (@OptionType.some KExpr major))
+ (h4 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (@OptionType.some Name cname))
+ (h5 : @Eq (OptionType RecRule) (recrule_for env recname cname) (@OptionType.some RecRule rule))
+ (fields : @Eq Bool (iota_fields_ok rule (kapp_args major)) Bool.true)
+ (arity : @Eq Bool (nat_eqb (name_list_len (kconst_params (recmeta_signature mta))) (level_list_len (kexpr_const_levels (kapp_fn e)))) Bool.true) (returned : @Eq KExpr e' (iota_contractum mta rule (kapp_args e) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn e))))) =>
  iota_reduct_full_recon env (instantiate_at e v d) (instantiate_at e' v d) recname mta (instantiate_at major v d) cname rule
- (Eq.trans (OptionType Name) (kexpr_const_name (kapp_fn (instantiate_at e v d))) (kexpr_const_name (kapp_fn e)) (OptionType.some Name recname) (kexpr_const_name_instantiate_const v d recname e h1) h1) h2 (iota_major_inst v d recname e (iota_major_index mta) major h1 h3) (Eq.trans (OptionType Name) (kexpr_const_name (kapp_fn (instantiate_at major v d))) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname) (kexpr_const_name_instantiate_const v d cname major h4) h4) h5
- (Eq.trans Bool (iota_fields_ok rule (kapp_args (instantiate_at major v d))) (iota_fields_ok rule (kapp_args major)) Bool.true
- (Eq.cong Nat Bool (fun (n : Nat) => nat_eqb (Nat.sub (recrule_num_fields rule) n) Nat.zero)
- (list_length (kapp_args (instantiate_at major v d))) (list_length (kapp_args major)) (Eq.trans Nat (list_length (kapp_args (instantiate_at major v d))) (list_length (list_map (fun (z : KExpr) => (instantiate_at z v d)) (kapp_args major))) (list_length (kapp_args major))
- (Eq.cong (ListType KExpr) Nat list_length (kapp_args (instantiate_at major v d)) (list_map (fun (z : KExpr) => (instantiate_at z v d)) (kapp_args major)) (instantiate_at_kapp_args_const v d cname major h4)) (list_map_length (fun (z : KExpr) => (instantiate_at z v d)) (kapp_args major)))) fields) (Eq.trans Bool (nat_eqb (name_list_len (kconst_params (recmeta_signature mta))) (level_list_len (kexpr_const_levels (kapp_fn (instantiate_at e v d))))) (nat_eqb (name_list_len (kconst_params (recmeta_signature mta))) (level_list_len (kexpr_const_levels (kapp_fn e)))) Bool.true
- (Eq.cong KExpr Bool (fun (h : KExpr) => (nat_eqb (name_list_len (kconst_params (recmeta_signature mta))) (level_list_len (kexpr_const_levels h)))) (kapp_fn (instantiate_at e v d)) (kapp_fn e) (delta_head_const_invariant_inst v d recname e h1)) arity) (Eq.symm KExpr (iota_contractum mta rule (kapp_args (instantiate_at e v d)) (kapp_args (instantiate_at major v d)) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn (instantiate_at e v d))))) (instantiate_at e' v d) (Eq.trans KExpr (iota_contractum mta rule (kapp_args (instantiate_at e v d)) (kapp_args (instantiate_at major v d)) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn (instantiate_at e v d))))) (iota_contractum mta rule (kapp_args (instantiate_at e v d)) (kapp_args (instantiate_at major v d)) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn e)))) (instantiate_at e' v d)
- (Eq.cong KExpr KExpr (fun (head : KExpr) => (iota_contractum mta rule (kapp_args (instantiate_at e v d)) (kapp_args (instantiate_at major v d)) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels head)))) (kapp_fn (instantiate_at e v d)) (kapp_fn e) (delta_head_const_invariant_inst v d recname e h1)) (iota_reduct_inst_eq env v d e e' recname mta major cname rule closed h1 h4 h5 (Eq.cong KExpr (OptionType KExpr) (fun (z : KExpr) => OptionType.some KExpr z) (iota_contractum mta rule (kapp_args e) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn e)))) e' (Eq.symm KExpr e' (iota_contractum mta rule (kapp_args e) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn e)))) returned))))))".to_string()),
+ (@Eq.trans (OptionType Name) (kexpr_const_name (kapp_fn (instantiate_at e v d))) (kexpr_const_name (kapp_fn e)) (@OptionType.some Name recname) (kexpr_const_name_instantiate_const v d recname e h1) h1) h2 (iota_major_inst v d recname e (iota_major_index mta) major h1 h3) (@Eq.trans (OptionType Name) (kexpr_const_name (kapp_fn (instantiate_at major v d))) (kexpr_const_name (kapp_fn major)) (@OptionType.some Name cname) (kexpr_const_name_instantiate_const v d cname major h4) h4) h5
+ (@Eq.trans Bool (iota_fields_ok rule (kapp_args (instantiate_at major v d))) (iota_fields_ok rule (kapp_args major)) Bool.true
+ (@Eq.cong Nat Bool (fun (n : Nat) => nat_eqb (Nat.sub (recrule_num_fields rule) n) Nat.zero)
+ (list_length (kapp_args (instantiate_at major v d))) (list_length (kapp_args major)) (@Eq.trans Nat (list_length (kapp_args (instantiate_at major v d))) (list_length (list_map (fun (z : KExpr) => (instantiate_at z v d)) (kapp_args major))) (list_length (kapp_args major))
+ (@Eq.cong (ListType KExpr) Nat list_length (kapp_args (instantiate_at major v d)) (list_map (fun (z : KExpr) => (instantiate_at z v d)) (kapp_args major)) (instantiate_at_kapp_args_const v d cname major h4)) (list_map_length (fun (z : KExpr) => (instantiate_at z v d)) (kapp_args major)))) fields) (@Eq.trans Bool (nat_eqb (name_list_len (kconst_params (recmeta_signature mta))) (level_list_len (kexpr_const_levels (kapp_fn (instantiate_at e v d))))) (nat_eqb (name_list_len (kconst_params (recmeta_signature mta))) (level_list_len (kexpr_const_levels (kapp_fn e)))) Bool.true
+ (@Eq.cong KExpr Bool (fun (h : KExpr) => (nat_eqb (name_list_len (kconst_params (recmeta_signature mta))) (level_list_len (kexpr_const_levels h)))) (kapp_fn (instantiate_at e v d)) (kapp_fn e) (delta_head_const_invariant_inst v d recname e h1)) arity) (@Eq.symm KExpr (iota_contractum mta rule (kapp_args (instantiate_at e v d)) (kapp_args (instantiate_at major v d)) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn (instantiate_at e v d))))) (instantiate_at e' v d) (@Eq.trans KExpr (iota_contractum mta rule (kapp_args (instantiate_at e v d)) (kapp_args (instantiate_at major v d)) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn (instantiate_at e v d))))) (iota_contractum mta rule (kapp_args (instantiate_at e v d)) (kapp_args (instantiate_at major v d)) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn e)))) (instantiate_at e' v d)
+ (@Eq.cong KExpr KExpr (fun (head : KExpr) => (iota_contractum mta rule (kapp_args (instantiate_at e v d)) (kapp_args (instantiate_at major v d)) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels head)))) (kapp_fn (instantiate_at e v d)) (kapp_fn e) (delta_head_const_invariant_inst v d recname e h1)) (iota_reduct_inst_eq env v d e e' recname mta major cname rule closed h1 h4 h5 (@Eq.cong KExpr (OptionType KExpr) (fun (z : KExpr) => @OptionType.some KExpr z) (iota_contractum mta rule (kapp_args e) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn e)))) e' (@Eq.symm KExpr e' (iota_contractum mta rule (kapp_args e) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn e)))) returned))))))".to_string()),
                 is_axiom: false,
                 description: "Direct guarded iota commutation: full inversion retains field and universe-arity guards; actual head and constructor-spine invariance transports both guards, stored structural RHS closure derives instance invariance, and canonical reconstruction closes the real operator graph.".to_string(),
                 category: AxiomCategory::DerivedLemma,
@@ -651,25 +651,25 @@ iota_reduct_full_inv env e e' (Eq (OptionType KExpr) (iota_reduct env (instantia
             );
             let value = format!(
                 "fun (env : RecEnv) (e : KExpr) (e' : KExpr) (C : Prop) \
-                 (hnone : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.none Name)) \
-                 (h : Eq (OptionType KExpr) (iota_reduct env e) (OptionType.some KExpr e')) => \
+                 (hnone : @Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (@OptionType.none Name)) \
+                 (h : @Eq (OptionType KExpr) (iota_reduct env e) (@OptionType.some KExpr e')) => \
                  iota_reduct_some_inv env e e' C h \
                  (fun (recname : Name) (meta : RecMeta) (major : KExpr) (cname : Name) (rule : RecRule) \
-                 (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name recname)) \
-                 (h2 : Eq (OptionType RecMeta) (recmeta_for env recname) (OptionType.some RecMeta meta)) \
-                 (h3 : Eq (OptionType KExpr) (list_head (list_drop {major_idx} (kapp_args e))) (OptionType.some KExpr major)) \
-                 (h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname)) \
-                 (h5 : Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule)) \
-                 (h5r : Eq (OptionType KExpr) (OptionType.some KExpr {reduct}) (OptionType.some KExpr e')) => \
+                 (h1 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (@OptionType.some Name recname)) \
+                 (h2 : @Eq (OptionType RecMeta) (recmeta_for env recname) (@OptionType.some RecMeta meta)) \
+                 (h3 : @Eq (OptionType KExpr) (list_head (list_drop {major_idx} (kapp_args e))) (@OptionType.some KExpr major)) \
+                 (h4 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (@OptionType.some Name cname)) \
+                 (h5 : @Eq (OptionType RecRule) (recrule_for env recname cname) (@OptionType.some RecRule rule)) \
+                 (h5r : @Eq (OptionType KExpr) (@OptionType.some KExpr {reduct}) (@OptionType.some KExpr e')) => \
                  option_none_ne_some Name recname C \
-                 (Eq.trans (OptionType Name) (OptionType.none Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name recname) \
-                 (Eq.symm (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.none Name) hnone) h1))"
+                 (@Eq.trans (OptionType Name) (@OptionType.none Name) (kexpr_const_name (kapp_fn e)) (@OptionType.some Name recname) \
+                 (@Eq.symm (OptionType Name) (kexpr_const_name (kapp_fn e)) (@OptionType.none Name) hnone) h1))"
             );
             self.add_definition(SpecDefinition {
                 name: "iota_step_head_none_absurd".to_string(),
                 type_src: concat!(
                     "forall (env : RecEnv) (e : KExpr) (e' : KExpr) (C : Prop), ",
-                    "Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.none Name) -> ",
+                    "@Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (@OptionType.none Name) -> ",
                     "iota_step env e e' -> C"
                 )
                 .to_string(),
@@ -711,24 +711,25 @@ iota_reduct_full_inv env e e' (Eq (OptionType KExpr) (iota_reduct env (instantia
         // recursors, so each step inserts the explicit unfold lemma.
         {
             // Discriminator: D z = Nat for z = succ _, Empty for z = zero.
-            let discr = "(Nat.rec (fun (_ : Nat) => Type) Empty (fun (_ : Nat) (_ : Type) => Nat))";
+            let discr =
+                "(@Nat.rec (fun (_ : Nat) => Type) Empty (fun (_ : Nat) (_ : Type) => Nat))";
             // From h_nil : Nat.sub (succ m) (list_length nil) = 0 derive succ m = 0.
             let succ_eq_zero = concat!(
-                "(Eq.trans Nat (Nat.succ m) (Nat.sub (Nat.succ m) (list_length (ListType.nil KExpr))) Nat.zero ",
+                "(@Eq.trans Nat (Nat.succ m) (Nat.sub (Nat.succ m) (list_length (@ListType.nil KExpr))) Nat.zero ",
                 // succ m = Nat.sub (succ m) (list_length nil)
-                "(Eq.symm Nat (Nat.sub (Nat.succ m) (list_length (ListType.nil KExpr))) (Nat.succ m) ",
-                "(Eq.trans Nat (Nat.sub (Nat.succ m) (list_length (ListType.nil KExpr))) (Nat.sub (Nat.succ m) Nat.zero) (Nat.succ m) ",
-                "(Eq.cong Nat Nat (fun (y : Nat) => Nat.sub (Nat.succ m) y) (list_length (ListType.nil KExpr)) Nat.zero (list_length_nil)) ",
+                "(@Eq.symm Nat (Nat.sub (Nat.succ m) (list_length (@ListType.nil KExpr))) (Nat.succ m) ",
+                "(@Eq.trans Nat (Nat.sub (Nat.succ m) (list_length (@ListType.nil KExpr))) (Nat.sub (Nat.succ m) Nat.zero) (Nat.succ m) ",
+                "(@Eq.cong Nat Nat (fun (y : Nat) => Nat.sub (Nat.succ m) y) (list_length (@ListType.nil KExpr)) Nat.zero (list_length_nil)) ",
                 "(nat_sub_zero_right (Nat.succ m)))) ",
                 "h_nil)"
             );
             let nil_absurd = format!(
                 concat!(
-                    "(fun (h_nil : Eq Nat (Nat.sub (Nat.succ m) (list_length (ListType.nil KExpr))) Nat.zero) => ",
-                    "Empty.rec (fun (_ : Empty) => Eq (ListType KExpr) ",
-                    "(list_drop (Nat.succ m) (list_append (ListType.nil KExpr) (ListType.cons KExpr a0 (ListType.nil KExpr)))) ",
-                    "(list_append (list_drop (Nat.succ m) (ListType.nil KExpr)) (ListType.cons KExpr a0 (ListType.nil KExpr)))) ",
-                    "(Eq.substType Nat {discr} (Nat.succ m) Nat.zero {succ_eq_zero} (Nat.succ m)))"
+                    "(fun (h_nil : @Eq Nat (Nat.sub (Nat.succ m) (list_length (@ListType.nil KExpr))) Nat.zero) => ",
+                    "@Empty.rec (fun (_ : Empty) => @Eq (ListType KExpr) ",
+                    "(list_drop (Nat.succ m) (list_append (@ListType.nil KExpr) (@ListType.cons KExpr a0 (@ListType.nil KExpr)))) ",
+                    "(list_append (list_drop (Nat.succ m) (@ListType.nil KExpr)) (@ListType.cons KExpr a0 (@ListType.nil KExpr)))) ",
+                    "(@Eq.substType Nat {discr} (Nat.succ m) Nat.zero {succ_eq_zero} (Nat.succ m)))"
                 ),
                 discr = discr,
                 succ_eq_zero = succ_eq_zero,
@@ -741,62 +742,62 @@ iota_reduct_full_inv env e e' (Eq (OptionType KExpr) (iota_reduct env (instantia
             // RHS: drop (succ m) (x::rest) = drop m rest, so (drop m rest)++[a] = RHS.
             let cons_case = concat!(
                 "(fun (x : KExpr) (rest : ListType KExpr) ",
-                "(_ihinner : Eq Nat (Nat.sub (Nat.succ m) (list_length rest)) Nat.zero -> ",
-                "Eq (ListType KExpr) (list_drop (Nat.succ m) (list_append rest (ListType.cons KExpr a0 (ListType.nil KExpr)))) ",
-                "(list_append (list_drop (Nat.succ m) rest) (ListType.cons KExpr a0 (ListType.nil KExpr)))) ",
-                "(h_cons : Eq Nat (Nat.sub (Nat.succ m) (list_length (ListType.cons KExpr x rest))) Nat.zero) => ",
+                "(_ihinner : @Eq Nat (Nat.sub (Nat.succ m) (list_length rest)) Nat.zero -> ",
+                "@Eq (ListType KExpr) (list_drop (Nat.succ m) (list_append rest (@ListType.cons KExpr a0 (@ListType.nil KExpr)))) ",
+                "(list_append (list_drop (Nat.succ m) rest) (@ListType.cons KExpr a0 (@ListType.nil KExpr)))) ",
+                "(h_cons : @Eq Nat (Nat.sub (Nat.succ m) (list_length (@ListType.cons KExpr x rest))) Nat.zero) => ",
                 // sub_m_rest : Nat.sub m (length rest) = 0, from h_cons.
                 // h_cons : Nat.sub (succ m) (length (x::rest)) = 0
                 //   = Nat.sub (succ m) (succ (length rest))  [list_length_cons]
                 //   = Nat.sub m (length rest)                [nat_sub_succ_succ]
-                "(fun (sub_m_rest : Eq Nat (Nat.sub m (list_length rest)) Nat.zero) => ",
-                "Eq.trans (ListType KExpr) ",
-                "(list_drop (Nat.succ m) (list_append (ListType.cons KExpr x rest) (ListType.cons KExpr a0 (ListType.nil KExpr)))) ",
-                "(list_drop m (list_append rest (ListType.cons KExpr a0 (ListType.nil KExpr)))) ",
-                "(list_append (list_drop (Nat.succ m) (ListType.cons KExpr x rest)) (ListType.cons KExpr a0 (ListType.nil KExpr))) ",
+                "(fun (sub_m_rest : @Eq Nat (Nat.sub m (list_length rest)) Nat.zero) => ",
+                "@Eq.trans (ListType KExpr) ",
+                "(list_drop (Nat.succ m) (list_append (@ListType.cons KExpr x rest) (@ListType.cons KExpr a0 (@ListType.nil KExpr)))) ",
+                "(list_drop m (list_append rest (@ListType.cons KExpr a0 (@ListType.nil KExpr)))) ",
+                "(list_append (list_drop (Nat.succ m) (@ListType.cons KExpr x rest)) (@ListType.cons KExpr a0 (@ListType.nil KExpr))) ",
                 // LEG A: LHS = drop m (rest ++ [a])
-                "(Eq.trans (ListType KExpr) ",
-                "(list_drop (Nat.succ m) (list_append (ListType.cons KExpr x rest) (ListType.cons KExpr a0 (ListType.nil KExpr)))) ",
-                "(list_drop (Nat.succ m) (ListType.cons KExpr x (list_append rest (ListType.cons KExpr a0 (ListType.nil KExpr))))) ",
-                "(list_drop m (list_append rest (ListType.cons KExpr a0 (ListType.nil KExpr)))) ",
+                "(@Eq.trans (ListType KExpr) ",
+                "(list_drop (Nat.succ m) (list_append (@ListType.cons KExpr x rest) (@ListType.cons KExpr a0 (@ListType.nil KExpr)))) ",
+                "(list_drop (Nat.succ m) (@ListType.cons KExpr x (list_append rest (@ListType.cons KExpr a0 (@ListType.nil KExpr))))) ",
+                "(list_drop m (list_append rest (@ListType.cons KExpr a0 (@ListType.nil KExpr)))) ",
                 // append cons: (x::rest)++[a] = x::(rest++[a])
-                "(Eq.cong (ListType KExpr) (ListType KExpr) (fun (L : ListType KExpr) => list_drop (Nat.succ m) L) ",
-                "(list_append (ListType.cons KExpr x rest) (ListType.cons KExpr a0 (ListType.nil KExpr))) ",
-                "(ListType.cons KExpr x (list_append rest (ListType.cons KExpr a0 (ListType.nil KExpr)))) ",
-                "(list_append_cons x rest (ListType.cons KExpr a0 (ListType.nil KExpr)))) ",
+                "(@Eq.cong (ListType KExpr) (ListType KExpr) (fun (L : ListType KExpr) => list_drop (Nat.succ m) L) ",
+                "(list_append (@ListType.cons KExpr x rest) (@ListType.cons KExpr a0 (@ListType.nil KExpr))) ",
+                "(@ListType.cons KExpr x (list_append rest (@ListType.cons KExpr a0 (@ListType.nil KExpr)))) ",
+                "(list_append_cons x rest (@ListType.cons KExpr a0 (@ListType.nil KExpr)))) ",
                 // drop (succ m) (x::L) = drop m (tail (x::L)) = drop m L
-                "(Eq.trans (ListType KExpr) ",
-                "(list_drop (Nat.succ m) (ListType.cons KExpr x (list_append rest (ListType.cons KExpr a0 (ListType.nil KExpr))))) ",
-                "(list_drop m (list_tail (ListType.cons KExpr x (list_append rest (ListType.cons KExpr a0 (ListType.nil KExpr)))))) ",
-                "(list_drop m (list_append rest (ListType.cons KExpr a0 (ListType.nil KExpr)))) ",
-                "(list_drop_succ m (ListType.cons KExpr x (list_append rest (ListType.cons KExpr a0 (ListType.nil KExpr))))) ",
-                "(Eq.cong (ListType KExpr) (ListType KExpr) (fun (L : ListType KExpr) => list_drop m L) ",
-                "(list_tail (ListType.cons KExpr x (list_append rest (ListType.cons KExpr a0 (ListType.nil KExpr))))) ",
-                "(list_append rest (ListType.cons KExpr a0 (ListType.nil KExpr))) ",
-                "(list_tail_cons x (list_append rest (ListType.cons KExpr a0 (ListType.nil KExpr))))))) ",
+                "(@Eq.trans (ListType KExpr) ",
+                "(list_drop (Nat.succ m) (@ListType.cons KExpr x (list_append rest (@ListType.cons KExpr a0 (@ListType.nil KExpr))))) ",
+                "(list_drop m (list_tail (@ListType.cons KExpr x (list_append rest (@ListType.cons KExpr a0 (@ListType.nil KExpr)))))) ",
+                "(list_drop m (list_append rest (@ListType.cons KExpr a0 (@ListType.nil KExpr)))) ",
+                "(list_drop_succ m (@ListType.cons KExpr x (list_append rest (@ListType.cons KExpr a0 (@ListType.nil KExpr))))) ",
+                "(@Eq.cong (ListType KExpr) (ListType KExpr) (fun (L : ListType KExpr) => list_drop m L) ",
+                "(list_tail (@ListType.cons KExpr x (list_append rest (@ListType.cons KExpr a0 (@ListType.nil KExpr))))) ",
+                "(list_append rest (@ListType.cons KExpr a0 (@ListType.nil KExpr))) ",
+                "(list_tail_cons x (list_append rest (@ListType.cons KExpr a0 (@ListType.nil KExpr))))))) ",
                 // LEG B: drop m (rest ++ [a]) = (drop (succ m) (x::rest)) ++ [a]
-                "(Eq.trans (ListType KExpr) ",
-                "(list_drop m (list_append rest (ListType.cons KExpr a0 (ListType.nil KExpr)))) ",
-                "(list_append (list_drop m rest) (ListType.cons KExpr a0 (ListType.nil KExpr))) ",
-                "(list_append (list_drop (Nat.succ m) (ListType.cons KExpr x rest)) (ListType.cons KExpr a0 (ListType.nil KExpr))) ",
+                "(@Eq.trans (ListType KExpr) ",
+                "(list_drop m (list_append rest (@ListType.cons KExpr a0 (@ListType.nil KExpr)))) ",
+                "(list_append (list_drop m rest) (@ListType.cons KExpr a0 (@ListType.nil KExpr))) ",
+                "(list_append (list_drop (Nat.succ m) (@ListType.cons KExpr x rest)) (@ListType.cons KExpr a0 (@ListType.nil KExpr))) ",
                 // ih rest sub_m_rest
                 "(ih rest sub_m_rest) ",
                 // (drop m rest)++[a] = (drop (succ m) (x::rest))++[a]  (since drop (succ m)(x::rest)=drop m rest)
-                "(Eq.symm (ListType KExpr) ",
-                "(list_append (list_drop (Nat.succ m) (ListType.cons KExpr x rest)) (ListType.cons KExpr a0 (ListType.nil KExpr))) ",
-                "(list_append (list_drop m rest) (ListType.cons KExpr a0 (ListType.nil KExpr))) ",
-                "(Eq.cong (ListType KExpr) (ListType KExpr) (fun (L : ListType KExpr) => list_append L (ListType.cons KExpr a0 (ListType.nil KExpr))) ",
-                "(list_drop (Nat.succ m) (ListType.cons KExpr x rest)) (list_drop m rest) ",
-                "(Eq.trans (ListType KExpr) (list_drop (Nat.succ m) (ListType.cons KExpr x rest)) ",
-                "(list_drop m (list_tail (ListType.cons KExpr x rest))) (list_drop m rest) ",
-                "(list_drop_succ m (ListType.cons KExpr x rest)) ",
-                "(Eq.cong (ListType KExpr) (ListType KExpr) (fun (L : ListType KExpr) => list_drop m L) ",
-                "(list_tail (ListType.cons KExpr x rest)) rest (list_tail_cons x rest))))))) ",
+                "(@Eq.symm (ListType KExpr) ",
+                "(list_append (list_drop (Nat.succ m) (@ListType.cons KExpr x rest)) (@ListType.cons KExpr a0 (@ListType.nil KExpr))) ",
+                "(list_append (list_drop m rest) (@ListType.cons KExpr a0 (@ListType.nil KExpr))) ",
+                "(@Eq.cong (ListType KExpr) (ListType KExpr) (fun (L : ListType KExpr) => list_append L (@ListType.cons KExpr a0 (@ListType.nil KExpr))) ",
+                "(list_drop (Nat.succ m) (@ListType.cons KExpr x rest)) (list_drop m rest) ",
+                "(@Eq.trans (ListType KExpr) (list_drop (Nat.succ m) (@ListType.cons KExpr x rest)) ",
+                "(list_drop m (list_tail (@ListType.cons KExpr x rest))) (list_drop m rest) ",
+                "(list_drop_succ m (@ListType.cons KExpr x rest)) ",
+                "(@Eq.cong (ListType KExpr) (ListType KExpr) (fun (L : ListType KExpr) => list_drop m L) ",
+                "(list_tail (@ListType.cons KExpr x rest)) rest (list_tail_cons x rest))))))) ",
                 // close the sub_m_rest binder by applying it to the derived equation
-                "(Eq.trans Nat (Nat.sub m (list_length rest)) (Nat.sub (Nat.succ m) (list_length (ListType.cons KExpr x rest))) Nat.zero ",
-                "(Eq.symm Nat (Nat.sub (Nat.succ m) (list_length (ListType.cons KExpr x rest))) (Nat.sub m (list_length rest)) ",
-                "(Eq.trans Nat (Nat.sub (Nat.succ m) (list_length (ListType.cons KExpr x rest))) (Nat.sub (Nat.succ m) (Nat.succ (list_length rest))) (Nat.sub m (list_length rest)) ",
-                "(Eq.cong Nat Nat (fun (y : Nat) => Nat.sub (Nat.succ m) y) (list_length (ListType.cons KExpr x rest)) (Nat.succ (list_length rest)) (list_length_cons x rest)) ",
+                "(@Eq.trans Nat (Nat.sub m (list_length rest)) (Nat.sub (Nat.succ m) (list_length (@ListType.cons KExpr x rest))) Nat.zero ",
+                "(@Eq.symm Nat (Nat.sub (Nat.succ m) (list_length (@ListType.cons KExpr x rest))) (Nat.sub m (list_length rest)) ",
+                "(@Eq.trans Nat (Nat.sub (Nat.succ m) (list_length (@ListType.cons KExpr x rest))) (Nat.sub (Nat.succ m) (Nat.succ (list_length rest))) (Nat.sub m (list_length rest)) ",
+                "(@Eq.cong Nat Nat (fun (y : Nat) => Nat.sub (Nat.succ m) y) (list_length (@ListType.cons KExpr x rest)) (Nat.succ (list_length rest)) (list_length_cons x rest)) ",
                 "(nat_sub_succ_succ m (list_length rest)))) ",
                 "h_cons))"
             );
@@ -805,14 +806,14 @@ iota_reduct_full_inv env e e' (Eq (OptionType KExpr) (iota_reduct env (instantia
             let succ_arm = format!(
                 concat!(
                     "(fun (m : Nat) ",
-                    "(ih : forall (xs0 : ListType KExpr), Eq Nat (Nat.sub m (list_length xs0)) Nat.zero -> ",
-                    "Eq (ListType KExpr) (list_drop m (list_append xs0 (ListType.cons KExpr a0 (ListType.nil KExpr)))) ",
-                    "(list_append (list_drop m xs0) (ListType.cons KExpr a0 (ListType.nil KExpr)))) => ",
+                    "(ih : forall (xs0 : ListType KExpr), @Eq Nat (Nat.sub m (list_length xs0)) Nat.zero -> ",
+                    "@Eq (ListType KExpr) (list_drop m (list_append xs0 (@ListType.cons KExpr a0 (@ListType.nil KExpr)))) ",
+                    "(list_append (list_drop m xs0) (@ListType.cons KExpr a0 (@ListType.nil KExpr)))) => ",
                     "fun (xs0 : ListType KExpr) => ",
-                    "ListType.rec KExpr ",
-                    "(fun (xs1 : ListType KExpr) => Eq Nat (Nat.sub (Nat.succ m) (list_length xs1)) Nat.zero -> ",
-                    "Eq (ListType KExpr) (list_drop (Nat.succ m) (list_append xs1 (ListType.cons KExpr a0 (ListType.nil KExpr)))) ",
-                    "(list_append (list_drop (Nat.succ m) xs1) (ListType.cons KExpr a0 (ListType.nil KExpr)))) ",
+                    "@ListType.rec KExpr ",
+                    "(fun (xs1 : ListType KExpr) => @Eq Nat (Nat.sub (Nat.succ m) (list_length xs1)) Nat.zero -> ",
+                    "@Eq (ListType KExpr) (list_drop (Nat.succ m) (list_append xs1 (@ListType.cons KExpr a0 (@ListType.nil KExpr)))) ",
+                    "(list_append (list_drop (Nat.succ m) xs1) (@ListType.cons KExpr a0 (@ListType.nil KExpr)))) ",
                     "{nil_absurd} ",
                     "{cons_case} ",
                     "xs0)"
@@ -823,16 +824,16 @@ iota_reduct_full_inv env e e' (Eq (OptionType KExpr) (iota_reduct env (instantia
 
             // zero arm: drop 0 (xs ++ [a]) = xs ++ [a] = (drop 0 xs) ++ [a].
             let zero_arm = concat!(
-                "(fun (xs0 : ListType KExpr) (_h0 : Eq Nat (Nat.sub Nat.zero (list_length xs0)) Nat.zero) => ",
-                "Eq.trans (ListType KExpr) ",
-                "(list_drop Nat.zero (list_append xs0 (ListType.cons KExpr a0 (ListType.nil KExpr)))) ",
-                "(list_append xs0 (ListType.cons KExpr a0 (ListType.nil KExpr))) ",
-                "(list_append (list_drop Nat.zero xs0) (ListType.cons KExpr a0 (ListType.nil KExpr))) ",
-                "(list_drop_zero (list_append xs0 (ListType.cons KExpr a0 (ListType.nil KExpr)))) ",
-                "(Eq.symm (ListType KExpr) ",
-                "(list_append (list_drop Nat.zero xs0) (ListType.cons KExpr a0 (ListType.nil KExpr))) ",
-                "(list_append xs0 (ListType.cons KExpr a0 (ListType.nil KExpr))) ",
-                "(Eq.cong (ListType KExpr) (ListType KExpr) (fun (L : ListType KExpr) => list_append L (ListType.cons KExpr a0 (ListType.nil KExpr))) ",
+                "(fun (xs0 : ListType KExpr) (_h0 : @Eq Nat (Nat.sub Nat.zero (list_length xs0)) Nat.zero) => ",
+                "@Eq.trans (ListType KExpr) ",
+                "(list_drop Nat.zero (list_append xs0 (@ListType.cons KExpr a0 (@ListType.nil KExpr)))) ",
+                "(list_append xs0 (@ListType.cons KExpr a0 (@ListType.nil KExpr))) ",
+                "(list_append (list_drop Nat.zero xs0) (@ListType.cons KExpr a0 (@ListType.nil KExpr))) ",
+                "(list_drop_zero (list_append xs0 (@ListType.cons KExpr a0 (@ListType.nil KExpr)))) ",
+                "(@Eq.symm (ListType KExpr) ",
+                "(list_append (list_drop Nat.zero xs0) (@ListType.cons KExpr a0 (@ListType.nil KExpr))) ",
+                "(list_append xs0 (@ListType.cons KExpr a0 (@ListType.nil KExpr))) ",
+                "(@Eq.cong (ListType KExpr) (ListType KExpr) (fun (L : ListType KExpr) => list_append L (@ListType.cons KExpr a0 (@ListType.nil KExpr))) ",
                 "(list_drop Nat.zero xs0) xs0 (list_drop_zero xs0))))"
             );
 
@@ -841,25 +842,25 @@ iota_reduct_full_inv env e e' (Eq (OptionType KExpr) (iota_reduct env (instantia
             // the elaborator promotes it to a PARAMETER: Le.rec n motive refl step
             // (second index) major. Motive ranges only over the second index j.
             let le_to_sub = concat!(
-                "(Le.rec n (fun (j : Nat) (_ : Le n j) => Eq Nat (Nat.sub n j) Nat.zero) ",
+                "(@Le.rec n (fun (j : Nat) (_ : Le n j) => @Eq Nat (Nat.sub n j) Nat.zero) ",
                 "(nat_sub_self n) ",
-                "(fun (m : Nat) (_h : Le n m) (ihm : Eq Nat (Nat.sub n m) Nat.zero) => ",
+                "(fun (m : Nat) (_h : Le n m) (ihm : @Eq Nat (Nat.sub n m) Nat.zero) => ",
                 // Nat.sub n (succ m) = pred (Nat.sub n m) = pred 0 = 0
-                "Eq.trans Nat (Nat.sub n (Nat.succ m)) (Nat.pred (Nat.sub n m)) Nat.zero ",
-                "(Eq.refl Nat (Nat.pred (Nat.sub n m))) ",
-                "(Eq.trans Nat (Nat.pred (Nat.sub n m)) (Nat.pred Nat.zero) Nat.zero ",
-                "(Eq.cong Nat Nat Nat.pred (Nat.sub n m) Nat.zero ihm) (Eq.refl Nat Nat.zero))) ",
+                "@Eq.trans Nat (Nat.sub n (Nat.succ m)) (Nat.pred (Nat.sub n m)) Nat.zero ",
+                "(@Eq.refl Nat (Nat.pred (Nat.sub n m))) ",
+                "(@Eq.trans Nat (Nat.pred (Nat.sub n m)) (Nat.pred Nat.zero) Nat.zero ",
+                "(@Eq.cong Nat Nat Nat.pred (Nat.sub n m) Nat.zero ihm) (@Eq.refl Nat Nat.zero))) ",
                 "(list_length xs) hle)"
             );
 
             let value = format!(
                 concat!(
                     "fun (n : Nat) (xs : ListType KExpr) (a : KExpr) (hle : Le n (list_length xs)) => ",
-                    "(fun (hsub : Eq Nat (Nat.sub n (list_length xs)) Nat.zero) => ",
-                    "Nat.rec ",
-                    "(fun (n0 : Nat) => forall (xs0 : ListType KExpr), Eq Nat (Nat.sub n0 (list_length xs0)) Nat.zero -> ",
-                    "Eq (ListType KExpr) (list_drop n0 (list_append xs0 (ListType.cons KExpr a (ListType.nil KExpr)))) ",
-                    "(list_append (list_drop n0 xs0) (ListType.cons KExpr a (ListType.nil KExpr)))) ",
+                    "(fun (hsub : @Eq Nat (Nat.sub n (list_length xs)) Nat.zero) => ",
+                    "@Nat.rec ",
+                    "(fun (n0 : Nat) => forall (xs0 : ListType KExpr), @Eq Nat (Nat.sub n0 (list_length xs0)) Nat.zero -> ",
+                    "@Eq (ListType KExpr) (list_drop n0 (list_append xs0 (@ListType.cons KExpr a (@ListType.nil KExpr)))) ",
+                    "(list_append (list_drop n0 xs0) (@ListType.cons KExpr a (@ListType.nil KExpr)))) ",
                     "{zero_arm} ",
                     "{succ_arm} ",
                     "n xs hsub) ",
@@ -875,8 +876,8 @@ iota_reduct_full_inv env e e' (Eq (OptionType KExpr) (iota_reduct env (instantia
                 type_src: concat!(
                     "forall (n : Nat) (xs : ListType KExpr) (a : KExpr), ",
                     "Le n (list_length xs) -> ",
-                    "Eq (ListType KExpr) (list_drop n (list_append xs (ListType.cons KExpr a (ListType.nil KExpr)))) ",
-                    "(list_append (list_drop n xs) (ListType.cons KExpr a (ListType.nil KExpr)))"
+                    "@Eq (ListType KExpr) (list_drop n (list_append xs (@ListType.cons KExpr a (@ListType.nil KExpr)))) ",
+                    "(list_append (list_drop n xs) (@ListType.cons KExpr a (@ListType.nil KExpr)))"
                 )
                 .to_string(),
                 value_src: Some(value),
@@ -922,22 +923,23 @@ iota_reduct_full_inv env e e' (Eq (OptionType KExpr) (iota_reduct env (instantia
         // xs. Same skeleton as #1 (Le.rec -> Nat.sub = 0; Nat.rec on n; ListType.rec
         // on xs; absurd nil/succ via Empty.rec) but using the list_take unfolds.
         {
-            let discr = "(Nat.rec (fun (_ : Nat) => Type) Empty (fun (_ : Nat) (_ : Type) => Nat))";
+            let discr =
+                "(@Nat.rec (fun (_ : Nat) => Type) Empty (fun (_ : Nat) (_ : Type) => Nat))";
             let succ_eq_zero = concat!(
-                "(Eq.trans Nat (Nat.succ m) (Nat.sub (Nat.succ m) (list_length (ListType.nil KExpr))) Nat.zero ",
-                "(Eq.symm Nat (Nat.sub (Nat.succ m) (list_length (ListType.nil KExpr))) (Nat.succ m) ",
-                "(Eq.trans Nat (Nat.sub (Nat.succ m) (list_length (ListType.nil KExpr))) (Nat.sub (Nat.succ m) Nat.zero) (Nat.succ m) ",
-                "(Eq.cong Nat Nat (fun (y : Nat) => Nat.sub (Nat.succ m) y) (list_length (ListType.nil KExpr)) Nat.zero (list_length_nil)) ",
+                "(@Eq.trans Nat (Nat.succ m) (Nat.sub (Nat.succ m) (list_length (@ListType.nil KExpr))) Nat.zero ",
+                "(@Eq.symm Nat (Nat.sub (Nat.succ m) (list_length (@ListType.nil KExpr))) (Nat.succ m) ",
+                "(@Eq.trans Nat (Nat.sub (Nat.succ m) (list_length (@ListType.nil KExpr))) (Nat.sub (Nat.succ m) Nat.zero) (Nat.succ m) ",
+                "(@Eq.cong Nat Nat (fun (y : Nat) => Nat.sub (Nat.succ m) y) (list_length (@ListType.nil KExpr)) Nat.zero (list_length_nil)) ",
                 "(nat_sub_zero_right (Nat.succ m)))) ",
                 "h_nil)"
             );
             let nil_absurd = format!(
                 concat!(
-                    "(fun (h_nil : Eq Nat (Nat.sub (Nat.succ m) (list_length (ListType.nil KExpr))) Nat.zero) => ",
-                    "Empty.rec (fun (_ : Empty) => Eq (ListType KExpr) ",
-                    "(list_take (Nat.succ m) (list_append (ListType.nil KExpr) (ListType.cons KExpr a0 (ListType.nil KExpr)))) ",
-                    "(list_take (Nat.succ m) (ListType.nil KExpr))) ",
-                    "(Eq.substType Nat {discr} (Nat.succ m) Nat.zero {succ_eq_zero} (Nat.succ m)))"
+                    "(fun (h_nil : @Eq Nat (Nat.sub (Nat.succ m) (list_length (@ListType.nil KExpr))) Nat.zero) => ",
+                    "@Empty.rec (fun (_ : Empty) => @Eq (ListType KExpr) ",
+                    "(list_take (Nat.succ m) (list_append (@ListType.nil KExpr) (@ListType.cons KExpr a0 (@ListType.nil KExpr)))) ",
+                    "(list_take (Nat.succ m) (@ListType.nil KExpr))) ",
+                    "(@Eq.substType Nat {discr} (Nat.succ m) Nat.zero {succ_eq_zero} (Nat.succ m)))"
                 ),
                 discr = discr,
                 succ_eq_zero = succ_eq_zero,
@@ -950,44 +952,44 @@ iota_reduct_full_inv env e e' (Eq (OptionType KExpr) (iota_reduct env (instantia
             // RHS take (succ m)(x::rest) = x :: take m rest. Equal.
             let cons_case = concat!(
                 "(fun (x : KExpr) (rest : ListType KExpr) ",
-                "(_ihinner : Eq Nat (Nat.sub (Nat.succ m) (list_length rest)) Nat.zero -> ",
-                "Eq (ListType KExpr) (list_take (Nat.succ m) (list_append rest (ListType.cons KExpr a0 (ListType.nil KExpr)))) ",
+                "(_ihinner : @Eq Nat (Nat.sub (Nat.succ m) (list_length rest)) Nat.zero -> ",
+                "@Eq (ListType KExpr) (list_take (Nat.succ m) (list_append rest (@ListType.cons KExpr a0 (@ListType.nil KExpr)))) ",
                 "(list_take (Nat.succ m) rest)) ",
-                "(h_cons : Eq Nat (Nat.sub (Nat.succ m) (list_length (ListType.cons KExpr x rest))) Nat.zero) => ",
-                "(fun (sub_m_rest : Eq Nat (Nat.sub m (list_length rest)) Nat.zero) => ",
-                "Eq.trans (ListType KExpr) ",
-                "(list_take (Nat.succ m) (list_append (ListType.cons KExpr x rest) (ListType.cons KExpr a0 (ListType.nil KExpr)))) ",
-                "(ListType.cons KExpr x (list_take m rest)) ",
-                "(list_take (Nat.succ m) (ListType.cons KExpr x rest)) ",
+                "(h_cons : @Eq Nat (Nat.sub (Nat.succ m) (list_length (@ListType.cons KExpr x rest))) Nat.zero) => ",
+                "(fun (sub_m_rest : @Eq Nat (Nat.sub m (list_length rest)) Nat.zero) => ",
+                "@Eq.trans (ListType KExpr) ",
+                "(list_take (Nat.succ m) (list_append (@ListType.cons KExpr x rest) (@ListType.cons KExpr a0 (@ListType.nil KExpr)))) ",
+                "(@ListType.cons KExpr x (list_take m rest)) ",
+                "(list_take (Nat.succ m) (@ListType.cons KExpr x rest)) ",
                 // LEG A: LHS = x :: take m rest
-                "(Eq.trans (ListType KExpr) ",
-                "(list_take (Nat.succ m) (list_append (ListType.cons KExpr x rest) (ListType.cons KExpr a0 (ListType.nil KExpr)))) ",
-                "(list_take (Nat.succ m) (ListType.cons KExpr x (list_append rest (ListType.cons KExpr a0 (ListType.nil KExpr))))) ",
-                "(ListType.cons KExpr x (list_take m rest)) ",
+                "(@Eq.trans (ListType KExpr) ",
+                "(list_take (Nat.succ m) (list_append (@ListType.cons KExpr x rest) (@ListType.cons KExpr a0 (@ListType.nil KExpr)))) ",
+                "(list_take (Nat.succ m) (@ListType.cons KExpr x (list_append rest (@ListType.cons KExpr a0 (@ListType.nil KExpr))))) ",
+                "(@ListType.cons KExpr x (list_take m rest)) ",
                 // append cons
-                "(Eq.cong (ListType KExpr) (ListType KExpr) (fun (L : ListType KExpr) => list_take (Nat.succ m) L) ",
-                "(list_append (ListType.cons KExpr x rest) (ListType.cons KExpr a0 (ListType.nil KExpr))) ",
-                "(ListType.cons KExpr x (list_append rest (ListType.cons KExpr a0 (ListType.nil KExpr)))) ",
-                "(list_append_cons x rest (ListType.cons KExpr a0 (ListType.nil KExpr)))) ",
+                "(@Eq.cong (ListType KExpr) (ListType KExpr) (fun (L : ListType KExpr) => list_take (Nat.succ m) L) ",
+                "(list_append (@ListType.cons KExpr x rest) (@ListType.cons KExpr a0 (@ListType.nil KExpr))) ",
+                "(@ListType.cons KExpr x (list_append rest (@ListType.cons KExpr a0 (@ListType.nil KExpr)))) ",
+                "(list_append_cons x rest (@ListType.cons KExpr a0 (@ListType.nil KExpr)))) ",
                 // take_succ_cons: take (succ m)(x::L) = x :: take m L; then ih on the tail
-                "(Eq.trans (ListType KExpr) ",
-                "(list_take (Nat.succ m) (ListType.cons KExpr x (list_append rest (ListType.cons KExpr a0 (ListType.nil KExpr))))) ",
-                "(ListType.cons KExpr x (list_take m (list_append rest (ListType.cons KExpr a0 (ListType.nil KExpr))))) ",
-                "(ListType.cons KExpr x (list_take m rest)) ",
-                "(list_take_succ_cons m x (list_append rest (ListType.cons KExpr a0 (ListType.nil KExpr)))) ",
-                "(Eq.cong (ListType KExpr) (ListType KExpr) (fun (L : ListType KExpr) => ListType.cons KExpr x L) ",
-                "(list_take m (list_append rest (ListType.cons KExpr a0 (ListType.nil KExpr)))) (list_take m rest) ",
+                "(@Eq.trans (ListType KExpr) ",
+                "(list_take (Nat.succ m) (@ListType.cons KExpr x (list_append rest (@ListType.cons KExpr a0 (@ListType.nil KExpr))))) ",
+                "(@ListType.cons KExpr x (list_take m (list_append rest (@ListType.cons KExpr a0 (@ListType.nil KExpr))))) ",
+                "(@ListType.cons KExpr x (list_take m rest)) ",
+                "(list_take_succ_cons m x (list_append rest (@ListType.cons KExpr a0 (@ListType.nil KExpr)))) ",
+                "(@Eq.cong (ListType KExpr) (ListType KExpr) (fun (L : ListType KExpr) => @ListType.cons KExpr x L) ",
+                "(list_take m (list_append rest (@ListType.cons KExpr a0 (@ListType.nil KExpr)))) (list_take m rest) ",
                 "(_ihinner_m rest sub_m_rest)))) ",
                 // LEG B: x :: take m rest = take (succ m)(x::rest)
-                "(Eq.symm (ListType KExpr) ",
-                "(list_take (Nat.succ m) (ListType.cons KExpr x rest)) ",
-                "(ListType.cons KExpr x (list_take m rest)) ",
+                "(@Eq.symm (ListType KExpr) ",
+                "(list_take (Nat.succ m) (@ListType.cons KExpr x rest)) ",
+                "(@ListType.cons KExpr x (list_take m rest)) ",
                 "(list_take_succ_cons m x rest))) ",
                 // sub_m_rest derivation
-                "(Eq.trans Nat (Nat.sub m (list_length rest)) (Nat.sub (Nat.succ m) (list_length (ListType.cons KExpr x rest))) Nat.zero ",
-                "(Eq.symm Nat (Nat.sub (Nat.succ m) (list_length (ListType.cons KExpr x rest))) (Nat.sub m (list_length rest)) ",
-                "(Eq.trans Nat (Nat.sub (Nat.succ m) (list_length (ListType.cons KExpr x rest))) (Nat.sub (Nat.succ m) (Nat.succ (list_length rest))) (Nat.sub m (list_length rest)) ",
-                "(Eq.cong Nat Nat (fun (y : Nat) => Nat.sub (Nat.succ m) y) (list_length (ListType.cons KExpr x rest)) (Nat.succ (list_length rest)) (list_length_cons x rest)) ",
+                "(@Eq.trans Nat (Nat.sub m (list_length rest)) (Nat.sub (Nat.succ m) (list_length (@ListType.cons KExpr x rest))) Nat.zero ",
+                "(@Eq.symm Nat (Nat.sub (Nat.succ m) (list_length (@ListType.cons KExpr x rest))) (Nat.sub m (list_length rest)) ",
+                "(@Eq.trans Nat (Nat.sub (Nat.succ m) (list_length (@ListType.cons KExpr x rest))) (Nat.sub (Nat.succ m) (Nat.succ (list_length rest))) (Nat.sub m (list_length rest)) ",
+                "(@Eq.cong Nat Nat (fun (y : Nat) => Nat.sub (Nat.succ m) y) (list_length (@ListType.cons KExpr x rest)) (Nat.succ (list_length rest)) (list_length_cons x rest)) ",
                 "(nat_sub_succ_succ m (list_length rest)))) ",
                 "h_cons))"
             );
@@ -995,13 +997,13 @@ iota_reduct_full_inv env e e' (Eq (OptionType KExpr) (iota_reduct env (instantia
             let succ_arm = format!(
                 concat!(
                     "(fun (m : Nat) ",
-                    "(_ihinner_m : forall (xs0 : ListType KExpr), Eq Nat (Nat.sub m (list_length xs0)) Nat.zero -> ",
-                    "Eq (ListType KExpr) (list_take m (list_append xs0 (ListType.cons KExpr a0 (ListType.nil KExpr)))) ",
+                    "(_ihinner_m : forall (xs0 : ListType KExpr), @Eq Nat (Nat.sub m (list_length xs0)) Nat.zero -> ",
+                    "@Eq (ListType KExpr) (list_take m (list_append xs0 (@ListType.cons KExpr a0 (@ListType.nil KExpr)))) ",
                     "(list_take m xs0)) => ",
                     "fun (xs0 : ListType KExpr) => ",
-                    "ListType.rec KExpr ",
-                    "(fun (xs1 : ListType KExpr) => Eq Nat (Nat.sub (Nat.succ m) (list_length xs1)) Nat.zero -> ",
-                    "Eq (ListType KExpr) (list_take (Nat.succ m) (list_append xs1 (ListType.cons KExpr a0 (ListType.nil KExpr)))) ",
+                    "@ListType.rec KExpr ",
+                    "(fun (xs1 : ListType KExpr) => @Eq Nat (Nat.sub (Nat.succ m) (list_length xs1)) Nat.zero -> ",
+                    "@Eq (ListType KExpr) (list_take (Nat.succ m) (list_append xs1 (@ListType.cons KExpr a0 (@ListType.nil KExpr)))) ",
                     "(list_take (Nat.succ m) xs1)) ",
                     "{nil_absurd} ",
                     "{cons_case} ",
@@ -1013,33 +1015,33 @@ iota_reduct_full_inv env e e' (Eq (OptionType KExpr) (iota_reduct env (instantia
 
             // zero arm: take 0 (xs++[a]) = nil = take 0 xs.
             let zero_arm = concat!(
-                "(fun (xs0 : ListType KExpr) (_h0 : Eq Nat (Nat.sub Nat.zero (list_length xs0)) Nat.zero) => ",
-                "Eq.trans (ListType KExpr) ",
-                "(list_take Nat.zero (list_append xs0 (ListType.cons KExpr a0 (ListType.nil KExpr)))) ",
-                "(ListType.nil KExpr) ",
+                "(fun (xs0 : ListType KExpr) (_h0 : @Eq Nat (Nat.sub Nat.zero (list_length xs0)) Nat.zero) => ",
+                "@Eq.trans (ListType KExpr) ",
+                "(list_take Nat.zero (list_append xs0 (@ListType.cons KExpr a0 (@ListType.nil KExpr)))) ",
+                "(@ListType.nil KExpr) ",
                 "(list_take Nat.zero xs0) ",
-                "(list_take_zero (list_append xs0 (ListType.cons KExpr a0 (ListType.nil KExpr)))) ",
-                "(Eq.symm (ListType KExpr) (list_take Nat.zero xs0) (ListType.nil KExpr) (list_take_zero xs0)))"
+                "(list_take_zero (list_append xs0 (@ListType.cons KExpr a0 (@ListType.nil KExpr)))) ",
+                "(@Eq.symm (ListType KExpr) (list_take Nat.zero xs0) (@ListType.nil KExpr) (list_take_zero xs0)))"
             );
 
             let le_to_sub = concat!(
-                "(Le.rec n (fun (j : Nat) (_ : Le n j) => Eq Nat (Nat.sub n j) Nat.zero) ",
+                "(@Le.rec n (fun (j : Nat) (_ : Le n j) => @Eq Nat (Nat.sub n j) Nat.zero) ",
                 "(nat_sub_self n) ",
-                "(fun (m : Nat) (_h : Le n m) (ihm : Eq Nat (Nat.sub n m) Nat.zero) => ",
-                "Eq.trans Nat (Nat.sub n (Nat.succ m)) (Nat.pred (Nat.sub n m)) Nat.zero ",
-                "(Eq.refl Nat (Nat.pred (Nat.sub n m))) ",
-                "(Eq.trans Nat (Nat.pred (Nat.sub n m)) (Nat.pred Nat.zero) Nat.zero ",
-                "(Eq.cong Nat Nat Nat.pred (Nat.sub n m) Nat.zero ihm) (Eq.refl Nat Nat.zero))) ",
+                "(fun (m : Nat) (_h : Le n m) (ihm : @Eq Nat (Nat.sub n m) Nat.zero) => ",
+                "@Eq.trans Nat (Nat.sub n (Nat.succ m)) (Nat.pred (Nat.sub n m)) Nat.zero ",
+                "(@Eq.refl Nat (Nat.pred (Nat.sub n m))) ",
+                "(@Eq.trans Nat (Nat.pred (Nat.sub n m)) (Nat.pred Nat.zero) Nat.zero ",
+                "(@Eq.cong Nat Nat Nat.pred (Nat.sub n m) Nat.zero ihm) (@Eq.refl Nat Nat.zero))) ",
                 "(list_length xs) hle)"
             );
 
             let value = format!(
                 concat!(
                     "fun (n : Nat) (xs : ListType KExpr) (a : KExpr) (hle : Le n (list_length xs)) => ",
-                    "(fun (hsub : Eq Nat (Nat.sub n (list_length xs)) Nat.zero) => ",
-                    "Nat.rec ",
-                    "(fun (n0 : Nat) => forall (xs0 : ListType KExpr), Eq Nat (Nat.sub n0 (list_length xs0)) Nat.zero -> ",
-                    "Eq (ListType KExpr) (list_take n0 (list_append xs0 (ListType.cons KExpr a (ListType.nil KExpr)))) ",
+                    "(fun (hsub : @Eq Nat (Nat.sub n (list_length xs)) Nat.zero) => ",
+                    "@Nat.rec ",
+                    "(fun (n0 : Nat) => forall (xs0 : ListType KExpr), @Eq Nat (Nat.sub n0 (list_length xs0)) Nat.zero -> ",
+                    "@Eq (ListType KExpr) (list_take n0 (list_append xs0 (@ListType.cons KExpr a (@ListType.nil KExpr)))) ",
                     "(list_take n0 xs0)) ",
                     "{zero_arm} ",
                     "{succ_arm} ",
@@ -1056,7 +1058,7 @@ iota_reduct_full_inv env e e' (Eq (OptionType KExpr) (iota_reduct env (instantia
                 type_src: concat!(
                     "forall (n : Nat) (xs : ListType KExpr) (a : KExpr), ",
                     "Le n (list_length xs) -> ",
-                    "Eq (ListType KExpr) (list_take n (list_append xs (ListType.cons KExpr a (ListType.nil KExpr)))) ",
+                    "@Eq (ListType KExpr) (list_take n (list_append xs (@ListType.cons KExpr a (@ListType.nil KExpr)))) ",
                     "(list_take n xs)"
                 )
                 .to_string(),
@@ -1100,26 +1102,26 @@ iota_reduct_full_inv env e e' (Eq (OptionType KExpr) (iota_reduct env (instantia
         // list_drop_zero; succ via list_drop_succ + list_tail_nil + IH.
         self.add_definition(SpecDefinition {
             name: "list_drop_nil".to_string(),
-            type_src: "forall (k : Nat), Eq (ListType KExpr) (list_drop k (ListType.nil KExpr)) (ListType.nil KExpr)".to_string(),
+            type_src: "forall (k : Nat), @Eq (ListType KExpr) (list_drop k (@ListType.nil KExpr)) (@ListType.nil KExpr)".to_string(),
             value_src: Some(
                 concat!(
-                    "fun (k : Nat) => Nat.rec ",
-                    "(fun (k0 : Nat) => Eq (ListType KExpr) (list_drop k0 (ListType.nil KExpr)) (ListType.nil KExpr)) ",
+                    "fun (k : Nat) => @Nat.rec ",
+                    "(fun (k0 : Nat) => @Eq (ListType KExpr) (list_drop k0 (@ListType.nil KExpr)) (@ListType.nil KExpr)) ",
                     // zero
-                    "(list_drop_zero (ListType.nil KExpr)) ",
+                    "(list_drop_zero (@ListType.nil KExpr)) ",
                     // succ: list_drop (succ m) nil = list_drop m (tail nil) = list_drop m nil = nil
-                    "(fun (m : Nat) (ih : Eq (ListType KExpr) (list_drop m (ListType.nil KExpr)) (ListType.nil KExpr)) => ",
-                    "Eq.trans (ListType KExpr) ",
-                    "(list_drop (Nat.succ m) (ListType.nil KExpr)) ",
-                    "(list_drop m (list_tail (ListType.nil KExpr))) ",
-                    "(ListType.nil KExpr) ",
-                    "(list_drop_succ m (ListType.nil KExpr)) ",
-                    "(Eq.trans (ListType KExpr) ",
-                    "(list_drop m (list_tail (ListType.nil KExpr))) ",
-                    "(list_drop m (ListType.nil KExpr)) ",
-                    "(ListType.nil KExpr) ",
-                    "(Eq.cong (ListType KExpr) (ListType KExpr) (fun (L : ListType KExpr) => list_drop m L) ",
-                    "(list_tail (ListType.nil KExpr)) (ListType.nil KExpr) list_tail_nil) ",
+                    "(fun (m : Nat) (ih : @Eq (ListType KExpr) (list_drop m (@ListType.nil KExpr)) (@ListType.nil KExpr)) => ",
+                    "@Eq.trans (ListType KExpr) ",
+                    "(list_drop (Nat.succ m) (@ListType.nil KExpr)) ",
+                    "(list_drop m (list_tail (@ListType.nil KExpr))) ",
+                    "(@ListType.nil KExpr) ",
+                    "(list_drop_succ m (@ListType.nil KExpr)) ",
+                    "(@Eq.trans (ListType KExpr) ",
+                    "(list_drop m (list_tail (@ListType.nil KExpr))) ",
+                    "(list_drop m (@ListType.nil KExpr)) ",
+                    "(@ListType.nil KExpr) ",
+                    "(@Eq.cong (ListType KExpr) (ListType KExpr) (fun (L : ListType KExpr) => list_drop m L) ",
+                    "(list_tail (@ListType.nil KExpr)) (@ListType.nil KExpr) list_tail_nil) ",
                     "ih)) ",
                     "k"
                 )
@@ -1159,21 +1161,21 @@ iota_reduct_full_inv env e e' (Eq (OptionType KExpr) (iota_reduct env (instantia
             let nil_absurd = |kcnt: &str, goal: &str| -> String {
                 format!(
                     concat!(
-                        "(fun (h_nil : Eq (OptionType KExpr) (list_head (list_drop {kcnt} (ListType.nil KExpr))) (OptionType.some KExpr major)) => ",
+                        "(fun (h_nil : @Eq (OptionType KExpr) (list_head (list_drop {kcnt} (@ListType.nil KExpr))) (@OptionType.some KExpr major)) => ",
                         "option_none_ne_some KExpr major ({goal}) ",
-                        "(Eq.trans (OptionType KExpr) ",
-                        "(OptionType.none KExpr) ",
-                        "(list_head (list_drop {kcnt} (ListType.nil KExpr))) ",
-                        "(OptionType.some KExpr major) ",
+                        "(@Eq.trans (OptionType KExpr) ",
+                        "(@OptionType.none KExpr) ",
+                        "(list_head (list_drop {kcnt} (@ListType.nil KExpr))) ",
+                        "(@OptionType.some KExpr major) ",
                         // none = list_head (list_drop kcnt nil): symm of (drop kcnt nil = nil ; head nil = none)
-                        "(Eq.symm (OptionType KExpr) ",
-                        "(list_head (list_drop {kcnt} (ListType.nil KExpr))) (OptionType.none KExpr) ",
-                        "(Eq.trans (OptionType KExpr) ",
-                        "(list_head (list_drop {kcnt} (ListType.nil KExpr))) ",
-                        "(list_head (ListType.nil KExpr)) ",
-                        "(OptionType.none KExpr) ",
-                        "(Eq.cong (ListType KExpr) (OptionType KExpr) (fun (L : ListType KExpr) => list_head L) ",
-                        "(list_drop {kcnt} (ListType.nil KExpr)) (ListType.nil KExpr) (list_drop_nil {kcnt})) ",
+                        "(@Eq.symm (OptionType KExpr) ",
+                        "(list_head (list_drop {kcnt} (@ListType.nil KExpr))) (@OptionType.none KExpr) ",
+                        "(@Eq.trans (OptionType KExpr) ",
+                        "(list_head (list_drop {kcnt} (@ListType.nil KExpr))) ",
+                        "(list_head (@ListType.nil KExpr)) ",
+                        "(@OptionType.none KExpr) ",
+                        "(@Eq.cong (ListType KExpr) (OptionType KExpr) (fun (L : ListType KExpr) => list_head L) ",
+                        "(list_drop {kcnt} (@ListType.nil KExpr)) (@ListType.nil KExpr) (list_drop_nil {kcnt})) ",
                         "list_head_nil)) ",
                         "h_nil))"
                     ),
@@ -1184,60 +1186,60 @@ iota_reduct_full_inv env e e' (Eq (OptionType KExpr) (iota_reduct env (instantia
 
             // zero arm: h : list_head (list_drop 0 xs) = some major i.e. head xs.
             // Goal: list_head (list_drop 0 (xs++[a])) = some major i.e. head (xs++[a]).
-            let zero_goal = "Eq (OptionType KExpr) (list_head (list_drop Nat.zero (list_append (ListType.nil KExpr) (ListType.cons KExpr a (ListType.nil KExpr))))) (OptionType.some KExpr major)";
+            let zero_goal = "@Eq (OptionType KExpr) (list_head (list_drop Nat.zero (list_append (@ListType.nil KExpr) (@ListType.cons KExpr a (@ListType.nil KExpr))))) (@OptionType.some KExpr major)";
             let zero_cons = concat!(
                 "(fun (x : KExpr) (rest : ListType KExpr) ",
-                "(_ihc : Eq (OptionType KExpr) (list_head (list_drop Nat.zero rest)) (OptionType.some KExpr major) -> ",
-                "Eq (OptionType KExpr) (list_head (list_drop Nat.zero (list_append rest (ListType.cons KExpr a (ListType.nil KExpr))))) (OptionType.some KExpr major)) ",
-                "(_h : Eq (OptionType KExpr) (list_head (list_drop Nat.zero (ListType.cons KExpr x rest))) (OptionType.some KExpr major)) => ",
+                "(_ihc : @Eq (OptionType KExpr) (list_head (list_drop Nat.zero rest)) (@OptionType.some KExpr major) -> ",
+                "@Eq (OptionType KExpr) (list_head (list_drop Nat.zero (list_append rest (@ListType.cons KExpr a (@ListType.nil KExpr))))) (@OptionType.some KExpr major)) ",
+                "(_h : @Eq (OptionType KExpr) (list_head (list_drop Nat.zero (@ListType.cons KExpr x rest))) (@OptionType.some KExpr major)) => ",
                 // goal: head (drop 0 ((x::rest)++[a])) = some major.
                 // drop 0 L = L; (x::rest)++[a] = x::(rest++[a]); head (x::_) = some x.
                 // From _h : head (drop 0 (x::rest)) = some major, i.e. some x = some major.
-                "Eq.trans (OptionType KExpr) ",
-                "(list_head (list_drop Nat.zero (list_append (ListType.cons KExpr x rest) (ListType.cons KExpr a (ListType.nil KExpr))))) ",
-                "(OptionType.some KExpr x) ",
-                "(OptionType.some KExpr major) ",
+                "@Eq.trans (OptionType KExpr) ",
+                "(list_head (list_drop Nat.zero (list_append (@ListType.cons KExpr x rest) (@ListType.cons KExpr a (@ListType.nil KExpr))))) ",
+                "(@OptionType.some KExpr x) ",
+                "(@OptionType.some KExpr major) ",
                 // LHS = some x
-                "(Eq.trans (OptionType KExpr) ",
-                "(list_head (list_drop Nat.zero (list_append (ListType.cons KExpr x rest) (ListType.cons KExpr a (ListType.nil KExpr))))) ",
-                "(list_head (list_append (ListType.cons KExpr x rest) (ListType.cons KExpr a (ListType.nil KExpr)))) ",
-                "(OptionType.some KExpr x) ",
-                "(Eq.cong (ListType KExpr) (OptionType KExpr) (fun (L : ListType KExpr) => list_head L) ",
-                "(list_drop Nat.zero (list_append (ListType.cons KExpr x rest) (ListType.cons KExpr a (ListType.nil KExpr)))) ",
-                "(list_append (ListType.cons KExpr x rest) (ListType.cons KExpr a (ListType.nil KExpr))) ",
-                "(list_drop_zero (list_append (ListType.cons KExpr x rest) (ListType.cons KExpr a (ListType.nil KExpr))))) ",
-                "(Eq.trans (OptionType KExpr) ",
-                "(list_head (list_append (ListType.cons KExpr x rest) (ListType.cons KExpr a (ListType.nil KExpr)))) ",
-                "(list_head (ListType.cons KExpr x (list_append rest (ListType.cons KExpr a (ListType.nil KExpr))))) ",
-                "(OptionType.some KExpr x) ",
-                "(Eq.cong (ListType KExpr) (OptionType KExpr) (fun (L : ListType KExpr) => list_head L) ",
-                "(list_append (ListType.cons KExpr x rest) (ListType.cons KExpr a (ListType.nil KExpr))) ",
-                "(ListType.cons KExpr x (list_append rest (ListType.cons KExpr a (ListType.nil KExpr)))) ",
-                "(list_append_cons x rest (ListType.cons KExpr a (ListType.nil KExpr)))) ",
-                "(list_head_cons x (list_append rest (ListType.cons KExpr a (ListType.nil KExpr)))))) ",
+                "(@Eq.trans (OptionType KExpr) ",
+                "(list_head (list_drop Nat.zero (list_append (@ListType.cons KExpr x rest) (@ListType.cons KExpr a (@ListType.nil KExpr))))) ",
+                "(list_head (list_append (@ListType.cons KExpr x rest) (@ListType.cons KExpr a (@ListType.nil KExpr)))) ",
+                "(@OptionType.some KExpr x) ",
+                "(@Eq.cong (ListType KExpr) (OptionType KExpr) (fun (L : ListType KExpr) => list_head L) ",
+                "(list_drop Nat.zero (list_append (@ListType.cons KExpr x rest) (@ListType.cons KExpr a (@ListType.nil KExpr)))) ",
+                "(list_append (@ListType.cons KExpr x rest) (@ListType.cons KExpr a (@ListType.nil KExpr))) ",
+                "(list_drop_zero (list_append (@ListType.cons KExpr x rest) (@ListType.cons KExpr a (@ListType.nil KExpr))))) ",
+                "(@Eq.trans (OptionType KExpr) ",
+                "(list_head (list_append (@ListType.cons KExpr x rest) (@ListType.cons KExpr a (@ListType.nil KExpr)))) ",
+                "(list_head (@ListType.cons KExpr x (list_append rest (@ListType.cons KExpr a (@ListType.nil KExpr))))) ",
+                "(@OptionType.some KExpr x) ",
+                "(@Eq.cong (ListType KExpr) (OptionType KExpr) (fun (L : ListType KExpr) => list_head L) ",
+                "(list_append (@ListType.cons KExpr x rest) (@ListType.cons KExpr a (@ListType.nil KExpr))) ",
+                "(@ListType.cons KExpr x (list_append rest (@ListType.cons KExpr a (@ListType.nil KExpr)))) ",
+                "(list_append_cons x rest (@ListType.cons KExpr a (@ListType.nil KExpr)))) ",
+                "(list_head_cons x (list_append rest (@ListType.cons KExpr a (@ListType.nil KExpr)))))) ",
                 // some x = some major, from _h (head (drop 0 (x::rest)) = some major)
-                "(Eq.trans (OptionType KExpr) (OptionType.some KExpr x) ",
-                "(list_head (list_drop Nat.zero (ListType.cons KExpr x rest))) ",
-                "(OptionType.some KExpr major) ",
-                "(Eq.symm (OptionType KExpr) ",
-                "(list_head (list_drop Nat.zero (ListType.cons KExpr x rest))) (OptionType.some KExpr x) ",
-                "(Eq.trans (OptionType KExpr) ",
-                "(list_head (list_drop Nat.zero (ListType.cons KExpr x rest))) ",
-                "(list_head (ListType.cons KExpr x rest)) ",
-                "(OptionType.some KExpr x) ",
-                "(Eq.cong (ListType KExpr) (OptionType KExpr) (fun (L : ListType KExpr) => list_head L) ",
-                "(list_drop Nat.zero (ListType.cons KExpr x rest)) (ListType.cons KExpr x rest) ",
-                "(list_drop_zero (ListType.cons KExpr x rest))) ",
+                "(@Eq.trans (OptionType KExpr) (@OptionType.some KExpr x) ",
+                "(list_head (list_drop Nat.zero (@ListType.cons KExpr x rest))) ",
+                "(@OptionType.some KExpr major) ",
+                "(@Eq.symm (OptionType KExpr) ",
+                "(list_head (list_drop Nat.zero (@ListType.cons KExpr x rest))) (@OptionType.some KExpr x) ",
+                "(@Eq.trans (OptionType KExpr) ",
+                "(list_head (list_drop Nat.zero (@ListType.cons KExpr x rest))) ",
+                "(list_head (@ListType.cons KExpr x rest)) ",
+                "(@OptionType.some KExpr x) ",
+                "(@Eq.cong (ListType KExpr) (OptionType KExpr) (fun (L : ListType KExpr) => list_head L) ",
+                "(list_drop Nat.zero (@ListType.cons KExpr x rest)) (@ListType.cons KExpr x rest) ",
+                "(list_drop_zero (@ListType.cons KExpr x rest))) ",
                 "(list_head_cons x rest))) ",
                 "_h))"
             );
             let zero_arm = format!(
                 concat!(
                     "(fun (xs0 : ListType KExpr) ",
-                    "(h : Eq (OptionType KExpr) (list_head (list_drop Nat.zero xs0)) (OptionType.some KExpr major)) => ",
-                    "ListType.rec KExpr ",
-                    "(fun (xs1 : ListType KExpr) => Eq (OptionType KExpr) (list_head (list_drop Nat.zero xs1)) (OptionType.some KExpr major) -> ",
-                    "Eq (OptionType KExpr) (list_head (list_drop Nat.zero (list_append xs1 (ListType.cons KExpr a (ListType.nil KExpr))))) (OptionType.some KExpr major)) ",
+                    "(h : @Eq (OptionType KExpr) (list_head (list_drop Nat.zero xs0)) (@OptionType.some KExpr major)) => ",
+                    "@ListType.rec KExpr ",
+                    "(fun (xs1 : ListType KExpr) => @Eq (OptionType KExpr) (list_head (list_drop Nat.zero xs1)) (@OptionType.some KExpr major) -> ",
+                    "@Eq (OptionType KExpr) (list_head (list_drop Nat.zero (list_append xs1 (@ListType.cons KExpr a (@ListType.nil KExpr))))) (@OptionType.some KExpr major)) ",
                     "{nil_absurd} ",
                     "{zero_cons} ",
                     "xs0 h)"
@@ -1253,66 +1255,66 @@ iota_reduct_full_inv env e e' (Eq (OptionType KExpr) (iota_reduct env (instantia
             // = some major; apply outer ih at rest.
             let succ_cons = concat!(
                 "(fun (x : KExpr) (rest : ListType KExpr) ",
-                "(_ihc : Eq (OptionType KExpr) (list_head (list_drop (Nat.succ m) rest)) (OptionType.some KExpr major) -> ",
-                "Eq (OptionType KExpr) (list_head (list_drop (Nat.succ m) (list_append rest (ListType.cons KExpr a (ListType.nil KExpr))))) (OptionType.some KExpr major)) ",
-                "(h : Eq (OptionType KExpr) (list_head (list_drop (Nat.succ m) (ListType.cons KExpr x rest))) (OptionType.some KExpr major)) => ",
+                "(_ihc : @Eq (OptionType KExpr) (list_head (list_drop (Nat.succ m) rest)) (@OptionType.some KExpr major) -> ",
+                "@Eq (OptionType KExpr) (list_head (list_drop (Nat.succ m) (list_append rest (@ListType.cons KExpr a (@ListType.nil KExpr))))) (@OptionType.some KExpr major)) ",
+                "(h : @Eq (OptionType KExpr) (list_head (list_drop (Nat.succ m) (@ListType.cons KExpr x rest))) (@OptionType.some KExpr major)) => ",
                 // goal LHS: head (drop (succ m) ((x::rest)++[a])) = head (drop m (rest++[a]))
-                "Eq.trans (OptionType KExpr) ",
-                "(list_head (list_drop (Nat.succ m) (list_append (ListType.cons KExpr x rest) (ListType.cons KExpr a (ListType.nil KExpr))))) ",
-                "(list_head (list_drop m (list_append rest (ListType.cons KExpr a (ListType.nil KExpr))))) ",
-                "(OptionType.some KExpr major) ",
+                "@Eq.trans (OptionType KExpr) ",
+                "(list_head (list_drop (Nat.succ m) (list_append (@ListType.cons KExpr x rest) (@ListType.cons KExpr a (@ListType.nil KExpr))))) ",
+                "(list_head (list_drop m (list_append rest (@ListType.cons KExpr a (@ListType.nil KExpr))))) ",
+                "(@OptionType.some KExpr major) ",
                 // LHS = head (drop m (rest++[a]))
-                "(Eq.cong (ListType KExpr) (OptionType KExpr) (fun (L : ListType KExpr) => list_head L) ",
-                "(list_drop (Nat.succ m) (list_append (ListType.cons KExpr x rest) (ListType.cons KExpr a (ListType.nil KExpr)))) ",
-                "(list_drop m (list_append rest (ListType.cons KExpr a (ListType.nil KExpr)))) ",
-                "(Eq.trans (ListType KExpr) ",
-                "(list_drop (Nat.succ m) (list_append (ListType.cons KExpr x rest) (ListType.cons KExpr a (ListType.nil KExpr)))) ",
-                "(list_drop (Nat.succ m) (ListType.cons KExpr x (list_append rest (ListType.cons KExpr a (ListType.nil KExpr))))) ",
-                "(list_drop m (list_append rest (ListType.cons KExpr a (ListType.nil KExpr)))) ",
-                "(Eq.cong (ListType KExpr) (ListType KExpr) (fun (L : ListType KExpr) => list_drop (Nat.succ m) L) ",
-                "(list_append (ListType.cons KExpr x rest) (ListType.cons KExpr a (ListType.nil KExpr))) ",
-                "(ListType.cons KExpr x (list_append rest (ListType.cons KExpr a (ListType.nil KExpr)))) ",
-                "(list_append_cons x rest (ListType.cons KExpr a (ListType.nil KExpr)))) ",
-                "(Eq.trans (ListType KExpr) ",
-                "(list_drop (Nat.succ m) (ListType.cons KExpr x (list_append rest (ListType.cons KExpr a (ListType.nil KExpr))))) ",
-                "(list_drop m (list_tail (ListType.cons KExpr x (list_append rest (ListType.cons KExpr a (ListType.nil KExpr)))))) ",
-                "(list_drop m (list_append rest (ListType.cons KExpr a (ListType.nil KExpr)))) ",
-                "(list_drop_succ m (ListType.cons KExpr x (list_append rest (ListType.cons KExpr a (ListType.nil KExpr))))) ",
-                "(Eq.cong (ListType KExpr) (ListType KExpr) (fun (L : ListType KExpr) => list_drop m L) ",
-                "(list_tail (ListType.cons KExpr x (list_append rest (ListType.cons KExpr a (ListType.nil KExpr))))) ",
-                "(list_append rest (ListType.cons KExpr a (ListType.nil KExpr))) ",
-                "(list_tail_cons x (list_append rest (ListType.cons KExpr a (ListType.nil KExpr)))))))) ",
+                "(@Eq.cong (ListType KExpr) (OptionType KExpr) (fun (L : ListType KExpr) => list_head L) ",
+                "(list_drop (Nat.succ m) (list_append (@ListType.cons KExpr x rest) (@ListType.cons KExpr a (@ListType.nil KExpr)))) ",
+                "(list_drop m (list_append rest (@ListType.cons KExpr a (@ListType.nil KExpr)))) ",
+                "(@Eq.trans (ListType KExpr) ",
+                "(list_drop (Nat.succ m) (list_append (@ListType.cons KExpr x rest) (@ListType.cons KExpr a (@ListType.nil KExpr)))) ",
+                "(list_drop (Nat.succ m) (@ListType.cons KExpr x (list_append rest (@ListType.cons KExpr a (@ListType.nil KExpr))))) ",
+                "(list_drop m (list_append rest (@ListType.cons KExpr a (@ListType.nil KExpr)))) ",
+                "(@Eq.cong (ListType KExpr) (ListType KExpr) (fun (L : ListType KExpr) => list_drop (Nat.succ m) L) ",
+                "(list_append (@ListType.cons KExpr x rest) (@ListType.cons KExpr a (@ListType.nil KExpr))) ",
+                "(@ListType.cons KExpr x (list_append rest (@ListType.cons KExpr a (@ListType.nil KExpr)))) ",
+                "(list_append_cons x rest (@ListType.cons KExpr a (@ListType.nil KExpr)))) ",
+                "(@Eq.trans (ListType KExpr) ",
+                "(list_drop (Nat.succ m) (@ListType.cons KExpr x (list_append rest (@ListType.cons KExpr a (@ListType.nil KExpr))))) ",
+                "(list_drop m (list_tail (@ListType.cons KExpr x (list_append rest (@ListType.cons KExpr a (@ListType.nil KExpr)))))) ",
+                "(list_drop m (list_append rest (@ListType.cons KExpr a (@ListType.nil KExpr)))) ",
+                "(list_drop_succ m (@ListType.cons KExpr x (list_append rest (@ListType.cons KExpr a (@ListType.nil KExpr))))) ",
+                "(@Eq.cong (ListType KExpr) (ListType KExpr) (fun (L : ListType KExpr) => list_drop m L) ",
+                "(list_tail (@ListType.cons KExpr x (list_append rest (@ListType.cons KExpr a (@ListType.nil KExpr))))) ",
+                "(list_append rest (@ListType.cons KExpr a (@ListType.nil KExpr))) ",
+                "(list_tail_cons x (list_append rest (@ListType.cons KExpr a (@ListType.nil KExpr)))))))) ",
                 // head (drop m (rest++[a])) = some major via ih on rest with h_rest
                 "(_ihinner_m rest ",
                 // h_rest : head (drop m rest) = some major, from h.
-                "(Eq.trans (OptionType KExpr) ",
+                "(@Eq.trans (OptionType KExpr) ",
                 "(list_head (list_drop m rest)) ",
-                "(list_head (list_drop (Nat.succ m) (ListType.cons KExpr x rest))) ",
-                "(OptionType.some KExpr major) ",
-                "(Eq.cong (ListType KExpr) (OptionType KExpr) (fun (L : ListType KExpr) => list_head L) ",
-                "(list_drop m rest) (list_drop (Nat.succ m) (ListType.cons KExpr x rest)) ",
-                "(Eq.symm (ListType KExpr) ",
-                "(list_drop (Nat.succ m) (ListType.cons KExpr x rest)) (list_drop m rest) ",
-                "(Eq.trans (ListType KExpr) ",
-                "(list_drop (Nat.succ m) (ListType.cons KExpr x rest)) ",
-                "(list_drop m (list_tail (ListType.cons KExpr x rest))) ",
+                "(list_head (list_drop (Nat.succ m) (@ListType.cons KExpr x rest))) ",
+                "(@OptionType.some KExpr major) ",
+                "(@Eq.cong (ListType KExpr) (OptionType KExpr) (fun (L : ListType KExpr) => list_head L) ",
+                "(list_drop m rest) (list_drop (Nat.succ m) (@ListType.cons KExpr x rest)) ",
+                "(@Eq.symm (ListType KExpr) ",
+                "(list_drop (Nat.succ m) (@ListType.cons KExpr x rest)) (list_drop m rest) ",
+                "(@Eq.trans (ListType KExpr) ",
+                "(list_drop (Nat.succ m) (@ListType.cons KExpr x rest)) ",
+                "(list_drop m (list_tail (@ListType.cons KExpr x rest))) ",
                 "(list_drop m rest) ",
-                "(list_drop_succ m (ListType.cons KExpr x rest)) ",
-                "(Eq.cong (ListType KExpr) (ListType KExpr) (fun (L : ListType KExpr) => list_drop m L) ",
-                "(list_tail (ListType.cons KExpr x rest)) rest (list_tail_cons x rest))))) ",
+                "(list_drop_succ m (@ListType.cons KExpr x rest)) ",
+                "(@Eq.cong (ListType KExpr) (ListType KExpr) (fun (L : ListType KExpr) => list_drop m L) ",
+                "(list_tail (@ListType.cons KExpr x rest)) rest (list_tail_cons x rest))))) ",
                 "h)))"
             );
-            let succ_goal = "Eq (OptionType KExpr) (list_head (list_drop (Nat.succ m) (list_append (ListType.nil KExpr) (ListType.cons KExpr a (ListType.nil KExpr))))) (OptionType.some KExpr major)";
+            let succ_goal = "@Eq (OptionType KExpr) (list_head (list_drop (Nat.succ m) (list_append (@ListType.nil KExpr) (@ListType.cons KExpr a (@ListType.nil KExpr))))) (@OptionType.some KExpr major)";
             let succ_arm = format!(
                 concat!(
                     "(fun (m : Nat) ",
-                    "(_ihinner_m : forall (xs0 : ListType KExpr), Eq (OptionType KExpr) (list_head (list_drop m xs0)) (OptionType.some KExpr major) -> ",
-                    "Eq (OptionType KExpr) (list_head (list_drop m (list_append xs0 (ListType.cons KExpr a (ListType.nil KExpr))))) (OptionType.some KExpr major)) => ",
+                    "(_ihinner_m : forall (xs0 : ListType KExpr), @Eq (OptionType KExpr) (list_head (list_drop m xs0)) (@OptionType.some KExpr major) -> ",
+                    "@Eq (OptionType KExpr) (list_head (list_drop m (list_append xs0 (@ListType.cons KExpr a (@ListType.nil KExpr))))) (@OptionType.some KExpr major)) => ",
                     "fun (xs0 : ListType KExpr) ",
-                    "(h : Eq (OptionType KExpr) (list_head (list_drop (Nat.succ m) xs0)) (OptionType.some KExpr major)) => ",
-                    "ListType.rec KExpr ",
-                    "(fun (xs1 : ListType KExpr) => Eq (OptionType KExpr) (list_head (list_drop (Nat.succ m) xs1)) (OptionType.some KExpr major) -> ",
-                    "Eq (OptionType KExpr) (list_head (list_drop (Nat.succ m) (list_append xs1 (ListType.cons KExpr a (ListType.nil KExpr))))) (OptionType.some KExpr major)) ",
+                    "(h : @Eq (OptionType KExpr) (list_head (list_drop (Nat.succ m) xs0)) (@OptionType.some KExpr major)) => ",
+                    "@ListType.rec KExpr ",
+                    "(fun (xs1 : ListType KExpr) => @Eq (OptionType KExpr) (list_head (list_drop (Nat.succ m) xs1)) (@OptionType.some KExpr major) -> ",
+                    "@Eq (OptionType KExpr) (list_head (list_drop (Nat.succ m) (list_append xs1 (@ListType.cons KExpr a (@ListType.nil KExpr))))) (@OptionType.some KExpr major)) ",
                     "{nil_absurd} ",
                     "{succ_cons} ",
                     "xs0 h)"
@@ -1324,10 +1326,10 @@ iota_reduct_full_inv env e e' (Eq (OptionType KExpr) (iota_reduct env (instantia
             let value = format!(
                 concat!(
                     "fun (k : Nat) (xs : ListType KExpr) (a : KExpr) (major : KExpr) ",
-                    "(hin : Eq (OptionType KExpr) (list_head (list_drop k xs)) (OptionType.some KExpr major)) => ",
-                    "Nat.rec ",
-                    "(fun (k0 : Nat) => forall (xs0 : ListType KExpr), Eq (OptionType KExpr) (list_head (list_drop k0 xs0)) (OptionType.some KExpr major) -> ",
-                    "Eq (OptionType KExpr) (list_head (list_drop k0 (list_append xs0 (ListType.cons KExpr a (ListType.nil KExpr))))) (OptionType.some KExpr major)) ",
+                    "(hin : @Eq (OptionType KExpr) (list_head (list_drop k xs)) (@OptionType.some KExpr major)) => ",
+                    "@Nat.rec ",
+                    "(fun (k0 : Nat) => forall (xs0 : ListType KExpr), @Eq (OptionType KExpr) (list_head (list_drop k0 xs0)) (@OptionType.some KExpr major) -> ",
+                    "@Eq (OptionType KExpr) (list_head (list_drop k0 (list_append xs0 (@ListType.cons KExpr a (@ListType.nil KExpr))))) (@OptionType.some KExpr major)) ",
                     "{zero_arm} ",
                     "{succ_arm} ",
                     "k xs hin"
@@ -1340,8 +1342,8 @@ iota_reduct_full_inv env e e' (Eq (OptionType KExpr) (iota_reduct env (instantia
                 name: "list_head_drop_append_some".to_string(),
                 type_src: concat!(
                     "forall (k : Nat) (xs : ListType KExpr) (a : KExpr) (major : KExpr), ",
-                    "Eq (OptionType KExpr) (list_head (list_drop k xs)) (OptionType.some KExpr major) -> ",
-                    "Eq (OptionType KExpr) (list_head (list_drop k (list_append xs (ListType.cons KExpr a (ListType.nil KExpr))))) (OptionType.some KExpr major)"
+                    "@Eq (OptionType KExpr) (list_head (list_drop k xs)) (@OptionType.some KExpr major) -> ",
+                    "@Eq (OptionType KExpr) (list_head (list_drop k (list_append xs (@ListType.cons KExpr a (@ListType.nil KExpr))))) (@OptionType.some KExpr major)"
                 )
                 .to_string(),
                 value_src: Some(value),
@@ -1386,24 +1388,24 @@ iota_reduct_full_inv env e e' (Eq (OptionType KExpr) (iota_reduct env (instantia
         // apply_spine_snoc, finishing with option_some_inj.
         self.add_definition(SpecDefinition {
             name: "iota_reduct_app_over".to_string(),
-            type_src: r#"forall (env : RecEnv) (f : KExpr) (a : KExpr) (f1 : KExpr), (forall (rn : Name) (m0 : RecMeta), Eq (OptionType Name) (kexpr_const_name (kapp_fn f)) (OptionType.some Name rn) -> Eq (OptionType RecMeta) (recmeta_for env rn) (OptionType.some RecMeta m0) -> Le (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params m0) (recmeta_num_motives m0)) (recmeta_num_minors m0)) (recmeta_num_indices m0))) (list_length (kapp_args f))) -> (forall (rn : Name) (m0 : RecMeta), Eq (OptionType Name) (kexpr_const_name (kapp_fn f)) (OptionType.some Name rn) -> Eq (OptionType RecMeta) (recmeta_for env rn) (OptionType.some RecMeta m0) -> Le (Nat.add (Nat.add (recmeta_num_params m0) (recmeta_num_motives m0)) (recmeta_num_minors m0)) (list_length (kapp_args f))) -> Eq (OptionType KExpr) (iota_reduct env f) (OptionType.some KExpr f1) -> Eq (OptionType KExpr) (iota_reduct env (KExpr.app f a)) (OptionType.some KExpr (KExpr.app f1 a))"#.to_string(),
+            type_src: r#"forall (env : RecEnv) (f : KExpr) (a : KExpr) (f1 : KExpr), (forall (rn : Name) (m0 : RecMeta), @Eq (OptionType Name) (kexpr_const_name (kapp_fn f)) (@OptionType.some Name rn) -> @Eq (OptionType RecMeta) (recmeta_for env rn) (@OptionType.some RecMeta m0) -> Le (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params m0) (recmeta_num_motives m0)) (recmeta_num_minors m0)) (recmeta_num_indices m0))) (list_length (kapp_args f))) -> (forall (rn : Name) (m0 : RecMeta), @Eq (OptionType Name) (kexpr_const_name (kapp_fn f)) (@OptionType.some Name rn) -> @Eq (OptionType RecMeta) (recmeta_for env rn) (@OptionType.some RecMeta m0) -> Le (Nat.add (Nat.add (recmeta_num_params m0) (recmeta_num_motives m0)) (recmeta_num_minors m0)) (list_length (kapp_args f))) -> @Eq (OptionType KExpr) (iota_reduct env f) (@OptionType.some KExpr f1) -> @Eq (OptionType KExpr) (iota_reduct env (KExpr.app f a)) (@OptionType.some KExpr (KExpr.app f1 a))"#.to_string(),
             value_src: Some(r"fun (env : RecEnv) (f : KExpr) (a : KExpr) (f1 : KExpr)
- (hov : (forall (rn : Name) (m0 : RecMeta), Eq (OptionType Name) (kexpr_const_name (kapp_fn f)) (OptionType.some Name rn) -> Eq (OptionType RecMeta) (recmeta_for env rn) (OptionType.some RecMeta m0) -> Le (Nat.succ (iota_major_index m0)) (list_length (kapp_args f)))) (hovp : (forall (rn : Name) (m0 : RecMeta), Eq (OptionType Name) (kexpr_const_name (kapp_fn f)) (OptionType.some Name rn) -> Eq (OptionType RecMeta) (recmeta_for env rn) (OptionType.some RecMeta m0) -> Le (iota_prefix_count m0) (list_length (kapp_args f)))) (h : Eq (OptionType KExpr) (iota_reduct env f) (OptionType.some KExpr f1)) =>
-iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app f a)) (OptionType.some KExpr (KExpr.app f1 a))) h
+ (hov : (forall (rn : Name) (m0 : RecMeta), @Eq (OptionType Name) (kexpr_const_name (kapp_fn f)) (@OptionType.some Name rn) -> @Eq (OptionType RecMeta) (recmeta_for env rn) (@OptionType.some RecMeta m0) -> Le (Nat.succ (iota_major_index m0)) (list_length (kapp_args f)))) (hovp : (forall (rn : Name) (m0 : RecMeta), @Eq (OptionType Name) (kexpr_const_name (kapp_fn f)) (@OptionType.some Name rn) -> @Eq (OptionType RecMeta) (recmeta_for env rn) (@OptionType.some RecMeta m0) -> Le (iota_prefix_count m0) (list_length (kapp_args f)))) (h : @Eq (OptionType KExpr) (iota_reduct env f) (@OptionType.some KExpr f1)) =>
+iota_reduct_full_inv env f f1 (@Eq (OptionType KExpr) (iota_reduct env (KExpr.app f a)) (@OptionType.some KExpr (KExpr.app f1 a))) h
  (fun (recname : Name) (mta : RecMeta) (major : KExpr) (cname : Name) (rule : RecRule)
- (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn f)) (OptionType.some Name recname))
- (h2 : Eq (OptionType RecMeta) (recmeta_for env recname) (OptionType.some RecMeta mta))
- (h3 : Eq (OptionType KExpr) (list_head (list_drop (iota_major_index mta) (kapp_args f))) (OptionType.some KExpr major))
- (h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname))
- (h5 : Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule))
- (fields : Eq Bool (iota_fields_ok rule (kapp_args major)) Bool.true)
- (arity : Eq Bool (nat_eqb (name_list_len (kconst_params (recmeta_signature mta))) (level_list_len (kexpr_const_levels (kapp_fn f)))) Bool.true) (returned : Eq KExpr f1 (iota_contractum mta rule (kapp_args f) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f))))) =>
+ (h1 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn f)) (@OptionType.some Name recname))
+ (h2 : @Eq (OptionType RecMeta) (recmeta_for env recname) (@OptionType.some RecMeta mta))
+ (h3 : @Eq (OptionType KExpr) (list_head (list_drop (iota_major_index mta) (kapp_args f))) (@OptionType.some KExpr major))
+ (h4 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (@OptionType.some Name cname))
+ (h5 : @Eq (OptionType RecRule) (recrule_for env recname cname) (@OptionType.some RecRule rule))
+ (fields : @Eq Bool (iota_fields_ok rule (kapp_args major)) Bool.true)
+ (arity : @Eq Bool (nat_eqb (name_list_len (kconst_params (recmeta_signature mta))) (level_list_len (kexpr_const_levels (kapp_fn f)))) Bool.true) (returned : @Eq KExpr f1 (iota_contractum mta rule (kapp_args f) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f))))) =>
  iota_reduct_full_recon env (KExpr.app f a) (KExpr.app f1 a) recname mta major cname rule
- h1 h2 (list_head_drop_append_some (iota_major_index mta) (kapp_args f) a major h3) h4 h5 fields arity (Eq.symm KExpr (iota_contractum mta rule (kapp_args (KExpr.app f a)) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f)))) (KExpr.app f1 a) (Eq.trans KExpr (iota_contractum mta rule (kapp_args (KExpr.app f a)) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f)))) (KExpr.app (iota_contractum mta rule (kapp_args f) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f)))) a) (KExpr.app f1 a) (Eq.trans KExpr (iota_contractum mta rule (kapp_args (KExpr.app f a)) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f)))) (apply_spine (list_append (list_drop (Nat.succ (iota_major_index mta)) (kapp_args f)) (ListType.cons KExpr a (ListType.nil KExpr))) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (iota_prefix_count mta) (kapp_args (KExpr.app f a))) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f)))))) (KExpr.app (iota_contractum mta rule (kapp_args f) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f)))) a)
- (Eq.cong (ListType KExpr) KExpr (fun (xs : ListType KExpr) => (apply_spine xs (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (iota_prefix_count mta) (kapp_args (KExpr.app f a))) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f))))))) (list_drop (Nat.succ (iota_major_index mta)) (kapp_args (KExpr.app f a))) (list_append (list_drop (Nat.succ (iota_major_index mta)) (kapp_args f)) (ListType.cons KExpr a (ListType.nil KExpr)))
- (list_drop_append_ge (Nat.succ (iota_major_index mta)) (kapp_args f) a (hov recname mta h1 h2))) (Eq.trans KExpr (apply_spine (list_append (list_drop (Nat.succ (iota_major_index mta)) (kapp_args f)) (ListType.cons KExpr a (ListType.nil KExpr))) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (iota_prefix_count mta) (kapp_args (KExpr.app f a))) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f)))))) (apply_spine (list_append (list_drop (Nat.succ (iota_major_index mta)) (kapp_args f)) (ListType.cons KExpr a (ListType.nil KExpr))) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (iota_prefix_count mta) (kapp_args f)) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f)))))) (KExpr.app (iota_contractum mta rule (kapp_args f) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f)))) a) (Eq.cong (ListType KExpr) KExpr (fun (xs : ListType KExpr) => (apply_spine (list_append (list_drop (Nat.succ (iota_major_index mta)) (kapp_args f)) (ListType.cons KExpr a (ListType.nil KExpr))) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine xs (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f))))))) (list_take (iota_prefix_count mta) (kapp_args (KExpr.app f a))) (list_take (iota_prefix_count mta) (kapp_args f))
+ h1 h2 (list_head_drop_append_some (iota_major_index mta) (kapp_args f) a major h3) h4 h5 fields arity (@Eq.symm KExpr (iota_contractum mta rule (kapp_args (KExpr.app f a)) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f)))) (KExpr.app f1 a) (@Eq.trans KExpr (iota_contractum mta rule (kapp_args (KExpr.app f a)) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f)))) (KExpr.app (iota_contractum mta rule (kapp_args f) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f)))) a) (KExpr.app f1 a) (@Eq.trans KExpr (iota_contractum mta rule (kapp_args (KExpr.app f a)) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f)))) (apply_spine (list_append (list_drop (Nat.succ (iota_major_index mta)) (kapp_args f)) (@ListType.cons KExpr a (@ListType.nil KExpr))) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (iota_prefix_count mta) (kapp_args (KExpr.app f a))) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f)))))) (KExpr.app (iota_contractum mta rule (kapp_args f) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f)))) a)
+ (@Eq.cong (ListType KExpr) KExpr (fun (xs : ListType KExpr) => (apply_spine xs (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (iota_prefix_count mta) (kapp_args (KExpr.app f a))) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f))))))) (list_drop (Nat.succ (iota_major_index mta)) (kapp_args (KExpr.app f a))) (list_append (list_drop (Nat.succ (iota_major_index mta)) (kapp_args f)) (@ListType.cons KExpr a (@ListType.nil KExpr)))
+ (list_drop_append_ge (Nat.succ (iota_major_index mta)) (kapp_args f) a (hov recname mta h1 h2))) (@Eq.trans KExpr (apply_spine (list_append (list_drop (Nat.succ (iota_major_index mta)) (kapp_args f)) (@ListType.cons KExpr a (@ListType.nil KExpr))) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (iota_prefix_count mta) (kapp_args (KExpr.app f a))) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f)))))) (apply_spine (list_append (list_drop (Nat.succ (iota_major_index mta)) (kapp_args f)) (@ListType.cons KExpr a (@ListType.nil KExpr))) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (iota_prefix_count mta) (kapp_args f)) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f)))))) (KExpr.app (iota_contractum mta rule (kapp_args f) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f)))) a) (@Eq.cong (ListType KExpr) KExpr (fun (xs : ListType KExpr) => (apply_spine (list_append (list_drop (Nat.succ (iota_major_index mta)) (kapp_args f)) (@ListType.cons KExpr a (@ListType.nil KExpr))) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine xs (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f))))))) (list_take (iota_prefix_count mta) (kapp_args (KExpr.app f a))) (list_take (iota_prefix_count mta) (kapp_args f))
  (list_take_append_le (iota_prefix_count mta) (kapp_args f) a (hovp recname mta h1 h2))) (apply_spine_snoc (list_drop (Nat.succ (iota_major_index mta)) (kapp_args f)) a (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (iota_prefix_count mta) (kapp_args f)) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f))))))))
- (Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.app x a) (iota_contractum mta rule (kapp_args f) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f)))) f1 (Eq.symm KExpr f1 (iota_contractum mta rule (kapp_args f) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f)))) returned)))))".to_string()),
+ (@Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.app x a) (iota_contractum mta rule (kapp_args f) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f)))) f1 (@Eq.symm KExpr f1 (iota_contractum mta rule (kapp_args f) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f)))) returned)))))".to_string()),
             is_axiom: false,
             description: "Direct guarded application-spine proof: retain actual field/arity guards from full inversion, transport the major window and spine segments, and reconstruct through the actual once-instantiated tail.".to_string(),
             category: AxiomCategory::DerivedLemma,
@@ -1451,16 +1453,16 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
             value_src: Some(
                 concat!(
                     "fun (a : Nat) (b : Nat) => ",
-                    "Nat.rec (fun (b0 : Nat) => Le a (Nat.add a b0)) ",
+                    "@Nat.rec (fun (b0 : Nat) => Le a (Nat.add a b0)) ",
                     // zero: Le a (a + 0); transport Le a a along (a = a + 0).
-                    "(Eq.subst Nat (fun (z : Nat) => Le a z) a (Nat.add a Nat.zero) ",
-                    "(Eq.symm Nat (Nat.add a Nat.zero) a (nat_add_zero_right a)) ",
+                    "(@Eq.subst Nat (fun (z : Nat) => Le a z) a (Nat.add a Nat.zero) ",
+                    "(@Eq.symm Nat (Nat.add a Nat.zero) a (nat_add_zero_right a)) ",
                     "(Le.refl a)) ",
                     // succ: Le a (a + succ m); from IH Le a (a + m), Le.step gives
                     // Le a (succ (a + m)); transport along (succ (a+m) = a + succ m).
                     "(fun (m : Nat) (ih : Le a (Nat.add a m)) => ",
-                    "Eq.subst Nat (fun (z : Nat) => Le a z) (Nat.succ (Nat.add a m)) (Nat.add a (Nat.succ m)) ",
-                    "(Eq.symm Nat (Nat.add a (Nat.succ m)) (Nat.succ (Nat.add a m)) (nat_add_succ_right a m)) ",
+                    "@Eq.subst Nat (fun (z : Nat) => Le a z) (Nat.succ (Nat.add a m)) (Nat.add a (Nat.succ m)) ",
+                    "(@Eq.symm Nat (Nat.add a (Nat.succ m)) (Nat.succ (Nat.add a m)) (nat_add_succ_right a m)) ",
                     "(Le.step a (Nat.add a m) ih)) ",
                     "b"
                 )
@@ -1501,20 +1503,20 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
             let nil_absurd = |kcnt: &str| -> String {
                 format!(
                     concat!(
-                        "(fun (h_nil : Eq (OptionType KExpr) (list_head (list_drop {kcnt} (ListType.nil KExpr))) (OptionType.some KExpr y)) => ",
-                        "option_none_ne_some KExpr y (Le (Nat.succ {kcnt}) (list_length (ListType.nil KExpr))) ",
-                        "(Eq.trans (OptionType KExpr) ",
-                        "(OptionType.none KExpr) ",
-                        "(list_head (list_drop {kcnt} (ListType.nil KExpr))) ",
-                        "(OptionType.some KExpr y) ",
+                        "(fun (h_nil : @Eq (OptionType KExpr) (list_head (list_drop {kcnt} (@ListType.nil KExpr))) (@OptionType.some KExpr y)) => ",
+                        "option_none_ne_some KExpr y (Le (Nat.succ {kcnt}) (list_length (@ListType.nil KExpr))) ",
+                        "(@Eq.trans (OptionType KExpr) ",
+                        "(@OptionType.none KExpr) ",
+                        "(list_head (list_drop {kcnt} (@ListType.nil KExpr))) ",
+                        "(@OptionType.some KExpr y) ",
                         // none = head (drop KCNT nil): symm of (drop KCNT nil = nil; head nil = none)
-                        "(Eq.symm (OptionType KExpr) (list_head (list_drop {kcnt} (ListType.nil KExpr))) (OptionType.none KExpr) ",
-                        "(Eq.trans (OptionType KExpr) ",
-                        "(list_head (list_drop {kcnt} (ListType.nil KExpr))) ",
-                        "(list_head (ListType.nil KExpr)) ",
-                        "(OptionType.none KExpr) ",
-                        "(Eq.cong (ListType KExpr) (OptionType KExpr) (fun (L : ListType KExpr) => list_head L) ",
-                        "(list_drop {kcnt} (ListType.nil KExpr)) (ListType.nil KExpr) (list_drop_nil {kcnt})) ",
+                        "(@Eq.symm (OptionType KExpr) (list_head (list_drop {kcnt} (@ListType.nil KExpr))) (@OptionType.none KExpr) ",
+                        "(@Eq.trans (OptionType KExpr) ",
+                        "(list_head (list_drop {kcnt} (@ListType.nil KExpr))) ",
+                        "(list_head (@ListType.nil KExpr)) ",
+                        "(@OptionType.none KExpr) ",
+                        "(@Eq.cong (ListType KExpr) (OptionType KExpr) (fun (L : ListType KExpr) => list_head L) ",
+                        "(list_drop {kcnt} (@ListType.nil KExpr)) (@ListType.nil KExpr) (list_drop_nil {kcnt})) ",
                         "list_head_nil)) ",
                         "h_nil))"
                     ),
@@ -1525,20 +1527,20 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
             // zero arm: forall xs0, head (drop 0 xs0) = some y -> Le (succ 0) (length xs0).
             let zero_cons = concat!(
                 "(fun (x : KExpr) (rest : ListType KExpr) ",
-                "(_ihc : Eq (OptionType KExpr) (list_head (list_drop Nat.zero rest)) (OptionType.some KExpr y) -> Le (Nat.succ Nat.zero) (list_length rest)) ",
-                "(_h : Eq (OptionType KExpr) (list_head (list_drop Nat.zero (ListType.cons KExpr x rest))) (OptionType.some KExpr y)) => ",
+                "(_ihc : @Eq (OptionType KExpr) (list_head (list_drop Nat.zero rest)) (@OptionType.some KExpr y) -> Le (Nat.succ Nat.zero) (list_length rest)) ",
+                "(_h : @Eq (OptionType KExpr) (list_head (list_drop Nat.zero (@ListType.cons KExpr x rest))) (@OptionType.some KExpr y)) => ",
                 // Le (succ 0) (length (x::rest)); length (x::rest) = succ (length rest).
-                "Eq.subst Nat (fun (z : Nat) => Le (Nat.succ Nat.zero) z) ",
-                "(Nat.succ (list_length rest)) (list_length (ListType.cons KExpr x rest)) ",
-                "(Eq.symm Nat (list_length (ListType.cons KExpr x rest)) (Nat.succ (list_length rest)) (list_length_cons x rest)) ",
+                "@Eq.subst Nat (fun (z : Nat) => Le (Nat.succ Nat.zero) z) ",
+                "(Nat.succ (list_length rest)) (list_length (@ListType.cons KExpr x rest)) ",
+                "(@Eq.symm Nat (list_length (@ListType.cons KExpr x rest)) (Nat.succ (list_length rest)) (list_length_cons x rest)) ",
                 "(le_succ_succ Nat.zero (list_length rest) (le_zero_n (list_length rest))))"
             );
             let zero_arm = format!(
                 concat!(
                     "(fun (xs0 : ListType KExpr) ",
-                    "(h : Eq (OptionType KExpr) (list_head (list_drop Nat.zero xs0)) (OptionType.some KExpr y)) => ",
-                    "ListType.rec KExpr ",
-                    "(fun (xs1 : ListType KExpr) => Eq (OptionType KExpr) (list_head (list_drop Nat.zero xs1)) (OptionType.some KExpr y) -> Le (Nat.succ Nat.zero) (list_length xs1)) ",
+                    "(h : @Eq (OptionType KExpr) (list_head (list_drop Nat.zero xs0)) (@OptionType.some KExpr y)) => ",
+                    "@ListType.rec KExpr ",
+                    "(fun (xs1 : ListType KExpr) => @Eq (OptionType KExpr) (list_head (list_drop Nat.zero xs1)) (@OptionType.some KExpr y) -> Le (Nat.succ Nat.zero) (list_length xs1)) ",
                     "{nil_absurd} ",
                     "{zero_cons} ",
                     "xs0 h)"
@@ -1550,41 +1552,41 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
             // succ arm: m + ih (forall xs0, head (drop m xs0)=some y -> Le (succ m)(length xs0)).
             let succ_cons = concat!(
                 "(fun (x : KExpr) (rest : ListType KExpr) ",
-                "(_ihc : Eq (OptionType KExpr) (list_head (list_drop (Nat.succ m) rest)) (OptionType.some KExpr y) -> Le (Nat.succ (Nat.succ m)) (list_length rest)) ",
-                "(h : Eq (OptionType KExpr) (list_head (list_drop (Nat.succ m) (ListType.cons KExpr x rest))) (OptionType.some KExpr y)) => ",
+                "(_ihc : @Eq (OptionType KExpr) (list_head (list_drop (Nat.succ m) rest)) (@OptionType.some KExpr y) -> Le (Nat.succ (Nat.succ m)) (list_length rest)) ",
+                "(h : @Eq (OptionType KExpr) (list_head (list_drop (Nat.succ m) (@ListType.cons KExpr x rest))) (@OptionType.some KExpr y)) => ",
                 // head (drop (succ m)(x::rest)) = head (drop m rest); so ih rest applies.
                 // Goal: Le (succ (succ m)) (length (x::rest)) = Le (succ(succ m))(succ(length rest)).
-                "Eq.subst Nat (fun (z : Nat) => Le (Nat.succ (Nat.succ m)) z) ",
-                "(Nat.succ (list_length rest)) (list_length (ListType.cons KExpr x rest)) ",
-                "(Eq.symm Nat (list_length (ListType.cons KExpr x rest)) (Nat.succ (list_length rest)) (list_length_cons x rest)) ",
+                "@Eq.subst Nat (fun (z : Nat) => Le (Nat.succ (Nat.succ m)) z) ",
+                "(Nat.succ (list_length rest)) (list_length (@ListType.cons KExpr x rest)) ",
+                "(@Eq.symm Nat (list_length (@ListType.cons KExpr x rest)) (Nat.succ (list_length rest)) (list_length_cons x rest)) ",
                 "(le_succ_succ (Nat.succ m) (list_length rest) ",
                 // ih rest applied to: head (drop m rest) = some y, derived from h.
                 "(_ihinner rest ",
-                "(Eq.trans (OptionType KExpr) ",
+                "(@Eq.trans (OptionType KExpr) ",
                 "(list_head (list_drop m rest)) ",
-                "(list_head (list_drop (Nat.succ m) (ListType.cons KExpr x rest))) ",
-                "(OptionType.some KExpr y) ",
+                "(list_head (list_drop (Nat.succ m) (@ListType.cons KExpr x rest))) ",
+                "(@OptionType.some KExpr y) ",
                 // head (drop m rest) = head (drop (succ m)(x::rest)): symm of the unfold.
-                "(Eq.cong (ListType KExpr) (OptionType KExpr) (fun (L : ListType KExpr) => list_head L) ",
-                "(list_drop m rest) (list_drop (Nat.succ m) (ListType.cons KExpr x rest)) ",
-                "(Eq.symm (ListType KExpr) (list_drop (Nat.succ m) (ListType.cons KExpr x rest)) (list_drop m rest) ",
-                "(Eq.trans (ListType KExpr) ",
-                "(list_drop (Nat.succ m) (ListType.cons KExpr x rest)) ",
-                "(list_drop m (list_tail (ListType.cons KExpr x rest))) ",
+                "(@Eq.cong (ListType KExpr) (OptionType KExpr) (fun (L : ListType KExpr) => list_head L) ",
+                "(list_drop m rest) (list_drop (Nat.succ m) (@ListType.cons KExpr x rest)) ",
+                "(@Eq.symm (ListType KExpr) (list_drop (Nat.succ m) (@ListType.cons KExpr x rest)) (list_drop m rest) ",
+                "(@Eq.trans (ListType KExpr) ",
+                "(list_drop (Nat.succ m) (@ListType.cons KExpr x rest)) ",
+                "(list_drop m (list_tail (@ListType.cons KExpr x rest))) ",
                 "(list_drop m rest) ",
-                "(list_drop_succ m (ListType.cons KExpr x rest)) ",
-                "(Eq.cong (ListType KExpr) (ListType KExpr) (fun (L : ListType KExpr) => list_drop m L) ",
-                "(list_tail (ListType.cons KExpr x rest)) rest (list_tail_cons x rest))))) ",
+                "(list_drop_succ m (@ListType.cons KExpr x rest)) ",
+                "(@Eq.cong (ListType KExpr) (ListType KExpr) (fun (L : ListType KExpr) => list_drop m L) ",
+                "(list_tail (@ListType.cons KExpr x rest)) rest (list_tail_cons x rest))))) ",
                 "h)))) "
             );
             let succ_arm = format!(
                 concat!(
                     "(fun (m : Nat) ",
-                    "(_ihinner : forall (xs0 : ListType KExpr), Eq (OptionType KExpr) (list_head (list_drop m xs0)) (OptionType.some KExpr y) -> Le (Nat.succ m) (list_length xs0)) => ",
+                    "(_ihinner : forall (xs0 : ListType KExpr), @Eq (OptionType KExpr) (list_head (list_drop m xs0)) (@OptionType.some KExpr y) -> Le (Nat.succ m) (list_length xs0)) => ",
                     "fun (xs0 : ListType KExpr) ",
-                    "(h : Eq (OptionType KExpr) (list_head (list_drop (Nat.succ m) xs0)) (OptionType.some KExpr y)) => ",
-                    "ListType.rec KExpr ",
-                    "(fun (xs1 : ListType KExpr) => Eq (OptionType KExpr) (list_head (list_drop (Nat.succ m) xs1)) (OptionType.some KExpr y) -> Le (Nat.succ (Nat.succ m)) (list_length xs1)) ",
+                    "(h : @Eq (OptionType KExpr) (list_head (list_drop (Nat.succ m) xs0)) (@OptionType.some KExpr y)) => ",
+                    "@ListType.rec KExpr ",
+                    "(fun (xs1 : ListType KExpr) => @Eq (OptionType KExpr) (list_head (list_drop (Nat.succ m) xs1)) (@OptionType.some KExpr y) -> Le (Nat.succ (Nat.succ m)) (list_length xs1)) ",
                     "{nil_absurd} ",
                     "{succ_cons} ",
                     "xs0 h)"
@@ -1596,9 +1598,9 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
             let value = format!(
                 concat!(
                     "fun (k : Nat) (xs : ListType KExpr) (y : KExpr) ",
-                    "(hin : Eq (OptionType KExpr) (list_head (list_drop k xs)) (OptionType.some KExpr y)) => ",
-                    "Nat.rec ",
-                    "(fun (k0 : Nat) => forall (xs0 : ListType KExpr), Eq (OptionType KExpr) (list_head (list_drop k0 xs0)) (OptionType.some KExpr y) -> Le (Nat.succ k0) (list_length xs0)) ",
+                    "(hin : @Eq (OptionType KExpr) (list_head (list_drop k xs)) (@OptionType.some KExpr y)) => ",
+                    "@Nat.rec ",
+                    "(fun (k0 : Nat) => forall (xs0 : ListType KExpr), @Eq (OptionType KExpr) (list_head (list_drop k0 xs0)) (@OptionType.some KExpr y) -> Le (Nat.succ k0) (list_length xs0)) ",
                     "{zero_arm} ",
                     "{succ_arm} ",
                     "k xs hin"
@@ -1611,7 +1613,7 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
                 name: "list_head_drop_some_le_succ".to_string(),
                 type_src: concat!(
                     "forall (k : Nat) (xs : ListType KExpr) (y : KExpr), ",
-                    "Eq (OptionType KExpr) (list_head (list_drop k xs)) (OptionType.some KExpr y) -> ",
+                    "@Eq (OptionType KExpr) (list_head (list_drop k xs)) (@OptionType.some KExpr y) -> ",
                     "Le (Nat.succ k) (list_length xs)"
                 )
                 .to_string(),
@@ -1682,16 +1684,16 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
             // (head=some rn) via option_some_inj on the common head lookup.
             let hrn_expr = concat!(
                 "(option_some_inj Name recname rn ",
-                "(Eq.trans (OptionType Name) (OptionType.some Name recname) (kexpr_const_name (kapp_fn f)) (OptionType.some Name rn) ",
-                "(Eq.symm (OptionType Name) (kexpr_const_name (kapp_fn f)) (OptionType.some Name recname) h1) ",
+                "(@Eq.trans (OptionType Name) (@OptionType.some Name recname) (kexpr_const_name (kapp_fn f)) (@OptionType.some Name rn) ",
+                "(@Eq.symm (OptionType Name) (kexpr_const_name (kapp_fn f)) (@OptionType.some Name recname) h1) ",
                 "h1'))"
             );
             // h2recname_expr : Eq (OptionType RecMeta) (recmeta_for env recname) (some m0),
             // by rewriting h2' (over rn) along rn=recname (symm hrn_expr).
             let h2recname_expr = format!(
                 concat!(
-                    "(Eq.substType Name (fun (n : Name) => Eq (OptionType RecMeta) (recmeta_for env n) (OptionType.some RecMeta m0)) rn recname ",
-                    "(Eq.symm Name recname rn {hrn_expr}) h2')"
+                    "(@Eq.substType Name (fun (n : Name) => @Eq (OptionType RecMeta) (recmeta_for env n) (@OptionType.some RecMeta m0)) rn recname ",
+                    "(@Eq.symm Name recname rn {hrn_expr}) h2')"
                 ),
                 hrn_expr = hrn_expr,
             );
@@ -1700,8 +1702,8 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
             let meta_eq_m0 = format!(
                 concat!(
                     "(option_some_inj RecMeta meta m0 ",
-                    "(Eq.trans (OptionType RecMeta) (OptionType.some RecMeta meta) (recmeta_for env recname) (OptionType.some RecMeta m0) ",
-                    "(Eq.symm (OptionType RecMeta) (recmeta_for env recname) (OptionType.some RecMeta meta) h2) ",
+                    "(@Eq.trans (OptionType RecMeta) (@OptionType.some RecMeta meta) (recmeta_for env recname) (@OptionType.some RecMeta m0) ",
+                    "(@Eq.symm (OptionType RecMeta) (recmeta_for env recname) (@OptionType.some RecMeta meta) h2) ",
                     "{h2recname_expr}))"
                 ),
                 h2recname_expr = h2recname_expr,
@@ -1711,10 +1713,10 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
             let hov = format!(
                 concat!(
                     "(fun (rn : Name) (m0 : RecMeta) ",
-                    "(h1' : Eq (OptionType Name) (kexpr_const_name (kapp_fn f)) (OptionType.some Name rn)) ",
-                    "(h2' : Eq (OptionType RecMeta) (recmeta_for env rn) (OptionType.some RecMeta m0)) => ",
+                    "(h1' : @Eq (OptionType Name) (kexpr_const_name (kapp_fn f)) (@OptionType.some Name rn)) ",
+                    "(h2' : @Eq (OptionType RecMeta) (recmeta_for env rn) (@OptionType.some RecMeta m0)) => ",
                     // rewrite goal Le (succ majidx(m0)) len  <- Le (succ majidx(meta)) len  along meta=m0
-                    "Eq.substType RecMeta (fun (mm : RecMeta) => Le (Nat.succ {majidx_mm}) {len_f}) meta m0 ",
+                    "@Eq.substType RecMeta (fun (mm : RecMeta) => Le (Nat.succ {majidx_mm}) {len_f}) meta m0 ",
                     "{meta_eq_m0} ",
                     "(list_head_drop_some_le_succ {majidx_meta} (kapp_args f) major h3))"
                 ),
@@ -1749,9 +1751,9 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
             let hovp = format!(
                 concat!(
                     "(fun (rn : Name) (m0 : RecMeta) ",
-                    "(h1' : Eq (OptionType Name) (kexpr_const_name (kapp_fn f)) (OptionType.some Name rn)) ",
-                    "(h2' : Eq (OptionType RecMeta) (recmeta_for env rn) (OptionType.some RecMeta m0)) => ",
-                    "Eq.substType RecMeta (fun (mm : RecMeta) => Le {prefix_mm} {len_f}) meta m0 ",
+                    "(h1' : @Eq (OptionType Name) (kexpr_const_name (kapp_fn f)) (@OptionType.some Name rn)) ",
+                    "(h2' : @Eq (OptionType RecMeta) (recmeta_for env rn) (@OptionType.some RecMeta m0)) => ",
+                    "@Eq.substType RecMeta (fun (mm : RecMeta) => Le {prefix_mm} {len_f}) meta m0 ",
                     "{meta_eq_m0} ",
                     "{prefix_le_len_meta})"
                 ),
@@ -1764,7 +1766,7 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
             // h3 type (as recovered by iota_reduct_some_inv) uses the explicit
             // major_idx form; the inversion's continuation binds exactly h1..h5,h5r.
             let h3_type = format!(
-                "Eq (OptionType KExpr) (list_head (list_drop {majidx_meta} (kapp_args f))) (OptionType.some KExpr major)",
+                "@Eq (OptionType KExpr) (list_head (list_drop {majidx_meta} (kapp_args f))) (@OptionType.some KExpr major)",
                 majidx_meta = majidx_meta,
             );
             let h5r_reduct = format!(
@@ -1780,17 +1782,17 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
             let value = format!(
                 concat!(
                     "fun (env : RecEnv) (f : KExpr) (a : KExpr) (f1 : KExpr) ",
-                    "(hf : Eq (OptionType KExpr) (iota_reduct env f) (OptionType.some KExpr f1)) => ",
+                    "(hf : @Eq (OptionType KExpr) (iota_reduct env f) (@OptionType.some KExpr f1)) => ",
                     "iota_reduct_some_inv env f f1 ",
-                    "(Eq (OptionType KExpr) (iota_reduct env (KExpr.app f a)) (OptionType.some KExpr (KExpr.app f1 a))) ",
+                    "(@Eq (OptionType KExpr) (iota_reduct env (KExpr.app f a)) (@OptionType.some KExpr (KExpr.app f1 a))) ",
                     "hf ",
                     "(fun (recname : Name) (meta : RecMeta) (major : KExpr) (cname : Name) (rule : RecRule) ",
-                    "(h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn f)) (OptionType.some Name recname)) ",
-                    "(h2 : Eq (OptionType RecMeta) (recmeta_for env recname) (OptionType.some RecMeta meta)) ",
+                    "(h1 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn f)) (@OptionType.some Name recname)) ",
+                    "(h2 : @Eq (OptionType RecMeta) (recmeta_for env recname) (@OptionType.some RecMeta meta)) ",
                     "(h3 : {h3_type}) ",
-                    "(h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname)) ",
-                    "(h5 : Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule)) ",
-                    "(h5r : Eq (OptionType KExpr) (OptionType.some KExpr {h5r_reduct}) (OptionType.some KExpr f1)) => ",
+                    "(h4 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (@OptionType.some Name cname)) ",
+                    "(h5 : @Eq (OptionType RecRule) (recrule_for env recname cname) (@OptionType.some RecRule rule)) ",
+                    "(h5r : @Eq (OptionType KExpr) (@OptionType.some KExpr {h5r_reduct}) (@OptionType.some KExpr f1)) => ",
                     "iota_reduct_app_over env f a f1 {hov} {hovp} hf)"
                 ),
                 h3_type = h3_type,
@@ -1803,8 +1805,8 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
                 name: "iota_reduct_app_some".to_string(),
                 type_src: concat!(
                     "forall (env : RecEnv) (f : KExpr) (a : KExpr) (f1 : KExpr), ",
-                    "Eq (OptionType KExpr) (iota_reduct env f) (OptionType.some KExpr f1) -> ",
-                    "Eq (OptionType KExpr) (iota_reduct env (KExpr.app f a)) (OptionType.some KExpr (KExpr.app f1 a))"
+                    "@Eq (OptionType KExpr) (iota_reduct env f) (@OptionType.some KExpr f1) -> ",
+                    "@Eq (OptionType KExpr) (iota_reduct env (KExpr.app f a)) (@OptionType.some KExpr (KExpr.app f1 a))"
                 )
                 .to_string(),
                 value_src: Some(value),
@@ -1846,31 +1848,31 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
             name: "iota_reduct_app_none".to_string(),
             type_src: concat!(
                 "forall (env : RecEnv) (f : KExpr) (a : KExpr), ",
-                "Eq (OptionType KExpr) (iota_reduct env (KExpr.app f a)) (OptionType.none KExpr) -> ",
-                "Eq (OptionType KExpr) (iota_reduct env f) (OptionType.none KExpr)"
+                "@Eq (OptionType KExpr) (iota_reduct env (KExpr.app f a)) (@OptionType.none KExpr) -> ",
+                "@Eq (OptionType KExpr) (iota_reduct env f) (@OptionType.none KExpr)"
             )
             .to_string(),
             value_src: Some(
                 concat!(
                     "fun (env : RecEnv) (f : KExpr) (a : KExpr) ",
-                    "(hnone : Eq (OptionType KExpr) (iota_reduct env (KExpr.app f a)) (OptionType.none KExpr)) => ",
-                    "OptionType.rec KExpr ",
+                    "(hnone : @Eq (OptionType KExpr) (iota_reduct env (KExpr.app f a)) (@OptionType.none KExpr)) => ",
+                    "@OptionType.rec KExpr ",
                     // motive: M o := (iota_reduct env f = o) -> (iota_reduct env f = none)
-                    "(fun (o : OptionType KExpr) => Eq (OptionType KExpr) (iota_reduct env f) o -> Eq (OptionType KExpr) (iota_reduct env f) (OptionType.none KExpr)) ",
+                    "(fun (o : OptionType KExpr) => @Eq (OptionType KExpr) (iota_reduct env f) o -> @Eq (OptionType KExpr) (iota_reduct env f) (@OptionType.none KExpr)) ",
                     // none arm: the carried equation is the goal.
-                    "(fun (heq : Eq (OptionType KExpr) (iota_reduct env f) (OptionType.none KExpr)) => heq) ",
+                    "(fun (heq : @Eq (OptionType KExpr) (iota_reduct env f) (@OptionType.none KExpr)) => heq) ",
                     // some arm: contradiction via iota_reduct_app_some + option_none_ne_some.
-                    "(fun (f1 : KExpr) (heq : Eq (OptionType KExpr) (iota_reduct env f) (OptionType.some KExpr f1)) => ",
-                    "option_none_ne_some KExpr (KExpr.app f1 a) (Eq (OptionType KExpr) (iota_reduct env f) (OptionType.none KExpr)) ",
-                    "(Eq.trans (OptionType KExpr) ",
-                    "(OptionType.none KExpr) ",
+                    "(fun (f1 : KExpr) (heq : @Eq (OptionType KExpr) (iota_reduct env f) (@OptionType.some KExpr f1)) => ",
+                    "option_none_ne_some KExpr (KExpr.app f1 a) (@Eq (OptionType KExpr) (iota_reduct env f) (@OptionType.none KExpr)) ",
+                    "(@Eq.trans (OptionType KExpr) ",
+                    "(@OptionType.none KExpr) ",
                     "(iota_reduct env (KExpr.app f a)) ",
-                    "(OptionType.some KExpr (KExpr.app f1 a)) ",
-                    "(Eq.symm (OptionType KExpr) (iota_reduct env (KExpr.app f a)) (OptionType.none KExpr) hnone) ",
+                    "(@OptionType.some KExpr (KExpr.app f1 a)) ",
+                    "(@Eq.symm (OptionType KExpr) (iota_reduct env (KExpr.app f a)) (@OptionType.none KExpr) hnone) ",
                     "(iota_reduct_app_some env f a f1 heq))) ",
                     // scrutinee + reflexivity seed.
                     "(iota_reduct env f) ",
-                    "(Eq.refl (OptionType KExpr) (iota_reduct env f))"
+                    "(@Eq.refl (OptionType KExpr) (iota_reduct env f))"
                 )
                 .to_string(),
             ),
@@ -1902,11 +1904,11 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
         // list_length_cons / list_append_cons / list_drop_succ / list_tail_cons,
         // landing on the IH (drop (length rest) (rest ++ [a])).
         {
-            let cons_a = "(ListType.cons KExpr a (ListType.nil KExpr))";
+            let cons_a = "(@ListType.cons KExpr a (@ListType.nil KExpr))";
             // The goal-shape predicate, parameterized by the concrete list L.
             let goal_for = |xs: &str| -> String {
                 format!(
-                    "Eq (OptionType KExpr) (list_head (list_drop (list_length {xs}) (list_append {xs} {cons_a}))) (OptionType.some KExpr a)"
+                    "@Eq (OptionType KExpr) (list_head (list_drop (list_length {xs}) (list_append {xs} {cons_a}))) (@OptionType.some KExpr a)"
                 )
             };
 
@@ -1914,28 +1916,28 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
             //   length nil -> 0 ; drop 0 (append nil [a]) -> append nil [a] ;
             //   append nil [a] -> [a] ; head [a] -> some a.
             let nil_arm = format!(
-                "(Eq.trans (OptionType KExpr) \
-                 (list_head (list_drop (list_length (ListType.nil KExpr)) (list_append (ListType.nil KExpr) {cons_a}))) \
-                 (list_head (list_drop Nat.zero (list_append (ListType.nil KExpr) {cons_a}))) \
-                 (OptionType.some KExpr a) \
-                 (Eq.cong Nat (OptionType KExpr) \
-                 (fun (N : Nat) => list_head (list_drop N (list_append (ListType.nil KExpr) {cons_a}))) \
-                 (list_length (ListType.nil KExpr)) Nat.zero list_length_nil) \
-                 (Eq.trans (OptionType KExpr) \
-                 (list_head (list_drop Nat.zero (list_append (ListType.nil KExpr) {cons_a}))) \
-                 (list_head (list_append (ListType.nil KExpr) {cons_a})) \
-                 (OptionType.some KExpr a) \
-                 (Eq.cong (ListType KExpr) (OptionType KExpr) (fun (L : ListType KExpr) => list_head L) \
-                 (list_drop Nat.zero (list_append (ListType.nil KExpr) {cons_a})) \
-                 (list_append (ListType.nil KExpr) {cons_a}) \
-                 (list_drop_zero (list_append (ListType.nil KExpr) {cons_a}))) \
-                 (Eq.trans (OptionType KExpr) \
-                 (list_head (list_append (ListType.nil KExpr) {cons_a})) \
+                "(@Eq.trans (OptionType KExpr) \
+                 (list_head (list_drop (list_length (@ListType.nil KExpr)) (list_append (@ListType.nil KExpr) {cons_a}))) \
+                 (list_head (list_drop Nat.zero (list_append (@ListType.nil KExpr) {cons_a}))) \
+                 (@OptionType.some KExpr a) \
+                 (@Eq.cong Nat (OptionType KExpr) \
+                 (fun (N : Nat) => list_head (list_drop N (list_append (@ListType.nil KExpr) {cons_a}))) \
+                 (list_length (@ListType.nil KExpr)) Nat.zero list_length_nil) \
+                 (@Eq.trans (OptionType KExpr) \
+                 (list_head (list_drop Nat.zero (list_append (@ListType.nil KExpr) {cons_a}))) \
+                 (list_head (list_append (@ListType.nil KExpr) {cons_a})) \
+                 (@OptionType.some KExpr a) \
+                 (@Eq.cong (ListType KExpr) (OptionType KExpr) (fun (L : ListType KExpr) => list_head L) \
+                 (list_drop Nat.zero (list_append (@ListType.nil KExpr) {cons_a})) \
+                 (list_append (@ListType.nil KExpr) {cons_a}) \
+                 (list_drop_zero (list_append (@ListType.nil KExpr) {cons_a}))) \
+                 (@Eq.trans (OptionType KExpr) \
+                 (list_head (list_append (@ListType.nil KExpr) {cons_a})) \
                  (list_head {cons_a}) \
-                 (OptionType.some KExpr a) \
-                 (Eq.cong (ListType KExpr) (OptionType KExpr) (fun (L : ListType KExpr) => list_head L) \
-                 (list_append (ListType.nil KExpr) {cons_a}) {cons_a} (list_append_nil {cons_a})) \
-                 (list_head_cons a (ListType.nil KExpr)))))"
+                 (@OptionType.some KExpr a) \
+                 (@Eq.cong (ListType KExpr) (OptionType KExpr) (fun (L : ListType KExpr) => list_head L) \
+                 (list_append (@ListType.nil KExpr) {cons_a}) {cons_a} (list_append_nil {cons_a})) \
+                 (list_head_cons a (@ListType.nil KExpr)))))"
             );
 
             // cons arm: x rest ih, ih = goal_for(rest).
@@ -1947,37 +1949,37 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
             let ih_ty = goal_for("rest");
             let cons_arm = format!(
                 "(fun (x : KExpr) (rest : ListType KExpr) (ih : {ih_ty}) => \
-                 Eq.trans (OptionType KExpr) \
-                 (list_head (list_drop (list_length (ListType.cons KExpr x rest)) (list_append (ListType.cons KExpr x rest) {cons_a}))) \
+                 @Eq.trans (OptionType KExpr) \
+                 (list_head (list_drop (list_length (@ListType.cons KExpr x rest)) (list_append (@ListType.cons KExpr x rest) {cons_a}))) \
                  (list_head (list_drop (list_length rest) (list_append rest {cons_a}))) \
-                 (OptionType.some KExpr a) \
-                 (Eq.trans (OptionType KExpr) \
-                 (list_head (list_drop (list_length (ListType.cons KExpr x rest)) (list_append (ListType.cons KExpr x rest) {cons_a}))) \
-                 (list_head (list_drop (Nat.succ (list_length rest)) (list_append (ListType.cons KExpr x rest) {cons_a}))) \
+                 (@OptionType.some KExpr a) \
+                 (@Eq.trans (OptionType KExpr) \
+                 (list_head (list_drop (list_length (@ListType.cons KExpr x rest)) (list_append (@ListType.cons KExpr x rest) {cons_a}))) \
+                 (list_head (list_drop (Nat.succ (list_length rest)) (list_append (@ListType.cons KExpr x rest) {cons_a}))) \
                  (list_head (list_drop (list_length rest) (list_append rest {cons_a}))) \
-                 (Eq.cong Nat (OptionType KExpr) \
-                 (fun (N : Nat) => list_head (list_drop N (list_append (ListType.cons KExpr x rest) {cons_a}))) \
-                 (list_length (ListType.cons KExpr x rest)) (Nat.succ (list_length rest)) (list_length_cons x rest)) \
-                 (Eq.trans (OptionType KExpr) \
-                 (list_head (list_drop (Nat.succ (list_length rest)) (list_append (ListType.cons KExpr x rest) {cons_a}))) \
-                 (list_head (list_drop (Nat.succ (list_length rest)) (ListType.cons KExpr x (list_append rest {cons_a})))) \
+                 (@Eq.cong Nat (OptionType KExpr) \
+                 (fun (N : Nat) => list_head (list_drop N (list_append (@ListType.cons KExpr x rest) {cons_a}))) \
+                 (list_length (@ListType.cons KExpr x rest)) (Nat.succ (list_length rest)) (list_length_cons x rest)) \
+                 (@Eq.trans (OptionType KExpr) \
+                 (list_head (list_drop (Nat.succ (list_length rest)) (list_append (@ListType.cons KExpr x rest) {cons_a}))) \
+                 (list_head (list_drop (Nat.succ (list_length rest)) (@ListType.cons KExpr x (list_append rest {cons_a})))) \
                  (list_head (list_drop (list_length rest) (list_append rest {cons_a}))) \
-                 (Eq.cong (ListType KExpr) (OptionType KExpr) \
+                 (@Eq.cong (ListType KExpr) (OptionType KExpr) \
                  (fun (L : ListType KExpr) => list_head (list_drop (Nat.succ (list_length rest)) L)) \
-                 (list_append (ListType.cons KExpr x rest) {cons_a}) \
-                 (ListType.cons KExpr x (list_append rest {cons_a})) \
+                 (list_append (@ListType.cons KExpr x rest) {cons_a}) \
+                 (@ListType.cons KExpr x (list_append rest {cons_a})) \
                  (list_append_cons x rest {cons_a})) \
-                 (Eq.trans (OptionType KExpr) \
-                 (list_head (list_drop (Nat.succ (list_length rest)) (ListType.cons KExpr x (list_append rest {cons_a})))) \
-                 (list_head (list_drop (list_length rest) (list_tail (ListType.cons KExpr x (list_append rest {cons_a}))))) \
+                 (@Eq.trans (OptionType KExpr) \
+                 (list_head (list_drop (Nat.succ (list_length rest)) (@ListType.cons KExpr x (list_append rest {cons_a})))) \
+                 (list_head (list_drop (list_length rest) (list_tail (@ListType.cons KExpr x (list_append rest {cons_a}))))) \
                  (list_head (list_drop (list_length rest) (list_append rest {cons_a}))) \
-                 (Eq.cong (ListType KExpr) (OptionType KExpr) (fun (L : ListType KExpr) => list_head L) \
-                 (list_drop (Nat.succ (list_length rest)) (ListType.cons KExpr x (list_append rest {cons_a}))) \
-                 (list_drop (list_length rest) (list_tail (ListType.cons KExpr x (list_append rest {cons_a})))) \
-                 (list_drop_succ (list_length rest) (ListType.cons KExpr x (list_append rest {cons_a})))) \
-                 (Eq.cong (ListType KExpr) (OptionType KExpr) \
+                 (@Eq.cong (ListType KExpr) (OptionType KExpr) (fun (L : ListType KExpr) => list_head L) \
+                 (list_drop (Nat.succ (list_length rest)) (@ListType.cons KExpr x (list_append rest {cons_a}))) \
+                 (list_drop (list_length rest) (list_tail (@ListType.cons KExpr x (list_append rest {cons_a})))) \
+                 (list_drop_succ (list_length rest) (@ListType.cons KExpr x (list_append rest {cons_a})))) \
+                 (@Eq.cong (ListType KExpr) (OptionType KExpr) \
                  (fun (L : ListType KExpr) => list_head (list_drop (list_length rest) L)) \
-                 (list_tail (ListType.cons KExpr x (list_append rest {cons_a}))) \
+                 (list_tail (@ListType.cons KExpr x (list_append rest {cons_a}))) \
                  (list_append rest {cons_a}) \
                  (list_tail_cons x (list_append rest {cons_a})))))) \
                  ih)"
@@ -1985,7 +1987,7 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
 
             let value = format!(
                 "fun (xs : ListType KExpr) (a : KExpr) => \
-                 ListType.rec KExpr \
+                 @ListType.rec KExpr \
                  (fun (xs0 : ListType KExpr) => {goal0}) \
                  {nil_arm} \
                  {cons_arm} \
@@ -2042,19 +2044,20 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
         // nil corner is absurd (Nat.sub (succ _) 0 = succ _ /= 0) via Empty.rec on a
         // reduced discriminator.
         {
-            let cons_a = "(ListType.cons KExpr a (ListType.nil KExpr))";
+            let cons_a = "(@ListType.cons KExpr a (@ListType.nil KExpr))";
             // Discriminator: D z = Nat for z = succ _, Empty for z = zero.
-            let discr = "(Nat.rec (fun (_ : Nat) => Type) Empty (fun (_ : Nat) (_ : Type) => Nat))";
+            let discr =
+                "(@Nat.rec (fun (_ : Nat) => Type) Empty (fun (_ : Nat) (_ : Type) => Nat))";
 
             // nil corner: the strict guard Nat.sub (succ KCNT) (length nil) = 0 is
             // absurd; collapse to succ KCNT = 0 and Empty.rec to the goal GOAL.
             let nil_absurd = |kcnt: &str, goal: &str| -> String {
                 let succ_eq_zero = format!(
                     concat!(
-                        "(Eq.trans Nat (Nat.succ {kcnt}) (Nat.sub (Nat.succ {kcnt}) (list_length (ListType.nil KExpr))) Nat.zero ",
-                        "(Eq.symm Nat (Nat.sub (Nat.succ {kcnt}) (list_length (ListType.nil KExpr))) (Nat.succ {kcnt}) ",
-                        "(Eq.trans Nat (Nat.sub (Nat.succ {kcnt}) (list_length (ListType.nil KExpr))) (Nat.sub (Nat.succ {kcnt}) Nat.zero) (Nat.succ {kcnt}) ",
-                        "(Eq.cong Nat Nat (fun (y : Nat) => Nat.sub (Nat.succ {kcnt}) y) (list_length (ListType.nil KExpr)) Nat.zero (list_length_nil)) ",
+                        "(@Eq.trans Nat (Nat.succ {kcnt}) (Nat.sub (Nat.succ {kcnt}) (list_length (@ListType.nil KExpr))) Nat.zero ",
+                        "(@Eq.symm Nat (Nat.sub (Nat.succ {kcnt}) (list_length (@ListType.nil KExpr))) (Nat.succ {kcnt}) ",
+                        "(@Eq.trans Nat (Nat.sub (Nat.succ {kcnt}) (list_length (@ListType.nil KExpr))) (Nat.sub (Nat.succ {kcnt}) Nat.zero) (Nat.succ {kcnt}) ",
+                        "(@Eq.cong Nat Nat (fun (y : Nat) => Nat.sub (Nat.succ {kcnt}) y) (list_length (@ListType.nil KExpr)) Nat.zero (list_length_nil)) ",
                         "(nat_sub_zero_right (Nat.succ {kcnt})))) ",
                         "h_nil)"
                     ),
@@ -2062,10 +2065,10 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
                 );
                 format!(
                     concat!(
-                        "(fun (h_nil : Eq Nat (Nat.sub (Nat.succ {kcnt}) (list_length (ListType.nil KExpr))) Nat.zero) ",
-                        "(_happ : Eq (OptionType KExpr) (list_head (list_drop {kcnt} (list_append (ListType.nil KExpr) {cons_a}))) (OptionType.some KExpr major)) => ",
-                        "Empty.rec (fun (_ : Empty) => {goal}) ",
-                        "(Eq.substType Nat {discr} (Nat.succ {kcnt}) Nat.zero {succ_eq_zero} (Nat.succ {kcnt})))"
+                        "(fun (h_nil : @Eq Nat (Nat.sub (Nat.succ {kcnt}) (list_length (@ListType.nil KExpr))) Nat.zero) ",
+                        "(_happ : @Eq (OptionType KExpr) (list_head (list_drop {kcnt} (list_append (@ListType.nil KExpr) {cons_a}))) (@OptionType.some KExpr major)) => ",
+                        "@Empty.rec (fun (_ : Empty) => {goal}) ",
+                        "(@Eq.substType Nat {discr} (Nat.succ {kcnt}) Nat.zero {succ_eq_zero} (Nat.succ {kcnt})))"
                     ),
                     kcnt = kcnt,
                     cons_a = cons_a,
@@ -2081,62 +2084,62 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
             let zero_cons = format!(
                 concat!(
                     "(fun (x : KExpr) (rest : ListType KExpr) ",
-                    "(_ihc : Eq Nat (Nat.sub (Nat.succ Nat.zero) (list_length rest)) Nat.zero -> ",
-                    "Eq (OptionType KExpr) (list_head (list_drop Nat.zero (list_append rest {cons_a}))) (OptionType.some KExpr major) -> ",
-                    "Eq (OptionType KExpr) (list_head (list_drop Nat.zero rest)) (OptionType.some KExpr major)) ",
-                    "(_h_cons : Eq Nat (Nat.sub (Nat.succ Nat.zero) (list_length (ListType.cons KExpr x rest))) Nat.zero) ",
-                    "(happ : Eq (OptionType KExpr) (list_head (list_drop Nat.zero (list_append (ListType.cons KExpr x rest) {cons_a}))) (OptionType.some KExpr major)) => ",
+                    "(_ihc : @Eq Nat (Nat.sub (Nat.succ Nat.zero) (list_length rest)) Nat.zero -> ",
+                    "@Eq (OptionType KExpr) (list_head (list_drop Nat.zero (list_append rest {cons_a}))) (@OptionType.some KExpr major) -> ",
+                    "@Eq (OptionType KExpr) (list_head (list_drop Nat.zero rest)) (@OptionType.some KExpr major)) ",
+                    "(_h_cons : @Eq Nat (Nat.sub (Nat.succ Nat.zero) (list_length (@ListType.cons KExpr x rest))) Nat.zero) ",
+                    "(happ : @Eq (OptionType KExpr) (list_head (list_drop Nat.zero (list_append (@ListType.cons KExpr x rest) {cons_a}))) (@OptionType.some KExpr major)) => ",
                     // goal: head (drop 0 (x::rest)) = some major.
-                    "Eq.trans (OptionType KExpr) ",
-                    "(list_head (list_drop Nat.zero (ListType.cons KExpr x rest))) ",
-                    "(OptionType.some KExpr x) ",
-                    "(OptionType.some KExpr major) ",
+                    "@Eq.trans (OptionType KExpr) ",
+                    "(list_head (list_drop Nat.zero (@ListType.cons KExpr x rest))) ",
+                    "(@OptionType.some KExpr x) ",
+                    "(@OptionType.some KExpr major) ",
                     // goal LHS = some x
-                    "(Eq.trans (OptionType KExpr) ",
-                    "(list_head (list_drop Nat.zero (ListType.cons KExpr x rest))) ",
-                    "(list_head (ListType.cons KExpr x rest)) ",
-                    "(OptionType.some KExpr x) ",
-                    "(Eq.cong (ListType KExpr) (OptionType KExpr) (fun (L : ListType KExpr) => list_head L) ",
-                    "(list_drop Nat.zero (ListType.cons KExpr x rest)) (ListType.cons KExpr x rest) ",
-                    "(list_drop_zero (ListType.cons KExpr x rest))) ",
+                    "(@Eq.trans (OptionType KExpr) ",
+                    "(list_head (list_drop Nat.zero (@ListType.cons KExpr x rest))) ",
+                    "(list_head (@ListType.cons KExpr x rest)) ",
+                    "(@OptionType.some KExpr x) ",
+                    "(@Eq.cong (ListType KExpr) (OptionType KExpr) (fun (L : ListType KExpr) => list_head L) ",
+                    "(list_drop Nat.zero (@ListType.cons KExpr x rest)) (@ListType.cons KExpr x rest) ",
+                    "(list_drop_zero (@ListType.cons KExpr x rest))) ",
                     "(list_head_cons x rest)) ",
                     // some x = some major, from happ (LHS reduces to some x).
-                    "(Eq.trans (OptionType KExpr) (OptionType.some KExpr x) ",
-                    "(list_head (list_drop Nat.zero (list_append (ListType.cons KExpr x rest) {cons_a}))) ",
-                    "(OptionType.some KExpr major) ",
-                    "(Eq.symm (OptionType KExpr) ",
-                    "(list_head (list_drop Nat.zero (list_append (ListType.cons KExpr x rest) {cons_a}))) (OptionType.some KExpr x) ",
-                    "(Eq.trans (OptionType KExpr) ",
-                    "(list_head (list_drop Nat.zero (list_append (ListType.cons KExpr x rest) {cons_a}))) ",
-                    "(list_head (list_append (ListType.cons KExpr x rest) {cons_a})) ",
-                    "(OptionType.some KExpr x) ",
-                    "(Eq.cong (ListType KExpr) (OptionType KExpr) (fun (L : ListType KExpr) => list_head L) ",
-                    "(list_drop Nat.zero (list_append (ListType.cons KExpr x rest) {cons_a})) ",
-                    "(list_append (ListType.cons KExpr x rest) {cons_a}) ",
-                    "(list_drop_zero (list_append (ListType.cons KExpr x rest) {cons_a}))) ",
-                    "(Eq.trans (OptionType KExpr) ",
-                    "(list_head (list_append (ListType.cons KExpr x rest) {cons_a})) ",
-                    "(list_head (ListType.cons KExpr x (list_append rest {cons_a}))) ",
-                    "(OptionType.some KExpr x) ",
-                    "(Eq.cong (ListType KExpr) (OptionType KExpr) (fun (L : ListType KExpr) => list_head L) ",
-                    "(list_append (ListType.cons KExpr x rest) {cons_a}) ",
-                    "(ListType.cons KExpr x (list_append rest {cons_a})) ",
+                    "(@Eq.trans (OptionType KExpr) (@OptionType.some KExpr x) ",
+                    "(list_head (list_drop Nat.zero (list_append (@ListType.cons KExpr x rest) {cons_a}))) ",
+                    "(@OptionType.some KExpr major) ",
+                    "(@Eq.symm (OptionType KExpr) ",
+                    "(list_head (list_drop Nat.zero (list_append (@ListType.cons KExpr x rest) {cons_a}))) (@OptionType.some KExpr x) ",
+                    "(@Eq.trans (OptionType KExpr) ",
+                    "(list_head (list_drop Nat.zero (list_append (@ListType.cons KExpr x rest) {cons_a}))) ",
+                    "(list_head (list_append (@ListType.cons KExpr x rest) {cons_a})) ",
+                    "(@OptionType.some KExpr x) ",
+                    "(@Eq.cong (ListType KExpr) (OptionType KExpr) (fun (L : ListType KExpr) => list_head L) ",
+                    "(list_drop Nat.zero (list_append (@ListType.cons KExpr x rest) {cons_a})) ",
+                    "(list_append (@ListType.cons KExpr x rest) {cons_a}) ",
+                    "(list_drop_zero (list_append (@ListType.cons KExpr x rest) {cons_a}))) ",
+                    "(@Eq.trans (OptionType KExpr) ",
+                    "(list_head (list_append (@ListType.cons KExpr x rest) {cons_a})) ",
+                    "(list_head (@ListType.cons KExpr x (list_append rest {cons_a}))) ",
+                    "(@OptionType.some KExpr x) ",
+                    "(@Eq.cong (ListType KExpr) (OptionType KExpr) (fun (L : ListType KExpr) => list_head L) ",
+                    "(list_append (@ListType.cons KExpr x rest) {cons_a}) ",
+                    "(@ListType.cons KExpr x (list_append rest {cons_a})) ",
                     "(list_append_cons x rest {cons_a})) ",
                     "(list_head_cons x (list_append rest {cons_a}))))) ",
                     "happ))"
                 ),
                 cons_a = cons_a,
             );
-            let zero_goal_nil = "Eq (OptionType KExpr) (list_head (list_drop Nat.zero (ListType.nil KExpr))) (OptionType.some KExpr major)".to_string();
+            let zero_goal_nil = "@Eq (OptionType KExpr) (list_head (list_drop Nat.zero (@ListType.nil KExpr))) (@OptionType.some KExpr major)".to_string();
             let zero_arm = format!(
                 concat!(
                     "(fun (xs0 : ListType KExpr) ",
-                    "(h_sub : Eq Nat (Nat.sub (Nat.succ Nat.zero) (list_length xs0)) Nat.zero) ",
-                    "(happ : Eq (OptionType KExpr) (list_head (list_drop Nat.zero (list_append xs0 {cons_a}))) (OptionType.some KExpr major)) => ",
-                    "ListType.rec KExpr ",
-                    "(fun (xs1 : ListType KExpr) => Eq Nat (Nat.sub (Nat.succ Nat.zero) (list_length xs1)) Nat.zero -> ",
-                    "Eq (OptionType KExpr) (list_head (list_drop Nat.zero (list_append xs1 {cons_a}))) (OptionType.some KExpr major) -> ",
-                    "Eq (OptionType KExpr) (list_head (list_drop Nat.zero xs1)) (OptionType.some KExpr major)) ",
+                    "(h_sub : @Eq Nat (Nat.sub (Nat.succ Nat.zero) (list_length xs0)) Nat.zero) ",
+                    "(happ : @Eq (OptionType KExpr) (list_head (list_drop Nat.zero (list_append xs0 {cons_a}))) (@OptionType.some KExpr major)) => ",
+                    "@ListType.rec KExpr ",
+                    "(fun (xs1 : ListType KExpr) => @Eq Nat (Nat.sub (Nat.succ Nat.zero) (list_length xs1)) Nat.zero -> ",
+                    "@Eq (OptionType KExpr) (list_head (list_drop Nat.zero (list_append xs1 {cons_a}))) (@OptionType.some KExpr major) -> ",
+                    "@Eq (OptionType KExpr) (list_head (list_drop Nat.zero xs1)) (@OptionType.some KExpr major)) ",
                     "{nil_absurd} ",
                     "{zero_cons} ",
                     "xs0 h_sub happ)"
@@ -2154,88 +2157,88 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
             let succ_cons = format!(
                 concat!(
                     "(fun (x : KExpr) (rest : ListType KExpr) ",
-                    "(_ihc : Eq Nat (Nat.sub (Nat.succ (Nat.succ m)) (list_length rest)) Nat.zero -> ",
-                    "Eq (OptionType KExpr) (list_head (list_drop (Nat.succ m) (list_append rest {cons_a}))) (OptionType.some KExpr major) -> ",
-                    "Eq (OptionType KExpr) (list_head (list_drop (Nat.succ m) rest)) (OptionType.some KExpr major)) ",
-                    "(h_cons : Eq Nat (Nat.sub (Nat.succ (Nat.succ m)) (list_length (ListType.cons KExpr x rest))) Nat.zero) ",
-                    "(happ : Eq (OptionType KExpr) (list_head (list_drop (Nat.succ m) (list_append (ListType.cons KExpr x rest) {cons_a}))) (OptionType.some KExpr major)) => ",
+                    "(_ihc : @Eq Nat (Nat.sub (Nat.succ (Nat.succ m)) (list_length rest)) Nat.zero -> ",
+                    "@Eq (OptionType KExpr) (list_head (list_drop (Nat.succ m) (list_append rest {cons_a}))) (@OptionType.some KExpr major) -> ",
+                    "@Eq (OptionType KExpr) (list_head (list_drop (Nat.succ m) rest)) (@OptionType.some KExpr major)) ",
+                    "(h_cons : @Eq Nat (Nat.sub (Nat.succ (Nat.succ m)) (list_length (@ListType.cons KExpr x rest))) Nat.zero) ",
+                    "(happ : @Eq (OptionType KExpr) (list_head (list_drop (Nat.succ m) (list_append (@ListType.cons KExpr x rest) {cons_a}))) (@OptionType.some KExpr major)) => ",
                     // goal: head (drop (succ m)(x::rest)) = some major.
-                    "Eq.trans (OptionType KExpr) ",
-                    "(list_head (list_drop (Nat.succ m) (ListType.cons KExpr x rest))) ",
+                    "@Eq.trans (OptionType KExpr) ",
+                    "(list_head (list_drop (Nat.succ m) (@ListType.cons KExpr x rest))) ",
                     "(list_head (list_drop m rest)) ",
-                    "(OptionType.some KExpr major) ",
+                    "(@OptionType.some KExpr major) ",
                     // goal LHS = head (drop m rest)
-                    "(Eq.cong (ListType KExpr) (OptionType KExpr) (fun (L : ListType KExpr) => list_head L) ",
-                    "(list_drop (Nat.succ m) (ListType.cons KExpr x rest)) (list_drop m rest) ",
-                    "(Eq.trans (ListType KExpr) ",
-                    "(list_drop (Nat.succ m) (ListType.cons KExpr x rest)) ",
-                    "(list_drop m (list_tail (ListType.cons KExpr x rest))) ",
+                    "(@Eq.cong (ListType KExpr) (OptionType KExpr) (fun (L : ListType KExpr) => list_head L) ",
+                    "(list_drop (Nat.succ m) (@ListType.cons KExpr x rest)) (list_drop m rest) ",
+                    "(@Eq.trans (ListType KExpr) ",
+                    "(list_drop (Nat.succ m) (@ListType.cons KExpr x rest)) ",
+                    "(list_drop m (list_tail (@ListType.cons KExpr x rest))) ",
                     "(list_drop m rest) ",
-                    "(list_drop_succ m (ListType.cons KExpr x rest)) ",
-                    "(Eq.cong (ListType KExpr) (ListType KExpr) (fun (L : ListType KExpr) => list_drop m L) ",
-                    "(list_tail (ListType.cons KExpr x rest)) rest (list_tail_cons x rest)))) ",
+                    "(list_drop_succ m (@ListType.cons KExpr x rest)) ",
+                    "(@Eq.cong (ListType KExpr) (ListType KExpr) (fun (L : ListType KExpr) => list_drop m L) ",
+                    "(list_tail (@ListType.cons KExpr x rest)) rest (list_tail_cons x rest)))) ",
                     // head (drop m rest) = some major via ih rest guard_rest happ'
                     "(_ihinner_m rest ",
                     // guard_rest : Nat.sub (succ m) (length rest) = 0, from h_cons.
-                    "(Eq.trans Nat (Nat.sub (Nat.succ m) (list_length rest)) ",
+                    "(@Eq.trans Nat (Nat.sub (Nat.succ m) (list_length rest)) ",
                     "(Nat.sub (Nat.succ (Nat.succ m)) (Nat.succ (list_length rest))) Nat.zero ",
                     // sub (succ m)(length rest) = sub (succ(succ m))(succ(length rest))  [symm nat_sub_succ_succ]
-                    "(Eq.symm Nat (Nat.sub (Nat.succ (Nat.succ m)) (Nat.succ (list_length rest))) (Nat.sub (Nat.succ m) (list_length rest)) ",
+                    "(@Eq.symm Nat (Nat.sub (Nat.succ (Nat.succ m)) (Nat.succ (list_length rest))) (Nat.sub (Nat.succ m) (list_length rest)) ",
                     "(nat_sub_succ_succ (Nat.succ m) (list_length rest))) ",
                     // = sub (succ(succ m))(length (x::rest)) = 0  [length_cons + h_cons]
-                    "(Eq.trans Nat (Nat.sub (Nat.succ (Nat.succ m)) (Nat.succ (list_length rest))) ",
-                    "(Nat.sub (Nat.succ (Nat.succ m)) (list_length (ListType.cons KExpr x rest))) Nat.zero ",
-                    "(Eq.cong Nat Nat (fun (y : Nat) => Nat.sub (Nat.succ (Nat.succ m)) y) ",
-                    "(Nat.succ (list_length rest)) (list_length (ListType.cons KExpr x rest)) ",
-                    "(Eq.symm Nat (list_length (ListType.cons KExpr x rest)) (Nat.succ (list_length rest)) (list_length_cons x rest))) ",
+                    "(@Eq.trans Nat (Nat.sub (Nat.succ (Nat.succ m)) (Nat.succ (list_length rest))) ",
+                    "(Nat.sub (Nat.succ (Nat.succ m)) (list_length (@ListType.cons KExpr x rest))) Nat.zero ",
+                    "(@Eq.cong Nat Nat (fun (y : Nat) => Nat.sub (Nat.succ (Nat.succ m)) y) ",
+                    "(Nat.succ (list_length rest)) (list_length (@ListType.cons KExpr x rest)) ",
+                    "(@Eq.symm Nat (list_length (@ListType.cons KExpr x rest)) (Nat.succ (list_length rest)) (list_length_cons x rest))) ",
                     "h_cons)) ",
                     // happ' : head (drop m (rest++[a])) = some major, from happ.
-                    "(Eq.trans (OptionType KExpr) ",
+                    "(@Eq.trans (OptionType KExpr) ",
                     "(list_head (list_drop m (list_append rest {cons_a}))) ",
-                    "(list_head (list_drop (Nat.succ m) (list_append (ListType.cons KExpr x rest) {cons_a}))) ",
-                    "(OptionType.some KExpr major) ",
+                    "(list_head (list_drop (Nat.succ m) (list_append (@ListType.cons KExpr x rest) {cons_a}))) ",
+                    "(@OptionType.some KExpr major) ",
                     // head (drop m (rest++[a])) = head (drop (succ m)((x::rest)++[a])): symm of the unfold.
-                    "(Eq.cong (ListType KExpr) (OptionType KExpr) (fun (L : ListType KExpr) => list_head L) ",
+                    "(@Eq.cong (ListType KExpr) (OptionType KExpr) (fun (L : ListType KExpr) => list_head L) ",
                     "(list_drop m (list_append rest {cons_a})) ",
-                    "(list_drop (Nat.succ m) (list_append (ListType.cons KExpr x rest) {cons_a})) ",
-                    "(Eq.symm (ListType KExpr) ",
-                    "(list_drop (Nat.succ m) (list_append (ListType.cons KExpr x rest) {cons_a})) ",
+                    "(list_drop (Nat.succ m) (list_append (@ListType.cons KExpr x rest) {cons_a})) ",
+                    "(@Eq.symm (ListType KExpr) ",
+                    "(list_drop (Nat.succ m) (list_append (@ListType.cons KExpr x rest) {cons_a})) ",
                     "(list_drop m (list_append rest {cons_a})) ",
-                    "(Eq.trans (ListType KExpr) ",
-                    "(list_drop (Nat.succ m) (list_append (ListType.cons KExpr x rest) {cons_a})) ",
-                    "(list_drop (Nat.succ m) (ListType.cons KExpr x (list_append rest {cons_a}))) ",
+                    "(@Eq.trans (ListType KExpr) ",
+                    "(list_drop (Nat.succ m) (list_append (@ListType.cons KExpr x rest) {cons_a})) ",
+                    "(list_drop (Nat.succ m) (@ListType.cons KExpr x (list_append rest {cons_a}))) ",
                     "(list_drop m (list_append rest {cons_a})) ",
-                    "(Eq.cong (ListType KExpr) (ListType KExpr) (fun (L : ListType KExpr) => list_drop (Nat.succ m) L) ",
-                    "(list_append (ListType.cons KExpr x rest) {cons_a}) ",
-                    "(ListType.cons KExpr x (list_append rest {cons_a})) ",
+                    "(@Eq.cong (ListType KExpr) (ListType KExpr) (fun (L : ListType KExpr) => list_drop (Nat.succ m) L) ",
+                    "(list_append (@ListType.cons KExpr x rest) {cons_a}) ",
+                    "(@ListType.cons KExpr x (list_append rest {cons_a})) ",
                     "(list_append_cons x rest {cons_a})) ",
-                    "(Eq.trans (ListType KExpr) ",
-                    "(list_drop (Nat.succ m) (ListType.cons KExpr x (list_append rest {cons_a}))) ",
-                    "(list_drop m (list_tail (ListType.cons KExpr x (list_append rest {cons_a})))) ",
+                    "(@Eq.trans (ListType KExpr) ",
+                    "(list_drop (Nat.succ m) (@ListType.cons KExpr x (list_append rest {cons_a}))) ",
+                    "(list_drop m (list_tail (@ListType.cons KExpr x (list_append rest {cons_a})))) ",
                     "(list_drop m (list_append rest {cons_a})) ",
-                    "(list_drop_succ m (ListType.cons KExpr x (list_append rest {cons_a}))) ",
-                    "(Eq.cong (ListType KExpr) (ListType KExpr) (fun (L : ListType KExpr) => list_drop m L) ",
-                    "(list_tail (ListType.cons KExpr x (list_append rest {cons_a}))) ",
+                    "(list_drop_succ m (@ListType.cons KExpr x (list_append rest {cons_a}))) ",
+                    "(@Eq.cong (ListType KExpr) (ListType KExpr) (fun (L : ListType KExpr) => list_drop m L) ",
+                    "(list_tail (@ListType.cons KExpr x (list_append rest {cons_a}))) ",
                     "(list_append rest {cons_a}) ",
                     "(list_tail_cons x (list_append rest {cons_a}))))))) ",
                     "happ)))"
                 ),
                 cons_a = cons_a,
             );
-            let succ_goal_nil = "Eq (OptionType KExpr) (list_head (list_drop (Nat.succ m) (ListType.nil KExpr))) (OptionType.some KExpr major)".to_string();
+            let succ_goal_nil = "@Eq (OptionType KExpr) (list_head (list_drop (Nat.succ m) (@ListType.nil KExpr))) (@OptionType.some KExpr major)".to_string();
             let succ_arm = format!(
                 concat!(
                     "(fun (m : Nat) ",
-                    "(_ihinner_m : forall (xs0 : ListType KExpr), Eq Nat (Nat.sub (Nat.succ m) (list_length xs0)) Nat.zero -> ",
-                    "Eq (OptionType KExpr) (list_head (list_drop m (list_append xs0 {cons_a}))) (OptionType.some KExpr major) -> ",
-                    "Eq (OptionType KExpr) (list_head (list_drop m xs0)) (OptionType.some KExpr major)) => ",
+                    "(_ihinner_m : forall (xs0 : ListType KExpr), @Eq Nat (Nat.sub (Nat.succ m) (list_length xs0)) Nat.zero -> ",
+                    "@Eq (OptionType KExpr) (list_head (list_drop m (list_append xs0 {cons_a}))) (@OptionType.some KExpr major) -> ",
+                    "@Eq (OptionType KExpr) (list_head (list_drop m xs0)) (@OptionType.some KExpr major)) => ",
                     "fun (xs0 : ListType KExpr) ",
-                    "(h_sub : Eq Nat (Nat.sub (Nat.succ (Nat.succ m)) (list_length xs0)) Nat.zero) ",
-                    "(happ : Eq (OptionType KExpr) (list_head (list_drop (Nat.succ m) (list_append xs0 {cons_a}))) (OptionType.some KExpr major)) => ",
-                    "ListType.rec KExpr ",
-                    "(fun (xs1 : ListType KExpr) => Eq Nat (Nat.sub (Nat.succ (Nat.succ m)) (list_length xs1)) Nat.zero -> ",
-                    "Eq (OptionType KExpr) (list_head (list_drop (Nat.succ m) (list_append xs1 {cons_a}))) (OptionType.some KExpr major) -> ",
-                    "Eq (OptionType KExpr) (list_head (list_drop (Nat.succ m) xs1)) (OptionType.some KExpr major)) ",
+                    "(h_sub : @Eq Nat (Nat.sub (Nat.succ (Nat.succ m)) (list_length xs0)) Nat.zero) ",
+                    "(happ : @Eq (OptionType KExpr) (list_head (list_drop (Nat.succ m) (list_append xs0 {cons_a}))) (@OptionType.some KExpr major)) => ",
+                    "@ListType.rec KExpr ",
+                    "(fun (xs1 : ListType KExpr) => @Eq Nat (Nat.sub (Nat.succ (Nat.succ m)) (list_length xs1)) Nat.zero -> ",
+                    "@Eq (OptionType KExpr) (list_head (list_drop (Nat.succ m) (list_append xs1 {cons_a}))) (@OptionType.some KExpr major) -> ",
+                    "@Eq (OptionType KExpr) (list_head (list_drop (Nat.succ m) xs1)) (@OptionType.some KExpr major)) ",
                     "{nil_absurd} ",
                     "{succ_cons} ",
                     "xs0 h_sub happ)"
@@ -2247,13 +2250,13 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
 
             // Le (succ k)(length xs) -> Nat.sub (succ k)(length xs) = 0.
             let le_to_sub = concat!(
-                "(Le.rec (Nat.succ k) (fun (j : Nat) (_ : Le (Nat.succ k) j) => Eq Nat (Nat.sub (Nat.succ k) j) Nat.zero) ",
+                "(@Le.rec (Nat.succ k) (fun (j : Nat) (_ : Le (Nat.succ k) j) => @Eq Nat (Nat.sub (Nat.succ k) j) Nat.zero) ",
                 "(nat_sub_self (Nat.succ k)) ",
-                "(fun (m : Nat) (_h : Le (Nat.succ k) m) (ihm : Eq Nat (Nat.sub (Nat.succ k) m) Nat.zero) => ",
-                "Eq.trans Nat (Nat.sub (Nat.succ k) (Nat.succ m)) (Nat.pred (Nat.sub (Nat.succ k) m)) Nat.zero ",
-                "(Eq.refl Nat (Nat.pred (Nat.sub (Nat.succ k) m))) ",
-                "(Eq.trans Nat (Nat.pred (Nat.sub (Nat.succ k) m)) (Nat.pred Nat.zero) Nat.zero ",
-                "(Eq.cong Nat Nat Nat.pred (Nat.sub (Nat.succ k) m) Nat.zero ihm) (Eq.refl Nat Nat.zero))) ",
+                "(fun (m : Nat) (_h : Le (Nat.succ k) m) (ihm : @Eq Nat (Nat.sub (Nat.succ k) m) Nat.zero) => ",
+                "@Eq.trans Nat (Nat.sub (Nat.succ k) (Nat.succ m)) (Nat.pred (Nat.sub (Nat.succ k) m)) Nat.zero ",
+                "(@Eq.refl Nat (Nat.pred (Nat.sub (Nat.succ k) m))) ",
+                "(@Eq.trans Nat (Nat.pred (Nat.sub (Nat.succ k) m)) (Nat.pred Nat.zero) Nat.zero ",
+                "(@Eq.cong Nat Nat Nat.pred (Nat.sub (Nat.succ k) m) Nat.zero ihm) (@Eq.refl Nat Nat.zero))) ",
                 "(list_length xs) hle)"
             );
 
@@ -2261,12 +2264,12 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
                 concat!(
                     "fun (k : Nat) (xs : ListType KExpr) (a : KExpr) (major : KExpr) ",
                     "(hle : Le (Nat.succ k) (list_length xs)) ",
-                    "(happ : Eq (OptionType KExpr) (list_head (list_drop k (list_append xs {cons_a}))) (OptionType.some KExpr major)) => ",
-                    "(fun (hsub : Eq Nat (Nat.sub (Nat.succ k) (list_length xs)) Nat.zero) => ",
-                    "Nat.rec ",
-                    "(fun (k0 : Nat) => forall (xs0 : ListType KExpr), Eq Nat (Nat.sub (Nat.succ k0) (list_length xs0)) Nat.zero -> ",
-                    "Eq (OptionType KExpr) (list_head (list_drop k0 (list_append xs0 {cons_a}))) (OptionType.some KExpr major) -> ",
-                    "Eq (OptionType KExpr) (list_head (list_drop k0 xs0)) (OptionType.some KExpr major)) ",
+                    "(happ : @Eq (OptionType KExpr) (list_head (list_drop k (list_append xs {cons_a}))) (@OptionType.some KExpr major)) => ",
+                    "(fun (hsub : @Eq Nat (Nat.sub (Nat.succ k) (list_length xs)) Nat.zero) => ",
+                    "@Nat.rec ",
+                    "(fun (k0 : Nat) => forall (xs0 : ListType KExpr), @Eq Nat (Nat.sub (Nat.succ k0) (list_length xs0)) Nat.zero -> ",
+                    "@Eq (OptionType KExpr) (list_head (list_drop k0 (list_append xs0 {cons_a}))) (@OptionType.some KExpr major) -> ",
+                    "@Eq (OptionType KExpr) (list_head (list_drop k0 xs0)) (@OptionType.some KExpr major)) ",
                     "{zero_arm} ",
                     "{succ_arm} ",
                     "k xs hsub happ) ",
@@ -2283,8 +2286,8 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
                 type_src: concat!(
                     "forall (k : Nat) (xs : ListType KExpr) (a : KExpr) (major : KExpr), ",
                     "Le (Nat.succ k) (list_length xs) -> ",
-                    "Eq (OptionType KExpr) (list_head (list_drop k (list_append xs (ListType.cons KExpr a (ListType.nil KExpr))))) (OptionType.some KExpr major) -> ",
-                    "Eq (OptionType KExpr) (list_head (list_drop k xs)) (OptionType.some KExpr major)"
+                    "@Eq (OptionType KExpr) (list_head (list_drop k (list_append xs (@ListType.cons KExpr a (@ListType.nil KExpr))))) (@OptionType.some KExpr major) -> ",
+                    "@Eq (OptionType KExpr) (list_head (list_drop k xs)) (@OptionType.some KExpr major)"
                 )
                 .to_string(),
                 value_src: Some(value),
@@ -2350,11 +2353,11 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
             let type_src = format!(
                 "forall (env : RecEnv) (f : KExpr) (a : KExpr) (e1 : KExpr), \
                  (forall (rn : Name) (m0 : RecMeta), \
-                 Eq (OptionType Name) (kexpr_const_name (kapp_fn f)) (OptionType.some Name rn) -> \
-                 Eq (OptionType RecMeta) (recmeta_for env rn) (OptionType.some RecMeta m0) -> \
+                 @Eq (OptionType Name) (kexpr_const_name (kapp_fn f)) (@OptionType.some Name rn) -> \
+                 @Eq (OptionType RecMeta) (recmeta_for env rn) (@OptionType.some RecMeta m0) -> \
                  Le (Nat.succ {major_idx_m0}) {len_f}) -> \
-                 Eq (OptionType KExpr) (iota_reduct env (KExpr.app f a)) (OptionType.some KExpr e1) -> \
-                 forall (C : Prop), (forall (f1 : KExpr), Eq (OptionType KExpr) (iota_reduct env f) (OptionType.some KExpr f1) -> C) -> C",
+                 @Eq (OptionType KExpr) (iota_reduct env (KExpr.app f a)) (@OptionType.some KExpr e1) -> \
+                 forall (C : Prop), (forall (f1 : KExpr), @Eq (OptionType KExpr) (iota_reduct env f) (@OptionType.some KExpr f1) -> C) -> C",
                 major_idx_m0 = major_idx_of("m0"),
                 len_f = len_f,
             );
@@ -2363,19 +2366,19 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
                 name: "iota_reduct_app_inner".to_string(),
                 type_src,
                 value_src: Some(r"fun (env : RecEnv) (f : KExpr) (a : KExpr) (e1 : KExpr)
- (hwin : (forall (rn : Name) (m0 : RecMeta), Eq (OptionType Name) (kexpr_const_name (kapp_fn f)) (OptionType.some Name rn) -> Eq (OptionType RecMeta) (recmeta_for env rn) (OptionType.some RecMeta m0) -> Le (Nat.succ (iota_major_index m0)) (list_length (kapp_args f)))) (h : Eq (OptionType KExpr) (iota_reduct env (KExpr.app f a)) (OptionType.some KExpr e1))
- (C : Prop) (k : forall (f1 : KExpr), Eq (OptionType KExpr) (iota_reduct env f) (OptionType.some KExpr f1) -> C) => iota_reduct_full_inv env (KExpr.app f a) e1 C h
+ (hwin : (forall (rn : Name) (m0 : RecMeta), @Eq (OptionType Name) (kexpr_const_name (kapp_fn f)) (@OptionType.some Name rn) -> @Eq (OptionType RecMeta) (recmeta_for env rn) (@OptionType.some RecMeta m0) -> Le (Nat.succ (iota_major_index m0)) (list_length (kapp_args f)))) (h : @Eq (OptionType KExpr) (iota_reduct env (KExpr.app f a)) (@OptionType.some KExpr e1))
+ (C : Prop) (k : forall (f1 : KExpr), @Eq (OptionType KExpr) (iota_reduct env f) (@OptionType.some KExpr f1) -> C) => iota_reduct_full_inv env (KExpr.app f a) e1 C h
  (fun (recname : Name) (mta : RecMeta) (major : KExpr) (cname : Name) (rule : RecRule)
- (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.app f a))) (OptionType.some Name recname))
- (h2 : Eq (OptionType RecMeta) (recmeta_for env recname) (OptionType.some RecMeta mta))
- (h3 : Eq (OptionType KExpr) (list_head (list_drop (iota_major_index mta) (kapp_args (KExpr.app f a)))) (OptionType.some KExpr major))
- (h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname))
- (h5 : Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule))
- (fields : Eq Bool (iota_fields_ok rule (kapp_args major)) Bool.true)
- (arity : Eq Bool (nat_eqb (name_list_len (kconst_params (recmeta_signature mta))) (level_list_len (kexpr_const_levels (kapp_fn f)))) Bool.true) (returned : Eq KExpr e1 (iota_contractum mta rule (kapp_args (KExpr.app f a)) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f))))) => k (iota_contractum mta rule (kapp_args f) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f))))
+ (h1 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.app f a))) (@OptionType.some Name recname))
+ (h2 : @Eq (OptionType RecMeta) (recmeta_for env recname) (@OptionType.some RecMeta mta))
+ (h3 : @Eq (OptionType KExpr) (list_head (list_drop (iota_major_index mta) (kapp_args (KExpr.app f a)))) (@OptionType.some KExpr major))
+ (h4 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (@OptionType.some Name cname))
+ (h5 : @Eq (OptionType RecRule) (recrule_for env recname cname) (@OptionType.some RecRule rule))
+ (fields : @Eq Bool (iota_fields_ok rule (kapp_args major)) Bool.true)
+ (arity : @Eq Bool (nat_eqb (name_list_len (kconst_params (recmeta_signature mta))) (level_list_len (kexpr_const_levels (kapp_fn f)))) Bool.true) (returned : @Eq KExpr e1 (iota_contractum mta rule (kapp_args (KExpr.app f a)) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f))))) => k (iota_contractum mta rule (kapp_args f) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f))))
  (iota_reduct_full_recon env f (iota_contractum mta rule (kapp_args f) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f)))) recname mta major cname rule h1 h2
  (list_head_drop_append_some_inv (iota_major_index mta) (kapp_args f) a major (hwin recname mta h1 h2) h3)
- h4 h5 fields arity (Eq.refl KExpr (iota_contractum mta rule (kapp_args f) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f)))))))".to_string()),
+ h4 h5 fields arity (@Eq.refl KExpr (iota_contractum mta rule (kapp_args f) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f)))))))".to_string()),
                 is_axiom: false,
                 description: "Guard-preserving converse over-application: an accepted application whose major is already inside f yields an accepted f. Full inversion retains the actual field-count and universe-arity guards; full reconstruction uses the same head universes and instantiated rule, not only the five successful lookups.".to_string(),
                 category: AxiomCategory::DerivedLemma,
@@ -2401,19 +2404,19 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
             name: "nat_le_succ_or".to_string(),
             type_src: concat!(
                 "forall (m : Nat) (n : Nat), Le m n -> ",
-                "forall (C : Prop), (Eq Nat m n -> C) -> (Le (Nat.succ m) n -> C) -> C"
+                "forall (C : Prop), (@Eq Nat m n -> C) -> (Le (Nat.succ m) n -> C) -> C"
             )
             .to_string(),
             value_src: Some(
                 concat!(
                     "fun (m : Nat) (n : Nat) (h : Le m n) => ",
-                    "Le.rec m ",
-                    "(fun (j : Nat) (_ : Le m j) => forall (C : Prop), (Eq Nat m j -> C) -> (Le (Nat.succ m) j -> C) -> C) ",
+                    "@Le.rec m ",
+                    "(fun (j : Nat) (_ : Le m j) => forall (C : Prop), (@Eq Nat m j -> C) -> (Le (Nat.succ m) j -> C) -> C) ",
                     // refl arm (j = m)
-                    "(fun (C : Prop) (keq : Eq Nat m m -> C) (_klt : Le (Nat.succ m) m -> C) => keq (Eq.refl Nat m)) ",
+                    "(fun (C : Prop) (keq : @Eq Nat m m -> C) (_klt : Le (Nat.succ m) m -> C) => keq (@Eq.refl Nat m)) ",
                     // step arm (j = succ p, _hp : Le m p)
-                    "(fun (p : Nat) (_hp : Le m p) (_ihp : forall (C : Prop), (Eq Nat m p -> C) -> (Le (Nat.succ m) p -> C) -> C) => ",
-                    "fun (C : Prop) (_keq : Eq Nat m (Nat.succ p) -> C) (klt : Le (Nat.succ m) (Nat.succ p) -> C) => ",
+                    "(fun (p : Nat) (_hp : Le m p) (_ihp : forall (C : Prop), (@Eq Nat m p -> C) -> (Le (Nat.succ m) p -> C) -> C) => ",
+                    "fun (C : Prop) (_keq : @Eq Nat m (Nat.succ p) -> C) (klt : Le (Nat.succ m) (Nat.succ p) -> C) => ",
                     "klt (le_succ_succ m p _hp)) ",
                     "n h"
                 )
@@ -2448,7 +2451,7 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
             value_src: Some(
                 concat!(
                     "fun (a : Nat) (c : Nat) (h : Le (Nat.succ a) c) => ",
-                    "Le.rec (Nat.succ a) (fun (j : Nat) (_ : Le (Nat.succ a) j) => Le a (Nat.pred j)) ",
+                    "@Le.rec (Nat.succ a) (fun (j : Nat) (_ : Le (Nat.succ a) j) => Le a (Nat.pred j)) ",
                     // refl: Le a (pred (succ a)) = Le a a
                     "(Le.refl a) ",
                     // step: Le a (pred (succ p)) = Le a p, from _hp by dropping left succ.
@@ -2509,26 +2512,26 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
         // ListType.rec on xs: nil via list_append_nil + list_length_nil (both
         // reduce); cons peels via list_append_cons + list_length_cons onto the IH.
         {
-            let cons_a = "(ListType.cons KExpr a (ListType.nil KExpr))";
+            let cons_a = "(@ListType.cons KExpr a (@ListType.nil KExpr))";
             let goal_for = |xs: &str| -> String {
                 format!(
-                    "Eq Nat (list_length (list_append {xs} {cons_a})) (Nat.succ (list_length {xs}))"
+                    "@Eq Nat (list_length (list_append {xs} {cons_a})) (Nat.succ (list_length {xs}))"
                 )
             };
             // nil arm: length (nil ++ [a]) = length [a] = succ 0 = succ (length nil).
             let nil_arm = format!(
-                "(Eq.trans Nat \
-                 (list_length (list_append (ListType.nil KExpr) {cons_a})) \
+                "(@Eq.trans Nat \
+                 (list_length (list_append (@ListType.nil KExpr) {cons_a})) \
                  (list_length {cons_a}) \
-                 (Nat.succ (list_length (ListType.nil KExpr))) \
-                 (Eq.cong (ListType KExpr) Nat (fun (L : ListType KExpr) => list_length L) \
-                 (list_append (ListType.nil KExpr) {cons_a}) {cons_a} (list_append_nil {cons_a})) \
-                 (Eq.trans Nat \
+                 (Nat.succ (list_length (@ListType.nil KExpr))) \
+                 (@Eq.cong (ListType KExpr) Nat (fun (L : ListType KExpr) => list_length L) \
+                 (list_append (@ListType.nil KExpr) {cons_a}) {cons_a} (list_append_nil {cons_a})) \
+                 (@Eq.trans Nat \
                  (list_length {cons_a}) \
-                 (Nat.succ (list_length (ListType.nil KExpr))) \
-                 (Nat.succ (list_length (ListType.nil KExpr))) \
-                 (list_length_cons a (ListType.nil KExpr)) \
-                 (Eq.refl Nat (Nat.succ (list_length (ListType.nil KExpr))))))"
+                 (Nat.succ (list_length (@ListType.nil KExpr))) \
+                 (Nat.succ (list_length (@ListType.nil KExpr))) \
+                 (list_length_cons a (@ListType.nil KExpr)) \
+                 (@Eq.refl Nat (Nat.succ (list_length (@ListType.nil KExpr))))))"
             );
             // cons arm: x rest ih (ih = goal_for rest).
             //   length ((x::rest)++[a]) = length (x::(rest++[a]))  [append_cons]
@@ -2540,32 +2543,32 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
             // succ (length (x::rest)); close the last gap with length_cons.
             let cons_arm = format!(
                 "(fun (x : KExpr) (rest : ListType KExpr) (ih : {ih_ty}) => \
-                 Eq.trans Nat \
-                 (list_length (list_append (ListType.cons KExpr x rest) {cons_a})) \
+                 @Eq.trans Nat \
+                 (list_length (list_append (@ListType.cons KExpr x rest) {cons_a})) \
                  (Nat.succ (Nat.succ (list_length rest))) \
-                 (Nat.succ (list_length (ListType.cons KExpr x rest))) \
-                 (Eq.trans Nat \
-                 (list_length (list_append (ListType.cons KExpr x rest) {cons_a})) \
+                 (Nat.succ (list_length (@ListType.cons KExpr x rest))) \
+                 (@Eq.trans Nat \
+                 (list_length (list_append (@ListType.cons KExpr x rest) {cons_a})) \
                  (Nat.succ (list_length (list_append rest {cons_a}))) \
                  (Nat.succ (Nat.succ (list_length rest))) \
-                 (Eq.trans Nat \
-                 (list_length (list_append (ListType.cons KExpr x rest) {cons_a})) \
-                 (list_length (ListType.cons KExpr x (list_append rest {cons_a}))) \
+                 (@Eq.trans Nat \
+                 (list_length (list_append (@ListType.cons KExpr x rest) {cons_a})) \
+                 (list_length (@ListType.cons KExpr x (list_append rest {cons_a}))) \
                  (Nat.succ (list_length (list_append rest {cons_a}))) \
-                 (Eq.cong (ListType KExpr) Nat (fun (L : ListType KExpr) => list_length L) \
-                 (list_append (ListType.cons KExpr x rest) {cons_a}) \
-                 (ListType.cons KExpr x (list_append rest {cons_a})) \
+                 (@Eq.cong (ListType KExpr) Nat (fun (L : ListType KExpr) => list_length L) \
+                 (list_append (@ListType.cons KExpr x rest) {cons_a}) \
+                 (@ListType.cons KExpr x (list_append rest {cons_a})) \
                  (list_append_cons x rest {cons_a})) \
                  (list_length_cons x (list_append rest {cons_a}))) \
-                 (Eq.cong Nat Nat (fun (N : Nat) => Nat.succ N) \
+                 (@Eq.cong Nat Nat (fun (N : Nat) => Nat.succ N) \
                  (list_length (list_append rest {cons_a})) (Nat.succ (list_length rest)) ih)) \
-                 (Eq.cong Nat Nat (fun (N : Nat) => Nat.succ N) \
-                 (Nat.succ (list_length rest)) (list_length (ListType.cons KExpr x rest)) \
-                 (Eq.symm Nat (list_length (ListType.cons KExpr x rest)) (Nat.succ (list_length rest)) (list_length_cons x rest))))",
+                 (@Eq.cong Nat Nat (fun (N : Nat) => Nat.succ N) \
+                 (Nat.succ (list_length rest)) (list_length (@ListType.cons KExpr x rest)) \
+                 (@Eq.symm Nat (list_length (@ListType.cons KExpr x rest)) (Nat.succ (list_length rest)) (list_length_cons x rest))))",
             );
             let value = format!(
                 "fun (xs : ListType KExpr) (a : KExpr) => \
-                 ListType.rec KExpr \
+                 @ListType.rec KExpr \
                  (fun (xs0 : ListType KExpr) => {goal0}) \
                  {nil_arm} \
                  {cons_arm} \
@@ -2634,11 +2637,11 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
             let len_f = "(list_length (kapp_args f))";
             let kargs_app = "(kapp_args (KExpr.app f a))";
             let kargs_f_snoc =
-                "(list_append (kapp_args f) (ListType.cons KExpr a (ListType.nil KExpr)))";
+                "(list_append (kapp_args f) (@ListType.cons KExpr a (@ListType.nil KExpr)))";
 
             // h3 type as recovered by iota_reduct_some_inv (over app f a).
             let h3_type = format!(
-                "Eq (OptionType KExpr) (list_head (list_drop {major_idx} {kargs_app})) (OptionType.some KExpr major)"
+                "@Eq (OptionType KExpr) (list_head (list_drop {major_idx} {kargs_app})) (@OptionType.some KExpr major)"
             );
             // The reduct over kapp_args (app f a), as recovered in h5r.
             let reduct_app = format!(
@@ -2651,13 +2654,13 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
             // over (app f a) + the boundary identity Eq KExpr major a).
             let k_type = format!(
                 "(forall (recname : Name) (meta : RecMeta) (major : KExpr) (cname : Name) (rule : RecRule), \
-                 Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.app f a))) (OptionType.some Name recname) -> \
-                 Eq (OptionType RecMeta) (recmeta_for env recname) (OptionType.some RecMeta meta) -> \
-                 Eq (OptionType KExpr) (list_head (list_drop {major_idx} {kargs_app})) (OptionType.some KExpr major) -> \
-                 Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname) -> \
-                 Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule) -> \
-                 Eq (OptionType KExpr) (OptionType.some KExpr {reduct_app}) (OptionType.some KExpr e1) -> \
-                 Eq KExpr major a -> C)"
+                 @Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.app f a))) (@OptionType.some Name recname) -> \
+                 @Eq (OptionType RecMeta) (recmeta_for env recname) (@OptionType.some RecMeta meta) -> \
+                 @Eq (OptionType KExpr) (list_head (list_drop {major_idx} {kargs_app})) (@OptionType.some KExpr major) -> \
+                 @Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (@OptionType.some Name cname) -> \
+                 @Eq (OptionType RecRule) (recrule_for env recname cname) (@OptionType.some RecRule rule) -> \
+                 @Eq (OptionType KExpr) (@OptionType.some KExpr {reduct_app}) (@OptionType.some KExpr e1) -> \
+                 @Eq KExpr major a -> C)"
             );
 
             // Le (succ major_idx) (length (kapp_args (app f a))) from h3.
@@ -2665,14 +2668,14 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
             // length (kapp_args (app f a)) = succ (length (kapp_args f)):
             //   kapp_args_app then list_length_append_singleton.
             let len_app_eq = format!(
-                "(Eq.trans Nat (list_length {kargs_app}) (list_length {kargs_f_snoc}) (Nat.succ {len_f}) \
-                 (Eq.cong (ListType KExpr) Nat (fun (L : ListType KExpr) => list_length L) \
+                "(@Eq.trans Nat (list_length {kargs_app}) (list_length {kargs_f_snoc}) (Nat.succ {len_f}) \
+                 (@Eq.cong (ListType KExpr) Nat (fun (L : ListType KExpr) => list_length L) \
                  {kargs_app} {kargs_f_snoc} (kapp_args_app f a)) \
                  (list_length_append_singleton (kapp_args f) a))"
             );
             // Le (succ major_idx) (succ (length (kapp_args f))), by transporting hlt_app.
             let hlt_succ = format!(
-                "(Eq.subst Nat (fun (z : Nat) => Le (Nat.succ {major_idx}) z) \
+                "(@Eq.subst Nat (fun (z : Nat) => Le (Nat.succ {major_idx}) z) \
                  (list_length {kargs_app}) (Nat.succ {len_f}) {len_app_eq} {hlt_app})"
             );
             // Le major_idx (length (kapp_args f)) via le_pred_pred.
@@ -2684,36 +2687,36 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
             // gives head (...) = some a; combine to major = a via option_some_inj.
             // h3 over (kapp_args f ++ [a]) at index major_idx:
             let h3_snoc = format!(
-                "(Eq.trans (OptionType KExpr) \
+                "(@Eq.trans (OptionType KExpr) \
                  (list_head (list_drop {major_idx} {kargs_f_snoc})) \
                  (list_head (list_drop {major_idx} {kargs_app})) \
-                 (OptionType.some KExpr major) \
-                 (Eq.cong (ListType KExpr) (OptionType KExpr) (fun (L : ListType KExpr) => list_head (list_drop {major_idx} L)) \
+                 (@OptionType.some KExpr major) \
+                 (@Eq.cong (ListType KExpr) (OptionType KExpr) (fun (L : ListType KExpr) => list_head (list_drop {major_idx} L)) \
                  {kargs_f_snoc} {kargs_app} \
-                 (Eq.symm (ListType KExpr) {kargs_app} {kargs_f_snoc} (kapp_args_app f a))) \
+                 (@Eq.symm (ListType KExpr) {kargs_app} {kargs_f_snoc} (kapp_args_app f a))) \
                  h3)"
             );
             // some a = some major : rewrite list_head_drop_len_append's index
             // (length kapp_args f) to major_idx (symm heq), landing on h3_snoc.
             let some_a_eq_some_major = format!(
-                "(Eq.trans (OptionType KExpr) \
-                 (OptionType.some KExpr a) \
+                "(@Eq.trans (OptionType KExpr) \
+                 (@OptionType.some KExpr a) \
                  (list_head (list_drop {major_idx} {kargs_f_snoc})) \
-                 (OptionType.some KExpr major) \
-                 (Eq.subst Nat (fun (z : Nat) => Eq (OptionType KExpr) (OptionType.some KExpr a) (list_head (list_drop z {kargs_f_snoc}))) \
+                 (@OptionType.some KExpr major) \
+                 (@Eq.subst Nat (fun (z : Nat) => @Eq (OptionType KExpr) (@OptionType.some KExpr a) (list_head (list_drop z {kargs_f_snoc}))) \
                  {len_f} {major_idx} \
-                 (Eq.symm Nat {major_idx} {len_f} heq) \
-                 (Eq.symm (OptionType KExpr) (list_head (list_drop {len_f} {kargs_f_snoc})) (OptionType.some KExpr a) \
+                 (@Eq.symm Nat {major_idx} {len_f} heq) \
+                 (@Eq.symm (OptionType KExpr) (list_head (list_drop {len_f} {kargs_f_snoc})) (@OptionType.some KExpr a) \
                  (list_head_drop_len_append (kapp_args f) a))) \
                  {h3_snoc})"
             );
             // major = a : option_some_inj on (symm some_a_eq_some_major) : some major = some a.
             let major_eq_a = format!(
                 "(option_some_inj KExpr major a \
-                 (Eq.symm (OptionType KExpr) (OptionType.some KExpr a) (OptionType.some KExpr major) {some_a_eq_some_major}))"
+                 (@Eq.symm (OptionType KExpr) (@OptionType.some KExpr a) (@OptionType.some KExpr major) {some_a_eq_some_major}))"
             );
             let keq_arm = format!(
-                "(fun (heq : Eq Nat {major_idx} {len_f}) => \
+                "(fun (heq : @Eq Nat {major_idx} {len_f}) => \
                  k recname meta major cname rule h1 h2 h3 h4 h5 h5r {major_eq_a})"
             );
 
@@ -2722,31 +2725,31 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
             // major_idx(m0)) len) by unifying (rn,m0) with (recname,meta) via
             // option_some_inj, exactly as iota_reduct_app_some; then iota_reduct_app_inner
             // forces iota_reduct env f = some f1, contradicting hnone.
-            let h1f = "(Eq.trans (OptionType Name) (kexpr_const_name (kapp_fn f)) (kexpr_const_name (kapp_fn (KExpr.app f a))) (OptionType.some Name recname) (Eq.cong KExpr (OptionType Name) (fun (H : KExpr) => kexpr_const_name H) (kapp_fn f) (kapp_fn (KExpr.app f a)) (Eq.symm KExpr (kapp_fn (KExpr.app f a)) (kapp_fn f) (kapp_fn_app f a))) h1)";
+            let h1f = "(@Eq.trans (OptionType Name) (kexpr_const_name (kapp_fn f)) (kexpr_const_name (kapp_fn (KExpr.app f a))) (@OptionType.some Name recname) (@Eq.cong KExpr (OptionType Name) (fun (H : KExpr) => kexpr_const_name H) (kapp_fn f) (kapp_fn (KExpr.app f a)) (@Eq.symm KExpr (kapp_fn (KExpr.app f a)) (kapp_fn f) (kapp_fn_app f a))) h1)";
             // hrn : Eq Name recname rn from h1f (head f = some recname) and h1' (head f = some rn).
             let hrn = format!(
                 "(option_some_inj Name recname rn \
-                 (Eq.trans (OptionType Name) (OptionType.some Name recname) (kexpr_const_name (kapp_fn f)) (OptionType.some Name rn) \
-                 (Eq.symm (OptionType Name) (kexpr_const_name (kapp_fn f)) (OptionType.some Name recname) {h1f}) h1'))"
+                 (@Eq.trans (OptionType Name) (@OptionType.some Name recname) (kexpr_const_name (kapp_fn f)) (@OptionType.some Name rn) \
+                 (@Eq.symm (OptionType Name) (kexpr_const_name (kapp_fn f)) (@OptionType.some Name recname) {h1f}) h1'))"
             );
             // h2recname : recmeta_for env recname = some m0, from h2' over rn along rn=recname.
             let h2recname = format!(
-                "(Eq.substType Name (fun (n : Name) => Eq (OptionType RecMeta) (recmeta_for env n) (OptionType.some RecMeta m0)) rn recname \
-                 (Eq.symm Name recname rn {hrn}) h2')"
+                "(@Eq.substType Name (fun (n : Name) => @Eq (OptionType RecMeta) (recmeta_for env n) (@OptionType.some RecMeta m0)) rn recname \
+                 (@Eq.symm Name recname rn {hrn}) h2')"
             );
             // meta = m0 from h2 (recmeta_for env recname = some meta) + h2recname.
             let meta_eq_m0 = format!(
                 "(option_some_inj RecMeta meta m0 \
-                 (Eq.trans (OptionType RecMeta) (OptionType.some RecMeta meta) (recmeta_for env recname) (OptionType.some RecMeta m0) \
-                 (Eq.symm (OptionType RecMeta) (recmeta_for env recname) (OptionType.some RecMeta meta) h2) {h2recname}))"
+                 (@Eq.trans (OptionType RecMeta) (@OptionType.some RecMeta meta) (recmeta_for env recname) (@OptionType.some RecMeta m0) \
+                 (@Eq.symm (OptionType RecMeta) (recmeta_for env recname) (@OptionType.some RecMeta meta) h2) {h2recname}))"
             );
             // hwin continuation: Le (succ major_idx(m0)) len, by transporting hstrict
             // (over meta) along meta = m0.
             let hwin = format!(
                 "(fun (rn : Name) (m0 : RecMeta) \
-                 (h1' : Eq (OptionType Name) (kexpr_const_name (kapp_fn f)) (OptionType.some Name rn)) \
-                 (h2' : Eq (OptionType RecMeta) (recmeta_for env rn) (OptionType.some RecMeta m0)) => \
-                 Eq.substType RecMeta (fun (mm : RecMeta) => Le (Nat.succ {major_idx_mm}) {len_f}) meta m0 \
+                 (h1' : @Eq (OptionType Name) (kexpr_const_name (kapp_fn f)) (@OptionType.some Name rn)) \
+                 (h2' : @Eq (OptionType RecMeta) (recmeta_for env rn) (@OptionType.some RecMeta m0)) => \
+                 @Eq.substType RecMeta (fun (mm : RecMeta) => Le (Nat.succ {major_idx_mm}) {len_f}) meta m0 \
                  {meta_eq_m0} \
                  hstrict)",
                 major_idx_mm = major_idx_of("mm"),
@@ -2755,25 +2758,25 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
             let strict_arm = format!(
                 "(fun (hstrict : Le (Nat.succ {major_idx}) {len_f}) => \
                  iota_reduct_app_inner env f a e1 {hwin} hsome C \
-                 (fun (f1 : KExpr) (hf1 : Eq (OptionType KExpr) (iota_reduct env f) (OptionType.some KExpr f1)) => \
+                 (fun (f1 : KExpr) (hf1 : @Eq (OptionType KExpr) (iota_reduct env f) (@OptionType.some KExpr f1)) => \
                  option_none_ne_some KExpr f1 C \
-                 (Eq.trans (OptionType KExpr) (OptionType.none KExpr) (iota_reduct env f) (OptionType.some KExpr f1) \
-                 (Eq.symm (OptionType KExpr) (iota_reduct env f) (OptionType.none KExpr) hnone) hf1)))"
+                 (@Eq.trans (OptionType KExpr) (@OptionType.none KExpr) (iota_reduct env f) (@OptionType.some KExpr f1) \
+                 (@Eq.symm (OptionType KExpr) (iota_reduct env f) (@OptionType.none KExpr) hnone) hf1)))"
             );
 
             let value = format!(
                 "fun (env : RecEnv) (f : KExpr) (a : KExpr) (e1 : KExpr) \
-                 (hsome : Eq (OptionType KExpr) (iota_reduct env (KExpr.app f a)) (OptionType.some KExpr e1)) \
-                 (hnone : Eq (OptionType KExpr) (iota_reduct env f) (OptionType.none KExpr)) \
+                 (hsome : @Eq (OptionType KExpr) (iota_reduct env (KExpr.app f a)) (@OptionType.some KExpr e1)) \
+                 (hnone : @Eq (OptionType KExpr) (iota_reduct env f) (@OptionType.none KExpr)) \
                  (C : Prop) (k : {k_type}) => \
                  iota_reduct_some_inv env (KExpr.app f a) e1 C hsome \
                  (fun (recname : Name) (meta : RecMeta) (major : KExpr) (cname : Name) (rule : RecRule) \
-                 (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.app f a))) (OptionType.some Name recname)) \
-                 (h2 : Eq (OptionType RecMeta) (recmeta_for env recname) (OptionType.some RecMeta meta)) \
+                 (h1 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.app f a))) (@OptionType.some Name recname)) \
+                 (h2 : @Eq (OptionType RecMeta) (recmeta_for env recname) (@OptionType.some RecMeta meta)) \
                  (h3 : {h3_type}) \
-                 (h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname)) \
-                 (h5 : Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule)) \
-                 (h5r : Eq (OptionType KExpr) (OptionType.some KExpr {reduct_app}) (OptionType.some KExpr e1)) => \
+                 (h4 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (@OptionType.some Name cname)) \
+                 (h5 : @Eq (OptionType RecRule) (recrule_for env recname cname) (@OptionType.some RecRule rule)) \
+                 (h5r : @Eq (OptionType KExpr) (@OptionType.some KExpr {reduct_app}) (@OptionType.some KExpr e1)) => \
                  nat_le_succ_or {major_idx} {len_f} {hle} C \
                  {keq_arm} \
                  {strict_arm})",
@@ -2789,8 +2792,8 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
 
             let type_src = format!(
                 "forall (env : RecEnv) (f : KExpr) (a : KExpr) (e1 : KExpr), \
-                 Eq (OptionType KExpr) (iota_reduct env (KExpr.app f a)) (OptionType.some KExpr e1) -> \
-                 Eq (OptionType KExpr) (iota_reduct env f) (OptionType.none KExpr) -> \
+                 @Eq (OptionType KExpr) (iota_reduct env (KExpr.app f a)) (@OptionType.some KExpr e1) -> \
+                 @Eq (OptionType KExpr) (iota_reduct env f) (@OptionType.none KExpr) -> \
                  forall (C : Prop), {k_type} -> C",
                 k_type = k_type,
             );
@@ -2854,19 +2857,19 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
             let value = format!(
                 "fun (env : RecEnv) (f : KExpr) (a : KExpr) (e1 : KExpr) \
                  (disjoint : RecEnvCtorRecDisjoint env) \
-                 (hsome : Eq (OptionType KExpr) (iota_reduct env (KExpr.app f a)) (OptionType.some KExpr e1)) \
-                 (hfnone : Eq (OptionType KExpr) (iota_reduct env f) (OptionType.none KExpr)) => \
+                 (hsome : @Eq (OptionType KExpr) (iota_reduct env (KExpr.app f a)) (@OptionType.some KExpr e1)) \
+                 (hfnone : @Eq (OptionType KExpr) (iota_reduct env f) (@OptionType.none KExpr)) => \
                  iota_reduct_app_minimal_boundary env f a e1 hsome hfnone \
-                 (Eq (OptionType KExpr) (iota_reduct env a) (OptionType.none KExpr)) \
+                 (@Eq (OptionType KExpr) (iota_reduct env a) (@OptionType.none KExpr)) \
                  (fun (recname : Name) (meta : RecMeta) (major : KExpr) (cname : Name) (rule : RecRule) \
-                 (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.app f a))) (OptionType.some Name recname)) \
-                 (h2 : Eq (OptionType RecMeta) (recmeta_for env recname) (OptionType.some RecMeta meta)) \
-                 (h3 : Eq (OptionType KExpr) (list_head (list_drop {major_idx} {kargs_app})) (OptionType.some KExpr major)) \
-                 (h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname)) \
-                 (h5 : Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule)) \
-                 (h5r : Eq (OptionType KExpr) (OptionType.some KExpr {reduct_app}) (OptionType.some KExpr e1)) \
-                 (hbnd : Eq KExpr major a) => \
-                 Eq.subst KExpr (fun (x : KExpr) => Eq (OptionType KExpr) (iota_reduct env x) (OptionType.none KExpr)) \
+                 (h1 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.app f a))) (@OptionType.some Name recname)) \
+                 (h2 : @Eq (OptionType RecMeta) (recmeta_for env recname) (@OptionType.some RecMeta meta)) \
+                 (h3 : @Eq (OptionType KExpr) (list_head (list_drop {major_idx} {kargs_app})) (@OptionType.some KExpr major)) \
+                 (h4 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (@OptionType.some Name cname)) \
+                 (h5 : @Eq (OptionType RecRule) (recrule_for env recname cname) (@OptionType.some RecRule rule)) \
+                 (h5r : @Eq (OptionType KExpr) (@OptionType.some KExpr {reduct_app}) (@OptionType.some KExpr e1)) \
+                 (hbnd : @Eq KExpr major a) => \
+                 @Eq.subst KExpr (fun (x : KExpr) => @Eq (OptionType KExpr) (iota_reduct env x) (@OptionType.none KExpr)) \
                  major a hbnd \
                  (recenv_ctor_rec_disjoint_major env recname cname rule major disjoint h4 h5))"
             );
@@ -2875,9 +2878,9 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
                 type_src: concat!(
                     "forall (env : RecEnv) (f : KExpr) (a : KExpr) (e1 : KExpr), ",
                     "RecEnvCtorRecDisjoint env -> ",
-                    "Eq (OptionType KExpr) (iota_reduct env (KExpr.app f a)) (OptionType.some KExpr e1) -> ",
-                    "Eq (OptionType KExpr) (iota_reduct env f) (OptionType.none KExpr) -> ",
-                    "Eq (OptionType KExpr) (iota_reduct env a) (OptionType.none KExpr)"
+                    "@Eq (OptionType KExpr) (iota_reduct env (KExpr.app f a)) (@OptionType.some KExpr e1) -> ",
+                    "@Eq (OptionType KExpr) (iota_reduct env f) (@OptionType.none KExpr) -> ",
+                    "@Eq (OptionType KExpr) (iota_reduct env a) (@OptionType.none KExpr)"
                 )
                 .to_string(),
                 value_src: Some(value),
@@ -2922,10 +2925,10 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
             let len_f = "(list_length (kapp_args f))";
             let kargs_app = "(kapp_args (KExpr.app f a))";
             let kargs_f_snoc =
-                "(list_append (kapp_args f) (ListType.cons KExpr a (ListType.nil KExpr)))";
+                "(list_append (kapp_args f) (@ListType.cons KExpr a (@ListType.nil KExpr)))";
 
             let h3_type = format!(
-                "Eq (OptionType KExpr) (list_head (list_drop {major_idx} {kargs_app})) (OptionType.some KExpr major)"
+                "@Eq (OptionType KExpr) (list_head (list_drop {major_idx} {kargs_app})) (@OptionType.some KExpr major)"
             );
             let reduct_app = format!(
                 "(apply_spine (list_drop (Nat.succ {major_idx}) {kargs_app}) \
@@ -2937,84 +2940,84 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
             // EXTRA index identity Eq Nat major_idx (length (kapp_args f)).
             let k_type = format!(
                 "(forall (recname : Name) (meta : RecMeta) (major : KExpr) (cname : Name) (rule : RecRule), \
-                 Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.app f a))) (OptionType.some Name recname) -> \
-                 Eq (OptionType RecMeta) (recmeta_for env recname) (OptionType.some RecMeta meta) -> \
-                 Eq (OptionType KExpr) (list_head (list_drop {major_idx} {kargs_app})) (OptionType.some KExpr major) -> \
-                 Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname) -> \
-                 Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule) -> \
-                 Eq Bool (iota_fields_ok rule (kapp_args major)) Bool.true -> \
-                 Eq Bool (nat_eqb (name_list_len (kconst_params (recmeta_signature meta))) (level_list_len (kexpr_const_levels (kapp_fn f)))) Bool.true -> \
-                 Eq (OptionType KExpr) (OptionType.some KExpr {reduct_app}) (OptionType.some KExpr e1) -> \
-                 Eq KExpr major a -> Eq Nat {major_idx} {len_f} -> C)"
+                 @Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.app f a))) (@OptionType.some Name recname) -> \
+                 @Eq (OptionType RecMeta) (recmeta_for env recname) (@OptionType.some RecMeta meta) -> \
+                 @Eq (OptionType KExpr) (list_head (list_drop {major_idx} {kargs_app})) (@OptionType.some KExpr major) -> \
+                 @Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (@OptionType.some Name cname) -> \
+                 @Eq (OptionType RecRule) (recrule_for env recname cname) (@OptionType.some RecRule rule) -> \
+                 @Eq Bool (iota_fields_ok rule (kapp_args major)) Bool.true -> \
+                 @Eq Bool (nat_eqb (name_list_len (kconst_params (recmeta_signature meta))) (level_list_len (kexpr_const_levels (kapp_fn f)))) Bool.true -> \
+                 @Eq (OptionType KExpr) (@OptionType.some KExpr {reduct_app}) (@OptionType.some KExpr e1) -> \
+                 @Eq KExpr major a -> @Eq Nat {major_idx} {len_f} -> C)"
             );
 
             let hlt_app = format!("(list_head_drop_some_le_succ {major_idx} {kargs_app} major h3)");
             let len_app_eq = format!(
-                "(Eq.trans Nat (list_length {kargs_app}) (list_length {kargs_f_snoc}) (Nat.succ {len_f}) \
-                 (Eq.cong (ListType KExpr) Nat (fun (L : ListType KExpr) => list_length L) \
+                "(@Eq.trans Nat (list_length {kargs_app}) (list_length {kargs_f_snoc}) (Nat.succ {len_f}) \
+                 (@Eq.cong (ListType KExpr) Nat (fun (L : ListType KExpr) => list_length L) \
                  {kargs_app} {kargs_f_snoc} (kapp_args_app f a)) \
                  (list_length_append_singleton (kapp_args f) a))"
             );
             let hlt_succ = format!(
-                "(Eq.subst Nat (fun (z : Nat) => Le (Nat.succ {major_idx}) z) \
+                "(@Eq.subst Nat (fun (z : Nat) => Le (Nat.succ {major_idx}) z) \
                  (list_length {kargs_app}) (Nat.succ {len_f}) {len_app_eq} {hlt_app})"
             );
             let hle = format!("(le_pred_pred {major_idx} {len_f} {hlt_succ})");
 
             // EQUAL arm: derive major = a (as in the boundary lemma) AND pass heq.
             let h3_snoc = format!(
-                "(Eq.trans (OptionType KExpr) \
+                "(@Eq.trans (OptionType KExpr) \
                  (list_head (list_drop {major_idx} {kargs_f_snoc})) \
                  (list_head (list_drop {major_idx} {kargs_app})) \
-                 (OptionType.some KExpr major) \
-                 (Eq.cong (ListType KExpr) (OptionType KExpr) (fun (L : ListType KExpr) => list_head (list_drop {major_idx} L)) \
+                 (@OptionType.some KExpr major) \
+                 (@Eq.cong (ListType KExpr) (OptionType KExpr) (fun (L : ListType KExpr) => list_head (list_drop {major_idx} L)) \
                  {kargs_f_snoc} {kargs_app} \
-                 (Eq.symm (ListType KExpr) {kargs_app} {kargs_f_snoc} (kapp_args_app f a))) \
+                 (@Eq.symm (ListType KExpr) {kargs_app} {kargs_f_snoc} (kapp_args_app f a))) \
                  h3)"
             );
             let some_a_eq_some_major = format!(
-                "(Eq.trans (OptionType KExpr) \
-                 (OptionType.some KExpr a) \
+                "(@Eq.trans (OptionType KExpr) \
+                 (@OptionType.some KExpr a) \
                  (list_head (list_drop {major_idx} {kargs_f_snoc})) \
-                 (OptionType.some KExpr major) \
-                 (Eq.subst Nat (fun (z : Nat) => Eq (OptionType KExpr) (OptionType.some KExpr a) (list_head (list_drop z {kargs_f_snoc}))) \
+                 (@OptionType.some KExpr major) \
+                 (@Eq.subst Nat (fun (z : Nat) => @Eq (OptionType KExpr) (@OptionType.some KExpr a) (list_head (list_drop z {kargs_f_snoc}))) \
                  {len_f} {major_idx} \
-                 (Eq.symm Nat {major_idx} {len_f} heq) \
-                 (Eq.symm (OptionType KExpr) (list_head (list_drop {len_f} {kargs_f_snoc})) (OptionType.some KExpr a) \
+                 (@Eq.symm Nat {major_idx} {len_f} heq) \
+                 (@Eq.symm (OptionType KExpr) (list_head (list_drop {len_f} {kargs_f_snoc})) (@OptionType.some KExpr a) \
                  (list_head_drop_len_append (kapp_args f) a))) \
                  {h3_snoc})"
             );
             let major_eq_a = format!(
                 "(option_some_inj KExpr major a \
-                 (Eq.symm (OptionType KExpr) (OptionType.some KExpr a) (OptionType.some KExpr major) {some_a_eq_some_major}))"
+                 (@Eq.symm (OptionType KExpr) (@OptionType.some KExpr a) (@OptionType.some KExpr major) {some_a_eq_some_major}))"
             );
             let keq_arm = format!(
-                "(fun (heq : Eq Nat {major_idx} {len_f}) => \
-                 k recname meta major cname rule h1 h2 h3 h4 h5 hfields harity (Eq.cong KExpr (OptionType KExpr) (fun (z : KExpr) => OptionType.some KExpr z) {reduct_app} e1 (Eq.symm KExpr e1 {reduct_app} returned)) {major_eq_a} heq)"
+                "(fun (heq : @Eq Nat {major_idx} {len_f}) => \
+                 k recname meta major cname rule h1 h2 h3 h4 h5 hfields harity (@Eq.cong KExpr (OptionType KExpr) (fun (z : KExpr) => @OptionType.some KExpr z) {reduct_app} e1 (@Eq.symm KExpr e1 {reduct_app} returned)) {major_eq_a} heq)"
             );
 
             // STRICT arm: killed by hnone via iota_reduct_app_inner (identical to the
             // boundary lemma).
-            let h1f = "(Eq.trans (OptionType Name) (kexpr_const_name (kapp_fn f)) (kexpr_const_name (kapp_fn (KExpr.app f a))) (OptionType.some Name recname) (Eq.cong KExpr (OptionType Name) (fun (H : KExpr) => kexpr_const_name H) (kapp_fn f) (kapp_fn (KExpr.app f a)) (Eq.symm KExpr (kapp_fn (KExpr.app f a)) (kapp_fn f) (kapp_fn_app f a))) h1)";
+            let h1f = "(@Eq.trans (OptionType Name) (kexpr_const_name (kapp_fn f)) (kexpr_const_name (kapp_fn (KExpr.app f a))) (@OptionType.some Name recname) (@Eq.cong KExpr (OptionType Name) (fun (H : KExpr) => kexpr_const_name H) (kapp_fn f) (kapp_fn (KExpr.app f a)) (@Eq.symm KExpr (kapp_fn (KExpr.app f a)) (kapp_fn f) (kapp_fn_app f a))) h1)";
             let hrn = format!(
                 "(option_some_inj Name recname rn \
-                 (Eq.trans (OptionType Name) (OptionType.some Name recname) (kexpr_const_name (kapp_fn f)) (OptionType.some Name rn) \
-                 (Eq.symm (OptionType Name) (kexpr_const_name (kapp_fn f)) (OptionType.some Name recname) {h1f}) h1'))"
+                 (@Eq.trans (OptionType Name) (@OptionType.some Name recname) (kexpr_const_name (kapp_fn f)) (@OptionType.some Name rn) \
+                 (@Eq.symm (OptionType Name) (kexpr_const_name (kapp_fn f)) (@OptionType.some Name recname) {h1f}) h1'))"
             );
             let h2recname = format!(
-                "(Eq.substType Name (fun (n : Name) => Eq (OptionType RecMeta) (recmeta_for env n) (OptionType.some RecMeta m0)) rn recname \
-                 (Eq.symm Name recname rn {hrn}) h2')"
+                "(@Eq.substType Name (fun (n : Name) => @Eq (OptionType RecMeta) (recmeta_for env n) (@OptionType.some RecMeta m0)) rn recname \
+                 (@Eq.symm Name recname rn {hrn}) h2')"
             );
             let meta_eq_m0 = format!(
                 "(option_some_inj RecMeta meta m0 \
-                 (Eq.trans (OptionType RecMeta) (OptionType.some RecMeta meta) (recmeta_for env recname) (OptionType.some RecMeta m0) \
-                 (Eq.symm (OptionType RecMeta) (recmeta_for env recname) (OptionType.some RecMeta meta) h2) {h2recname}))"
+                 (@Eq.trans (OptionType RecMeta) (@OptionType.some RecMeta meta) (recmeta_for env recname) (@OptionType.some RecMeta m0) \
+                 (@Eq.symm (OptionType RecMeta) (recmeta_for env recname) (@OptionType.some RecMeta meta) h2) {h2recname}))"
             );
             let hwin = format!(
                 "(fun (rn : Name) (m0 : RecMeta) \
-                 (h1' : Eq (OptionType Name) (kexpr_const_name (kapp_fn f)) (OptionType.some Name rn)) \
-                 (h2' : Eq (OptionType RecMeta) (recmeta_for env rn) (OptionType.some RecMeta m0)) => \
-                 Eq.substType RecMeta (fun (mm : RecMeta) => Le (Nat.succ {major_idx_mm}) {len_f}) meta m0 \
+                 (h1' : @Eq (OptionType Name) (kexpr_const_name (kapp_fn f)) (@OptionType.some Name rn)) \
+                 (h2' : @Eq (OptionType RecMeta) (recmeta_for env rn) (@OptionType.some RecMeta m0)) => \
+                 @Eq.substType RecMeta (fun (mm : RecMeta) => Le (Nat.succ {major_idx_mm}) {len_f}) meta m0 \
                  {meta_eq_m0} \
                  hstrict)",
                 major_idx_mm = major_idx_of("mm"),
@@ -3022,27 +3025,27 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
             let strict_arm = format!(
                 "(fun (hstrict : Le (Nat.succ {major_idx}) {len_f}) => \
                  iota_reduct_app_inner env f a e1 {hwin} hsome C \
-                 (fun (f1 : KExpr) (hf1 : Eq (OptionType KExpr) (iota_reduct env f) (OptionType.some KExpr f1)) => \
+                 (fun (f1 : KExpr) (hf1 : @Eq (OptionType KExpr) (iota_reduct env f) (@OptionType.some KExpr f1)) => \
                  option_none_ne_some KExpr f1 C \
-                 (Eq.trans (OptionType KExpr) (OptionType.none KExpr) (iota_reduct env f) (OptionType.some KExpr f1) \
-                 (Eq.symm (OptionType KExpr) (iota_reduct env f) (OptionType.none KExpr) hnone) hf1)))"
+                 (@Eq.trans (OptionType KExpr) (@OptionType.none KExpr) (iota_reduct env f) (@OptionType.some KExpr f1) \
+                 (@Eq.symm (OptionType KExpr) (iota_reduct env f) (@OptionType.none KExpr) hnone) hf1)))"
             );
 
             let value = format!(
                 "fun (env : RecEnv) (f : KExpr) (a : KExpr) (e1 : KExpr) \
-                 (hsome : Eq (OptionType KExpr) (iota_reduct env (KExpr.app f a)) (OptionType.some KExpr e1)) \
-                 (hnone : Eq (OptionType KExpr) (iota_reduct env f) (OptionType.none KExpr)) \
+                 (hsome : @Eq (OptionType KExpr) (iota_reduct env (KExpr.app f a)) (@OptionType.some KExpr e1)) \
+                 (hnone : @Eq (OptionType KExpr) (iota_reduct env f) (@OptionType.none KExpr)) \
                  (C : Prop) (k : {k_type}) => \
                  iota_reduct_full_inv env (KExpr.app f a) e1 C hsome \
                  (fun (recname : Name) (meta : RecMeta) (major : KExpr) (cname : Name) (rule : RecRule) \
-                 (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.app f a))) (OptionType.some Name recname)) \
-                 (h2 : Eq (OptionType RecMeta) (recmeta_for env recname) (OptionType.some RecMeta meta)) \
+                 (h1 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.app f a))) (@OptionType.some Name recname)) \
+                 (h2 : @Eq (OptionType RecMeta) (recmeta_for env recname) (@OptionType.some RecMeta meta)) \
                  (h3 : {h3_type}) \
-                 (h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname)) \
-                 (h5 : Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule)) \
-                 (hfields : Eq Bool (iota_fields_ok rule (kapp_args major)) Bool.true) \
-                 (harity : Eq Bool (nat_eqb (name_list_len (kconst_params (recmeta_signature meta))) (level_list_len (kexpr_const_levels (kapp_fn f)))) Bool.true) \
-                 (returned : Eq KExpr e1 {reduct_app}) => \
+                 (h4 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (@OptionType.some Name cname)) \
+                 (h5 : @Eq (OptionType RecRule) (recrule_for env recname cname) (@OptionType.some RecRule rule)) \
+                 (hfields : @Eq Bool (iota_fields_ok rule (kapp_args major)) Bool.true) \
+                 (harity : @Eq Bool (nat_eqb (name_list_len (kconst_params (recmeta_signature meta))) (level_list_len (kexpr_const_levels (kapp_fn f)))) Bool.true) \
+                 (returned : @Eq KExpr e1 {reduct_app}) => \
                  nat_le_succ_or {major_idx} {len_f} {hle} C \
                  {keq_arm} \
                  {strict_arm})",
@@ -3058,8 +3061,8 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
 
             let type_src = format!(
                 "forall (env : RecEnv) (f : KExpr) (a : KExpr) (e1 : KExpr), \
-                 Eq (OptionType KExpr) (iota_reduct env (KExpr.app f a)) (OptionType.some KExpr e1) -> \
-                 Eq (OptionType KExpr) (iota_reduct env f) (OptionType.none KExpr) -> \
+                 @Eq (OptionType KExpr) (iota_reduct env (KExpr.app f a)) (@OptionType.some KExpr e1) -> \
+                 @Eq (OptionType KExpr) (iota_reduct env f) (@OptionType.none KExpr) -> \
                  forall (C : Prop), {k_type} -> C",
                 k_type = k_type,
             );
@@ -3122,7 +3125,7 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
                 type_src: format!(
                     concat!(
                         "forall (args : ListType KExpr) (head : KExpr) (c : Nat) (a : Nat), ",
-                        "Eq KExpr (lift_at (apply_spine args head) c a) ",
+                        "@Eq KExpr (lift_at (apply_spine args head) c a) ",
                         "(apply_spine (list_map {f} args) (lift_at head c a))"
                     ),
                     f = f,
@@ -3130,68 +3133,68 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
                 value_src: Some(format!(
                     concat!(
                         "fun (args : ListType KExpr) (head : KExpr) (c : Nat) (a : Nat) => ",
-                        "ListType.rec KExpr ",
+                        "@ListType.rec KExpr ",
                         "(fun (args0 : ListType KExpr) => forall (head0 : KExpr), ",
-                        "Eq KExpr (lift_at (apply_spine args0 head0) c a) ",
+                        "@Eq KExpr (lift_at (apply_spine args0 head0) c a) ",
                         "(apply_spine (list_map {f} args0) (lift_at head0 c a))) ",
                         // nil case
                         "(fun (head0 : KExpr) => ",
-                        "Eq.trans KExpr ",
-                        "(lift_at (apply_spine (ListType.nil KExpr) head0) c a) ",
+                        "@Eq.trans KExpr ",
+                        "(lift_at (apply_spine (@ListType.nil KExpr) head0) c a) ",
                         "(lift_at head0 c a) ",
-                        "(apply_spine (list_map {f} (ListType.nil KExpr)) (lift_at head0 c a)) ",
-                        "(Eq.cong KExpr KExpr (fun (X : KExpr) => lift_at X c a) ",
-                        "(apply_spine (ListType.nil KExpr) head0) head0 (apply_spine_nil head0)) ",
-                        "(Eq.symm KExpr ",
-                        "(apply_spine (list_map {f} (ListType.nil KExpr)) (lift_at head0 c a)) ",
+                        "(apply_spine (list_map {f} (@ListType.nil KExpr)) (lift_at head0 c a)) ",
+                        "(@Eq.cong KExpr KExpr (fun (X : KExpr) => lift_at X c a) ",
+                        "(apply_spine (@ListType.nil KExpr) head0) head0 (apply_spine_nil head0)) ",
+                        "(@Eq.symm KExpr ",
+                        "(apply_spine (list_map {f} (@ListType.nil KExpr)) (lift_at head0 c a)) ",
                         "(lift_at head0 c a) ",
-                        "(Eq.trans KExpr ",
-                        "(apply_spine (list_map {f} (ListType.nil KExpr)) (lift_at head0 c a)) ",
-                        "(apply_spine (ListType.nil KExpr) (lift_at head0 c a)) ",
+                        "(@Eq.trans KExpr ",
+                        "(apply_spine (list_map {f} (@ListType.nil KExpr)) (lift_at head0 c a)) ",
+                        "(apply_spine (@ListType.nil KExpr) (lift_at head0 c a)) ",
                         "(lift_at head0 c a) ",
-                        "(Eq.cong (ListType KExpr) KExpr ",
+                        "(@Eq.cong (ListType KExpr) KExpr ",
                         "(fun (L : ListType KExpr) => apply_spine L (lift_at head0 c a)) ",
-                        "(list_map {f} (ListType.nil KExpr)) (ListType.nil KExpr) (list_map_nil {f})) ",
+                        "(list_map {f} (@ListType.nil KExpr)) (@ListType.nil KExpr) (list_map_nil {f})) ",
                         "(apply_spine_nil (lift_at head0 c a))))) ",
                         // cons case
                         "(fun (x : KExpr) (rest : ListType KExpr) ",
                         "(ih : forall (head0 : KExpr), ",
-                        "Eq KExpr (lift_at (apply_spine rest head0) c a) ",
+                        "@Eq KExpr (lift_at (apply_spine rest head0) c a) ",
                         "(apply_spine (list_map {f} rest) (lift_at head0 c a))) => ",
                         "fun (head0 : KExpr) => ",
-                        "Eq.trans KExpr ",
-                        "(lift_at (apply_spine (ListType.cons KExpr x rest) head0) c a) ",
+                        "@Eq.trans KExpr ",
+                        "(lift_at (apply_spine (@ListType.cons KExpr x rest) head0) c a) ",
                         "(apply_spine (list_map {f} rest) (KExpr.app (lift_at head0 c a) (lift_at x c a))) ",
-                        "(apply_spine (list_map {f} (ListType.cons KExpr x rest)) (lift_at head0 c a)) ",
+                        "(apply_spine (list_map {f} (@ListType.cons KExpr x rest)) (lift_at head0 c a)) ",
                         // leg1
-                        "(Eq.trans KExpr ",
-                        "(lift_at (apply_spine (ListType.cons KExpr x rest) head0) c a) ",
+                        "(@Eq.trans KExpr ",
+                        "(lift_at (apply_spine (@ListType.cons KExpr x rest) head0) c a) ",
                         "(apply_spine (list_map {f} rest) (lift_at (KExpr.app head0 x) c a)) ",
                         "(apply_spine (list_map {f} rest) (KExpr.app (lift_at head0 c a) (lift_at x c a))) ",
-                        "(Eq.trans KExpr ",
-                        "(lift_at (apply_spine (ListType.cons KExpr x rest) head0) c a) ",
+                        "(@Eq.trans KExpr ",
+                        "(lift_at (apply_spine (@ListType.cons KExpr x rest) head0) c a) ",
                         "(lift_at (apply_spine rest (KExpr.app head0 x)) c a) ",
                         "(apply_spine (list_map {f} rest) (lift_at (KExpr.app head0 x) c a)) ",
-                        "(Eq.cong KExpr KExpr (fun (X : KExpr) => lift_at X c a) ",
-                        "(apply_spine (ListType.cons KExpr x rest) head0) (apply_spine rest (KExpr.app head0 x)) ",
+                        "(@Eq.cong KExpr KExpr (fun (X : KExpr) => lift_at X c a) ",
+                        "(apply_spine (@ListType.cons KExpr x rest) head0) (apply_spine rest (KExpr.app head0 x)) ",
                         "(apply_spine_cons x rest head0)) ",
                         "(ih (KExpr.app head0 x))) ",
-                        "(Eq.cong KExpr KExpr (fun (Y : KExpr) => apply_spine (list_map {f} rest) Y) ",
+                        "(@Eq.cong KExpr KExpr (fun (Y : KExpr) => apply_spine (list_map {f} rest) Y) ",
                         "(lift_at (KExpr.app head0 x) c a) ",
                         "(KExpr.app (lift_at head0 c a) (lift_at x c a)) ",
                         "(lift_at_app head0 x c a))) ",
                         // leg2 (symm of RHS forward chain)
-                        "(Eq.symm KExpr ",
-                        "(apply_spine (list_map {f} (ListType.cons KExpr x rest)) (lift_at head0 c a)) ",
+                        "(@Eq.symm KExpr ",
+                        "(apply_spine (list_map {f} (@ListType.cons KExpr x rest)) (lift_at head0 c a)) ",
                         "(apply_spine (list_map {f} rest) (KExpr.app (lift_at head0 c a) (lift_at x c a))) ",
-                        "(Eq.trans KExpr ",
-                        "(apply_spine (list_map {f} (ListType.cons KExpr x rest)) (lift_at head0 c a)) ",
-                        "(apply_spine (ListType.cons KExpr (lift_at x c a) (list_map {f} rest)) (lift_at head0 c a)) ",
+                        "(@Eq.trans KExpr ",
+                        "(apply_spine (list_map {f} (@ListType.cons KExpr x rest)) (lift_at head0 c a)) ",
+                        "(apply_spine (@ListType.cons KExpr (lift_at x c a) (list_map {f} rest)) (lift_at head0 c a)) ",
                         "(apply_spine (list_map {f} rest) (KExpr.app (lift_at head0 c a) (lift_at x c a))) ",
-                        "(Eq.cong (ListType KExpr) KExpr ",
+                        "(@Eq.cong (ListType KExpr) KExpr ",
                         "(fun (L : ListType KExpr) => apply_spine L (lift_at head0 c a)) ",
-                        "(list_map {f} (ListType.cons KExpr x rest)) ",
-                        "(ListType.cons KExpr (lift_at x c a) (list_map {f} rest)) ",
+                        "(list_map {f} (@ListType.cons KExpr x rest)) ",
+                        "(@ListType.cons KExpr (lift_at x c a) (list_map {f} rest)) ",
                         "(list_map_cons {f} x rest)) ",
                         "(apply_spine_cons (lift_at x c a) (list_map {f} rest) (lift_at head0 c a))))) ",
                         "args head"
@@ -3237,20 +3240,20 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
         // const-head guard discharges away).
         self.add_definition(SpecDefinition {
             name: "kapp_args_lift_bvar".to_string(),
-            type_src: "forall (i : Nat) (c : Nat) (a : Nat), Eq (ListType KExpr) (kapp_args (lift_bvar_at i c a)) (ListType.nil KExpr)".to_string(),
+            type_src: "forall (i : Nat) (c : Nat) (a : Nat), @Eq (ListType KExpr) (kapp_args (lift_bvar_at i c a)) (@ListType.nil KExpr)".to_string(),
             value_src: Some(concat!(
                 "fun (i : Nat) (c : Nat) (a : Nat) => ",
-                "Nat.rec ",
-                "(fun (k : Nat) => Eq (ListType KExpr) ",
-                "(kapp_args (Nat.rec (fun (_ : Nat) => KExpr) (KExpr.bvar (Nat.add i a)) (fun (_ : Nat) (_ : KExpr) => KExpr.bvar i) k)) ",
-                "(ListType.nil KExpr)) ",
+                "@Nat.rec ",
+                "(fun (k : Nat) => @Eq (ListType KExpr) ",
+                "(kapp_args (@Nat.rec (fun (_ : Nat) => KExpr) (KExpr.bvar (Nat.add i a)) (fun (_ : Nat) (_ : KExpr) => KExpr.bvar i) k)) ",
+                "(@ListType.nil KExpr)) ",
                 // zero branch: Nat.rec ... Nat.zero = KExpr.bvar (Nat.add i a); kapp_args = nil
-                "(Eq.refl (ListType KExpr) (ListType.nil KExpr)) ",
+                "(@Eq.refl (ListType KExpr) (@ListType.nil KExpr)) ",
                 // succ branch: Nat.rec ... (succ k) = KExpr.bvar i; kapp_args = nil
-                "(fun (k : Nat) (_ih : Eq (ListType KExpr) ",
-                "(kapp_args (Nat.rec (fun (_ : Nat) => KExpr) (KExpr.bvar (Nat.add i a)) (fun (_ : Nat) (_ : KExpr) => KExpr.bvar i) k)) ",
-                "(ListType.nil KExpr)) => ",
-                "Eq.refl (ListType KExpr) (ListType.nil KExpr)) ",
+                "(fun (k : Nat) (_ih : @Eq (ListType KExpr) ",
+                "(kapp_args (@Nat.rec (fun (_ : Nat) => KExpr) (KExpr.bvar (Nat.add i a)) (fun (_ : Nat) (_ : KExpr) => KExpr.bvar i) k)) ",
+                "(@ListType.nil KExpr)) => ",
+                "@Eq.refl (ListType KExpr) (@ListType.nil KExpr)) ",
                 "(Nat.sub c i)",
             ).to_string()),
             is_axiom: false,
@@ -3283,7 +3286,7 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
             // goal(E) : kapp_args commutes with lift_at (up to list_map).
             let goal = |e: &str| -> String {
                 format!(
-                    "Eq (ListType KExpr) (kapp_args (lift_at {e} c a)) (list_map {fmap} (kapp_args {e}))"
+                    "@Eq (ListType KExpr) (kapp_args (lift_at {e} c a)) (list_map {fmap} (kapp_args {e}))"
                 )
             };
             // nil-head arm discharged GENUINELY: both sides reduce to nil. `nilrhs`
@@ -3293,13 +3296,13 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
             let nil_arm = |ctor: &str, lhs_to_nil: &str| -> String {
                 format!(
                     concat!(
-                        "Eq.trans (ListType KExpr) ",
-                        "(kapp_args (lift_at {ctor} c a)) (ListType.nil KExpr) (list_map {fmap} (kapp_args {ctor})) ",
+                        "@Eq.trans (ListType KExpr) ",
+                        "(kapp_args (lift_at {ctor} c a)) (@ListType.nil KExpr) (list_map {fmap} (kapp_args {ctor})) ",
                         "{lhs_to_nil} ",
-                        "(Eq.symm (ListType KExpr) (list_map {fmap} (kapp_args {ctor})) (ListType.nil KExpr) ",
-                        "(Eq.trans (ListType KExpr) (list_map {fmap} (kapp_args {ctor})) (list_map {fmap} (ListType.nil KExpr)) (ListType.nil KExpr) ",
-                        "(Eq.cong (ListType KExpr) (ListType KExpr) (fun (L : ListType KExpr) => list_map {fmap} L) ",
-                        "(kapp_args {ctor}) (ListType.nil KExpr) (Eq.refl (ListType KExpr) (ListType.nil KExpr))) ",
+                        "(@Eq.symm (ListType KExpr) (list_map {fmap} (kapp_args {ctor})) (@ListType.nil KExpr) ",
+                        "(@Eq.trans (ListType KExpr) (list_map {fmap} (kapp_args {ctor})) (list_map {fmap} (@ListType.nil KExpr)) (@ListType.nil KExpr) ",
+                        "(@Eq.cong (ListType KExpr) (ListType KExpr) (fun (L : ListType KExpr) => list_map {fmap} L) ",
+                        "(kapp_args {ctor}) (@ListType.nil KExpr) (@Eq.refl (ListType KExpr) (@ListType.nil KExpr))) ",
                         "(list_map_nil {fmap})))"
                     ),
                     ctor = ctor,
@@ -3311,7 +3314,7 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
             // lam=lam, pi=pi all defeq through lift_at_sort/lam/pi; kapp_args nil refl).
             let refl_nil = |ctor: &str| -> String {
                 format!(
-                    "(Eq.refl (ListType KExpr) (kapp_args (lift_at {ctor} c a)))",
+                    "(@Eq.refl (ListType KExpr) (kapp_args (lift_at {ctor} c a)))",
                     ctor = ctor
                 )
             };
@@ -3327,48 +3330,48 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
             let disch_lit = nil_arm("(KExpr.lit m)", &refl_nil("(KExpr.lit m)"));
             // The meeting point M for the app arm.
             let meet = format!(
-                "(list_append (list_map {fmap} (kapp_args f)) (ListType.cons KExpr (lift_at a0 c a) (ListType.nil KExpr)))"
+                "(list_append (list_map {fmap} (kapp_args f)) (@ListType.cons KExpr (lift_at a0 c a) (@ListType.nil KExpr)))"
             );
             let app_arm = format!(
                 concat!(
                     "(fun (f : KExpr) (a0 : KExpr) ",
                     "(ihf : {goal_f}) (_iha : {goal_a}) => ",
-                    "Eq.trans (ListType KExpr) ",
+                    "@Eq.trans (ListType KExpr) ",
                     "(kapp_args (lift_at (KExpr.app f a0) c a)) {meet} (list_map {fmap} (kapp_args (KExpr.app f a0))) ",
                     // LHS -> M
-                    "(Eq.trans (ListType KExpr) ",
+                    "(@Eq.trans (ListType KExpr) ",
                     "(kapp_args (lift_at (KExpr.app f a0) c a)) ",
                     "(kapp_args (KExpr.app (lift_at f c a) (lift_at a0 c a))) {meet} ",
-                    "(Eq.cong KExpr (ListType KExpr) (fun (X : KExpr) => kapp_args X) ",
+                    "(@Eq.cong KExpr (ListType KExpr) (fun (X : KExpr) => kapp_args X) ",
                     "(lift_at (KExpr.app f a0) c a) (KExpr.app (lift_at f c a) (lift_at a0 c a)) ",
                     "(lift_at_app f a0 c a)) ",
-                    "(Eq.trans (ListType KExpr) ",
+                    "(@Eq.trans (ListType KExpr) ",
                     "(kapp_args (KExpr.app (lift_at f c a) (lift_at a0 c a))) ",
-                    "(list_append (kapp_args (lift_at f c a)) (ListType.cons KExpr (lift_at a0 c a) (ListType.nil KExpr))) ",
+                    "(list_append (kapp_args (lift_at f c a)) (@ListType.cons KExpr (lift_at a0 c a) (@ListType.nil KExpr))) ",
                     "{meet} ",
                     "(kapp_args_app (lift_at f c a) (lift_at a0 c a)) ",
-                    "(Eq.cong (ListType KExpr) (ListType KExpr) ",
-                    "(fun (L : ListType KExpr) => list_append L (ListType.cons KExpr (lift_at a0 c a) (ListType.nil KExpr))) ",
+                    "(@Eq.cong (ListType KExpr) (ListType KExpr) ",
+                    "(fun (L : ListType KExpr) => list_append L (@ListType.cons KExpr (lift_at a0 c a) (@ListType.nil KExpr))) ",
                     "(kapp_args (lift_at f c a)) (list_map {fmap} (kapp_args f)) ihf))) ",
                     // M -> RHS  (symm of RHS -> M)
-                    "(Eq.symm (ListType KExpr) (list_map {fmap} (kapp_args (KExpr.app f a0))) {meet} ",
-                    "(Eq.trans (ListType KExpr) ",
+                    "(@Eq.symm (ListType KExpr) (list_map {fmap} (kapp_args (KExpr.app f a0))) {meet} ",
+                    "(@Eq.trans (ListType KExpr) ",
                     "(list_map {fmap} (kapp_args (KExpr.app f a0))) ",
-                    "(list_map {fmap} (list_append (kapp_args f) (ListType.cons KExpr a0 (ListType.nil KExpr)))) ",
+                    "(list_map {fmap} (list_append (kapp_args f) (@ListType.cons KExpr a0 (@ListType.nil KExpr)))) ",
                     "{meet} ",
-                    "(Eq.cong (ListType KExpr) (ListType KExpr) (fun (L : ListType KExpr) => list_map {fmap} L) ",
-                    "(kapp_args (KExpr.app f a0)) (list_append (kapp_args f) (ListType.cons KExpr a0 (ListType.nil KExpr))) ",
+                    "(@Eq.cong (ListType KExpr) (ListType KExpr) (fun (L : ListType KExpr) => list_map {fmap} L) ",
+                    "(kapp_args (KExpr.app f a0)) (list_append (kapp_args f) (@ListType.cons KExpr a0 (@ListType.nil KExpr))) ",
                     "(kapp_args_app f a0)) ",
-                    "(Eq.trans (ListType KExpr) ",
-                    "(list_map {fmap} (list_append (kapp_args f) (ListType.cons KExpr a0 (ListType.nil KExpr)))) ",
-                    "(list_append (list_map {fmap} (kapp_args f)) (list_map {fmap} (ListType.cons KExpr a0 (ListType.nil KExpr)))) ",
+                    "(@Eq.trans (ListType KExpr) ",
+                    "(list_map {fmap} (list_append (kapp_args f) (@ListType.cons KExpr a0 (@ListType.nil KExpr)))) ",
+                    "(list_append (list_map {fmap} (kapp_args f)) (list_map {fmap} (@ListType.cons KExpr a0 (@ListType.nil KExpr)))) ",
                     "{meet} ",
-                    "(list_map_append {fmap} (kapp_args f) (ListType.cons KExpr a0 (ListType.nil KExpr))) ",
-                    "(Eq.cong (ListType KExpr) (ListType KExpr) ",
+                    "(list_map_append {fmap} (kapp_args f) (@ListType.cons KExpr a0 (@ListType.nil KExpr))) ",
+                    "(@Eq.cong (ListType KExpr) (ListType KExpr) ",
                     "(fun (L : ListType KExpr) => list_append (list_map {fmap} (kapp_args f)) L) ",
-                    "(list_map {fmap} (ListType.cons KExpr a0 (ListType.nil KExpr))) ",
-                    "(ListType.cons KExpr (lift_at a0 c a) (ListType.nil KExpr)) ",
-                    "(list_map_cons {fmap} a0 (ListType.nil KExpr)))))))"
+                    "(list_map {fmap} (@ListType.cons KExpr a0 (@ListType.nil KExpr))) ",
+                    "(@ListType.cons KExpr (lift_at a0 c a) (@ListType.nil KExpr)) ",
+                    "(list_map_cons {fmap} a0 (@ListType.nil KExpr)))))))"
                 ),
                 goal_f = goal("f"),
                 goal_a = goal("a0"),
@@ -3378,7 +3381,7 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
             let kapp_args_value = format!(
                 concat!(
                     "fun (c : Nat) (a : Nat) (e : KExpr) => ",
-                    "KExpr.rec ",
+                    "@KExpr.rec ",
                     "(fun (e0 : KExpr) => {goal_e0}) ",
                     "(fun (n : Level) => {disch_sort}) ",
                     "(fun (i : Nat) => {disch_bvar}) ",
@@ -3386,7 +3389,7 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
                     "(fun (ty : KExpr) (b : KExpr) (_ihty : {goal_ty}) (_ihb : {goal_b}) => {disch_lam}) ",
                     "(fun (ty : KExpr) (b : KExpr) (_ihty : {goal_ty}) (_ihb : {goal_b}) => {disch_pi}) ",
                     "(fun (nm0 : Name) (us : ListType Level) => ",
-                    "Eq.refl (ListType KExpr) (ListType.nil KExpr)) ",
+                    "@Eq.refl (ListType KExpr) (@ListType.nil KExpr)) ",
                     "(fun (ty : KExpr) (v : KExpr) (b : KExpr) (_ihty : {goal_ty}) (_ihv : {goal_v}) (_ihb : {goal_b}) => {disch_let}) ",
                     "(fun (s : Name) (i : Nat) (sub : KExpr) (_ihsub : {goal_sub}) => {disch_proj}) ",
                     "(fun (m : Nat) => {disch_lit}) ",
@@ -3453,18 +3456,18 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
         // helper for kexpr_const_name_lift (lift never gives a bvar head a const name).
         self.add_definition(SpecDefinition {
             name: "kexpr_const_name_kapp_fn_lift_bvar".to_string(),
-            type_src: "forall (i : Nat) (c : Nat) (a : Nat), Eq (OptionType Name) (kexpr_const_name (kapp_fn (lift_bvar_at i c a))) (OptionType.none Name)".to_string(),
+            type_src: "forall (i : Nat) (c : Nat) (a : Nat), @Eq (OptionType Name) (kexpr_const_name (kapp_fn (lift_bvar_at i c a))) (@OptionType.none Name)".to_string(),
             value_src: Some(concat!(
                 "fun (i : Nat) (c : Nat) (a : Nat) => ",
-                "Nat.rec ",
-                "(fun (k : Nat) => Eq (OptionType Name) ",
-                "(kexpr_const_name (kapp_fn (Nat.rec (fun (_ : Nat) => KExpr) (KExpr.bvar (Nat.add i a)) (fun (_ : Nat) (_ : KExpr) => KExpr.bvar i) k))) ",
-                "(OptionType.none Name)) ",
-                "(Eq.refl (OptionType Name) (OptionType.none Name)) ",
-                "(fun (k : Nat) (_ih : Eq (OptionType Name) ",
-                "(kexpr_const_name (kapp_fn (Nat.rec (fun (_ : Nat) => KExpr) (KExpr.bvar (Nat.add i a)) (fun (_ : Nat) (_ : KExpr) => KExpr.bvar i) k))) ",
-                "(OptionType.none Name)) => ",
-                "Eq.refl (OptionType Name) (OptionType.none Name)) ",
+                "@Nat.rec ",
+                "(fun (k : Nat) => @Eq (OptionType Name) ",
+                "(kexpr_const_name (kapp_fn (@Nat.rec (fun (_ : Nat) => KExpr) (KExpr.bvar (Nat.add i a)) (fun (_ : Nat) (_ : KExpr) => KExpr.bvar i) k))) ",
+                "(@OptionType.none Name)) ",
+                "(@Eq.refl (OptionType Name) (@OptionType.none Name)) ",
+                "(fun (k : Nat) (_ih : @Eq (OptionType Name) ",
+                "(kexpr_const_name (kapp_fn (@Nat.rec (fun (_ : Nat) => KExpr) (KExpr.bvar (Nat.add i a)) (fun (_ : Nat) (_ : KExpr) => KExpr.bvar i) k))) ",
+                "(@OptionType.none Name)) => ",
+                "@Eq.refl (OptionType Name) (@OptionType.none Name)) ",
                 "(Nat.sub c i)",
             ).to_string()),
             is_axiom: false,
@@ -3495,46 +3498,46 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
         {
             let goal = |e: &str| -> String {
                 format!(
-                    "Eq (OptionType Name) (kexpr_const_name (kapp_fn (lift_at {e} c a))) (kexpr_const_name (kapp_fn {e}))"
+                    "@Eq (OptionType Name) (kexpr_const_name (kapp_fn (lift_at {e} c a))) (kexpr_const_name (kapp_fn {e}))"
                 )
             };
             // sort/lam/pi: both sides reduce to none by refl.
             let refl_none = |ctor: &str| -> String {
                 format!(
-                    "(Eq.refl (OptionType Name) (kexpr_const_name (kapp_fn (lift_at {ctor} c a))))",
+                    "(@Eq.refl (OptionType Name) (kexpr_const_name (kapp_fn (lift_at {ctor} c a))))",
                     ctor = ctor
                 )
             };
             // bvar: LHS = none via helper; RHS kexpr_const_name (kapp_fn (bvar i)) = none (refl).
             let bvar_arm = concat!(
-                "Eq.trans (OptionType Name) ",
-                "(kexpr_const_name (kapp_fn (lift_at (KExpr.bvar i) c a))) (OptionType.none Name) (kexpr_const_name (kapp_fn (KExpr.bvar i))) ",
+                "@Eq.trans (OptionType Name) ",
+                "(kexpr_const_name (kapp_fn (lift_at (KExpr.bvar i) c a))) (@OptionType.none Name) (kexpr_const_name (kapp_fn (KExpr.bvar i))) ",
                 "(kexpr_const_name_kapp_fn_lift_bvar i c a) ",
-                "(Eq.symm (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.bvar i))) (OptionType.none Name) ",
-                "(Eq.refl (OptionType Name) (OptionType.none Name)))"
+                "(@Eq.symm (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.bvar i))) (@OptionType.none Name) ",
+                "(@Eq.refl (OptionType Name) (@OptionType.none Name)))"
             );
             // app: kapp_fn (lift_at (app f a0)) = kapp_fn (lift_at f); RHS = kexpr_const_name (kapp_fn f); IH on f.
             let app_arm = format!(
                 concat!(
                     "(fun (f : KExpr) (a0 : KExpr) (ihf : {goal_f}) (_iha : {goal_a}) => ",
-                    "Eq.trans (OptionType Name) ",
+                    "@Eq.trans (OptionType Name) ",
                     "(kexpr_const_name (kapp_fn (lift_at (KExpr.app f a0) c a))) ",
                     "(kexpr_const_name (kapp_fn (lift_at f c a))) ",
                     "(kexpr_const_name (kapp_fn (KExpr.app f a0))) ",
                     // LHS = kexpr_const_name (kapp_fn (lift f)) :
                     //   kapp_fn (lift (app f a0)) = kapp_fn (app (lift f)(lift a0)) = kapp_fn (lift f)
-                    "(Eq.cong KExpr (OptionType Name) (fun (X : KExpr) => kexpr_const_name (kapp_fn X)) ",
+                    "(@Eq.cong KExpr (OptionType Name) (fun (X : KExpr) => kexpr_const_name (kapp_fn X)) ",
                     "(lift_at (KExpr.app f a0) c a) (KExpr.app (lift_at f c a) (lift_at a0 c a)) ",
                     "(lift_at_app f a0 c a)) ",
                     // kexpr_const_name (kapp_fn (lift f)) = kexpr_const_name (kapp_fn f) [ihf];
                     // kexpr_const_name (kapp_fn (app f a0)) = kexpr_const_name (kapp_fn f) [defeq, refl]
-                    "(Eq.trans (OptionType Name) ",
+                    "(@Eq.trans (OptionType Name) ",
                     "(kexpr_const_name (kapp_fn (lift_at f c a))) ",
                     "(kexpr_const_name (kapp_fn f)) ",
                     "(kexpr_const_name (kapp_fn (KExpr.app f a0))) ",
                     "ihf ",
-                    "(Eq.symm (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.app f a0))) (kexpr_const_name (kapp_fn f)) ",
-                    "(Eq.refl (OptionType Name) (kexpr_const_name (kapp_fn f))))))"
+                    "(@Eq.symm (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.app f a0))) (kexpr_const_name (kapp_fn f)) ",
+                    "(@Eq.refl (OptionType Name) (kexpr_const_name (kapp_fn f))))))"
                 ),
                 goal_f = goal("f"),
                 goal_a = goal("a0"),
@@ -3542,7 +3545,7 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
             let value = format!(
                 concat!(
                     "fun (c : Nat) (a : Nat) (e : KExpr) => ",
-                    "KExpr.rec ",
+                    "@KExpr.rec ",
                     "(fun (e0 : KExpr) => {goal_e0}) ",
                     "(fun (n : Level) => {disch_sort}) ",
                     "(fun (i : Nat) => {bvar_arm}) ",
@@ -3550,7 +3553,7 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
                     "(fun (ty : KExpr) (b : KExpr) (_ihty : {goal_ty}) (_ihb : {goal_b}) => {disch_lam}) ",
                     "(fun (ty : KExpr) (b : KExpr) (_ihty : {goal_ty}) (_ihb : {goal_b}) => {disch_pi}) ",
                     "(fun (nm0 : Name) (us : ListType Level) => ",
-                    "Eq.refl (OptionType Name) (kexpr_const_name (kapp_fn (lift_at (KExpr.const nm0 us) c a)))) ",
+                    "@Eq.refl (OptionType Name) (kexpr_const_name (kapp_fn (lift_at (KExpr.const nm0 us) c a)))) ",
                     "(fun (ty : KExpr) (v : KExpr) (b : KExpr) (_ihty : {goal_ty}) (_ihv : {goal_v}) (_ihb : {goal_b}) => {disch_let}) ",
                     "(fun (s : Name) (i : Nat) (sub : KExpr) (_ihsub : {goal_sub}) => {disch_proj}) ",
                     "(fun (m : Nat) => {disch_lit}) ",
@@ -3619,18 +3622,18 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
             name: "kapp_drop_lift".to_string(),
             type_src: concat!(
                 "forall (c : Nat) (a : Nat) (e : KExpr) (kk : Nat), ",
-                "Eq (ListType KExpr) (list_drop kk (kapp_args (lift_at e c a))) ",
+                "@Eq (ListType KExpr) (list_drop kk (kapp_args (lift_at e c a))) ",
                 "(list_map (fun (a0 : KExpr) => lift_at a0 c a) (list_drop kk (kapp_args e)))"
             )
             .to_string(),
             value_src: Some(format!(
                 concat!(
                     "fun (c : Nat) (a : Nat) (e : KExpr) (kk : Nat) => ",
-                    "Eq.trans (ListType KExpr) ",
+                    "@Eq.trans (ListType KExpr) ",
                     "(list_drop kk (kapp_args (lift_at e c a))) ",
                     "(list_drop kk (list_map {f} (kapp_args e))) ",
                     "(list_map {f} (list_drop kk (kapp_args e))) ",
-                    "(Eq.cong (ListType KExpr) (ListType KExpr) (fun (L : ListType KExpr) => list_drop kk L) ",
+                    "(@Eq.cong (ListType KExpr) (ListType KExpr) (fun (L : ListType KExpr) => list_drop kk L) ",
                     "(kapp_args (lift_at e c a)) (list_map {f} (kapp_args e)) ",
                     "(lift_at_kapp_args c a e)) ",
                     "(list_map_drop {f} kk (kapp_args e))"
@@ -3660,18 +3663,18 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
             name: "kapp_take_lift".to_string(),
             type_src: concat!(
                 "forall (c : Nat) (a : Nat) (e : KExpr) (pn : Nat), ",
-                "Eq (ListType KExpr) (list_take pn (kapp_args (lift_at e c a))) ",
+                "@Eq (ListType KExpr) (list_take pn (kapp_args (lift_at e c a))) ",
                 "(list_map (fun (a0 : KExpr) => lift_at a0 c a) (list_take pn (kapp_args e)))"
             )
             .to_string(),
             value_src: Some(format!(
                 concat!(
                     "fun (c : Nat) (a : Nat) (e : KExpr) (pn : Nat) => ",
-                    "Eq.trans (ListType KExpr) ",
+                    "@Eq.trans (ListType KExpr) ",
                     "(list_take pn (kapp_args (lift_at e c a))) ",
                     "(list_take pn (list_map {f} (kapp_args e))) ",
                     "(list_map {f} (list_take pn (kapp_args e))) ",
-                    "(Eq.cong (ListType KExpr) (ListType KExpr) (fun (L : ListType KExpr) => list_take pn L) ",
+                    "(@Eq.cong (ListType KExpr) (ListType KExpr) (fun (L : ListType KExpr) => list_take pn L) ",
                     "(kapp_args (lift_at e c a)) (list_map {f} (kapp_args e)) ",
                     "(lift_at_kapp_args c a e)) ",
                     "(list_map_take {f} pn (kapp_args e))"
@@ -3708,7 +3711,7 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
                 type_src: format!(
                     concat!(
                         "forall (c : Nat) (a : Nat) (major : KExpr) (nf : Nat), ",
-                        "Eq (ListType KExpr) (list_drop {off_i} (kapp_args (lift_at major c a))) ",
+                        "@Eq (ListType KExpr) (list_drop {off_i} (kapp_args (lift_at major c a))) ",
                         "(list_map (fun (a0 : KExpr) => lift_at a0 c a) (list_drop {off} (kapp_args major)))"
                     ),
                     off_i = fields_off_lift,
@@ -3717,30 +3720,30 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
                 value_src: Some(format!(
                     concat!(
                         "fun (c : Nat) (a : Nat) (major : KExpr) (nf : Nat) => ",
-                        "Eq.trans (ListType KExpr) ",
+                        "@Eq.trans (ListType KExpr) ",
                         "(list_drop {off_i} (kapp_args (lift_at major c a))) ",
                         "(list_drop {off} (list_map {f} (kapp_args major))) ",
                         "(list_map {f} (list_drop {off} (kapp_args major))) ",
                         // s1 = s_off ∘ s_list
-                        "(Eq.trans (ListType KExpr) ",
+                        "(@Eq.trans (ListType KExpr) ",
                         "(list_drop {off_i} (kapp_args (lift_at major c a))) ",
                         "(list_drop {off} (kapp_args (lift_at major c a))) ",
                         "(list_drop {off} (list_map {f} (kapp_args major))) ",
                         // s_off: rewrite offset off_i -> off (list fixed), via list_drop_cong.
                         "(list_drop_cong {off_i} {off} (kapp_args (lift_at major c a)) ",
                         // eoff : off_i = off  =  eoff1 ∘ eoff2
-                        "(Eq.trans Nat {off_i} {off_mid} {off} ",
+                        "(@Eq.trans Nat {off_i} {off_mid} {off} ",
                         // eoff1: KA_AM -> MAP_KA_M inside list_length.
-                        "(Eq.cong (ListType KExpr) Nat ",
+                        "(@Eq.cong (ListType KExpr) Nat ",
                         "(fun (L : ListType KExpr) => Nat.sub (list_length L) nf) ",
                         "(kapp_args (lift_at major c a)) (list_map {f} (kapp_args major)) ",
                         "(lift_at_kapp_args c a major)) ",
                         // eoff2: collapse list_length (list_map F ..) -> list_length ..
-                        "(Eq.cong Nat Nat (fun (q : Nat) => Nat.sub q nf) ",
+                        "(@Eq.cong Nat Nat (fun (q : Nat) => Nat.sub q nf) ",
                         "(list_length (list_map {f} (kapp_args major))) (list_length (kapp_args major)) ",
                         "(list_map_length {f} (kapp_args major))))) ",
                         // s_list: rewrite list KA_AM -> MAP_KA_M (offset fixed at off).
-                        "(Eq.cong (ListType KExpr) (ListType KExpr) ",
+                        "(@Eq.cong (ListType KExpr) (ListType KExpr) ",
                         "(fun (L : ListType KExpr) => list_drop {off} L) ",
                         "(kapp_args (lift_at major c a)) (list_map {f} (kapp_args major)) ",
                         "(lift_at_kapp_args c a major))) ",
@@ -3787,25 +3790,25 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
                 name: "lift_apply_spine3".to_string(),
                 type_src: format!(
                     "forall (c : Nat) (a : Nat) (la : ListType KExpr) (lb : ListType KExpr) (lc : ListType KExpr) (rhs : KExpr), \
-                     Eq KExpr (lift_at (apply_spine la (apply_spine lb (apply_spine lc rhs))) c a) {final_term}"
+                     @Eq KExpr (lift_at (apply_spine la (apply_spine lb (apply_spine lc rhs))) c a) {final_term}"
                 ),
                 value_src: Some(format!(
                     concat!(
                         "fun (c : Nat) (a : Nat) (la : ListType KExpr) (lb : ListType KExpr) (lc : ListType KExpr) (rhs : KExpr) => ",
-                        "Eq.trans KExpr ",
+                        "@Eq.trans KExpr ",
                         "(lift_at (apply_spine la (apply_spine lb (apply_spine lc rhs))) c a) ",
                         "(apply_spine (list_map {fmap} la) (lift_at (apply_spine lb (apply_spine lc rhs)) c a)) ",
                         "{final_term} ",
                         "(lift_at_apply_spine la (apply_spine lb (apply_spine lc rhs)) c a) ",
-                        "(Eq.trans KExpr ",
+                        "(@Eq.trans KExpr ",
                         "(apply_spine (list_map {fmap} la) (lift_at (apply_spine lb (apply_spine lc rhs)) c a)) ",
                         "(apply_spine (list_map {fmap} la) (apply_spine (list_map {fmap} lb) (lift_at (apply_spine lc rhs) c a))) ",
                         "{final_term} ",
-                        "(Eq.cong KExpr KExpr (fun (Z : KExpr) => apply_spine (list_map {fmap} la) Z) ",
+                        "(@Eq.cong KExpr KExpr (fun (Z : KExpr) => apply_spine (list_map {fmap} la) Z) ",
                         "(lift_at (apply_spine lb (apply_spine lc rhs)) c a) ",
                         "(apply_spine (list_map {fmap} lb) (lift_at (apply_spine lc rhs) c a)) ",
                         "(lift_at_apply_spine lb (apply_spine lc rhs) c a)) ",
-                        "(Eq.cong KExpr KExpr ",
+                        "(@Eq.cong KExpr KExpr ",
                         "(fun (Z : KExpr) => apply_spine (list_map {fmap} la) (apply_spine (list_map {fmap} lb) Z)) ",
                         "(lift_at (apply_spine lc rhs) c a) ",
                         "(apply_spine (list_map {fmap} lc) (lift_at rhs c a)) ",
@@ -3873,71 +3876,71 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
 
             // inner: apply_spine pre_l rhs = apply_spine (map F pre) (lift rhs).
             let inner = format!(
-                "(Eq.trans KExpr \
+                "(@Eq.trans KExpr \
                  (apply_spine {pre_l} {p_rhs}) (apply_spine {mpre} {p_rhs}) (apply_spine {mpre} {l_rhs}) \
-                 (Eq.cong (ListType KExpr) KExpr (fun (L : ListType KExpr) => apply_spine L {p_rhs}) \
+                 (@Eq.cong (ListType KExpr) KExpr (fun (L : ListType KExpr) => apply_spine L {p_rhs}) \
                  {pre_l} {mpre} (kapp_take_lift c a e {prefix_n})) \
-                 (Eq.cong KExpr KExpr (fun (Z : KExpr) => apply_spine {mpre} Z) \
+                 (@Eq.cong KExpr KExpr (fun (Z : KExpr) => apply_spine {mpre} Z) \
                  {p_rhs} {l_rhs} \
-                 (Eq.symm KExpr {l_rhs} {p_rhs} (recenv_lift_closed_rhs_instance env recname cname rule (recmeta_signature meta) (kexpr_const_levels (kapp_fn e)) c a liftclosed h5))))"
+                 (@Eq.symm KExpr {l_rhs} {p_rhs} (recenv_lift_closed_rhs_instance env recname cname rule (recmeta_signature meta) (kexpr_const_levels (kapp_fn e)) c a liftclosed h5))))"
             );
 
             // middle: apply_spine fld_l (apply_spine pre_l rhs)
             //       = apply_spine (map F fld) (apply_spine (map F pre) (lift rhs)).
             let middle = format!(
-                "(Eq.trans KExpr \
+                "(@Eq.trans KExpr \
                  (apply_spine {fld_l} (apply_spine {pre_l} {p_rhs})) \
                  (apply_spine {mfld} (apply_spine {pre_l} {p_rhs})) \
                  (apply_spine {mfld} (apply_spine {mpre} {l_rhs})) \
-                 (Eq.cong (ListType KExpr) KExpr \
+                 (@Eq.cong (ListType KExpr) KExpr \
                  (fun (L : ListType KExpr) => apply_spine L (apply_spine {pre_l} {p_rhs})) \
                  {fld_l} {mfld} (kapp_fields_lift c a major {nf})) \
-                 (Eq.cong KExpr KExpr (fun (Z : KExpr) => apply_spine {mfld} Z) \
+                 (@Eq.cong KExpr KExpr (fun (Z : KExpr) => apply_spine {mfld} Z) \
                  (apply_spine {pre_l} {p_rhs}) (apply_spine {mpre} {l_rhs}) {inner}))"
             );
 
             // outer: REDUCT_l = apply_spine (map F ext) (apply_spine (map F fld) (apply_spine (map F pre) (lift rhs))).
             let outer = format!(
-                "(Eq.trans KExpr \
+                "(@Eq.trans KExpr \
                  {reduct_l} \
                  (apply_spine {mext} (apply_spine {fld_l} (apply_spine {pre_l} {p_rhs}))) \
                  {reduct_unfolded} \
-                 (Eq.cong (ListType KExpr) KExpr \
+                 (@Eq.cong (ListType KExpr) KExpr \
                  (fun (L : ListType KExpr) => apply_spine L (apply_spine {fld_l} (apply_spine {pre_l} {p_rhs}))) \
                  {ext_l} {mext} (kapp_drop_lift c a e (Nat.succ {major_idx}))) \
-                 (Eq.cong KExpr KExpr (fun (Z : KExpr) => apply_spine {mext} Z) \
+                 (@Eq.cong KExpr KExpr (fun (Z : KExpr) => apply_spine {mext} Z) \
                  (apply_spine {fld_l} (apply_spine {pre_l} {p_rhs})) \
                  (apply_spine {mfld} (apply_spine {mpre} {l_rhs})) {middle}))"
             );
 
             // spine_eq: REDUCT_l = lift REDUCT (outer ∘ symm lift_apply_spine3).
             let spine_eq = format!(
-                "(Eq.trans KExpr {reduct_l} {reduct_unfolded} {lift_reduct} {outer} \
-                 (Eq.symm KExpr {lift_reduct} {reduct_unfolded} \
+                "(@Eq.trans KExpr {reduct_l} {reduct_unfolded} {lift_reduct} {outer} \
+                 (@Eq.symm KExpr {lift_reduct} {reduct_unfolded} \
                  (lift_apply_spine3 c a {ext} {fld} {pre} {p_rhs})))"
             );
 
             // lift_eq: lift REDUCT = lift e' (cong lift on option_some_inj h5r).
             let lift_eq = format!(
-                "(Eq.cong KExpr KExpr {fmap} {reduct} e' (option_some_inj KExpr {reduct} e' h5r))"
+                "(@Eq.cong KExpr KExpr {fmap} {reduct} e' (option_some_inj KExpr {reduct} e' h5r))"
             );
 
             let value = format!(
                 "fun (env : RecEnv) (c : Nat) (a : Nat) (e : KExpr) (e' : KExpr) \
                  (recname : Name) (meta : RecMeta) (major : KExpr) (cname : Name) (rule : RecRule) \
                  (liftclosed : RecEnvLiftClosed env) \
-                 (h5 : Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule)) \
-                 (h5r : Eq (OptionType KExpr) (OptionType.some KExpr {reduct}) (OptionType.some KExpr e')) => \
-                 Eq.trans KExpr {reduct_l} {lift_reduct} (lift_at e' c a) {spine_eq} {lift_eq}"
+                 (h5 : @Eq (OptionType RecRule) (recrule_for env recname cname) (@OptionType.some RecRule rule)) \
+                 (h5r : @Eq (OptionType KExpr) (@OptionType.some KExpr {reduct}) (@OptionType.some KExpr e')) => \
+                 @Eq.trans KExpr {reduct_l} {lift_reduct} (lift_at e' c a) {spine_eq} {lift_eq}"
             );
 
             let type_src = format!(
                 "forall (env : RecEnv) (c : Nat) (a : Nat) (e : KExpr) (e' : KExpr) \
                  (recname : Name) (meta : RecMeta) (major : KExpr) (cname : Name) (rule : RecRule), \
                  RecEnvLiftClosed env -> \
-                 Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule) -> \
-                 Eq (OptionType KExpr) (OptionType.some KExpr {reduct}) (OptionType.some KExpr e') -> \
-                 Eq KExpr {reduct_l} (lift_at e' c a)"
+                 @Eq (OptionType RecRule) (recrule_for env recname cname) (@OptionType.some RecRule rule) -> \
+                 @Eq (OptionType KExpr) (@OptionType.some KExpr {reduct}) (@OptionType.some KExpr e') -> \
+                 @Eq KExpr {reduct_l} (lift_at e' c a)"
             );
 
             self.add_definition(SpecDefinition {
@@ -3983,41 +3986,41 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
                 name: "iota_major_lift".to_string(),
                 type_src: concat!(
                     "forall (c : Nat) (a : Nat) (e : KExpr) (kk : Nat) (major : KExpr), ",
-                    "Eq (OptionType KExpr) (list_head (list_drop kk (kapp_args e))) (OptionType.some KExpr major) -> ",
-                    "Eq (OptionType KExpr) (list_head (list_drop kk (kapp_args (lift_at e c a)))) (OptionType.some KExpr (lift_at major c a))"
+                    "@Eq (OptionType KExpr) (list_head (list_drop kk (kapp_args e))) (@OptionType.some KExpr major) -> ",
+                    "@Eq (OptionType KExpr) (list_head (list_drop kk (kapp_args (lift_at e c a)))) (@OptionType.some KExpr (lift_at major c a))"
                 )
                 .to_string(),
                 value_src: Some(format!(
                     concat!(
                         "fun (c : Nat) (a : Nat) (e : KExpr) (kk : Nat) (major : KExpr) ",
-                        "(h3 : Eq (OptionType KExpr) (list_head (list_drop kk (kapp_args e))) (OptionType.some KExpr major)) => ",
-                        "Eq.trans (OptionType KExpr) ",
+                        "(h3 : @Eq (OptionType KExpr) (list_head (list_drop kk (kapp_args e))) (@OptionType.some KExpr major)) => ",
+                        "@Eq.trans (OptionType KExpr) ",
                         "(list_head (list_drop kk (kapp_args (lift_at e c a)))) ",
                         "(opt_map {f} (list_head (list_drop kk (kapp_args e)))) ",
-                        "(OptionType.some KExpr (lift_at major c a)) ",
+                        "(@OptionType.some KExpr (lift_at major c a)) ",
                         // LHS -> opt_map F (list_head (list_drop kk (kapp_args e)))
-                        "(Eq.trans (OptionType KExpr) ",
+                        "(@Eq.trans (OptionType KExpr) ",
                         "(list_head (list_drop kk (kapp_args (lift_at e c a)))) ",
                         "(list_head (list_drop kk (list_map {f} (kapp_args e)))) ",
                         "(opt_map {f} (list_head (list_drop kk (kapp_args e)))) ",
-                        "(Eq.cong (ListType KExpr) (OptionType KExpr) (fun (L : ListType KExpr) => list_head (list_drop kk L)) ",
+                        "(@Eq.cong (ListType KExpr) (OptionType KExpr) (fun (L : ListType KExpr) => list_head (list_drop kk L)) ",
                         "(kapp_args (lift_at e c a)) (list_map {f} (kapp_args e)) ",
                         "(lift_at_kapp_args c a e)) ",
-                        "(Eq.trans (OptionType KExpr) ",
+                        "(@Eq.trans (OptionType KExpr) ",
                         "(list_head (list_drop kk (list_map {f} (kapp_args e)))) ",
                         "(list_head (list_map {f} (list_drop kk (kapp_args e)))) ",
                         "(opt_map {f} (list_head (list_drop kk (kapp_args e)))) ",
-                        "(Eq.cong (ListType KExpr) (OptionType KExpr) (fun (L : ListType KExpr) => list_head L) ",
+                        "(@Eq.cong (ListType KExpr) (OptionType KExpr) (fun (L : ListType KExpr) => list_head L) ",
                         "(list_drop kk (list_map {f} (kapp_args e))) (list_map {f} (list_drop kk (kapp_args e))) ",
                         "(list_map_drop {f} kk (kapp_args e))) ",
                         "(list_map_head {f} (list_drop kk (kapp_args e))))) ",
                         // opt_map F (...) -> some (lift major)
-                        "(Eq.trans (OptionType KExpr) ",
+                        "(@Eq.trans (OptionType KExpr) ",
                         "(opt_map {f} (list_head (list_drop kk (kapp_args e)))) ",
-                        "(opt_map {f} (OptionType.some KExpr major)) ",
-                        "(OptionType.some KExpr (lift_at major c a)) ",
-                        "(Eq.cong (OptionType KExpr) (OptionType KExpr) (fun (O : OptionType KExpr) => opt_map {f} O) ",
-                        "(list_head (list_drop kk (kapp_args e))) (OptionType.some KExpr major) h3) ",
+                        "(opt_map {f} (@OptionType.some KExpr major)) ",
+                        "(@OptionType.some KExpr (lift_at major c a)) ",
+                        "(@Eq.cong (OptionType KExpr) (OptionType KExpr) (fun (O : OptionType KExpr) => opt_map {f} O) ",
+                        "(list_head (list_drop kk (kapp_args e))) (@OptionType.some KExpr major) h3) ",
                         "(opt_map_some {f} major))"
                     ),
                     f = f,
@@ -4061,29 +4064,29 @@ iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app
                 type_src: concat!(
                     "forall (env : RecEnv) (e : KExpr) (e' : KExpr) (c : Nat) (a : Nat), ",
                     "RecEnvLiftClosed env -> ",
-                    "Eq (OptionType KExpr) (iota_reduct env e) (OptionType.some KExpr e') -> ",
-                    "Eq (OptionType KExpr) (iota_reduct env (lift_at e c a)) (OptionType.some KExpr (lift_at e' c a))"
+                    "@Eq (OptionType KExpr) (iota_reduct env e) (@OptionType.some KExpr e') -> ",
+                    "@Eq (OptionType KExpr) (iota_reduct env (lift_at e c a)) (@OptionType.some KExpr (lift_at e' c a))"
                 )
                 .to_string(),
                 value_src: Some(r"fun (env : RecEnv) (e : KExpr) (e' : KExpr) (c : Nat) (a : Nat) (liftclosed : RecEnvLiftClosed env)
- (h : Eq (OptionType KExpr) (iota_reduct env e) (OptionType.some KExpr e')) =>
-iota_reduct_full_inv env e e' (Eq (OptionType KExpr) (iota_reduct env (lift_at e c a)) (OptionType.some KExpr (lift_at e' c a))) h
+ (h : @Eq (OptionType KExpr) (iota_reduct env e) (@OptionType.some KExpr e')) =>
+iota_reduct_full_inv env e e' (@Eq (OptionType KExpr) (iota_reduct env (lift_at e c a)) (@OptionType.some KExpr (lift_at e' c a))) h
  (fun (recname : Name) (mta : RecMeta) (major : KExpr) (cname : Name) (rule : RecRule)
- (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name recname))
- (h2 : Eq (OptionType RecMeta) (recmeta_for env recname) (OptionType.some RecMeta mta))
- (h3 : Eq (OptionType KExpr) (list_head (list_drop (iota_major_index mta) (kapp_args e))) (OptionType.some KExpr major))
- (h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname))
- (h5 : Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule))
- (fields : Eq Bool (iota_fields_ok rule (kapp_args major)) Bool.true)
- (arity : Eq Bool (nat_eqb (name_list_len (kconst_params (recmeta_signature mta))) (level_list_len (kexpr_const_levels (kapp_fn e)))) Bool.true) (returned : Eq KExpr e' (iota_contractum mta rule (kapp_args e) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn e))))) =>
+ (h1 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (@OptionType.some Name recname))
+ (h2 : @Eq (OptionType RecMeta) (recmeta_for env recname) (@OptionType.some RecMeta mta))
+ (h3 : @Eq (OptionType KExpr) (list_head (list_drop (iota_major_index mta) (kapp_args e))) (@OptionType.some KExpr major))
+ (h4 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (@OptionType.some Name cname))
+ (h5 : @Eq (OptionType RecRule) (recrule_for env recname cname) (@OptionType.some RecRule rule))
+ (fields : @Eq Bool (iota_fields_ok rule (kapp_args major)) Bool.true)
+ (arity : @Eq Bool (nat_eqb (name_list_len (kconst_params (recmeta_signature mta))) (level_list_len (kexpr_const_levels (kapp_fn e)))) Bool.true) (returned : @Eq KExpr e' (iota_contractum mta rule (kapp_args e) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn e))))) =>
  iota_reduct_full_recon env (lift_at e c a) (lift_at e' c a) recname mta (lift_at major c a) cname rule
- (Eq.trans (OptionType Name) (kexpr_const_name (kapp_fn (lift_at e c a))) (kexpr_const_name (kapp_fn e)) (OptionType.some Name recname) (kexpr_const_name_lift c a e) h1) h2 (iota_major_lift c a e (iota_major_index mta) major h3) (Eq.trans (OptionType Name) (kexpr_const_name (kapp_fn (lift_at major c a))) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname) (kexpr_const_name_lift c a major) h4) h5
- (Eq.trans Bool (iota_fields_ok rule (kapp_args (lift_at major c a))) (iota_fields_ok rule (kapp_args major)) Bool.true
- (Eq.cong Nat Bool (fun (n : Nat) => nat_eqb (Nat.sub (recrule_num_fields rule) n) Nat.zero)
- (list_length (kapp_args (lift_at major c a))) (list_length (kapp_args major)) (Eq.trans Nat (list_length (kapp_args (lift_at major c a))) (list_length (list_map (fun (z : KExpr) => (lift_at z c a)) (kapp_args major))) (list_length (kapp_args major))
- (Eq.cong (ListType KExpr) Nat list_length (kapp_args (lift_at major c a)) (list_map (fun (z : KExpr) => (lift_at z c a)) (kapp_args major)) (lift_at_kapp_args c a major)) (list_map_length (fun (z : KExpr) => (lift_at z c a)) (kapp_args major)))) fields) (Eq.trans Bool (nat_eqb (name_list_len (kconst_params (recmeta_signature mta))) (level_list_len (kexpr_const_levels (kapp_fn (lift_at e c a))))) (nat_eqb (name_list_len (kconst_params (recmeta_signature mta))) (level_list_len (kexpr_const_levels (kapp_fn e)))) Bool.true
- (Eq.cong KExpr Bool (fun (h : KExpr) => (nat_eqb (name_list_len (kconst_params (recmeta_signature mta))) (level_list_len (kexpr_const_levels h)))) (kapp_fn (lift_at e c a)) (kapp_fn e) (delta_head_const_invariant_lift c a recname e h1)) arity) (Eq.symm KExpr (iota_contractum mta rule (kapp_args (lift_at e c a)) (kapp_args (lift_at major c a)) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn (lift_at e c a))))) (lift_at e' c a) (Eq.trans KExpr (iota_contractum mta rule (kapp_args (lift_at e c a)) (kapp_args (lift_at major c a)) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn (lift_at e c a))))) (iota_contractum mta rule (kapp_args (lift_at e c a)) (kapp_args (lift_at major c a)) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn e)))) (lift_at e' c a)
- (Eq.cong KExpr KExpr (fun (head : KExpr) => (iota_contractum mta rule (kapp_args (lift_at e c a)) (kapp_args (lift_at major c a)) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels head)))) (kapp_fn (lift_at e c a)) (kapp_fn e) (delta_head_const_invariant_lift c a recname e h1)) (iota_reduct_lift_eq env c a e e' recname mta major cname rule liftclosed h5 (Eq.cong KExpr (OptionType KExpr) (fun (z : KExpr) => OptionType.some KExpr z) (iota_contractum mta rule (kapp_args e) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn e)))) e' (Eq.symm KExpr e' (iota_contractum mta rule (kapp_args e) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn e)))) returned))))))".to_string()),
+ (@Eq.trans (OptionType Name) (kexpr_const_name (kapp_fn (lift_at e c a))) (kexpr_const_name (kapp_fn e)) (@OptionType.some Name recname) (kexpr_const_name_lift c a e) h1) h2 (iota_major_lift c a e (iota_major_index mta) major h3) (@Eq.trans (OptionType Name) (kexpr_const_name (kapp_fn (lift_at major c a))) (kexpr_const_name (kapp_fn major)) (@OptionType.some Name cname) (kexpr_const_name_lift c a major) h4) h5
+ (@Eq.trans Bool (iota_fields_ok rule (kapp_args (lift_at major c a))) (iota_fields_ok rule (kapp_args major)) Bool.true
+ (@Eq.cong Nat Bool (fun (n : Nat) => nat_eqb (Nat.sub (recrule_num_fields rule) n) Nat.zero)
+ (list_length (kapp_args (lift_at major c a))) (list_length (kapp_args major)) (@Eq.trans Nat (list_length (kapp_args (lift_at major c a))) (list_length (list_map (fun (z : KExpr) => (lift_at z c a)) (kapp_args major))) (list_length (kapp_args major))
+ (@Eq.cong (ListType KExpr) Nat list_length (kapp_args (lift_at major c a)) (list_map (fun (z : KExpr) => (lift_at z c a)) (kapp_args major)) (lift_at_kapp_args c a major)) (list_map_length (fun (z : KExpr) => (lift_at z c a)) (kapp_args major)))) fields) (@Eq.trans Bool (nat_eqb (name_list_len (kconst_params (recmeta_signature mta))) (level_list_len (kexpr_const_levels (kapp_fn (lift_at e c a))))) (nat_eqb (name_list_len (kconst_params (recmeta_signature mta))) (level_list_len (kexpr_const_levels (kapp_fn e)))) Bool.true
+ (@Eq.cong KExpr Bool (fun (h : KExpr) => (nat_eqb (name_list_len (kconst_params (recmeta_signature mta))) (level_list_len (kexpr_const_levels h)))) (kapp_fn (lift_at e c a)) (kapp_fn e) (delta_head_const_invariant_lift c a recname e h1)) arity) (@Eq.symm KExpr (iota_contractum mta rule (kapp_args (lift_at e c a)) (kapp_args (lift_at major c a)) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn (lift_at e c a))))) (lift_at e' c a) (@Eq.trans KExpr (iota_contractum mta rule (kapp_args (lift_at e c a)) (kapp_args (lift_at major c a)) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn (lift_at e c a))))) (iota_contractum mta rule (kapp_args (lift_at e c a)) (kapp_args (lift_at major c a)) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn e)))) (lift_at e' c a)
+ (@Eq.cong KExpr KExpr (fun (head : KExpr) => (iota_contractum mta rule (kapp_args (lift_at e c a)) (kapp_args (lift_at major c a)) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels head)))) (kapp_fn (lift_at e c a)) (kapp_fn e) (delta_head_const_invariant_lift c a recname e h1)) (iota_reduct_lift_eq env c a e e' recname mta major cname rule liftclosed h5 (@Eq.cong KExpr (OptionType KExpr) (fun (z : KExpr) => @OptionType.some KExpr z) (iota_contractum mta rule (kapp_args e) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn e)))) e' (@Eq.symm KExpr e' (iota_contractum mta rule (kapp_args e) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn e)))) returned))))))".to_string()),
                 is_axiom: false,
                 description: "Direct guarded iota commutation: full inversion retains field and universe-arity guards; actual head and constructor-spine invariance transports both guards, stored structural RHS closure derives instance invariance, and canonical reconstruction closes the real operator graph.".to_string(),
                 category: AxiomCategory::DerivedLemma,
@@ -4126,13 +4129,13 @@ iota_reduct_full_inv env e e' (Eq (OptionType KExpr) (iota_reduct env (lift_at e
         // D (succ a) = Empty, then Empty.rec into C.
         self.add_definition(SpecDefinition {
             name: "nat_zero_ne_succ".to_string(),
-            type_src: "forall (a : Nat) (C : Type), Eq Nat Nat.zero (Nat.succ a) -> C".to_string(),
+            type_src: "forall (a : Nat) (C : Type), @Eq Nat Nat.zero (Nat.succ a) -> C".to_string(),
             value_src: Some(
                 concat!(
-                    "fun (a : Nat) (C : Type) (h : Eq Nat Nat.zero (Nat.succ a)) => ",
-                    "Empty.rec (fun (_ : Empty) => C) ",
-                    "(Eq.substType Nat ",
-                    "(fun (z : Nat) => Nat.rec (fun (_ : Nat) => Type) Nat (fun (_ : Nat) (_ : Type) => Empty) z) ",
+                    "fun (a : Nat) (C : Type) (h : @Eq Nat Nat.zero (Nat.succ a)) => ",
+                    "@Empty.rec (fun (_ : Empty) => C) ",
+                    "(@Eq.substType Nat ",
+                    "(fun (z : Nat) => @Nat.rec (fun (_ : Nat) => Type) Nat (fun (_ : Nat) (_ : Type) => Empty) z) ",
                     "Nat.zero (Nat.succ a) h Nat.zero)"
                 )
                 .to_string(),
@@ -4162,12 +4165,12 @@ iota_reduct_full_inv env e e' (Eq (OptionType KExpr) (iota_reduct env (lift_at e
         // (pred reduces on succ, so pred (succ a) = a definitionally).
         self.add_definition(SpecDefinition {
             name: "nat_succ_inj".to_string(),
-            type_src: "forall (a : Nat) (b : Nat), Eq Nat (Nat.succ a) (Nat.succ b) -> Eq Nat a b"
+            type_src: "forall (a : Nat) (b : Nat), @Eq Nat (Nat.succ a) (Nat.succ b) -> @Eq Nat a b"
                 .to_string(),
             value_src: Some(
                 concat!(
-                    "fun (a : Nat) (b : Nat) (h : Eq Nat (Nat.succ a) (Nat.succ b)) => ",
-                    "Eq.cong Nat Nat (fun (z : Nat) => Nat.pred z) (Nat.succ a) (Nat.succ b) h"
+                    "fun (a : Nat) (b : Nat) (h : @Eq Nat (Nat.succ a) (Nat.succ b)) => ",
+                    "@Eq.cong Nat Nat (fun (z : Nat) => Nat.pred z) (Nat.succ a) (Nat.succ b) h"
                 )
                 .to_string(),
             ),
@@ -4204,12 +4207,12 @@ iota_reduct_full_inv env e e' (Eq (OptionType KExpr) (iota_reduct env (lift_at e
             value_src: Some(
                 concat!(
                     "fun (j : Nat) (C : Type) (h : Lt j Nat.zero) => ",
-                    "Empty.rec (fun (_ : Empty) => C) ",
-                    "(Lt.rec ",
+                    "@Empty.rec (fun (_ : Empty) => C) ",
+                    "(@Lt.rec ",
                     "(fun (x : Nat) (y : Nat) (_ : Lt x y) => ",
-                    "Nat.rec (fun (_ : Nat) => Type) Empty (fun (_ : Nat) (_ : Type) => Nat) y) ",
+                    "@Nat.rec (fun (_ : Nat) => Type) Empty (fun (_ : Nat) (_ : Type) => Nat) y) ",
                     "(fun (m : Nat) => Nat.zero) ",
-                    "(fun (k : Nat) (mm : Nat) (_hkm : Lt k mm) (_ih : Nat.rec (fun (_ : Nat) => Type) Empty (fun (_ : Nat) (_ : Type) => Nat) mm) => Nat.zero) ",
+                    "(fun (k : Nat) (mm : Nat) (_hkm : Lt k mm) (_ih : @Nat.rec (fun (_ : Nat) => Type) Empty (fun (_ : Nat) (_ : Type) => Nat) mm) => Nat.zero) ",
                     "j Nat.zero h)"
                 )
                 .to_string(),
@@ -4245,7 +4248,7 @@ iota_reduct_full_inv env e e' (Eq (OptionType KExpr) (iota_reduct env (lift_at e
             value_src: Some(
                 concat!(
                     "fun (n : Nat) => ",
-                    "Nat.rec (fun (n0 : Nat) => Lt n0 (Nat.succ n0)) ",
+                    "@Nat.rec (fun (n0 : Nat) => Lt n0 (Nat.succ n0)) ",
                     "(Lt.zero_lt_succ Nat.zero) ",
                     "(fun (m : Nat) (ih : Lt m (Nat.succ m)) => ",
                     "Lt.succ_lt_succ m (Nat.succ m) ih) ",
@@ -4283,23 +4286,23 @@ iota_reduct_full_inv env e e' (Eq (OptionType KExpr) (iota_reduct env (lift_at e
             value_src: Some(
                 concat!(
                     "fun (a : Nat) (b : Nat) (h : Lt (Nat.succ a) (Nat.succ b)) => ",
-                    "Lt.rec ",
+                    "@Lt.rec ",
                     "(fun (x : Nat) (y : Nat) (_ : Lt x y) => ",
-                    "forall (a0 : Nat) (b0 : Nat), Eq Nat x (Nat.succ a0) -> Eq Nat y (Nat.succ b0) -> Lt a0 b0) ",
+                    "forall (a0 : Nat) (b0 : Nat), @Eq Nat x (Nat.succ a0) -> @Eq Nat y (Nat.succ b0) -> Lt a0 b0) ",
                     // zero_lt_succ arm: x = 0, so Eq 0 (succ a0) is absurd.
                     "(fun (m : Nat) (a0 : Nat) (b0 : Nat) ",
-                    "(ex : Eq Nat Nat.zero (Nat.succ a0)) (_ey : Eq Nat (Nat.succ m) (Nat.succ b0)) => ",
+                    "(ex : @Eq Nat Nat.zero (Nat.succ a0)) (_ey : @Eq Nat (Nat.succ m) (Nat.succ b0)) => ",
                     "nat_zero_ne_succ a0 (Lt a0 b0) ex) ",
                     // succ_lt_succ arm: x = succ a', y = succ b', hh : Lt a' b'.
                     "(fun (a' : Nat) (b' : Nat) (hh : Lt a' b') ",
-                    "(_ih : forall (a0 : Nat) (b0 : Nat), Eq Nat a' (Nat.succ a0) -> Eq Nat b' (Nat.succ b0) -> Lt a0 b0) ",
+                    "(_ih : forall (a0 : Nat) (b0 : Nat), @Eq Nat a' (Nat.succ a0) -> @Eq Nat b' (Nat.succ b0) -> Lt a0 b0) ",
                     "(a0 : Nat) (b0 : Nat) ",
-                    "(ex : Eq Nat (Nat.succ a') (Nat.succ a0)) (ey : Eq Nat (Nat.succ b') (Nat.succ b0)) => ",
+                    "(ex : @Eq Nat (Nat.succ a') (Nat.succ a0)) (ey : @Eq Nat (Nat.succ b') (Nat.succ b0)) => ",
                     // transport hh : Lt a' b' to Lt a0 b0 via the two succ-injective eqs.
-                    "Eq.substType Nat (fun (z : Nat) => Lt a0 z) b' b0 (nat_succ_inj b' b0 ey) ",
-                    "(Eq.substType Nat (fun (z : Nat) => Lt z b') a' a0 (nat_succ_inj a' a0 ex) hh)) ",
+                    "@Eq.substType Nat (fun (z : Nat) => Lt a0 z) b' b0 (nat_succ_inj b' b0 ey) ",
+                    "(@Eq.substType Nat (fun (z : Nat) => Lt z b') a' a0 (nat_succ_inj a' a0 ex) hh)) ",
                     "(Nat.succ a) (Nat.succ b) h ",
-                    "a b (Eq.refl Nat (Nat.succ a)) (Eq.refl Nat (Nat.succ b))"
+                    "a b (@Eq.refl Nat (Nat.succ a)) (@Eq.refl Nat (Nat.succ b))"
                 )
                 .to_string(),
             ),
@@ -4336,37 +4339,37 @@ iota_reduct_full_inv env e e' (Eq (OptionType KExpr) (iota_reduct env (lift_at e
             name: "nat_strict_split".to_string(),
             type_src: concat!(
                 "forall (a : Nat) (b : Nat), Lt a b -> ",
-                "forall (C : Type), (Lt (Nat.succ a) b -> C) -> (Eq Nat (Nat.succ a) b -> C) -> C"
+                "forall (C : Type), (Lt (Nat.succ a) b -> C) -> (@Eq Nat (Nat.succ a) b -> C) -> C"
             )
             .to_string(),
             value_src: Some(
                 concat!(
                     "fun (a : Nat) (b : Nat) (h : Lt a b) => ",
-                    "Lt.rec ",
+                    "@Lt.rec ",
                     "(fun (x : Nat) (y : Nat) (_ : Lt x y) => ",
-                    "forall (C : Type), (Lt (Nat.succ x) y -> C) -> (Eq Nat (Nat.succ x) y -> C) -> C) ",
+                    "forall (C : Type), (Lt (Nat.succ x) y -> C) -> (@Eq Nat (Nat.succ x) y -> C) -> C) ",
                     // zero_lt_succ m : Lt 0 (succ m). Need split of Lt 0 (succ m) into
                     //   Lt 1 (succ m) or Eq 1 (succ m). Decide on m.
                     "(fun (m : Nat) => ",
-                    "Nat.rec (fun (m0 : Nat) => ",
-                    "forall (C : Type), (Lt (Nat.succ Nat.zero) (Nat.succ m0) -> C) -> (Eq Nat (Nat.succ Nat.zero) (Nat.succ m0) -> C) -> C) ",
+                    "@Nat.rec (fun (m0 : Nat) => ",
+                    "forall (C : Type), (Lt (Nat.succ Nat.zero) (Nat.succ m0) -> C) -> (@Eq Nat (Nat.succ Nat.zero) (Nat.succ m0) -> C) -> C) ",
                     // m0 = 0: Eq 1 1 via refl.
                     "(fun (C : Type) (_kl : Lt (Nat.succ Nat.zero) (Nat.succ Nat.zero) -> C) ",
-                    "(ke : Eq Nat (Nat.succ Nat.zero) (Nat.succ Nat.zero) -> C) => ke (Eq.refl Nat (Nat.succ Nat.zero))) ",
+                    "(ke : @Eq Nat (Nat.succ Nat.zero) (Nat.succ Nat.zero) -> C) => ke (@Eq.refl Nat (Nat.succ Nat.zero))) ",
                     // m0 = succ m': Lt 1 (succ (succ m')) via succ_lt_succ 0 (succ m') (zero_lt_succ m').
-                    "(fun (m' : Nat) (_ihm : forall (C : Type), (Lt (Nat.succ Nat.zero) (Nat.succ m') -> C) -> (Eq Nat (Nat.succ Nat.zero) (Nat.succ m') -> C) -> C) ",
+                    "(fun (m' : Nat) (_ihm : forall (C : Type), (Lt (Nat.succ Nat.zero) (Nat.succ m') -> C) -> (@Eq Nat (Nat.succ Nat.zero) (Nat.succ m') -> C) -> C) ",
                     "(C : Type) (kl : Lt (Nat.succ Nat.zero) (Nat.succ (Nat.succ m')) -> C) ",
-                    "(_ke : Eq Nat (Nat.succ Nat.zero) (Nat.succ (Nat.succ m')) -> C) => ",
+                    "(_ke : @Eq Nat (Nat.succ Nat.zero) (Nat.succ (Nat.succ m')) -> C) => ",
                     "kl (Lt.succ_lt_succ Nat.zero (Nat.succ m') (Lt.zero_lt_succ m'))) ",
                     "m) ",
                     // succ_lt_succ a' b' hh : Lt (succ a') (succ b'), inner IH ih.
                     "(fun (a' : Nat) (b' : Nat) (_hh : Lt a' b') ",
-                    "(ih : forall (C : Type), (Lt (Nat.succ a') b' -> C) -> (Eq Nat (Nat.succ a') b' -> C) -> C) ",
+                    "(ih : forall (C : Type), (Lt (Nat.succ a') b' -> C) -> (@Eq Nat (Nat.succ a') b' -> C) -> C) ",
                     "(C : Type) (kl : Lt (Nat.succ (Nat.succ a')) (Nat.succ b') -> C) ",
-                    "(ke : Eq Nat (Nat.succ (Nat.succ a')) (Nat.succ b') -> C) => ",
+                    "(ke : @Eq Nat (Nat.succ (Nat.succ a')) (Nat.succ b') -> C) => ",
                     "ih C ",
                     "(fun (hlt : Lt (Nat.succ a') b') => kl (Lt.succ_lt_succ (Nat.succ a') b' hlt)) ",
-                    "(fun (heq : Eq Nat (Nat.succ a') b') => ke (Eq.cong Nat Nat (fun (z : Nat) => Nat.succ z) (Nat.succ a') b' heq))) ",
+                    "(fun (heq : @Eq Nat (Nat.succ a') b') => ke (@Eq.cong Nat Nat (fun (z : Nat) => Nat.succ z) (Nat.succ a') b' heq))) ",
                     "a b h"
                 )
                 .to_string(),
@@ -4419,7 +4422,7 @@ iota_reduct_full_inv env e e' (Eq (OptionType KExpr) (iota_reduct env (lift_at e
                 concat!(
                     "fun (P : Nat -> Type) ",
                     "(step : forall (k : Nat), (forall (j : Nat), Lt j k -> P j) -> P k) => ",
-                    "Nat.rec ",
+                    "@Nat.rec ",
                     "(fun (n0 : Nat) => forall (j : Nat), Lt j (Nat.succ n0) -> P j) ",
                     // base n=0: forall j, Lt j (succ 0) -> P j.
                     "(fun (j : Nat) (hlt : Lt j (Nat.succ Nat.zero)) => ",
@@ -4428,9 +4431,9 @@ iota_reduct_full_inv env e e' (Eq (OptionType KExpr) (iota_reduct env (lift_at e
                     "(fun (hL : Lt (Nat.succ j) (Nat.succ Nat.zero)) => ",
                     "lt_zero_absurd j (P j) (lt_succ_succ_to_lt j Nat.zero hL)) ",
                     // Eq (succ j) 1 arm: j = 0, transport P 0.
-                    "(fun (hE : Eq Nat (Nat.succ j) (Nat.succ Nat.zero)) => ",
-                    "Eq.substType Nat P Nat.zero j ",
-                    "(Eq.symm Nat j Nat.zero (nat_succ_inj j Nat.zero hE)) ",
+                    "(fun (hE : @Eq Nat (Nat.succ j) (Nat.succ Nat.zero)) => ",
+                    "@Eq.substType Nat P Nat.zero j ",
+                    "(@Eq.symm Nat j Nat.zero (nat_succ_inj j Nat.zero hE)) ",
                     "(step Nat.zero (fun (i : Nat) (hi : Lt i Nat.zero) => lt_zero_absurd i (P i) hi)))) ",
                     // step succ n: ih : forall j, Lt j (succ n) -> P j.
                     "(fun (n : Nat) (ih : forall (j : Nat), Lt j (Nat.succ n) -> P j) ",
@@ -4440,9 +4443,9 @@ iota_reduct_full_inv env e e' (Eq (OptionType KExpr) (iota_reduct env (lift_at e
                     "(fun (hL : Lt (Nat.succ j) (Nat.succ (Nat.succ n))) => ",
                     "ih j (lt_succ_succ_to_lt j (Nat.succ n) hL)) ",
                     // Eq (succ j) (succ (succ n)) arm: j = succ n, transport P (succ n) = step (succ n) ih.
-                    "(fun (hE : Eq Nat (Nat.succ j) (Nat.succ (Nat.succ n))) => ",
-                    "Eq.substType Nat P (Nat.succ n) j ",
-                    "(Eq.symm Nat j (Nat.succ n) (nat_succ_inj j (Nat.succ n) hE)) ",
+                    "(fun (hE : @Eq Nat (Nat.succ j) (Nat.succ (Nat.succ n))) => ",
+                    "@Eq.substType Nat P (Nat.succ n) j ",
+                    "(@Eq.symm Nat j (Nat.succ n) (nat_succ_inj j (Nat.succ n) hE)) ",
                     "(step (Nat.succ n) ih)))"
                 )
                 .to_string(),
@@ -4536,7 +4539,7 @@ iota_reduct_full_inv env e e' (Eq (OptionType KExpr) (iota_reduct env (lift_at e
             value_src: Some(
                 concat!(
                     "fun (a : Nat) (c : Nat) (h : Lt a c) => ",
-                    "Lt.rec ",
+                    "@Lt.rec ",
                     "(fun (x : Nat) (y : Nat) (_ : Lt x y) => Lt x (Nat.succ y)) ",
                     "(fun (m : Nat) => Lt.zero_lt_succ (Nat.succ m)) ",
                     "(fun (a' : Nat) (b' : Nat) (_hh : Lt a' b') (ih : Lt a' (Nat.succ b')) => ",
@@ -4576,7 +4579,7 @@ iota_reduct_full_inv env e e' (Eq (OptionType KExpr) (iota_reduct env (lift_at e
             value_src: Some(
                 concat!(
                     "fun (a : Nat) (b : Nat) (c : Nat) (hab : Lt a b) (hbc : Lt b c) => ",
-                    "Lt.rec ",
+                    "@Lt.rec ",
                     "(fun (x : Nat) (y : Nat) (_ : Lt x y) => forall (a0 : Nat), Lt a0 x -> Lt a0 y) ",
                     // zero_lt_succ m : Lt 0 (succ m). Need forall a0, Lt a0 0 -> Lt a0 (succ m).
                     "(fun (m : Nat) (a0 : Nat) (h0 : Lt a0 Nat.zero) => lt_zero_absurd a0 (Lt a0 (Nat.succ m)) h0) ",
@@ -4589,10 +4592,10 @@ iota_reduct_full_inv env e e' (Eq (OptionType KExpr) (iota_reduct env (lift_at e
                     "(fun (hL : Lt (Nat.succ a0) (Nat.succ b')) => ",
                     "lt_succ_weaken a0 c' (ih a0 (lt_succ_succ_to_lt a0 b' hL))) ",
                     // Eq (succ a0) (succ b') arm: a0 = b', transport hh then weaken.
-                    "(fun (hE : Eq Nat (Nat.succ a0) (Nat.succ b')) => ",
+                    "(fun (hE : @Eq Nat (Nat.succ a0) (Nat.succ b')) => ",
                     "lt_succ_weaken a0 c' ",
-                    "(Eq.substType Nat (fun (z : Nat) => Lt z c') b' a0 ",
-                    "(Eq.symm Nat a0 b' (nat_succ_inj a0 b' hE)) hh))) ",
+                    "(@Eq.substType Nat (fun (z : Nat) => Lt z c') b' a0 ",
+                    "(@Eq.symm Nat a0 b' (nat_succ_inj a0 b' hE)) hh))) ",
                     "b c hbc a hab"
                 )
                 .to_string(),
@@ -4634,7 +4637,7 @@ iota_reduct_full_inv env e e' (Eq (OptionType KExpr) (iota_reduct env (lift_at e
             value_src: Some(
                 concat!(
                     "fun (a : Nat) (b : Nat) => ",
-                    "Nat.rec (fun (b0 : Nat) => Lt a (Nat.succ (Nat.add a b0))) ",
+                    "@Nat.rec (fun (b0 : Nat) => Lt a (Nat.succ (Nat.add a b0))) ",
                     "(lt_succ_self a) ",
                     "(fun (m : Nat) (ih : Lt a (Nat.succ (Nat.add a m))) => ",
                     "lt_succ_weaken a (Nat.succ (Nat.add a m)) ih) ",
@@ -4674,7 +4677,7 @@ iota_reduct_full_inv env e e' (Eq (OptionType KExpr) (iota_reduct env (lift_at e
             value_src: Some(
                 concat!(
                     "fun (a : Nat) (b : Nat) => ",
-                    "Nat.rec (fun (b0 : Nat) => Lt b0 (Nat.succ (Nat.add a b0))) ",
+                    "@Nat.rec (fun (b0 : Nat) => Lt b0 (Nat.succ (Nat.add a b0))) ",
                     "(Lt.zero_lt_succ a) ",
                     "(fun (m : Nat) (ih : Lt m (Nat.succ (Nat.add a m))) => ",
                     "Lt.succ_lt_succ m (Nat.succ (Nat.add a m)) ih) ",
@@ -4810,20 +4813,20 @@ iota_reduct_full_inv env e e' (Eq (OptionType KExpr) (iota_reduct env (lift_at e
             value_src: Some(
                 concat!(
                     "fun (a : Nat) (b : Nat) (c : Nat) => ",
-                    "Eq.substType Nat (fun (z : Nat) => Lt b (Nat.succ z)) ",
+                    "@Eq.substType Nat (fun (z : Nat) => Lt b (Nat.succ z)) ",
                     "(Nat.add b (Nat.add a c)) ",
                     "(Nat.add a (Nat.add b c)) ",
-                    "(Eq.trans Nat ",
+                    "(@Eq.trans Nat ",
                     "(Nat.add b (Nat.add a c)) ",
                     "(Nat.add (Nat.add b a) c) ",
                     "(Nat.add a (Nat.add b c)) ",
-                    "(Eq.symm Nat (Nat.add (Nat.add b a) c) (Nat.add b (Nat.add a c)) ",
+                    "(@Eq.symm Nat (Nat.add (Nat.add b a) c) (Nat.add b (Nat.add a c)) ",
                     "(nat_add_assoc b a c)) ",
-                    "(Eq.trans Nat ",
+                    "(@Eq.trans Nat ",
                     "(Nat.add (Nat.add b a) c) ",
                     "(Nat.add (Nat.add a b) c) ",
                     "(Nat.add a (Nat.add b c)) ",
-                    "(Eq.cong Nat Nat (fun (x : Nat) => Nat.add x c) ",
+                    "(@Eq.cong Nat Nat (fun (x : Nat) => Nat.add x c) ",
                     "(Nat.add b a) (Nat.add a b) (nat_add_comm b a)) ",
                     "(nat_add_assoc a b c))) ",
                     "(lt_add_succ_left b (Nat.add a c))"
@@ -4864,7 +4867,7 @@ iota_reduct_full_inv env e e' (Eq (OptionType KExpr) (iota_reduct env (lift_at e
             value_src: Some(
                 concat!(
                     "fun (a : Nat) (b : Nat) (c : Nat) => ",
-                    "Eq.substType Nat (fun (z : Nat) => Lt c (Nat.succ z)) ",
+                    "@Eq.substType Nat (fun (z : Nat) => Lt c (Nat.succ z)) ",
                     "(Nat.add (Nat.add a b) c) ",
                     "(Nat.add a (Nat.add b c)) ",
                     "(nat_add_assoc a b c) ",
@@ -4953,7 +4956,7 @@ impl Specification {
             type_src: "forall (n : Nat), Le Nat.zero n".to_string(),
             value_src: Some(
                 concat!(
-                    "fun (n : Nat) => Nat.rec (fun (n0 : Nat) => Le Nat.zero n0) ",
+                    "fun (n : Nat) => @Nat.rec (fun (n0 : Nat) => Le Nat.zero n0) ",
                     "(Le.refl Nat.zero) ",
                     "(fun (m : Nat) (ih : Le Nat.zero m) => Le.step Nat.zero m ih) ",
                     "n"
@@ -4982,7 +4985,7 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (a : Nat) (b : Nat) (h : Le a b) => ",
-                    "Le.rec a (fun (j : Nat) (_ : Le a j) => Le (Nat.succ a) (Nat.succ j)) ",
+                    "@Le.rec a (fun (j : Nat) (_ : Le a j) => Le (Nat.succ a) (Nat.succ j)) ",
                     "(Le.refl (Nat.succ a)) ",
                     "(fun (m : Nat) (_hm : Le a m) (ihm : Le (Nat.succ a) (Nat.succ m)) => ",
                     "Le.step (Nat.succ a) (Nat.succ m) ihm) ",
@@ -5012,7 +5015,7 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (a : Nat) (b : Nat) (c : Nat) (hab : Le a b) (hbc : Le b c) => ",
-                    "Le.rec b (fun (j : Nat) (_ : Le b j) => Le a j) ",
+                    "@Le.rec b (fun (j : Nat) (_ : Le b j) => Le a j) ",
                     "hab ",
                     "(fun (m : Nat) (_hm : Le b m) (ihm : Le a m) => Le.step a m ihm) ",
                     "c hbc"

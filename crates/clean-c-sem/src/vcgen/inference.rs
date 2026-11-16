@@ -796,7 +796,7 @@ impl InvariantInference {
     /// Detect search loop pattern: while (!found && i < n)
     ///
     /// Infers invariants about partial search results
-    pub fn detect_search_pattern(&self, cond: &CExpr, body: &CStmt) -> Option<Spec> {
+    pub(crate) fn detect_search_pattern(&self, cond: &CExpr, body: &CStmt) -> Option<Spec> {
         // Look for: !found && i < n  or  found == 0 && i < n
         let search_info = self.analyze_search_condition(cond)?;
 
@@ -1010,7 +1010,11 @@ impl InferenceContext {
     /// - Loop iteration counter (implicit in for loops)
     /// - Original values of modified variables
     /// - Partial results (partial sum, partial product)
-    pub fn generate_loop_ghosts(&mut self, loop_var: Option<&str>, modified_vars: &[String]) {
+    pub(crate) fn generate_loop_ghosts(
+        &mut self,
+        loop_var: Option<&str>,
+        modified_vars: &[String],
+    ) {
         // Ghost for loop iteration count
         if let Some(var) = loop_var {
             self.ghost_vars.push(GhostVariable {
@@ -1050,7 +1054,7 @@ impl InferenceContext {
     ///
     /// This helps prove frame conditions for array loops - elements not
     /// touched by the loop retain their initial values.
-    pub fn generate_array_frame_ghosts(&mut self, accesses: &[(String, Spec, bool)]) {
+    pub(crate) fn generate_array_frame_ghosts(&mut self, accesses: &[(String, Spec, bool)]) {
         use std::collections::HashSet;
 
         // Collect arrays that are written to (we can't add frame ghosts for these)
@@ -1089,7 +1093,7 @@ impl InferenceContext {
     }
 
     /// Get ghost invariants based on tracked ghost variables
-    pub fn ghost_invariants(&self) -> Vec<Spec> {
+    pub(crate) fn ghost_invariants(&self) -> Vec<Spec> {
         let mut invs = Vec::new();
 
         for ghost in &self.ghost_vars {
@@ -1203,7 +1207,7 @@ impl GhostVariable {
     /// * `arr_name` - Name of the array variable
     /// * `index` - Index expression (as Spec)
     /// * `init` - Initial value at that index (if known)
-    pub fn array_element(arr_name: &str, index: Spec, init: Option<Spec>) -> Self {
+    pub(crate) fn array_element(arr_name: &str, index: Spec, init: Option<Spec>) -> Self {
         // Create a unique name based on array and a simple index representation
         let index_repr = match &index {
             Spec::Var(v) => v.clone(),

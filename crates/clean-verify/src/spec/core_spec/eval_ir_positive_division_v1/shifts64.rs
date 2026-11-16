@@ -31,37 +31,37 @@ pub(super) const LAWS: &[(&str, &str)] = &[
     (
         "ir_lshr_bits_in_range_v1",
         r"def ir_lshr_bits_in_range_v1 (width word amount : Nat) (inRange : Nat.lt amount width) :
-  Eq IRStepResult (ir_lshr_bits width word amount)
+  @Eq IRStepResult (ir_lshr_bits width word amount)
     (IRStepResult.value (IRScalar.int_ (ir_nat_div word (ir_nat_pow2 amount)))) :=
-Eq.subst Bool
-  (fun (valid : Bool) => Eq IRStepResult
-    (Bool.rec (fun (_ : Bool) => IRStepResult)
+@Eq.subst Bool
+  (fun (valid : Bool) => @Eq IRStepResult
+    (@Bool.rec (fun (_ : Bool) => IRStepResult)
       (IRStepResult.fault (IROutcome.ub IRFault.shift_oob))
       (IRStepResult.value (IRScalar.int_ (ir_nat_div word (ir_nat_pow2 amount)))) valid)
     (IRStepResult.value (IRScalar.int_ (ir_nat_div word (ir_nat_pow2 amount)))))
   Bool.true (ir_nat_ltb amount width)
-  (Eq.symm Bool (ir_nat_ltb amount width) Bool.true (ir_byte_ltb_of_lt_v1 amount width inRange))
-  (Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ (ir_nat_div word (ir_nat_pow2 amount)))))",
+  (@Eq.symm Bool (ir_nat_ltb amount width) Bool.true (ir_byte_ltb_of_lt_v1 amount width inRange))
+  (@Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ (ir_nat_div word (ir_nat_pow2 amount)))))",
     ),
     (
         "ir_ashr_bits_in_range_v1",
         r"def ir_ashr_bits_in_range_v1 (width word amount : Nat) (inRange : Nat.lt amount width) :
-  Eq IRStepResult (ir_ashr_bits width word amount)
+  @Eq IRStepResult (ir_ashr_bits width word amount)
     (IRStepResult.value (IRScalar.int_ (ir_ashr_value width word amount))) :=
-Eq.subst Bool
-  (fun (valid : Bool) => Eq IRStepResult
-    (Bool.rec (fun (_ : Bool) => IRStepResult)
+@Eq.subst Bool
+  (fun (valid : Bool) => @Eq IRStepResult
+    (@Bool.rec (fun (_ : Bool) => IRStepResult)
       (IRStepResult.fault (IROutcome.ub IRFault.shift_oob))
       (IRStepResult.value (IRScalar.int_ (ir_ashr_value width word amount))) valid)
     (IRStepResult.value (IRScalar.int_ (ir_ashr_value width word amount))))
   Bool.true (ir_nat_ltb amount width)
-  (Eq.symm Bool (ir_nat_ltb amount width) Bool.true (ir_byte_ltb_of_lt_v1 amount width inRange))
-  (Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ (ir_ashr_value width word amount))))",
+  (@Eq.symm Bool (ir_nat_ltb amount width) Bool.true (ir_byte_ltb_of_lt_v1 amount width inRange))
+  (@Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ (ir_ashr_value width word amount))))",
     ),
     (
         "ir_byte_u64_shift_amount_fits_v1",
         r"def ir_byte_u64_shift_amount_fits_v1 (amount : Nat) (inRange : Nat.lt amount 64) :
-  Eq Bool (ir_nat_ltb amount (ir_nat_pow2 64)) Bool.true :=
+  @Eq Bool (ir_nat_ltb amount (ir_nat_pow2 64)) Bool.true :=
 ir_byte_ltb_of_lt_v1 amount (ir_nat_pow2 64)
   (@Nat.lt_of_lt_of_le amount 64 (ir_nat_pow2 64) inRange
     (@Nat.le_add_right 64 18446744073709551552))",
@@ -69,9 +69,9 @@ ir_byte_ltb_of_lt_v1 amount (ir_nat_pow2 64)
     (
         "ir_positive_division_u64_ashr_value_v1",
         r"def ir_positive_division_u64_ashr_value_v1 (word amount : Nat)
-  (fits : Eq Bool (ir_nat_ltb word (ir_nat_pow2 64)) Bool.true) :
-  Eq Nat (ir_ashr_value 64 word amount)
-    (Bool.rec (fun (_ : Bool) => Nat)
+  (fits : @Eq Bool (ir_nat_ltb word (ir_nat_pow2 64)) Bool.true) :
+  @Eq Nat (ir_ashr_value 64 word amount)
+    (@Bool.rec (fun (_ : Bool) => Nat)
       (ir_dm_quot (ir_dm_go 1 word 64 (ir_nat_pow2 amount) (IRDivMod.mk word 0)))
       (Nat.add (ir_dm_quot (ir_dm_go 1 word 64 (ir_nat_pow2 amount) (IRDivMod.mk word 0)))
         (Nat.sub (ir_nat_pow2 64)
@@ -88,26 +88,26 @@ ir_positive_division_ashr_value_quotient_congr_v1 64 word amount
     (
         "ir_byte_lshr_u64_in_range_v1",
         r"def ir_byte_lshr_u64_in_range_v1 (word amount : Nat)
-  (fits : Eq Bool (ir_nat_ltb word (ir_nat_pow2 64)) Bool.true)
+  (fits : @Eq Bool (ir_nat_ltb word (ir_nat_pow2 64)) Bool.true)
   (inRange : Nat.lt amount 64) :
-  Eq IRStepResult
+  @Eq IRStepResult
     (ir_binop_eval IRBinOp.lshr (IRTy.uint_ 64) (IRScalar.int_ word) (IRScalar.int_ amount))
     (IRStepResult.value (IRScalar.int_
       (ir_dm_quot (ir_dm_go 1 word 64 (ir_nat_pow2 amount) (IRDivMod.mk word 0))))) :=
-Eq.trans IRStepResult
+@Eq.trans IRStepResult
   (ir_binop_eval IRBinOp.lshr (IRTy.uint_ 64) (IRScalar.int_ word) (IRScalar.int_ amount))
   (ir_lshr_bits 64 word (ir_wrap 64 amount))
   (IRStepResult.value (IRScalar.int_
     (ir_dm_quot (ir_dm_go 1 word 64 (ir_nat_pow2 amount) (IRDivMod.mk word 0)))))
   (ir_eq_cong Nat IRStepResult (fun (input : Nat) => ir_lshr_bits 64 input (ir_wrap 64 amount))
     (ir_wrap 64 word) word (ir_byte_wrap_canonical_v1 64 word fits))
-  (Eq.trans IRStepResult (ir_lshr_bits 64 word (ir_wrap 64 amount)) (ir_lshr_bits 64 word amount)
+  (@Eq.trans IRStepResult (ir_lshr_bits 64 word (ir_wrap 64 amount)) (ir_lshr_bits 64 word amount)
     (IRStepResult.value (IRScalar.int_
       (ir_dm_quot (ir_dm_go 1 word 64 (ir_nat_pow2 amount) (IRDivMod.mk word 0)))))
     (ir_eq_cong Nat IRStepResult (fun (shift : Nat) => ir_lshr_bits 64 word shift)
       (ir_wrap 64 amount) amount
       (ir_byte_wrap_canonical_v1 64 amount (ir_byte_u64_shift_amount_fits_v1 amount inRange)))
-    (Eq.trans IRStepResult (ir_lshr_bits 64 word amount)
+    (@Eq.trans IRStepResult (ir_lshr_bits 64 word amount)
       (IRStepResult.value (IRScalar.int_ (ir_nat_div word (ir_nat_pow2 amount))))
       (IRStepResult.value (IRScalar.int_
         (ir_dm_quot (ir_dm_go 1 word 64 (ir_nat_pow2 amount) (IRDivMod.mk word 0)))))
@@ -120,30 +120,30 @@ Eq.trans IRStepResult
     (
         "ir_byte_ashr_i64_in_range_v1",
         r"def ir_byte_ashr_i64_in_range_v1 (word amount : Nat)
-  (fits : Eq Bool (ir_nat_ltb word (ir_nat_pow2 64)) Bool.true)
+  (fits : @Eq Bool (ir_nat_ltb word (ir_nat_pow2 64)) Bool.true)
   (inRange : Nat.lt amount 64) :
-  Eq IRStepResult
+  @Eq IRStepResult
     (ir_binop_eval IRBinOp.ashr (IRTy.int_ 64) (IRScalar.int_ word) (IRScalar.int_ amount))
     (IRStepResult.value (IRScalar.int_
-      (Bool.rec (fun (_ : Bool) => Nat)
+      (@Bool.rec (fun (_ : Bool) => Nat)
         (ir_dm_quot (ir_dm_go 1 word 64 (ir_nat_pow2 amount) (IRDivMod.mk word 0)))
         (Nat.add (ir_dm_quot (ir_dm_go 1 word 64 (ir_nat_pow2 amount) (IRDivMod.mk word 0)))
           (Nat.sub (ir_nat_pow2 64)
             (ir_dm_quot (ir_dm_go 1 (ir_nat_pow2 64) 65 (ir_nat_pow2 amount)
               (IRDivMod.mk (ir_nat_pow2 64) 0)))))
         (ir_sign_bit 64 word)))) :=
-Eq.trans IRStepResult
+@Eq.trans IRStepResult
   (ir_binop_eval IRBinOp.ashr (IRTy.int_ 64) (IRScalar.int_ word) (IRScalar.int_ amount))
   (ir_ashr_bits 64 word amount)
   (IRStepResult.value (IRScalar.int_
-    (Bool.rec (fun (_ : Bool) => Nat)
+    (@Bool.rec (fun (_ : Bool) => Nat)
       (ir_dm_quot (ir_dm_go 1 word 64 (ir_nat_pow2 amount) (IRDivMod.mk word 0)))
       (Nat.add (ir_dm_quot (ir_dm_go 1 word 64 (ir_nat_pow2 amount) (IRDivMod.mk word 0)))
         (Nat.sub (ir_nat_pow2 64)
           (ir_dm_quot (ir_dm_go 1 (ir_nat_pow2 64) 65 (ir_nat_pow2 amount)
             (IRDivMod.mk (ir_nat_pow2 64) 0)))))
       (ir_sign_bit 64 word))))
-  (Eq.trans IRStepResult
+  (@Eq.trans IRStepResult
     (ir_binop_eval IRBinOp.ashr (IRTy.int_ 64) (IRScalar.int_ word) (IRScalar.int_ amount))
     (ir_ashr_bits 64 word (ir_wrap 64 amount)) (ir_ashr_bits 64 word amount)
     (ir_eq_cong Nat IRStepResult (fun (input : Nat) => ir_ashr_bits 64 input (ir_wrap 64 amount))
@@ -151,10 +151,10 @@ Eq.trans IRStepResult
     (ir_eq_cong Nat IRStepResult (fun (shift : Nat) => ir_ashr_bits 64 word shift)
       (ir_wrap 64 amount) amount
       (ir_byte_wrap_canonical_v1 64 amount (ir_byte_u64_shift_amount_fits_v1 amount inRange))))
-  (Eq.trans IRStepResult (ir_ashr_bits 64 word amount)
+  (@Eq.trans IRStepResult (ir_ashr_bits 64 word amount)
     (IRStepResult.value (IRScalar.int_ (ir_ashr_value 64 word amount)))
     (IRStepResult.value (IRScalar.int_
-      (Bool.rec (fun (_ : Bool) => Nat)
+      (@Bool.rec (fun (_ : Bool) => Nat)
         (ir_dm_quot (ir_dm_go 1 word 64 (ir_nat_pow2 amount) (IRDivMod.mk word 0)))
         (Nat.add (ir_dm_quot (ir_dm_go 1 word 64 (ir_nat_pow2 amount) (IRDivMod.mk word 0)))
           (Nat.sub (ir_nat_pow2 64)
@@ -164,7 +164,7 @@ Eq.trans IRStepResult
     (ir_ashr_bits_in_range_v1 64 word amount inRange)
     (ir_eq_cong Nat IRStepResult (fun (value : Nat) => IRStepResult.value (IRScalar.int_ value))
       (ir_ashr_value 64 word amount)
-      (Bool.rec (fun (_ : Bool) => Nat)
+      (@Bool.rec (fun (_ : Bool) => Nat)
         (ir_dm_quot (ir_dm_go 1 word 64 (ir_nat_pow2 amount) (IRDivMod.mk word 0)))
         (Nat.add (ir_dm_quot (ir_dm_go 1 word 64 (ir_nat_pow2 amount) (IRDivMod.mk word 0)))
           (Nat.sub (ir_nat_pow2 64)
@@ -176,9 +176,9 @@ Eq.trans IRStepResult
     (
         "ir_byte_lshr_u64_in_range_result_bound_v1",
         r"def ir_byte_lshr_u64_in_range_result_bound_v1 (word amount : Nat)
-  (fits : Eq Bool (ir_nat_ltb word (ir_nat_pow2 64)) Bool.true)
+  (fits : @Eq Bool (ir_nat_ltb word (ir_nat_pow2 64)) Bool.true)
   (inRange : Nat.lt amount 64) :
-  Eq Bool (ir_nat_ltb
+  @Eq Bool (ir_nat_ltb
     (ir_dm_quot (ir_dm_go 1 word 64 (ir_nat_pow2 amount) (IRDivMod.mk word 0)))
     (ir_nat_pow2 64)) Bool.true :=
 ir_byte_ltb_of_lt_v1
@@ -192,10 +192,10 @@ ir_byte_ltb_of_lt_v1
     (
         "ir_byte_ashr_i64_in_range_result_bound_v1",
         r"def ir_byte_ashr_i64_in_range_result_bound_v1 (word amount : Nat)
-  (fits : Eq Bool (ir_nat_ltb word (ir_nat_pow2 64)) Bool.true)
+  (fits : @Eq Bool (ir_nat_ltb word (ir_nat_pow2 64)) Bool.true)
   (inRange : Nat.lt amount 64) :
-  Eq Bool (ir_nat_ltb
-    (Bool.rec (fun (_ : Bool) => Nat)
+  @Eq Bool (ir_nat_ltb
+    (@Bool.rec (fun (_ : Bool) => Nat)
       (ir_dm_quot (ir_dm_go 1 word 64 (ir_nat_pow2 amount) (IRDivMod.mk word 0)))
       (Nat.add (ir_dm_quot (ir_dm_go 1 word 64 (ir_nat_pow2 amount) (IRDivMod.mk word 0)))
         (Nat.sub (ir_nat_pow2 64)
@@ -207,14 +207,14 @@ let negativeBound : Nat.lt
     (Nat.sub (ir_nat_pow2 64)
       (ir_dm_quot (ir_dm_go 1 (ir_nat_pow2 64) 65 (ir_nat_pow2 amount)
         (IRDivMod.mk (ir_nat_pow2 64) 0))))) (ir_nat_pow2 64) :=
-  Eq.subst Nat
+  @Eq.subst Nat
     (fun (fill : Nat) => Nat.lt
       (Nat.add (ir_dm_quot (ir_dm_go 1 word 64 (ir_nat_pow2 amount) (IRDivMod.mk word 0)))
         (Nat.sub (ir_nat_pow2 64) fill)) (ir_nat_pow2 64))
     (ir_nat_pow2 (Nat.sub 64 amount))
     (ir_dm_quot (ir_dm_go 1 (ir_nat_pow2 64) 65 (ir_nat_pow2 amount)
       (IRDivMod.mk (ir_nat_pow2 64) 0)))
-    (Eq.symm Nat
+    (@Eq.symm Nat
       (ir_dm_quot (ir_dm_go 1 (ir_nat_pow2 64) 65 (ir_nat_pow2 amount)
         (IRDivMod.mk (ir_nat_pow2 64) 0))) (ir_nat_pow2 (Nat.sub 64 amount))
       (ir_positive_division_u64_fill_quotient_v1 amount (@Nat.le_of_lt amount 64 inRange)))

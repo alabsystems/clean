@@ -60,7 +60,7 @@ impl Specification {
         let translated = |e: &str, rho: &str, d: &str| format!("(to_kexpr_at {e} {rho} {d})");
         let ih = |e: &str| {
             format!(
-                "forall (rho : ListType Nat) (sigma : ListType Nat) (d : Nat), Eq KExpr {} {}",
+                "forall (rho : ListType Nat) (sigma : ListType Nat) (d : Nat), @Eq KExpr {} {}",
                 translated(e, "rho", "d"),
                 translated(e, "sigma", "d")
             )
@@ -85,14 +85,14 @@ impl Specification {
         let proof = format!(
             r"fun (e : ImplExpr) (h : ImplNoFVar e)
     (rho : ListType Nat) (sigma : ListType Nat) (d : Nat) =>
-  ImplNoFVar.rec (fun (e0 : ImplExpr) (_h0 : ImplNoFVar e0) => {motive})
+  @ImplNoFVar.rec (fun (e0 : ImplExpr) (_h0 : ImplNoFVar e0) => {motive})
     (fun (i : Nat) (_rho : ListType Nat) (_sigma : ListType Nat) (_d : Nat) =>
-      Eq.refl KExpr (KExpr.bvar i))
+      @Eq.refl KExpr (KExpr.bvar i))
     (fun (l : Level) (_rho : ListType Nat) (_sigma : ListType Nat) (_d : Nat) =>
-      Eq.refl KExpr (KExpr.sort l))
+      @Eq.refl KExpr (KExpr.sort l))
     (fun (nm : Name) (us : ListType Level)
       (_rho : ListType Nat) (_sigma : ListType Nat) (_d : Nat) =>
-      Eq.refl KExpr (KExpr.const nm us))
+      @Eq.refl KExpr (KExpr.const nm us))
     {app}
     {lam}
     {pi}
@@ -103,7 +103,7 @@ impl Specification {
       psubst_closed_cong3 KExpr.let_ {ty_lhs} {ty_rhs} {v_lhs} {v_rhs} {b_lhs} {b_rhs}
         (iht rho sigma d) (ihv rho sigma d) (ihb rho sigma (Nat.succ d)))
     (fun (lt : ImplLit) (_rho : ListType Nat) (_sigma : ListType Nat) (_d : Nat) =>
-      Eq.refl KExpr (impl_lit_to_kexpr lt))
+      @Eq.refl KExpr (impl_lit_to_kexpr lt))
     (fun (inner : ImplExpr) (_hinner : ImplNoFVar inner) (ihinner : {ihinner})
       (rho : ListType Nat) (sigma : ListType Nat) (d : Nat) => ihinner rho sigma d)
     e h rho sigma d",
@@ -127,7 +127,7 @@ impl Specification {
             "to_kexpr_at_rho_independent",
             r"forall (e : ImplExpr) (h : ImplNoFVar e)
     (rho : ListType Nat) (sigma : ListType Nat) (d : Nat),
-    Eq KExpr (to_kexpr_at e rho d) (to_kexpr_at e sigma d)",
+    @Eq KExpr (to_kexpr_at e rho d) (to_kexpr_at e sigma d)",
             &proof,
             "No-FVar syntax translates independently of the renaming at every binder depth. Nine structural positive cases cover the ten-constructor syntax by excluding FVar. Binder depths increment and metadata erases exactly as in to_kexpr_at. No source or closedness claim.",
         )?;
@@ -135,7 +135,7 @@ impl Specification {
             self,
             "to_kexpr_rho_independent",
             r"forall (e : ImplExpr) (h : ImplNoFVar e) (rho : ListType Nat) (sigma : ListType Nat),
-    Eq KExpr (to_kexpr e rho) (to_kexpr e sigma)",
+    @Eq KExpr (to_kexpr e rho) (to_kexpr e sigma)",
             r"fun (e : ImplExpr) (h : ImplNoFVar e) (rho : ListType Nat) (sigma : ListType Nat) =>
     to_kexpr_at_rho_independent e h rho sigma Nat.zero",
             "Depth-zero specialization of the structural No-FVar translation theorem.",
@@ -144,12 +144,12 @@ impl Specification {
             self,
             "to_kexpr_eq_of_nil",
             r"forall (e : ImplExpr) (h : ImplNoFVar e) (T : KExpr)
-    (ht : Eq KExpr (to_kexpr e (ListType.nil Nat)) T) (rho : ListType Nat),
-    Eq KExpr (to_kexpr e rho) T",
+    (ht : @Eq KExpr (to_kexpr e (@ListType.nil Nat)) T) (rho : ListType Nat),
+    @Eq KExpr (to_kexpr e rho) T",
             r"fun (e : ImplExpr) (h : ImplNoFVar e) (T : KExpr)
-    (ht : Eq KExpr (to_kexpr e (ListType.nil Nat)) T) (rho : ListType Nat) =>
-  Eq.trans KExpr (to_kexpr e rho) (to_kexpr e (ListType.nil Nat)) T
-    (to_kexpr_rho_independent e h rho (ListType.nil Nat)) ht",
+    (ht : @Eq KExpr (to_kexpr e (@ListType.nil Nat)) T) (rho : ListType Nat) =>
+  Eq.trans KExpr (to_kexpr e rho) (to_kexpr e (@ListType.nil Nat)) T
+    (to_kexpr_rho_independent e h rho (@ListType.nil Nat)) ht",
             "A schematic field represented once at nil is represented at every rho under structural No-FVar. Intended for the environment bridge without assuming an all-rho equality as a field.",
         )?;
 
@@ -158,19 +158,19 @@ impl Specification {
 
     fn add_universe_schematic_rep_controls(&mut self) -> Result<(), SpecError> {
         self.add_recursive_def(
-            "def impl_no_fvar_rho_zero : ListType Nat := ListType.cons Nat Nat.zero (ListType.nil Nat)",
+            "def impl_no_fvar_rho_zero : ListType Nat := @ListType.cons Nat Nat.zero (@ListType.nil Nat)",
             "Counterexample renaming containing FVarId 0.",
         )?;
         self.add_recursive_def(
-            "def impl_no_fvar_rho_one : ListType Nat := ListType.cons Nat (Nat.succ Nat.zero) (ListType.nil Nat)",
+            "def impl_no_fvar_rho_one : ListType Nat := @ListType.cons Nat (Nat.succ Nat.zero) (@ListType.nil Nat)",
             "Counterexample renaming omitting FVarId 0; its sentinel index is one.",
         )?;
         schematic_theorem(
             self,
             "impl_fvar_translation_depends_on_rho",
-            r"Eq KExpr (to_kexpr (ImplExpr.fvar Nat.zero) impl_no_fvar_rho_zero)
+            r"@Eq KExpr (to_kexpr (ImplExpr.fvar Nat.zero) impl_no_fvar_rho_zero)
     (to_kexpr (ImplExpr.fvar Nat.zero) impl_no_fvar_rho_one) -> Empty",
-            r"fun (h : Eq KExpr (to_kexpr (ImplExpr.fvar Nat.zero) impl_no_fvar_rho_zero)
+            r"fun (h : @Eq KExpr (to_kexpr (ImplExpr.fvar Nat.zero) impl_no_fvar_rho_zero)
     (to_kexpr (ImplExpr.fvar Nat.zero) impl_no_fvar_rho_one)) =>
   nat_zero_ne_succ Nat.zero Empty (kexpr_bvar_inj Nat.zero (Nat.succ Nat.zero) h)",
             "Genuine free-variable counterexample: FVar 0 becomes BVar 0 under [0] and BVar 1 under [1]. This is a checked refutation, not merely rejection of a proposed proof term.",
@@ -179,9 +179,9 @@ impl Specification {
             self,
             "impl_unqualified_rho_independence_refuted",
             r"(forall (e : ImplExpr) (rho : ListType Nat) (sigma : ListType Nat) (d : Nat),
-    Eq KExpr (to_kexpr_at e rho d) (to_kexpr_at e sigma d)) -> Empty",
+    @Eq KExpr (to_kexpr_at e rho d) (to_kexpr_at e sigma d)) -> Empty",
             r"fun (h : forall (e : ImplExpr) (rho : ListType Nat) (sigma : ListType Nat) (d : Nat),
-    Eq KExpr (to_kexpr_at e rho d) (to_kexpr_at e sigma d)) =>
+    @Eq KExpr (to_kexpr_at e rho d) (to_kexpr_at e sigma d)) =>
   impl_fvar_translation_depends_on_rho
     (h (ImplExpr.fvar Nat.zero) impl_no_fvar_rho_zero impl_no_fvar_rho_one Nat.zero)",
             "Refutes the universal renaming-independence statement when its No-FVar premise is removed.",
@@ -216,7 +216,7 @@ impl Specification {
             self,
             "to_kexpr_no_fvar_binder_mdata_witness",
             r"forall (rho : ListType Nat) (sigma : ListType Nat) (d : Nat),
-    Eq KExpr (to_kexpr_at impl_no_fvar_binder_mdata_expr rho d)
+    @Eq KExpr (to_kexpr_at impl_no_fvar_binder_mdata_expr rho d)
       (to_kexpr_at impl_no_fvar_binder_mdata_expr sigma d)",
             r"fun (rho : ListType Nat) (sigma : ListType Nat) (d : Nat) =>
   to_kexpr_at_rho_independent impl_no_fvar_binder_mdata_expr
@@ -304,8 +304,8 @@ mod tests {
                 schematic_theorem(
                     &mut spec,
                     "no_fvar_unqualified_translation_must_fail",
-                    "Eq KExpr (to_kexpr (ImplExpr.fvar Nat.zero) impl_no_fvar_rho_zero) (to_kexpr (ImplExpr.fvar Nat.zero) impl_no_fvar_rho_one)",
-                    "Eq.refl KExpr (KExpr.bvar Nat.zero)",
+                    "@Eq KExpr (to_kexpr (ImplExpr.fvar Nat.zero) impl_no_fvar_rho_zero) (to_kexpr (ImplExpr.fvar Nat.zero) impl_no_fvar_rho_one)",
+                    "@Eq.refl KExpr (KExpr.bvar Nat.zero)",
                     "Negative control: changing the renaming changes the represented FVar.",
                 )
                 .is_err()

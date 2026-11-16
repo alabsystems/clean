@@ -353,41 +353,41 @@
   ],
   "summary": {
    "sites_by_role": {
-    "call": 48,
-    "construct": 240,
+    "call": 49,
+    "construct": 243,
     "def": 61,
     "import": 15,
     "mention": 16,
-    "read": 193
+    "read": 198
    },
    "occurrences_by_role": {
-    "call": 49,
-    "construct": 299,
+    "call": 50,
+    "construct": 306,
     "def": 64,
     "import": 15,
     "mention": 23,
-    "read": 223
+    "read": 228
    },
    "classified_sites_by_class": {
-    "mint": 96,
-    "relabel": 97,
-    "root": 49,
-    "threshold": 46
+    "mint": 97,
+    "relabel": 98,
+    "root": 50,
+    "threshold": 47
    },
    "mint_sites_by_checker": {
-    "clean-kernel/add_decl/Extended": 8,
+    "clean-kernel/add_decl/Extended": 7,
     "clean-kernel/add_decl/Lean": 2,
-    "clean-kernel/add_decl/caller-selected": 20,
+    "clean-kernel/add_decl/caller-selected": 21,
     "clean-kernel/reference/LeanReference": 1,
     "clean-kernel/typecheck/Extended": 1,
     "clean-kernel/typecheck/Lean": 2,
-    "clean-kernel/typecheck/caller-selected": 3,
+    "clean-kernel/typecheck/caller-selected": 4,
     "external-tool": 1,
     "in-repo-checker": 3,
     "none": 55
    },
    "mint_sites_by_rung": {
-    "2": 69,
+    "2": 70,
     "None": 27
    }
   },
@@ -573,6 +573,29 @@
     "kcheck_rung": null,
     "rung_note": "FloorLevel::AxiomDependent is an axiom-relative soundness floor. It does not claim a kernel proof-check.",
     "first_risk_note": "Honest about the axiom. But the sibling Foundational floor for every non-axiom node rests only on its presence in env and its kind ('kernel-checked declaration' is presumed, not checked here), so AxiomDependent versus Foundational sorts nodes by kind and never re-checks anything."
+   },
+   {
+    "id": "clean:crates/clean-cli/examples/mathverse_mathlib_citation.rs#main#ImportConfidence::KernelVerified#construct",
+    "file": "crates/clean-cli/examples/mathverse_mathlib_citation.rs",
+    "symbol": "main",
+    "family": "label",
+    "token": "ImportConfidence::KernelVerified",
+    "role": "construct",
+    "count": 2,
+    "lines": [
+     106,
+     145
+    ],
+    "class": "threshold",
+    "mints": "the confidence an example's probe filters and asserts on",
+    "checker": {
+     "kind": "not-a-mint",
+     "detail": "not a mint: nothing is accepted at this site"
+    },
+    "evidence_tokens": [],
+    "kcheck_rung": null,
+    "rung_note": "a policy value or comparison operand; nothing to flip",
+    "reach": "example"
    },
    {
     "id": "clean:crates/clean-cli/examples/mathverse_real_corpus_e2e.rs#main#ImportConfidence::KernelVerified#construct",
@@ -1160,7 +1183,7 @@
     "role": "call",
     "count": 1,
     "lines": [
-     260
+     265
     ],
     "class": "root",
     "mints": "the import base every `.lean` module is elaborated over (clean check, clean lake build, Trust's island elaboration)",
@@ -1212,8 +1235,8 @@
     "role": "read",
     "count": 2,
     "lines": [
-     165,
-     168
+     179,
+     182
     ]
    },
    {
@@ -1225,7 +1248,67 @@
     "role": "read",
     "count": 1,
     "lines": [
-     169
+     183
+    ]
+   },
+   {
+    "id": "clean:crates/clean-elab/src/tactic/mathverse_use.rs#discharge_fabricated_stubs_for#ImportConfidence::KernelVerified#read",
+    "file": "crates/clean-elab/src/tactic/mathverse_use.rs",
+    "symbol": "discharge_fabricated_stubs_for",
+    "family": "label",
+    "token": "ImportConfidence::KernelVerified",
+    "role": "read",
+    "count": 1,
+    "lines": [
+     509
+    ]
+   },
+   {
+    "id": "clean:crates/clean-elab/src/tactic/mathverse_use.rs#import_confidence_label#ImportConfidence::KernelBridged#read",
+    "file": "crates/clean-elab/src/tactic/mathverse_use.rs",
+    "symbol": "import_confidence_label",
+    "family": "label",
+    "token": "ImportConfidence::KernelBridged",
+    "role": "read",
+    "count": 1,
+    "lines": [
+     2514
+    ]
+   },
+   {
+    "id": "clean:crates/clean-elab/src/tactic/mathverse_use.rs#import_confidence_label#ImportConfidence::KernelCheckedConditional#read",
+    "file": "crates/clean-elab/src/tactic/mathverse_use.rs",
+    "symbol": "import_confidence_label",
+    "family": "label",
+    "token": "ImportConfidence::KernelCheckedConditional",
+    "role": "read",
+    "count": 1,
+    "lines": [
+     2517
+    ]
+   },
+   {
+    "id": "clean:crates/clean-elab/src/tactic/mathverse_use.rs#import_confidence_label#ImportConfidence::KernelVerified#read",
+    "file": "crates/clean-elab/src/tactic/mathverse_use.rs",
+    "symbol": "import_confidence_label",
+    "family": "label",
+    "token": "ImportConfidence::KernelVerified",
+    "role": "read",
+    "count": 1,
+    "lines": [
+     2513
+    ]
+   },
+   {
+    "id": "clean:crates/clean-elab/src/tactic/mathverse_use.rs#import_confidence_label#ImportConfidence::SourceVerified#read",
+    "file": "crates/clean-elab/src/tactic/mathverse_use.rs",
+    "symbol": "import_confidence_label",
+    "family": "label",
+    "token": "ImportConfidence::SourceVerified",
+    "role": "read",
+    "count": 1,
+    "lines": [
+     2515
     ]
    },
    {
@@ -1652,7 +1735,7 @@
     "role": "def",
     "count": 1,
     "lines": [
-     3884
+     3891
     ]
    },
    {
@@ -2993,7 +3076,7 @@
     "role": "read",
     "count": 1,
     "lines": [
-     109
+     38
     ]
    },
    {
@@ -3005,7 +3088,7 @@
     "role": "read",
     "count": 1,
     "lines": [
-     108
+     37
     ]
    },
    {
@@ -3017,7 +3100,7 @@
     "role": "read",
     "count": 1,
     "lines": [
-     105
+     34
     ]
    },
    {
@@ -3029,7 +3112,7 @@
     "role": "read",
     "count": 1,
     "lines": [
-     106
+     35
     ]
    },
    {
@@ -4046,8 +4129,8 @@
     "role": "construct",
     "count": 2,
     "lines": [
-     1741,
-     1756
+     1880,
+     1895
     ],
     "class": "relabel",
     "mints": "ImportConfidence::KernelBridged on a dependent of a bridged theorem",
@@ -4069,8 +4152,8 @@
     "role": "construct",
     "count": 2,
     "lines": [
-     1628,
-     1643
+     1767,
+     1782
     ],
     "class": "relabel",
     "mints": "ImportConfidence::KernelCheckedConditional written to a shard header (tier 2: checked under named hypotheses)",
@@ -4092,7 +4175,7 @@
     "role": "construct",
     "count": 1,
     "lines": [
-     1639
+     1778
     ],
     "class": "mint",
     "mints": "PureVerifiedImport.kernel_checked_ledger count and a shard header stamped ImportConfidence::KernelCheckedConditional",
@@ -4115,8 +4198,8 @@
     "role": "construct",
     "count": 2,
     "lines": [
-     1438,
-     1453
+     1577,
+     1592
     ],
     "class": "mint",
     "mints": "ImportConfidence::KernelBridged for an Isabelle theorem discharged through a bridge lemma",
@@ -4139,18 +4222,20 @@
     "family": "label",
     "token": "ImportConfidence::KernelVerified",
     "role": "construct",
-    "count": 2,
+    "count": 4,
     "lines": [
-     1006,
-     1026
+     1086,
+     1111,
+     1149,
+     1162
     ],
     "class": "mint",
-    "mints": "ImportConfidence::KernelVerified on a stored shard header for a translated Isabelle/Pure theorem",
+    "mints": "ImportConfidence::KernelVerified on the stored shard header of a translated Isabelle/Pure theorem (1086) and of its human-name alias (1149), each mirrored into PureVerifiedImport.written_constants (1111, 1162) for the publish step's provenance stamp",
     "checker": {
      "kind": "clean-kernel",
      "entry": "add_decl",
-     "theory": "Extended",
-     "detail": "add_decl of the translated proof term"
+     "theory": "caller-selected",
+     "detail": "Primary (1086, 1111): reached only when env.add_decl(kdecl) at 895 returned Ok for some escalation mode and env.axiom_deps at 1028 shows a foundational-only closure (1032-1040 reject otherwise). Alias (1149, 1162): written only when env.add_decl(alias_decl) at 1141 accepts `<isabelle name> : ty := Const(isabelle.s<serial>)`, whose type and closure are the primary's. The env is the caller's. It is either fresh, from Environment::with_prelude() (KernelTheory::Extended, the default) in import_proven_theorems (172) and in streaming::build_verify_state (streaming.rs:616, also behind SingleLineState::minimal at mod.rs:90), or decoded from a replay snapshot file. The snapshot sources are: the shard pre-pass hand-off (streaming.rs:155, exported by shard_verify.rs:577); ISA_SNAPSHOT_IN resume (streaming.rs:181, parallel_streaming.rs:157), both through load_snapshot, which enforces the translator fingerprint unless ISA_SNAPSHOT_ALLOW_MISMATCH=1; and the --retry-from retry lane (retry.rs:707 load_snapshot_retry, then retry.rs:1215/1476), where a fingerprint mismatch is only warned and the accepted prefix is trusted on the strictly-additive discipline (snapshot.rs:715-743). On every snapshot arm, add_decl checks against residents decoded from the file, not re-checked here (the accelerator trust models of snapshot.rs:18-36 and retry.rs:11-42)."
     },
     "evidence_tokens": [
      "add_decl"
@@ -4167,7 +4252,7 @@
     "role": "construct",
     "count": 1,
     "lines": [
-     1017
+     1097
     ],
     "class": "mint",
     "mints": "PureVerifiedImport.kernel_verified count and an Isabelle shard header stamped ImportConfidence::KernelVerified",
@@ -4175,7 +4260,7 @@
      "kind": "clean-kernel",
      "entry": "add_decl",
      "theory": "caller-selected",
-     "detail": "Line 1017 is reached only when env.add_decl(kdecl) at 849 returned Ok for some escalation mode and env.axiom_deps at 959 shows a foundational-only closure. The env is the caller's; import_proven_theorems builds it with Environment::with_prelude() (172), the Extended default."
+     "detail": "Line 1097 is reached only when env.add_decl(kdecl) at 895 returned Ok for some escalation mode and env.axiom_deps at 1028 shows a foundational-only closure. The env is the caller's; import_proven_theorems builds it with Environment::with_prelude() (172), the Extended default."
     },
     "evidence_tokens": [
      "add_decl"
@@ -4183,6 +4268,58 @@
     "reach": "user",
     "reach_detail": "Isabelle import CLI (cli/isabelle_import_dispatch.rs through import_proven_theorems_* / retry.rs). Trust does not name it at the pin.",
     "kcheck_rung": 2
+   },
+   {
+    "id": "clean:crates/clean-mathverse/src/hol/isabelle_pure_verify/emit_defs.rs#emit_synthesized_def_consts#ImportConfidence::KernelVerified#construct",
+    "file": "crates/clean-mathverse/src/hol/isabelle_pure_verify/emit_defs.rs",
+    "symbol": "emit_synthesized_def_consts",
+    "family": "label",
+    "token": "ImportConfidence::KernelVerified",
+    "role": "construct",
+    "count": 2,
+    "lines": [
+     193,
+     206
+    ],
+    "class": "mint",
+    "mints": "KernelVerified on synthesized Definition/Opaque shard rows and their written-constant ledger after a fresh strict typecheck",
+    "checker": {
+     "kind": "clean-kernel",
+     "entry": "typecheck",
+     "theory": "caller-selected",
+     "detail": "Before any writer mutation, the function requires FullKernelCheck admission provenance, reconstructs the exact stored Definition/Opaque kind, universes, type, value and reducibility intent, and calls env.check_decl_readonly_strict. Any failed check emits no row. This is a local safe/total typecheck conditional on the supplied environment, not an Ax0/reference/quorum claim."
+    },
+    "evidence_tokens": [
+     "declaration_verification",
+     "check_decl_readonly_strict"
+    ],
+    "reach": "user",
+    "kcheck_rung": 2
+   },
+   {
+    "id": "clean:crates/clean-mathverse/src/hol/isabelle_pure_verify/emit_defs.rs#stage_family#ImportConfidence::KernelVerified#construct",
+    "file": "crates/clean-mathverse/src/hol/isabelle_pure_verify/emit_defs.rs",
+    "symbol": "stage_family",
+    "family": "label",
+    "token": "ImportConfidence::KernelVerified",
+    "role": "construct",
+    "count": 1,
+    "lines": [
+     343
+    ],
+    "class": "relabel",
+    "mints": "FamilyRow.confidence = ImportConfidence::KernelVerified for an inductive family's value-bearing auxiliary eliminator (<member>.casesOn / <member>.recOn), which emit_inductive_families writes to the shard header (447) and written_constants (474)",
+    "checker": {
+     "kind": "inherits",
+     "detail": "A private staging fn (emit_defs.rs:252-363) that calls no kernel entry. Line 345 is reached only for a constant with a value (the guard at 332-334), and only when env.declaration_verification(&aux_name) == Some(DeclarationVerification::FullKernelCheck) (342-344). Otherwise the row is Axiomatized (347), as is every value-less type-former, constructor and recursor row (279, 297, 318). For Num.casesOn/recOn the record comes from add_inductive_impl_inner, which inserts them StructuralOnly (inductive_builder.rs:589-592, 641-644) and upgrades them through validate_and_stamp_recursor (653) after check_decl_readonly_strict (registration.rs:761-765). Every clean-kernel writer that records FullKernelCheck on a value-bearing constant does so after a full check of value : type: add_decl (decl_add.rs:1032), ensure_exact_checked_decl after check_decl_readonly_strict (decl_add.rs:499-501), validate_and_stamp_recursor, and install_no_confusion_candidates_transactionally after check_decl_readonly_strict (inductive_no_confusion.rs:2304, 2319-2320). The other FullKernelCheck writers stamp value-less constants only, which the value guard keeps off line 317: add_inductive_impl_inner's type former and constructors (inductive_builder.rs:339-342, 368-371), restore_nested_block (inductive_nested_restore.rs:432-435) and init_quot (mod.rs:5124-5125). add_decl_structural, add_decl_unchecked and the extend_*_structural/_unchecked bulk paths record StructuralOnly or Unchecked (decl_add.rs:1476-1483, 1311-1312; registration.rs:1789-1952). The map is private and serde-skipped (env/mod.rs:2164-2168), so an env decoded from a replay snapshot carries none; on resume register_datatype_inductives (via register_builtin_def_consts, streaming.rs:798) returns early because Num is already present, and these rows fall to Axiomatized. The family is installed by register_datatype_inductives through add_inductive (DATATYPE_INDUCTIVE_ROOTS, currently Num)."
+    },
+    "evidence_tokens": [
+     "declaration_verification"
+    ],
+    "reach": "user",
+    "reach_detail": "private; reached through emit_inductive_families (pub(super)), called by import_proven_theorems (batch.rs:396), stream_with_recorder (streaming.rs:278) and import_proven_theorems_parallel (parallel_streaming.rs:241). Those drivers are pub API (isabelle_pure_verify/mod.rs:47-63) and are reached by `clean mathverse isabelle-import` (cli/isabelle_import_dispatch.rs:151, 153), by the per-range shard emit (shard_mathverse.rs:234 via stream_shard_recorded, shard_group.rs:264), and by `isabelle-flip-gate`, whose replay_slice calls import_proven_theorems_streaming_shard (isabelle_flip_gate.rs:455 -> shard_verify.rs:501 -> stream_shard_recorded -> stream_with_recorder at 524) into a throwaway writer. At the Trust pin a3e9179477 no .rs names emit_defs or isabelle_pure_verify.",
+    "kcheck_rung": null,
+    "rung_note": "carries a label minted elsewhere: the kernel's FullKernelCheck record, for Num.casesOn/recOn the one validate_and_stamp_recursor writes after check_decl_readonly_strict"
    },
    {
     "id": "clean:crates/clean-mathverse/src/hol/isabelle_pure_verify/shard_verify.rs#ShardRecorder::record_line#kernel_checked_ledger+=#construct",
@@ -4193,7 +4330,7 @@
     "role": "construct",
     "count": 1,
     "lines": [
-     429
+     453
     ],
     "class": "relabel",
     "mints": "ShardVerdicts::kernel_checked_ledger (the tier-2 KernelCheckedConditional count) for one line in this shard's range",
@@ -5612,8 +5749,8 @@
     "role": "read",
     "count": 2,
     "lines": [
-     304,
-     305
+     313,
+     314
     ]
    },
    {
@@ -5625,7 +5762,7 @@
     "role": "read",
     "count": 1,
     "lines": [
-     300
+     309
     ]
    },
    {
@@ -5637,8 +5774,8 @@
     "role": "read",
     "count": 2,
     "lines": [
-     293,
-     294
+     302,
+     303
     ]
    },
    {
@@ -5650,7 +5787,7 @@
     "role": "read",
     "count": 1,
     "lines": [
-     295
+     304
     ]
    },
    {
@@ -5662,10 +5799,10 @@
     "role": "construct",
     "count": 4,
     "lines": [
-     294,
-     295,
-     300,
-     305
+     303,
+     304,
+     309,
+     314
     ],
     "class": "mint",
     "mints": "PremiseCandidate.trust_level = AxiomDependent",
@@ -5688,7 +5825,7 @@
     "role": "construct",
     "count": 1,
     "lines": [
-     296
+     305
     ],
     "class": "relabel",
     "mints": "PremiseCandidate.trust_level = CertificateReplayed",
@@ -5711,8 +5848,8 @@
     "role": "construct",
     "count": 2,
     "lines": [
-     293,
-     304
+     302,
+     313
     ],
     "class": "relabel",
     "mints": "a TrustLevel mapped from a stored header's confidence",
@@ -8174,7 +8311,7 @@
     "role": "read",
     "count": 1,
     "lines": [
-     325
+     414
     ]
    },
    {
@@ -8186,7 +8323,7 @@
     "role": "read",
     "count": 1,
     "lines": [
-     328
+     417
     ]
    },
    {
@@ -8198,7 +8335,7 @@
     "role": "read",
     "count": 1,
     "lines": [
-     324
+     413
     ]
    },
    {
@@ -8210,7 +8347,7 @@
     "role": "read",
     "count": 1,
     "lines": [
-     326
+     415
     ]
    },
    {
@@ -8222,7 +8359,7 @@
     "role": "construct",
     "count": 1,
     "lines": [
-     360
+     449
     ],
     "class": "relabel",
     "mints": "an ImportConfidence decoded from its stored byte",
@@ -8244,7 +8381,7 @@
     "role": "construct",
     "count": 1,
     "lines": [
-     359
+     448
     ],
     "class": "relabel",
     "mints": "an ImportConfidence decoded from its stored byte",
@@ -8266,7 +8403,7 @@
     "role": "construct",
     "count": 1,
     "lines": [
-     354
+     443
     ],
     "class": "relabel",
     "mints": "an ImportConfidence decoded from its stored byte",
@@ -8288,7 +8425,7 @@
     "role": "construct",
     "count": 1,
     "lines": [
-     358
+     447
     ],
     "class": "relabel",
     "mints": "an ImportConfidence decoded from its stored byte",
@@ -8310,7 +8447,7 @@
     "role": "def",
     "count": 1,
     "lines": [
-     306
+     395
     ]
    },
    {
@@ -8322,7 +8459,7 @@
     "role": "def",
     "count": 1,
     "lines": [
-     276
+     365
     ]
    },
    {
@@ -8334,7 +8471,7 @@
     "role": "def",
     "count": 1,
     "lines": [
-     251
+     340
     ]
    },
    {
@@ -8346,7 +8483,7 @@
     "role": "def",
     "count": 1,
     "lines": [
-     263
+     352
     ]
    },
    {
@@ -8358,7 +8495,7 @@
     "role": "def",
     "count": 1,
     "lines": [
-     411
+     500
     ]
    },
    {
@@ -8370,7 +8507,7 @@
     "role": "def",
     "count": 1,
     "lines": [
-     413
+     502
     ]
    },
    {
@@ -8382,7 +8519,7 @@
     "role": "def",
     "count": 1,
     "lines": [
-     409
+     498
     ]
    },
    {
@@ -8951,8 +9088,8 @@
     "role": "read",
     "count": 2,
     "lines": [
-     4201,
-     4355
+     4321,
+     4475
     ]
    },
    {
@@ -8964,7 +9101,7 @@
     "role": "construct",
     "count": 1,
     "lines": [
-     4218
+     4338
     ],
     "class": "relabel",
     "mints": "a seeded prerequisite counted in seeded_checked",
@@ -8987,7 +9124,7 @@
     "role": "read",
     "count": 1,
     "lines": [
-     4331
+     4451
     ]
    },
    {
@@ -8999,8 +9136,8 @@
     "role": "read",
     "count": 2,
     "lines": [
-     4216,
-     4312
+     4336,
+     4432
     ]
    },
    {
@@ -9012,8 +9149,8 @@
     "role": "read",
     "count": 2,
     "lines": [
-     4217,
-     4369
+     4337,
+     4489
     ]
    },
    {
@@ -9025,8 +9162,8 @@
     "role": "construct",
     "count": 2,
     "lines": [
-     4327,
-     4350
+     4447,
+     4470
     ],
     "class": "relabel",
     "mints": "the recheck report's kernel_verified count",
@@ -9049,8 +9186,8 @@
     "role": "construct",
     "count": 2,
     "lines": [
-     4328,
-     4351
+     4448,
+     4471
     ],
     "class": "relabel",
     "mints": "the recheck report's kernel_verified_names list",
@@ -9906,7 +10043,7 @@
     "role": "call",
     "count": 1,
     "lines": [
-     502
+     545
     ],
     "class": "root",
     "mints": "a ReferenceKernel over an empty Environment::default base for the C4 tracing replay target, which observes each ordinary declaration through the labelled tracing core and then passes the same declaration to the same fenced admission (EntryTarget::admit_decl)",
@@ -9934,7 +10071,7 @@
     "role": "call",
     "count": 1,
     "lines": [
-     575
+     618
     ],
     "class": "root",
     "mints": "a ReferenceKernel over an empty Environment::default base (maxHeartbeats set from the options) for the C4 progress replay target, which prints a progress line every 100 rows and passes every declaration, family and Quot to the same fenced admission (EntryTarget)",
@@ -10107,7 +10244,7 @@
     "role": "call",
     "count": 1,
     "lines": [
-     308
+     326
     ],
     "class": "root",
     "mints": "a fenced ReferenceAccepted check of the fixed expected original-execution judgment, discarded before returning an unbound mathematical wrapper",
@@ -10116,6 +10253,29 @@
      "entry": "reference",
      "theory": "LeanReference",
      "detail": "check rebuilds expected_goal from caller-supplied expected execution data and invokes check_closed_term in the completed reference model; the resulting wrapper grants no source, ABI, compiler or emission authority"
+    },
+    "evidence_tokens": [],
+    "kcheck_rung": 2,
+    "reach": "user"
+   },
+   {
+    "id": "clean:crates/clean-olean/src/semr_native_execution/translation.rs#UnboundNativeWpTranslationContext::check#check_closed_term#call",
+    "file": "crates/clean-olean/src/semr_native_execution/translation.rs",
+    "symbol": "UnboundNativeWpTranslationContext::check",
+    "family": "root",
+    "token": "check_closed_term",
+    "role": "call",
+    "count": 1,
+    "lines": [
+     81
+    ],
+    "class": "root",
+    "mints": "a fenced ReferenceAccepted check of the fixed TranslationCertificate goal over the expected subject and the packet's proposed VC, discarded before returning an unbound CheckedUnboundNativeWpTranslation wrapper",
+    "checker": {
+     "kind": "clean-kernel",
+     "entry": "reference",
+     "theory": "LeanReference",
+     "detail": "check refuses a packet whose context digest is not this model's, rebuilds expected_goal from the caller's expected subject and the packet's proposed VC, and invokes check_closed_term in the completed reference model; the wrapper has no Deserialize, grade, ABI or token conversion"
     },
     "evidence_tokens": [],
     "kcheck_rung": 2,

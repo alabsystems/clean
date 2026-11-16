@@ -16,17 +16,19 @@ const TOPSET: &str = "(fun (qe : KExpr) => whnf_acc qe)";
 /// R12's `KDTY`.
 const KDTY: &str = "(Sk.kd Sk.ty)";
 /// R17's `DEADCONST`.
-const DEADCONST: &str = "(KExpr.const fixture_def_env_name (ListType.nil Level))";
+const DEADCONST: &str = "(KExpr.const fixture_def_env_name (@ListType.nil Level))";
 
 /// R10/R17's first inertness premise, at the constant `n`.
 fn defval_none(n: &str) -> String {
-    format!("Eq (OptionType KExpr) (defval_for (red_def the_red_env) {n}) (OptionType.none KExpr)")
+    format!(
+        "@Eq (OptionType KExpr) (defval_for (red_def the_red_env) {n}) (@OptionType.none KExpr)"
+    )
 }
 
 /// R10/R17's second inertness premise, at the constant `n`.
 fn recmeta_none(n: &str) -> String {
     format!(
-        "Eq (OptionType RecMeta) (recmeta_for (red_rec the_red_env) {n}) (OptionType.none RecMeta)"
+        "@Eq (OptionType RecMeta) (recmeta_for (red_rec the_red_env) {n}) (@OptionType.none RecMeta)"
     )
 }
 
@@ -94,7 +96,7 @@ pub(super) fn val_xval_good() -> String {
     let xv = "(xval qD qv qsv qhv qr)";
     let m_let = format!("(fun (qD : Nat -> Sk) (qtt : KExpr) (qv : KExpr) (qb : KExpr) (qst : Sk) (qsv : Sk) (qc : Sk) (qht : WKC qD qtt qst) (qhv : WKC qD qv qsv) (qhb : WKC {ldd} qb qc) {ih_t} {ih_v} {ih_bl} (qr : VEnvD qD) (qhr : GoodEnvD qD qr) => qihgb (vconsD qsv qD {xv} qr) (goodEnvD_vconsD qsv qD {xv} qr (qihgv qr qhr) qhr))");
 
-    format!("fun (D : Nat -> Sk) (e : KExpr) (s : Sk) (h : WKC D e s) => WKC.rec {motive} {m_var} {m_sort} {m_pi} {m_lam} {m_app} {m_konst} {m_let} D e s h")
+    format!("fun (D : Nat -> Sk) (e : KExpr) (s : Sk) (h : WKC D e s) => @WKC.rec {motive} {m_var} {m_sort} {m_pi} {m_lam} {m_app} {m_konst} {m_let} D e s h")
 }
 
 // ================================================================
@@ -140,7 +142,7 @@ pub(super) const VAL_XVAL_EXCLUDES_OMEGA: &str = "fun (D : Nat -> Sk) (e : KExpr
 /// invisible without it.
 pub(super) const TY_GOOD_REPROVES: &str = "forall (D : Nat -> Sk) (e : KExpr) (s : Sk) (h : WK D e s) (r : VEnvD D), GoodEnvD D r -> GoodD s (sval D e s h r)";
 
-pub(super) const VAL_GOOD_REPROVES: &str = "fun (D : Nat -> Sk) (e : KExpr) (s : Sk) (h : WK D e s) (r : VEnvD D) (hr : GoodEnvD D r) => Eq.substType (VD s) (fun (qv : VD s) => GoodD s qv) (xval D e s (r17_wk_wkc D e s h) r) (sval D e s h r) (r18_xval_sval D e s h r) (r23_xval_good D e s (r17_wk_wkc D e s h) r hr)";
+pub(super) const VAL_GOOD_REPROVES: &str = "fun (D : Nat -> Sk) (e : KExpr) (s : Sk) (h : WK D e s) (r : VEnvD D) (hr : GoodEnvD D r) => @Eq.substType (VD s) (fun (qv : VD s) => GoodD s qv) (xval D e s (r17_wk_wkc D e s h) r) (sval D e s h r) (r18_xval_sval D e s h r) (r23_xval_good D e s (r17_wk_wkc D e s h) r hr)";
 
 /// **`r23_sn_fires_at_konst`** — the normalization theorem CONCLUDING, at a
 /// real object.
@@ -189,19 +191,19 @@ pub(super) fn val_omega_excluded_at_konst() -> String {
 /// whnf_acc x` and `r22_xval_conv` degenerates to the identity. The content of
 /// the membership-shaped results lives at `ty` and `kd` shapes, where `vcarD`
 /// IS the denoted set.
-pub(super) const TY_VCAR_ARR_IS_TOP: &str = "forall (d : Sk) (c : Sk) (f : VD (Sk.arr d c)) (e : KExpr), Eq Type (vcarD (Sk.arr d c) f e) (whnf_acc e)";
+pub(super) const TY_VCAR_ARR_IS_TOP: &str = "forall (d : Sk) (c : Sk) (f : VD (Sk.arr d c)) (e : KExpr), @Eq Type (vcarD (Sk.arr d c) f e) (whnf_acc e)";
 
 pub(super) const VAL_VCAR_ARR_IS_TOP: &str =
-    "fun (d : Sk) (c : Sk) (f : VD (Sk.arr d c)) (e : KExpr) => Eq.refl Type (whnf_acc e)";
+    "fun (d : Sk) (c : Sk) (f : VD (Sk.arr d c)) (e : KExpr) => @Eq.refl Type (whnf_acc e)";
 
 /// **`r23_vcar_ty_is_the_set`** — the other half, also `Eq.refl`: at `ty` the
 /// candidate IS the denoted set, so nothing is discarded there. Registered
 /// beside its sibling so the two states are named apart rather than left for a
 /// reader to infer from one of them.
 pub(super) const TY_VCAR_TY_IS_SET: &str =
-    "forall (C : VD Sk.ty) (e : KExpr), Eq Type (vcarD Sk.ty C e) (C e)";
+    "forall (C : VD Sk.ty) (e : KExpr), @Eq Type (vcarD Sk.ty C e) (C e)";
 
-pub(super) const VAL_VCAR_TY_IS_SET: &str = "fun (C : VD Sk.ty) (e : KExpr) => Eq.refl Type (C e)";
+pub(super) const VAL_VCAR_TY_IS_SET: &str = "fun (C : VD Sk.ty) (e : KExpr) => @Eq.refl Type (C e)";
 
 // ================================================================
 // Group D — negative controls. NOT registered.
@@ -221,7 +223,7 @@ pub(super) fn probe_good_without_env() -> String {
 /// normalization result would say nothing.
 #[cfg(test)]
 pub(super) fn probe_vcar_ty_collapses() -> String {
-    format!("def r23_vcar_ty_collapse_probe : forall (C : VD Sk.ty) (e : KExpr), Eq Type (vcarD Sk.ty C e) (whnf_acc e) := fun (C : VD Sk.ty) (e : KExpr) => Eq.refl Type {TOPSET}")
+    format!("def r23_vcar_ty_collapse_probe : forall (C : VD Sk.ty) (e : KExpr), @Eq Type (vcarD Sk.ty C e) (whnf_acc e) := fun (C : VD Sk.ty) (e : KExpr) => @Eq.refl Type {TOPSET}")
 }
 
 // ================================================================

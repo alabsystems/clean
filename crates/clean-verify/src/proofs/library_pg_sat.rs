@@ -24,7 +24,7 @@ impl ProofLibrary {
             ProofTerm::new(
                 "pg01_width_size_tradeoff",
                 "fun (n : Nat) (w : Nat) (bound : WidthBound n w) => \
-                 WidthBound.rec n w \
+                 @WidthBound.rec n w \
                    (fun (b : WidthBound n w) => WidthSizeLower n w b) \
                    (WidthSizeLower.empty n w) \
                    (fun (cw : Nat) (prev : WidthBound n w) (ih : WidthSizeLower n w prev) => \
@@ -44,7 +44,7 @@ impl ProofLibrary {
             ProofTerm::new(
                 "pg02_restart_optimality",
                 "fun (n : Nat) (seq : RestartSeq n) => \
-                 RestartSeq.rec n \
+                 @RestartSeq.rec n \
                    (fun (s : RestartSeq n) => RestartOptimal n s) \
                    (RestartOptimal.done n) \
                    (fun (cw : Nat) (prev : RestartSeq n) (ih : RestartOptimal n prev) => \
@@ -70,7 +70,7 @@ impl ProofLibrary {
             ProofTerm::new(
                 "pg04_restart_sat_preserving",
                 "fun (n : Nat) (seq : RestartSeq n) => \
-                 RestartSeq.rec n \
+                 @RestartSeq.rec n \
                    (fun (s : RestartSeq n) => RestartSatPreserving n s) \
                    (RestartSatPreserving.done n) \
                    (fun (cw : Nat) (prev : RestartSeq n) (ih : RestartSatPreserving n prev) => \
@@ -95,7 +95,7 @@ impl ProofLibrary {
             ProofTerm::new(
                 "pg03_space_width_inequality",
                 "fun (n : Nat) (sw : SpaceWidth n) => \
-                 SpaceWidth.rec n \
+                 @SpaceWidth.rec n \
                    (fun (s : SpaceWidth n) => SpaceWidthValid n s) \
                    (SpaceWidthValid.init n) \
                    (fun (cw : Nat) (prev : SpaceWidth n) (ih : SpaceWidthValid n prev) => \

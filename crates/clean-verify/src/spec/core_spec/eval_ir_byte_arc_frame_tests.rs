@@ -34,7 +34,7 @@ fn add(spec: &mut Specification, source: &str) {
 }
 
 fn equation(name: &str, ty: &str, actual: &str, expected: &str, proof: &str) -> String {
-    format!("def {name} : Eq ({ty}) ({actual}) ({expected}) :=\n{proof}")
+    format!("def {name} : @Eq ({ty}) ({actual}) ({expected}) :=\n{proof}")
 }
 
 fn compute(spec: &mut Specification, name: &str, ty: &str, actual: &str, expected: &str) {
@@ -45,7 +45,7 @@ fn compute(spec: &mut Specification, name: &str, ty: &str, actual: &str, expecte
             ty,
             actual,
             expected,
-            &format!("Eq.refl ({ty}) ({expected})"),
+            &format!("@Eq.refl ({ty}) ({expected})"),
         ),
     );
 }
@@ -85,9 +85,9 @@ fn specification() -> Specification {
     // constructor to install the new module once the parent integrates it.
     audit(&spec, "ir_byte_arc_count_pair_distinct_v1");
     for source in [
-        format!("def arc_pair_ctx : IRByteContextV1 :=\nIRByteContextV1.mk (IRModule.mk (IRList.nil IRFunc) (IRList.nil IRGlobal))\n  (IRList.cons IRByteLayoutV1 ({}) (IRList.nil IRByteLayoutV1))\n  (IRList.nil IRByteSignatureV1) (IRList.nil IRByteFunctionV1) (IRList.nil IRByteSiteV1)", super::LAYOUT),
-        "def arc_pair_allocs : IRList IRByteAllocationV1 := IRList.cons IRByteAllocationV1 (IRByteAllocationV1.mk 16 160 7 Bool.true) (IRList.nil IRByteAllocationV1)".to_owned(),
-        "def arc_pair_blank : Nat -> IROption Nat := fun (_ : Nat) => IROption.none Nat".to_owned(),
+        format!("def arc_pair_ctx : IRByteContextV1 :=\nIRByteContextV1.mk (IRModule.mk (@IRList.nil IRFunc) (@IRList.nil IRGlobal))\n  (@IRList.cons IRByteLayoutV1 ({}) (@IRList.nil IRByteLayoutV1))\n  (@IRList.nil IRByteSignatureV1) (@IRList.nil IRByteFunctionV1) (@IRList.nil IRByteSiteV1)", super::LAYOUT),
+        "def arc_pair_allocs : IRList IRByteAllocationV1 := @IRList.cons IRByteAllocationV1 (IRByteAllocationV1.mk 16 160 7 Bool.true) (@IRList.nil IRByteAllocationV1)".to_owned(),
+        "def arc_pair_blank : Nat -> IROption Nat := fun (_ : Nat) => @IROption.none Nat".to_owned(),
         "def arc_pair_empty : IRByteMemoryV1 := IRByteMemoryV1.mk arc_pair_allocs arc_pair_blank 512".to_owned(),
         format!("def arc_pair_seed : IRByteMemoryV1 := {}", seed(b"Nat")),
         format!("def arc_pair_string_seed : IRByteMemoryV1 := {}", seed(b"String")),
@@ -161,15 +161,15 @@ fn arguments(alias: bool, seed: &str, n: u128, m: u128) -> String {
     let initial = memory(seed, n, m);
     let with_second = super::written(seed, "32", &m.to_string());
     let layout = format!(
-        "Eq.refl (IROption IRByteLayoutV1) (IROption.some IRByteLayoutV1 ({}))",
+        "@Eq.refl (IROption IRByteLayoutV1) (@IROption.some IRByteLayoutV1 ({}))",
         super::LAYOUT
     );
-    let common = format!("arc_pair_ctx ({initial}) 16 {n} ({}) ({layout})\n  (Eq.refl Bool Bool.true) (ir_byte_usize64_rep_write_v1 ({with_second}) 16 {n})", le(17, LIMIT));
+    let common = format!("arc_pair_ctx ({initial}) 16 {n} ({}) ({layout})\n  (@Eq.refl Bool Bool.true) (ir_byte_usize64_rep_write_v1 ({with_second}) 16 {n})", le(17, LIMIT));
     if alias {
         format!("{common} ({})", le(n + 1, MAX))
     } else {
         let disjoint = apart(32, 8, 16);
-        format!("{common} 32 {m} ({}) (Eq.refl Bool Bool.true)\n  (ir_byte_usize64_rep_disjoint_write_v1 ({with_second}) 32 16 {n} {m}\n    ({disjoint}) (ir_byte_usize64_rep_write_v1 {seed} 32 {m}))\n  ({}) ({}) ({disjoint})", le(33, LIMIT), le(n, MAX), le(m, MAX))
+        format!("{common} 32 {m} ({}) (@Eq.refl Bool Bool.true)\n  (ir_byte_usize64_rep_disjoint_write_v1 ({with_second}) 32 16 {n} {m}\n    ({disjoint}) (ir_byte_usize64_rep_write_v1 {seed} 32 {m}))\n  ({}) ({}) ({disjoint})", le(33, LIMIT), le(n, MAX), le(m, MAX))
     }
 }
 
@@ -232,7 +232,7 @@ fn execution_observations(alias: bool) {
                     "ir_byte_arc_count_pair_old_at_v1 ({}) {index}",
                     operation(alias, seed, n, m)
                 ),
-                &format!("IROption.some IRScalar (IRScalar.int_ {old})"),
+                &format!("@IROption.some IRScalar (IRScalar.int_ {old})"),
                 &law(alias, suffix, seed, n, m),
             ),
         );
@@ -251,7 +251,7 @@ fn execution_observations(alias: bool) {
                 &format!("arc_pair_{case}_{suffix}"),
                 OPTION,
                 &read(alias, seed, n, m, address, 8),
-                &format!("IROption.some Nat {new}"),
+                &format!("@IROption.some Nat {new}"),
                 &law(alias, suffix, seed, n, m),
             ),
         );

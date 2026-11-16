@@ -327,7 +327,7 @@ Bool.or (arm_modelled a) (Bool.not (arm_gate CleanModeM.classical a))",
             self.add_recursive_def(
                 &format!(
                     "def arm_covered_classical_{a} : \
-Eq Bool (arm_covered_at_classical ReleaseArm.{a}) {want} := Eq.refl Bool {want}"
+@Eq Bool (arm_covered_at_classical ReleaseArm.{a}) {want} := @Eq.refl Bool {want}"
                 ),
                 "One arm of the deployed partition, by computation. Generated from \
                  the ARMS table, so it cannot disagree with the gate definitions \
@@ -346,8 +346,8 @@ Eq Bool (arm_covered_at_classical ReleaseArm.{a}) {want} := Eq.refl Bool {want}"
         //   extension arm -> and true  false = false
         self.register_arm_rec_theorem(
             "impl_infer_mode_gate_constructive",
-            "Eq Bool (Bool.and (arm_is_extension a) (arm_gate CleanModeM.constructive a)) Bool.false",
-            "Eq.refl Bool Bool.false",
+            "@Eq Bool (Bool.and (arm_is_extension a) (arm_gate CleanModeM.constructive a)) Bool.false",
+            "@Eq.refl Bool Bool.false",
             concat!(
                 "THE MODE-GATE SIDE LEMMA: in Constructive mode — the #[default], which ",
                 "audit r16 M16-3 measured is NOT the deployed admission mode (with_prelude ",
@@ -374,9 +374,9 @@ Eq Bool (arm_covered_at_classical ReleaseArm.{a}) {want} := Eq.refl Bool {want}"
         // the side lemma trivially and prove nothing about the deployed gates.
         self.add_definition(SpecDefinition {
             name: "impl_infer_mode_gate_cubical_opens".to_string(),
-            type_src: "Eq Bool (arm_gate CleanModeM.cubical ReleaseArm.cubicalPath) Bool.true"
+            type_src: "@Eq Bool (arm_gate CleanModeM.cubical ReleaseArm.cubicalPath) Bool.true"
                 .to_string(),
-            value_src: Some("Eq.refl Bool Bool.true".to_string()),
+            value_src: Some("@Eq.refl Bool Bool.true".to_string()),
             is_axiom: false,
             description: "NON-VACUITY GUARD on the mode-gate model: the cubical Path arm's \
                           gate DOES open in Cubical mode. Without this, an arm_gate that \
@@ -401,8 +401,8 @@ Eq Bool (arm_covered_at_classical ReleaseArm.{a}) {want} := Eq.refl Bool {want}"
         // ── THE COVERAGE PARTITION (standing rule 3, as a theorem) ──────────
         self.register_arm_rec_theorem(
             "impl_infer_arm_partition",
-            "Eq Bool (Bool.or (arm_modelled a) (Bool.or (arm_is_extension a) (arm_is_proj a))) Bool.true",
-            "Eq.refl Bool Bool.true",
+            "@Eq Bool (Bool.or (arm_modelled a) (Bool.or (arm_is_extension a) (arm_is_proj a))) Bool.true",
+            "@Eq.refl Bool Bool.true",
             concat!(
                 "COVERAGE, as a kernel-checked fraction: every one of the 24 release ",
                 "dispatch arms is either MODELLED by an ImplInfer rule (10), discharged by ",
@@ -421,8 +421,8 @@ Eq Bool (arm_covered_at_classical ReleaseArm.{a}) {want} := Eq.refl Bool {want}"
 
         self.register_arm_rec_theorem(
             "impl_infer_proj_is_the_only_exclusion",
-            "Eq Bool (arm_is_proj a) (Bool.and (Bool.not (arm_modelled a)) (Bool.not (arm_is_extension a)))",
-            "Eq.refl Bool (arm_is_proj a)",
+            "@Eq Bool (arm_is_proj a) (Bool.and (Bool.not (arm_modelled a)) (Bool.not (arm_is_extension a)))",
+            "@Eq.refl Bool (arm_is_proj a)",
             concat!(
                 "Proj is EXACTLY the arm that is neither modelled nor mode-gated — the ",
                 "excluded arm named individually, as standing rule 3 requires, and proved ",
@@ -444,7 +444,7 @@ Eq Bool (arm_covered_at_classical ReleaseArm.{a}) {want} := Eq.refl Bool {want}"
         // fraction is a fact about the syntax, not about a comment.
         self.register_implexpr_rec_theorem(
             "impl_expr_arm_never_extension",
-            "Eq Bool (arm_is_extension (impl_expr_arm e)) Bool.false",
+            "@Eq Bool (arm_is_extension (impl_expr_arm e)) Bool.false",
             concat!(
                 "The layer-1 syntax NEVER lands in a mode-gated arm: every ImplExpr ",
                 "constructor maps to one of the 11 core dispatch arms. This is the bridge ",
@@ -458,7 +458,7 @@ Eq Bool (arm_covered_at_classical ReleaseArm.{a}) {want} := Eq.refl Bool {want}"
 
         self.register_implexpr_rec_theorem(
             "impl_expr_arm_never_proj",
-            "Eq Bool (arm_is_proj (impl_expr_arm e)) Bool.false",
+            "@Eq Bool (arm_is_proj (impl_expr_arm e)) Bool.false",
             concat!(
                 "The layer-1 syntax NEVER lands in the excluded Proj arm. Together with ",
                 "impl_expr_arm_never_extension this pins ImplExpr's image to exactly the 10 ",
@@ -498,7 +498,7 @@ Eq Bool (arm_covered_at_classical ReleaseArm.{a}) {want} := Eq.refl Bool {want}"
             })
             .collect::<String>();
         let value = format!(
-            "fun (a : ReleaseArm) => ReleaseArm.rec (fun (z : ReleaseArm) => {}) {minors}a",
+            "fun (a : ReleaseArm) => @ReleaseArm.rec (fun (z : ReleaseArm) => {}) {minors}a",
             goal.replace(" a)", " z)")
         );
         self.add_definition(SpecDefinition {
@@ -567,11 +567,11 @@ Eq Bool (arm_covered_at_classical ReleaseArm.{a}) {want} := Eq.refl Bool {want}"
                         )
                     })
                     .collect::<String>();
-                format!("(fun {binders}{ihs} => Eq.refl Bool Bool.false) ")
+                format!("(fun {binders}{ihs} => @Eq.refl Bool Bool.false) ")
             })
             .collect::<String>();
         let value = format!(
-            "fun (e : ImplExpr) => ImplExpr.rec (fun (z : ImplExpr) => {}) {minors}e",
+            "fun (e : ImplExpr) => @ImplExpr.rec (fun (z : ImplExpr) => {}) {minors}e",
             goal.replace(" e)", " z)")
         );
         self.add_definition(SpecDefinition {

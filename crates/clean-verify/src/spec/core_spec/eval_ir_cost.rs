@@ -74,9 +74,9 @@
 use crate::spec::error::SpecError;
 use crate::spec::Specification;
 
-const SRC_IS_RUNNING: &str = "def ir_config_is_running (c : IRConfig) : Bool := IRConfig.rec (fun (_ : IRConfig) => Bool) (fun (_ : IRMachine) => Bool.true) (fun (_ : IROutcome) => Bool.false) c";
+const SRC_IS_RUNNING: &str = "def ir_config_is_running (c : IRConfig) : Bool := @IRConfig.rec (fun (_ : IRConfig) => Bool) (fun (_ : IRMachine) => Bool.true) (fun (_ : IROutcome) => Bool.false) c";
 
-const SRC_COST: &str = "def ir_lzm_cost (l : Level) : Nat := Level.rec (fun (_ : Level) => Nat) ir_d5 (fun (_ : Level) (_ : Nat) => ir_d5) (fun (l1 : Level) (l2 : Level) (c1 : Nat) (c2 : Nat) => Nat.add (Nat.add (Bool.rec (fun (_ : Bool) => Nat) ir_d3 (Nat.add (Nat.add (Nat.add ir_d1 c2) ir_d5) ir_d1) (level_is_zero l1)) c1) ir_d8) (fun (l1 : Level) (l2 : Level) (c1 : Nat) (c2 : Nat) => Nat.add (Nat.add ir_d1 c2) ir_d8) (fun (_ : Name) => ir_d5) l";
+const SRC_COST: &str = "def ir_lzm_cost (l : Level) : Nat := @Level.rec (fun (_ : Level) => Nat) ir_d5 (fun (_ : Level) (_ : Nat) => ir_d5) (fun (l1 : Level) (l2 : Level) (c1 : Nat) (c2 : Nat) => Nat.add (Nat.add (@Bool.rec (fun (_ : Bool) => Nat) ir_d3 (Nat.add (Nat.add (Nat.add ir_d1 c2) ir_d5) ir_d1) (level_is_zero l1)) c1) ir_d8) (fun (l1 : Level) (l2 : Level) (c1 : Nat) (c2 : Nat) => Nat.add (Nat.add ir_d1 c2) ir_d8) (fun (_ : Name) => ir_d5) l";
 
 const HEAP_ZERO: &str = "(ir_cell ir_d0 (ir_var ir_d0 ir_sp0) ir_mem0)";
 const HEAP_SUCC: &str = "(ir_cell ir_d0 (ir_var ir_d1 (ir_sp1 (IRScalar.ptr_ ir_d1))) (ir_cell ir_d1 (ir_var ir_d0 ir_sp0) ir_mem0))";
@@ -92,7 +92,7 @@ fn init(heap: &str, na: &str) -> String {
 fn halts(name: &str, binder: &str, lvl: &str, heap: &str, na: &str, ans: &str) -> String {
     let tgt = format!("(IRConfig.halted (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.{ans}))))");
     format!(
-        "def {name} {binder}: Eq IRConfig (ir_steps (ir_lzm_cost {lvl}) ir_lzm_module {}) {tgt} := Eq.refl IRConfig {tgt}",
+        "def {name} {binder}: @Eq IRConfig (ir_steps (ir_lzm_cost {lvl}) ir_lzm_module {}) {tgt} := @Eq.refl IRConfig {tgt}",
         init(heap, na)
     )
 }
@@ -100,7 +100,7 @@ fn halts(name: &str, binder: &str, lvl: &str, heap: &str, na: &str, ans: &str) -
 /// One step earlier it is still running — which is what makes the count exact.
 fn tight(name: &str, lvl: &str, heap: &str, na: &str) -> String {
     format!(
-        "def {name} : Eq Bool (ir_config_is_running (ir_steps (Nat.pred (ir_lzm_cost {lvl})) ir_lzm_module {})) Bool.true := Eq.refl Bool Bool.true",
+        "def {name} : @Eq Bool (ir_config_is_running (ir_steps (Nat.pred (ir_lzm_cost {lvl})) ir_lzm_module {})) Bool.true := @Eq.refl Bool Bool.true",
         init(heap, na)
     )
 }
@@ -169,7 +169,7 @@ mod tests {
     fn test_counts_are_checked_by_execution() {
         let w = halts("w", "", "Level.zero", HEAP_ZERO, "ir_d1", "true");
         assert!(w.contains("ir_steps (ir_lzm_cost Level.zero) ir_lzm_module"));
-        assert!(w.contains(":= Eq.refl IRConfig"));
+        assert!(w.contains(":= @Eq.refl IRConfig"));
     }
 
     /// Halted-at-n alone proves only `cost >= actual`, because a halted
@@ -182,7 +182,7 @@ mod tests {
             "tightness must probe at cost - 1"
         );
         assert!(t.contains("ir_config_is_running"));
-        assert!(t.ends_with("Bool.true := Eq.refl Bool Bool.true"));
+        assert!(t.ends_with("Bool.true := @Eq.refl Bool Bool.true"));
     }
 
     /// The param witness is quantified in both the payload and the name; that

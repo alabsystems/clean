@@ -21,8 +21,8 @@ impl Specification {
         // Part of #461.
         self.add_definition(SpecDefinition {
             name: "nat_sub_zero_right".to_string(),
-            type_src: "forall (n : Nat), Eq Nat (Nat.sub n Nat.zero) n".to_string(),
-            value_src: Some("fun (n : Nat) => Eq.refl Nat n".to_string()),
+            type_src: "forall (n : Nat), @Eq Nat (Nat.sub n Nat.zero) n".to_string(),
+            value_src: Some("fun (n : Nat) => @Eq.refl Nat n".to_string()),
             is_axiom: false,
             description: "Nat.sub n 0 = n. DerivedProved via Eq.refl (single iota on concrete zero). Part of #461.".to_string(),
             category: AxiomCategory::DerivedLemma,
@@ -42,18 +42,18 @@ impl Specification {
         // Part of #461.
         self.add_definition_structural(SpecDefinition {
             name: "nat_sub_zero_left".to_string(),
-            type_src: "forall (n : Nat), Eq Nat (Nat.sub Nat.zero n) Nat.zero".to_string(),
+            type_src: "forall (n : Nat), @Eq Nat (Nat.sub Nat.zero n) Nat.zero".to_string(),
             value_src: Some(concat!(
-                "fun (n : Nat) => Nat.rec ",
-                "(fun (k : Nat) => Eq Nat (Nat.sub Nat.zero k) Nat.zero) ",
-                "(Eq.refl Nat Nat.zero) ",
-                "(fun (k : Nat) (ih : Eq Nat (Nat.sub Nat.zero k) Nat.zero) => ",
-                "Eq.trans Nat ",
+                "fun (n : Nat) => @Nat.rec ",
+                "(fun (k : Nat) => @Eq Nat (Nat.sub Nat.zero k) Nat.zero) ",
+                "(@Eq.refl Nat Nat.zero) ",
+                "(fun (k : Nat) (ih : @Eq Nat (Nat.sub Nat.zero k) Nat.zero) => ",
+                "@Eq.trans Nat ",
                 "(Nat.sub Nat.zero (Nat.succ k)) ",
                 "(Nat.pred Nat.zero) ",
                 "Nat.zero ",
-                "(Eq.cong Nat Nat Nat.pred (Nat.sub Nat.zero k) Nat.zero ih) ",
-                "(Eq.refl Nat Nat.zero)) ",
+                "(@Eq.cong Nat Nat Nat.pred (Nat.sub Nat.zero k) Nat.zero ih) ",
+                "(@Eq.refl Nat Nat.zero)) ",
                 "n",
             ).to_string()),
             is_axiom: false,
@@ -80,10 +80,10 @@ impl Specification {
         // Part of #461.
         self.add_definition_structural(SpecDefinition {
             name: "nat_add_succ_zero".to_string(),
-            type_src: "forall (n : Nat), Eq Nat (Nat.add n (Nat.succ Nat.zero)) (Nat.succ n)"
+            type_src: "forall (n : Nat), @Eq Nat (Nat.add n (Nat.succ Nat.zero)) (Nat.succ n)"
                 .to_string(),
             value_src: Some(
-                "fun (n : Nat) => Eq.refl Nat (Nat.succ n)".to_string(),
+                "fun (n : Nat) => @Eq.refl Nat (Nat.succ n)".to_string(),
             ),
             is_axiom: false,
             description: "Nat.add n 1 = Nat.succ n. DerivedProved via Eq.refl + structural registration (nested iota on concrete succ/zero). Part of #461.".to_string(),
@@ -100,8 +100,8 @@ impl Specification {
         // and the rhs is the concrete constructor Nat.zero. Part of #464.
         self.add_definition(SpecDefinition {
             name: "nat_add_zero_right".to_string(),
-            type_src: "forall (n : Nat), Eq Nat (Nat.add n Nat.zero) n".to_string(),
-            value_src: Some("fun (n : Nat) => Eq.refl Nat n".to_string()),
+            type_src: "forall (n : Nat), @Eq Nat (Nat.add n Nat.zero) n".to_string(),
+            value_src: Some("fun (n : Nat) => @Eq.refl Nat n".to_string()),
             is_axiom: false,
             description:
                 "Nat.add n 0 = n. DerivedProved via Eq.refl on the concrete zero branch. Part of #464."
@@ -119,14 +119,14 @@ impl Specification {
         // the step case definitionally: add 0 (succ k) = succ (add 0 k). Part of #464.
         self.add_definition_structural(SpecDefinition {
             name: "nat_zero_add".to_string(),
-            type_src: "forall (n : Nat), Eq Nat (Nat.add Nat.zero n) n".to_string(),
+            type_src: "forall (n : Nat), @Eq Nat (Nat.add Nat.zero n) n".to_string(),
             value_src: Some(
                 concat!(
-                    "fun (n : Nat) => Nat.rec ",
-                    "(fun (k : Nat) => Eq Nat (Nat.add Nat.zero k) k) ",
-                    "(Eq.refl Nat Nat.zero) ",
-                    "(fun (k : Nat) (ih : Eq Nat (Nat.add Nat.zero k) k) => ",
-                    "Eq.cong Nat Nat Nat.succ ",
+                    "fun (n : Nat) => @Nat.rec ",
+                    "(fun (k : Nat) => @Eq Nat (Nat.add Nat.zero k) k) ",
+                    "(@Eq.refl Nat Nat.zero) ",
+                    "(fun (k : Nat) (ih : @Eq Nat (Nat.add Nat.zero k) k) => ",
+                    "@Eq.cong Nat Nat Nat.succ ",
                     "(Nat.add Nat.zero k) ",
                     "k ",
                     "ih) ",
@@ -156,14 +156,14 @@ impl Specification {
         // on the IH after both sides iota-reduce. Part of #464.
         self.add_definition_structural(SpecDefinition {
             name: "nat_succ_add".to_string(),
-            type_src: "forall (n : Nat) (m : Nat), Eq Nat (Nat.add (Nat.succ n) m) (Nat.succ (Nat.add n m))"
+            type_src: "forall (n : Nat) (m : Nat), @Eq Nat (Nat.add (Nat.succ n) m) (Nat.succ (Nat.add n m))"
                 .to_string(),
             value_src: Some(concat!(
-                "fun (n : Nat) (m : Nat) => Nat.rec ",
-                "(fun (k : Nat) => Eq Nat (Nat.add (Nat.succ n) k) (Nat.succ (Nat.add n k))) ",
-                "(Eq.refl Nat (Nat.succ n)) ",
-                "(fun (k : Nat) (ih : Eq Nat (Nat.add (Nat.succ n) k) (Nat.succ (Nat.add n k))) => ",
-                "Eq.cong Nat Nat Nat.succ ",
+                "fun (n : Nat) (m : Nat) => @Nat.rec ",
+                "(fun (k : Nat) => @Eq Nat (Nat.add (Nat.succ n) k) (Nat.succ (Nat.add n k))) ",
+                "(@Eq.refl Nat (Nat.succ n)) ",
+                "(fun (k : Nat) (ih : @Eq Nat (Nat.add (Nat.succ n) k) (Nat.succ (Nat.add n k))) => ",
+                "@Eq.cong Nat Nat Nat.succ ",
                 "(Nat.add (Nat.succ n) k) ",
                 "(Nat.succ (Nat.add n k)) ",
                 "ih) ",
@@ -189,32 +189,32 @@ impl Specification {
         // rewrites the right via nat_succ_add. Part of #464.
         self.add_definition_structural(SpecDefinition {
             name: "nat_add_comm".to_string(),
-            type_src: "forall (a : Nat) (b : Nat), Eq Nat (Nat.add a b) (Nat.add b a)"
+            type_src: "forall (a : Nat) (b : Nat), @Eq Nat (Nat.add a b) (Nat.add b a)"
                 .to_string(),
             value_src: Some(concat!(
-                "fun (a : Nat) (b : Nat) => Nat.rec ",
-                "(fun (k : Nat) => Eq Nat (Nat.add a k) (Nat.add k a)) ",
-                "(Eq.trans Nat ",
+                "fun (a : Nat) (b : Nat) => @Nat.rec ",
+                "(fun (k : Nat) => @Eq Nat (Nat.add a k) (Nat.add k a)) ",
+                "(@Eq.trans Nat ",
                 "(Nat.add a Nat.zero) ",
                 "a ",
                 "(Nat.add Nat.zero a) ",
-                "(Eq.refl Nat a) ",
-                "(Eq.symm Nat (Nat.add Nat.zero a) a (nat_zero_add a))) ",
-                "(fun (k : Nat) (ih : Eq Nat (Nat.add a k) (Nat.add k a)) => ",
-                "Eq.trans Nat ",
+                "(@Eq.refl Nat a) ",
+                "(@Eq.symm Nat (Nat.add Nat.zero a) a (nat_zero_add a))) ",
+                "(fun (k : Nat) (ih : @Eq Nat (Nat.add a k) (Nat.add k a)) => ",
+                "@Eq.trans Nat ",
                 "(Nat.add a (Nat.succ k)) ",
                 "(Nat.succ (Nat.add a k)) ",
                 "(Nat.add (Nat.succ k) a) ",
-                "(Eq.refl Nat (Nat.succ (Nat.add a k))) ",
-                "(Eq.trans Nat ",
+                "(@Eq.refl Nat (Nat.succ (Nat.add a k))) ",
+                "(@Eq.trans Nat ",
                 "(Nat.succ (Nat.add a k)) ",
                 "(Nat.succ (Nat.add k a)) ",
                 "(Nat.add (Nat.succ k) a) ",
-                "(Eq.cong Nat Nat Nat.succ ",
+                "(@Eq.cong Nat Nat Nat.succ ",
                 "(Nat.add a k) ",
                 "(Nat.add k a) ",
                 "ih) ",
-                "(Eq.symm Nat ",
+                "(@Eq.symm Nat ",
                 "(Nat.add (Nat.succ k) a) ",
                 "(Nat.succ (Nat.add k a)) ",
                 "(nat_succ_add k a)))) ",
@@ -246,9 +246,9 @@ impl Specification {
         self.add_definition_structural(SpecDefinition {
             name: "nat_sub_succ_one".to_string(),
             type_src:
-                "forall (n : Nat), Eq Nat (Nat.sub (Nat.succ n) (Nat.succ Nat.zero)) n"
+                "forall (n : Nat), @Eq Nat (Nat.sub (Nat.succ n) (Nat.succ Nat.zero)) n"
                     .to_string(),
-            value_src: Some("fun (n : Nat) => Eq.refl Nat n".to_string()),
+            value_src: Some("fun (n : Nat) => @Eq.refl Nat n".to_string()),
             is_axiom: false,
             description: "Nat.sub (succ n) 1 = n. DerivedProved via Eq.refl + structural registration (chain of succ_succ + zero_right iotas). Part of #461.".to_string(),
             category: AxiomCategory::DerivedLemma,
@@ -267,14 +267,14 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "nat_sub_add_succ_zero_one".to_string(),
             type_src:
-                "forall (n : Nat), Eq Nat (Nat.sub (Nat.add n (Nat.succ Nat.zero)) (Nat.succ Nat.zero)) n"
+                "forall (n : Nat), @Eq Nat (Nat.sub (Nat.add n (Nat.succ Nat.zero)) (Nat.succ Nat.zero)) n"
                     .to_string(),
             value_src: Some(concat!(
-                "fun (n : Nat) => Eq.trans Nat ",
+                "fun (n : Nat) => @Eq.trans Nat ",
                 "(Nat.sub (Nat.add n (Nat.succ Nat.zero)) (Nat.succ Nat.zero)) ",
                 "(Nat.sub (Nat.succ n) (Nat.succ Nat.zero)) ",
                 "n ",
-                "(Eq.cong Nat Nat ",
+                "(@Eq.cong Nat Nat ",
                 "(fun (x : Nat) => Nat.sub x (Nat.succ Nat.zero)) ",
                 "(Nat.add n (Nat.succ Nat.zero)) ",
                 "(Nat.succ n) ",
@@ -302,17 +302,17 @@ impl Specification {
         // Part of #464.
         self.add_definition(SpecDefinition {
             name: "nat_add_succ_zero_is_succ_pred".to_string(),
-            type_src: "forall (n : Nat), Eq Nat (Nat.add n (Nat.succ Nat.zero)) (Nat.succ (Nat.sub (Nat.add n (Nat.succ Nat.zero)) (Nat.succ Nat.zero)))".to_string(),
+            type_src: "forall (n : Nat), @Eq Nat (Nat.add n (Nat.succ Nat.zero)) (Nat.succ (Nat.sub (Nat.add n (Nat.succ Nat.zero)) (Nat.succ Nat.zero)))".to_string(),
             value_src: Some(concat!(
-                "fun (n : Nat) => Eq.trans Nat ",
+                "fun (n : Nat) => @Eq.trans Nat ",
                 "(Nat.add n (Nat.succ Nat.zero)) ",
                 "(Nat.succ n) ",
                 "(Nat.succ (Nat.sub (Nat.add n (Nat.succ Nat.zero)) (Nat.succ Nat.zero))) ",
                 "(nat_add_succ_zero n) ",
-                "(Eq.cong Nat Nat Nat.succ ",
+                "(@Eq.cong Nat Nat Nat.succ ",
                 "n ",
                 "(Nat.sub (Nat.add n (Nat.succ Nat.zero)) (Nat.succ Nat.zero)) ",
-                "(Eq.symm Nat ",
+                "(@Eq.symm Nat ",
                 "(Nat.sub (Nat.add n (Nat.succ Nat.zero)) (Nat.succ Nat.zero)) ",
                 "n ",
                 "(nat_sub_add_succ_zero_one n)))",
@@ -340,10 +340,10 @@ impl Specification {
         self.add_definition_structural(SpecDefinition {
             name: "nat_add_succ_right".to_string(),
             type_src:
-                "forall (j : Nat) (n : Nat), Eq Nat (Nat.add j (Nat.succ n)) (Nat.succ (Nat.add j n))"
+                "forall (j : Nat) (n : Nat), @Eq Nat (Nat.add j (Nat.succ n)) (Nat.succ (Nat.add j n))"
                     .to_string(),
             value_src: Some(
-                "fun (j : Nat) (n : Nat) => Eq.refl Nat (Nat.succ (Nat.add j n))".to_string(),
+                "fun (j : Nat) (n : Nat) => @Eq.refl Nat (Nat.succ (Nat.add j n))".to_string(),
             ),
             is_axiom: false,
             description: "j + succ(n) = succ(j + n). Definitionally true via the defining iota of Nat.add. DerivedProved via Eq.refl + structural registration. Part of #464.".to_string(),

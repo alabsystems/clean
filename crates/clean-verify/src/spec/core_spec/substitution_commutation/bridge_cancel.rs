@@ -30,8 +30,8 @@ impl Specification {
             name: "inst_overlift_cancel".to_string(),
             type_src: concat!(
                 "forall (e : KExpr) (val : KExpr) (n : Nat) (d : Nat), ",
-                "Eq Nat (Nat.sub d n) Nat.zero -> ",
-                "Eq KExpr ",
+                "@Eq Nat (Nat.sub d n) Nat.zero -> ",
+                "@Eq KExpr ",
                 "(instantiate_at (lift_at e Nat.zero (Nat.succ n)) val d) ",
                 "(lift_at e Nat.zero n)",
             )
@@ -39,16 +39,16 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (e : KExpr) (val : KExpr) (n : Nat) (d : Nat) ",
-                    "(h_dn : Eq Nat (Nat.sub d n) Nat.zero) => ",
-                    "Eq.trans KExpr ",
+                    "(h_dn : @Eq Nat (Nat.sub d n) Nat.zero) => ",
+                    "@Eq.trans KExpr ",
                     "(instantiate_at (lift_at e Nat.zero (Nat.succ n)) val d) ",
                     "(instantiate_at (lift_at (lift_at e Nat.zero n) d (Nat.succ Nat.zero)) val d) ",
                     "(lift_at e Nat.zero n) ",
-                    "(Eq.cong KExpr KExpr ",
+                    "(@Eq.cong KExpr KExpr ",
                     "(fun (x : KExpr) => instantiate_at x val d) ",
                     "(lift_at e Nat.zero (Nat.succ n)) ",
                     "(lift_at (lift_at e Nat.zero n) d (Nat.succ Nat.zero)) ",
-                    "(Eq.symm KExpr ",
+                    "(@Eq.symm KExpr ",
                     "(lift_at (lift_at e Nat.zero n) d (Nat.succ Nat.zero)) ",
                     "(lift_at e Nat.zero (Nat.succ n)) ",
                     "(lift_at_shift_succ e n d h_dn))) ",

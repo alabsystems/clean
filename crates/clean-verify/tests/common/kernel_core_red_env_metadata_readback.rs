@@ -619,12 +619,12 @@ fn test_emitted_projection_metadata_readback_refuses_rendered_block_name() {
             .lines()
             .find(|line| line.starts_with(&prefix))
             .expect("actual emitted metadata line");
-        let original = format!("(ListType.cons Name kcre_name_{tag} (ListType.nil Name))");
+        let original = format!("(@ListType.cons Name kcre_name_{tag} (@ListType.nil Name))");
         let retained = line
             .strip_suffix(&original)
             .expect("final stored block occupies the fifth field");
         let replacement = format!(
-            "{retained}(ListType.cons Name kcre_name_{} (ListType.nil Name))",
+            "{retained}(@ListType.cons Name kcre_name_{} (@ListType.nil Name))",
             good.tag(wrong_name)
         );
         assert_eq!(COMMITTED_DEF_SCRIPT.matches(line).count(), 1);

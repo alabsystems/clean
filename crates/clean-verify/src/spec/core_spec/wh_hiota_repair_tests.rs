@@ -226,7 +226,7 @@ fn def_eq_fuel_wh_at_the_divergence_witness_is_monotone_here() {
                 let name = format!("wh_mono_pin_{n}_{}", val.replace("Bool.", ""));
                 let src = format!(
                     "def {name} : Eq Bool (def_eq_fuel_wh the_red_env {nat} {d} {d}) {val} \
-                     := Eq.refl Bool {val}"
+                     := @Eq.refl Bool {val}"
                 );
                 if spec
                     .add_recursive_def(&src, "fuel-monotonicity pin")

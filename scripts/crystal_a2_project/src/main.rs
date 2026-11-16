@@ -1296,6 +1296,50 @@ mod tests {
         );
     }
 
+    /// trust-ir's function-item constant (`Constant::FnItem`, the reflection cohort of
+    /// 2026-11-15) names its function by `FuncId`, which `fold_in` does not relocate inside a
+    /// constant: refused like `FnDef`, never merged pointing at the primary's function.
+    #[test]
+    #[should_panic(expected = "may name a function")]
+    fn fold_in_refuses_a_function_item_constant() {
+        fold_in(
+            &mut trust_ir::Module::new("primary"),
+            artifact_with_const(Constant::FnItem(FuncId::new(0))),
+            "sidecar.bin",
+        );
+    }
+
+    /// The function-item TYPE and CONSTANT have no Clean image: refused by name as a type, as a
+    /// bare constant, as a global element and as a global initializer, never erased to a
+    /// pointer, a unit or a function signature.
+    #[test]
+    fn a_function_item_is_refused_by_name_in_every_position() {
+        let mut p = Projector::default();
+        let item = Ty::FnItem(FuncId::new(0));
+        let ty = p.ty(&item).expect_err("a function item has no IRTy image");
+        assert!(
+            ty.contains("no Clean IRTy image") && ty.contains("FnItem"),
+            "{ty}"
+        );
+        let value = Constant::FnItem(FuncId::new(0));
+        let bare = p
+            .cst(&value)
+            .expect_err("a function-item constant has no IRConst image");
+        assert!(bare.contains("FnItem"), "{bare}");
+        let module = trust_ir::Module::new("m");
+        let elem = p
+            .global_elem(&module, &value)
+            .expect_err("a function-item constant is no global element");
+        assert!(elem.contains("FnItem"), "{elem}");
+        for ty in [item, Ty::Struct(StructId::new(0))] {
+            let init = p
+                .global_init(&module, &ty, &value)
+                .expect_err("a function item never initializes a global");
+            assert!(init.contains("FnItem"), "{init}");
+        }
+        assert!(super::constant_may_name_function(&value));
+    }
+
     /// A chain root that CALLS a bodiless declaration (`call @func.1`, the `premise-decls`
     /// lowering of a foreign premise), with the declaration also named in the chain.
     fn module_calling_a_declaration() -> trust_ir::Module {
@@ -2185,6 +2229,26 @@ mod tests {
         );
     }
 
+    /// A `DirectWithUninhabited` descriptor (trust-ir's 2026-11-15 cohort) stores its tag at
+    /// `tag_offset` and adds layout profiles for dead variants: no IREnc row and not the
+    /// canonical tagged-union layout `Direct` is read against, so it is refused and recorded.
+    #[test]
+    fn a_direct_with_uninhabited_descriptor_is_refused_and_recorded() {
+        let (encs, refused) = encodings_of(
+            trust_ir::ty::EnumTagEncoding::DirectWithUninhabited {
+                tag_offset: 0,
+                variants: Vec::new(),
+            },
+            vec![vec![Ty::Ptr]],
+        );
+        assert!(encs.is_empty(), "{encs:?}");
+        assert_eq!(refused.len(), 1, "{refused:?}");
+        assert!(
+            refused[0].starts_with("enum.1: its layout descriptor is DirectWithUninhabited"),
+            "{refused:?}"
+        );
+    }
+
     #[test]
     fn a_single_inhabited_descriptor_retains_its_selected_variant_in_the_refusal() {
         for variant in [0, 1] {
@@ -2468,6 +2532,50 @@ mod tests {
             encs.is_empty() && refused.is_empty(),
             "{encs:?} {refused:?}"
         );
+    }
+
+    #[test]
+    fn a_direct_uninhabited_descriptor_is_not_a_canonical_direct_image() {
+        use trust_ir::ty::{EnumTagEncoding, FieldStorageLayout, UninhabitedVariantLayout};
+        // Existing ordinary Direct remains supported at these physical numbers.
+        let (encs, refused) = direct(0, 16, vec![vec![], vec![8]]);
+        assert!(
+            encs.is_empty() && refused.is_empty(),
+            "{encs:?} {refused:?}"
+        );
+        for dead in [0, 1] {
+            let variants = (0..2)
+                .map(|index| vec![if index == dead { Ty::Never } else { Ty::Ptr }])
+                .collect();
+            let (encs, refused, _) = derive_over(
+                Ty::Enum(EnumId::new(1)),
+                vec![],
+                vec![enum_with(
+                    1,
+                    EnumTagEncoding::DirectWithUninhabited {
+                        tag_offset: 0,
+                        variants: vec![UninhabitedVariantLayout {
+                            variant: dead,
+                            size: 0,
+                            align: 1,
+                            fields: vec![FieldStorageLayout { size: 0, align: 1 }],
+                        }],
+                    },
+                    variants,
+                    16,
+                    vec![vec![8], vec![8]],
+                )],
+                None,
+                Some(target(8)),
+            );
+            assert!(encs.is_empty(), "{encs:?}");
+            assert_eq!(refused.len(), 1, "{refused:?}");
+            assert!(
+                refused[0].starts_with("enum.1: its layout descriptor is DirectWithUninhabited"),
+                "{refused:?}"
+            );
+            assert!(refused[0].contains("no IREnc row describes"), "{refused:?}");
+        }
     }
 
     /// PROBE 7. `Direct { tag_offset: 8 }` passed as canonical, with no row
@@ -4023,6 +4131,39 @@ mod tests {
         assert_ne!(img, Img::Word(0));
     }
 
+    #[test]
+    fn a_nominal_function_item_reference_value_images_as_opaque() {
+        for id in [0, 7, u32::MAX] {
+            let value = trust_ir::InterpretValue {
+                ty: Ty::FnItem(FuncId::new(id)),
+                kind: trust_ir::InterpretValueKind::FnItem(FuncId::new(id)),
+            };
+            let image = reference::image(&value);
+            assert_eq!(
+                image,
+                Img::Opaque(format!("nominal function item @func.{id} (fnitem.{id})"))
+            );
+            assert!(!image.agrees(&image));
+            assert!(!Img::Word(0).agrees(&image));
+            assert!(!Img::Word(u128::from(id)).agrees(&image));
+            let structural = trust_ir::InterpretValue {
+                ty: Ty::Func(FuncTyId::new(id)),
+                kind: trust_ir::InterpretValueKind::FnDef(FuncId::new(id)),
+            };
+            assert_ne!(image, reference::image(&structural));
+            let nested = trust_ir::InterpretValue {
+                ty: Ty::Tuple(vec![value.ty.clone()]),
+                kind: trust_ir::InterpretValueKind::Aggregate(vec![value]),
+            };
+            let nested_image = reference::image(&nested);
+            assert_eq!(nested_image, Img::Agg(vec![image]));
+            assert!(!nested_image.agrees(&nested_image));
+        }
+        let scalar = trust_ir::InterpretValue::int(Ty::U64, 7).expect("ordinary scalar");
+        assert_eq!(reference::image(&scalar), Img::Word(7));
+        assert!(Img::Word(7).agrees(&reference::image(&scalar)));
+    }
+
     /// trust-ir v50 (`Constant::Splat`, the constant-size uniform array): no
     /// Clean image is decided, so every position this reader reads a constant
     /// from REFUSES it by name -- a bare constant, a lane of an aggregate, and
@@ -4562,6 +4703,180 @@ mod m0_tests {
             usize_bits: Some(64),
             ..Projector::default()
         }
+    }
+
+    #[test]
+    fn nominal_function_items_have_no_core_type_or_constant_image() {
+        let mut p = p64();
+        let nominal = Ty::FnItem(FuncId::new(7));
+        let refusal = p
+            .ty(&nominal)
+            .expect_err("a nominal singleton has no IRTy image");
+        assert!(refusal.contains("no Clean IRTy image"), "{refusal}");
+        assert!(refusal.contains("FnItem"), "{refusal}");
+        assert!(!super::is_zst(&nominal, &[]));
+        assert!(!super::ty_is_bare_ptr(&nominal));
+        assert!(super::metadata_ty_key(&nominal).is_none());
+
+        let constant = Constant::FnItem(FuncId::new(7));
+        let refusal = p
+            .cst(&constant)
+            .expect_err("a nominal singleton has no IRConst image");
+        assert!(refusal.contains("no Clean IRConst image"), "{refusal}");
+        assert!(refusal.contains("FnItem"), "{refusal}");
+        assert!(
+            p.funcs.is_empty(),
+            "a refusal must not intern the nominal target"
+        );
+        assert!(super::constant_may_name_function(&constant));
+        assert!(super::constant_may_name_function(&Constant::Aggregate(
+            vec![constant]
+        )));
+
+        // Existing structural function carriers and scalar images remain supported.
+        assert_eq!(p.ty(&Ty::Func(FuncTyId::new(7))).unwrap(), "(func 7)");
+        assert_eq!(p.ty(&Ty::U64).unwrap(), "(uint 64)");
+        assert_eq!(
+            p.cst(&Constant::FnDef(FuncId::new(7))).unwrap(),
+            "(cfunc 0)"
+        );
+        assert_eq!(p.cst(&Constant::Int(7)).unwrap(), "(int 7)");
+    }
+
+    fn box_deref(root: trust_ir::box_validity::PremiseRoot) -> Inst {
+        use trust_ir::box_validity::{BoxDerefSite, BoxFactSession, BoxPointee, BoxValidityFact};
+        Inst::BoxDeref {
+            ptr_ty: Ty::Ptr,
+            pointee: BoxPointee::Sized { ty: Ty::U32 },
+            operand: ValueId::new(7),
+            fact: Box::new(BoxValidityFact::premise(
+                BoxDerefSite {
+                    item: [11; 16],
+                    ordinal: 3,
+                },
+                BoxFactSession::PROOF_SNAPSHOT,
+                root,
+            )),
+        }
+    }
+
+    #[test]
+    fn box_deref_facts_do_not_authorize_core_projection() {
+        for root in trust_ir::box_validity::PremiseRoot::ALL {
+            let mut instruction = box_deref(root);
+            let node = trust_ir::InstrNode::new(instruction.clone()).with_result(ValueId::new(8));
+            // Enable D12 so its None comes from the instruction classification,
+            // rather than the option's early return.
+            let mut p = Projector {
+                ptr_bitcast_identity: true,
+                ..p64()
+            };
+            let mut fresh = 100;
+            assert_eq!(p.seq_atomic_image(&node, &mut fresh).unwrap(), None);
+            assert_eq!(fresh, 100);
+            assert_eq!(p.tls_input_image(&node).unwrap(), None);
+            assert_eq!(p.ptr_bitcast_identity_image(&node).unwrap(), None);
+            assert_eq!(p.negative_int_const_image(&node).unwrap(), None);
+            assert!(!super::inst_is_const_bool_false(&instruction));
+            match super::vt_node(&instruction) {
+                super::VtNode::Other => {}
+                super::VtNode::Meta(..)
+                | super::VtNode::Gep { .. }
+                | super::VtNode::Copy(..)
+                | super::VtNode::Cast { .. }
+                | super::VtNode::Load { .. }
+                | super::VtNode::FromParts { .. }
+                | super::VtNode::ConstInt(..) => panic!("BoxDeref is no vtable certificate"),
+            }
+            assert!(super::call_target(&mut instruction).is_none());
+            let refusal = p
+                .inst(&instruction)
+                .expect_err("no validity-hypothesis image");
+            assert!(
+                refusal.contains("no Clean IRInst image for trust_ir::Inst::BoxDeref"),
+                "{refusal}"
+            );
+
+            let mut block = trust_ir::Block::new(BlockId::new(0));
+            block.params.push((ValueId::new(7), Ty::Ptr));
+            block.body.push(node);
+            block.body.push(trust_ir::InstrNode::new(Inst::Return {
+                values: vec![ValueId::new(8)],
+            }));
+            let mut function = trust_ir::Function::new(
+                FuncId::new(0),
+                "box_deref",
+                FuncTyId::new(0),
+                BlockId::new(0),
+            );
+            function.blocks.push(block);
+            let mut module = trust_ir::Module::new("box_deref");
+            module.functions.push(function);
+            let function = &module.functions[0];
+            assert_eq!(
+                p.ub_halt_image(function, &function.blocks[0], 0).unwrap(),
+                None
+            );
+            let refusal = p
+                .project_chain(&module, &[function])
+                .expect_err("the complete helper dispatch must reach the named refusal");
+            assert!(refusal.contains("trust_ir::Inst::BoxDeref"), "{refusal}");
+            p.ub_halt_sites.insert((0, 0, 0));
+            let refusal = p
+                .ub_halt_image(function, &function.blocks[0], 0)
+                .expect_err("a sited BoxDeref is not an assert-false halt");
+            assert!(
+                refusal.contains("not an `assert` of a `const bool false`"),
+                "{refusal}"
+            );
+            assert_eq!(
+                (
+                    p.seq_atomic_images,
+                    p.tls_input_images,
+                    p.ptr_bitcast_identities,
+                    p.negative_int_images,
+                    p.ub_halt_images
+                ),
+                (0, 0, 0, 0, 0)
+            );
+            // The existing scalar image remains a real positive in this fixture.
+            assert_eq!(
+                p.inst(&Inst::Copy {
+                    ty: Ty::U32,
+                    operand: ValueId::new(7)
+                })
+                .unwrap(),
+                "(copy (uint 32) 7)"
+            );
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "trust_ir::Inst::BoxDeref")]
+    fn fold_in_refuses_a_box_deref_validity_hypothesis() {
+        let mut block = trust_ir::Block::new(BlockId::new(0));
+        block.params.push((ValueId::new(7), Ty::Ptr));
+        block.body.push(
+            trust_ir::InstrNode::new(box_deref(trust_ir::box_validity::PremiseRoot::ParamByValue))
+                .with_result(ValueId::new(8)),
+        );
+        block.body.push(trust_ir::InstrNode::new(Inst::Return {
+            values: vec![ValueId::new(8)],
+        }));
+        let mut function = trust_ir::Function::new(
+            FuncId::new(0),
+            "boxed_sidecar",
+            FuncTyId::new(0),
+            BlockId::new(0),
+        );
+        function.blocks.push(block);
+        let mut sidecar = trust_ir::Module::new("boxed_sidecar");
+        sidecar.functions.push(function);
+        super::fold_in(
+            &mut trust_ir::Module::new("primary"),
+            sidecar,
+            "sidecar.bin",
+        );
     }
 
     #[test]
@@ -5325,6 +5640,7 @@ impl Projector {
             | Ty::Vector(..)
             | Ty::FatPtr(_)
             | Ty::Func(_)
+            | Ty::FnItem(_)
             | Ty::Set(..)
             | Ty::Sequence(_)
             | Ty::Record(_)
@@ -5372,6 +5688,7 @@ impl Projector {
             | Ty::Tuple(_)
             | Ty::Enum(_)
             | Ty::Func(_)
+            | Ty::FnItem(_)
             | Ty::Ref(_)
             | Ty::RefMut(_)
             | Ty::PtrConst(_)
@@ -5651,7 +5968,8 @@ impl Projector {
             // Every variant `IRTy` has no image for, NAMED rather than
             // wildcarded, so a variant trust-ir adds fails to compile here
             // until someone decides whether it has one.
-            other @ (Ty::Char
+            other @ (Ty::FnItem(_)
+            | Ty::Char
             | Ty::Error
             | Ty::F16
             | Ty::Vector(..)
@@ -5695,6 +6013,7 @@ impl Projector {
                 | Constant::Record(_)
                 | Constant::Closure { .. }
                 | Constant::FnDef(_)
+                | Constant::FnItem(_)
                 | Constant::SymbolAddr { .. }
                 | Constant::PhantomData
                 | Constant::Uninit
@@ -5761,6 +6080,7 @@ impl Projector {
                 | Ty::Vector(..)
                 | Ty::FatPtr(_)
                 | Ty::Func(_)
+                | Ty::FnItem(_)
                 | Ty::Set(..)
                 | Ty::Sequence(_)
                 | Ty::Record(_)
@@ -5783,6 +6103,7 @@ impl Projector {
                 | Constant::Record(_)
                 | Constant::Closure { .. }
                 | Constant::FnDef(_)
+                | Constant::FnItem(_)
                 | Constant::SymbolAddr { .. }
                 | Constant::PhantomData),
             ) => Err(format!(
@@ -5832,6 +6153,7 @@ impl Projector {
                 | Ty::Vector(..)
                 | Ty::FatPtr(_)
                 | Ty::Func(_)
+                | Ty::FnItem(_)
                 | Ty::Set(..)
                 | Ty::Sequence(_)
                 | Ty::Record(_)
@@ -5885,6 +6207,7 @@ impl Projector {
                 | Ty::Vector(..)
                 | Ty::FatPtr(_)
                 | Ty::Func(_)
+                | Ty::FnItem(_)
                 | Ty::Set(..)
                 | Ty::Sequence(_)
                 | Ty::Record(_)
@@ -5934,6 +6257,7 @@ impl Projector {
                 | Ty::Vector(..)
                 | Ty::FatPtr(_)
                 | Ty::Func(_)
+                | Ty::FnItem(_)
                 | Ty::Set(..)
                 | Ty::Sequence(_)
                 | Ty::Record(_)
@@ -5983,6 +6307,7 @@ impl Projector {
                 | Ty::Vector(..)
                 | Ty::FatPtr(_)
                 | Ty::Func(_)
+                | Ty::FnItem(_)
                 | Ty::Set(..)
                 | Ty::Sequence(_)
                 | Ty::Record(_)
@@ -6046,6 +6371,7 @@ impl Projector {
             | Constant::Record(_)
             | Constant::Closure { .. }
             | Constant::FnDef(_)
+            | Constant::FnItem(_)
             | Constant::SymbolAddr { .. }
             | Constant::PhantomData
             | Constant::Splat { .. }) => self.cst(other),
@@ -6102,7 +6428,8 @@ impl Projector {
             // Named, not wildcarded, for the reason `ty` gives. `Array` is
             // refused HERE and accepted only by `global_init`: the position a
             // `(agg …)` is read from is what keeps the two shapes apart.
-            other @ (Constant::Bytes { .. }
+            other @ (Constant::FnItem(_)
+            | Constant::Bytes { .. }
             | Constant::Array(_)
             | Constant::Vector(_)
             | Constant::Sequence(_)
@@ -6351,7 +6678,8 @@ impl Projector {
             | Inst::TensorView { .. }
             | Inst::TensorGather { .. }
             | Inst::TensorScatter { .. }
-            | Inst::MakeClosure { .. } => return Ok(None),
+            | Inst::MakeClosure { .. }
+            | Inst::BoxDeref { .. } => return Ok(None),
         };
         self.seq_atomic_images += 1;
         Ok(Some(nodes))
@@ -6442,7 +6770,8 @@ impl Projector {
             | Inst::TensorView { .. }
             | Inst::TensorGather { .. }
             | Inst::TensorScatter { .. }
-            | Inst::MakeClosure { .. } => return Ok(None),
+            | Inst::MakeClosure { .. }
+            | Inst::BoxDeref { .. } => return Ok(None),
         };
         let spec = trust_ir::dialect::trust_rust::decode_thread_local_addr(op).map_err(|e| {
             format!(
@@ -6573,7 +6902,8 @@ impl Projector {
             | Inst::TensorView { .. }
             | Inst::TensorGather { .. }
             | Inst::TensorScatter { .. }
-            | Inst::MakeClosure { .. } => return Ok(None),
+            | Inst::MakeClosure { .. }
+            | Inst::BoxDeref { .. } => return Ok(None),
         };
         // Named matches, not a nested pattern (a `Cast` pattern naming `Bitcast` and `Ty::Ptr`
         // needs an alternative that leaves those fields out, which main's lint r11 refuses) and
@@ -6625,6 +6955,7 @@ impl Projector {
                     | Constant::Record(_)
                     | Constant::Closure { .. }
                     | Constant::FnDef(_)
+                    | Constant::FnItem(_)
                     | Constant::SymbolAddr { .. }
                     | Constant::PhantomData
                     | Constant::Uninit
@@ -6708,7 +7039,8 @@ impl Projector {
             | Inst::TensorView { .. }
             | Inst::TensorGather { .. }
             | Inst::TensorScatter { .. }
-            | Inst::MakeClosure { .. } => return Ok(None),
+            | Inst::MakeClosure { .. }
+            | Inst::BoxDeref { .. } => return Ok(None),
         };
         if *v >= 0 {
             return Ok(None);
@@ -6746,6 +7078,7 @@ impl Projector {
             | Ty::FatPtr(_)
             | Ty::Tuple(_)
             | Ty::Func(_)
+            | Ty::FnItem(_)
             | Ty::Vector(..)
             | Ty::Array(..)
             | Ty::Set(..)
@@ -6893,7 +7226,8 @@ impl Projector {
             | Inst::TensorView { .. }
             | Inst::TensorGather { .. }
             | Inst::TensorScatter { .. }
-            | Inst::MakeClosure { .. } => false,
+            | Inst::MakeClosure { .. }
+            | Inst::BoxDeref { .. } => false,
         };
         if !halting {
             return Err(format!(
@@ -7282,7 +7616,8 @@ impl Projector {
             | Inst::TensorView { .. }
             | Inst::TensorGather { .. }
             | Inst::TensorScatter { .. }
-            | Inst::MakeClosure { .. } => {
+            | Inst::MakeClosure { .. }
+            | Inst::BoxDeref { .. } => {
                 return Err(format!(
                     "no Clean IRInst image for trust_ir::Inst::{}",
                     variant_name(i)
@@ -7293,7 +7628,7 @@ impl Projector {
 }
 
 /// Whether a constant MAY name a function anywhere in its tree, which
-/// `fold_in` cannot relocate: a `FnDef`, a `Closure`'s `func`, or a
+/// `fold_in` cannot relocate: a `FnDef`, a `FnItem`, a `Closure`'s `func`, or a
 /// `SymbolAddr`. A `SymbolAddr` names its target by NAME, resolved against the
 /// merged module's symbol table, and trust-ir documents that target as "a
 /// function or data global defined in the same module, or an external symbol"
@@ -7307,7 +7642,10 @@ impl Projector {
 fn constant_may_name_function(c: &Constant) -> bool {
     match c {
         Constant::Ext(e) => e.unreachable(),
-        Constant::FnDef(_) | Constant::Closure { .. } | Constant::SymbolAddr { .. } => true,
+        Constant::FnDef(_)
+        | Constant::FnItem(_)
+        | Constant::Closure { .. }
+        | Constant::SymbolAddr { .. } => true,
         Constant::Aggregate(v)
         | Constant::Array(v)
         | Constant::Vector(v)
@@ -7890,6 +8228,12 @@ fn enum_row(
                 ));
             }
         }
+        // The physical Direct numbers cannot erase the descriptor's dead-variant
+        // storage/validity distinction: no current IREnc row carries that fact.
+        trust_ir::ty::EnumTagEncoding::DirectWithUninhabited { .. } => refused.push(format!(
+            "enum.{raw}: its layout descriptor is DirectWithUninhabited (physical tag plus \
+             uninhabited-variant storage/validity), which no IREnc row describes"
+        )),
         // NO tag is stored: the memory image is the sole inhabited variant's
         // payload alone. trust-ir's own canonical layout budgets a tag this
         // enum does not have (its doc on `EnumTagEncoding::Untagged`), and
@@ -8093,6 +8437,7 @@ fn is_pointer_word(t: &Ty, d: &Definer<'_>, seen: &mut Vec<u32>) -> bool {
         | Ty::Array(..)
         | Ty::FatPtr(_)
         | Ty::Func(_)
+        | Ty::FnItem(_)
         | Ty::Set(..)
         | Ty::Sequence(_)
         | Ty::Record(_)
@@ -8155,6 +8500,7 @@ fn is_zst(t: &Ty, structs: &[trust_ir::ty::StructDef]) -> bool {
         | Ty::Array(..)
         | Ty::FatPtr(_)
         | Ty::Func(_)
+        | Ty::FnItem(_)
         | Ty::Set(..)
         | Ty::Sequence(_)
         | Ty::Record(_)
@@ -8615,6 +8961,7 @@ fn no_ty_image(t: &Ty) -> String {
         | Ty::Rc(_)
         | Ty::Vector(..)
         | Ty::Func(_)
+        | Ty::FnItem(_)
         | Ty::Set(..)
         | Ty::Sequence(_)
         | Ty::Record(_)
@@ -8963,7 +9310,8 @@ fn vt_node(i: &Inst) -> VtNode<'_> {
         | Inst::TensorView { .. }
         | Inst::TensorGather { .. }
         | Inst::TensorScatter { .. }
-        | Inst::MakeClosure { .. } => VtNode::Other,
+        | Inst::MakeClosure { .. }
+        | Inst::BoxDeref { .. } => VtNode::Other,
     }
 }
 
@@ -9008,6 +9356,7 @@ fn vt_ty(t: &Ty) -> VtTy {
         | Ty::Tuple(_)
         | Ty::Enum(_)
         | Ty::Func(_)
+        | Ty::FnItem(_)
         | Ty::Set(..)
         | Ty::Sequence(_)
         | Ty::Record(_)
@@ -9051,6 +9400,7 @@ fn fat_kind_of(t: &Ty) -> Option<&trust_ir::FatPtrKind> {
         | Ty::Tuple(_)
         | Ty::Enum(_)
         | Ty::Func(_)
+        | Ty::FnItem(_)
         | Ty::Ref(_)
         | Ty::RefMut(_)
         | Ty::PtrConst(_)
@@ -9125,6 +9475,7 @@ fn ty_is_bare_ptr(t: &Ty) -> bool {
         | Ty::Tuple(_)
         | Ty::Enum(_)
         | Ty::Func(_)
+        | Ty::FnItem(_)
         | Ty::Ref(_)
         | Ty::RefMut(_)
         | Ty::PtrConst(_)
@@ -9178,6 +9529,7 @@ fn inst_is_const_bool_false(i: &Inst) -> bool {
                 | Ty::Tuple(_)
                 | Ty::Enum(_)
                 | Ty::Func(_)
+                | Ty::FnItem(_)
                 | Ty::Ref(_)
                 | Ty::RefMut(_)
                 | Ty::PtrConst(_)
@@ -9209,6 +9561,7 @@ fn inst_is_const_bool_false(i: &Inst) -> bool {
                 | Constant::Record(_)
                 | Constant::Closure { .. }
                 | Constant::FnDef(_)
+                | Constant::FnItem(_)
                 | Constant::SymbolAddr { .. }
                 | Constant::PhantomData
                 | Constant::Uninit
@@ -9289,7 +9642,8 @@ fn inst_is_const_bool_false(i: &Inst) -> bool {
         | Inst::CallCannotUnwind { .. }
         | Inst::CallIndirectCannotUnwind { .. }
         | Inst::DropInvoke { .. }
-        | Inst::InvokeIndirect { .. } => false,
+        | Inst::InvokeIndirect { .. }
+        | Inst::BoxDeref { .. } => false,
     }
 }
 
@@ -9342,6 +9696,7 @@ fn metadata_ty_key(t: &Ty) -> Option<u8> {
         | Ty::Tuple(_)
         | Ty::Enum(_)
         | Ty::Func(_)
+        | Ty::FnItem(_)
         | Ty::Ref(_)
         | Ty::RefMut(_)
         | Ty::PtrConst(_)
@@ -9396,6 +9751,7 @@ fn const_int(c: &Constant) -> Option<i128> {
         | Constant::Record(_)
         | Constant::Closure { .. }
         | Constant::FnDef(_)
+        | Constant::FnItem(_)
         | Constant::SymbolAddr { .. }
         | Constant::PhantomData
         | Constant::Uninit
@@ -9472,7 +9828,8 @@ fn shift_ub_sites((sites, unsited): UbSites, shift: u32) -> UbSites {
 ///   out of the wrong table;
 /// * a merged body must carry no instruction that names a function other than
 ///   through `Inst::Call`. `Invoke`, `CallIndirect`'s signature id, a
-///   `Constant::FnDef`, `Constant::Closure`, `Inst::MakeClosure` or `Constant::SymbolAddr` (by
+///   `Constant::FnDef`, `Constant::FnItem`, `Constant::Closure`, `Inst::MakeClosure` or
+///   `Constant::SymbolAddr` (by
 ///   name) and the element-op loop's `fwd` all carry one or may, none of them
 ///   appears in the Phase-B bundle, and a
 ///   relocation that silently missed one would produce a module calling the
@@ -9575,9 +9932,16 @@ fn fold_in(primary: &mut trust_ir::Module, other: trust_ir::Module, path: &str) 
                         f.name,
                         variant_name(&n.inst)
                     ),
+                    // Its mandatory validity hypothesis has no Clean image. A merge
+                    // cannot erase that hypothesis or turn the instruction into a cast.
+                    Inst::BoxDeref { .. } => panic!(
+                        "--merge {path}: `{}` carries a trust_ir::Inst::BoxDeref; its validity \
+                         hypothesis has no Clean IRInst image",
+                        f.name
+                    ),
                     Inst::Const { value, .. } if constant_may_name_function(value) => panic!(
                         "--merge {path}: `{}` carries a constant that may name a function \
-                         (`FnDef`/`Closure`/`SymbolAddr`); it is not relocated here, so it is \
+                         (`FnDef`/`FnItem`/`Closure`/`SymbolAddr`); it is not relocated here, so it is \
                          refused",
                         f.name
                     ),
@@ -9835,7 +10199,8 @@ fn call_target(inst: &mut Inst) -> Option<&mut trust_ir::value::FuncId> {
         | Inst::TensorView { .. }
         | Inst::TensorGather { .. }
         | Inst::TensorScatter { .. }
-        | Inst::MakeClosure { .. } => None,
+        | Inst::MakeClosure { .. }
+        | Inst::BoxDeref { .. } => None,
     }
 }
 
@@ -10342,6 +10707,10 @@ mod reference {
             InterpretValueKind::DanglingPtr(a) => Img::Word(u128::from(*a)),
             InterpretValueKind::Aggregate(fields) => Img::Agg(fields.iter().map(image).collect()),
             InterpretValueKind::Ptr(_) => Img::Opaque("a pointer into an allocation".into()),
+            // A nominal singleton is not an address-bearing FnDef or a word.
+            InterpretValueKind::FnItem(id) => {
+                Img::Opaque(format!("nominal function item @func.{} ({})", id.0, v.ty))
+            }
             InterpretValueKind::FloatBits(_)
             | InterpretValueKind::Bool(_)
             | InterpretValueKind::Vector(_)
@@ -10637,11 +11006,12 @@ mod deep {
                     let _ = write!(out, "{t:?}");
                 }
                 // `trait_id`, a predicate, a function type, a record and a
-                // closure type are all indices into tables this rendering does
+                // closure type and a nominal function item are all indices into tables this rendering does
                 // not read: unresolved, so labelled with the artifact.
                 Ty::FatPtr(FatPtrKind::TraitObject { trait_id: _ })
                 | Ty::Refine(..)
                 | Ty::Func(_)
+                | Ty::FnItem(_)
                 | Ty::Record(_)
                 | Ty::Closure(_) => self.local(t, out),
                 // Carry no artifact-local id: a scalar, or a NOMINAL type whose

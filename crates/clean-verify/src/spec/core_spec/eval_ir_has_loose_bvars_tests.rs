@@ -37,7 +37,7 @@ fn test_the_call_targets_the_callee_by_its_registered_id() {
         "the caller's id is distinct from the callee's"
     );
     assert!(
-        minted_line("ir_hlb_module").contains("ir_hlb_func (IRList.cons IRFunc ir_lbr_func"),
+        minted_line("ir_hlb_module").contains("ir_hlb_func (@IRList.cons IRFunc ir_lbr_func"),
         "one module, two functions, caller first"
     );
     assert!(
@@ -96,10 +96,14 @@ fn test_the_composition_is_split_at_the_call_boundary() {
         !proof.trim_start().starts_with("Eq.refl"),
         "the composed theorem must not be one flat Eq.refl"
     );
+    assert!(
+        !proof.trim_start().starts_with("@Eq.refl"),
+        "the composed theorem must not be one flat explicit Eq.refl"
+    );
     // The callee lemma is frame-generic and is used BOTH ways.
     let act = SRC_IR_LBR_ACTIVATION.split(":=").next().unwrap_or("");
     assert!(act.contains("(ds : IRList Nat)") && act.contains("(rest : IRList IRFrame)"));
-    assert!(SRC_IR_LBR_EXACT.contains("ir_lbr_activation e px (IRList.nil Nat)"));
+    assert!(SRC_IR_LBR_EXACT.contains("ir_lbr_activation e px (@IRList.nil Nat)"));
     // The seam lemma abstracts the callee's answer.
     let resume = SRC_IR_HLB_RESUME.split(":=").next().unwrap_or("");
     assert!(resume.contains("(k : Nat)") && resume.contains("(IRScalar.int_ k)"));

@@ -144,7 +144,7 @@ const SIMPLE: &[(&str, &str, &str, &str)] = &[
     (
         "irswitchcase_witness",
         "IRSwitchCase",
-        "IRSwitchCase.mk Nat.zero Nat.zero (IRList.nil Nat)",
+        "IRSwitchCase.mk Nat.zero Nat.zero (@IRList.nil Nat)",
         "IRSwitchCase IS INHABITED — one Switch arm with no block arguments.",
     ),
     (
@@ -440,8 +440,8 @@ impl Specification {
                 "EncodesExprPathStep {step_cell} (IRScalar.ptr_ Nat.zero) ExprPathStepR.projexpr"
             ),
             value_src: Some(format!(
-                "EncodesExprPathStep.mk {step_cell} Nat.zero ExprPathStepR.projexpr ir_sp0 \
-                 (Eq.refl (IROption IRMemSlot) (IROption.some IRMemSlot (IRMemSlot.mk Nat.zero \
+                "@EncodesExprPathStep.mk {step_cell} Nat.zero ExprPathStepR.projexpr ir_sp0 \
+                 (@Eq.refl (IROption IRMemSlot) (@IROption.some IRMemSlot (IRMemSlot.mk Nat.zero \
                  (ir_var (expr_path_step_tag ExprPathStepR.projexpr) ir_sp0) Bool.true)))"
             )),
             is_axiom: false,
@@ -468,7 +468,7 @@ impl Specification {
         // ── arrivals from the eval_ir mode lane, and one kernel builtin ─────
         let mode_cell = "(ir_cell Nat.zero \
                          (ir_var (clean_mode_tag CleanModeR.constructive) ir_sp0) \
-                         (IRList.nil IRMemSlot))";
+                         (@IRList.nil IRMemSlot))";
         self.add_definition(SpecDefinition {
             name: "cleanmoder_witness".to_string(),
             type_src: "CleanModeR".to_string(),
@@ -494,8 +494,8 @@ impl Specification {
                 "EncodesCleanMode {mode_cell} (IRScalar.ptr_ Nat.zero) CleanModeR.constructive"
             ),
             value_src: Some(format!(
-                "EncodesCleanMode.mk {mode_cell} Nat.zero CleanModeR.constructive \
-                 (Eq.refl (IROption IRMemSlot) (IROption.some IRMemSlot \
+                "@EncodesCleanMode.mk {mode_cell} Nat.zero CleanModeR.constructive \
+                 (@Eq.refl (IROption IRMemSlot) (@IROption.some IRMemSlot \
                  (IRMemSlot.mk Nat.zero \
                  (ir_var (clean_mode_tag CleanModeR.constructive) ir_sp0) Bool.true)))"
             )),
@@ -545,10 +545,10 @@ impl Specification {
                  (SimpPriorityR.custom ir_d7)"
             ),
             value_src: Some(format!(
-                "EncodesSimpPriority.custom {prio_mem} ir_d0 ir_sp0 ir_d7 \
-                 (Eq.refl (IROption IRMemSlot) (IROption.some IRMemSlot \
+                "@EncodesSimpPriority.custom {prio_mem} ir_d0 ir_sp0 ir_d7 \
+                 (@Eq.refl (IROption IRMemSlot) (@IROption.some IRMemSlot \
                  (IRMemSlot.mk ir_d0 (ir_var ir_d1 ir_sp0) Bool.true))) \
-                 (Eq.refl (IROption IRMemSlot) (IROption.some IRMemSlot \
+                 (@Eq.refl (IROption IRMemSlot) (@IROption.some IRMemSlot \
                  (IRMemSlot.mk ir_d4 (IRScalar.int_ ir_d7) Bool.true)))"
             )),
             is_axiom: false,
@@ -588,8 +588,8 @@ impl Specification {
             type_src: "WhNormalizes (KExpr.sort Level.zero) (KExpr.sort Level.zero)".to_string(),
             value_src: Some(
                 concat!(
-                    "WhNormalizes.stuck (KExpr.sort Level.zero) ",
-                    "(fun (j : Nat) => Eq.refl (OptionType KExpr) (OptionType.none KExpr))"
+                    "@WhNormalizes.stuck (KExpr.sort Level.zero) ",
+                    "(fun (j : Nat) => @Eq.refl (OptionType KExpr) (@OptionType.none KExpr))"
                 )
                 .to_string(),
             ),
@@ -623,8 +623,8 @@ impl Specification {
             type_src: "WhNormalizes3 (KExpr.sort Level.zero) (KExpr.sort Level.zero)".to_string(),
             value_src: Some(
                 concat!(
-                    "WhNormalizes3.stuck (KExpr.sort Level.zero) Nat.zero ",
-                    "(Eq.refl WhStepR WhStepR.wstuck)"
+                    "@WhNormalizes3.stuck (KExpr.sort Level.zero) Nat.zero ",
+                    "(@Eq.refl WhStepR WhStepR.wstuck)"
                 )
                 .to_string(),
             ),
@@ -653,8 +653,8 @@ impl Specification {
                 .to_string(),
             value_src: Some(
                 concat!(
-                    "DefEqFuelAcceptsWh.mk (KExpr.sort Level.zero) (KExpr.sort Level.zero) ",
-                    "(Nat.succ (Nat.succ Nat.zero)) (Eq.refl Bool Bool.true)"
+                    "@DefEqFuelAcceptsWh.mk (KExpr.sort Level.zero) (KExpr.sort Level.zero) ",
+                    "(Nat.succ (Nat.succ Nat.zero)) (@Eq.refl Bool Bool.true)"
                 )
                 .to_string(),
             ),
@@ -687,8 +687,8 @@ impl Specification {
             name: "literalreturn_witness".to_string(),
             type_src: "LiteralReturn Nat.zero (literal_type_of_code Nat.zero)".to_string(),
             value_src: Some(
-                "LiteralReturn.intro Nat.zero (literal_type_of_code Nat.zero) \
-                 (Eq.refl KExpr (literal_type_of_code Nat.zero))"
+                "@LiteralReturn.intro Nat.zero (literal_type_of_code Nat.zero) \
+                 (@Eq.refl KExpr (literal_type_of_code Nat.zero))"
                     .to_string(),
             ),
             is_axiom: false,
@@ -715,7 +715,7 @@ impl Specification {
         // already computes to `some (Sort 2)` by Eq.refl in
         // acceptance_example_alias_typed. Both constant wrappers are inhabited
         // at exactly that lookup.
-        let example_us = "(ListType.cons Level (Level.succ Level.zero) (ListType.nil Level))";
+        let example_us = "(@ListType.cons Level (Level.succ Level.zero) (@ListType.nil Level))";
         let example_ty = "(KExpr.sort (Level.succ (Level.succ Level.zero)))";
         self.add_definition(SpecDefinition {
             name: "constantinferreturn_witness".to_string(),
@@ -723,8 +723,8 @@ impl Specification {
                 "ConstantInferReturn acceptance_example_tenv Name.anonymous {example_us} {example_ty}"
             ),
             value_src: Some(format!(
-                "ConstantInferReturn.intro acceptance_example_tenv Name.anonymous {example_us} \
-                 {example_ty} (Eq.refl (OptionType KExpr) (OptionType.some KExpr {example_ty}))"
+                "@ConstantInferReturn.intro acceptance_example_tenv Name.anonymous {example_us} \
+                 {example_ty} (@Eq.refl (OptionType KExpr) (@OptionType.some KExpr {example_ty}))"
             )),
             is_axiom: false,
             description: concat!(
@@ -753,9 +753,9 @@ impl Specification {
                  {example_ty}"
             ),
             value_src: Some(format!(
-                "AcceptanceConstantReturn.intro acceptance_example_tenv Name.anonymous \
+                "@AcceptanceConstantReturn.intro acceptance_example_tenv Name.anonymous \
                  {example_us} {example_ty} {example_ty} \
-                 (Eq.refl (OptionType KExpr) (OptionType.some KExpr {example_ty})) \
+                 (@Eq.refl (OptionType KExpr) (@OptionType.some KExpr {example_ty})) \
                  (kexprUniverseEq_refl {example_ty})"
             )),
             is_axiom: false,
@@ -778,16 +778,16 @@ impl Specification {
             axiom_deps: HashSet::new(),
         })?;
 
-        let example_ci = "(ImplConstInfo.mk (ListType.nil Name) (ImplExpr.sort Level.zero) \
+        let example_ci = "(ImplConstInfo.mk (@ListType.nil Name) (ImplExpr.sort Level.zero) \
                           Bool.false Bool.false)";
         self.add_definition(SpecDefinition {
             name: "implconstenventryrep_witness".to_string(),
             type_src: format!(
                 "ImplConstEnvEntryRep {example_ci} \
-                 (OptionType.some KConstSig (impl_schematic_signature {example_ci}))"
+                 (@OptionType.some KConstSig (impl_schematic_signature {example_ci}))"
             ),
             value_src: Some(format!(
-                "ImplConstEnvEntryRep.mk {example_ci} (ImplNoFVar.sort Level.zero)"
+                "@ImplConstEnvEntryRep.mk {example_ci} (ImplNoFVar.sort Level.zero)"
             )),
             is_axiom: false,
             description: concat!(
@@ -815,7 +815,7 @@ impl Specification {
             type_src: "forall (env : RecEnv), RecEnvClosed env -> RecEnvRhsClosed env".to_string(),
             value_src: Some(
                 "fun (env : RecEnv) (w : RecEnvClosed env) => \
-                 RecEnvClosed.rec env (fun (_ : RecEnvClosed env) => RecEnvRhsClosed env) \
+                 @RecEnvClosed.rec env (fun (_ : RecEnvClosed env) => RecEnvRhsClosed env) \
                  (fun (hc : RecEnvRhsClosed env) => hc) w"
                     .to_string(),
             ),
@@ -873,7 +873,7 @@ impl Specification {
             name: "relationunion_witness".to_string(),
             type_src: format!("RelationUnion Nat {nat_rel} {nat_rel} Nat.zero Nat.zero"),
             value_src: Some(format!(
-                "RelationUnion.left Nat {nat_rel} {nat_rel} Nat.zero Nat.zero Nat.zero"
+                "@RelationUnion.left Nat {nat_rel} {nat_rel} Nat.zero Nat.zero Nat.zero"
             )),
             is_axiom: false,
             description: concat!(

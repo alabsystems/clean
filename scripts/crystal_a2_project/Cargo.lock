@@ -83,8 +83,8 @@ dependencies = [
 
 [[package]]
 name = "trust-ir"
-version = "0.14.0"
-source = "git+https://github.com/alabsystems/trust-ir.git?rev=a98dfbbe7f0b7ee8c60f2ee7c2cfd641ba850b87#a98dfbbe7f0b7ee8c60f2ee7c2cfd641ba850b87"
+version = "0.15.0"
+source = "git+https://github.com/alabsystems/trust-ir.git?rev=8bae728257b123d6394b2dc049b3573ad885049f#8bae728257b123d6394b2dc049b3573ad885049f"
 dependencies = [
  "sha2",
 ]

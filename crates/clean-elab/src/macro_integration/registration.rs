@@ -74,7 +74,7 @@ pub(super) fn syntax_quote_from_body(body: &SurfaceExpr, content: &str) -> Synta
 /// Errors that can occur while registering macros from surface syntax
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
-pub enum MacroRegistrationError {
+pub(crate) enum MacroRegistrationError {
     /// A source category cannot be represented by the single-component protocol.
     #[error("syntax category must be one non-relative string name component")]
     SyntaxCategoryName,

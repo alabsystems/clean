@@ -227,9 +227,9 @@ impl Ctx {
         &mut self,
         n: &str,
         ty: Expr,
-    ) -> Result<Expr, super::TranslateError> {
+    ) -> Result<Expr, TranslateError> {
         if strict_const_map() {
-            return Err(super::TranslateError::UnmappedConst(n.to_string()));
+            return Err(TranslateError::UnmappedConst(n.to_string()));
         }
         Ok(self.const_param(n, ty))
     }

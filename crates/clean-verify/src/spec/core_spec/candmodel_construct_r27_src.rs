@@ -12,7 +12,7 @@
 
 /// The `HeadFree` witness at any head that is not a constant application.
 /// `kapp_fn (bvar i)` is `bvar i`, whose `kexpr_const_name` is `none`.
-const HF_REFL: &str = "(Eq.refl (OptionType Name) (OptionType.none Name))";
+const HF_REFL: &str = "(@Eq.refl (OptionType Name) (@OptionType.none Name))";
 
 // ================================================================
 // Group A — reducibility is derivation-irrelevant.
@@ -33,7 +33,7 @@ const HF_REFL: &str = "(Eq.refl (OptionType Name) (OptionType.none Name))";
 /// be stated uniformly.
 pub(super) const TY_RED_IRREL: &str = "forall (D : Nat -> Sk) (A : KExpr) (h1 : WKC D A Sk.ty) (h2 : WKC D A Sk.ty) (r : VEnvD D) (t : KExpr), r24_RedAt D A h1 r t -> r24_RedAt D A h2 r t";
 
-pub(super) const VAL_RED_IRREL: &str = "fun (D : Nat -> Sk) (A : KExpr) (h1 : WKC D A Sk.ty) (h2 : WKC D A Sk.ty) (r : VEnvD D) (t : KExpr) (hm : r24_RedAt D A h1 r t) => Eq.substType (VD Sk.ty) (fun (qv : VD Sk.ty) => qv t) (xval D A Sk.ty h1 r) (xval D A Sk.ty h2 r) (r17_xval_irrel D A Sk.ty h1 h2 r) hm";
+pub(super) const VAL_RED_IRREL: &str = "fun (D : Nat -> Sk) (A : KExpr) (h1 : WKC D A Sk.ty) (h2 : WKC D A Sk.ty) (r : VEnvD D) (t : KExpr) (hm : r24_RedAt D A h1 r t) => @Eq.substType (VD Sk.ty) (fun (qv : VD Sk.ty) => qv t) (xval D A Sk.ty h1 r) (xval D A Sk.ty h2 r) (r17_xval_irrel D A Sk.ty h1 h2 r) hm";
 
 // ================================================================
 // Group B — VARIABLES ARE REDUCIBLE.

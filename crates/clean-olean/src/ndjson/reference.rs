@@ -53,8 +53,16 @@ use super::world::ExportMeta;
 use crate::recheck_closed::reference_base::reference_base_closed;
 use crate::recheck_closed::ClosedRecheckOptions;
 
-/// The axioms of Lean's foundations: what a "proved" statement may rest on.
-pub const FOUNDATIONAL_AXIOMS: [&str; 3] = ["propext", "Quot.sound", "Classical.choice"];
+/// The axioms of Lean's foundations as Lean's `#print axioms` names them: what
+/// a "proved" statement in an export may rest on, and the `--permit` list the
+/// reference quorum is given.
+///
+/// Not a second copy of the kernel's allowlist (`clean_kernel::is_foundational_axiom`
+/// is the one rule): each name here is foundational there too, which
+/// `test_lean_foundational_axioms_are_kernel_foundational` pins. The kernel's
+/// list also holds the quotient primitives, which an export states as `quot`
+/// declarations rather than axioms.
+pub const LEAN_FOUNDATIONAL_AXIOMS: [&str; 3] = ["propext", "Quot.sound", "Classical.choice"];
 
 /// The fenced entry's verdict on one export.
 #[derive(Debug, Clone, Serialize)]

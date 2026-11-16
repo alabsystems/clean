@@ -65,7 +65,7 @@ pub const T84C_CONV_LIPSCHITZ: ProofStatus = ProofStatus::DerivedPending;
 
 /// Parameters describing a 2D convolution.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ConvParams {
+pub(crate) struct ConvParams {
     pub kernel_height: usize,
     pub kernel_width: usize,
     pub in_channels: usize,
@@ -81,7 +81,7 @@ pub struct ConvParams {
 /// `kernel` is indexed `[out_ch][in_ch][kh][kw]`. `bias` has length
 /// `out_channels` (one per output channel).
 #[derive(Debug, Clone)]
-pub struct ConvWeight {
+pub(crate) struct ConvWeight {
     pub kernel: Vec<Vec<Vec<Vec<f64>>>>,
     pub bias: Vec<f64>,
 }
@@ -90,7 +90,7 @@ pub struct ConvWeight {
 /// shape metadata.  Layout is row-major: `[H][W][C]` maps to index
 /// `(h * width + w) * channels + c`.
 #[derive(Debug, Clone)]
-pub struct IntervalTensor {
+pub(crate) struct IntervalTensor {
     pub data: Vec<Interval>,
     pub height: usize,
     pub width: usize,
@@ -100,7 +100,7 @@ pub struct IntervalTensor {
 impl IntervalTensor {
     /// Create a new interval tensor.  Panics in debug mode if sizes disagree.
     #[must_use]
-    pub fn new(data: Vec<Interval>, height: usize, width: usize, channels: usize) -> Self {
+    pub(crate) fn new(data: Vec<Interval>, height: usize, width: usize, channels: usize) -> Self {
         debug_assert_eq!(
             data.len(),
             height * width * channels,
@@ -116,19 +116,19 @@ impl IntervalTensor {
 
     /// Index into the tensor: `(h, w, c)`.
     #[must_use]
-    pub fn get(&self, h: usize, w: usize, c: usize) -> &Interval {
+    pub(crate) fn get(&self, h: usize, w: usize, c: usize) -> &Interval {
         &self.data[(h * self.width + w) * self.channels + c]
     }
 
     /// Total number of elements.
     #[must_use]
-    pub fn len(&self) -> usize {
+    pub(crate) fn len(&self) -> usize {
         self.data.len()
     }
 
     /// Whether the tensor is empty.
     #[must_use]
-    pub fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.data.is_empty()
     }
 }
@@ -141,7 +141,11 @@ impl IntervalTensor {
 ///
 /// Returns `(out_h, out_w)`.
 #[must_use]
-pub fn compute_output_shape(in_h: usize, in_w: usize, params: &ConvParams) -> (usize, usize) {
+pub(crate) fn compute_output_shape(
+    in_h: usize,
+    in_w: usize,
+    params: &ConvParams,
+) -> (usize, usize) {
     let out_h = (in_h + 2 * params.pad_h - params.kernel_height) / params.stride_h + 1;
     let out_w = (in_w + 2 * params.pad_w - params.kernel_width) / params.stride_w + 1;
     (out_h, out_w)
@@ -160,7 +164,7 @@ pub fn compute_output_shape(in_h: usize, in_w: usize, params: &ConvParams) -> (u
 /// Returns a vector of columns (each column is a `Vec<Interval>`), with
 /// `out_h * out_w` columns total.
 #[must_use]
-pub fn im2col_intervals(input: &IntervalTensor, params: &ConvParams) -> Vec<Vec<Interval>> {
+pub(crate) fn im2col_intervals(input: &IntervalTensor, params: &ConvParams) -> Vec<Vec<Interval>> {
     let (out_h, out_w) = compute_output_shape(input.height, input.width, params);
     let col_len = params.in_channels * params.kernel_height * params.kernel_width;
     let zero = Interval::point(0.0);
@@ -205,7 +209,7 @@ pub fn im2col_intervals(input: &IntervalTensor, params: &ConvParams) -> Vec<Vec<
 /// output channel and each spatial position, we compute interval bounds
 /// using the positive/negative weight decomposition.
 #[must_use]
-pub fn conv_forward_interval(
+pub(crate) fn conv_forward_interval(
     input: &IntervalTensor,
     weight: &ConvWeight,
     params: &ConvParams,
@@ -252,7 +256,7 @@ pub fn conv_forward_interval(
 /// convolution output falls within the IBP output bounds.
 ///
 /// `concrete` is a flat `[H][W][C]` vector of concrete values.
-pub fn verify_conv_ibp_sound(
+pub(crate) fn verify_conv_ibp_sound(
     input_bounds: &IntervalTensor,
     concrete: &[f64],
     weight: &ConvWeight,
@@ -322,7 +326,7 @@ pub fn verify_conv_ibp_sound(
 /// The returned matrix has shape `(out_h*out_w*out_ch, in_h*in_w*in_ch)`.
 /// Bias vector has length `out_h*out_w*out_ch`.
 #[must_use]
-pub fn conv_to_linear_matrix(
+pub(crate) fn conv_to_linear_matrix(
     in_h: usize,
     in_w: usize,
     weight: &ConvWeight,
@@ -363,7 +367,7 @@ pub fn conv_to_linear_matrix(
 
 /// Verify that `conv_forward_interval` matches IBP linear applied to the
 /// expanded matrix, for small inputs.
-pub fn verify_conv_linear_equivalence(
+pub(crate) fn verify_conv_linear_equivalence(
     input: &IntervalTensor,
     weight: &ConvWeight,
     params: &ConvParams,
@@ -402,7 +406,7 @@ pub fn verify_conv_linear_equivalence(
 /// `params.in_channels == params.out_channels`.  `weight.bias` has length
 /// `channels`.
 #[must_use]
-pub fn depthwise_conv_interval(
+pub(crate) fn depthwise_conv_interval(
     input: &IntervalTensor,
     weight: &ConvWeight,
     params: &ConvParams,
@@ -458,7 +462,7 @@ pub fn depthwise_conv_interval(
 /// Uses the Frobenius norm of the expanded linear matrix as a simple
 /// (but loose) upper bound on the spectral norm.
 #[must_use]
-pub fn conv_lipschitz_bound(
+pub(crate) fn conv_lipschitz_bound(
     in_h: usize,
     in_w: usize,
     weight: &ConvWeight,

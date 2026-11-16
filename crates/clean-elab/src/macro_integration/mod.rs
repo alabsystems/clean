@@ -34,7 +34,7 @@ mod tests;
 
 // Public re-exports from sub-modules
 pub use from_syntax::syntax_to_surface;
-pub use registration::MacroRegistrationError;
+pub(crate) use registration::MacroRegistrationError;
 pub use to_syntax::surface_to_syntax;
 
 // Re-exports for tests (pub(super) items from sub-modules)

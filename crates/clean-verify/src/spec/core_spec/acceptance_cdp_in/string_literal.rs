@@ -75,26 +75,26 @@ const STRING_ADMIT_CONSTRUCTORS: &[(&str, &str)] = &[("accepts_tc_string_mk_meta
 /// application over it.
 const EXPANSION: &[(&str, &str)] = &[
     (
-        r"def string_lit_char_valid (c : Nat) : Bool := Bool.rec (fun (_ : Bool) => Bool) (Bool.rec (fun (_ : Bool) => Bool) Bool.false (nat_leb (Nat.succ c) 1114112) (nat_leb 57344 c)) Bool.true (nat_leb (Nat.succ c) 55296)",
+        r"def string_lit_char_valid (c : Nat) : Bool := @Bool.rec (fun (_ : Bool) => Bool) (@Bool.rec (fun (_ : Bool) => Bool) Bool.false (nat_leb (Nat.succ c) 1114112) (nat_leb 57344 c)) Bool.true (nat_leb (Nat.succ c) 55296)",
         "A Unicode scalar value: c < 0xD800, or 0xDFFF < c < 0x110000 (Nat.isValidChar). Every character of a Rust str satisfies it.",
     ),
     (
-        r"def string_lit_chars_valid (cs : ListType Nat) : Bool := ListType.rec Nat (fun (_ : ListType Nat) => Bool) Bool.true (fun (c : Nat) (_ : ListType Nat) (ih : Bool) => Bool.rec (fun (_ : Bool) => Bool) Bool.false ih (string_lit_char_valid c)) cs",
+        r"def string_lit_chars_valid (cs : ListType Nat) : Bool := @ListType.rec Nat (fun (_ : ListType Nat) => Bool) Bool.true (fun (c : Nat) (_ : ListType Nat) (ih : Bool) => @Bool.rec (fun (_ : Bool) => Bool) Bool.false ih (string_lit_char_valid c)) cs",
         "Every character of the list is a Unicode scalar value (the range a Rust str guarantees).",
     ),
     (
-        r"def string_lit_char_list (cs : ListType Nat) : KExpr := ListType.rec Nat (fun (_ : ListType Nat) => KExpr) (KExpr.app (KExpr.const accepts_tc_list_nil_name (ListType.cons Level Level.zero (ListType.nil Level))) (KExpr.const accepts_tc_char_name (ListType.nil Level))) (fun (c : Nat) (_ : ListType Nat) (ih : KExpr) => KExpr.app (KExpr.app (KExpr.app (KExpr.const accepts_tc_list_cons_name (ListType.cons Level Level.zero (ListType.nil Level))) (KExpr.const accepts_tc_char_name (ListType.nil Level))) (KExpr.app (KExpr.const accepts_tc_char_of_nat_name (ListType.nil Level)) (literal_nat c))) ih) cs",
+        r"def string_lit_char_list (cs : ListType Nat) : KExpr := @ListType.rec Nat (fun (_ : ListType Nat) => KExpr) (KExpr.app (KExpr.const accepts_tc_list_nil_name (@ListType.cons Level Level.zero (@ListType.nil Level))) (KExpr.const accepts_tc_char_name (@ListType.nil Level))) (fun (c : Nat) (_ : ListType Nat) (ih : KExpr) => KExpr.app (KExpr.app (KExpr.app (KExpr.const accepts_tc_list_cons_name (@ListType.cons Level Level.zero (@ListType.nil Level))) (KExpr.const accepts_tc_char_name (@ListType.nil Level))) (KExpr.app (KExpr.const accepts_tc_char_of_nat_name (@ListType.nil Level)) (literal_nat c))) ih) cs",
         "The deployed string_lit_to_constructor's character list: List.cons.{0} Char (Char.ofNat (literal c)) ... (List.nil.{0} Char), one Char.ofNat of a raw Nat literal per scalar value, in order.",
     ),
     (
-        r"def string_lit_expansion (cs : ListType Nat) : KExpr := KExpr.app (KExpr.const accepts_tc_string_of_list_name (ListType.nil Level)) (string_lit_char_list cs)",
+        r"def string_lit_expansion (cs : ListType Nat) : KExpr := KExpr.app (KExpr.const accepts_tc_string_of_list_name (@ListType.nil Level)) (string_lit_char_list cs)",
         "The deployed string_lit_to_constructor's result: String.ofList applied to the character list.",
     ),
 ];
 
 /// `List.{0} Char`, the domain of the canonical `String.ofList`'s lambda (the
 /// witnesses' beta step names it; the kernel checks it against the reflected body).
-const STRING_OF_LIST_DOM: &str = r"def accepts_tc_string_of_list_dom : KExpr := KExpr.app (KExpr.const accepts_tc_list_name (ListType.cons Level Level.zero (ListType.nil Level))) (KExpr.const accepts_tc_char_name (ListType.nil Level))";
+const STRING_OF_LIST_DOM: &str = r"def accepts_tc_string_of_list_dom : KExpr := KExpr.app (KExpr.const accepts_tc_list_name (@ListType.cons Level Level.zero (@ListType.nil Level))) (KExpr.const accepts_tc_char_name (@ListType.nil Level))";
 
 /// The registered alias of a real name the stage keys on.
 fn name_alias(real: &str) -> Result<&'static str, SpecError> {
@@ -157,7 +157,7 @@ impl Specification {
             )?;
             let name = name_alias(real)?;
             premises.push(format!(
-                "Eq (OptionType KDefSig) (kdef_for (red_def R) {name}) (OptionType.some KDefSig {alias})"
+                "@Eq (OptionType KDefSig) (kdef_for (red_def R) {name}) (@OptionType.some KDefSig {alias})"
             ));
         }
         for (alias, real) in STRING_ADMIT_CONSTRUCTORS {
@@ -170,7 +170,7 @@ impl Specification {
             )?;
             let name = name_alias(real)?;
             premises.push(format!(
-                "Eq (OptionType KCtorMeta) (kctor_for (red_ind_ctor R) {name}) (OptionType.some KCtorMeta {alias})"
+                "@Eq (OptionType KCtorMeta) (kctor_for (red_ind_ctor R) {name}) (@OptionType.some KCtorMeta {alias})"
             ));
         }
         self.add_inductive(
@@ -185,46 +185,46 @@ impl Specification {
 }
 
 /// The witness string: `"ab"`, the scalar values 97 and 98.
-const AB: &str = "(ListType.cons Nat 97 (ListType.cons Nat 98 (ListType.nil Nat)))";
+const AB: &str = "(@ListType.cons Nat 97 (@ListType.cons Nat 98 (@ListType.nil Nat)))";
 
 /// `(name, type, value)` of the derived rules: each deployed branch that
 /// expands a String literal, over any `R` carrying the admission fact.
 fn derived_rules() -> Vec<(String, String, String)> {
-    let hyps = "(hadm : StringLitAdmitIn R) (hv : Eq Bool (string_lit_chars_valid cs) Bool.true)";
+    let hyps = "(hadm : StringLitAdmitIn R) (hv : @Eq Bool (string_lit_chars_valid cs) Bool.true)";
     let lit = "(literal_string (string_lit_code cs))";
     let exp = "(string_lit_expansion cs)";
-    let arm = "(KernelAcceptsTcIn.lit_string_expand R tenv G cs hadm hv)";
+    let arm = "(@KernelAcceptsTcIn.lit_string_expand R tenv G cs hadm hv)";
     let head = "forall (R : RedEnv) (tenv : KDeclEnv) (G : ListType CtxEntryIn)";
     let bind = "fun (R : RedEnv) (tenv : KDeclEnv) (G : ListType CtxEntryIn)";
     vec![
         (
             "accepts_tc_lit_string_every_payload".to_string(),
-            format!("{head} (n : Nat), StringLitAdmitIn R -> Eq Bool (string_lit_chars_valid (string_lit_chars n)) Bool.true -> KernelAcceptsTcIn R tenv Bool.false G (literal_string n) (string_lit_expansion (string_lit_chars n))"),
-            format!("{bind} (n : Nat) (hadm : StringLitAdmitIn R) (hv : Eq Bool (string_lit_chars_valid (string_lit_chars n)) Bool.true) =>
+            format!("{head} (n : Nat), StringLitAdmitIn R -> @Eq Bool (string_lit_chars_valid (string_lit_chars n)) Bool.true -> KernelAcceptsTcIn R tenv Bool.false G (literal_string n) (string_lit_expansion (string_lit_chars n))"),
+            format!("{bind} (n : Nat) (hadm : StringLitAdmitIn R) (hv : @Eq Bool (string_lit_chars_valid (string_lit_chars n)) Bool.true) =>
 Eq.substType Nat (fun (k : Nat) => KernelAcceptsTcIn R tenv Bool.false G (literal_string k) (string_lit_expansion (string_lit_chars n)))
   (string_lit_code (string_lit_chars n)) n (string_lit_code_chars n)
-  (KernelAcceptsTcIn.lit_string_expand R tenv G (string_lit_chars n) hadm hv)"),
+  (@KernelAcceptsTcIn.lit_string_expand R tenv G (string_lit_chars n) hadm hv)"),
         ),
         (
             "accepts_tc_string_lit_expansion".to_string(),
-            format!("{head} (cs : ListType Nat) (W : KExpr) (s : KExpr), StringLitAdmitIn R -> Eq Bool (string_lit_chars_valid cs) Bool.true -> KernelAcceptsTcIn R tenv Bool.false G {exp} W -> KernelAcceptsTcIn R tenv Bool.false G W s -> KernelAcceptsTcIn R tenv Bool.false G {lit} s"),
+            format!("{head} (cs : ListType Nat) (W : KExpr) (s : KExpr), StringLitAdmitIn R -> @Eq Bool (string_lit_chars_valid cs) Bool.true -> KernelAcceptsTcIn R tenv Bool.false G {exp} W -> KernelAcceptsTcIn R tenv Bool.false G W s -> KernelAcceptsTcIn R tenv Bool.false G {lit} s"),
             format!("{bind} (cs : ListType Nat) (W : KExpr) (s : KExpr) {hyps} (hw : KernelAcceptsTcIn R tenv Bool.false G {exp} W) (hs : KernelAcceptsTcIn R tenv Bool.false G W s) =>
-KernelAcceptsTcIn.trans R tenv G {lit} W s (KernelAcceptsTcIn.trans R tenv G {lit} {exp} W {arm} hw) hs"),
+@KernelAcceptsTcIn.trans R tenv G {lit} W s (@KernelAcceptsTcIn.trans R tenv G {lit} {exp} W {arm} hw) hs"),
         ),
         (
             "accepts_tc_iota_major_string_literal".to_string(),
-            format!("{head} (f : KExpr) (cs : ListType Nat) (rhs : KExpr), StringLitAdmitIn R -> Eq Bool (string_lit_chars_valid cs) Bool.true -> KernelAcceptsTcIn R tenv Bool.false G (KExpr.app f {exp}) rhs -> KernelAcceptsTcIn R tenv Bool.false G (KExpr.app f {lit}) rhs"),
+            format!("{head} (f : KExpr) (cs : ListType Nat) (rhs : KExpr), StringLitAdmitIn R -> @Eq Bool (string_lit_chars_valid cs) Bool.true -> KernelAcceptsTcIn R tenv Bool.false G (KExpr.app f {exp}) rhs -> KernelAcceptsTcIn R tenv Bool.false G (KExpr.app f {lit}) rhs"),
             format!("{bind} (f : KExpr) (cs : ListType Nat) (rhs : KExpr) {hyps} (h : KernelAcceptsTcIn R tenv Bool.false G (KExpr.app f {exp}) rhs) =>
-KernelAcceptsTcIn.trans R tenv G (KExpr.app f {lit}) (KExpr.app f {exp}) rhs
-  (KernelAcceptsTcIn.app_cong R tenv G f f {lit} {exp} (KernelAcceptsTcIn.cdp R tenv G f f (DefEqCDPIn.refl R f)) {arm})
+@KernelAcceptsTcIn.trans R tenv G (KExpr.app f {lit}) (KExpr.app f {exp}) rhs
+  (@KernelAcceptsTcIn.app_cong R tenv G f f {lit} {exp} (@KernelAcceptsTcIn.cdp R tenv G f f (@DefEqCDPIn.refl R f)) {arm})
   h"),
         ),
         (
             "accepts_tc_proj_string_literal".to_string(),
-            format!("{head} (S : Name) (i : Nat) (cs : ListType Nat) (rhs : KExpr), StringLitAdmitIn R -> Eq Bool (string_lit_chars_valid cs) Bool.true -> KernelAcceptsTcIn R tenv Bool.false G (KExpr.proj S i {exp}) rhs -> KernelAcceptsTcIn R tenv Bool.false G (KExpr.proj S i {lit}) rhs"),
+            format!("{head} (S : Name) (i : Nat) (cs : ListType Nat) (rhs : KExpr), StringLitAdmitIn R -> @Eq Bool (string_lit_chars_valid cs) Bool.true -> KernelAcceptsTcIn R tenv Bool.false G (KExpr.proj S i {exp}) rhs -> KernelAcceptsTcIn R tenv Bool.false G (KExpr.proj S i {lit}) rhs"),
             format!("{bind} (S : Name) (i : Nat) (cs : ListType Nat) (rhs : KExpr) {hyps} (h : KernelAcceptsTcIn R tenv Bool.false G (KExpr.proj S i {exp}) rhs) =>
-KernelAcceptsTcIn.trans R tenv G (KExpr.proj S i {lit}) (KExpr.proj S i {exp}) rhs
-  (KernelAcceptsTcIn.proj_cong R tenv G S i {lit} {exp} {arm})
+@KernelAcceptsTcIn.trans R tenv G (KExpr.proj S i {lit}) (KExpr.proj S i {exp}) rhs
+  (@KernelAcceptsTcIn.proj_cong R tenv G S i {lit} {exp} {arm})
   h"),
         ),
     ]
@@ -241,20 +241,20 @@ fn witnesses() -> Vec<(String, String, String)> {
     let lit = format!("(literal_string (string_lit_code {AB}))");
     let exp = format!("(string_lit_expansion {AB})");
     let list = format!("(string_lit_char_list {AB})");
-    let mk = "(KExpr.const accepts_tc_string_mk_name (ListType.nil Level))";
+    let mk = "(KExpr.const accepts_tc_string_mk_name (@ListType.nil Level))";
     let built = format!("(KExpr.app {mk} {list})");
-    let valid = "(Eq.refl Bool Bool.true)";
+    let valid = "(@Eq.refl Bool Bool.true)";
     // delta then beta: String.ofList L == String.mk L at the fixture.
     let ofl = "(KExpr.const accepts_tc_string_of_list_name (ListType.nil Level))";
     let body = "accepts_tc_string_of_list_body";
     let delta = format!(
-        "(accepts_tc_delta {env} tenv G {exp} accepts_tc_string_of_list_name {body} (Eq.refl (OptionType Name) (OptionType.some Name accepts_tc_string_of_list_name)) (Eq.refl (OptionType KExpr) (OptionType.some KExpr {body})))"
+        "(accepts_tc_delta {env} tenv G {exp} accepts_tc_string_of_list_name {body} (@Eq.refl (OptionType Name) (@OptionType.some Name accepts_tc_string_of_list_name)) (@Eq.refl (OptionType KExpr) (@OptionType.some KExpr {body})))"
     );
     let beta = format!(
         "(accepts_tc_beta {env} tenv G accepts_tc_string_of_list_dom (KExpr.app {mk} (KExpr.bvar Nat.zero)) {list})"
     );
     let to_ctor = format!(
-        "(KernelAcceptsTcIn.trans {env} tenv G {exp} (KExpr.app {body} {list}) {built} {delta} {beta})"
+        "(@KernelAcceptsTcIn.trans {env} tenv G {exp} (KExpr.app {body} {list}) {built} {delta} {beta})"
     );
     let _ = ofl;
     let s_name = "literal_builtin_string_name";
@@ -262,11 +262,11 @@ fn witnesses() -> Vec<(String, String, String)> {
     let proj_exp = format!("(KExpr.proj {s_name} Nat.zero {exp})");
     let proj_built = format!("(KExpr.proj {s_name} Nat.zero {built})");
     let proj_beta = format!(
-        "(KernelAcceptsTcIn.cdp {env} tenv G {proj_built} {list} (DefEqCDPIn.raw {env} {proj_built} {list} (par_reduces_cdp.projection_beta {env} {s_name} Nat.zero {built} {list} (Eq.refl (OptionType KExpr) (OptionType.some KExpr {list})))))"
+        "(@KernelAcceptsTcIn.cdp {env} tenv G {proj_built} {list} (@DefEqCDPIn.raw {env} {proj_built} {list} (@par_reduces_cdp.projection_beta {env} {s_name} Nat.zero {built} {list} (@Eq.refl (OptionType KExpr) (@OptionType.some KExpr {list})))))"
     );
-    let motive = "(KExpr.lam (KExpr.const literal_builtin_string_name (ListType.nil Level)) (KExpr.app (KExpr.const accepts_tc_list_name (ListType.cons Level Level.zero (ListType.nil Level))) (KExpr.const accepts_tc_char_name (ListType.nil Level))))";
+    let motive = "(KExpr.lam (KExpr.const literal_builtin_string_name (@ListType.nil Level)) (KExpr.app (KExpr.const accepts_tc_list_name (@ListType.cons Level Level.zero (@ListType.nil Level))) (KExpr.const accepts_tc_char_name (@ListType.nil Level))))";
     let minor = "(KExpr.lam accepts_tc_string_of_list_dom (KExpr.bvar Nat.zero))";
-    let us = "(ListType.cons Level (Level.succ Level.zero) (ListType.nil Level))";
+    let us = "(@ListType.cons Level (Level.succ Level.zero) (@ListType.nil Level))";
     let rec_f = format!(
         "(KExpr.app (KExpr.app (KExpr.const accepts_tc_string_rec_name {us}) {motive}) {minor})"
     );
@@ -277,37 +277,37 @@ fn witnesses() -> Vec<(String, String, String)> {
         format!("(KExpr.app (KExpr.app (KExpr.app {rhs_inst} {motive}) {minor}) {list})");
     let at_ctor = format!("(KExpr.app {rec_f} {built})");
     let iota = format!(
-        "(accepts_tc_iota {env} tenv G {at_ctor} accepts_tc_string_rec_name accepts_tc_string_rec_meta {built} accepts_tc_string_mk_name accepts_tc_string_rec_mk_rule {contractum} (Eq.refl (OptionType Name) (OptionType.some Name accepts_tc_string_rec_name)) (Eq.refl (OptionType RecMeta) (OptionType.some RecMeta accepts_tc_string_rec_meta)) (Eq.refl (OptionType KExpr) (OptionType.some KExpr {built})) (Eq.refl (OptionType Name) (OptionType.some Name accepts_tc_string_mk_name)) (Eq.refl (OptionType RecRule) (OptionType.some RecRule accepts_tc_string_rec_mk_rule)) (Eq.refl (OptionType KExpr) (OptionType.some KExpr {contractum})))"
+        "(accepts_tc_iota {env} tenv G {at_ctor} accepts_tc_string_rec_name accepts_tc_string_rec_meta {built} accepts_tc_string_mk_name accepts_tc_string_rec_mk_rule {contractum} (@Eq.refl (OptionType Name) (@OptionType.some Name accepts_tc_string_rec_name)) (@Eq.refl (OptionType RecMeta) (@OptionType.some RecMeta accepts_tc_string_rec_meta)) (@Eq.refl (OptionType KExpr) (@OptionType.some KExpr {built})) (@Eq.refl (OptionType Name) (@OptionType.some Name accepts_tc_string_mk_name)) (@Eq.refl (OptionType RecRule) (@OptionType.some RecRule accepts_tc_string_rec_mk_rule)) (@Eq.refl (OptionType KExpr) (@OptionType.some KExpr {contractum})))"
     );
     let mut out = vec![
         (
             "accepts_tc_string_admit".to_string(),
             format!("StringLitAdmitIn {env}"),
-            format!("StringLitAdmitIn.mk {env} (Eq.refl (OptionType KDefSig) (OptionType.some KDefSig accepts_tc_string_of_list_def)) (Eq.refl (OptionType KDefSig) (OptionType.some KDefSig accepts_tc_char_of_nat_def)) (Eq.refl (OptionType KCtorMeta) (OptionType.some KCtorMeta accepts_tc_string_mk_meta))"),
+            format!("@StringLitAdmitIn.mk {env} (@Eq.refl (OptionType KDefSig) (@OptionType.some KDefSig accepts_tc_string_of_list_def)) (@Eq.refl (OptionType KDefSig) (@OptionType.some KDefSig accepts_tc_char_of_nat_def)) (@Eq.refl (OptionType KCtorMeta) (@OptionType.some KCtorMeta accepts_tc_string_mk_meta))"),
         ),
         (
             "kernel_accepts_tc_in_lit_string_expand".to_string(),
             format!("forall {g}, KernelAcceptsTcIn {env} tenv Bool.false G {lit} {exp}"),
-            format!("fun {g} => KernelAcceptsTcIn.lit_string_expand {env} tenv G {AB} accepts_tc_string_admit {valid}"),
+            format!("fun {g} => @KernelAcceptsTcIn.lit_string_expand {env} tenv G {AB} accepts_tc_string_admit {valid}"),
         ),
         (
             "kernel_accepts_tc_in_string_lit_constructor".to_string(),
             format!("forall {g}, KernelAcceptsTcIn {env} tenv Bool.false G {lit} {built}"),
-            format!("fun {g} => accepts_tc_string_lit_expansion {env} tenv G {AB} {built} {built} accepts_tc_string_admit {valid} {to_ctor} (KernelAcceptsTcIn.cdp {env} tenv G {built} {built} (DefEqCDPIn.refl {env} {built}))"),
+            format!("fun {g} => accepts_tc_string_lit_expansion {env} tenv G {AB} {built} {built} accepts_tc_string_admit {valid} {to_ctor} (@KernelAcceptsTcIn.cdp {env} tenv G {built} {built} (@DefEqCDPIn.refl {env} {built}))"),
         ),
         (
             "kernel_accepts_tc_in_string_lit_proj".to_string(),
             format!("forall {g}, KernelAcceptsTcIn {env} tenv Bool.false G {proj_lit} {list}"),
-            format!("fun {g} => accepts_tc_proj_string_literal {env} tenv G {s_name} Nat.zero {AB} {list} accepts_tc_string_admit {valid} (KernelAcceptsTcIn.trans {env} tenv G {proj_exp} {proj_built} {list} (KernelAcceptsTcIn.proj_cong {env} tenv G {s_name} Nat.zero {exp} {built} {to_ctor}) {proj_beta})"),
+            format!("fun {g} => accepts_tc_proj_string_literal {env} tenv G {s_name} Nat.zero {AB} {list} accepts_tc_string_admit {valid} (@KernelAcceptsTcIn.trans {env} tenv G {proj_exp} {proj_built} {list} (@KernelAcceptsTcIn.proj_cong {env} tenv G {s_name} Nat.zero {exp} {built} {to_ctor}) {proj_beta})"),
         ),
         (
             "kernel_accepts_tc_in_string_lit_iota".to_string(),
             format!("forall {g}, KernelAcceptsTcIn {env} tenv Bool.false G (KExpr.app {rec_f} {lit}) {contractum}"),
-            format!("fun {g} => accepts_tc_iota_major_string_literal {env} tenv G {rec_f} {AB} {contractum} accepts_tc_string_admit {valid} (KernelAcceptsTcIn.trans {env} tenv G (KExpr.app {rec_f} {exp}) {at_ctor} {contractum} (KernelAcceptsTcIn.app_cong {env} tenv G {rec_f} {rec_f} {exp} {built} (KernelAcceptsTcIn.cdp {env} tenv G {rec_f} {rec_f} (DefEqCDPIn.refl {env} {rec_f})) {to_ctor}) {iota})"),
+            format!("fun {g} => accepts_tc_iota_major_string_literal {env} tenv G {rec_f} {AB} {contractum} accepts_tc_string_admit {valid} (@KernelAcceptsTcIn.trans {env} tenv G (KExpr.app {rec_f} {exp}) {at_ctor} {contractum} (@KernelAcceptsTcIn.app_cong {env} tenv G {rec_f} {rec_f} {exp} {built} (@KernelAcceptsTcIn.cdp {env} tenv G {rec_f} {rec_f} (@DefEqCDPIn.refl {env} {rec_f})) {to_ctor}) {iota})"),
         ),
         (
             "kernel_accepts_tc_in_lit_string_empty".to_string(),
-            format!("forall {g}, KernelAcceptsTcIn {env} tenv Bool.false G (literal_string Nat.zero) (string_lit_expansion (ListType.nil Nat))"),
+            format!("forall {g}, KernelAcceptsTcIn {env} tenv Bool.false G (literal_string Nat.zero) (string_lit_expansion (@ListType.nil Nat))"),
             format!("fun {g} => accepts_tc_lit_string_every_payload {env} tenv G Nat.zero accepts_tc_string_admit {valid}"),
         ),
     ];

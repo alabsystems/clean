@@ -12,16 +12,16 @@ impl Specification {
             name: "option_none_ne_some_type".to_string(),
             type_src: concat!(
                 "forall (b : Type) (r : b) (C : Type), ",
-                "Eq (OptionType b) (OptionType.none b) (OptionType.some b r) -> C"
+                "@Eq (OptionType b) (@OptionType.none b) (@OptionType.some b r) -> C"
             )
             .to_string(),
             value_src: Some(
                 concat!(
                     "fun (b : Type) (r : b) (C : Type) ",
-                    "(h : Eq (OptionType b) (OptionType.none b) (OptionType.some b r)) => ",
-                    "Empty.rec (fun (_ : Empty) => C) ",
-                    "(Eq.substType (OptionType b) (opt_is_none b) ",
-                    "(OptionType.none b) (OptionType.some b r) h Nat.zero)"
+                    "(h : @Eq (OptionType b) (@OptionType.none b) (@OptionType.some b r)) => ",
+                    "@Empty.rec (fun (_ : Empty) => C) ",
+                    "(@Eq.substType (OptionType b) (opt_is_none b) ",
+                    "(@OptionType.none b) (@OptionType.some b r) h Nat.zero)"
                 )
                 .to_string(),
             ),
@@ -43,32 +43,32 @@ impl Specification {
             name: "opt_bind_some_inv_type".to_string(),
             type_src: concat!(
                 "forall (a : Type) (b : Type) (o : OptionType a) (f : a -> OptionType b) (r : b) (C : Type), ",
-                "Eq (OptionType b) (opt_bind a b o f) (OptionType.some b r) -> ",
-                "(forall (w : a), Eq (OptionType a) o (OptionType.some a w) -> ",
-                "Eq (OptionType b) (f w) (OptionType.some b r) -> C) -> ",
+                "@Eq (OptionType b) (opt_bind a b o f) (@OptionType.some b r) -> ",
+                "(forall (w : a), @Eq (OptionType a) o (@OptionType.some a w) -> ",
+                "@Eq (OptionType b) (f w) (@OptionType.some b r) -> C) -> ",
                 "C"
             )
             .to_string(),
             value_src: Some(
                 concat!(
                     "fun (a : Type) (b : Type) (o : OptionType a) (f : a -> OptionType b) (r : b) (C : Type) ",
-                    "(h : Eq (OptionType b) (opt_bind a b o f) (OptionType.some b r)) ",
-                    "(k : forall (w : a), Eq (OptionType a) o (OptionType.some a w) -> ",
-                    "Eq (OptionType b) (f w) (OptionType.some b r) -> C) => ",
-                    "OptionType.rec a ",
+                    "(h : @Eq (OptionType b) (opt_bind a b o f) (@OptionType.some b r)) ",
+                    "(k : forall (w : a), @Eq (OptionType a) o (@OptionType.some a w) -> ",
+                    "@Eq (OptionType b) (f w) (@OptionType.some b r) -> C) => ",
+                    "@OptionType.rec a ",
                     "(fun (o0 : OptionType a) => ",
-                    "Eq (OptionType b) (opt_bind a b o0 f) (OptionType.some b r) -> ",
-                    "(forall (w : a), Eq (OptionType a) o0 (OptionType.some a w) -> ",
-                    "Eq (OptionType b) (f w) (OptionType.some b r) -> C) -> C) ",
-                    "(fun (h0 : Eq (OptionType b) (opt_bind a b (OptionType.none a) f) (OptionType.some b r)) ",
-                    "(k0 : forall (w : a), Eq (OptionType a) (OptionType.none a) (OptionType.some a w) -> ",
-                    "Eq (OptionType b) (f w) (OptionType.some b r) -> C) => ",
+                    "@Eq (OptionType b) (opt_bind a b o0 f) (@OptionType.some b r) -> ",
+                    "(forall (w : a), @Eq (OptionType a) o0 (@OptionType.some a w) -> ",
+                    "@Eq (OptionType b) (f w) (@OptionType.some b r) -> C) -> C) ",
+                    "(fun (h0 : @Eq (OptionType b) (opt_bind a b (@OptionType.none a) f) (@OptionType.some b r)) ",
+                    "(k0 : forall (w : a), @Eq (OptionType a) (@OptionType.none a) (@OptionType.some a w) -> ",
+                    "@Eq (OptionType b) (f w) (@OptionType.some b r) -> C) => ",
                     "option_none_ne_some_type b r C h0) ",
                     "(fun (w : a) ",
-                    "(h0 : Eq (OptionType b) (opt_bind a b (OptionType.some a w) f) (OptionType.some b r)) ",
-                    "(k0 : forall (w0 : a), Eq (OptionType a) (OptionType.some a w) (OptionType.some a w0) -> ",
-                    "Eq (OptionType b) (f w0) (OptionType.some b r) -> C) => ",
-                    "k0 w (Eq.refl (OptionType a) (OptionType.some a w)) h0) ",
+                    "(h0 : @Eq (OptionType b) (opt_bind a b (@OptionType.some a w) f) (@OptionType.some b r)) ",
+                    "(k0 : forall (w0 : a), @Eq (OptionType a) (@OptionType.some a w) (@OptionType.some a w0) -> ",
+                    "@Eq (OptionType b) (f w0) (@OptionType.some b r) -> C) => ",
+                    "k0 w (@Eq.refl (OptionType a) (@OptionType.some a w)) h0) ",
                     "o h k"
                 )
                 .to_string(),

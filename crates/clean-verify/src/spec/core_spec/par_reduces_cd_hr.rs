@@ -160,7 +160,7 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (env : RedEnv) (a : KExpr) (b : KExpr) (h : m_step env a b) => ",
-                    "m_star.step env a b b h (m_star.refl env b)"
+                    "@m_star.step env a b b h (@m_star.refl env b)"
                 )
                 .to_string(),
             ),
@@ -192,7 +192,7 @@ impl Specification {
                 concat!(
                     "fun (env : RedEnv) (e1 : KExpr) (e2 : KExpr) (e3 : KExpr) ",
                     "(h1 : m_star env e1 e2) (h2 : m_star env e2 e3) => ",
-                    "m_star.rec env ",
+                    "@m_star.rec env ",
                     "(fun (a : KExpr) (b : KExpr) (_ : m_star env a b) => ",
                     "m_star env b e3 -> m_star env a e3) ",
                     "(fun (e : KExpr) (k : m_star env e e3) => k) ",
@@ -200,7 +200,7 @@ impl Specification {
                     "(hstep : m_step env a b) (_htail : m_star env b c) ",
                     "(ih : m_star env c e3 -> m_star env b e3) ",
                     "(k : m_star env c e3) => ",
-                    "m_star.step env a b e3 hstep (ih k)) ",
+                    "@m_star.step env a b e3 hstep (ih k)) ",
                     "e1 e2 h1 h2"
                 )
                 .to_string(),
@@ -420,7 +420,7 @@ fn m_diamond_of_proof() -> String {
         "(@par_strips_witness_c_star.rec (red_rec env) a b ",
         "(fun (_w : par_strips_witness_c_star (red_rec env) a b) => m_step_join env a b) ",
         "(fun (c : KExpr) (la : par_reduces_c_star (red_rec env) a c) (lb : par_reduces_c_star (red_rec env) b c) => ",
-        "m_step_join.intro env a b c (m_step.par env a c la) (m_step.par env b c lb)) ",
+        "@m_step_join.intro env a b c (@m_step.par env a c la) (@m_step.par env b c lb)) ",
         "(PCR x a b hpar hbpar))"
     );
     // (par,delta): hpar : β+ι* x a, hbdelta : δ* x b. COMM x a b -> par_delta_commute_witness a b
@@ -429,7 +429,7 @@ fn m_diamond_of_proof() -> String {
         "(@par_delta_commute_witness.rec env a b ",
         "(fun (_w : par_delta_commute_witness env a b) => m_step_join env a b) ",
         "(fun (c : KExpr) (la : delta_cong_star env a c) (lb : par_reduces_c_star (red_rec env) b c) => ",
-        "m_step_join.intro env a b c (m_step.delta env a c la) (m_step.par env b c lb)) ",
+        "@m_step_join.intro env a b c (@m_step.delta env a c la) (@m_step.par env b c lb)) ",
         "(COMM x a b hpar hbdelta))"
     );
     // par arm of ha (hpar : β+ι* x a): eliminate hb2 : m_step env x b.
@@ -452,7 +452,7 @@ fn m_diamond_of_proof() -> String {
         "(@par_delta_commute_witness.rec env b a ",
         "(fun (_w : par_delta_commute_witness env b a) => m_step_join env a b) ",
         "(fun (c : KExpr) (lb : delta_cong_star env b c) (la : par_reduces_c_star (red_rec env) a c) => ",
-        "m_step_join.intro env a b c (m_step.par env a c la) (m_step.delta env b c lb)) ",
+        "@m_step_join.intro env a b c (@m_step.par env a c la) (@m_step.delta env b c lb)) ",
         "(COMM x b a hbpar hdelta))"
     );
     // (delta,delta): hdelta : δ* x a, hbdelta : δ* x b. DCR x a b -> par_strips_witness_d_star a b
@@ -461,7 +461,7 @@ fn m_diamond_of_proof() -> String {
         "(@par_strips_witness_d_star.rec env a b ",
         "(fun (_w : par_strips_witness_d_star env a b) => m_step_join env a b) ",
         "(fun (c : KExpr) (la : delta_cong_star env a c) (lb : delta_cong_star env b c) => ",
-        "m_step_join.intro env a b c (m_step.delta env a c la) (m_step.delta env b c lb)) ",
+        "@m_step_join.intro env a b c (@m_step.delta env a c la) (@m_step.delta env b c lb)) ",
         "(DCR x a b hdelta hbdelta))"
     );
     // delta arm of ha (hdelta : δ* x a): eliminate hb2 : m_step env x b.
@@ -505,7 +505,7 @@ fn m_strip_of_proof() -> String {
     let refl_arm = concat!(
         "(fun (e : KExpr) => ",
         "fun (b : KExpr) (hb : m_step env e b) => ",
-        "m_strip_witness.intro env b e b (m_star.refl env b) hb)"
+        "@m_strip_witness.intro env b e b (@m_star.refl env b) hb)"
     );
     // step arm: x ⇒ x1 (hstep), x1 ⇒* a (htail), ih. Given b, hb : m_step env x b.
     // m_diamond_of hb hstep : m_step_join env b x1 = ∃d, m_step b d ∧ m_step x1 d.
@@ -521,7 +521,7 @@ fn m_strip_of_proof() -> String {
         "@m_strip_witness.rec env d a ",
         "(fun (_w : m_strip_witness env d a) => m_strip_witness env b a) ",
         "(fun (e2 : KExpr) (m1 : m_star env d e2) (m2 : m_step env a e2) => ",
-        "m_strip_witness.intro env b a e2 (m_star.step env b d e2 l1 m1) m2) ",
+        "@m_strip_witness.intro env b a e2 (@m_star.step env b d e2 l1 m1) m2) ",
         "(ih d l2)) ",
         "(m_diamond_of env PCR DCR COMM x b x1 hb hstep))"
     );
@@ -530,7 +530,7 @@ fn m_strip_of_proof() -> String {
             "{prefix}",
             "(x : KExpr) (a : KExpr) (b : KExpr) ",
             "(hb : m_step env x b) (ha : m_star env x a) => ",
-            "m_star.rec env {motive} {refl_arm} {step_arm} x a ha b hb"
+            "@m_star.rec env {motive} {refl_arm} {step_arm} x a ha b hb"
         ),
         prefix = hr_corner_binders_lam(),
         motive = motive,
@@ -550,7 +550,7 @@ fn mstar_confluent_of_proof() -> String {
     let refl_arm = concat!(
         "(fun (e : KExpr) => ",
         "fun (b : KExpr) (hb : m_star env e b) => ",
-        "m_star_join.intro env e b b hb (m_star.refl env b))"
+        "@m_star_join.intro env e b b hb (@m_star.refl env b))"
     );
     // step arm: x ⇒ x1 (hstep), x1 ⇒* a (htail), ih. Given b, hb : m_star env x b.
     // m_strip_of hstep hb : m_strip_witness env x1 b = ∃c, m_star x1 c ∧ m_step b c.
@@ -566,7 +566,7 @@ fn mstar_confluent_of_proof() -> String {
         "@m_star_join.rec env a c ",
         "(fun (_w : m_star_join env a c) => m_star_join env a b) ",
         "(fun (d : KExpr) (j1 : m_star env a d) (j2 : m_star env c d) => ",
-        "m_star_join.intro env a b d j1 ",
+        "@m_star_join.intro env a b d j1 ",
         "(m_star_trans env b c d (m_step_to_mstar env b c s2) j2)) ",
         "(ih c s1)) ",
         "(m_strip_of env PCR DCR COMM x b x1 hstep hb))"
@@ -576,7 +576,7 @@ fn mstar_confluent_of_proof() -> String {
             "{prefix}",
             "(x : KExpr) (a : KExpr) (b : KExpr) ",
             "(ha : m_star env x a) (hb : m_star env x b) => ",
-            "m_star.rec env {motive} {refl_arm} {step_arm} x a ha b hb"
+            "@m_star.rec env {motive} {refl_arm} {step_arm} x a ha b hb"
         ),
         prefix = hr_corner_binders_lam(),
         motive = motive,

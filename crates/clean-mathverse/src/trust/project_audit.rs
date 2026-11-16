@@ -1504,6 +1504,10 @@ mod tests {
         let workspace = TestWorkspace::new(tmp.path(), &["Project"]);
 
         let mut env = Environment::try_with_prelude().expect("prelude");
+        // The admission markers left the default prelude (`bcacce6e0d`); without
+        // them the builder mints a stand-in that is no sorry at all.
+        env.init_admission_stub_theory()
+            .expect("explicit admission theory for this sorry fixture");
         let prop = Expr::prop();
         let proof = create_sorry_term(&env, &prop);
         env.add_decl_structural(Declaration::Theorem {
@@ -1513,6 +1517,11 @@ mod tests {
             value: proof,
         })
         .expect("synthetic sorry theorem");
+        assert!(
+            env.get_const(&Name::from_string("Project.synthetic_gap"))
+                .is_some_and(|info| info.trust_summary().has_synthetic_sorry),
+            "the fixture must plant a synthetic sorry, or the audit has nothing to find"
+        );
 
         let report = audit_lake_project(&workspace, &env);
         let status = project_audit_authority_gate_status(&report);
@@ -1536,6 +1545,10 @@ mod tests {
         let workspace = TestWorkspace::new(tmp.path(), &["Project"]);
 
         let mut env = Environment::try_with_prelude().expect("prelude");
+        // The admission markers left the default prelude (`bcacce6e0d`); without
+        // them the builder mints a stand-in that is no sorry at all.
+        env.init_admission_stub_theory()
+            .expect("explicit admission theory for this sorry fixture");
         let prop = Expr::prop();
         let proof = create_sorry_term_with_kind(&env, &prop, SorryKind::Explicit);
         env.add_decl_structural(Declaration::Theorem {
@@ -1545,6 +1558,11 @@ mod tests {
             value: proof,
         })
         .expect("explicit sorry theorem");
+        assert!(
+            env.get_const(&Name::from_string("Project.explicit_gap"))
+                .is_some_and(|info| info.trust_summary().has_explicit_sorry),
+            "the fixture must plant an explicit sorry, or the audit has nothing to find"
+        );
 
         let report = audit_lake_project(&workspace, &env);
         let status = project_audit_authority_gate_status(&report);

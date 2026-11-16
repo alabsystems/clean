@@ -62,7 +62,7 @@ impl Specification {
              (hs : par_reduces_cd_star the_red_env (KExpr.app f a) w) : \
              StuckAppRedWitness the_red_env f a w := \
              par_reduces_cd_star_rigid_app_inv the_red_env (KExpr.app f a) w hs f a hr \
-             (Eq.refl KExpr (KExpr.app f a))",
+             (@Eq.refl KExpr (KExpr.app f a))",
             "rigid_app_leg_inv: invert ONE reduction leg out of a rigid-headed application. A \
              thin specialisation of par_reduces_cd_star_rigid_app_inv at the reflexive equation, \
              but naming it matters: it and its neutral twin land on the SAME witness type, which \
@@ -77,11 +77,11 @@ impl Specification {
              StuckAppRedWitness the_red_env f a w := \
              par_reduces_cd_star_neutral_app_inv_eq f a w \
              (StuckAppRedWitness the_red_env f a w) hn hi hs \
-             (fun (g : KExpr) (y : KExpr) (heq : Eq KExpr w (KExpr.app g y)) \
+             (fun (g : KExpr) (y : KExpr) (heq : @Eq KExpr w (KExpr.app g y)) \
              (hf : par_reduces_cd_star the_red_env f g) \
              (ha : par_reduces_cd_star the_red_env a y) \
              (_n2 : iota_neutral g) (_i2 : iota_immune (KExpr.app g y)) => \
-             StuckAppRedWitness.mk the_red_env f a w g y heq hf ha)",
+             @StuckAppRedWitness.mk the_red_env f a w g y heq hf ha)",
             "neutral_app_leg_inv: invert ONE reduction leg out of a const-headed neutral \
              application, landing on the same witness type as the rigid inverter. The two \
              obligations it consumes — iota_neutral and iota_immune — are exactly what nf_head's \
@@ -100,25 +100,25 @@ impl Specification {
              (w1 : StuckAppRedWitness the_red_env f1 a1 w) \
              (w2 : StuckAppRedWitness the_red_env f2 a2 w) : \
              BinderJoinComponents f1 a1 f2 a2 := \
-             StuckAppRedWitness.rec the_red_env f1 a1 w \
+             @StuckAppRedWitness.rec the_red_env f1 a1 w \
              (fun (_x : StuckAppRedWitness the_red_env f1 a1 w) => \
              BinderJoinComponents f1 a1 f2 a2) \
-             (fun (g1 : KExpr) (x1 : KExpr) (heq1 : Eq KExpr w (KExpr.app g1 x1)) \
+             (fun (g1 : KExpr) (x1 : KExpr) (heq1 : @Eq KExpr w (KExpr.app g1 x1)) \
              (hf1 : par_reduces_cd_star the_red_env f1 g1) \
              (ha1 : par_reduces_cd_star the_red_env a1 x1) => \
-             StuckAppRedWitness.rec the_red_env f2 a2 w \
+             @StuckAppRedWitness.rec the_red_env f2 a2 w \
              (fun (_y : StuckAppRedWitness the_red_env f2 a2 w) => \
              BinderJoinComponents f1 a1 f2 a2) \
-             (fun (g2 : KExpr) (x2 : KExpr) (heq2 : Eq KExpr w (KExpr.app g2 x2)) \
+             (fun (g2 : KExpr) (x2 : KExpr) (heq2 : @Eq KExpr w (KExpr.app g2 x2)) \
              (hf2 : par_reduces_cd_star the_red_env f2 g2) \
              (ha2 : par_reduces_cd_star the_red_env a2 x2) => \
-             (fun (hsame : Eq KExpr (KExpr.app g1 x1) (KExpr.app g2 x2)) => \
-             BinderJoinComponents.mk f1 a1 f2 a2 \
-             (par_strips_witness_cd_star.intro the_red_env f1 f2 g1 hf1 \
+             (fun (hsame : @Eq KExpr (KExpr.app g1 x1) (KExpr.app g2 x2)) => \
+             @BinderJoinComponents.mk f1 a1 f2 a2 \
+             (@par_strips_witness_cd_star.intro the_red_env f1 f2 g1 hf1 \
              (Eq.substType KExpr \
              (fun (z : KExpr) => par_reduces_cd_star the_red_env f2 z) \
              g2 g1 (Eq.symm KExpr g1 g2 (app_inj_fst g1 x1 g2 x2 hsame)) hf2)) \
-             (par_strips_witness_cd_star.intro the_red_env a1 a2 x1 ha1 \
+             (@par_strips_witness_cd_star.intro the_red_env a1 a2 x1 ha1 \
              (Eq.substType KExpr \
              (fun (z : KExpr) => par_reduces_cd_star the_red_env a2 z) \
              x2 x1 (Eq.symm KExpr x1 x2 (app_inj_snd g1 x1 g2 x2 hsame)) ha2))) \
@@ -153,14 +153,14 @@ impl Specification {
             &format!(
                 "def def_eq_round_app (n : Nat) (x : KExpr) (bb : KExpr) \
                  (f1 : KExpr) (a1 : KExpr) (f2 : KExpr) (a2 : KExpr) (w : KExpr) \
-                 (hx : Eq (OptionType KExpr) (whnf_fuel_red the_red_env n x) \
-                 (OptionType.some KExpr (KExpr.app f1 a1))) \
-                 (hb : Eq (OptionType KExpr) (whnf_fuel_red the_red_env n bb) \
-                 (OptionType.some KExpr (KExpr.app f2 a2))) \
+                 (hx : @Eq (OptionType KExpr) (whnf_fuel_red the_red_env n x) \
+                 (@OptionType.some KExpr (KExpr.app f1 a1))) \
+                 (hb : @Eq (OptionType KExpr) (whnf_fuel_red the_red_env n bb) \
+                 (@OptionType.some KExpr (KExpr.app f2 a2))) \
                  (wit1 : StuckAppRedWitness the_red_env f1 a1 w) \
                  (wit2 : StuckAppRedWitness the_red_env f2 a2 w) \
                  (accb : rbelow_plus_acc bb) {RECUR}: DefEqFuelAccepts x bb := \
-                 BinderJoinComponents.rec f1 a1 f2 a2 \
+                 @BinderJoinComponents.rec f1 a1 f2 a2 \
                  (fun (_c : BinderJoinComponents f1 a1 f2 a2) => DefEqFuelAccepts x bb) \
                  (fun (j0 : par_strips_witness_cd_star the_red_env f1 f2) \
                  (j1 : par_strips_witness_cd_star the_red_env a1 a2) => \

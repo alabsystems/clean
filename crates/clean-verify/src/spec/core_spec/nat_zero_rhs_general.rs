@@ -26,7 +26,7 @@ use crate::spec::Specification;
 // Proof records below make the same binders explicit; data stays unfoldable.
 const DECLARATIONS: &[(&str, &str)] = &[
     (r"def nz_zero_args (m : KExpr) (z : KExpr) (s : KExpr) : ListType KExpr :=
- (ListType.cons KExpr m (ListType.cons KExpr z (ListType.cons KExpr s (ListType.nil KExpr))))", "Actual raw telescope or argument-list data for the synthetic Nat.zero composition."),
+ (@ListType.cons KExpr m (@ListType.cons KExpr z (@ListType.cons KExpr s (@ListType.nil KExpr))))", "Actual raw telescope or argument-list data for the synthetic Nat.zero composition."),
 
     (r"def nz_zero_rule_tail : KExpr :=
  (KExpr.pi (KExpr.app (KExpr.bvar Nat.zero) natZeroC) (KExpr.pi natRecSArm (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) natZeroC)))", "Actual raw telescope or argument-list data for the synthetic Nat.zero composition."),
@@ -37,50 +37,50 @@ const DECLARATIONS: &[(&str, &str)] = &[
     (r"def nz_zero_tail_after_m (m : KExpr) : KExpr :=
  (KExpr.pi (KExpr.app m natZeroC) (KExpr.pi (nz_zero_sarm_after_m m) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) natZeroC)))", "Actual raw telescope or argument-list data for the synthetic Nat.zero composition."),
 
-    (r"def nz_zero_after_m_eq (m : KExpr) : Eq KExpr (instantiate nz_zero_rule_tail m) (nz_zero_tail_after_m m) :=
+    (r"def nz_zero_after_m_eq (m : KExpr) : @Eq KExpr (instantiate nz_zero_rule_tail m) (nz_zero_tail_after_m m) :=
  (Eq.cong KExpr KExpr (fun (x : KExpr) => (KExpr.pi (KExpr.app x natZeroC) (KExpr.pi (nz_zero_sarm_after_m m) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) natZeroC)))) (lift_at m Nat.zero Nat.zero) m (lift_zero_identity m))", "Checked telescope equality or concrete nonzero-universe caller of the generic Nat.zero composition."),
 
-    (r"def nz_zero_sarm_after_z_eq (m : KExpr) (z : KExpr) : Eq KExpr (instantiate (nz_zero_sarm_after_m m) z) (natSuccCaseSem m) :=
- (Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.pi natTypeC x) (KExpr.pi (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) z (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) z (Nat.succ (Nat.succ Nat.zero))) (KExpr.app natSuccC (KExpr.bvar (Nat.succ Nat.zero))))) (KExpr.pi (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.app natSuccC (KExpr.bvar (Nat.succ Nat.zero))))) (universe_bridge_congr2 KExpr KExpr KExpr (fun (A : KExpr) (B : KExpr) => KExpr.pi A B) (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) z (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) z (Nat.succ (Nat.succ Nat.zero))) (KExpr.app natSuccC (KExpr.bvar (Nat.succ Nat.zero)))) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.app natSuccC (KExpr.bvar (Nat.succ Nat.zero)))) (Eq.cong KExpr KExpr (fun (x : KExpr) => (KExpr.app x (KExpr.bvar Nat.zero))) (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) z (Nat.succ Nat.zero)) (lift_at m Nat.zero (Nat.succ Nat.zero)) (inst_at1_lift2 m z)) (Eq.cong KExpr KExpr (fun (x : KExpr) => (KExpr.app x (KExpr.app natSuccC (KExpr.bvar (Nat.succ Nat.zero))))) (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) z (Nat.succ (Nat.succ Nat.zero))) (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (instantiate_lift_cancel_general m z Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero))) (Nat.succ (Nat.succ Nat.zero)) (Eq.refl Nat (Nat.succ Nat.zero))))))", "Checked telescope equality or concrete nonzero-universe caller of the generic Nat.zero composition."),
+    (r"def nz_zero_sarm_after_z_eq (m : KExpr) (z : KExpr) : @Eq KExpr (instantiate (nz_zero_sarm_after_m m) z) (natSuccCaseSem m) :=
+ (Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.pi natTypeC x) (KExpr.pi (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) z (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) z (Nat.succ (Nat.succ Nat.zero))) (KExpr.app natSuccC (KExpr.bvar (Nat.succ Nat.zero))))) (KExpr.pi (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.app natSuccC (KExpr.bvar (Nat.succ Nat.zero))))) (universe_bridge_congr2 KExpr KExpr KExpr (fun (A : KExpr) (B : KExpr) => KExpr.pi A B) (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) z (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) z (Nat.succ (Nat.succ Nat.zero))) (KExpr.app natSuccC (KExpr.bvar (Nat.succ Nat.zero)))) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.app natSuccC (KExpr.bvar (Nat.succ Nat.zero)))) (Eq.cong KExpr KExpr (fun (x : KExpr) => (KExpr.app x (KExpr.bvar Nat.zero))) (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) z (Nat.succ Nat.zero)) (lift_at m Nat.zero (Nat.succ Nat.zero)) (inst_at1_lift2 m z)) (Eq.cong KExpr KExpr (fun (x : KExpr) => (KExpr.app x (KExpr.app natSuccC (KExpr.bvar (Nat.succ Nat.zero))))) (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) z (Nat.succ (Nat.succ Nat.zero))) (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (instantiate_lift_cancel_general m z Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero))) (Nat.succ (Nat.succ Nat.zero)) (@Eq.refl Nat (Nat.succ Nat.zero))))))", "Checked telescope equality or concrete nonzero-universe caller of the generic Nat.zero composition."),
 
-    (r"def nz_zero_after_z_eq (m : KExpr) (z : KExpr) : Eq KExpr (instantiate (KExpr.pi (nz_zero_sarm_after_m m) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) natZeroC)) z) (KExpr.pi (natSuccCaseSem m) (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) natZeroC)) :=
+    (r"def nz_zero_after_z_eq (m : KExpr) (z : KExpr) : @Eq KExpr (instantiate (KExpr.pi (nz_zero_sarm_after_m m) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) natZeroC)) z) (KExpr.pi (natSuccCaseSem m) (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) natZeroC)) :=
  (universe_bridge_congr2 KExpr KExpr KExpr (fun (A : KExpr) (B : KExpr) => KExpr.pi A B) (instantiate (nz_zero_sarm_after_m m) z) (natSuccCaseSem m) (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) z (Nat.succ Nat.zero)) natZeroC) (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) natZeroC) (nz_zero_sarm_after_z_eq m z) (Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.app x natZeroC) (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) z (Nat.succ Nat.zero)) (lift_at m Nat.zero (Nat.succ Nat.zero)) (inst_at1_lift2 m z)))", "Checked telescope equality or concrete nonzero-universe caller of the generic Nat.zero composition."),
 
-    (r"def nz_zero_after_s_eq (m : KExpr) (s : KExpr) : Eq KExpr (instantiate (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) natZeroC) s) (KExpr.app m natZeroC) :=
+    (r"def nz_zero_after_s_eq (m : KExpr) (s : KExpr) : @Eq KExpr (instantiate (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) natZeroC) s) (KExpr.app m natZeroC) :=
  (Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.app x natZeroC) (instantiate (lift_at m Nat.zero (Nat.succ Nat.zero)) s) m (inst_lift1 m s))", "Checked telescope equality or concrete nonzero-universe caller of the generic Nat.zero composition."),
 
     (r"def nz_zero_typed_spine (R : RedEnv) (tenv : KDeclEnv) (G : ListType KExpr) (u : Level) (m : KExpr) (z : KExpr) (s : KExpr)
  (hm : TypingCtxConvIn R tenv G m (natMotiveTy u))
  (hz : TypingCtxConvIn R tenv G z (KExpr.app m natZeroC))
  (hs : TypingCtxConvIn R tenv G s (natSuccCaseSem m)) : TypedRawPiSpine R tenv G (nz_rule_type u) (nz_zero_args m z s) (KExpr.app m natZeroC) :=
- TypedRawPiSpine.cons R tenv G (natMotiveTy u) nz_zero_rule_tail m (ListType.cons KExpr z (ListType.cons KExpr s (ListType.nil KExpr))) (KExpr.app m natZeroC) hm (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (ListType.cons KExpr z (ListType.cons KExpr s (ListType.nil KExpr))) (KExpr.app m natZeroC)) (nz_zero_tail_after_m m) (instantiate nz_zero_rule_tail m) (Eq.symm KExpr (instantiate nz_zero_rule_tail m) (nz_zero_tail_after_m m) (nz_zero_after_m_eq m)) (TypedRawPiSpine.cons R tenv G (KExpr.app m natZeroC) (KExpr.pi (nz_zero_sarm_after_m m) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) natZeroC)) z (ListType.cons KExpr s (ListType.nil KExpr)) (KExpr.app m natZeroC) hz (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (ListType.cons KExpr s (ListType.nil KExpr)) (KExpr.app m natZeroC)) (KExpr.pi (natSuccCaseSem m) (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) natZeroC)) (instantiate (KExpr.pi (nz_zero_sarm_after_m m) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) natZeroC)) z) (Eq.symm KExpr (instantiate (KExpr.pi (nz_zero_sarm_after_m m) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) natZeroC)) z) (KExpr.pi (natSuccCaseSem m) (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) natZeroC)) (nz_zero_after_z_eq m z)) (TypedRawPiSpine.cons R tenv G (natSuccCaseSem m) (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) natZeroC) s (ListType.nil KExpr) (KExpr.app m natZeroC) hs (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (ListType.nil KExpr) (KExpr.app m natZeroC)) (KExpr.app m natZeroC) (instantiate (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) natZeroC) s) (Eq.symm KExpr (instantiate (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) natZeroC) s) (KExpr.app m natZeroC) (nz_zero_after_s_eq m s)) (TypedRawPiSpine.nil R tenv G (KExpr.app m natZeroC)))))))", "Actual three-binder RHS telescope from the motive and two minor typings, without closedness premises."),
+ @TypedRawPiSpine.cons R tenv G (natMotiveTy u) nz_zero_rule_tail m (@ListType.cons KExpr z (@ListType.cons KExpr s (@ListType.nil KExpr))) (KExpr.app m natZeroC) hm (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (@ListType.cons KExpr z (@ListType.cons KExpr s (@ListType.nil KExpr))) (KExpr.app m natZeroC)) (nz_zero_tail_after_m m) (instantiate nz_zero_rule_tail m) (Eq.symm KExpr (instantiate nz_zero_rule_tail m) (nz_zero_tail_after_m m) (nz_zero_after_m_eq m)) (@TypedRawPiSpine.cons R tenv G (KExpr.app m natZeroC) (KExpr.pi (nz_zero_sarm_after_m m) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) natZeroC)) z (@ListType.cons KExpr s (@ListType.nil KExpr)) (KExpr.app m natZeroC) hz (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (@ListType.cons KExpr s (@ListType.nil KExpr)) (KExpr.app m natZeroC)) (KExpr.pi (natSuccCaseSem m) (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) natZeroC)) (instantiate (KExpr.pi (nz_zero_sarm_after_m m) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) natZeroC)) z) (Eq.symm KExpr (instantiate (KExpr.pi (nz_zero_sarm_after_m m) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) natZeroC)) z) (KExpr.pi (natSuccCaseSem m) (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) natZeroC)) (nz_zero_after_z_eq m z)) (@TypedRawPiSpine.cons R tenv G (natSuccCaseSem m) (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) natZeroC) s (@ListType.nil KExpr) (KExpr.app m natZeroC) hs (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (@ListType.nil KExpr) (KExpr.app m natZeroC)) (KExpr.app m natZeroC) (instantiate (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) natZeroC) s) (Eq.symm KExpr (instantiate (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) natZeroC) s) (KExpr.app m natZeroC) (nz_zero_after_s_eq m s)) (@TypedRawPiSpine.nil R tenv G (KExpr.app m natZeroC)))))))", "Actual three-binder RHS telescope from the motive and two minor typings, without closedness premises."),
 
     (r"def nz_general_raw_result_typed (R : RedEnv) (u : Level) (m : KExpr) (z : KExpr) (s : KExpr)
- (hm : TypingCtxConvIn R (natTEnv Level.zero) (ListType.nil KExpr) m (natMotiveTy u))
- (hz : TypingCtxConvIn R (natTEnv Level.zero) (ListType.nil KExpr) z (KExpr.app m natZeroC))
- (hs : TypingCtxConvIn R (natTEnv Level.zero) (ListType.nil KExpr) s (natSuccCaseSem m)) : TypingCtxConvIn R (natTEnv Level.zero) (ListType.nil KExpr) (KExpr.app (KExpr.app (KExpr.app (natRecRhsZero u) m) z) s) (KExpr.app m natZeroC) :=
- typed_raw_pi_spine_apply R (natTEnv Level.zero) (ListType.nil KExpr) (nz_rule_type u) (nz_zero_args m z s) (KExpr.app m natZeroC)
-  (nz_zero_typed_spine R (natTEnv Level.zero) (ListType.nil KExpr) u m z s hm hz hs) (natRecRhsZero u)
-  (nz_typing_to_semantic R (natTEnv Level.zero) (ListType.nil KExpr) (natRecRhsZero u) (nz_rule_type u) (nz_rhs_typed u))", "Raw Nat.zero RHS application typing from the proved schematic RHS and actual typed spine; no output oracle."),
+ (hm : TypingCtxConvIn R (natTEnv Level.zero) (@ListType.nil KExpr) m (natMotiveTy u))
+ (hz : TypingCtxConvIn R (natTEnv Level.zero) (@ListType.nil KExpr) z (KExpr.app m natZeroC))
+ (hs : TypingCtxConvIn R (natTEnv Level.zero) (@ListType.nil KExpr) s (natSuccCaseSem m)) : TypingCtxConvIn R (natTEnv Level.zero) (@ListType.nil KExpr) (KExpr.app (KExpr.app (KExpr.app (natRecRhsZero u) m) z) s) (KExpr.app m natZeroC) :=
+ typed_raw_pi_spine_apply R (natTEnv Level.zero) (@ListType.nil KExpr) (nz_rule_type u) (nz_zero_args m z s) (KExpr.app m natZeroC)
+  (nz_zero_typed_spine R (natTEnv Level.zero) (@ListType.nil KExpr) u m z s hm hz hs) (natRecRhsZero u)
+  (nz_typing_to_semantic R (natTEnv Level.zero) (@ListType.nil KExpr) (natRecRhsZero u) (nz_rule_type u) (nz_rhs_typed u))", "Raw Nat.zero RHS application typing from the proved schematic RHS and actual typed spine; no output oracle."),
 
     (r"def nz_general_guarded_step (u : Level) (m : KExpr) (z : KExpr) (s : KExpr) : iota_step (red_rec nz_env) (natRecApp u m z s natZeroC) (KExpr.app (KExpr.app (KExpr.app (natRecRhsZero u) m) z) s) :=
  natREnv_iota_zero u m z s", "Actual guarded synthetic Nat.zero iota step at arbitrary supplied universe and raw arguments."),
 
     (r"def nz_general_guarded_result_typed (u : Level) (m : KExpr) (z : KExpr) (s : KExpr)
- (hm : TypingCtxConvIn nz_env (natTEnv Level.zero) (ListType.nil KExpr) m (natMotiveTy u))
- (hz : TypingCtxConvIn nz_env (natTEnv Level.zero) (ListType.nil KExpr) z (KExpr.app m natZeroC))
- (hs : TypingCtxConvIn nz_env (natTEnv Level.zero) (ListType.nil KExpr) s (natSuccCaseSem m)) : TypingCtxConvIn nz_env (natTEnv Level.zero) (ListType.nil KExpr) (KExpr.app (KExpr.app (KExpr.app (natRecRhsZero u) m) z) s) (KExpr.app m natZeroC) :=
+ (hm : TypingCtxConvIn nz_env (natTEnv Level.zero) (@ListType.nil KExpr) m (natMotiveTy u))
+ (hz : TypingCtxConvIn nz_env (natTEnv Level.zero) (@ListType.nil KExpr) z (KExpr.app m natZeroC))
+ (hs : TypingCtxConvIn nz_env (natTEnv Level.zero) (@ListType.nil KExpr) s (natSuccCaseSem m)) : TypingCtxConvIn nz_env (natTEnv Level.zero) (@ListType.nil KExpr) (KExpr.app (KExpr.app (KExpr.app (natRecRhsZero u) m) z) s) (KExpr.app m natZeroC) :=
  nz_general_raw_result_typed nz_env u m z s hm hz hs", "Raw result typing for the actual synthetic Nat.zero guarded environment."),
 
     (r"def nz_general_nonzero_caller :
- TypingCtxConvIn nz_env (natTEnv Level.zero) (ListType.nil KExpr)
+ TypingCtxConvIn nz_env (natTEnv Level.zero) (@ListType.nil KExpr)
  nz_raw_result (KExpr.app nz_motive natZeroC) :=
  nz_general_guarded_result_typed (Level.succ Level.zero) nz_motive natZeroC nz_minor
  nz_motive_argument_typed nz_zero_argument_typed nz_minor_argument_typed", "Checked telescope equality or concrete nonzero-universe caller of the generic Nat.zero composition."),
 
     (r"def nz_general_nonzero_caller_nat :
- TypingCtxConvIn nz_env (natTEnv Level.zero) (ListType.nil KExpr) nz_raw_result natTypeC :=
- TypingCtxConvIn.conv nz_env (natTEnv Level.zero) (ListType.nil KExpr)
+ TypingCtxConvIn nz_env (natTEnv Level.zero) (@ListType.nil KExpr) nz_raw_result natTypeC :=
+ @TypingCtxConvIn.conv nz_env (natTEnv Level.zero) (@ListType.nil KExpr)
  nz_raw_result (KExpr.app nz_motive natZeroC) natTypeC
  nz_general_nonzero_caller (nz_motive_beta natZeroC)", "Checked telescope equality or concrete nonzero-universe caller of the generic Nat.zero composition."),
 
@@ -88,12 +88,12 @@ const DECLARATIONS: &[(&str, &str)] = &[
  nz_general_guarded_step (Level.succ Level.zero) nz_motive natZeroC nz_minor", "Checked telescope equality or concrete nonzero-universe caller of the generic Nat.zero composition."),
 
     (r"def nz_zero_spine_open_motive_control :
- Eq KExpr (instantiate (nz_zero_sarm_after_m (KExpr.bvar Nat.zero))
+ @Eq KExpr (instantiate (nz_zero_sarm_after_m (KExpr.bvar Nat.zero))
    (KExpr.bvar (Nat.succ Nat.zero))) (natSuccCaseSem (KExpr.bvar Nat.zero)) :=
  nz_zero_sarm_after_z_eq (KExpr.bvar Nat.zero) (KExpr.bvar (Nat.succ Nat.zero))", "Actual loose-BVar motive cancellation control; no assertion that this motive is typed in the empty context."),
 
     (r"def nz_zero_input_args (m : KExpr) (z : KExpr) (s : KExpr) : ListType KExpr :=
- (ListType.cons KExpr m (ListType.cons KExpr z (ListType.cons KExpr s (ListType.cons KExpr natZeroC (ListType.nil KExpr)))))", "Actual raw telescope or argument-list data for the synthetic Nat.zero composition."),
+ (@ListType.cons KExpr m (@ListType.cons KExpr z (@ListType.cons KExpr s (@ListType.cons KExpr natZeroC (@ListType.nil KExpr)))))", "Actual raw telescope or argument-list data for the synthetic Nat.zero composition."),
 
     (r"def nz_zero_input_tail : KExpr :=
  (KExpr.pi (KExpr.app (KExpr.bvar Nat.zero) natZeroC) (KExpr.pi natRecSArm (KExpr.pi natTypeC (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar Nat.zero)))))", "Actual raw telescope or argument-list data for the synthetic Nat.zero composition."),
@@ -101,16 +101,16 @@ const DECLARATIONS: &[(&str, &str)] = &[
     (r"def nz_zero_input_after_m (m : KExpr) : KExpr :=
  (KExpr.pi (KExpr.app m natZeroC) (KExpr.pi (nz_zero_sarm_after_m m) (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar Nat.zero)))))", "Actual raw telescope or argument-list data for the synthetic Nat.zero composition."),
 
-    (r"def nz_zero_input_after_m_eq (m : KExpr) : Eq KExpr (instantiate nz_zero_input_tail m) (nz_zero_input_after_m m) :=
+    (r"def nz_zero_input_after_m_eq (m : KExpr) : @Eq KExpr (instantiate nz_zero_input_tail m) (nz_zero_input_after_m m) :=
  (Eq.cong KExpr KExpr (fun (x : KExpr) => (KExpr.pi (KExpr.app x natZeroC) (KExpr.pi (nz_zero_sarm_after_m m) (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar Nat.zero)))))) (lift_at m Nat.zero Nat.zero) m (lift_zero_identity m))", "Checked telescope equality or concrete nonzero-universe caller of the generic Nat.zero composition."),
 
-    (r"def nz_zero_input_after_z_eq (m : KExpr) (z : KExpr) : Eq KExpr (instantiate (KExpr.pi (nz_zero_sarm_after_m m) (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar Nat.zero)))) z) (KExpr.pi (natSuccCaseSem m) (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)))) :=
- (universe_bridge_congr2 KExpr KExpr KExpr (fun (A : KExpr) (B : KExpr) => KExpr.pi A B) (instantiate (nz_zero_sarm_after_m m) z) (natSuccCaseSem m) (KExpr.pi natTypeC (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) z (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))) (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))) (nz_zero_sarm_after_z_eq m z) (Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.pi natTypeC x) (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) z (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)) (Eq.cong KExpr KExpr (fun (x : KExpr) => (KExpr.app x (KExpr.bvar Nat.zero))) (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) z (Nat.succ (Nat.succ Nat.zero))) (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (instantiate_lift_cancel_general m z Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero))) (Nat.succ (Nat.succ Nat.zero)) (Eq.refl Nat (Nat.succ Nat.zero))))))", "Checked telescope equality or concrete nonzero-universe caller of the generic Nat.zero composition."),
+    (r"def nz_zero_input_after_z_eq (m : KExpr) (z : KExpr) : @Eq KExpr (instantiate (KExpr.pi (nz_zero_sarm_after_m m) (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar Nat.zero)))) z) (KExpr.pi (natSuccCaseSem m) (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)))) :=
+ (universe_bridge_congr2 KExpr KExpr KExpr (fun (A : KExpr) (B : KExpr) => KExpr.pi A B) (instantiate (nz_zero_sarm_after_m m) z) (natSuccCaseSem m) (KExpr.pi natTypeC (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) z (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))) (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))) (nz_zero_sarm_after_z_eq m z) (Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.pi natTypeC x) (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) z (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)) (Eq.cong KExpr KExpr (fun (x : KExpr) => (KExpr.app x (KExpr.bvar Nat.zero))) (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) z (Nat.succ (Nat.succ Nat.zero))) (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (instantiate_lift_cancel_general m z Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero))) (Nat.succ (Nat.succ Nat.zero)) (@Eq.refl Nat (Nat.succ Nat.zero))))))", "Checked telescope equality or concrete nonzero-universe caller of the generic Nat.zero composition."),
 
-    (r"def nz_zero_input_after_s_eq (m : KExpr) (s : KExpr) : Eq KExpr (instantiate (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))) s) (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero))) :=
+    (r"def nz_zero_input_after_s_eq (m : KExpr) (s : KExpr) : @Eq KExpr (instantiate (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))) s) (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero))) :=
  (Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.pi natTypeC x) (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) s (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (Eq.cong KExpr KExpr (fun (x : KExpr) => (KExpr.app x (KExpr.bvar Nat.zero))) (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) s (Nat.succ Nat.zero)) (lift_at m Nat.zero (Nat.succ Nat.zero)) (inst_at1_lift2 m s)))", "Checked telescope equality or concrete nonzero-universe caller of the generic Nat.zero composition."),
 
-    (r"def nz_zero_input_after_major_eq (m : KExpr) : Eq KExpr (instantiate (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) natZeroC) (KExpr.app m natZeroC) :=
+    (r"def nz_zero_input_after_major_eq (m : KExpr) : @Eq KExpr (instantiate (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) natZeroC) (KExpr.app m natZeroC) :=
  (Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.app x natZeroC) (instantiate (lift_at m Nat.zero (Nat.succ Nat.zero)) natZeroC) m (inst_lift1 m natZeroC))", "Checked telescope equality or concrete nonzero-universe caller of the generic Nat.zero composition."),
 
     (r"def nz_zero_input_typed_spine (R : RedEnv) (tenv : KDeclEnv) (G : ListType KExpr) (u : Level) (m : KExpr) (z : KExpr) (s : KExpr)
@@ -118,19 +118,19 @@ const DECLARATIONS: &[(&str, &str)] = &[
  (hz : TypingCtxConvIn R tenv G z (KExpr.app m natZeroC))
  (hs : TypingCtxConvIn R tenv G s (natSuccCaseSem m))
  (hzero : TypingCtxConvIn R tenv G natZeroC natTypeC) : TypedRawPiSpine R tenv G (natRecTy u) (nz_zero_input_args m z s) (KExpr.app m natZeroC) :=
- TypedRawPiSpine.cons R tenv G (natMotiveTy u) nz_zero_input_tail m (ListType.cons KExpr z (ListType.cons KExpr s (ListType.cons KExpr natZeroC (ListType.nil KExpr)))) (KExpr.app m natZeroC) hm (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (ListType.cons KExpr z (ListType.cons KExpr s (ListType.cons KExpr natZeroC (ListType.nil KExpr)))) (KExpr.app m natZeroC)) (nz_zero_input_after_m m) (instantiate nz_zero_input_tail m) (Eq.symm KExpr (instantiate nz_zero_input_tail m) (nz_zero_input_after_m m) (nz_zero_input_after_m_eq m)) (TypedRawPiSpine.cons R tenv G (KExpr.app m natZeroC) (KExpr.pi (nz_zero_sarm_after_m m) (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar Nat.zero)))) z (ListType.cons KExpr s (ListType.cons KExpr natZeroC (ListType.nil KExpr))) (KExpr.app m natZeroC) hz (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (ListType.cons KExpr s (ListType.cons KExpr natZeroC (ListType.nil KExpr))) (KExpr.app m natZeroC)) (KExpr.pi (natSuccCaseSem m) (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)))) (instantiate (KExpr.pi (nz_zero_sarm_after_m m) (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar Nat.zero)))) z) (Eq.symm KExpr (instantiate (KExpr.pi (nz_zero_sarm_after_m m) (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar Nat.zero)))) z) (KExpr.pi (natSuccCaseSem m) (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)))) (nz_zero_input_after_z_eq m z)) (TypedRawPiSpine.cons R tenv G (natSuccCaseSem m) (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))) s (ListType.cons KExpr natZeroC (ListType.nil KExpr)) (KExpr.app m natZeroC) hs (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (ListType.cons KExpr natZeroC (ListType.nil KExpr)) (KExpr.app m natZeroC)) (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero))) (instantiate (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))) s) (Eq.symm KExpr (instantiate (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))) s) (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero))) (nz_zero_input_after_s_eq m s)) (TypedRawPiSpine.cons R tenv G natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) natZeroC (ListType.nil KExpr) (KExpr.app m natZeroC) hzero (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (ListType.nil KExpr) (KExpr.app m natZeroC)) (KExpr.app m natZeroC) (instantiate (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) natZeroC) (Eq.symm KExpr (instantiate (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) natZeroC) (KExpr.app m natZeroC) (nz_zero_input_after_major_eq m)) (TypedRawPiSpine.nil R tenv G (KExpr.app m natZeroC)))))))))", "Actual four-argument Nat recursor telescope, including genuine zero-major typing."),
+ @TypedRawPiSpine.cons R tenv G (natMotiveTy u) nz_zero_input_tail m (@ListType.cons KExpr z (@ListType.cons KExpr s (@ListType.cons KExpr natZeroC (@ListType.nil KExpr)))) (KExpr.app m natZeroC) hm (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (@ListType.cons KExpr z (@ListType.cons KExpr s (@ListType.cons KExpr natZeroC (@ListType.nil KExpr)))) (KExpr.app m natZeroC)) (nz_zero_input_after_m m) (instantiate nz_zero_input_tail m) (Eq.symm KExpr (instantiate nz_zero_input_tail m) (nz_zero_input_after_m m) (nz_zero_input_after_m_eq m)) (@TypedRawPiSpine.cons R tenv G (KExpr.app m natZeroC) (KExpr.pi (nz_zero_sarm_after_m m) (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar Nat.zero)))) z (@ListType.cons KExpr s (@ListType.cons KExpr natZeroC (@ListType.nil KExpr))) (KExpr.app m natZeroC) hz (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (@ListType.cons KExpr s (@ListType.cons KExpr natZeroC (@ListType.nil KExpr))) (KExpr.app m natZeroC)) (KExpr.pi (natSuccCaseSem m) (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)))) (instantiate (KExpr.pi (nz_zero_sarm_after_m m) (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar Nat.zero)))) z) (Eq.symm KExpr (instantiate (KExpr.pi (nz_zero_sarm_after_m m) (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar Nat.zero)))) z) (KExpr.pi (natSuccCaseSem m) (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)))) (nz_zero_input_after_z_eq m z)) (@TypedRawPiSpine.cons R tenv G (natSuccCaseSem m) (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))) s (@ListType.cons KExpr natZeroC (@ListType.nil KExpr)) (KExpr.app m natZeroC) hs (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (@ListType.cons KExpr natZeroC (@ListType.nil KExpr)) (KExpr.app m natZeroC)) (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero))) (instantiate (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))) s) (Eq.symm KExpr (instantiate (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))) s) (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero))) (nz_zero_input_after_s_eq m s)) (@TypedRawPiSpine.cons R tenv G natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) natZeroC (@ListType.nil KExpr) (KExpr.app m natZeroC) hzero (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (@ListType.nil KExpr) (KExpr.app m natZeroC)) (KExpr.app m natZeroC) (instantiate (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) natZeroC) (Eq.symm KExpr (instantiate (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) natZeroC) (KExpr.app m natZeroC) (nz_zero_input_after_major_eq m)) (@TypedRawPiSpine.nil R tenv G (KExpr.app m natZeroC)))))))))", "Actual four-argument Nat recursor telescope, including genuine zero-major typing."),
 
     (r"def nz_general_input_typed (R : RedEnv) (u : Level) (m : KExpr) (z : KExpr) (s : KExpr)
- (hm : TypingCtxConvIn R (natTEnv Level.zero) (ListType.nil KExpr) m (natMotiveTy u))
- (hz : TypingCtxConvIn R (natTEnv Level.zero) (ListType.nil KExpr) z (KExpr.app m natZeroC))
- (hs : TypingCtxConvIn R (natTEnv Level.zero) (ListType.nil KExpr) s (natSuccCaseSem m)) : TypingCtxConvIn R (natTEnv Level.zero) (ListType.nil KExpr) (natRecApp u m z s natZeroC) (KExpr.app m natZeroC) :=
- typed_raw_pi_spine_const_apply R (natTEnv Level.zero) (ListType.nil KExpr) recName
- (ListType.cons Level u (ListType.nil Level)) (natRecTy u)
+ (hm : TypingCtxConvIn R (natTEnv Level.zero) (@ListType.nil KExpr) m (natMotiveTy u))
+ (hz : TypingCtxConvIn R (natTEnv Level.zero) (@ListType.nil KExpr) z (KExpr.app m natZeroC))
+ (hs : TypingCtxConvIn R (natTEnv Level.zero) (@ListType.nil KExpr) s (natSuccCaseSem m)) : TypingCtxConvIn R (natTEnv Level.zero) (@ListType.nil KExpr) (natRecApp u m z s natZeroC) (KExpr.app m natZeroC) :=
+ typed_raw_pi_spine_const_apply R (natTEnv Level.zero) (@ListType.nil KExpr) recName
+ (@ListType.cons Level u (@ListType.nil Level)) (natRecTy u)
  (nz_zero_input_args m z s) (KExpr.app m natZeroC) (natTEnv_rec_lookup u)
- (nz_zero_input_typed_spine R (natTEnv Level.zero) (ListType.nil KExpr) u m z s hm hz hs
-  (nz_typing_to_semantic R (natTEnv Level.zero) (ListType.nil KExpr) natZeroC natTypeC (nz_zero_typed (ListType.nil KExpr))))", "Whole synthetic Nat.zero input typing from actual three argument typings and guarded recursor lookup."),
+ (nz_zero_input_typed_spine R (natTEnv Level.zero) (@ListType.nil KExpr) u m z s hm hz hs
+  (nz_typing_to_semantic R (natTEnv Level.zero) (@ListType.nil KExpr) natZeroC natTypeC (nz_zero_typed (@ListType.nil KExpr))))", "Whole synthetic Nat.zero input typing from actual three argument typings and guarded recursor lookup."),
 
-    (r"def nz_general_nonzero_input : TypingCtxConvIn nz_env (natTEnv Level.zero) (ListType.nil KExpr) nz_input (KExpr.app nz_motive natZeroC) :=
+    (r"def nz_general_nonzero_input : TypingCtxConvIn nz_env (natTEnv Level.zero) (@ListType.nil KExpr) nz_input (KExpr.app nz_motive natZeroC) :=
  nz_general_input_typed nz_env (Level.succ Level.zero) nz_motive natZeroC nz_minor nz_motive_argument_typed nz_zero_argument_typed nz_minor_argument_typed", "Checked telescope equality or concrete nonzero-universe caller of the generic Nat.zero composition."),
 ];
 
@@ -170,7 +170,7 @@ const REGISTRATIONS: &[Registration] = &[
         declaration_index: 4,
         name: "nz_zero_after_m_eq",
         type_src: r"forall (m : KExpr),
- Eq KExpr (instantiate nz_zero_rule_tail m) (nz_zero_tail_after_m m)",
+ @Eq KExpr (instantiate nz_zero_rule_tail m) (nz_zero_tail_after_m m)",
         value_src: r"fun (m : KExpr) =>
  (Eq.cong KExpr KExpr (fun (x : KExpr) => (KExpr.pi (KExpr.app x natZeroC) (KExpr.pi (nz_zero_sarm_after_m m) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) natZeroC)))) (lift_at m Nat.zero Nat.zero) m (lift_zero_identity m))",
     },
@@ -178,15 +178,15 @@ const REGISTRATIONS: &[Registration] = &[
         declaration_index: 5,
         name: "nz_zero_sarm_after_z_eq",
         type_src: r"forall (m : KExpr) (z : KExpr),
- Eq KExpr (instantiate (nz_zero_sarm_after_m m) z) (natSuccCaseSem m)",
+ @Eq KExpr (instantiate (nz_zero_sarm_after_m m) z) (natSuccCaseSem m)",
         value_src: r"fun (m : KExpr) (z : KExpr) =>
- (Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.pi natTypeC x) (KExpr.pi (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) z (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) z (Nat.succ (Nat.succ Nat.zero))) (KExpr.app natSuccC (KExpr.bvar (Nat.succ Nat.zero))))) (KExpr.pi (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.app natSuccC (KExpr.bvar (Nat.succ Nat.zero))))) (universe_bridge_congr2 KExpr KExpr KExpr (fun (A : KExpr) (B : KExpr) => KExpr.pi A B) (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) z (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) z (Nat.succ (Nat.succ Nat.zero))) (KExpr.app natSuccC (KExpr.bvar (Nat.succ Nat.zero)))) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.app natSuccC (KExpr.bvar (Nat.succ Nat.zero)))) (Eq.cong KExpr KExpr (fun (x : KExpr) => (KExpr.app x (KExpr.bvar Nat.zero))) (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) z (Nat.succ Nat.zero)) (lift_at m Nat.zero (Nat.succ Nat.zero)) (inst_at1_lift2 m z)) (Eq.cong KExpr KExpr (fun (x : KExpr) => (KExpr.app x (KExpr.app natSuccC (KExpr.bvar (Nat.succ Nat.zero))))) (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) z (Nat.succ (Nat.succ Nat.zero))) (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (instantiate_lift_cancel_general m z Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero))) (Nat.succ (Nat.succ Nat.zero)) (Eq.refl Nat (Nat.succ Nat.zero))))))",
+ (Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.pi natTypeC x) (KExpr.pi (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) z (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) z (Nat.succ (Nat.succ Nat.zero))) (KExpr.app natSuccC (KExpr.bvar (Nat.succ Nat.zero))))) (KExpr.pi (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.app natSuccC (KExpr.bvar (Nat.succ Nat.zero))))) (universe_bridge_congr2 KExpr KExpr KExpr (fun (A : KExpr) (B : KExpr) => KExpr.pi A B) (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) z (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) z (Nat.succ (Nat.succ Nat.zero))) (KExpr.app natSuccC (KExpr.bvar (Nat.succ Nat.zero)))) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.app natSuccC (KExpr.bvar (Nat.succ Nat.zero)))) (Eq.cong KExpr KExpr (fun (x : KExpr) => (KExpr.app x (KExpr.bvar Nat.zero))) (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) z (Nat.succ Nat.zero)) (lift_at m Nat.zero (Nat.succ Nat.zero)) (inst_at1_lift2 m z)) (Eq.cong KExpr KExpr (fun (x : KExpr) => (KExpr.app x (KExpr.app natSuccC (KExpr.bvar (Nat.succ Nat.zero))))) (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) z (Nat.succ (Nat.succ Nat.zero))) (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (instantiate_lift_cancel_general m z Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero))) (Nat.succ (Nat.succ Nat.zero)) (@Eq.refl Nat (Nat.succ Nat.zero))))))",
     },
     Registration::Proof {
         declaration_index: 6,
         name: "nz_zero_after_z_eq",
         type_src: r"forall (m : KExpr) (z : KExpr),
- Eq KExpr (instantiate (KExpr.pi (nz_zero_sarm_after_m m) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) natZeroC)) z) (KExpr.pi (natSuccCaseSem m) (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) natZeroC))",
+ @Eq KExpr (instantiate (KExpr.pi (nz_zero_sarm_after_m m) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) natZeroC)) z) (KExpr.pi (natSuccCaseSem m) (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) natZeroC))",
         value_src: r"fun (m : KExpr) (z : KExpr) =>
  (universe_bridge_congr2 KExpr KExpr KExpr (fun (A : KExpr) (B : KExpr) => KExpr.pi A B) (instantiate (nz_zero_sarm_after_m m) z) (natSuccCaseSem m) (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) z (Nat.succ Nat.zero)) natZeroC) (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) natZeroC) (nz_zero_sarm_after_z_eq m z) (Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.app x natZeroC) (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) z (Nat.succ Nat.zero)) (lift_at m Nat.zero (Nat.succ Nat.zero)) (inst_at1_lift2 m z)))",
     },
@@ -194,7 +194,7 @@ const REGISTRATIONS: &[Registration] = &[
         declaration_index: 7,
         name: "nz_zero_after_s_eq",
         type_src: r"forall (m : KExpr) (s : KExpr),
- Eq KExpr (instantiate (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) natZeroC) s) (KExpr.app m natZeroC)",
+ @Eq KExpr (instantiate (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) natZeroC) s) (KExpr.app m natZeroC)",
         value_src: r"fun (m : KExpr) (s : KExpr) =>
  (Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.app x natZeroC) (instantiate (lift_at m Nat.zero (Nat.succ Nat.zero)) s) m (inst_lift1 m s))",
     },
@@ -210,23 +210,23 @@ const REGISTRATIONS: &[Registration] = &[
  (hm : TypingCtxConvIn R tenv G m (natMotiveTy u))
  (hz : TypingCtxConvIn R tenv G z (KExpr.app m natZeroC))
  (hs : TypingCtxConvIn R tenv G s (natSuccCaseSem m)) =>
- TypedRawPiSpine.cons R tenv G (natMotiveTy u) nz_zero_rule_tail m (ListType.cons KExpr z (ListType.cons KExpr s (ListType.nil KExpr))) (KExpr.app m natZeroC) hm (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (ListType.cons KExpr z (ListType.cons KExpr s (ListType.nil KExpr))) (KExpr.app m natZeroC)) (nz_zero_tail_after_m m) (instantiate nz_zero_rule_tail m) (Eq.symm KExpr (instantiate nz_zero_rule_tail m) (nz_zero_tail_after_m m) (nz_zero_after_m_eq m)) (TypedRawPiSpine.cons R tenv G (KExpr.app m natZeroC) (KExpr.pi (nz_zero_sarm_after_m m) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) natZeroC)) z (ListType.cons KExpr s (ListType.nil KExpr)) (KExpr.app m natZeroC) hz (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (ListType.cons KExpr s (ListType.nil KExpr)) (KExpr.app m natZeroC)) (KExpr.pi (natSuccCaseSem m) (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) natZeroC)) (instantiate (KExpr.pi (nz_zero_sarm_after_m m) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) natZeroC)) z) (Eq.symm KExpr (instantiate (KExpr.pi (nz_zero_sarm_after_m m) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) natZeroC)) z) (KExpr.pi (natSuccCaseSem m) (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) natZeroC)) (nz_zero_after_z_eq m z)) (TypedRawPiSpine.cons R tenv G (natSuccCaseSem m) (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) natZeroC) s (ListType.nil KExpr) (KExpr.app m natZeroC) hs (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (ListType.nil KExpr) (KExpr.app m natZeroC)) (KExpr.app m natZeroC) (instantiate (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) natZeroC) s) (Eq.symm KExpr (instantiate (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) natZeroC) s) (KExpr.app m natZeroC) (nz_zero_after_s_eq m s)) (TypedRawPiSpine.nil R tenv G (KExpr.app m natZeroC)))))))",
+ @TypedRawPiSpine.cons R tenv G (natMotiveTy u) nz_zero_rule_tail m (@ListType.cons KExpr z (@ListType.cons KExpr s (@ListType.nil KExpr))) (KExpr.app m natZeroC) hm (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (@ListType.cons KExpr z (@ListType.cons KExpr s (@ListType.nil KExpr))) (KExpr.app m natZeroC)) (nz_zero_tail_after_m m) (instantiate nz_zero_rule_tail m) (Eq.symm KExpr (instantiate nz_zero_rule_tail m) (nz_zero_tail_after_m m) (nz_zero_after_m_eq m)) (@TypedRawPiSpine.cons R tenv G (KExpr.app m natZeroC) (KExpr.pi (nz_zero_sarm_after_m m) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) natZeroC)) z (@ListType.cons KExpr s (@ListType.nil KExpr)) (KExpr.app m natZeroC) hz (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (@ListType.cons KExpr s (@ListType.nil KExpr)) (KExpr.app m natZeroC)) (KExpr.pi (natSuccCaseSem m) (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) natZeroC)) (instantiate (KExpr.pi (nz_zero_sarm_after_m m) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) natZeroC)) z) (Eq.symm KExpr (instantiate (KExpr.pi (nz_zero_sarm_after_m m) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) natZeroC)) z) (KExpr.pi (natSuccCaseSem m) (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) natZeroC)) (nz_zero_after_z_eq m z)) (@TypedRawPiSpine.cons R tenv G (natSuccCaseSem m) (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) natZeroC) s (@ListType.nil KExpr) (KExpr.app m natZeroC) hs (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (@ListType.nil KExpr) (KExpr.app m natZeroC)) (KExpr.app m natZeroC) (instantiate (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) natZeroC) s) (Eq.symm KExpr (instantiate (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) natZeroC) s) (KExpr.app m natZeroC) (nz_zero_after_s_eq m s)) (@TypedRawPiSpine.nil R tenv G (KExpr.app m natZeroC)))))))",
     },
     Registration::Proof {
         declaration_index: 9,
         name: "nz_general_raw_result_typed",
         type_src: r"forall (R : RedEnv) (u : Level) (m : KExpr) (z : KExpr) (s : KExpr)
- (hm : TypingCtxConvIn R (natTEnv Level.zero) (ListType.nil KExpr) m (natMotiveTy u))
- (hz : TypingCtxConvIn R (natTEnv Level.zero) (ListType.nil KExpr) z (KExpr.app m natZeroC))
- (hs : TypingCtxConvIn R (natTEnv Level.zero) (ListType.nil KExpr) s (natSuccCaseSem m)),
- TypingCtxConvIn R (natTEnv Level.zero) (ListType.nil KExpr) (KExpr.app (KExpr.app (KExpr.app (natRecRhsZero u) m) z) s) (KExpr.app m natZeroC)",
+ (hm : TypingCtxConvIn R (natTEnv Level.zero) (@ListType.nil KExpr) m (natMotiveTy u))
+ (hz : TypingCtxConvIn R (natTEnv Level.zero) (@ListType.nil KExpr) z (KExpr.app m natZeroC))
+ (hs : TypingCtxConvIn R (natTEnv Level.zero) (@ListType.nil KExpr) s (natSuccCaseSem m)),
+ TypingCtxConvIn R (natTEnv Level.zero) (@ListType.nil KExpr) (KExpr.app (KExpr.app (KExpr.app (natRecRhsZero u) m) z) s) (KExpr.app m natZeroC)",
         value_src: r"fun (R : RedEnv) (u : Level) (m : KExpr) (z : KExpr) (s : KExpr)
- (hm : TypingCtxConvIn R (natTEnv Level.zero) (ListType.nil KExpr) m (natMotiveTy u))
- (hz : TypingCtxConvIn R (natTEnv Level.zero) (ListType.nil KExpr) z (KExpr.app m natZeroC))
- (hs : TypingCtxConvIn R (natTEnv Level.zero) (ListType.nil KExpr) s (natSuccCaseSem m)) =>
- typed_raw_pi_spine_apply R (natTEnv Level.zero) (ListType.nil KExpr) (nz_rule_type u) (nz_zero_args m z s) (KExpr.app m natZeroC)
-  (nz_zero_typed_spine R (natTEnv Level.zero) (ListType.nil KExpr) u m z s hm hz hs) (natRecRhsZero u)
-  (nz_typing_to_semantic R (natTEnv Level.zero) (ListType.nil KExpr) (natRecRhsZero u) (nz_rule_type u) (nz_rhs_typed u))",
+ (hm : TypingCtxConvIn R (natTEnv Level.zero) (@ListType.nil KExpr) m (natMotiveTy u))
+ (hz : TypingCtxConvIn R (natTEnv Level.zero) (@ListType.nil KExpr) z (KExpr.app m natZeroC))
+ (hs : TypingCtxConvIn R (natTEnv Level.zero) (@ListType.nil KExpr) s (natSuccCaseSem m)) =>
+ typed_raw_pi_spine_apply R (natTEnv Level.zero) (@ListType.nil KExpr) (nz_rule_type u) (nz_zero_args m z s) (KExpr.app m natZeroC)
+  (nz_zero_typed_spine R (natTEnv Level.zero) (@ListType.nil KExpr) u m z s hm hz hs) (natRecRhsZero u)
+  (nz_typing_to_semantic R (natTEnv Level.zero) (@ListType.nil KExpr) (natRecRhsZero u) (nz_rule_type u) (nz_rhs_typed u))",
     },
     Registration::Proof {
         declaration_index: 10,
@@ -240,20 +240,20 @@ const REGISTRATIONS: &[Registration] = &[
         declaration_index: 11,
         name: "nz_general_guarded_result_typed",
         type_src: r"forall (u : Level) (m : KExpr) (z : KExpr) (s : KExpr)
- (hm : TypingCtxConvIn nz_env (natTEnv Level.zero) (ListType.nil KExpr) m (natMotiveTy u))
- (hz : TypingCtxConvIn nz_env (natTEnv Level.zero) (ListType.nil KExpr) z (KExpr.app m natZeroC))
- (hs : TypingCtxConvIn nz_env (natTEnv Level.zero) (ListType.nil KExpr) s (natSuccCaseSem m)),
- TypingCtxConvIn nz_env (natTEnv Level.zero) (ListType.nil KExpr) (KExpr.app (KExpr.app (KExpr.app (natRecRhsZero u) m) z) s) (KExpr.app m natZeroC)",
+ (hm : TypingCtxConvIn nz_env (natTEnv Level.zero) (@ListType.nil KExpr) m (natMotiveTy u))
+ (hz : TypingCtxConvIn nz_env (natTEnv Level.zero) (@ListType.nil KExpr) z (KExpr.app m natZeroC))
+ (hs : TypingCtxConvIn nz_env (natTEnv Level.zero) (@ListType.nil KExpr) s (natSuccCaseSem m)),
+ TypingCtxConvIn nz_env (natTEnv Level.zero) (@ListType.nil KExpr) (KExpr.app (KExpr.app (KExpr.app (natRecRhsZero u) m) z) s) (KExpr.app m natZeroC)",
         value_src: r"fun (u : Level) (m : KExpr) (z : KExpr) (s : KExpr)
- (hm : TypingCtxConvIn nz_env (natTEnv Level.zero) (ListType.nil KExpr) m (natMotiveTy u))
- (hz : TypingCtxConvIn nz_env (natTEnv Level.zero) (ListType.nil KExpr) z (KExpr.app m natZeroC))
- (hs : TypingCtxConvIn nz_env (natTEnv Level.zero) (ListType.nil KExpr) s (natSuccCaseSem m)) =>
+ (hm : TypingCtxConvIn nz_env (natTEnv Level.zero) (@ListType.nil KExpr) m (natMotiveTy u))
+ (hz : TypingCtxConvIn nz_env (natTEnv Level.zero) (@ListType.nil KExpr) z (KExpr.app m natZeroC))
+ (hs : TypingCtxConvIn nz_env (natTEnv Level.zero) (@ListType.nil KExpr) s (natSuccCaseSem m)) =>
  nz_general_raw_result_typed nz_env u m z s hm hz hs",
     },
     Registration::Proof {
         declaration_index: 12,
         name: "nz_general_nonzero_caller",
-        type_src: r"TypingCtxConvIn nz_env (natTEnv Level.zero) (ListType.nil KExpr)
+        type_src: r"TypingCtxConvIn nz_env (natTEnv Level.zero) (@ListType.nil KExpr)
  nz_raw_result (KExpr.app nz_motive natZeroC)",
         value_src: r"nz_general_guarded_result_typed (Level.succ Level.zero) nz_motive natZeroC nz_minor
  nz_motive_argument_typed nz_zero_argument_typed nz_minor_argument_typed",
@@ -261,8 +261,8 @@ const REGISTRATIONS: &[Registration] = &[
     Registration::Proof {
         declaration_index: 13,
         name: "nz_general_nonzero_caller_nat",
-        type_src: r"TypingCtxConvIn nz_env (natTEnv Level.zero) (ListType.nil KExpr) nz_raw_result natTypeC",
-        value_src: r"TypingCtxConvIn.conv nz_env (natTEnv Level.zero) (ListType.nil KExpr)
+        type_src: r"TypingCtxConvIn nz_env (natTEnv Level.zero) (@ListType.nil KExpr) nz_raw_result natTypeC",
+        value_src: r"@TypingCtxConvIn.conv nz_env (natTEnv Level.zero) (@ListType.nil KExpr)
  nz_raw_result (KExpr.app nz_motive natZeroC) natTypeC
  nz_general_nonzero_caller (nz_motive_beta natZeroC)",
     },
@@ -275,7 +275,7 @@ const REGISTRATIONS: &[Registration] = &[
     Registration::Proof {
         declaration_index: 15,
         name: "nz_zero_spine_open_motive_control",
-        type_src: r"Eq KExpr (instantiate (nz_zero_sarm_after_m (KExpr.bvar Nat.zero))
+        type_src: r"@Eq KExpr (instantiate (nz_zero_sarm_after_m (KExpr.bvar Nat.zero))
    (KExpr.bvar (Nat.succ Nat.zero))) (natSuccCaseSem (KExpr.bvar Nat.zero))",
         value_src: r"nz_zero_sarm_after_z_eq (KExpr.bvar Nat.zero) (KExpr.bvar (Nat.succ Nat.zero))",
     },
@@ -295,7 +295,7 @@ const REGISTRATIONS: &[Registration] = &[
         declaration_index: 19,
         name: "nz_zero_input_after_m_eq",
         type_src: r"forall (m : KExpr),
- Eq KExpr (instantiate nz_zero_input_tail m) (nz_zero_input_after_m m)",
+ @Eq KExpr (instantiate nz_zero_input_tail m) (nz_zero_input_after_m m)",
         value_src: r"fun (m : KExpr) =>
  (Eq.cong KExpr KExpr (fun (x : KExpr) => (KExpr.pi (KExpr.app x natZeroC) (KExpr.pi (nz_zero_sarm_after_m m) (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar Nat.zero)))))) (lift_at m Nat.zero Nat.zero) m (lift_zero_identity m))",
     },
@@ -303,15 +303,15 @@ const REGISTRATIONS: &[Registration] = &[
         declaration_index: 20,
         name: "nz_zero_input_after_z_eq",
         type_src: r"forall (m : KExpr) (z : KExpr),
- Eq KExpr (instantiate (KExpr.pi (nz_zero_sarm_after_m m) (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar Nat.zero)))) z) (KExpr.pi (natSuccCaseSem m) (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))))",
+ @Eq KExpr (instantiate (KExpr.pi (nz_zero_sarm_after_m m) (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar Nat.zero)))) z) (KExpr.pi (natSuccCaseSem m) (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))))",
         value_src: r"fun (m : KExpr) (z : KExpr) =>
- (universe_bridge_congr2 KExpr KExpr KExpr (fun (A : KExpr) (B : KExpr) => KExpr.pi A B) (instantiate (nz_zero_sarm_after_m m) z) (natSuccCaseSem m) (KExpr.pi natTypeC (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) z (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))) (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))) (nz_zero_sarm_after_z_eq m z) (Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.pi natTypeC x) (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) z (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)) (Eq.cong KExpr KExpr (fun (x : KExpr) => (KExpr.app x (KExpr.bvar Nat.zero))) (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) z (Nat.succ (Nat.succ Nat.zero))) (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (instantiate_lift_cancel_general m z Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero))) (Nat.succ (Nat.succ Nat.zero)) (Eq.refl Nat (Nat.succ Nat.zero))))))",
+ (universe_bridge_congr2 KExpr KExpr KExpr (fun (A : KExpr) (B : KExpr) => KExpr.pi A B) (instantiate (nz_zero_sarm_after_m m) z) (natSuccCaseSem m) (KExpr.pi natTypeC (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) z (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))) (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))) (nz_zero_sarm_after_z_eq m z) (Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.pi natTypeC x) (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) z (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)) (Eq.cong KExpr KExpr (fun (x : KExpr) => (KExpr.app x (KExpr.bvar Nat.zero))) (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) z (Nat.succ (Nat.succ Nat.zero))) (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (instantiate_lift_cancel_general m z Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero))) (Nat.succ (Nat.succ Nat.zero)) (@Eq.refl Nat (Nat.succ Nat.zero))))))",
     },
     Registration::Proof {
         declaration_index: 21,
         name: "nz_zero_input_after_s_eq",
         type_src: r"forall (m : KExpr) (s : KExpr),
- Eq KExpr (instantiate (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))) s) (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)))",
+ @Eq KExpr (instantiate (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))) s) (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)))",
         value_src: r"fun (m : KExpr) (s : KExpr) =>
  (Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.pi natTypeC x) (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) s (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (Eq.cong KExpr KExpr (fun (x : KExpr) => (KExpr.app x (KExpr.bvar Nat.zero))) (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) s (Nat.succ Nat.zero)) (lift_at m Nat.zero (Nat.succ Nat.zero)) (inst_at1_lift2 m s)))",
     },
@@ -319,7 +319,7 @@ const REGISTRATIONS: &[Registration] = &[
         declaration_index: 22,
         name: "nz_zero_input_after_major_eq",
         type_src: r"forall (m : KExpr),
- Eq KExpr (instantiate (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) natZeroC) (KExpr.app m natZeroC)",
+ @Eq KExpr (instantiate (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) natZeroC) (KExpr.app m natZeroC)",
         value_src: r"fun (m : KExpr) =>
  (Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.app x natZeroC) (instantiate (lift_at m Nat.zero (Nat.succ Nat.zero)) natZeroC) m (inst_lift1 m natZeroC))",
     },
@@ -337,30 +337,30 @@ const REGISTRATIONS: &[Registration] = &[
  (hz : TypingCtxConvIn R tenv G z (KExpr.app m natZeroC))
  (hs : TypingCtxConvIn R tenv G s (natSuccCaseSem m))
  (hzero : TypingCtxConvIn R tenv G natZeroC natTypeC) =>
- TypedRawPiSpine.cons R tenv G (natMotiveTy u) nz_zero_input_tail m (ListType.cons KExpr z (ListType.cons KExpr s (ListType.cons KExpr natZeroC (ListType.nil KExpr)))) (KExpr.app m natZeroC) hm (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (ListType.cons KExpr z (ListType.cons KExpr s (ListType.cons KExpr natZeroC (ListType.nil KExpr)))) (KExpr.app m natZeroC)) (nz_zero_input_after_m m) (instantiate nz_zero_input_tail m) (Eq.symm KExpr (instantiate nz_zero_input_tail m) (nz_zero_input_after_m m) (nz_zero_input_after_m_eq m)) (TypedRawPiSpine.cons R tenv G (KExpr.app m natZeroC) (KExpr.pi (nz_zero_sarm_after_m m) (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar Nat.zero)))) z (ListType.cons KExpr s (ListType.cons KExpr natZeroC (ListType.nil KExpr))) (KExpr.app m natZeroC) hz (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (ListType.cons KExpr s (ListType.cons KExpr natZeroC (ListType.nil KExpr))) (KExpr.app m natZeroC)) (KExpr.pi (natSuccCaseSem m) (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)))) (instantiate (KExpr.pi (nz_zero_sarm_after_m m) (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar Nat.zero)))) z) (Eq.symm KExpr (instantiate (KExpr.pi (nz_zero_sarm_after_m m) (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar Nat.zero)))) z) (KExpr.pi (natSuccCaseSem m) (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)))) (nz_zero_input_after_z_eq m z)) (TypedRawPiSpine.cons R tenv G (natSuccCaseSem m) (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))) s (ListType.cons KExpr natZeroC (ListType.nil KExpr)) (KExpr.app m natZeroC) hs (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (ListType.cons KExpr natZeroC (ListType.nil KExpr)) (KExpr.app m natZeroC)) (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero))) (instantiate (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))) s) (Eq.symm KExpr (instantiate (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))) s) (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero))) (nz_zero_input_after_s_eq m s)) (TypedRawPiSpine.cons R tenv G natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) natZeroC (ListType.nil KExpr) (KExpr.app m natZeroC) hzero (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (ListType.nil KExpr) (KExpr.app m natZeroC)) (KExpr.app m natZeroC) (instantiate (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) natZeroC) (Eq.symm KExpr (instantiate (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) natZeroC) (KExpr.app m natZeroC) (nz_zero_input_after_major_eq m)) (TypedRawPiSpine.nil R tenv G (KExpr.app m natZeroC)))))))))",
+ @TypedRawPiSpine.cons R tenv G (natMotiveTy u) nz_zero_input_tail m (@ListType.cons KExpr z (@ListType.cons KExpr s (@ListType.cons KExpr natZeroC (@ListType.nil KExpr)))) (KExpr.app m natZeroC) hm (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (@ListType.cons KExpr z (@ListType.cons KExpr s (@ListType.cons KExpr natZeroC (@ListType.nil KExpr)))) (KExpr.app m natZeroC)) (nz_zero_input_after_m m) (instantiate nz_zero_input_tail m) (Eq.symm KExpr (instantiate nz_zero_input_tail m) (nz_zero_input_after_m m) (nz_zero_input_after_m_eq m)) (@TypedRawPiSpine.cons R tenv G (KExpr.app m natZeroC) (KExpr.pi (nz_zero_sarm_after_m m) (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar Nat.zero)))) z (@ListType.cons KExpr s (@ListType.cons KExpr natZeroC (@ListType.nil KExpr))) (KExpr.app m natZeroC) hz (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (@ListType.cons KExpr s (@ListType.cons KExpr natZeroC (@ListType.nil KExpr))) (KExpr.app m natZeroC)) (KExpr.pi (natSuccCaseSem m) (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)))) (instantiate (KExpr.pi (nz_zero_sarm_after_m m) (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar Nat.zero)))) z) (Eq.symm KExpr (instantiate (KExpr.pi (nz_zero_sarm_after_m m) (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar Nat.zero)))) z) (KExpr.pi (natSuccCaseSem m) (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)))) (nz_zero_input_after_z_eq m z)) (@TypedRawPiSpine.cons R tenv G (natSuccCaseSem m) (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))) s (@ListType.cons KExpr natZeroC (@ListType.nil KExpr)) (KExpr.app m natZeroC) hs (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (@ListType.cons KExpr natZeroC (@ListType.nil KExpr)) (KExpr.app m natZeroC)) (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero))) (instantiate (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))) s) (Eq.symm KExpr (instantiate (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))) s) (KExpr.pi natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero))) (nz_zero_input_after_s_eq m s)) (@TypedRawPiSpine.cons R tenv G natTypeC (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) natZeroC (@ListType.nil KExpr) (KExpr.app m natZeroC) hzero (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (@ListType.nil KExpr) (KExpr.app m natZeroC)) (KExpr.app m natZeroC) (instantiate (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) natZeroC) (Eq.symm KExpr (instantiate (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) natZeroC) (KExpr.app m natZeroC) (nz_zero_input_after_major_eq m)) (@TypedRawPiSpine.nil R tenv G (KExpr.app m natZeroC)))))))))",
     },
     Registration::Proof {
         declaration_index: 24,
         name: "nz_general_input_typed",
         type_src: r"forall (R : RedEnv) (u : Level) (m : KExpr) (z : KExpr) (s : KExpr)
- (hm : TypingCtxConvIn R (natTEnv Level.zero) (ListType.nil KExpr) m (natMotiveTy u))
- (hz : TypingCtxConvIn R (natTEnv Level.zero) (ListType.nil KExpr) z (KExpr.app m natZeroC))
- (hs : TypingCtxConvIn R (natTEnv Level.zero) (ListType.nil KExpr) s (natSuccCaseSem m)),
- TypingCtxConvIn R (natTEnv Level.zero) (ListType.nil KExpr) (natRecApp u m z s natZeroC) (KExpr.app m natZeroC)",
+ (hm : TypingCtxConvIn R (natTEnv Level.zero) (@ListType.nil KExpr) m (natMotiveTy u))
+ (hz : TypingCtxConvIn R (natTEnv Level.zero) (@ListType.nil KExpr) z (KExpr.app m natZeroC))
+ (hs : TypingCtxConvIn R (natTEnv Level.zero) (@ListType.nil KExpr) s (natSuccCaseSem m)),
+ TypingCtxConvIn R (natTEnv Level.zero) (@ListType.nil KExpr) (natRecApp u m z s natZeroC) (KExpr.app m natZeroC)",
         value_src: r"fun (R : RedEnv) (u : Level) (m : KExpr) (z : KExpr) (s : KExpr)
- (hm : TypingCtxConvIn R (natTEnv Level.zero) (ListType.nil KExpr) m (natMotiveTy u))
- (hz : TypingCtxConvIn R (natTEnv Level.zero) (ListType.nil KExpr) z (KExpr.app m natZeroC))
- (hs : TypingCtxConvIn R (natTEnv Level.zero) (ListType.nil KExpr) s (natSuccCaseSem m)) =>
- typed_raw_pi_spine_const_apply R (natTEnv Level.zero) (ListType.nil KExpr) recName
- (ListType.cons Level u (ListType.nil Level)) (natRecTy u)
+ (hm : TypingCtxConvIn R (natTEnv Level.zero) (@ListType.nil KExpr) m (natMotiveTy u))
+ (hz : TypingCtxConvIn R (natTEnv Level.zero) (@ListType.nil KExpr) z (KExpr.app m natZeroC))
+ (hs : TypingCtxConvIn R (natTEnv Level.zero) (@ListType.nil KExpr) s (natSuccCaseSem m)) =>
+ typed_raw_pi_spine_const_apply R (natTEnv Level.zero) (@ListType.nil KExpr) recName
+ (@ListType.cons Level u (@ListType.nil Level)) (natRecTy u)
  (nz_zero_input_args m z s) (KExpr.app m natZeroC) (natTEnv_rec_lookup u)
- (nz_zero_input_typed_spine R (natTEnv Level.zero) (ListType.nil KExpr) u m z s hm hz hs
-  (nz_typing_to_semantic R (natTEnv Level.zero) (ListType.nil KExpr) natZeroC natTypeC (nz_zero_typed (ListType.nil KExpr))))",
+ (nz_zero_input_typed_spine R (natTEnv Level.zero) (@ListType.nil KExpr) u m z s hm hz hs
+  (nz_typing_to_semantic R (natTEnv Level.zero) (@ListType.nil KExpr) natZeroC natTypeC (nz_zero_typed (@ListType.nil KExpr))))",
     },
     Registration::Proof {
         declaration_index: 25,
         name: "nz_general_nonzero_input",
-        type_src: r"TypingCtxConvIn nz_env (natTEnv Level.zero) (ListType.nil KExpr) nz_input (KExpr.app nz_motive natZeroC)",
+        type_src: r"TypingCtxConvIn nz_env (natTEnv Level.zero) (@ListType.nil KExpr) nz_input (KExpr.app nz_motive natZeroC)",
         value_src: r"nz_general_input_typed nz_env (Level.succ Level.zero) nz_motive natZeroC nz_minor nz_motive_argument_typed nz_zero_argument_typed nz_minor_argument_typed",
     },
 ];
@@ -437,8 +437,8 @@ mod tests {
     // Well-parsed false terms: refusal is not a universal untypability claim.
     const NEGATIVE_CONTROLS: &[&str] = &[
         r"def nz_general_forged_raw_type : TypingCtxConvIn nz_env (natTEnv Level.zero)
- (ListType.nil KExpr) nz_raw_result (KExpr.sort Level.zero) := nz_general_nonzero_caller_nat",
-        r"def nz_general_forged_minor : TypingCtxConvIn nz_env (natTEnv Level.zero) (ListType.nil KExpr)
+ (@ListType.nil KExpr) nz_raw_result (KExpr.sort Level.zero) := nz_general_nonzero_caller_nat",
+        r"def nz_general_forged_minor : TypingCtxConvIn nz_env (natTEnv Level.zero) (@ListType.nil KExpr)
  nz_raw_result (KExpr.app nz_motive natZeroC) :=
  nz_general_guarded_result_typed (Level.succ Level.zero) nz_motive natZeroC nz_minor
  nz_motive_argument_typed nz_zero_argument_typed nz_zero_argument_typed",
@@ -446,9 +446,9 @@ mod tests {
  (KExpr.app (KExpr.app (KExpr.app (natRecRhsZero Level.zero) nz_motive) natZeroC) nz_minor) :=
  nz_general_nonzero_step",
         r"def nz_general_forged_input_missing_universe :
- TypingCtxConvIn nz_env (natTEnv Level.zero) (ListType.nil KExpr)
+ TypingCtxConvIn nz_env (natTEnv Level.zero) (@ListType.nil KExpr)
  (apply_spine (nz_zero_input_args nz_motive natZeroC nz_minor)
-   (KExpr.const recName (ListType.nil Level))) (KExpr.app nz_motive natZeroC) :=
+   (KExpr.const recName (@ListType.nil Level))) (KExpr.app nz_motive natZeroC) :=
  nz_general_nonzero_input",
     ];
 
@@ -647,15 +647,15 @@ mod tests {
             let spec = build_spec_with_stack();
             for (value_src, type_src) in [
                 ("nz_general_nonzero_input",
-                 "TypingCtxConvIn nz_env (natTEnv Level.zero) (ListType.nil KExpr) nz_input (KExpr.app nz_motive natZeroC)"),
+                 "TypingCtxConvIn nz_env (natTEnv Level.zero) (@ListType.nil KExpr) nz_input (KExpr.app nz_motive natZeroC)"),
                 ("nz_general_nonzero_step",
                  "iota_step (red_rec nz_env) nz_input nz_raw_result"),
                 ("nz_general_nonzero_caller",
-                 "TypingCtxConvIn nz_env (natTEnv Level.zero) (ListType.nil KExpr) nz_raw_result (KExpr.app nz_motive natZeroC)"),
+                 "TypingCtxConvIn nz_env (natTEnv Level.zero) (@ListType.nil KExpr) nz_raw_result (KExpr.app nz_motive natZeroC)"),
                 ("nz_general_nonzero_caller_nat",
-                 "TypingCtxConvIn nz_env (natTEnv Level.zero) (ListType.nil KExpr) nz_raw_result natTypeC"),
+                 "TypingCtxConvIn nz_env (natTEnv Level.zero) (@ListType.nil KExpr) nz_raw_result natTypeC"),
                 ("nz_zero_spine_open_motive_control",
-                 "Eq KExpr (instantiate (nz_zero_sarm_after_m (KExpr.bvar Nat.zero)) (KExpr.bvar (Nat.succ Nat.zero))) (natSuccCaseSem (KExpr.bvar Nat.zero))"),
+                 "@Eq KExpr (instantiate (nz_zero_sarm_after_m (KExpr.bvar Nat.zero)) (KExpr.bvar (Nat.succ Nat.zero))) (natSuccCaseSem (KExpr.bvar Nat.zero))"),
             ] {
                 let value = spec.elaborate_source(value_src, "actual generic Nat.zero caller")
                     .expect("actual caller elaborates");

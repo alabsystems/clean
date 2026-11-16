@@ -27,13 +27,14 @@ fn register(spec: &mut Specification, source: &str) {
 fn check(spec: &mut Specification, name: &str, ty: &str, actual: &str, expected: &str) {
     register(
         spec,
-        &format!("def {name} : Eq ({ty}) ({actual}) ({expected}) := Eq.refl ({ty}) ({expected})"),
+        &format!("def {name} : @Eq ({ty}) ({actual}) ({expected}) := @Eq.refl ({ty}) ({expected})"),
     );
     checked(spec, name);
 }
 
 fn reject(spec: &mut Specification, name: &str, ty: &str, actual: &str, wrong: &str) {
-    let source = format!("def {name} : Eq ({ty}) ({actual}) ({wrong}) := Eq.refl ({ty}) ({wrong})");
+    let source =
+        format!("def {name} : @Eq ({ty}) ({actual}) ({wrong}) := @Eq.refl ({ty}) ({wrong})");
     let error = spec
         .add_recursive_def(&source, "Deliberately false Usize endpoint")
         .expect_err("wrong endpoint must not check");
@@ -46,13 +47,13 @@ fn fixture() -> Specification {
         crate::eval_ir::build_byte_prelude_spec_v1_with_stack().expect("public ByteV1 constructor");
     for source in [
         r"def usize_context (ty : IRTy) (size align : Nat) : IRByteContextV1 :=
-IRByteContextV1.mk (IRModule.mk (IRList.nil IRFunc) (IRList.nil IRGlobal))
-  (IRList.cons IRByteLayoutV1 (IRByteLayoutV1.mk ty size align (IRList.nil IRTy) (IRList.nil Nat)) (IRList.nil IRByteLayoutV1))
-  (IRList.nil IRByteSignatureV1) (IRList.nil IRByteFunctionV1) (IRList.nil IRByteSiteV1)",
+IRByteContextV1.mk (IRModule.mk (@IRList.nil IRFunc) (@IRList.nil IRGlobal))
+  (@IRList.cons IRByteLayoutV1 (IRByteLayoutV1.mk ty size align (@IRList.nil IRTy) (@IRList.nil Nat)) (@IRList.nil IRByteLayoutV1))
+  (@IRList.nil IRByteSignatureV1) (@IRList.nil IRByteFunctionV1) (@IRList.nil IRByteSiteV1)",
         "def usize_ctx : IRByteContextV1 := usize_context (IRTy.usize_ 64) 8 8",
         r"def usize_allocs : IRList IRByteAllocationV1 :=
-IRList.cons IRByteAllocationV1 (IRByteAllocationV1.mk 16 32 7 Bool.true) (IRList.nil IRByteAllocationV1)",
-        "def usize_blank : Nat -> IROption Nat := fun (_ : Nat) => IROption.none Nat",
+@IRList.cons IRByteAllocationV1 (IRByteAllocationV1.mk 16 32 7 Bool.true) (@IRList.nil IRByteAllocationV1)",
+        "def usize_blank : Nat -> IROption Nat := fun (_ : Nat) => @IROption.none Nat",
         r"def usize_memory (n : Nat) : IRByteMemoryV1 := IRByteMemoryV1.mk usize_allocs
   (ir_byte_write_word_v1 (ir_byte_write_word_v1 usize_blank 32 8 77) 16 8 n) 128",
         r"def usize_op (n delta : Nat) : IRByteMemoryResultV1 :=
@@ -118,7 +119,7 @@ fn byte_usize_type_width_and_constants_are_distinct_and_legacy_stays_refused() {
             );
         }
         for bits in [0, 32, 64, 128] {
-            let source = format!("def usize_legacy_atomic_{bits} (m : IRModule) (s : IRMachine) : Eq IRConfig (ir_exec m (IRInst.atomic_fetch_add_relaxed_usize_seq {bits} 40 78) (IRList.cons Nat 99 (IRList.nil Nat)) s) (IRConfig.halted (IROutcome.unmodelled IRFault.width_bounded)) := ir_exec_atomic_fetch_add_relaxed_usize_seq_unmodelled m {bits} 40 78 (IRList.cons Nat 99 (IRList.nil Nat)) s");
+            let source = format!("def usize_legacy_atomic_{bits} (m : IRModule) (s : IRMachine) : @Eq IRConfig (ir_exec m (IRInst.atomic_fetch_add_relaxed_usize_seq {bits} 40 78) (@IRList.cons Nat 99 (@IRList.nil Nat)) s) (IRConfig.halted (IROutcome.unmodelled IRFault.width_bounded)) := ir_exec_atomic_fetch_add_relaxed_usize_seq_unmodelled m {bits} 40 78 (@IRList.cons Nat 99 (@IRList.nil Nat)) s");
             register(&mut spec, &source);
             checked(&spec, &format!("usize_legacy_atomic_{bits}"));
         }
@@ -142,7 +143,7 @@ fn byte_usize_atomic_keeps_old_result_and_exact_memory_including_wrap() {
             );
             check(&mut spec, &format!("usize_frame_{name}"), "IROption Nat",
                 &format!("ir_byte_read_word_v1 (ir_byte_mem_bytes_v1 (ir_byte_fetch_add_memory_v1 ({actual}))) 8 32"),
-                "IROption.some Nat 77");
+                "@IROption.some Nat 77");
             reject(
                 &mut spec,
                 &format!("usize_wrong_old_{name}"),
@@ -217,7 +218,7 @@ fn byte_usize_atomic_refuses_wrong_width_type_layout_and_memory() {
         ] {
             reject(&mut spec, &format!("usize_reject_{name}"), "IROption IRScalar",
                 &format!("ir_byte_fetch_add_old_v1 (ir_byte_fetch_add_relaxed_usize_seq_v1 64 ({ctx}) (IRScalar.ptr_ 16) (IRScalar.int_ 7) (usize_memory 41))"),
-                "IROption.some IRScalar (IRScalar.int_ 41)");
+                "@IROption.some IRScalar (IRScalar.int_ 41)");
         }
     });
 }
@@ -246,13 +247,13 @@ fn byte_usize_representation_laws_have_no_axioms_or_success_premises() {
         register(
             &mut spec,
             r"def usize_inhabited_primitive :
-Eq IRByteMemoryResultV1 (usize_op 41 7)
+@Eq IRByteMemoryResultV1 (usize_op 41 7)
   (IRByteMemoryResultV1.value (IRScalar.int_ 41)
     (IRByteMemoryV1.mk usize_allocs (ir_byte_write_word_v1 (ir_byte_mem_bytes_v1 (usize_memory 41)) 16 8 48) 128)) :=
 ir_byte_fetch_add_relaxed_usize64_seq_below_v1 usize_ctx (usize_memory 41) 16 41 7
   (Nat.le_add_right 17 18446744073709551599)
-  (Eq.refl (IROption IRByteLayoutV1) (IROption.some IRByteLayoutV1 (IRByteLayoutV1.mk (IRTy.usize_ 64) 8 8 (IRList.nil IRTy) (IRList.nil Nat))))
-  (Eq.refl Bool Bool.true)
+  (@Eq.refl (IROption IRByteLayoutV1) (@IROption.some IRByteLayoutV1 (IRByteLayoutV1.mk (IRTy.usize_ 64) 8 8 (@IRList.nil IRTy) (@IRList.nil Nat))))
+  (@Eq.refl Bool Bool.true)
   (ir_byte_usize64_rep_write_v1 (IRByteMemoryV1.mk usize_allocs (ir_byte_write_word_v1 usize_blank 32 8 77) 128) 16 41)
   (Nat.le_add_right 49 18446744073709551567)",
         );

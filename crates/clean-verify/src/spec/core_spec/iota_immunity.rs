@@ -106,7 +106,7 @@ impl Specification {
         format!(
             "(delta_reduct_eq_none_of_defval_none (red_def the_red_env) \
              (KExpr.const {nm} {us}) {nm} \
-             (Eq.refl (OptionType Name) (OptionType.some Name {nm})) hdef)"
+             (@Eq.refl (OptionType Name) (@OptionType.some Name {nm})) hdef)"
         )
     }
 
@@ -115,7 +115,7 @@ impl Specification {
     /// Shared with `wh_neutral_stuck`, which needs the identical predicate; it
     /// is exported rather than restated there.
     pub(super) fn head_is(e: &str) -> String {
-        format!("Eq (OptionType Name) (kexpr_const_name (kapp_fn {e})) (OptionType.some Name nm)")
+        format!("@Eq (OptionType Name) (kexpr_const_name (kapp_fn {e})) (@OptionType.some Name nm)")
     }
 
     /// The same statement lifted into `Type`.
@@ -139,7 +139,7 @@ impl Specification {
     /// `LiftP.rec` unwrap, the mirror of `LiftP.up` (pattern from `nf_head.rs:96`).
     fn unlift(e: &str, value: &str) -> String {
         let p = Self::head_is(e);
-        format!("LiftP.rec ({p}) (fun (_l : LiftP ({p})) => {p}) (fun (pp : {p}) => pp) ({value})")
+        format!("@LiftP.rec ({p}) (fun (_l : LiftP ({p})) => {p}) (fun (pp : {p}) => pp) ({value})")
     }
 
     fn add_const_head_preserved(&mut self) -> Result<(), SpecError> {
@@ -188,10 +188,10 @@ impl Specification {
         self.add_recursive_def(
             &format!(
                 "def const_head_preserved_cd (env : RedEnv) (nm : Name) \
-                 (hdef : Eq (OptionType KExpr) (defval_for (red_def env) nm) \
-                 (OptionType.none KExpr)) \
-                 (hrec : Eq (OptionType RecMeta) (recmeta_for (red_rec env) nm) \
-                 (OptionType.none RecMeta)) \
+                 (hdef : @Eq (OptionType KExpr) (defval_for (red_def env) nm) \
+                 (@OptionType.none KExpr)) \
+                 (hrec : @Eq (OptionType RecMeta) (recmeta_for (red_rec env) nm) \
+                 (@OptionType.none RecMeta)) \
                  (e : KExpr) (e2 : KExpr) (h : par_reduces_cd env e e2) : \
                  {src_goal} -> {tgt_goal} := \
                  fun (hh : {src_goal}) => {unwrap}",
@@ -200,7 +200,7 @@ impl Specification {
                 unwrap = Self::unlift(
                     "e2",
                     &format!(
-                        "par_reduces_cd.rec env \
+                        "@par_reduces_cd.rec env \
                          (fun (p : KExpr) (q : KExpr) (_h : par_reduces_cd env p q) => \
                          {p_goal} -> {q_lifted}) \
                          {arms}e e2 h hh",
@@ -234,7 +234,7 @@ impl Specification {
     fn special_arm(slot: usize) -> String {
         match slot {
             0 => format!(
-                "(fun (re : KExpr) (hr : {p}) => LiftP.up ({p}) hr) ",
+                "(fun (re : KExpr) (hr : {p}) => @LiftP.up ({p}) hr) ",
                 p = Self::head_is("re")
             ),
             7 => format!(
@@ -248,10 +248,10 @@ impl Specification {
                 "(fun (de : KExpr) (de2 : KExpr) \
                  (hstep : delta_step (red_def env) de de2) (hr : {src}) => \
                  option_none_ne_some_type KExpr de2 ({tgt}) \
-                 (Eq.trans (OptionType KExpr) (OptionType.none KExpr) \
-                 (delta_reduct (red_def env) de) (OptionType.some KExpr de2) \
+                 (Eq.trans (OptionType KExpr) (@OptionType.none KExpr) \
+                 (delta_reduct (red_def env) de) (@OptionType.some KExpr de2) \
                  (Eq.symm (OptionType KExpr) (delta_reduct (red_def env) de) \
-                 (OptionType.none KExpr) \
+                 (@OptionType.none KExpr) \
                  (delta_reduct_eq_none_of_defval_none (red_def env) de nm hr hdef)) \
                  hstep)) ",
                 src = Self::head_is("de"),
@@ -265,10 +265,10 @@ impl Specification {
         self.add_recursive_def(
             &format!(
                 "def const_head_star_preserved (env : RedEnv) (nm : Name) \
-                 (hdef : Eq (OptionType KExpr) (defval_for (red_def env) nm) \
-                 (OptionType.none KExpr)) \
-                 (hrec : Eq (OptionType RecMeta) (recmeta_for (red_rec env) nm) \
-                 (OptionType.none RecMeta)) \
+                 (hdef : @Eq (OptionType KExpr) (defval_for (red_def env) nm) \
+                 (@OptionType.none KExpr)) \
+                 (hrec : @Eq (OptionType RecMeta) (recmeta_for (red_rec env) nm) \
+                 (@OptionType.none RecMeta)) \
                  (e : KExpr) (e2 : KExpr) (h : par_reduces_cd_star env e e2) : \
                  {src_goal} -> {tgt_goal} := \
                  fun (hh : {src_goal}) => {unwrap}",
@@ -277,10 +277,10 @@ impl Specification {
                 unwrap = Self::unlift(
                     "e2",
                     &format!(
-                        "par_reduces_cd_star.rec env \
+                        "@par_reduces_cd_star.rec env \
                          (fun (p : KExpr) (q : KExpr) (_h : par_reduces_cd_star env p q) => \
                          {p_goal} -> {q_lifted}) \
-                         (fun (re : KExpr) (hr : {re_goal}) => LiftP.up ({re_goal}) hr) \
+                         (fun (re : KExpr) (hr : {re_goal}) => @LiftP.up ({re_goal}) hr) \
                          (fun (sx : KExpr) (sy : KExpr) (sz : KExpr) \
                          (hstep : par_reduces_cd env sx sy) \
                          (_hstar : par_reduces_cd_star env sy sz) \
@@ -308,10 +308,10 @@ impl Specification {
         self.add_recursive_def(
             &format!(
                 "def iota_immune_of_dead_const_head (nm : Name) \
-                 (hdef : Eq (OptionType KExpr) (defval_for (red_def the_red_env) nm) \
-                 (OptionType.none KExpr)) \
-                 (hrec : Eq (OptionType RecMeta) (recmeta_for (red_rec the_red_env) nm) \
-                 (OptionType.none RecMeta)) \
+                 (hdef : @Eq (OptionType KExpr) (defval_for (red_def the_red_env) nm) \
+                 (@OptionType.none KExpr)) \
+                 (hrec : @Eq (OptionType RecMeta) (recmeta_for (red_rec the_red_env) nm) \
+                 (@OptionType.none RecMeta)) \
                  (e : KExpr) (hhead : {head}) : iota_immune e := \
                  fun (e2 : KExpr) (r : KExpr) \
                  (hstar : par_reduces_cd_star the_red_env e e2) \
@@ -342,16 +342,16 @@ impl Specification {
     fn add_iota_immune_app_witness(&mut self) -> Result<(), SpecError> {
         // Name.anonymous is in neither component of the reflected env, so both
         // deadness facts are single-rfl computations.
-        let subject = "(KExpr.app (KExpr.const Name.anonymous (ListType.nil Level)) \
+        let subject = "(KExpr.app (KExpr.const Name.anonymous (@ListType.nil Level)) \
                        (KExpr.sort Level.zero))";
         self.add_recursive_def(
             &format!(
                 "def iota_immune_app_witness : iota_immune {subject} := \
                  iota_immune_of_dead_const_head Name.anonymous \
-                 (Eq.refl (OptionType KExpr) (OptionType.none KExpr)) \
-                 (Eq.refl (OptionType RecMeta) (OptionType.none RecMeta)) \
+                 (@Eq.refl (OptionType KExpr) (@OptionType.none KExpr)) \
+                 (@Eq.refl (OptionType RecMeta) (@OptionType.none RecMeta)) \
                  {subject} \
-                 (Eq.refl (OptionType Name) (OptionType.some Name Name.anonymous))"
+                 (@Eq.refl (OptionType Name) (@OptionType.some Name Name.anonymous))"
             ),
             "iota_immune_app_witness (NON-VACUITY): iota_immune holds at a genuine APPLICATION. \
              \
@@ -374,8 +374,8 @@ impl Specification {
         self.add_recursive_def(
             &format!(
                 "def iota_neutral_of_dead_const (nm : Name) (us : ListType Level) \
-                 (hdef : Eq (OptionType KExpr) (defval_for (red_def the_red_env) nm) \
-                 (OptionType.none KExpr)) : iota_neutral (KExpr.const nm us) := \
+                 (hdef : @Eq (OptionType KExpr) (defval_for (red_def the_red_env) nm) \
+                 (@OptionType.none KExpr)) : iota_neutral (KExpr.const nm us) := \
                  iota_neutral.const nm us {dead} {dead}"
             ),
             "iota_neutral_of_dead_const: iota_neutral at an opaque constant. \
@@ -392,14 +392,14 @@ impl Specification {
     }
 
     fn add_nf_head_neutral_witness(&mut self) -> Result<(), SpecError> {
-        let head = "(KExpr.const Name.anonymous (ListType.nil Level))";
+        let head = "(KExpr.const Name.anonymous (@ListType.nil Level))";
         let arg = "(KExpr.sort Level.zero)";
         self.add_recursive_def(
             &format!(
                 "def nf_head_neutral_app_witness : nf_head (KExpr.app {head} {arg}) := \
                  nf_head.neutral {head} {arg} \
-                 (iota_neutral_of_dead_const Name.anonymous (ListType.nil Level) \
-                 (Eq.refl (OptionType KExpr) (OptionType.none KExpr))) \
+                 (iota_neutral_of_dead_const Name.anonymous (@ListType.nil Level) \
+                 (@Eq.refl (OptionType KExpr) (@OptionType.none KExpr))) \
                  iota_immune_app_witness"
             ),
             "nf_head_neutral_app_witness (NON-VACUITY, the one that matters): the FIRST nf_head \

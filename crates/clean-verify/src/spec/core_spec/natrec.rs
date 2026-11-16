@@ -70,20 +70,20 @@ impl Specification {
         // ── The Nat constant heads (opaque consts; their reduction behaviour is
         // supplied by the RecEnv iota rules, not a DefEnv value).
         self.add_recursive_def(
-            "def natTypeC : KExpr := KExpr.const natName (ListType.nil Level)",
+            "def natTypeC : KExpr := KExpr.const natName (@ListType.nil Level)",
             "Nat : the object-level type constant. Nat.rec port N0.",
         )?;
         self.add_recursive_def(
-            "def natZeroC : KExpr := KExpr.const zeroName (ListType.nil Level)",
+            "def natZeroC : KExpr := KExpr.const zeroName (@ListType.nil Level)",
             "Nat.zero constant. Nat.rec port N0.",
         )?;
         self.add_recursive_def(
-            "def natSuccC : KExpr := KExpr.const succName (ListType.nil Level)",
+            "def natSuccC : KExpr := KExpr.const succName (@ListType.nil Level)",
             "Nat.succ constant. Nat.rec port N0.",
         )?;
         // Nat.rec.{u} carries its ONE level parameter (the motive universe).
         self.add_recursive_def(
-            "def natRecC (u : Level) : KExpr := KExpr.const recName (ListType.cons Level u (ListType.nil Level))",
+            "def natRecC (u : Level) : KExpr := KExpr.const recName (@ListType.cons Level u (@ListType.nil Level))",
             "Nat.rec.{u} constant (carries the motive-universe level param u). Nat.rec port N0.",
         )?;
 
@@ -128,7 +128,7 @@ impl Specification {
         // The old iota operation and per-u RHS environment below are unchanged;
         // their later switch to schematic stored rules must be atomic.
         self.add_recursive_def(
-            "def natRecMeta : RecMeta := RecMeta.mk Nat.zero (Nat.succ Nat.zero) (Nat.succ (Nat.succ Nat.zero)) Nat.zero Bool.true (KConstSig.mk (ListType.cons Name Name.anonymous (ListType.nil Name)) (natRecTy (Level.param Name.anonymous))) Nat.zero",
+            "def natRecMeta : RecMeta := RecMeta.mk Nat.zero (Nat.succ Nat.zero) (Nat.succ (Nat.succ Nat.zero)) Nat.zero Bool.true (KConstSig.mk (@ListType.cons Name Name.anonymous (@ListType.nil Name)) (natRecTy (Level.param Name.anonymous))) Nat.zero",
             "Nat.rec arg-order metadata (0 params, 1 motive, 2 minors, 0 indices, major-after-minors). Nat.rec port N0.",
         )?;
         // The two rules, one per constructor.
@@ -171,11 +171,11 @@ impl Specification {
         // computational-fidelity core: Nat.rec's object-level iota is real, not
         // asserted. Zero axiom_deps (Eq.refl).
         self.add_recursive_def(
-            "def natREnv_iota_zero (u : Level) (m : KExpr) (z : KExpr) (s : KExpr) : iota_step (natREnv u) (natRecApp u m z s natZeroC) (KExpr.app (KExpr.app (KExpr.app (natRecRhsZero u) m) z) s) := Eq.refl (OptionType KExpr) (OptionType.some KExpr (KExpr.app (KExpr.app (KExpr.app (natRecRhsZero u) m) z) s))",
+            "def natREnv_iota_zero (u : Level) (m : KExpr) (z : KExpr) (s : KExpr) : iota_step (natREnv u) (natRecApp u m z s natZeroC) (KExpr.app (KExpr.app (KExpr.app (natRecRhsZero u) m) z) s) := @Eq.refl (OptionType KExpr) (@OptionType.some KExpr (KExpr.app (KExpr.app (KExpr.app (natRecRhsZero u) m) z) s))",
             "Nat.rec iota fires on a zero major: iota_step (natREnv u) (natRec m z s zero) ((natRecRhsZero u) m z s), by rfl-computation. Nat.rec port N1b-iota.",
         )?;
         self.add_recursive_def(
-            "def natREnv_iota_succ (u : Level) (m : KExpr) (z : KExpr) (s : KExpr) (n : KExpr) : iota_step (natREnv u) (natRecApp u m z s (KExpr.app natSuccC n)) (KExpr.app (KExpr.app (KExpr.app (KExpr.app (natRecRhsSucc u) m) z) s) n) := Eq.refl (OptionType KExpr) (OptionType.some KExpr (KExpr.app (KExpr.app (KExpr.app (KExpr.app (natRecRhsSucc u) m) z) s) n))",
+            "def natREnv_iota_succ (u : Level) (m : KExpr) (z : KExpr) (s : KExpr) (n : KExpr) : iota_step (natREnv u) (natRecApp u m z s (KExpr.app natSuccC n)) (KExpr.app (KExpr.app (KExpr.app (KExpr.app (natRecRhsSucc u) m) z) s) n) := @Eq.refl (OptionType KExpr) (@OptionType.some KExpr (KExpr.app (KExpr.app (KExpr.app (KExpr.app (natRecRhsSucc u) m) z) s) n))",
             "Nat.rec iota fires on a succ major: iota_step (natREnv u) (natRec m z s (succ n)) ((natRecRhsSucc u) m z s n), by rfl-computation. Nat.rec port N1b-iota.",
         )?;
 
@@ -185,19 +185,19 @@ impl Specification {
         // δ-environments that bind the Nat names. Now buildable: add_natrec_objects
         // runs AFTER add_delta_step_core (defval_for), so the old deferral is lifted.
         self.add_inductive(
-            "inductive NatFresh : DefEnv -> Type\n| mk : forall (denv : DefEnv), Eq (OptionType KExpr) (defval_for denv natName) (OptionType.none KExpr) -> Eq (OptionType KExpr) (defval_for denv zeroName) (OptionType.none KExpr) -> Eq (OptionType KExpr) (defval_for denv succName) (OptionType.none KExpr) -> Eq (OptionType KExpr) (defval_for denv recName) (OptionType.none KExpr) -> NatFresh denv",
+            "inductive NatFresh : DefEnv -> Type\n| mk : forall (denv : DefEnv), @Eq (OptionType KExpr) (defval_for denv natName) (@OptionType.none KExpr) -> @Eq (OptionType KExpr) (defval_for denv zeroName) (@OptionType.none KExpr) -> @Eq (OptionType KExpr) (defval_for denv succName) (@OptionType.none KExpr) -> @Eq (OptionType KExpr) (defval_for denv recName) (@OptionType.none KExpr) -> NatFresh denv",
             "NatFresh denv: denv δ-defines none of Nat/zero/succ/rec (all defval_for = none). Freshness gate keeping the model redNatRec field vacuous over adversarial δ-envs. Nat.rec port N3-gate.",
         )?;
         // ── N2 (gate): NatRecEnvOK (renv really carries the Nat.rec recursor data).
         self.add_inductive(
-            "inductive NatRecEnvOK : Level -> RecEnv -> Type\n| mk : forall (u : Level) (renv : RecEnv), Eq (OptionType RecMeta) (recmeta_for renv recName) (OptionType.some RecMeta natRecMeta) -> Eq (OptionType RecRule) (recrule_for renv recName zeroName) (OptionType.some RecRule (RecRule.mk zeroName Nat.zero (natRecRhsZero (Level.param Name.anonymous)))) -> Eq (OptionType RecRule) (recrule_for renv recName succName) (OptionType.some RecRule (RecRule.mk succName (Nat.succ Nat.zero) (natRecRhsSucc (Level.param Name.anonymous)))) -> NatRecEnvOK u renv",
+            "inductive NatRecEnvOK : Level -> RecEnv -> Type\n| mk : forall (u : Level) (renv : RecEnv), @Eq (OptionType RecMeta) (recmeta_for renv recName) (@OptionType.some RecMeta natRecMeta) -> @Eq (OptionType RecRule) (recrule_for renv recName zeroName) (@OptionType.some RecRule (RecRule.mk zeroName Nat.zero (natRecRhsZero (Level.param Name.anonymous)))) -> @Eq (OptionType RecRule) (recrule_for renv recName succName) (@OptionType.some RecRule (RecRule.mk succName (Nat.succ Nat.zero) (natRecRhsSucc (Level.param Name.anonymous)))) -> NatRecEnvOK u renv",
             "NatRecEnvOK u renv: renv carries the Nat.rec metadata + both rules. Gates the model redNatRec field vacuous off non-Nat envs. Nat.rec port N2.",
         )?;
         // natREnv actually satisfies NatRecEnvOK — the three fields hold by rfl
         // (recmeta_for/recrule_for on natREnv compute to the Nat.rec data).
         // Non-vacuity: the Nat recursor env is real. Zero axiom_deps.
         self.add_recursive_def(
-            "def natREnv_recEnvOK (u : Level) : NatRecEnvOK u (natREnv u) := NatRecEnvOK.mk u (natREnv u) (Eq.refl (OptionType RecMeta) (OptionType.some RecMeta natRecMeta)) (Eq.refl (OptionType RecRule) (OptionType.some RecRule (RecRule.mk zeroName Nat.zero (natRecRhsZero (Level.param Name.anonymous))))) (Eq.refl (OptionType RecRule) (OptionType.some RecRule (RecRule.mk succName (Nat.succ Nat.zero) (natRecRhsSucc (Level.param Name.anonymous)))))",
+            "def natREnv_recEnvOK (u : Level) : NatRecEnvOK u (natREnv u) := @NatRecEnvOK.mk u (natREnv u) (@Eq.refl (OptionType RecMeta) (@OptionType.some RecMeta natRecMeta)) (@Eq.refl (OptionType RecRule) (@OptionType.some RecRule (RecRule.mk zeroName Nat.zero (natRecRhsZero (Level.param Name.anonymous))))) (@Eq.refl (OptionType RecRule) (@OptionType.some RecRule (RecRule.mk succName (Nat.succ Nat.zero) (natRecRhsSucc (Level.param Name.anonymous)))))",
             "natREnv satisfies NatRecEnvOK, by rfl: recmeta_for/recrule_for on natREnv compute to the Nat.rec metadata + rules. The Nat recursor env is real. Nat.rec port N2.",
         )?;
 
@@ -209,11 +209,11 @@ impl Specification {
         // from the natREnv_iota_zero/succ rfl-witnesses through the ι arm
         // (red_rec (RedEnv.mk r d ic) computes to r).
         self.add_recursive_def(
-            "def natrec_fires_red_zero (u : Level) (d : DefEnv) (ic : IndCtorEnv) (m : KExpr) (z : KExpr) (s : KExpr) : whnf_red_step (RedEnv.mk (natREnv u) d ic) (natRecApp u m z s natZeroC) (KExpr.app (KExpr.app (KExpr.app (natRecRhsZero u) m) z) s) := whnf_red_step.iota (RedEnv.mk (natREnv u) d ic) (natRecApp u m z s natZeroC) (KExpr.app (KExpr.app (KExpr.app (natRecRhsZero u) m) z) s) (natREnv_iota_zero u m z s)",
+            "def natrec_fires_red_zero (u : Level) (d : DefEnv) (ic : IndCtorEnv) (m : KExpr) (z : KExpr) (s : KExpr) : whnf_red_step (RedEnv.mk (natREnv u) d ic) (natRecApp u m z s natZeroC) (KExpr.app (KExpr.app (KExpr.app (natRecRhsZero u) m) z) s) := @whnf_red_step.iota (RedEnv.mk (natREnv u) d ic) (natRecApp u m z s natZeroC) (KExpr.app (KExpr.app (KExpr.app (natRecRhsZero u) m) z) s) (natREnv_iota_zero u m z s)",
             "ι-LIVENESS (X15, Nat instance, zero major): for ANY definition environment and ANY motive/minors, the Nat recursor applied to the zero constructor takes a whnf_red_step — the natREnv_iota_zero rfl-witness through the ι arm. The in-spec natrec_fires (zero case).",
         )?;
         self.add_recursive_def(
-            "def natrec_fires_red_succ (u : Level) (d : DefEnv) (ic : IndCtorEnv) (m : KExpr) (z : KExpr) (s : KExpr) (n : KExpr) : whnf_red_step (RedEnv.mk (natREnv u) d ic) (natRecApp u m z s (KExpr.app natSuccC n)) (KExpr.app (KExpr.app (KExpr.app (KExpr.app (natRecRhsSucc u) m) z) s) n) := whnf_red_step.iota (RedEnv.mk (natREnv u) d ic) (natRecApp u m z s (KExpr.app natSuccC n)) (KExpr.app (KExpr.app (KExpr.app (KExpr.app (natRecRhsSucc u) m) z) s) n) (natREnv_iota_succ u m z s n)",
+            "def natrec_fires_red_succ (u : Level) (d : DefEnv) (ic : IndCtorEnv) (m : KExpr) (z : KExpr) (s : KExpr) (n : KExpr) : whnf_red_step (RedEnv.mk (natREnv u) d ic) (natRecApp u m z s (KExpr.app natSuccC n)) (KExpr.app (KExpr.app (KExpr.app (KExpr.app (natRecRhsSucc u) m) z) s) n) := @whnf_red_step.iota (RedEnv.mk (natREnv u) d ic) (natRecApp u m z s (KExpr.app natSuccC n)) (KExpr.app (KExpr.app (KExpr.app (KExpr.app (natRecRhsSucc u) m) z) s) n) (natREnv_iota_succ u m z s n)",
             "ι-LIVENESS (X15, Nat instance, succ major): for ANY definition environment and ANY motive/minors and ANY major tail n, the Nat recursor applied to succ n takes a whnf_red_step — the natREnv_iota_succ rfl-witness through the ι arm. The in-spec natrec_fires (succ case).",
         )?;
 
@@ -253,11 +253,11 @@ impl Specification {
         // Lift the verified iota-fire (N1b-iota) into the reduction relation: the
         // Nat.rec spine at a numeral major takes a natStep to the rule-rhs spine.
         self.add_recursive_def(
-            "def natStep_iota_zero (u : Level) (m : KExpr) (z : KExpr) (s : KExpr) : natStep u (natRecApp u m z s natZeroC) (KExpr.app (KExpr.app (KExpr.app (natRecRhsZero u) m) z) s) := natStep.iota u (natRecApp u m z s natZeroC) (KExpr.app (KExpr.app (KExpr.app (natRecRhsZero u) m) z) s) (iotaCong.head u (natRecApp u m z s natZeroC) (KExpr.app (KExpr.app (KExpr.app (natRecRhsZero u) m) z) s) (natREnv_iota_zero u m z s))",
+            "def natStep_iota_zero (u : Level) (m : KExpr) (z : KExpr) (s : KExpr) : natStep u (natRecApp u m z s natZeroC) (KExpr.app (KExpr.app (KExpr.app (natRecRhsZero u) m) z) s) := @natStep.iota u (natRecApp u m z s natZeroC) (KExpr.app (KExpr.app (KExpr.app (natRecRhsZero u) m) z) s) (@iotaCong.head u (natRecApp u m z s natZeroC) (KExpr.app (KExpr.app (KExpr.app (natRecRhsZero u) m) z) s) (natREnv_iota_zero u m z s))",
             "Nat.rec zero major takes a natStep (iota) to (natRecRhsZero u) m z s. Nat.rec port N1b.",
         )?;
         self.add_recursive_def(
-            "def natStep_iota_succ (u : Level) (m : KExpr) (z : KExpr) (s : KExpr) (n : KExpr) : natStep u (natRecApp u m z s (KExpr.app natSuccC n)) (KExpr.app (KExpr.app (KExpr.app (KExpr.app (natRecRhsSucc u) m) z) s) n) := natStep.iota u (natRecApp u m z s (KExpr.app natSuccC n)) (KExpr.app (KExpr.app (KExpr.app (KExpr.app (natRecRhsSucc u) m) z) s) n) (iotaCong.head u (natRecApp u m z s (KExpr.app natSuccC n)) (KExpr.app (KExpr.app (KExpr.app (KExpr.app (natRecRhsSucc u) m) z) s) n) (natREnv_iota_succ u m z s n))",
+            "def natStep_iota_succ (u : Level) (m : KExpr) (z : KExpr) (s : KExpr) (n : KExpr) : natStep u (natRecApp u m z s (KExpr.app natSuccC n)) (KExpr.app (KExpr.app (KExpr.app (KExpr.app (natRecRhsSucc u) m) z) s) n) := @natStep.iota u (natRecApp u m z s (KExpr.app natSuccC n)) (KExpr.app (KExpr.app (KExpr.app (KExpr.app (natRecRhsSucc u) m) z) s) n) (@iotaCong.head u (natRecApp u m z s (KExpr.app natSuccC n)) (KExpr.app (KExpr.app (KExpr.app (KExpr.app (natRecRhsSucc u) m) z) s) n) (natREnv_iota_succ u m z s n))",
             "Nat.rec succ major takes a natStep (iota) to (natRecRhsSucc u) m z s n. Nat.rec port N1b.",
         )?;
 
@@ -270,7 +270,7 @@ impl Specification {
         // intermediates). Zero axiom_deps. Needs psubst calculus (why add_natrec
         // moved after add_dependent_sn_richmodel).
         self.add_recursive_def(
-            "def betaReduces_psubst (A : KExpr) (body : KExpr) (arg : KExpr) : beta_reduces (KExpr.app (KExpr.lam A body) arg) (psubst (scons arg idsubst) body) := Eq.substType KExpr (fun (w : KExpr) => beta_reduces (KExpr.app (KExpr.lam A body) arg) w) (instantiate body arg) (psubst (scons arg idsubst) body) (instantiate_eq_psubst body arg) (beta_reduces.beta A body arg)",
+            "def betaReduces_psubst (A : KExpr) (body : KExpr) (arg : KExpr) : beta_reduces (KExpr.app (KExpr.lam A body) arg) (psubst (scons arg idsubst) body) := @Eq.substType KExpr (fun (w : KExpr) => beta_reduces (KExpr.app (KExpr.lam A body) arg) w) (instantiate body arg) (psubst (scons arg idsubst) body) (instantiate_eq_psubst body arg) (beta_reduces.beta A body arg)",
             "betaReduces_psubst: beta_reduces (app (lam A body) arg) (psubst (scons arg idsubst) body), the β-chain foundation (beta.beta transported along instantiate_eq_psubst). Nat.rec port N1b-full.",
         )?;
         // psubst_scons_up: psubst (scons a idsubst) (psubst (up s) b) = psubst
@@ -279,7 +279,7 @@ impl Specification {
         // instantiate (psubst (up s) b) a (symm instantiate_eq_psubst / symm
         // psubst_scons_instantiate). Ported from SnNatRec.lean. Zero axiom_deps.
         self.add_recursive_def(
-            "def psubst_scons_up (a : KExpr) (b : KExpr) (s : Nat -> KExpr) : Eq KExpr (psubst (scons a idsubst) (psubst (up s) b)) (psubst (scons a s) b) := Eq.trans KExpr (psubst (scons a idsubst) (psubst (up s) b)) (instantiate (psubst (up s) b) a) (psubst (scons a s) b) (Eq.symm KExpr (instantiate (psubst (up s) b) a) (psubst (scons a idsubst) (psubst (up s) b)) (instantiate_eq_psubst (psubst (up s) b) a)) (Eq.symm KExpr (psubst (scons a s) b) (instantiate (psubst (up s) b) a) (psubst_scons_instantiate b a s))",
+            "def psubst_scons_up (a : KExpr) (b : KExpr) (s : Nat -> KExpr) : @Eq KExpr (psubst (scons a idsubst) (psubst (up s) b)) (psubst (scons a s) b) := @Eq.trans KExpr (psubst (scons a idsubst) (psubst (up s) b)) (instantiate (psubst (up s) b) a) (psubst (scons a s) b) (@Eq.symm KExpr (instantiate (psubst (up s) b) a) (psubst (scons a idsubst) (psubst (up s) b)) (instantiate_eq_psubst (psubst (up s) b) a)) (@Eq.symm KExpr (psubst (scons a s) b) (instantiate (psubst (up s) b) a) (psubst_scons_instantiate b a s))",
             "psubst_scons_up: psubst (scons a idsubst) (psubst (up s) b) = psubst (scons a s) b, the β-chain substitution-composition step. Nat.rec port N1b-full.",
         )?;
 
@@ -297,24 +297,24 @@ impl Specification {
         let e3 = format!("(KExpr.app (psubst (scons z (scons m idsubst)) {body1}) s)");
         let e4 = "(psubst (scons s (scons z (scons m idsubst))) (KExpr.bvar (Nat.succ Nat.zero)))";
         let beta1 = format!(
-            "(natStep.beta u {e1} {e2} (beta_reduces.app_left (KExpr.app (KExpr.app (natRecRhsZero u) m) z) (KExpr.app (psubst (scons m idsubst) {body0}) z) s (beta_reduces.app_left (KExpr.app (natRecRhsZero u) m) (psubst (scons m idsubst) {body0}) z (betaReduces_psubst (natMotiveTy u) {body0} m))))"
+            "(@natStep.beta u {e1} {e2} (beta_reduces.app_left (KExpr.app (KExpr.app (natRecRhsZero u) m) z) (KExpr.app (psubst (scons m idsubst) {body0}) z) s (beta_reduces.app_left (KExpr.app (natRecRhsZero u) m) (psubst (scons m idsubst) {body0}) z (betaReduces_psubst (natMotiveTy u) {body0} m))))"
         );
         let brp2 = format!(
             "(betaReduces_psubst (psubst (scons m idsubst) (KExpr.app (KExpr.bvar Nat.zero) natZeroC)) (psubst (up (scons m idsubst)) {body1}) z)"
         );
         let trans2 = format!(
-            "(Eq.substType KExpr (fun (w : KExpr) => beta_reduces (KExpr.app (psubst (scons m idsubst) {body0}) z) w) (psubst (scons z idsubst) (psubst (up (scons m idsubst)) {body1})) (psubst (scons z (scons m idsubst)) {body1}) (psubst_scons_up z {body1} (scons m idsubst)) {brp2})"
+            "(@Eq.substType KExpr (fun (w : KExpr) => beta_reduces (KExpr.app (psubst (scons m idsubst) {body0}) z) w) (psubst (scons z idsubst) (psubst (up (scons m idsubst)) {body1})) (psubst (scons z (scons m idsubst)) {body1}) (psubst_scons_up z {body1} (scons m idsubst)) {brp2})"
         );
         let beta2 = format!(
-            "(natStep.beta u {e2} {e3} (beta_reduces.app_left (KExpr.app (psubst (scons m idsubst) {body0}) z) (psubst (scons z (scons m idsubst)) {body1}) s {trans2}))"
+            "(@natStep.beta u {e2} {e3} (beta_reduces.app_left (KExpr.app (psubst (scons m idsubst) {body0}) z) (psubst (scons z (scons m idsubst)) {body1}) s {trans2}))"
         );
         let brp3 = "(betaReduces_psubst (psubst (scons z (scons m idsubst)) natRecSArm) (psubst (up (scons z (scons m idsubst))) (KExpr.bvar (Nat.succ Nat.zero))) s)";
         let trans3 = format!(
-            "(Eq.substType KExpr (fun (w : KExpr) => beta_reduces (KExpr.app (psubst (scons z (scons m idsubst)) {body1}) s) w) (psubst (scons s idsubst) (psubst (up (scons z (scons m idsubst))) (KExpr.bvar (Nat.succ Nat.zero)))) (psubst (scons s (scons z (scons m idsubst))) (KExpr.bvar (Nat.succ Nat.zero))) (psubst_scons_up s (KExpr.bvar (Nat.succ Nat.zero)) (scons z (scons m idsubst))) {brp3})"
+            "(@Eq.substType KExpr (fun (w : KExpr) => beta_reduces (KExpr.app (psubst (scons z (scons m idsubst)) {body1}) s) w) (psubst (scons s idsubst) (psubst (up (scons z (scons m idsubst))) (KExpr.bvar (Nat.succ Nat.zero)))) (psubst (scons s (scons z (scons m idsubst))) (KExpr.bvar (Nat.succ Nat.zero))) (psubst_scons_up s (KExpr.bvar (Nat.succ Nat.zero)) (scons z (scons m idsubst))) {brp3})"
         );
-        let beta3 = format!("(natStep.beta u {e3} {e4} {trans3})");
+        let beta3 = format!("(@natStep.beta u {e3} {e4} {trans3})");
         let natrec_zero = format!(
-            "def natRec_zero_betaSteps (u : Level) (m : KExpr) (z : KExpr) (s : KExpr) : natSteps u (natRecApp u m z s natZeroC) z := natSteps.step u (natRecApp u m z s natZeroC) {e1} z (natStep_iota_zero u m z s) (natSteps.step u {e1} {e2} z {beta1} (natSteps.step u {e2} {e3} z {beta2} (natSteps.step u {e3} {e4} z {beta3} (natSteps.refl u z))))"
+            "def natRec_zero_betaSteps (u : Level) (m : KExpr) (z : KExpr) (s : KExpr) : natSteps u (natRecApp u m z s natZeroC) z := @natSteps.step u (natRecApp u m z s natZeroC) {e1} z (natStep_iota_zero u m z s) (@natSteps.step u {e1} {e2} z {beta1} (@natSteps.step u {e2} {e3} z {beta2} (@natSteps.step u {e3} {e4} z {beta3} (@natSteps.refl u z))))"
         );
         self.add_recursive_def(
             &natrec_zero,
@@ -338,23 +338,23 @@ impl Specification {
         let se5 = format!("(psubst (scons n (scons s (scons z (scons m idsubst)))) {s_body})");
         // β1: reduce app(natRecRhsSucc u)m under 3 app_left (z,s,n)
         let sbeta1 = format!(
-            "(natStep.beta u {se1} {se2} (beta_reduces.app_left (KExpr.app (KExpr.app (KExpr.app (natRecRhsSucc u) m) z) s) (KExpr.app (KExpr.app (psubst (scons m idsubst) {sb0}) z) s) n (beta_reduces.app_left (KExpr.app (KExpr.app (natRecRhsSucc u) m) z) (KExpr.app (psubst (scons m idsubst) {sb0}) z) s (beta_reduces.app_left (KExpr.app (natRecRhsSucc u) m) (psubst (scons m idsubst) {sb0}) z (betaReduces_psubst (natMotiveTy u) {sb0} m)))))"
+            "(@natStep.beta u {se1} {se2} (beta_reduces.app_left (KExpr.app (KExpr.app (KExpr.app (natRecRhsSucc u) m) z) s) (KExpr.app (KExpr.app (psubst (scons m idsubst) {sb0}) z) s) n (beta_reduces.app_left (KExpr.app (KExpr.app (natRecRhsSucc u) m) z) (KExpr.app (psubst (scons m idsubst) {sb0}) z) s (beta_reduces.app_left (KExpr.app (natRecRhsSucc u) m) (psubst (scons m idsubst) {sb0}) z (betaReduces_psubst (natMotiveTy u) {sb0} m)))))"
         );
         // β2: under 2 app_left (s,n)
         let sbrp2 = format!("(betaReduces_psubst (psubst (scons m idsubst) (KExpr.app (KExpr.bvar Nat.zero) natZeroC)) (psubst (up (scons m idsubst)) {sb1}) z)");
-        let strans2 = format!("(Eq.substType KExpr (fun (w : KExpr) => beta_reduces (KExpr.app (psubst (scons m idsubst) {sb0}) z) w) (psubst (scons z idsubst) (psubst (up (scons m idsubst)) {sb1})) (psubst (scons z (scons m idsubst)) {sb1}) (psubst_scons_up z {sb1} (scons m idsubst)) {sbrp2})");
-        let sbeta2 = format!("(natStep.beta u {se2} {se3} (beta_reduces.app_left (KExpr.app (KExpr.app (psubst (scons m idsubst) {sb0}) z) s) (KExpr.app (psubst (scons z (scons m idsubst)) {sb1}) s) n (beta_reduces.app_left (KExpr.app (psubst (scons m idsubst) {sb0}) z) (psubst (scons z (scons m idsubst)) {sb1}) s {strans2})))");
+        let strans2 = format!("(@Eq.substType KExpr (fun (w : KExpr) => beta_reduces (KExpr.app (psubst (scons m idsubst) {sb0}) z) w) (psubst (scons z idsubst) (psubst (up (scons m idsubst)) {sb1})) (psubst (scons z (scons m idsubst)) {sb1}) (psubst_scons_up z {sb1} (scons m idsubst)) {sbrp2})");
+        let sbeta2 = format!("(@natStep.beta u {se2} {se3} (beta_reduces.app_left (KExpr.app (KExpr.app (psubst (scons m idsubst) {sb0}) z) s) (KExpr.app (psubst (scons z (scons m idsubst)) {sb1}) s) n (beta_reduces.app_left (KExpr.app (psubst (scons m idsubst) {sb0}) z) (psubst (scons z (scons m idsubst)) {sb1}) s {strans2})))");
         // β3: under 1 app_left (n)
         let sbrp3 = format!("(betaReduces_psubst (psubst (scons z (scons m idsubst)) natRecSArm) (psubst (up (scons z (scons m idsubst))) {sb2}) s)");
-        let strans3 = format!("(Eq.substType KExpr (fun (w : KExpr) => beta_reduces (KExpr.app (psubst (scons z (scons m idsubst)) {sb1}) s) w) (psubst (scons s idsubst) (psubst (up (scons z (scons m idsubst))) {sb2})) (psubst (scons s (scons z (scons m idsubst))) {sb2}) (psubst_scons_up s {sb2} (scons z (scons m idsubst))) {sbrp3})");
-        let sbeta3 = format!("(natStep.beta u {se3} {se4} (beta_reduces.app_left (KExpr.app (psubst (scons z (scons m idsubst)) {sb1}) s) (psubst (scons s (scons z (scons m idsubst))) {sb2}) n {strans3}))");
+        let strans3 = format!("(@Eq.substType KExpr (fun (w : KExpr) => beta_reduces (KExpr.app (psubst (scons z (scons m idsubst)) {sb1}) s) w) (psubst (scons s idsubst) (psubst (up (scons z (scons m idsubst))) {sb2})) (psubst (scons s (scons z (scons m idsubst))) {sb2}) (psubst_scons_up s {sb2} (scons z (scons m idsubst))) {sbrp3})");
+        let sbeta3 = format!("(@natStep.beta u {se3} {se4} (beta_reduces.app_left (KExpr.app (psubst (scons z (scons m idsubst)) {sb1}) s) (psubst (scons s (scons z (scons m idsubst))) {sb2}) n {strans3}))");
         // β4: no app_left
         let sbrp4 = format!("(betaReduces_psubst (psubst (scons s (scons z (scons m idsubst))) natTypeC) (psubst (up (scons s (scons z (scons m idsubst)))) {s_body}) n)");
-        let strans4 = format!("(Eq.substType KExpr (fun (w : KExpr) => beta_reduces (KExpr.app (psubst (scons s (scons z (scons m idsubst))) {sb2}) n) w) (psubst (scons n idsubst) (psubst (up (scons s (scons z (scons m idsubst)))) {s_body})) (psubst (scons n (scons s (scons z (scons m idsubst)))) {s_body}) (psubst_scons_up n {s_body} (scons s (scons z (scons m idsubst)))) {sbrp4})");
-        let sbeta4 = format!("(natStep.beta u {se4} {se5} {strans4})");
+        let strans4 = format!("(@Eq.substType KExpr (fun (w : KExpr) => beta_reduces (KExpr.app (psubst (scons s (scons z (scons m idsubst))) {sb2}) n) w) (psubst (scons n idsubst) (psubst (up (scons s (scons z (scons m idsubst)))) {s_body})) (psubst (scons n (scons s (scons z (scons m idsubst)))) {s_body}) (psubst_scons_up n {s_body} (scons s (scons z (scons m idsubst)))) {sbrp4})");
+        let sbeta4 = format!("(@natStep.beta u {se4} {se5} {strans4})");
         let target = "(KExpr.app (KExpr.app s n) (natRecApp u m z s n))";
         let natrec_succ = format!(
-            "def natRec_succ_betaSteps (u : Level) (m : KExpr) (z : KExpr) (s : KExpr) (n : KExpr) : natSteps u (natRecApp u m z s (KExpr.app natSuccC n)) {target} := natSteps.step u (natRecApp u m z s (KExpr.app natSuccC n)) {se1} {target} (natStep_iota_succ u m z s n) (natSteps.step u {se1} {se2} {target} {sbeta1} (natSteps.step u {se2} {se3} {target} {sbeta2} (natSteps.step u {se3} {se4} {target} {sbeta3} (natSteps.step u {se4} {se5} {target} {sbeta4} (natSteps.refl u {target})))))"
+            "def natRec_succ_betaSteps (u : Level) (m : KExpr) (z : KExpr) (s : KExpr) (n : KExpr) : natSteps u (natRecApp u m z s (KExpr.app natSuccC n)) {target} := @natSteps.step u (natRecApp u m z s (KExpr.app natSuccC n)) {se1} {target} (natStep_iota_succ u m z s n) (@natSteps.step u {se1} {se2} {target} {sbeta1} (@natSteps.step u {se2} {se3} {target} {sbeta2} (@natSteps.step u {se3} {se4} {target} {sbeta3} (@natSteps.step u {se4} {se5} {target} {sbeta4} (@natSteps.refl u {target})))))"
         );
         self.add_recursive_def(
             &natrec_succ,
@@ -367,7 +367,7 @@ impl Specification {
         // Nat.rec computation-fidelity theorem: the recursor's iota rules genuinely
         // reduce (iota + β) in the spec's reduction relation. Zero axiom_deps.
         self.add_recursive_def(
-            "def natRecContract_steps (u : Level) (e : KExpr) (e2 : KExpr) (h : NatRecContract u e e2) : natSteps u e e2 := NatRecContract.rec u (fun (e0 : KExpr) (e0b : KExpr) (_ : NatRecContract u e0 e0b) => natSteps u e0 e0b) (fun (m : KExpr) (z : KExpr) (s : KExpr) => natRec_zero_betaSteps u m z s) (fun (m : KExpr) (z : KExpr) (s : KExpr) (n : KExpr) => natRec_succ_betaSteps u m z s n) e e2 h",
+            "def natRecContract_steps (u : Level) (e : KExpr) (e2 : KExpr) (h : NatRecContract u e e2) : natSteps u e e2 := @NatRecContract.rec u (fun (e0 : KExpr) (e0b : KExpr) (_ : NatRecContract u e0 e0b) => natSteps u e0 e0b) (fun (m : KExpr) (z : KExpr) (s : KExpr) => natRec_zero_betaSteps u m z s) (fun (m : KExpr) (z : KExpr) (s : KExpr) (n : KExpr) => natRec_succ_betaSteps u m z s n) e e2 h",
             "natRecContract_steps: NatRecContract u e e2 -> natSteps u e e2 — every object-level Nat.rec iota rule is realized as a real iota+β multi-step reduction. THE Nat.rec computation-fidelity theorem. Nat.rec port N1b-full COMPLETE.",
         )?;
 
@@ -375,7 +375,7 @@ impl Specification {
         // encoding, toward onePlusOne_computes (concrete demo that 1+1 ⟶* 2 through
         // the object-level Nat.rec iota — a REDUCTION, not SN; no CandModel needed).
         self.add_recursive_def(
-            "def natSteps_trans (u : Level) (a : KExpr) (b : KExpr) (c : KExpr) (h1 : natSteps u a b) (h2 : natSteps u b c) : natSteps u a c := natSteps.rec u (fun (a0 : KExpr) (b0 : KExpr) (_ : natSteps u a0 b0) => natSteps u b0 c -> natSteps u a0 c) (fun (e : KExpr) => fun (hc : natSteps u e c) => hc) (fun (e : KExpr) (e2 : KExpr) (e3 : KExpr) (st : natStep u e e2) (_rest : natSteps u e2 e3) (ih : natSteps u e3 c -> natSteps u e2 c) => fun (hc : natSteps u e3 c) => natSteps.step u e e2 c st (ih hc)) a b h1 h2",
+            "def natSteps_trans (u : Level) (a : KExpr) (b : KExpr) (c : KExpr) (h1 : natSteps u a b) (h2 : natSteps u b c) : natSteps u a c := @natSteps.rec u (fun (a0 : KExpr) (b0 : KExpr) (_ : natSteps u a0 b0) => natSteps u b0 c -> natSteps u a0 c) (fun (e : KExpr) => fun (hc : natSteps u e c) => hc) (fun (e : KExpr) (e2 : KExpr) (e3 : KExpr) (st : natStep u e e2) (_rest : natSteps u e2 e3) (ih : natSteps u e3 c -> natSteps u e2 c) => fun (hc : natSteps u e3 c) => @natSteps.step u e e2 c st (ih hc)) a b h1 h2",
             "natSteps_trans: transitivity of natSteps (via natSteps.rec). Nat.rec port N4-demo.",
         )?;
         self.add_recursive_def(
@@ -402,12 +402,12 @@ impl Specification {
         // app_right congruence for a single natStep: the iota leg lifts via
         // iotaCong.app_right, the beta leg via beta_reduces.app_right.
         self.add_recursive_def(
-            "def natStep_app_right (u : Level) (f : KExpr) (e : KExpr) (e2 : KExpr) (h : natStep u e e2) : natStep u (KExpr.app f e) (KExpr.app f e2) := match h with\n| natStep.iota ic => natStep.iota u (KExpr.app f e) (KExpr.app f e2) (iotaCong.app_right u f e e2 ic)\n| natStep.beta br => natStep.beta u (KExpr.app f e) (KExpr.app f e2) (beta_reduces.app_right f e e2 br)",
+            "def natStep_app_right (u : Level) (f : KExpr) (e : KExpr) (e2 : KExpr) (h : natStep u e e2) : natStep u (KExpr.app f e) (KExpr.app f e2) := match h with\n| natStep.iota ic => @natStep.iota u (KExpr.app f e) (KExpr.app f e2) (@iotaCong.app_right u f e e2 ic)\n| natStep.beta br => @natStep.beta u (KExpr.app f e) (KExpr.app f e2) (beta_reduces.app_right f e e2 br)",
             "natStep_app_right: one natStep lifts under an application argument (iota via iotaCong.app_right, beta via beta_reduces.app_right). Nat.rec port N4-demo.",
         )?;
         // app_right congruence for a multi-step natSteps (induct + natStep_app_right).
         self.add_recursive_def(
-            "def natSteps_app_right (u : Level) (f : KExpr) (a : KExpr) (b : KExpr) (h : natSteps u a b) : natSteps u (KExpr.app f a) (KExpr.app f b) := natSteps.rec u (fun (a0 : KExpr) (b0 : KExpr) (_ : natSteps u a0 b0) => natSteps u (KExpr.app f a0) (KExpr.app f b0)) (fun (e : KExpr) => natSteps.refl u (KExpr.app f e)) (fun (e : KExpr) (e2 : KExpr) (e3 : KExpr) (st : natStep u e e2) (_rest : natSteps u e2 e3) (ih : natSteps u (KExpr.app f e2) (KExpr.app f e3)) => natSteps.step u (KExpr.app f e) (KExpr.app f e2) (KExpr.app f e3) (natStep_app_right u f e e2 st) ih) a b h",
+            "def natSteps_app_right (u : Level) (f : KExpr) (a : KExpr) (b : KExpr) (h : natSteps u a b) : natSteps u (KExpr.app f a) (KExpr.app f b) := @natSteps.rec u (fun (a0 : KExpr) (b0 : KExpr) (_ : natSteps u a0 b0) => natSteps u (KExpr.app f a0) (KExpr.app f b0)) (fun (e : KExpr) => @natSteps.refl u (KExpr.app f e)) (fun (e : KExpr) (e2 : KExpr) (e3 : KExpr) (st : natStep u e e2) (_rest : natSteps u e2 e3) (ih : natSteps u (KExpr.app f e2) (KExpr.app f e3)) => @natSteps.step u (KExpr.app f e) (KExpr.app f e2) (KExpr.app f e3) (natStep_app_right u f e e2 st) ih) a b h",
             "natSteps_app_right: a multi-step natSteps reduction lifts under an application argument (congruence). Nat.rec port N4-demo.",
         )?;
 
@@ -428,14 +428,14 @@ impl Specification {
             let h_a = "(natRec_succ_betaSteps u natConstMotive natOne natAddOneCase natZeroC)";
             // β1: contract the step case `natAddOneCase` against the field 0 (n discarded).
             let beta1 = format!(
-                "(natStep.beta u {t1} {t2} (beta_reduces.app_left (KExpr.app natAddOneCase natZeroC) {stepfn} {inner_rec} (beta_reduces.beta natTypeC {stepfn} natZeroC)))"
+                "(@natStep.beta u {t1} {t2} (beta_reduces.app_left (KExpr.app natAddOneCase natZeroC) {stepfn} {inner_rec} (beta_reduces.beta natTypeC {stepfn} natZeroC)))"
             );
             // β2: apply `λ ih. succ ih` to the inner recursor → succ (Nat.rec .. 0).
             let beta2 = format!(
-                "(natStep.beta u {t2} {t3} (beta_reduces.beta natTypeC (KExpr.app natSuccC (KExpr.bvar Nat.zero)) {inner_rec}))"
+                "(@natStep.beta u {t2} {t3} (beta_reduces.beta natTypeC (KExpr.app natSuccC (KExpr.bvar Nat.zero)) {inner_rec}))"
             );
             let s_b = format!(
-                "(natSteps.step u {t1} {t2} {t3} {beta1} (natSteps.step u {t2} {t3} {t3} {beta2} (natSteps.refl u {t3})))"
+                "(@natSteps.step u {t1} {t2} {t3} {beta1} (@natSteps.step u {t2} {t3} {t3} {beta2} (@natSteps.refl u {t3})))"
             );
             // sC: under the outer succ, the zero-iota collapses the inner recursor to 1.
             let s_c = format!(
@@ -460,7 +460,7 @@ impl Specification {
             "IsNumeral t: t is a closed Nat numeral (zero, or succ of a numeral). Nat.rec port B4.",
         )?;
         self.add_recursive_def(
-            "def neutral_numeral (t : KExpr) (h : IsNumeral t) : Neutral t := IsNumeral.rec (fun (t0 : KExpr) (_ : IsNumeral t0) => Neutral t0) ConstFreeUnit.triv (fun (n : KExpr) (_ : IsNumeral n) (_ : Neutral n) => ConstFreeUnit.triv) t h",
+            "def neutral_numeral (t : KExpr) (h : IsNumeral t) : Neutral t := @IsNumeral.rec (fun (t0 : KExpr) (_ : IsNumeral t0) => Neutral t0) ConstFreeUnit.triv (fun (n : KExpr) (_ : IsNumeral n) (_ : Neutral n) => ConstFreeUnit.triv) t h",
             "neutral_numeral: every numeral is Neutral — its head is const (zero) or app (succ), on which Neutral computes to ConstFreeUnit (witness ConstFreeUnit.triv). Nat.rec port B4.",
         )?;
 
@@ -470,7 +470,7 @@ impl Specification {
         // to none for each. This makes whnfAcc_numeral UNCONDITIONAL over the spec's
         // fixed reduction env (confirms the static de-risking empirically).
         self.add_recursive_def(
-            "def natFresh_red : NatFresh (red_def the_red_env) := NatFresh.mk (red_def the_red_env) (Eq.refl (OptionType KExpr) (OptionType.none KExpr)) (Eq.refl (OptionType KExpr) (OptionType.none KExpr)) (Eq.refl (OptionType KExpr) (OptionType.none KExpr)) (Eq.refl (OptionType KExpr) (OptionType.none KExpr))",
+            "def natFresh_red : NatFresh (red_def the_red_env) := @NatFresh.mk (red_def the_red_env) (@Eq.refl (OptionType KExpr) (@OptionType.none KExpr)) (@Eq.refl (OptionType KExpr) (@OptionType.none KExpr)) (@Eq.refl (OptionType KExpr) (@OptionType.none KExpr)) (@Eq.refl (OptionType KExpr) (@OptionType.none KExpr))",
             "natFresh_red: the_red_env δ-defines none of Nat/zero/succ/rec (defval_for (red_def the_red_env) = none, by rfl). the_red_env is Nat-fresh ⇒ whnfAcc_numeral unconditional. Nat.rec port B5-precondition.",
         )?;
 
@@ -486,13 +486,13 @@ impl Specification {
             // delta_reduct_eq_none_of_defval_none + the option_none_ne_some absurdity.
             let dnd_case = |src: &str, nm: &str| -> String {
                 format!(
-                    "fun (e2 : KExpr) (C : Type) (hd : delta_reduces {src} e2) => option_none_ne_some_type KExpr e2 C (Eq.trans (OptionType KExpr) (OptionType.none KExpr) (delta_reduct (red_def the_red_env) {src}) (OptionType.some KExpr e2) (Eq.symm (OptionType KExpr) (delta_reduct (red_def the_red_env) {src}) (OptionType.none KExpr) (delta_reduct_eq_none_of_defval_none (red_def the_red_env) {src} {nm} (Eq.refl (OptionType Name) (OptionType.some Name {nm})) (Eq.refl (OptionType KExpr) (OptionType.none KExpr)))) (delta_reduces_to_step {src} e2 hd))"
+                    "fun (e2 : KExpr) (C : Type) (hd : delta_reduces {src} e2) => option_none_ne_some_type KExpr e2 C (@Eq.trans (OptionType KExpr) (@OptionType.none KExpr) (delta_reduct (red_def the_red_env) {src}) (@OptionType.some KExpr e2) (@Eq.symm (OptionType KExpr) (delta_reduct (red_def the_red_env) {src}) (@OptionType.none KExpr) (delta_reduct_eq_none_of_defval_none (red_def the_red_env) {src} {nm} (@Eq.refl (OptionType Name) (@OptionType.some Name {nm})) (@Eq.refl (OptionType KExpr) (@OptionType.none KExpr)))) (delta_reduces_to_step {src} e2 hd))"
                 )
             };
             let zero_case = dnd_case("natZeroC", "zeroName");
             let succ_body = dnd_case("(KExpr.app natSuccC n)", "succName");
             let body = format!(
-                "def numeral_no_delta (t : KExpr) (h : IsNumeral t) : forall (e2 : KExpr) (C : Type), delta_reduces t e2 -> C := IsNumeral.rec (fun (t0 : KExpr) (_ : IsNumeral t0) => forall (e2 : KExpr) (C : Type), delta_reduces t0 e2 -> C) ({zero_case}) (fun (n : KExpr) (_ : IsNumeral n) (_ : forall (e2 : KExpr) (C : Type), delta_reduces n e2 -> C) => {succ_body}) t h"
+                "def numeral_no_delta (t : KExpr) (h : IsNumeral t) : forall (e2 : KExpr) (C : Type), delta_reduces t e2 -> C := @IsNumeral.rec (fun (t0 : KExpr) (_ : IsNumeral t0) => forall (e2 : KExpr) (C : Type), delta_reduces t0 e2 -> C) ({zero_case}) (fun (n : KExpr) (_ : IsNumeral n) (_ : forall (e2 : KExpr) (C : Type), delta_reduces n e2 -> C) => {succ_body}) t h"
             );
             self.add_recursive_def(
                 &body,
@@ -505,7 +505,7 @@ impl Specification {
         // every head except let_ (Empty); transport D (const n us)=CFU along heq to
         // D (let_ ..)=Empty, then Empty.rec. Mirrors the Neutral discriminator shape.
         self.add_recursive_def(
-            "def const_ne_let (n : Name) (us : ListType Level) (lty : KExpr) (lval : KExpr) (lbody : KExpr) (C : Type) (heq : Eq KExpr (KExpr.const n us) (KExpr.let_ lty lval lbody)) : C := Empty.rec (fun (_ : Empty) => C) (Eq.rec KExpr (KExpr.const n us) (fun (x : KExpr) (_ : Eq KExpr (KExpr.const n us) x) => KExpr.rec (fun (_ : KExpr) => Type) (fun (l : Level) => ConstFreeUnit) (fun (i : Nat) => ConstFreeUnit) (fun (f : KExpr) (a : KExpr) (nf : Type) (na : Type) => ConstFreeUnit) (fun (ty : KExpr) (b : KExpr) (nty : Type) (nb : Type) => ConstFreeUnit) (fun (ty : KExpr) (b : KExpr) (nty : Type) (nb : Type) => ConstFreeUnit) (fun (nm : Name) (uss : ListType Level) => ConstFreeUnit) (fun (lt : KExpr) (lv : KExpr) (lb : KExpr) (nty : Type) (nv : Type) (nb : Type) => Empty) (fun (ps : Name) (pin : Nat) (psub : KExpr) (np : Type) => ConstFreeUnit) (fun (lv2 : Nat) => ConstFreeUnit) x) ConstFreeUnit.triv (KExpr.let_ lty lval lbody) heq)",
+            "def const_ne_let (n : Name) (us : ListType Level) (lty : KExpr) (lval : KExpr) (lbody : KExpr) (C : Type) (heq : @Eq KExpr (KExpr.const n us) (KExpr.let_ lty lval lbody)) : C := @Empty.rec (fun (_ : Empty) => C) (@Eq.rec KExpr (KExpr.const n us) (fun (x : KExpr) (_ : @Eq KExpr (KExpr.const n us) x) => @KExpr.rec (fun (_ : KExpr) => Type) (fun (l : Level) => ConstFreeUnit) (fun (i : Nat) => ConstFreeUnit) (fun (f : KExpr) (a : KExpr) (nf : Type) (na : Type) => ConstFreeUnit) (fun (ty : KExpr) (b : KExpr) (nty : Type) (nb : Type) => ConstFreeUnit) (fun (ty : KExpr) (b : KExpr) (nty : Type) (nb : Type) => ConstFreeUnit) (fun (nm : Name) (uss : ListType Level) => ConstFreeUnit) (fun (lt : KExpr) (lv : KExpr) (lb : KExpr) (nty : Type) (nv : Type) (nb : Type) => Empty) (fun (ps : Name) (pin : Nat) (psub : KExpr) (np : Type) => ConstFreeUnit) (fun (lv2 : Nat) => ConstFreeUnit) x) ConstFreeUnit.triv (KExpr.let_ lty lval lbody) heq)",
             "const_ne_let: a const is not a let_ (KExpr.rec discriminator + Eq.rec transport + Empty.rec). Nat.rec port B5(b) helper.",
         )?;
 
@@ -513,7 +513,7 @@ impl Specification {
         // discriminator shape as const_ne_let (proj -> Empty, every other head ->
         // ConstFreeUnit); transport ConstFreeUnit.triv along heq to Empty, then Empty.rec.
         self.add_recursive_def(
-            "def const_ne_proj (n : Name) (us : ListType Level) (ps : Name) (pin : Nat) (psub : KExpr) (C : Type) (heq : Eq KExpr (KExpr.const n us) (KExpr.proj ps pin psub)) : C := Empty.rec (fun (_ : Empty) => C) (Eq.rec KExpr (KExpr.const n us) (fun (x : KExpr) (_ : Eq KExpr (KExpr.const n us) x) => KExpr.rec (fun (_ : KExpr) => Type) (fun (l : Level) => ConstFreeUnit) (fun (i : Nat) => ConstFreeUnit) (fun (f : KExpr) (a : KExpr) (nf : Type) (na : Type) => ConstFreeUnit) (fun (ty : KExpr) (b : KExpr) (nty : Type) (nb : Type) => ConstFreeUnit) (fun (ty : KExpr) (b : KExpr) (nty : Type) (nb : Type) => ConstFreeUnit) (fun (nm : Name) (uss : ListType Level) => ConstFreeUnit) (fun (lt : KExpr) (lv : KExpr) (lb : KExpr) (nty : Type) (nv : Type) (nb : Type) => ConstFreeUnit) (fun (qs : Name) (qi : Nat) (qsub : KExpr) (nq : Type) => Empty) (fun (lv2 : Nat) => ConstFreeUnit) x) ConstFreeUnit.triv (KExpr.proj ps pin psub) heq)",
+            "def const_ne_proj (n : Name) (us : ListType Level) (ps : Name) (pin : Nat) (psub : KExpr) (C : Type) (heq : @Eq KExpr (KExpr.const n us) (KExpr.proj ps pin psub)) : C := @Empty.rec (fun (_ : Empty) => C) (@Eq.rec KExpr (KExpr.const n us) (fun (x : KExpr) (_ : @Eq KExpr (KExpr.const n us) x) => @KExpr.rec (fun (_ : KExpr) => Type) (fun (l : Level) => ConstFreeUnit) (fun (i : Nat) => ConstFreeUnit) (fun (f : KExpr) (a : KExpr) (nf : Type) (na : Type) => ConstFreeUnit) (fun (ty : KExpr) (b : KExpr) (nty : Type) (nb : Type) => ConstFreeUnit) (fun (ty : KExpr) (b : KExpr) (nty : Type) (nb : Type) => ConstFreeUnit) (fun (nm : Name) (uss : ListType Level) => ConstFreeUnit) (fun (lt : KExpr) (lv : KExpr) (lb : KExpr) (nty : Type) (nv : Type) (nb : Type) => ConstFreeUnit) (fun (qs : Name) (qi : Nat) (qsub : KExpr) (nq : Type) => Empty) (fun (lv2 : Nat) => ConstFreeUnit) x) ConstFreeUnit.triv (KExpr.proj ps pin psub) heq)",
             "const_ne_proj: a const is not a proj (KExpr.rec discriminator + Eq.rec transport + Empty.rec). Proj/lit fragment rung.",
         )?;
 
@@ -526,30 +526,30 @@ impl Specification {
         {
             let cn = "(KExpr.const n us)";
             let mot = format!(
-                "(fun (s : KExpr) (t : KExpr) (_ : beta_reduces s t) => Eq KExpr s {cn} -> C)"
+                "(fun (s : KExpr) (t : KExpr) (_ : beta_reduces s t) => @Eq KExpr s {cn} -> C)"
             );
             // helper: Eq.symm of a source-eq heq (Eq S (const)) -> Eq (const) S
-            let sym = |s: &str| format!("(Eq.symm KExpr {s} {cn} heq)");
-            let c_beta = format!("(fun (A0 : KExpr) (body : KExpr) (arg : KExpr) (heq : Eq KExpr (KExpr.app (KExpr.lam A0 body) arg) {cn}) => const_ne_app n us (KExpr.lam A0 body) arg C {})", sym("(KExpr.app (KExpr.lam A0 body) arg)"));
-            let c_appl = format!("(fun (f : KExpr) (f2 : KExpr) (a : KExpr) (_hstep : beta_reduces f f2) (_ih : Eq KExpr f {cn} -> C) (heq : Eq KExpr (KExpr.app f a) {cn}) => const_ne_app n us f a C {})", sym("(KExpr.app f a)"));
-            let c_appr = format!("(fun (f : KExpr) (a : KExpr) (a2 : KExpr) (_hstep : beta_reduces a a2) (_ih : Eq KExpr a {cn} -> C) (heq : Eq KExpr (KExpr.app f a) {cn}) => const_ne_app n us f a C {})", sym("(KExpr.app f a)"));
-            let c_lamty = format!("(fun (ty : KExpr) (ty2 : KExpr) (body : KExpr) (_hstep : beta_reduces ty ty2) (_ih : Eq KExpr ty {cn} -> C) (heq : Eq KExpr (KExpr.lam ty body) {cn}) => const_ne_lam n us ty body C {})", sym("(KExpr.lam ty body)"));
-            let c_lambd = format!("(fun (ty : KExpr) (body : KExpr) (body2 : KExpr) (_hstep : beta_reduces body body2) (_ih : Eq KExpr body {cn} -> C) (heq : Eq KExpr (KExpr.lam ty body) {cn}) => const_ne_lam n us ty body C {})", sym("(KExpr.lam ty body)"));
-            let c_pidom = format!("(fun (dom : KExpr) (dom2 : KExpr) (body : KExpr) (_hstep : beta_reduces dom dom2) (_ih : Eq KExpr dom {cn} -> C) (heq : Eq KExpr (KExpr.pi dom body) {cn}) => const_ne_pi n us dom body C {})", sym("(KExpr.pi dom body)"));
-            let c_picod = format!("(fun (dom : KExpr) (body : KExpr) (body2 : KExpr) (_hstep : beta_reduces body body2) (_ih : Eq KExpr body {cn} -> C) (heq : Eq KExpr (KExpr.pi dom body) {cn}) => const_ne_pi n us dom body C {})", sym("(KExpr.pi dom body)"));
-            let c_fadom = format!("(fun (dom : KExpr) (dom2 : KExpr) (body : KExpr) (_hstep : beta_reduces dom dom2) (_ih : Eq KExpr dom {cn} -> C) (heq : Eq KExpr (KExpr.forall_ dom body) {cn}) => const_ne_pi n us dom body C {})", sym("(KExpr.forall_ dom body)"));
-            let c_facod = format!("(fun (dom : KExpr) (body : KExpr) (body2 : KExpr) (_hstep : beta_reduces body body2) (_ih : Eq KExpr body {cn} -> C) (heq : Eq KExpr (KExpr.forall_ dom body) {cn}) => const_ne_pi n us dom body C {})", sym("(KExpr.forall_ dom body)"));
-            let c_zeta = format!("(fun (ty : KExpr) (val : KExpr) (body : KExpr) (heq : Eq KExpr (KExpr.let_ ty val body) {cn}) => const_ne_let n us ty val body C {})", sym("(KExpr.let_ ty val body)"));
-            let c_letty = format!("(fun (ty : KExpr) (ty2 : KExpr) (val : KExpr) (body : KExpr) (_hstep : beta_reduces ty ty2) (_ih : Eq KExpr ty {cn} -> C) (heq : Eq KExpr (KExpr.let_ ty val body) {cn}) => const_ne_let n us ty val body C {})", sym("(KExpr.let_ ty val body)"));
-            let c_letval = format!("(fun (ty : KExpr) (val : KExpr) (val2 : KExpr) (body : KExpr) (_hstep : beta_reduces val val2) (_ih : Eq KExpr val {cn} -> C) (heq : Eq KExpr (KExpr.let_ ty val body) {cn}) => const_ne_let n us ty val body C {})", sym("(KExpr.let_ ty val body)"));
-            let c_letbd = format!("(fun (ty : KExpr) (val : KExpr) (body : KExpr) (body2 : KExpr) (_hstep : beta_reduces body body2) (_ih : Eq KExpr body {cn} -> C) (heq : Eq KExpr (KExpr.let_ ty val body) {cn}) => const_ne_let n us ty val body C {})", sym("(KExpr.let_ ty val body)"));
+            let sym = |s: &str| format!("(@Eq.symm KExpr {s} {cn} heq)");
+            let c_beta = format!("(fun (A0 : KExpr) (body : KExpr) (arg : KExpr) (heq : @Eq KExpr (KExpr.app (KExpr.lam A0 body) arg) {cn}) => const_ne_app n us (KExpr.lam A0 body) arg C {})", sym("(KExpr.app (KExpr.lam A0 body) arg)"));
+            let c_appl = format!("(fun (f : KExpr) (f2 : KExpr) (a : KExpr) (_hstep : beta_reduces f f2) (_ih : @Eq KExpr f {cn} -> C) (heq : @Eq KExpr (KExpr.app f a) {cn}) => const_ne_app n us f a C {})", sym("(KExpr.app f a)"));
+            let c_appr = format!("(fun (f : KExpr) (a : KExpr) (a2 : KExpr) (_hstep : beta_reduces a a2) (_ih : @Eq KExpr a {cn} -> C) (heq : @Eq KExpr (KExpr.app f a) {cn}) => const_ne_app n us f a C {})", sym("(KExpr.app f a)"));
+            let c_lamty = format!("(fun (ty : KExpr) (ty2 : KExpr) (body : KExpr) (_hstep : beta_reduces ty ty2) (_ih : @Eq KExpr ty {cn} -> C) (heq : @Eq KExpr (KExpr.lam ty body) {cn}) => const_ne_lam n us ty body C {})", sym("(KExpr.lam ty body)"));
+            let c_lambd = format!("(fun (ty : KExpr) (body : KExpr) (body2 : KExpr) (_hstep : beta_reduces body body2) (_ih : @Eq KExpr body {cn} -> C) (heq : @Eq KExpr (KExpr.lam ty body) {cn}) => const_ne_lam n us ty body C {})", sym("(KExpr.lam ty body)"));
+            let c_pidom = format!("(fun (dom : KExpr) (dom2 : KExpr) (body : KExpr) (_hstep : beta_reduces dom dom2) (_ih : @Eq KExpr dom {cn} -> C) (heq : @Eq KExpr (KExpr.pi dom body) {cn}) => const_ne_pi n us dom body C {})", sym("(KExpr.pi dom body)"));
+            let c_picod = format!("(fun (dom : KExpr) (body : KExpr) (body2 : KExpr) (_hstep : beta_reduces body body2) (_ih : @Eq KExpr body {cn} -> C) (heq : @Eq KExpr (KExpr.pi dom body) {cn}) => const_ne_pi n us dom body C {})", sym("(KExpr.pi dom body)"));
+            let c_fadom = format!("(fun (dom : KExpr) (dom2 : KExpr) (body : KExpr) (_hstep : beta_reduces dom dom2) (_ih : @Eq KExpr dom {cn} -> C) (heq : @Eq KExpr (KExpr.forall_ dom body) {cn}) => const_ne_pi n us dom body C {})", sym("(KExpr.forall_ dom body)"));
+            let c_facod = format!("(fun (dom : KExpr) (body : KExpr) (body2 : KExpr) (_hstep : beta_reduces body body2) (_ih : @Eq KExpr body {cn} -> C) (heq : @Eq KExpr (KExpr.forall_ dom body) {cn}) => const_ne_pi n us dom body C {})", sym("(KExpr.forall_ dom body)"));
+            let c_zeta = format!("(fun (ty : KExpr) (val : KExpr) (body : KExpr) (heq : @Eq KExpr (KExpr.let_ ty val body) {cn}) => const_ne_let n us ty val body C {})", sym("(KExpr.let_ ty val body)"));
+            let c_letty = format!("(fun (ty : KExpr) (ty2 : KExpr) (val : KExpr) (body : KExpr) (_hstep : beta_reduces ty ty2) (_ih : @Eq KExpr ty {cn} -> C) (heq : @Eq KExpr (KExpr.let_ ty val body) {cn}) => const_ne_let n us ty val body C {})", sym("(KExpr.let_ ty val body)"));
+            let c_letval = format!("(fun (ty : KExpr) (val : KExpr) (val2 : KExpr) (body : KExpr) (_hstep : beta_reduces val val2) (_ih : @Eq KExpr val {cn} -> C) (heq : @Eq KExpr (KExpr.let_ ty val body) {cn}) => const_ne_let n us ty val body C {})", sym("(KExpr.let_ ty val body)"));
+            let c_letbd = format!("(fun (ty : KExpr) (val : KExpr) (body : KExpr) (body2 : KExpr) (_hstep : beta_reduces body body2) (_ih : @Eq KExpr body {cn} -> C) (heq : @Eq KExpr (KExpr.let_ ty val body) {cn}) => const_ne_let n us ty val body C {})", sym("(KExpr.let_ ty val body)"));
             // iota: transport hiota (iota_reduces e0 e02) to const via heq, then
             // iota_reduct_const_none gives iota_reduct = none, contradicting the step.
-            let c_iota = format!("(fun (e0 : KExpr) (e02 : KExpr) (hiota : iota_reduces e0 e02) (heq : Eq KExpr e0 {cn}) => option_none_ne_some_type KExpr e02 C (Eq.trans (OptionType KExpr) (OptionType.none KExpr) (iota_reduct (red_rec the_red_env) e0) (OptionType.some KExpr e02) (Eq.symm (OptionType KExpr) (iota_reduct (red_rec the_red_env) e0) (OptionType.none KExpr) (Eq.trans (OptionType KExpr) (iota_reduct (red_rec the_red_env) e0) (iota_reduct (red_rec the_red_env) {cn}) (OptionType.none KExpr) (Eq.cong KExpr (OptionType KExpr) (fun (x : KExpr) => iota_reduct (red_rec the_red_env) x) e0 {cn} heq) (iota_reduct_const_none (red_rec the_red_env) n us))) (iota_reduces_to_step e0 e02 hiota)))");
+            let c_iota = format!("(fun (e0 : KExpr) (e02 : KExpr) (hiota : iota_reduces e0 e02) (heq : @Eq KExpr e0 {cn}) => option_none_ne_some_type KExpr e02 C (@Eq.trans (OptionType KExpr) (@OptionType.none KExpr) (iota_reduct (red_rec the_red_env) e0) (@OptionType.some KExpr e02) (@Eq.symm (OptionType KExpr) (iota_reduct (red_rec the_red_env) e0) (@OptionType.none KExpr) (@Eq.trans (OptionType KExpr) (iota_reduct (red_rec the_red_env) e0) (iota_reduct (red_rec the_red_env) {cn}) (@OptionType.none KExpr) (@Eq.cong KExpr (OptionType KExpr) (fun (x : KExpr) => iota_reduct (red_rec the_red_env) x) e0 {cn} heq) (iota_reduct_const_none (red_rec the_red_env) n us))) (iota_reduces_to_step e0 e02 hiota)))");
             // proj (proj/lit rung): source proj ps pin sub != const, discharge via const_ne_proj + Eq.symm.
-            let c_proj = format!("(fun (ps : Name) (pin : Nat) (sub : KExpr) (sub2 : KExpr) (_hstep : beta_reduces sub sub2) (_ih : Eq KExpr sub {cn} -> C) (heq : Eq KExpr (KExpr.proj ps pin sub) {cn}) => const_ne_proj n us ps pin sub C {})", sym("(KExpr.proj ps pin sub)"));
+            let c_proj = format!("(fun (ps : Name) (pin : Nat) (sub : KExpr) (sub2 : KExpr) (_hstep : beta_reduces sub sub2) (_ih : @Eq KExpr sub {cn} -> C) (heq : @Eq KExpr (KExpr.proj ps pin sub) {cn}) => const_ne_proj n us ps pin sub C {})", sym("(KExpr.proj ps pin sub)"));
             let body = format!(
-                "def const_no_beta_reduces (n : Name) (us : ListType Level) (e' : KExpr) (C : Type) (hbr : beta_reduces {cn} e') : C := beta_reduces.rec {mot} {c_beta} {c_appl} {c_appr} {c_lamty} {c_lambd} {c_pidom} {c_picod} {c_fadom} {c_facod} {c_zeta} {c_letty} {c_letval} {c_letbd} {c_iota} {c_proj} {cn} e' hbr (Eq.refl KExpr {cn})"
+                "def const_no_beta_reduces (n : Name) (us : ListType Level) (e' : KExpr) (C : Type) (hbr : beta_reduces {cn} e') : C := @beta_reduces.rec {mot} {c_beta} {c_appl} {c_appr} {c_lamty} {c_lambd} {c_pidom} {c_picod} {c_fadom} {c_facod} {c_zeta} {c_letty} {c_letval} {c_letbd} {c_iota} {c_proj} {cn} e' hbr (@Eq.refl KExpr {cn})"
             );
             self.add_recursive_def(
                 &body,
@@ -565,30 +565,30 @@ impl Specification {
         {
             let asn = "(KExpr.app natSuccC n)";
             let mot = format!(
-                "(fun (s : KExpr) (t : KExpr) (_ : beta_reduces s t) => Eq KExpr s {asn} -> C)"
+                "(fun (s : KExpr) (t : KExpr) (_ : beta_reduces s t) => @Eq KExpr s {asn} -> C)"
             );
-            let s_beta = format!("(fun (A0 : KExpr) (body : KExpr) (arg : KExpr) (heq : Eq KExpr (KExpr.app (KExpr.lam A0 body) arg) {asn}) => const_ne_lam succName (ListType.nil Level) A0 body C (Eq.symm KExpr (KExpr.lam A0 body) natSuccC (app_inj_fst (KExpr.lam A0 body) arg natSuccC n heq)))");
-            let s_appl = format!("(fun (f : KExpr) (f2 : KExpr) (a : KExpr) (hstep : beta_reduces f f2) (_ih : Eq KExpr f {asn} -> C) (heq : Eq KExpr (KExpr.app f a) {asn}) => const_no_beta_reduces succName (ListType.nil Level) f2 C (Eq.rec KExpr f (fun (x : KExpr) (_ : Eq KExpr f x) => beta_reduces x f2) hstep natSuccC (app_inj_fst f a natSuccC n heq)))");
-            let s_appr = format!("(fun (f : KExpr) (a : KExpr) (a2 : KExpr) (hstep : beta_reduces a a2) (_ih : Eq KExpr a {asn} -> C) (heq : Eq KExpr (KExpr.app f a) {asn}) => ihn a2 C (Eq.rec KExpr a (fun (x : KExpr) (_ : Eq KExpr a x) => beta_reduces x a2) hstep n (app_inj_snd f a natSuccC n heq)))");
-            let s_lamty = format!("(fun (ty : KExpr) (ty2 : KExpr) (body : KExpr) (_hstep : beta_reduces ty ty2) (_ih : Eq KExpr ty {asn} -> C) (heq : Eq KExpr (KExpr.lam ty body) {asn}) => lam_ne_app ty body natSuccC n C heq)");
-            let s_lambd = format!("(fun (ty : KExpr) (body : KExpr) (body2 : KExpr) (_hstep : beta_reduces body body2) (_ih : Eq KExpr body {asn} -> C) (heq : Eq KExpr (KExpr.lam ty body) {asn}) => lam_ne_app ty body natSuccC n C heq)");
-            let s_pidom = format!("(fun (dom : KExpr) (dom2 : KExpr) (body : KExpr) (_hstep : beta_reduces dom dom2) (_ih : Eq KExpr dom {asn} -> C) (heq : Eq KExpr (KExpr.pi dom body) {asn}) => pi_ne_app dom body natSuccC n C heq)");
-            let s_picod = format!("(fun (dom : KExpr) (body : KExpr) (body2 : KExpr) (_hstep : beta_reduces body body2) (_ih : Eq KExpr body {asn} -> C) (heq : Eq KExpr (KExpr.pi dom body) {asn}) => pi_ne_app dom body natSuccC n C heq)");
-            let s_fadom = format!("(fun (dom : KExpr) (dom2 : KExpr) (body : KExpr) (_hstep : beta_reduces dom dom2) (_ih : Eq KExpr dom {asn} -> C) (heq : Eq KExpr (KExpr.forall_ dom body) {asn}) => pi_ne_app dom body natSuccC n C heq)");
-            let s_facod = format!("(fun (dom : KExpr) (body : KExpr) (body2 : KExpr) (_hstep : beta_reduces body body2) (_ih : Eq KExpr body {asn} -> C) (heq : Eq KExpr (KExpr.forall_ dom body) {asn}) => pi_ne_app dom body natSuccC n C heq)");
-            let s_zeta = format!("(fun (ty : KExpr) (val : KExpr) (body : KExpr) (heq : Eq KExpr (KExpr.let_ ty val body) {asn}) => let_ne_app ty val body natSuccC n C heq)");
-            let s_letty = format!("(fun (ty : KExpr) (ty2 : KExpr) (val : KExpr) (body : KExpr) (_hstep : beta_reduces ty ty2) (_ih : Eq KExpr ty {asn} -> C) (heq : Eq KExpr (KExpr.let_ ty val body) {asn}) => let_ne_app ty val body natSuccC n C heq)");
-            let s_letval = format!("(fun (ty : KExpr) (val : KExpr) (val2 : KExpr) (body : KExpr) (_hstep : beta_reduces val val2) (_ih : Eq KExpr val {asn} -> C) (heq : Eq KExpr (KExpr.let_ ty val body) {asn}) => let_ne_app ty val body natSuccC n C heq)");
-            let s_letbd = format!("(fun (ty : KExpr) (val : KExpr) (body : KExpr) (body2 : KExpr) (_hstep : beta_reduces body body2) (_ih : Eq KExpr body {asn} -> C) (heq : Eq KExpr (KExpr.let_ ty val body) {asn}) => let_ne_app ty val body natSuccC n C heq)");
-            let s_iota = format!("(fun (e0 : KExpr) (e02 : KExpr) (hiota : iota_reduces e0 e02) (heq : Eq KExpr e0 {asn}) => option_none_ne_some_type KExpr e02 C (Eq.trans (OptionType KExpr) (OptionType.none KExpr) (iota_reduct (red_rec the_red_env) e0) (OptionType.some KExpr e02) (Eq.symm (OptionType KExpr) (iota_reduct (red_rec the_red_env) e0) (OptionType.none KExpr) (Eq.trans (OptionType KExpr) (iota_reduct (red_rec the_red_env) e0) (iota_reduct (red_rec the_red_env) {asn}) (OptionType.none KExpr) (Eq.cong KExpr (OptionType KExpr) (fun (x : KExpr) => iota_reduct (red_rec the_red_env) x) e0 {asn} heq) (Eq.refl (OptionType KExpr) (OptionType.none KExpr)))) (iota_reduces_to_step e0 e02 hiota)))");
+            let s_beta = format!("(fun (A0 : KExpr) (body : KExpr) (arg : KExpr) (heq : @Eq KExpr (KExpr.app (KExpr.lam A0 body) arg) {asn}) => const_ne_lam succName (@ListType.nil Level) A0 body C (@Eq.symm KExpr (KExpr.lam A0 body) natSuccC (app_inj_fst (KExpr.lam A0 body) arg natSuccC n heq)))");
+            let s_appl = format!("(fun (f : KExpr) (f2 : KExpr) (a : KExpr) (hstep : beta_reduces f f2) (_ih : @Eq KExpr f {asn} -> C) (heq : @Eq KExpr (KExpr.app f a) {asn}) => const_no_beta_reduces succName (@ListType.nil Level) f2 C (@Eq.rec KExpr f (fun (x : KExpr) (_ : @Eq KExpr f x) => beta_reduces x f2) hstep natSuccC (app_inj_fst f a natSuccC n heq)))");
+            let s_appr = format!("(fun (f : KExpr) (a : KExpr) (a2 : KExpr) (hstep : beta_reduces a a2) (_ih : @Eq KExpr a {asn} -> C) (heq : @Eq KExpr (KExpr.app f a) {asn}) => ihn a2 C (@Eq.rec KExpr a (fun (x : KExpr) (_ : @Eq KExpr a x) => beta_reduces x a2) hstep n (app_inj_snd f a natSuccC n heq)))");
+            let s_lamty = format!("(fun (ty : KExpr) (ty2 : KExpr) (body : KExpr) (_hstep : beta_reduces ty ty2) (_ih : @Eq KExpr ty {asn} -> C) (heq : @Eq KExpr (KExpr.lam ty body) {asn}) => lam_ne_app ty body natSuccC n C heq)");
+            let s_lambd = format!("(fun (ty : KExpr) (body : KExpr) (body2 : KExpr) (_hstep : beta_reduces body body2) (_ih : @Eq KExpr body {asn} -> C) (heq : @Eq KExpr (KExpr.lam ty body) {asn}) => lam_ne_app ty body natSuccC n C heq)");
+            let s_pidom = format!("(fun (dom : KExpr) (dom2 : KExpr) (body : KExpr) (_hstep : beta_reduces dom dom2) (_ih : @Eq KExpr dom {asn} -> C) (heq : @Eq KExpr (KExpr.pi dom body) {asn}) => pi_ne_app dom body natSuccC n C heq)");
+            let s_picod = format!("(fun (dom : KExpr) (body : KExpr) (body2 : KExpr) (_hstep : beta_reduces body body2) (_ih : @Eq KExpr body {asn} -> C) (heq : @Eq KExpr (KExpr.pi dom body) {asn}) => pi_ne_app dom body natSuccC n C heq)");
+            let s_fadom = format!("(fun (dom : KExpr) (dom2 : KExpr) (body : KExpr) (_hstep : beta_reduces dom dom2) (_ih : @Eq KExpr dom {asn} -> C) (heq : @Eq KExpr (KExpr.forall_ dom body) {asn}) => pi_ne_app dom body natSuccC n C heq)");
+            let s_facod = format!("(fun (dom : KExpr) (body : KExpr) (body2 : KExpr) (_hstep : beta_reduces body body2) (_ih : @Eq KExpr body {asn} -> C) (heq : @Eq KExpr (KExpr.forall_ dom body) {asn}) => pi_ne_app dom body natSuccC n C heq)");
+            let s_zeta = format!("(fun (ty : KExpr) (val : KExpr) (body : KExpr) (heq : @Eq KExpr (KExpr.let_ ty val body) {asn}) => let_ne_app ty val body natSuccC n C heq)");
+            let s_letty = format!("(fun (ty : KExpr) (ty2 : KExpr) (val : KExpr) (body : KExpr) (_hstep : beta_reduces ty ty2) (_ih : @Eq KExpr ty {asn} -> C) (heq : @Eq KExpr (KExpr.let_ ty val body) {asn}) => let_ne_app ty val body natSuccC n C heq)");
+            let s_letval = format!("(fun (ty : KExpr) (val : KExpr) (val2 : KExpr) (body : KExpr) (_hstep : beta_reduces val val2) (_ih : @Eq KExpr val {asn} -> C) (heq : @Eq KExpr (KExpr.let_ ty val body) {asn}) => let_ne_app ty val body natSuccC n C heq)");
+            let s_letbd = format!("(fun (ty : KExpr) (val : KExpr) (body : KExpr) (body2 : KExpr) (_hstep : beta_reduces body body2) (_ih : @Eq KExpr body {asn} -> C) (heq : @Eq KExpr (KExpr.let_ ty val body) {asn}) => let_ne_app ty val body natSuccC n C heq)");
+            let s_iota = format!("(fun (e0 : KExpr) (e02 : KExpr) (hiota : iota_reduces e0 e02) (heq : @Eq KExpr e0 {asn}) => option_none_ne_some_type KExpr e02 C (@Eq.trans (OptionType KExpr) (@OptionType.none KExpr) (iota_reduct (red_rec the_red_env) e0) (@OptionType.some KExpr e02) (@Eq.symm (OptionType KExpr) (iota_reduct (red_rec the_red_env) e0) (@OptionType.none KExpr) (@Eq.trans (OptionType KExpr) (iota_reduct (red_rec the_red_env) e0) (iota_reduct (red_rec the_red_env) {asn}) (@OptionType.none KExpr) (@Eq.cong KExpr (OptionType KExpr) (fun (x : KExpr) => iota_reduct (red_rec the_red_env) x) e0 {asn} heq) (@Eq.refl (OptionType KExpr) (@OptionType.none KExpr)))) (iota_reduces_to_step e0 e02 hiota)))");
             // proj (proj/lit rung): source proj != app, discharge via proj_ne_app.
-            let s_proj = format!("(fun (ps : Name) (pin : Nat) (sub : KExpr) (sub2 : KExpr) (_hstep : beta_reduces sub sub2) (_ih : Eq KExpr sub {asn} -> C) (heq : Eq KExpr (KExpr.proj ps pin sub) {asn}) => proj_ne_app ps pin sub natSuccC n C heq)");
+            let s_proj = format!("(fun (ps : Name) (pin : Nat) (sub : KExpr) (sub2 : KExpr) (_hstep : beta_reduces sub sub2) (_ih : @Eq KExpr sub {asn} -> C) (heq : @Eq KExpr (KExpr.proj ps pin sub) {asn}) => proj_ne_app ps pin sub natSuccC n C heq)");
             let succ_body = format!(
-                "fun (e' : KExpr) (C : Type) (hbr : beta_reduces {asn} e') => beta_reduces.rec {mot} {s_beta} {s_appl} {s_appr} {s_lamty} {s_lambd} {s_pidom} {s_picod} {s_fadom} {s_facod} {s_zeta} {s_letty} {s_letval} {s_letbd} {s_iota} {s_proj} {asn} e' hbr (Eq.refl KExpr {asn})"
+                "fun (e' : KExpr) (C : Type) (hbr : beta_reduces {asn} e') => @beta_reduces.rec {mot} {s_beta} {s_appl} {s_appr} {s_lamty} {s_lambd} {s_pidom} {s_picod} {s_fadom} {s_facod} {s_zeta} {s_letty} {s_letval} {s_letbd} {s_iota} {s_proj} {asn} e' hbr (@Eq.refl KExpr {asn})"
             );
-            let zero_body = "fun (e' : KExpr) (C : Type) (hbr : beta_reduces natZeroC e') => const_no_beta_reduces zeroName (ListType.nil Level) e' C hbr";
+            let zero_body = "fun (e' : KExpr) (C : Type) (hbr : beta_reduces natZeroC e') => const_no_beta_reduces zeroName (@ListType.nil Level) e' C hbr";
             let body = format!(
-                "def numeral_no_beta (t : KExpr) (h : IsNumeral t) : forall (e' : KExpr) (C : Type), beta_reduces t e' -> C := IsNumeral.rec (fun (t0 : KExpr) (_ : IsNumeral t0) => forall (e' : KExpr) (C : Type), beta_reduces t0 e' -> C) ({zero_body}) (fun (n : KExpr) (_ : IsNumeral n) (ihn : forall (e' : KExpr) (C : Type), beta_reduces n e' -> C) => {succ_body}) t h"
+                "def numeral_no_beta (t : KExpr) (h : IsNumeral t) : forall (e' : KExpr) (C : Type), beta_reduces t e' -> C := @IsNumeral.rec (fun (t0 : KExpr) (_ : IsNumeral t0) => forall (e' : KExpr) (C : Type), beta_reduces t0 e' -> C) ({zero_body}) (fun (n : KExpr) (_ : IsNumeral n) (ihn : forall (e' : KExpr) (C : Type), beta_reduces n e' -> C) => {succ_body}) t h"
             );
             self.add_recursive_def(
                 &body,
@@ -623,12 +623,12 @@ impl Specification {
         // instantiate_lift_cancel_general — no psubst chain needed) + natSuccCaseSem.
         // inst_lift1: instantiate (lift_at m 0 1) n = m (cancel a=1,j=0 then lift_at m 0 0 = m).
         self.add_recursive_def(
-            "def inst_lift1 (m : KExpr) (n : KExpr) : Eq KExpr (instantiate (lift_at m Nat.zero (Nat.succ Nat.zero)) n) m := Eq.trans KExpr (instantiate (lift_at m Nat.zero (Nat.succ Nat.zero)) n) (lift_at m Nat.zero Nat.zero) m (instantiate_lift_cancel_general m n Nat.zero (Nat.succ Nat.zero) Nat.zero (Eq.refl Nat (Nat.succ Nat.zero))) (lift_zero_identity m)",
+            "def inst_lift1 (m : KExpr) (n : KExpr) : @Eq KExpr (instantiate (lift_at m Nat.zero (Nat.succ Nat.zero)) n) m := @Eq.trans KExpr (instantiate (lift_at m Nat.zero (Nat.succ Nat.zero)) n) (lift_at m Nat.zero Nat.zero) m (instantiate_lift_cancel_general m n Nat.zero (Nat.succ Nat.zero) Nat.zero (@Eq.refl Nat (Nat.succ Nat.zero))) (lift_zero_identity m)",
             "inst_lift1: instantiate (lift_at m 0 1) n = m — a unit lift cancels under instantiate. Nat.rec port B5(g) prep.",
         )?;
         // inst_at1_lift2: instantiate_at (lift_at m 0 2) n 1 = lift_at m 0 1 (cancel a=2,j=1).
         self.add_recursive_def(
-            "def inst_at1_lift2 (m : KExpr) (n : KExpr) : Eq KExpr (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) n (Nat.succ Nat.zero)) (lift_at m Nat.zero (Nat.succ Nat.zero)) := instantiate_lift_cancel_general m n Nat.zero (Nat.succ (Nat.succ Nat.zero)) (Nat.succ Nat.zero) (Eq.refl Nat (Nat.succ Nat.zero))",
+            "def inst_at1_lift2 (m : KExpr) (n : KExpr) : @Eq KExpr (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) n (Nat.succ Nat.zero)) (lift_at m Nat.zero (Nat.succ Nat.zero)) := instantiate_lift_cancel_general m n Nat.zero (Nat.succ (Nat.succ Nat.zero)) (Nat.succ Nat.zero) (@Eq.refl Nat (Nat.succ Nat.zero))",
             "inst_at1_lift2: instantiate_at (lift_at m 0 2) n 1 = lift_at m 0 1 — depth-1 lift-cancel. Nat.rec port B5(g) prep.",
         )?;
         // natSuccCaseSem: the succ-minor's semantic type (fun n ih => C(succ n)),
@@ -656,12 +656,12 @@ impl Specification {
             let appmn = "(KExpr.app m n)";
             let qprime = format!("(KExpr.app {lm1} (KExpr.app natSuccC {ln1}))");
             let rhs1 = format!("(KExpr.pi {appmn} {qprime})");
-            let eqdom = format!("(Eq.trans KExpr {pp} (KExpr.app m {ln0}) {appmn} (Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.app x {ln0}) (instantiate {lm1} n) m (inst_lift1 m n)) (Eq.cong KExpr KExpr (fun (y : KExpr) => KExpr.app m y) {ln0} n (lift_zero_identity n)))");
-            let eqbody = format!("(Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.app x (KExpr.app natSuccC {ln1})) (instantiate_at {lm2} n {z1}) {lm1} (inst_at1_lift2 m n))");
-            let result1 = format!("(Eq.trans KExpr (KExpr.pi {pp} {qq}) (KExpr.pi {appmn} {qq}) {rhs1} (Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.pi x {qq}) {pp} {appmn} {eqdom}) (Eq.cong KExpr KExpr (fun (yy : KExpr) => KExpr.pi {appmn} yy) {qq} {qprime} {eqbody}))");
+            let eqdom = format!("(@Eq.trans KExpr {pp} (KExpr.app m {ln0}) {appmn} (@Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.app x {ln0}) (instantiate {lm1} n) m (inst_lift1 m n)) (@Eq.cong KExpr KExpr (fun (y : KExpr) => KExpr.app m y) {ln0} n (lift_zero_identity n)))");
+            let eqbody = format!("(@Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.app x (KExpr.app natSuccC {ln1})) (instantiate_at {lm2} n {z1}) {lm1} (inst_at1_lift2 m n))");
+            let result1 = format!("(@Eq.trans KExpr (KExpr.pi {pp} {qq}) (KExpr.pi {appmn} {qq}) {rhs1} (@Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.pi x {qq}) {pp} {appmn} {eqdom}) (@Eq.cong KExpr KExpr (fun (yy : KExpr) => KExpr.pi {appmn} yy) {qq} {qprime} {eqbody}))");
             let lhs1 = format!("(instantiate (KExpr.pi (KExpr.app {lm1} (KExpr.bvar Nat.zero)) (KExpr.app {lm2} (KExpr.app natSuccC (KExpr.bvar {z1})))) n)");
             self.add_recursive_def(
-                &format!("def natSuccArm_inst1 (m : KExpr) (n : KExpr) : Eq KExpr {lhs1} {rhs1} := {result1}"),
+                &format!("def natSuccArm_inst1 (m : KExpr) (n : KExpr) : @Eq KExpr {lhs1} {rhs1} := {result1}"),
                 "natSuccArm_inst1: instantiating the succ-minor Pi-body at the argument n. Nat.rec port B5(g) prep.",
             )?;
             // natSuccArm_inst2 (m n r)
@@ -669,11 +669,11 @@ impl Specification {
             let innerp = "(KExpr.app natSuccC n)";
             let lhs2form = format!("(KExpr.app (instantiate {lm1} r) {inner})");
             let rhs2 = format!("(KExpr.app m {innerp})");
-            let eqinner = format!("(Eq.cong KExpr KExpr (fun (z : KExpr) => KExpr.app natSuccC z) (instantiate {ln1} r) n (inst_lift1 n r))");
-            let result2 = format!("(Eq.trans KExpr {lhs2form} (KExpr.app m {inner}) {rhs2} (Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.app x {inner}) (instantiate {lm1} r) m (inst_lift1 m r)) (Eq.cong KExpr KExpr (fun (y : KExpr) => KExpr.app m y) {inner} {innerp} {eqinner}))");
+            let eqinner = format!("(@Eq.cong KExpr KExpr (fun (z : KExpr) => KExpr.app natSuccC z) (instantiate {ln1} r) n (inst_lift1 n r))");
+            let result2 = format!("(@Eq.trans KExpr {lhs2form} (KExpr.app m {inner}) {rhs2} (@Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.app x {inner}) (instantiate {lm1} r) m (inst_lift1 m r)) (@Eq.cong KExpr KExpr (fun (y : KExpr) => KExpr.app m y) {inner} {innerp} {eqinner}))");
             let lhs2 = format!("(instantiate (KExpr.app {lm1} (KExpr.app natSuccC {ln1})) r)");
             self.add_recursive_def(
-                &format!("def natSuccArm_inst2 (m : KExpr) (n : KExpr) (r : KExpr) : Eq KExpr {lhs2} {rhs2} := {result2}"),
+                &format!("def natSuccArm_inst2 (m : KExpr) (n : KExpr) (r : KExpr) : @Eq KExpr {lhs2} {rhs2} := {result2}"),
                 "natSuccArm_inst2: instantiating the succ codomain at the recursive call r. Nat.rec port B5(g) prep.",
             )?;
         }
@@ -709,19 +709,19 @@ impl Specification {
             #[allow(non_snake_case)]
             let succT = format!("(KExpr.app m {succt})");
             let motive = format!("(fun (t0 : KExpr) (_ : IsNumeral t0) => forall (m : KExpr) (z : KExpr) (s : KExpr), cm_Red tenv M {mtym} m -> cm_Red tenv M (KExpr.app m natZeroC) z -> cm_Red tenv M {scs} s -> cm_Red tenv M (KExpr.app m t0) (natRecApp u m z s t0))");
-            let zero_case = format!("(fun (m : KExpr) (z : KExpr) (s : KExpr) (hm : cm_Red tenv M {mtym} m) (hz : cm_Red tenv M (KExpr.app m natZeroC) z) (hs : cm_Red tenv M {scs} s) => redNatRec_holds tenv M u {rr} {re} m z s natZeroC z (KExpr.app m natZeroC) natFresh_red (natREnv_recEnvOK u) (NatRecContract.zero u m z s) (CR1 tenv M {mtym} m hm) (CR1 tenv M (KExpr.app m natZeroC) z hz) (CR1 tenv M {scs} s hs) (whnfAcc_numeral natZeroC IsNumeral.zero) hz)");
+            let zero_case = format!("(fun (m : KExpr) (z : KExpr) (s : KExpr) (hm : cm_Red tenv M {mtym} m) (hz : cm_Red tenv M (KExpr.app m natZeroC) z) (hs : cm_Red tenv M {scs} s) => redNatRec_holds tenv M u {rr} {re} m z s natZeroC z (KExpr.app m natZeroC) natFresh_red (natREnv_recEnvOK u) (@NatRecContract.zero u m z s) (CR1 tenv M {mtym} m hm) (CR1 tenv M (KExpr.app m natZeroC) z hz) (CR1 tenv M {scs} s hs) (whnfAcc_numeral natZeroC IsNumeral.zero) hz)");
             // succ case
             let h1 = format!(
                 "(pi_elim tenv M natTypeC {succbody} s n hs (red_numeral tenv M n hn natTypeC))"
             );
-            let h1t = format!("(Eq.rec KExpr {arm1lhs} (fun (Tv : KExpr) (_ : Eq KExpr {arm1lhs} Tv) => cm_Red tenv M Tv (KExpr.app s n)) {h1} {arm1rhs} (natSuccArm_inst1 m n))");
+            let h1t = format!("(@Eq.rec KExpr {arm1lhs} (fun (Tv : KExpr) (_ : @Eq KExpr {arm1lhs} Tv) => cm_Red tenv M Tv (KExpr.app s n)) {h1} {arm1rhs} (natSuccArm_inst1 m n))");
             let hih = "(ihn m z s hm hz hs)";
             let h2 = format!(
                 "(pi_elim tenv M (KExpr.app m n) {bodyinst} (KExpr.app s n) {nra} {h1t} {hih})"
             );
-            let h2t = format!("(Eq.rec KExpr {arm2lhs} (fun (Tv : KExpr) (_ : Eq KExpr {arm2lhs} Tv) => cm_Red tenv M Tv {succcontr}) {h2} {succT} (natSuccArm_inst2 m n {nra}))");
-            let succ_case = format!("(fun (n : KExpr) (hn : IsNumeral n) (ihn : forall (m : KExpr) (z : KExpr) (s : KExpr), cm_Red tenv M {mtym} m -> cm_Red tenv M (KExpr.app m natZeroC) z -> cm_Red tenv M {scs} s -> cm_Red tenv M (KExpr.app m n) (natRecApp u m z s n)) (m : KExpr) (z : KExpr) (s : KExpr) (hm : cm_Red tenv M {mtym} m) (hz : cm_Red tenv M (KExpr.app m natZeroC) z) (hs : cm_Red tenv M {scs} s) => redNatRec_holds tenv M u {rr} {re} m z s {succt} {succcontr} {succT} natFresh_red (natREnv_recEnvOK u) (NatRecContract.succ u m z s n) (CR1 tenv M {mtym} m hm) (CR1 tenv M (KExpr.app m natZeroC) z hz) (CR1 tenv M {scs} s hs) (whnfAcc_numeral {succt} (IsNumeral.succ n hn)) {h2t})");
-            let body = format!("def natRec_adequacy_numeral (tenv : KDeclEnv) (M : CandModel tenv) (u : Level) (t : KExpr) (h : IsNumeral t) : forall (m : KExpr) (z : KExpr) (s : KExpr), cm_Red tenv M {mtym} m -> cm_Red tenv M (KExpr.app m natZeroC) z -> cm_Red tenv M {scs} s -> cm_Red tenv M (KExpr.app m t) (natRecApp u m z s t) := IsNumeral.rec {motive} {zero_case} {succ_case} t h");
+            let h2t = format!("(@Eq.rec KExpr {arm2lhs} (fun (Tv : KExpr) (_ : @Eq KExpr {arm2lhs} Tv) => cm_Red tenv M Tv {succcontr}) {h2} {succT} (natSuccArm_inst2 m n {nra}))");
+            let succ_case = format!("(fun (n : KExpr) (hn : IsNumeral n) (ihn : forall (m : KExpr) (z : KExpr) (s : KExpr), cm_Red tenv M {mtym} m -> cm_Red tenv M (KExpr.app m natZeroC) z -> cm_Red tenv M {scs} s -> cm_Red tenv M (KExpr.app m n) (natRecApp u m z s n)) (m : KExpr) (z : KExpr) (s : KExpr) (hm : cm_Red tenv M {mtym} m) (hz : cm_Red tenv M (KExpr.app m natZeroC) z) (hs : cm_Red tenv M {scs} s) => redNatRec_holds tenv M u {rr} {re} m z s {succt} {succcontr} {succT} natFresh_red (natREnv_recEnvOK u) (@NatRecContract.succ u m z s n) (CR1 tenv M {mtym} m hm) (CR1 tenv M (KExpr.app m natZeroC) z hz) (CR1 tenv M {scs} s hs) (whnfAcc_numeral {succt} (IsNumeral.succ n hn)) {h2t})");
+            let body = format!("def natRec_adequacy_numeral (tenv : KDeclEnv) (M : CandModel tenv) (u : Level) (t : KExpr) (h : IsNumeral t) : forall (m : KExpr) (z : KExpr) (s : KExpr), cm_Red tenv M {mtym} m -> cm_Red tenv M (KExpr.app m natZeroC) z -> cm_Red tenv M {scs} s -> cm_Red tenv M (KExpr.app m t) (natRecApp u m z s t) := @IsNumeral.rec {motive} {zero_case} {succ_case} t h");
             self.add_recursive_def(
                 &body,
                 "natRec_adequacy_numeral: for every numeral t, if the motive/zero/succ minors are reducible at their dependent types then Nat.rec m z s t is reducible at (m t). THE recursor-reducibility payoff (redNatRec head-expansion + pi_elim + numeral induction). Nat.rec port B5(g).",
@@ -734,28 +734,28 @@ impl Specification {
         // zero:Nat, succ:Nat->Nat, rec:natRecTy). VARIABLE-motive only (conv-free
         // TypingCtx ceiling — the honest limit). CandModel-conditional, zero axioms.
         self.add_recursive_def(
-            "def natTEnv (u : Level) (n : Name) : OptionType KConstSig := opt_pick KConstSig (name_eqb n natName) (KConstSig.mk (ListType.nil Name) (KExpr.sort (Level.succ Level.zero))) (opt_pick KConstSig (name_eqb n zeroName) (KConstSig.mk (ListType.nil Name) natTypeC) (opt_pick KConstSig (name_eqb n succName) (KConstSig.mk (ListType.nil Name) (KExpr.pi natTypeC natTypeC)) (opt_pick KConstSig (name_eqb n recName) (KConstSig.mk (ListType.cons Name Name.anonymous (ListType.nil Name)) (natRecTy (Level.param Name.anonymous))) (OptionType.none KConstSig))))",
+            "def natTEnv (u : Level) (n : Name) : OptionType KConstSig := opt_pick KConstSig (name_eqb n natName) (KConstSig.mk (@ListType.nil Name) (KExpr.sort (Level.succ Level.zero))) (opt_pick KConstSig (name_eqb n zeroName) (KConstSig.mk (@ListType.nil Name) natTypeC) (opt_pick KConstSig (name_eqb n succName) (KConstSig.mk (@ListType.nil Name) (KExpr.pi natTypeC natTypeC)) (opt_pick KConstSig (name_eqb n recName) (KConstSig.mk (@ListType.cons Name Name.anonymous (@ListType.nil Name)) (natRecTy (Level.param Name.anonymous))) (@OptionType.none KConstSig))))",
             "Nat schematic signature environment: Nat/zero/succ have no universe parameters; the recursor stores one parameter and natRecTy at that parameter. The legacy u argument is retained for callers but does not fix the stored type. This is a model environment, not a production admission witness.",
         )?;
         self.add_recursive_def(
-            "def natRecMeta_signature : Eq (OptionType KConstSig) (natTEnv Level.zero recName) (OptionType.some KConstSig (recmeta_signature (natRecMeta))) := Eq.refl (OptionType KConstSig) (OptionType.some KConstSig (recmeta_signature (natRecMeta)))",
+            "def natRecMeta_signature : @Eq (OptionType KConstSig) (natTEnv Level.zero recName) (@OptionType.some KConstSig (recmeta_signature (natRecMeta))) := @Eq.refl (OptionType KConstSig) (@OptionType.some KConstSig (recmeta_signature (natRecMeta)))",
             "Stored Nat metadata signature equals the existing schematic declaration; this is data agreement, not recursor RHS typing.",
         )?;
 
         self.add_recursive_def(
-            "def natTEnv_rec_lookup (u : Level) : Eq (OptionType KExpr) (kdecl_type_at (natTEnv Level.zero) recName (ListType.cons Level u (ListType.nil Level))) (OptionType.some KExpr (natRecTy u)) := Eq.refl (OptionType KExpr) (OptionType.some KExpr (natRecTy u))",
+            "def natTEnv_rec_lookup (u : Level) : @Eq (OptionType KExpr) (kdecl_type_at (natTEnv Level.zero) recName (@ListType.cons Level u (@ListType.nil Level))) (@OptionType.some KExpr (natRecTy u)) := @Eq.refl (OptionType KExpr) (@OptionType.some KExpr (natRecTy u))",
             "The same stored Nat recursor signature yields natRecTy u at every supplied universe, through the actual arity-checked lookup.",
         )?;
         self.add_recursive_def(
-            "def natTEnv_rec_typed (u : Level) : TypingCtx (natTEnv Level.zero) (ListType.nil KExpr) (natRecC u) (natRecTy u) := TypingCtx.const (natTEnv Level.zero) (ListType.nil KExpr) recName (ListType.cons Level u (ListType.nil Level)) (natRecTy u) (natTEnv_rec_lookup u)",
+            "def natTEnv_rec_typed (u : Level) : TypingCtx (natTEnv Level.zero) (@ListType.nil KExpr) (natRecC u) (natRecTy u) := @TypingCtx.const (natTEnv Level.zero) (@ListType.nil KExpr) recName (@ListType.cons Level u (@ListType.nil Level)) (natRecTy u) (natTEnv_rec_lookup u)",
             "Actual TypingCtx constructor witness for the universe-bearing recursor constant; the signature migration does not exclude it by a zero-arity guard.",
         )?;
         self.add_recursive_def(
-            "def natTEnv_rec_missing_argument : Eq (OptionType KExpr) (kdecl_type_at (natTEnv Level.zero) recName (ListType.nil Level)) (OptionType.none KExpr) := Eq.refl (OptionType KExpr) (OptionType.none KExpr)",
+            "def natTEnv_rec_missing_argument : @Eq (OptionType KExpr) (kdecl_type_at (natTEnv Level.zero) recName (@ListType.nil Level)) (@OptionType.none KExpr) := @Eq.refl (OptionType KExpr) (@OptionType.none KExpr)",
             "The same stored recursor rejects a missing universe argument.",
         )?;
         self.add_recursive_def(
-            "def whnf_terminates_well_typed_nat (u : Level) (M : CandModel (natTEnv u)) (e : KExpr) (T : KExpr) (h : TypingCtx (natTEnv u) (ListType.nil KExpr) e T) : whnf_acc e := whnf_terminates_well_typed_dependent (natTEnv u) M e T h",
+            "def whnf_terminates_well_typed_nat (u : Level) (M : CandModel (natTEnv u)) (e : KExpr) (T : KExpr) (h : TypingCtx (natTEnv u) (@ListType.nil KExpr) e T) : whnf_acc e := whnf_terminates_well_typed_dependent (natTEnv u) M e T h",
             "whnf_terminates_well_typed_nat: every Nat-typed closed term is whnf-accessible (SN), specializing the dependent SN theorem to natTEnv. Variable-motive ceiling. THE Nat.rec SN theorem. Nat.rec port B6.",
         )?;
 

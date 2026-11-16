@@ -511,7 +511,7 @@ impl Specification {
                 "r (fun (e : IREnc) => ir_view_result encs e r) (ir_enc_find encs t)",
             ),
             "THE VIEW. It branches on the TABLE first and on the result second, and that order \
-             is load-bearing: with an empty table the IROption.rec iota-reduces to `r` without \
+             is load-bearing: with an empty table the @IROption.rec iota-reduces to `r` without \
              ever matching `r`, so `ir_load_view (ir_mod_encs (IRModule.mk fs gs)) t r` is \
              `Eq.refl`-equal to `r` at an ABSTRACT r. A version that matched the result first \
              would be stuck at an abstract one and no conservativity witness could be written.",
@@ -1136,7 +1136,7 @@ impl Specification {
                 "(IRStepResult.value (IRScalar.aggv (ir_vals_set sp k v))) ",
                 "(ir_nat_ltb k (ir_vals_len sp))",
             ),
-            "Field write into an aggregate's spine, rebuilding the whole value. Bool.rec minor \
+            "Field write into an aggregate's spine, rebuilding the whole value. @Bool.rec minor \
              order is (false, true), so the FIRST minor is the out-of-range case — which \
              preserves the fault order of the design this replaced: a non-aggregate operand is \
              decided by ir_insert_field's outer match (not_agg) BEFORE the index is examined \
@@ -1239,7 +1239,7 @@ impl Specification {
                 "@Bool.rec (fun (_ : Bool) => IRConfig) ",
                 "(ir_jump m s et eargs) (ir_jump m s tt targs) b",
             ),
-            "CondBr on a decided condition. Bool.rec minor order is (false, true), so the first \
+            "CondBr on a decided condition. @Bool.rec minor order is (false, true), so the first \
              minor is the else edge.",
         )?;
 
@@ -1410,7 +1410,7 @@ impl Specification {
                 "(fun (x : Bool) => @Bool.rec (fun (_ : Bool) => IRStepResult) ",
                 "(IRStepResult.value b) (IRStepResult.value a) x) (ir_as_bool c)",
             ),
-            "Select: the branch-free conditional. Bool.rec minor order is (false, true).",
+            "Select: the branch-free conditional. @Bool.rec minor order is (false, true).",
         )?;
 
         self.add_recursive_def(
@@ -1570,7 +1570,7 @@ impl Specification {
              module, pointer id, increment id, result list and machine. No successful-result \
              premise, memory transition, atomic admission or concurrency claim. The byte \
              executor is a separate profile; this theorem says only what the cell executor \
-             refuses. Eq.refl proof term, zero axiom_deps.",
+             refuses. @Eq.refl proof term, zero axiom_deps.",
         )?;
         self.add_recursive_def(
             concat!(
@@ -1584,7 +1584,7 @@ impl Specification {
             "Legacy REFUSAL independence only: varying the pointer leaves the same universal \
              unmodelled outcome. This accounts for the unread field in ir_exec, not for the \
              byte executor, where the pointer determines the actual memory operation. It \
-             grants no successful-execution coverage. Eq.refl proof term, zero axiom_deps.",
+             grants no successful-execution coverage. @Eq.refl proof term, zero axiom_deps.",
         )?;
         self.add_recursive_def(
             concat!(
@@ -1598,7 +1598,7 @@ impl Specification {
             "Legacy REFUSAL independence only: varying the increment leaves the same universal \
              unmodelled outcome. This accounts for the unread field in ir_exec, not for the \
              byte executor, where the increment determines the stored value. It grants no \
-             successful-execution coverage. Eq.refl proof term, zero axiom_deps.",
+             successful-execution coverage. @Eq.refl proof term, zero axiom_deps.",
         )?;
 
         // ===================================================================

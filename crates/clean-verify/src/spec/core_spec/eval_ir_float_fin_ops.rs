@@ -58,7 +58,7 @@ impl Specification {
                 "(Nat.add (ir_f64_ma a b) (ir_f64_mb a b)) ",
                 "(ir_f64_ssign a b)",
             ),
-            "THE EXACT MAGNITUDE OF THE SUM. Bool.rec minor order is (false, true): the SECOND \
+            "THE EXACT MAGNITUDE OF THE SUM. @Bool.rec minor order is (false, true): the SECOND \
              minor is same signs, an ordinary addition; the FIRST is opposite signs, where the \
              answer is the absolute difference — written as `(x - y) + (y - x)` on TRUNCATING \
              Nat.sub, which is |x - y| because exactly one of the two terms is non-zero. That is \

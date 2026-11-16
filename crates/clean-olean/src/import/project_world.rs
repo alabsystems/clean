@@ -208,6 +208,41 @@ pub fn source_world_for_file(
     )
 }
 
+/// Select the configured compiler-pin library for an in-memory source unit.
+///
+/// A snapshot's diagnostic path is not filesystem provenance and is never
+/// searched for a project or toolchain here. Unlike the legacy checkout-pin
+/// choice, this decision declares the exact Oracle world before source
+/// imports. The ordinary per-part world fence and subsequent kernel replay
+/// still run: this returns producer configuration, never proof authority.
+///
+/// # Errors
+/// Missing pinned input, an unreadable header, or another installed build.
+pub fn source_world_for_snapshot() -> Result<SourceWorldDecision, SourceWorldRefusal> {
+    let world = LeanWorld::ORACLE;
+    let lib = crate::require_pinned_lean_lib_path()
+        .map_err(|reason| SourceWorldRefusal::Explicit { world, reason })?;
+    snapshot_world_for_library(lean_worlds(), lib)
+}
+
+fn snapshot_world_for_library(
+    table: &'static [LeanWorldRow],
+    lib: PathBuf,
+) -> Result<SourceWorldDecision, SourceWorldRefusal> {
+    let world = LeanWorld::ORACLE;
+    let refuse = |reason: String| SourceWorldRefusal::Explicit { world, reason };
+    let row = row_of_source_world(table, world)
+        .ok_or_else(|| refuse("no measured registry row".to_string()))?;
+    if row.state == WorldState::Canary {
+        return Err(refuse("canary artifacts remain refused".to_string()));
+    }
+    let lib = checked_library_identity(row, lib).map_err(refuse)?;
+    Ok(SourceWorldDecision {
+        world,
+        imports: Ok(ImportWorld::Explicit { world, lib }),
+    })
+}
+
 fn source_world_for(
     table: &'static [LeanWorldRow],
     file: &Path,
@@ -251,6 +286,10 @@ fn installed_library(row: &LeanWorldRow, elan_roots: &[PathBuf]) -> Result<PathB
                     .join(", ")
             )
         })?;
+    checked_library_identity(row, lib)
+}
+
+fn checked_library_identity(row: &LeanWorldRow, lib: PathBuf) -> Result<PathBuf, String> {
     match installed_identity(&lib) {
         Some(identity) if identity == row.identity => Ok(lib),
         found => Err(format!(

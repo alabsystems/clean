@@ -120,7 +120,7 @@ impl Specification {
     /// `childAcc` values.
     fn add_infer_terminates_childacc(&mut self) -> Result<(), SpecError> {
         self.add_recursive_def(
-            "def childAcc (p : KExpr) : Type := KExpr.rec (fun (_ : KExpr) => Type) \
+            "def childAcc (p : KExpr) : Type := @KExpr.rec (fun (_ : KExpr) => Type) \
              (fun (n : Level) => ConstFreeUnit) (fun (i : Nat) => ConstFreeUnit) \
              (fun (f : KExpr) (a : KExpr) (cf : Type) (ca : Type) => AndType (infer_acc f) (infer_acc a)) \
              (fun (ty : KExpr) (b : KExpr) (cty : Type) (cb : Type) => AndType (infer_acc ty) (infer_acc b)) \
@@ -156,7 +156,7 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (c : KExpr) (p : KExpr) (h : subexpr_step c p) => ",
-                    "subexpr_step.rec ",
+                    "@subexpr_step.rec ",
                     "(fun (cc : KExpr) (pp : KExpr) (_ : subexpr_step cc pp) => childAcc pp -> infer_acc cc) ",
                     // app_f f a : childAcc (app f a) -> infer_acc f
                     "(fun (f : KExpr) (a : KExpr) (b : childAcc (KExpr.app f a)) => ",
@@ -302,7 +302,7 @@ impl Specification {
 fn infer_terminates_proof() -> String {
     concat!(
         "fun (e : KExpr) => ",
-        "KExpr.rec ",
+        "@KExpr.rec ",
         "(fun (x : KExpr) => infer_acc x) ",
         // sort n — leaf: empty predecessor set, bundle = ConstFreeUnit.triv.
         "(fun (n : Level) => ",
@@ -319,19 +319,19 @@ fn infer_terminates_proof() -> String {
         "infer_acc.intro (KExpr.app f a) ",
         "(fun (e' : KExpr) (h : subexpr_step e' (KExpr.app f a)) => ",
         "subexpr_step_acc_inv e' (KExpr.app f a) h ",
-        "(AndType.intro (infer_acc f) (infer_acc a) ih_f ih_a))) ",
+        "(@AndType.intro (infer_acc f) (infer_acc a) ih_f ih_a))) ",
         // lam ty body — bundle = AndType.intro ih_ty ih_body.
         "(fun (ty : KExpr) (body : KExpr) (ih_ty : infer_acc ty) (ih_body : infer_acc body) => ",
         "infer_acc.intro (KExpr.lam ty body) ",
         "(fun (e' : KExpr) (h : subexpr_step e' (KExpr.lam ty body)) => ",
         "subexpr_step_acc_inv e' (KExpr.lam ty body) h ",
-        "(AndType.intro (infer_acc ty) (infer_acc body) ih_ty ih_body))) ",
+        "(@AndType.intro (infer_acc ty) (infer_acc body) ih_ty ih_body))) ",
         // pi ty body — symmetric with lam.
         "(fun (ty : KExpr) (body : KExpr) (ih_ty : infer_acc ty) (ih_body : infer_acc body) => ",
         "infer_acc.intro (KExpr.pi ty body) ",
         "(fun (e' : KExpr) (h : subexpr_step e' (KExpr.pi ty body)) => ",
         "subexpr_step_acc_inv e' (KExpr.pi ty body) h ",
-        "(AndType.intro (infer_acc ty) (infer_acc body) ih_ty ih_body))) ",
+        "(@AndType.intro (infer_acc ty) (infer_acc body) ih_ty ih_body))) ",
         // const nm us — leaf.
         "(fun (nm : Name) (us : ListType Level) => ",
         "infer_acc.intro (KExpr.const nm us) ",
@@ -345,8 +345,8 @@ fn infer_terminates_proof() -> String {
         "infer_acc.intro (KExpr.let_ ty v b) ",
         "(fun (e' : KExpr) (h : subexpr_step e' (KExpr.let_ ty v b)) => ",
         "subexpr_step_acc_inv e' (KExpr.let_ ty v b) h ",
-        "(AndType.intro (infer_acc ty) (AndType (infer_acc v) (infer_acc b)) ih_ty ",
-        "(AndType.intro (infer_acc v) (infer_acc b) ih_v ih_b)))) ",
+        "(@AndType.intro (infer_acc ty) (AndType (infer_acc v) (infer_acc b)) ih_ty ",
+        "(@AndType.intro (infer_acc v) (infer_acc b) ih_v ih_b)))) ",
         // proj s i sub — single child: childAcc (proj s i sub) reduces to infer_acc sub.
         "(fun (s : Name) (i : Nat) (sub : KExpr) (ih_sub : infer_acc sub) => ",
         "infer_acc.intro (KExpr.proj s i sub) ",

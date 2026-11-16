@@ -430,7 +430,7 @@ fn test_candmodel_r17_k_step_is_load_bearing() {
 #[test]
 fn test_candmodel_r17_wkv_recursor_is_parameter_promoted() {
     assert!(
-        src_konst_irrel().contains(":= Eq.refl "),
+        src_konst_irrel().contains(":= @Eq.refl "),
         "the konst irrelevance step is no longer the bare Eq.refl that measures proof irrelevance"
     );
     assert!(

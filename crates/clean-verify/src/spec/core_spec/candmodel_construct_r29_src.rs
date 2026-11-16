@@ -34,7 +34,7 @@ fn red_at(ty: &str, deriv: &str, tm: &str) -> String {
 /// closed context.
 pub(super) fn src_tcons() -> String {
     "def r29_tcons (A : KExpr) (G : Nat -> KExpr) (i : Nat) : KExpr := \
-     Nat.rec (fun (qi : Nat) => KExpr) A (fun (qn : Nat) (qih : KExpr) => G qn) i"
+     @Nat.rec (fun (qi : Nat) => KExpr) A (fun (qn : Nat) (qih : KExpr) => G qn) i"
         .to_string()
 }
 
@@ -53,7 +53,7 @@ pub(super) fn src_ctx_ok() -> String {
 pub(super) fn src_ctx_ok_cons() -> String {
     "def r29_ctxOK_cons (A : KExpr) (G : Nat -> KExpr) (hA : InertTy A) (hG : r29_ctxOK G) \
      (i : Nat) : InertTy (r29_tcons A G i) := \
-     Nat.rec (fun (qi : Nat) => InertTy (r29_tcons A G qi)) hA \
+     @Nat.rec (fun (qi : Nat) => InertTy (r29_tcons A G qi)) hA \
      (fun (qn : Nat) (qih : InertTy (r29_tcons A G qn)) => hG qn) i"
         .to_string()
 }
@@ -131,7 +131,7 @@ pub(super) fn src_redsub_extend() -> String {
          (hs : r29_RedSub D G hG r s) (a : KExpr) \
          (ha : {ha}) : \
          r29_RedSub D (r29_tcons A G) (r29_ctxOK_cons A G hA hG) r (scons a s) := \
-         fun (i : Nat) => Nat.rec (fun (qi : Nat) => {motive}) ha \
+         fun (i : Nat) => @Nat.rec (fun (qi : Nat) => {motive}) ha \
          (fun (qn : Nat) (qih : {ih}) => hs qn) i",
         ha = red_at("A", "(r28_inertTy_wkc D A hA)", "a"),
         motive = at("qi"),
@@ -230,8 +230,8 @@ pub(super) fn val_fundamental() -> String {
         ),
     );
     // SN of the substituted annotation, through InertTy.
-    let h_ann = "(Eq.substType KExpr (fun (z : KExpr) => whnf_acc z) A (psubst s A) \
-         (Eq.symm KExpr (psubst s A) A (r28_inertTy_psubst A hA s)) \
+    let h_ann = "(@Eq.substType KExpr (fun (z : KExpr) => whnf_acc z) A (psubst s A) \
+         (@Eq.symm KExpr (psubst s A) A (r28_inertTy_psubst A hA s)) \
          (r28_inertTy_whnfAcc A hA))"
         .to_string();
     let m_lam = format!(
@@ -255,7 +255,7 @@ pub(super) fn val_fundamental() -> String {
         "fun (D : Nat -> Sk) (r : VEnvD D) (hr : GoodEnvD D r) \
          (hrec : RecEnvClosed (red_rec the_red_env)) \
          (G : Nat -> KExpr) (e : KExpr) (T : KExpr) (d : TmC G e T) => \
-         TmC.rec {motive} {m_var} {m_app} {m_lam} G e T d"
+         @TmC.rec {motive} {m_var} {m_app} {m_lam} G e T d"
     )
 }
 
@@ -283,7 +283,7 @@ pub(super) fn val_sn() -> String {
      (hrec : RecEnvClosed (red_rec the_red_env)) \
      (G : Nat -> KExpr) (e : KExpr) (T : KExpr) (d : TmC G e T) \
      (hG : r29_ctxOK G) (hT : InertTy T) => \
-     Eq.substType KExpr (fun (z : KExpr) => whnf_acc z) (psubst idsubst e) e (psubst_id e) \
+     @Eq.substType KExpr (fun (z : KExpr) => whnf_acc z) (psubst idsubst e) e (psubst_id e) \
      (isCandHF_cr1 (r24_RedAt D T (r28_inertTy_wkc D T hT) r) \
      (r24_red_isCandHF D T (r28_inertTy_wkc D T hT) r hr) (psubst idsubst e) \
      (r29_fundamental D r hr hrec G e T d hG hT idsubst (r29_redsub_id D G hG r hr)))"

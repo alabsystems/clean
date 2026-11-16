@@ -9,7 +9,7 @@
     "UNKNOWN is a first-class value, never 0; it neither satisfies nor violates a direction.",
     "Quoting any row of this file from prose is a bug: read the artifact."
   ],
-  "generated_at_utc": "2026-11-16T00:00:47Z",
+  "generated_at_utc": "2026-11-16T15:59:53Z",
   "generator": "scripts/spine_scoreboard.py",
   "inputs": {
     "spine_set": "ABSENT",
@@ -17,14 +17,14 @@
     "axiom_ratchet": "sha256:cca27c20be9d4a38ef4d6008beae43231ed359a68a55fb3ed9a403ee44dd1fc0",
     "unchecked_decl_ratchet": "sha256:0a0a26bef7832b0261015068743896e7c6edb02537647acde26c19a083ee1d76",
     "env_bypass_census": "sha256:0bcd921a2d6121c79ab04e0c6a1d195b139109ad1374f1638ab7683800648f57",
-    "assumption_ledger": "sha256:f3ec073f6b655457c52a4ba7fbc611b0a314ad6b837b19a1d6734c3f54bf1172",
+    "assumption_ledger": "sha256:1e2a55a393d4d53b17629186bc8c6b4c231338fe5dd8d60347b7fad617ff56c3",
     "parity_tiers": "sha256:2d2d501572050b8c0589d7ec9864be9213231c3447a74d4be895905edf4eecfb",
     "evalir_coverage": "sha256:eaa072140d77bab3fb3f500f13cb4fb253289aef7d3bb25938925956331c38cc",
-    "evalir_adequacy_grid": "sha256:32972002a5e38d1aba249826d6407226acea404ef0fdde7bd50ff57e57fe23d4",
+    "evalir_adequacy_grid": "sha256:fc7bbb4c9eb08af2ef8cf840cb978e9ff5f1d40f1401360f0833b72d6a987221",
     "evalir_census_src": "sha256:2d785520100aacd746da40082cd733947ebe4890ef1f4feabbf21e5b647da602",
-    "evalir_syntax_src": "sha256:96353ec20713bd6267e3a81205b7d3ca81b7d17fcc0cb651d26319ed010e9e63",
-    "verdict_io_contracts": "sha256:fb24609548a8f44f34404ba3086b23d016909e198028fa189f289a0d302238bc",
-    "verdict_set": "sha256:bbfbecc316e92457fe16cfe0ed6b7e6959e2d56125a6fad42b80530e81189547"
+    "evalir_syntax_src": "sha256:0f8331a872afdcecd399178c4a3b0f4aff9964520b62e66f83ce2a5d1a235a26",
+    "verdict_io_contracts": "sha256:5362e9eb253a45bb5858cc62b9cfb8e9b2ff1d918f0de8976435f87675d084e2",
+    "verdict_set": "sha256:1f50ee9fce64529ed3dd07fb2f4483f3836f389e25c8da045a5ea35d19f25ffb"
   },
   "rebases": [
     {

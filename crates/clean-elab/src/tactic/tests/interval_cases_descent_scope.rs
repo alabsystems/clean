@@ -96,7 +96,7 @@ fn test_interval_cases_defeq_canary_lt_is_le_succ() {
 
     // (a) `Nat.lt_irrefl n (Nat.le_trans (succ n) 2 n hlt h_lower) : False`
     //     with `hlt : n < 2` fed to a slot expecting `Nat.le (succ n) 2`.
-    let mut state = ProofState::with_elab_context(
+    let state = ProofState::with_elab_context(
         env.clone(),
         Expr::const_(Name::from_string("False"), vec![]),
         vec![
@@ -147,7 +147,7 @@ fn test_interval_cases_defeq_canary_lt_is_le_succ() {
 
     // (b) `Nat.le_of_succ_le_succ n 3 hlt4 : n ≤ 3` with `hlt4 : n < 4`,
     //     relying on `lit(4) ≡ Nat.succ lit(3)` syntactically.
-    let mut state2 = ProofState::with_elab_context(
+    let state2 = ProofState::with_elab_context(
         env,
         make_nat_le_tc(n.clone(), make_nat_literal(3)),
         vec![

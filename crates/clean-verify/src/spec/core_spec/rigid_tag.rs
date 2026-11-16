@@ -71,7 +71,7 @@ impl Specification {
         let motive_at = |x: &str| {
             format!(
                 "forall (w : KExpr), par_reduces_cd_star env {x} w -> \
-                 Eq Nat (kexpr_tag {x}) (kexpr_tag w)"
+                 @Eq Nat (kexpr_tag {x}) (kexpr_tag w)"
             )
         };
         // From `Eq KExpr w <form>` conclude `Eq Nat (kexpr_tag <form>) (kexpr_tag w)`.
@@ -106,19 +106,19 @@ impl Specification {
         // EQUATION form and return an `Eq KExpr` outright, with no answer-type
         // parameter to mis-instantiate.
         {
-            let tag_eq = "Eq Nat (kexpr_tag (KExpr.pi pty pbody)) (kexpr_tag w)";
+            let tag_eq = "@Eq Nat (kexpr_tag (KExpr.pi pty pbody)) (kexpr_tag w)";
             arms.push_str(&format!(
                 "(fun (pty : KExpr) (pbody : KExpr) (w : KExpr) \
                  (hs : par_reduces_cd_star env (KExpr.pi pty pbody) w) => \
-                 LiftP.rec ({tag_eq}) \
+                 @LiftP.rec ({tag_eq}) \
                  (fun (_l : LiftP ({tag_eq})) => {tag_eq}) \
                  (fun (p : {tag_eq}) => p) \
                  (par_reduces_cd_star_pi_inv_eq env pty pbody w (LiftP ({tag_eq})) hs \
                  (fun (dom2 : KExpr) (body2 : KExpr) \
-                 (heq : Eq KExpr w (KExpr.pi dom2 body2)) \
+                 (heq : @Eq KExpr w (KExpr.pi dom2 body2)) \
                  (_h1 : par_reduces_cd_star env pty dom2) \
                  (_h2 : par_reduces_cd_star env pbody body2) => \
-                 LiftP.up ({tag_eq}) \
+                 @LiftP.up ({tag_eq}) \
                  (Eq.symm Nat (kexpr_tag w) (kexpr_tag (KExpr.pi dom2 body2)) \
                  (Eq.cong KExpr Nat kexpr_tag w (KExpr.pi dom2 body2) heq))))) "
             ));
@@ -136,14 +136,14 @@ impl Specification {
             "(fun (af : KExpr) (aa : KExpr) (hraf : rigid_app_head af) \
              (_ih : {ih}) (w : KExpr) \
              (hs : par_reduces_cd_star env (KExpr.app af aa) w) => \
-             StuckAppRedWitness.rec env af aa w \
+             @StuckAppRedWitness.rec env af aa w \
              (fun (_x : StuckAppRedWitness env af aa w) => \
-             Eq Nat (kexpr_tag (KExpr.app af aa)) (kexpr_tag w)) \
-             (fun (f2 : KExpr) (a2 : KExpr) (heq : Eq KExpr w (KExpr.app f2 a2)) \
+             @Eq Nat (kexpr_tag (KExpr.app af aa)) (kexpr_tag w)) \
+             (fun (f2 : KExpr) (a2 : KExpr) (heq : @Eq KExpr w (KExpr.app f2 a2)) \
              (_r1 : par_reduces_cd_star env af f2) \
              (_r2 : par_reduces_cd_star env aa a2) => {body}) \
              (par_reduces_cd_star_rigid_app_inv env (KExpr.app af aa) w hs af aa \
-             (rigid_app_head.app af aa hraf) (Eq.refl KExpr (KExpr.app af aa)))) ",
+             (rigid_app_head.app af aa hraf) (@Eq.refl KExpr (KExpr.app af aa)))) ",
             ih = motive_at("af"),
             body = via_equation("(KExpr.app f2 a2)", "heq")
         ));
@@ -152,13 +152,13 @@ impl Specification {
         arms.push_str(&format!(
             "(fun (s : Name) (i : Nat) (sub : KExpr) (w : KExpr) \
              (hs : par_reduces_cd_star env (KExpr.proj s i sub) w) => \
-             ProjRedWitness.rec env s i sub w \
+             @ProjRedWitness.rec env s i sub w \
              (fun (_x : ProjRedWitness env s i sub w) => \
-             Eq Nat (kexpr_tag (KExpr.proj s i sub)) (kexpr_tag w)) \
-             (fun (sub2 : KExpr) (heq : Eq KExpr w (KExpr.proj s i sub2)) \
+             @Eq Nat (kexpr_tag (KExpr.proj s i sub)) (kexpr_tag w)) \
+             (fun (sub2 : KExpr) (heq : @Eq KExpr w (KExpr.proj s i sub2)) \
              (_r : par_reduces_cd_star env sub sub2) => {body}) \
              (par_reduces_cd_star_proj_inv env (KExpr.proj s i sub) w hs s i sub \
-             (Eq.refl KExpr (KExpr.proj s i sub)))) ",
+             (@Eq.refl KExpr (KExpr.proj s i sub)))) ",
             body = via_equation("(KExpr.proj s i sub2)", "heq")
         ));
 
@@ -184,11 +184,11 @@ impl Specification {
                 "def rigid_app_head_star_preserves_tag (env : RedEnv) (e : KExpr) \
                  (hr : rigid_app_head e) : \
                  forall (w : KExpr), par_reduces_cd_star env e w -> \
-                 Eq Nat (kexpr_tag e) (kexpr_tag w) := \
-                 rigid_app_head.rec \
+                 @Eq Nat (kexpr_tag e) (kexpr_tag w) := \
+                 @rigid_app_head.rec \
                  (fun (x : KExpr) (_h : rigid_app_head x) => \
                  forall (w : KExpr), par_reduces_cd_star env x w -> \
-                 Eq Nat (kexpr_tag x) (kexpr_tag w)) \
+                 @Eq Nat (kexpr_tag x) (kexpr_tag w)) \
                  {arms}e hr"
             ),
             "rigid_app_head_star_preserves_tag: reduction out of a rigid-headed term preserves \

@@ -110,7 +110,7 @@ impl IntKind {
     }
 
     /// Maximum value for signed variant
-    pub fn signed_max(&self) -> i128 {
+    pub(crate) fn signed_max(&self) -> i128 {
         match self {
             IntKind::Bool => 1,
             IntKind::Char => i8::MAX as i128,
@@ -121,7 +121,7 @@ impl IntKind {
     }
 
     /// Maximum value for unsigned variant
-    pub fn unsigned_max(&self) -> u128 {
+    pub(crate) fn unsigned_max(&self) -> u128 {
         match self {
             IntKind::Bool => 1,
             IntKind::Char => u8::MAX as u128,
@@ -198,7 +198,7 @@ impl StructField {
     }
 
     /// Is this member a bit-field (including a zero-width separator)?
-    pub fn is_bitfield(&self) -> bool {
+    pub(crate) fn is_bitfield(&self) -> bool {
         self.bit_width.is_some()
     }
 }
@@ -453,7 +453,7 @@ impl CType {
     }
 
     /// Create an unsigned char type
-    pub fn unsigned_char() -> Self {
+    pub(crate) fn unsigned_char() -> Self {
         CType::Int(IntKind::Char, Signedness::Unsigned)
     }
 
@@ -493,7 +493,7 @@ impl CType {
     /// unqualified types are never wrapped in a redundant `Qualified` layer.
     /// When `ty` is already a `Qualified` type, the new qualifiers are merged
     /// (OR-ed) into the existing flags rather than nested.
-    pub fn with_qualifiers(
+    pub(crate) fn with_qualifiers(
         ty: CType,
         is_const: bool,
         is_volatile: bool,
@@ -641,7 +641,7 @@ impl CType {
     }
 
     /// Check if type is an arithmetic type (integer or float)
-    pub fn is_arithmetic(&self) -> bool {
+    pub(crate) fn is_arithmetic(&self) -> bool {
         self.is_integer() || self.is_float()
     }
 
@@ -651,7 +651,7 @@ impl CType {
     }
 
     /// Check if type is a pointer type
-    pub fn is_pointer(&self) -> bool {
+    pub(crate) fn is_pointer(&self) -> bool {
         match self {
             CType::Pointer(_) => true,
             CType::Qualified { ty, .. } => ty.is_pointer(),
@@ -669,7 +669,7 @@ impl CType {
     }
 
     /// Check if type is a flexible array member / incomplete array (`T[]`).
-    pub fn is_flexible_array(&self) -> bool {
+    pub(crate) fn is_flexible_array(&self) -> bool {
         match self {
             CType::IncompleteArray(_) => true,
             CType::Qualified { ty, .. } => ty.is_flexible_array(),
@@ -711,7 +711,7 @@ impl CType {
     }
 
     /// Get struct field by name
-    pub fn get_field(&self, name: &str) -> Option<(usize, &StructField)> {
+    pub(crate) fn get_field(&self, name: &str) -> Option<(usize, &StructField)> {
         match self {
             CType::Struct { fields, .. } | CType::Union { fields, .. } => {
                 fields.iter().enumerate().find(|(_, f)| f.name == name)
@@ -732,7 +732,7 @@ impl CType {
     /// Compute the layout of every member of a struct, parallel to its field
     /// list (including unnamed zero-width bit-field separators). Returns `None`
     /// for non-struct types.
-    pub fn struct_field_layouts(&self) -> Option<Vec<FieldLayout>> {
+    pub(crate) fn struct_field_layouts(&self) -> Option<Vec<FieldLayout>> {
         match self {
             CType::Struct { fields, .. } => Some(struct_layout(fields).0),
             CType::Qualified { ty, .. } => ty.struct_field_layouts(),
@@ -787,7 +787,7 @@ impl CType {
     ///
     /// Non-aggregate types and aggregates without a flexible array member
     /// validate trivially.
-    pub fn validate_flexible_array_member(&self) -> Result<(), FlexibleArrayError> {
+    pub(crate) fn validate_flexible_array_member(&self) -> Result<(), FlexibleArrayError> {
         match self {
             CType::Struct { fields, .. } => validate_struct_flexible_array(fields),
             CType::Union { fields, .. } => {
@@ -915,7 +915,7 @@ impl CType {
     ///
     /// Small integer types are promoted to int or unsigned int
     #[must_use]
-    pub fn integer_promotion(&self) -> CType {
+    pub(crate) fn integer_promotion(&self) -> CType {
         match self {
             CType::Int(IntKind::Bool | IntKind::Char | IntKind::Short, _) => {
                 CType::Int(IntKind::Int, Signedness::Signed)
@@ -948,7 +948,7 @@ impl CType {
     /// `unsigned int` when an enumerator exceeds `INT_MAX` but still fits in a
     /// non-negative 4-byte value. Non-enumeration types return themselves.
     #[must_use]
-    pub fn enum_underlying_type(&self) -> CType {
+    pub(crate) fn enum_underlying_type(&self) -> CType {
         match self {
             CType::Enum { variants, .. } => {
                 let needs_unsigned = variants
@@ -970,7 +970,7 @@ impl CType {
     ///
     /// Returns the common type for arithmetic operations
     #[must_use]
-    pub fn usual_arithmetic_conversion(&self, other: &CType) -> CType {
+    pub(crate) fn usual_arithmetic_conversion(&self, other: &CType) -> CType {
         let a = self.integer_promotion();
         let b = other.integer_promotion();
 

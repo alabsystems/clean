@@ -53,7 +53,7 @@ use crate::spec::Specification;
 /// app(lam) alias made `app_ne_lam` suffice). Mirrors the discrimination-lane
 /// `KEXPR_NOT_LAM_INLINE` (with the trailing let_ minor). let_ maps to Nat.
 const KEXPR_NOT_LAM_INLINE: &str = concat!(
-    "(KExpr.rec (fun (_ : KExpr) => Type) ",
+    "(@KExpr.rec (fun (_ : KExpr) => Type) ",
     "(fun (_ : Level) => Nat) ",
     "(fun (_ : Nat) => Nat) ",
     "(fun (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) => Nat) ",
@@ -643,18 +643,18 @@ impl Specification {
 fn par_reduces_p0_subsumes_par_p_proof() -> String {
     let motive =
         "(fun (e : KExpr) (e' : KExpr) (_h : par_reduces_p0 env e e') => par_reduces_p env e e')";
-    let refl_arm = "(fun (e : KExpr) => par_reduces_p.refl env e)";
+    let refl_arm = "(fun (e : KExpr) => @par_reduces_p.refl env e)";
     let beta_arm = concat!(
         "(fun (A : KExpr) (A' : KExpr) (body : KExpr) (body' : KExpr) (arg : KExpr) (arg' : KExpr) ",
         "(_hA : par_reduces_p0 env A A') (_hbody : par_reduces_p0 env body body') (_harg : par_reduces_p0 env arg arg') ",
         "(ihA : par_reduces_p env A A') (ihbody : par_reduces_p env body body') (iharg : par_reduces_p env arg arg') => ",
-        "par_reduces_p.beta env A A' body body' arg arg' ihA ihbody iharg)"
+        "@par_reduces_p.beta env A A' body body' arg arg' ihA ihbody iharg)"
     );
     let app_arm = concat!(
         "(fun (f : KExpr) (f' : KExpr) (a : KExpr) (a' : KExpr) ",
         "(_hf : par_reduces_p0 env f f') (_ha : par_reduces_p0 env a a') ",
         "(ihf : par_reduces_p env f f') (iha : par_reduces_p env a a') => ",
-        "par_reduces_p.app env f f' a a' ihf iha)"
+        "@par_reduces_p.app env f f' a a' ihf iha)"
     );
     let binder_arm = |ctor: &str| -> String {
         format!(
@@ -662,7 +662,7 @@ fn par_reduces_p0_subsumes_par_p_proof() -> String {
                 "(fun (ty : KExpr) (ty' : KExpr) (body : KExpr) (body' : KExpr) ",
                 "(_hty : par_reduces_p0 env ty ty') (_hbody : par_reduces_p0 env body body') ",
                 "(ihty : par_reduces_p env ty ty') (ihbody : par_reduces_p env body body') => ",
-                "{ctor} env ty ty' body body' ihty ihbody)"
+                "@{ctor} env ty ty' body body' ihty ihbody)"
             ),
             ctor = ctor,
         )
@@ -671,7 +671,7 @@ fn par_reduces_p0_subsumes_par_p_proof() -> String {
         "(fun (ty : KExpr) (ty' : KExpr) (val : KExpr) (val' : KExpr) (body : KExpr) (body' : KExpr) ",
         "(_hty : par_reduces_p0 env ty ty') (_hval : par_reduces_p0 env val val') (_hbody : par_reduces_p0 env body body') ",
         "(ihty : par_reduces_p env ty ty') (ihval : par_reduces_p env val val') (ihbody : par_reduces_p env body body') => ",
-        "par_reduces_p.let_ env ty ty' val val' body body' ihty ihval ihbody)"
+        "@par_reduces_p.let_ env ty ty' val val' body body' ihty ihval ihbody)"
     );
     // iota_0 arm: developed premise (app f a ⇒_p app f' a') via par_reduces_p.app on
     // the IHs, then iota_p fires iota_step env (app f' a') r. The gate r0 is dropped.
@@ -680,25 +680,25 @@ fn par_reduces_p0_subsumes_par_p_proof() -> String {
         "(_hf : par_reduces_p0 env f f') (_ha : par_reduces_p0 env a a') ",
         "(_hgate : iota_step env (KExpr.app f a) r0) (hfire : iota_step env (KExpr.app f' a') r) ",
         "(ihf : par_reduces_p env f f') (iha : par_reduces_p env a a') => ",
-        "par_reduces_p.iota_p env (KExpr.app f a) (KExpr.app f' a') r ",
-        "(par_reduces_p.app env f f' a a' ihf iha) hfire)"
+        "@par_reduces_p.iota_p env (KExpr.app f a) (KExpr.app f' a') r ",
+        "(@par_reduces_p.app env f f' a a' ihf iha) hfire)"
     );
     // let_cong arm: map the p0 let congruence to the matching par_reduces_p.let_cong.
     let let_cong_arm = concat!(
         "(fun (ty : KExpr) (ty' : KExpr) (val : KExpr) (val' : KExpr) (body : KExpr) (body' : KExpr) ",
         "(_hty : par_reduces_p0 env ty ty') (_hval : par_reduces_p0 env val val') (_hbody : par_reduces_p0 env body body') ",
         "(ihty : par_reduces_p env ty ty') (ihval : par_reduces_p env val val') (ihbody : par_reduces_p env body body') => ",
-        "par_reduces_p.let_cong env ty ty' val val' body body' ihty ihval ihbody)"
+        "@par_reduces_p.let_cong env ty ty' val val' body body' ihty ihval ihbody)"
     );
     let proj_arm = concat!(
         "(fun (s : Name) (i : Nat) (sub : KExpr) (sub' : KExpr) ",
         "(_hsub : par_reduces_p0 env sub sub') (ihsub : par_reduces_p env sub sub') => ",
-        "par_reduces_p.proj env s i sub sub' ihsub)"
+        "@par_reduces_p.proj env s i sub sub' ihsub)"
     );
     format!(
         concat!(
             "fun (env : RecEnv) (e0 : KExpr) (e0' : KExpr) (h0 : par_reduces_p0 env e0 e0') => ",
-            "par_reduces_p0.rec env {motive} ",
+            "@par_reduces_p0.rec env {motive} ",
             "{refl_arm} {beta_arm} {app_arm} {lam_arm} {pi_arm} {forall_arm} {let_arm} {iota_arm} {let_cong_arm} {proj_arm} ",
             "e0 e0' h0"
         ),
@@ -734,14 +734,14 @@ fn par0_lift_proof() -> String {
     );
     let refl_arm = concat!(
         "(fun (e : KExpr) (c : Nat) (a : Nat) (_liftclosed : RecEnvLiftClosed env) => ",
-        "par_reduces_p0.refl env (lift_at e c a))"
+        "@par_reduces_p0.refl env (lift_at e c a))"
     );
     let app_arm = format!(
         concat!(
             "(fun (f : KExpr) (f' : KExpr) (a0 : KExpr) (a0' : KExpr) ",
             "(_hf : par_reduces_p0 env f f') (_ha : par_reduces_p0 env a0 a0') ",
             "(ihf : {ih_f}) (iha : {ih_a}) (c : Nat) (a : Nat) (liftclosed : RecEnvLiftClosed env) => ",
-            "par_reduces_p0.app env (lift_at f c a) (lift_at f' c a) ",
+            "@par_reduces_p0.app env (lift_at f c a) (lift_at f' c a) ",
             "(lift_at a0 c a) (lift_at a0' c a) (ihf c a liftclosed) (iha c a liftclosed))"
         ),
         ih_f = ih.replace("SUB'", "f'").replace("SUB", "f"),
@@ -761,17 +761,17 @@ fn par0_lift_proof() -> String {
         );
         let swap_raw = format!("(lift_instantiate_swap {bodyp} {argp} Nat.zero c a)");
         let cong_lhs = format!(
-            "(Eq.cong Nat KExpr (fun (n : Nat) => lift_at (instantiate_at {bodyp} {argp} Nat.zero) n a) c (Nat.add Nat.zero c) (Eq.symm Nat (Nat.add Nat.zero c) c (nat_zero_add c)))"
+            "(@Eq.cong Nat KExpr (fun (n : Nat) => lift_at (instantiate_at {bodyp} {argp} Nat.zero) n a) c (Nat.add Nat.zero c) (@Eq.symm Nat (Nat.add Nat.zero c) c (nat_zero_add c)))"
         );
         let cong_rhs = format!(
-            "(Eq.cong Nat KExpr (fun (n : Nat) => instantiate_at (lift_at {bodyp} (Nat.succ n) a) (lift_at {argp} c a) Nat.zero) (Nat.add Nat.zero c) c (nat_zero_add c))"
+            "(@Eq.cong Nat KExpr (fun (n : Nat) => instantiate_at (lift_at {bodyp} (Nat.succ n) a) (lift_at {argp} c a) Nat.zero) (Nat.add Nat.zero c) c (nat_zero_add c))"
         );
         let eq = format!(
-            "(Eq.trans KExpr {goal_lhs} {swap_lhs} {goal_rhs} {cong_lhs} (Eq.trans KExpr {swap_lhs} {swap_rhs} {goal_rhs} {swap_raw} {cong_rhs}))"
+            "(@Eq.trans KExpr {goal_lhs} {swap_lhs} {goal_rhs} {cong_lhs} (@Eq.trans KExpr {swap_lhs} {swap_rhs} {goal_rhs} {swap_raw} {cong_rhs}))"
         );
         let p = format!("(fun (x : KExpr) => par_reduces_p0 env {lhs_head} x)");
         format!(
-            "(Eq.substType KExpr {p} {goal_rhs} {goal_lhs} (Eq.symm KExpr {goal_lhs} {goal_rhs} {eq}) {ctor_term})"
+            "(@Eq.substType KExpr {p} {goal_rhs} {goal_lhs} (@Eq.symm KExpr {goal_lhs} {goal_rhs} {eq}) {ctor_term})"
         )
     };
     let beta_lhs_head = concat!(
@@ -779,7 +779,7 @@ fn par0_lift_proof() -> String {
         "(lift_at arg c a))"
     );
     let beta_ctor = concat!(
-        "(par_reduces_p0.beta env (lift_at A c a) (lift_at A' c a) ",
+        "(@par_reduces_p0.beta env (lift_at A c a) (lift_at A' c a) ",
         "(lift_at body (Nat.succ c) a) (lift_at body' (Nat.succ c) a) ",
         "(lift_at arg c a) (lift_at arg' c a) ",
         "(ihA c a liftclosed) (ihbody (Nat.succ c) a liftclosed) (iharg c a liftclosed))"
@@ -804,7 +804,7 @@ fn par0_lift_proof() -> String {
                 "(fun (ty : KExpr) (ty' : KExpr) (body : KExpr) (body' : KExpr) ",
                 "(_hty : par_reduces_p0 env ty ty') (_hbody : par_reduces_p0 env body body') ",
                 "(ihty : {ih_ty}) (ihbody : {ih_body}) (c : Nat) (a : Nat) (liftclosed : RecEnvLiftClosed env) => ",
-                "{ctor} env (lift_at ty c a) (lift_at ty' c a) ",
+                "@{ctor} env (lift_at ty c a) (lift_at ty' c a) ",
                 "(lift_at body (Nat.succ c) a) (lift_at body' (Nat.succ c) a) ",
                 "(ihty c a liftclosed) (ihbody (Nat.succ c) a liftclosed))"
             ),
@@ -818,7 +818,7 @@ fn par0_lift_proof() -> String {
     let let_lhs_head =
         "(KExpr.let_ (lift_at ty c a) (lift_at val c a) (lift_at body (Nat.succ c) a))";
     let let_ctor = concat!(
-        "(par_reduces_p0.let_ env (lift_at ty c a) (lift_at ty' c a) ",
+        "(@par_reduces_p0.let_ env (lift_at ty c a) (lift_at ty' c a) ",
         "(lift_at val c a) (lift_at val' c a) ",
         "(lift_at body (Nat.succ c) a) (lift_at body' (Nat.succ c) a) ",
         "(ihty c a liftclosed) (ihval c a liftclosed) (ihbody (Nat.succ c) a liftclosed))"
@@ -847,7 +847,7 @@ fn par0_lift_proof() -> String {
             "(_hbody : par_reduces_p0 env body body') ",
             "(ihty : {ih_ty}) (ihval : {ih_val}) (ihbody : {ih_body}) ",
             "(c : Nat) (a : Nat) (liftclosed : RecEnvLiftClosed env) => ",
-            "par_reduces_p0.let_cong env (lift_at ty c a) (lift_at ty' c a) ",
+            "@par_reduces_p0.let_cong env (lift_at ty c a) (lift_at ty' c a) ",
             "(lift_at val c a) (lift_at val' c a) ",
             "(lift_at body (Nat.succ c) a) (lift_at body' (Nat.succ c) a) ",
             "(ihty c a liftclosed) (ihval c a liftclosed) (ihbody (Nat.succ c) a liftclosed))"
@@ -867,7 +867,7 @@ fn par0_lift_proof() -> String {
             "(hgate : iota_step env (KExpr.app f a0) r0) (hfire : iota_step env (KExpr.app f' a0') r) ",
             "(ihf : {ih_f}) (iha : {ih_a}) ",
             "(c : Nat) (a : Nat) (liftclosed : RecEnvLiftClosed env) => ",
-            "par_reduces_p0.iota_0 env (lift_at f c a) (lift_at f' c a) ",
+            "@par_reduces_p0.iota_0 env (lift_at f c a) (lift_at f' c a) ",
             "(lift_at a0 c a) (lift_at a0' c a) (lift_at r c a) (lift_at r0 c a) ",
             "(ihf c a liftclosed) (iha c a liftclosed) ",
             "(iota_lift_commutes env (KExpr.app f a0) r0 c a liftclosed hgate) ",
@@ -882,7 +882,7 @@ fn par0_lift_proof() -> String {
             "(fun (s : Name) (i : Nat) (sub : KExpr) (sub' : KExpr) ",
             "(_hsub : par_reduces_p0 env sub sub') (ihsub : {ih_sub}) ",
             "(c : Nat) (a : Nat) (liftclosed : RecEnvLiftClosed env) => ",
-            "par_reduces_p0.proj env s i (lift_at sub c a) (lift_at sub' c a) ",
+            "@par_reduces_p0.proj env s i (lift_at sub c a) (lift_at sub' c a) ",
             "(ihsub c a liftclosed))"
         ),
         ih_sub = ih.replace("SUB'", "sub'").replace("SUB", "sub"),
@@ -891,7 +891,7 @@ fn par0_lift_proof() -> String {
         concat!(
             "fun (env : RecEnv) (v0 : KExpr) (v0' : KExpr) (c0 : Nat) (a0 : Nat) ",
             "(liftclosed0 : RecEnvLiftClosed env) (h0 : par_reduces_p0 env v0 v0') => ",
-            "par_reduces_p0.rec env {motive} ",
+            "@par_reduces_p0.rec env {motive} ",
             "{refl_arm} {beta_arm} {app_arm} ",
             "{lam_arm} {pi_arm} {forall_arm} {let_arm} {iota_arm} {let_cong_arm} {proj_arm} ",
             "v0 v0' h0 c0 a0 liftclosed0"
@@ -929,14 +929,14 @@ fn par0_subst_proof() -> String {
     );
     let refl_arm = concat!(
         "(fun (e : KExpr) (v : KExpr) (d : Nat) (_closed : RecEnvClosed env) (_liftclosed : RecEnvLiftClosed env) => ",
-        "par_reduces_p0.refl env (instantiate_at e v d))"
+        "@par_reduces_p0.refl env (instantiate_at e v d))"
     );
     let app_arm = format!(
         concat!(
             "(fun (f : KExpr) (f' : KExpr) (a0 : KExpr) (a0' : KExpr) ",
             "(_hf : par_reduces_p0 env f f') (_ha : par_reduces_p0 env a0 a0') ",
             "(ihf : {ih_f}) (iha : {ih_a}) (v : KExpr) (d : Nat) (closed : RecEnvClosed env) (liftclosed : RecEnvLiftClosed env) => ",
-            "par_reduces_p0.app env (instantiate_at f v d) (instantiate_at f' v d) ",
+            "@par_reduces_p0.app env (instantiate_at f v d) (instantiate_at f' v d) ",
             "(instantiate_at a0 v d) (instantiate_at a0' v d) ",
             "(ihf v d closed liftclosed) (iha v d closed liftclosed))"
         ),
@@ -954,7 +954,7 @@ fn par0_subst_proof() -> String {
         let eq = format!("(instantiate_nested_commutes_zero_subst {bodyp} {argp} v d)");
         let p = format!("(fun (x : KExpr) => par_reduces_p0 env {lhs_head} x)");
         format!(
-            "(Eq.substType KExpr {p} {goal_rhs} {goal_lhs} (Eq.symm KExpr {goal_lhs} {goal_rhs} {eq}) {ctor_term})"
+            "(@Eq.substType KExpr {p} {goal_rhs} {goal_lhs} (@Eq.symm KExpr {goal_lhs} {goal_rhs} {eq}) {ctor_term})"
         )
     };
     let beta_lhs_head = concat!(
@@ -962,7 +962,7 @@ fn par0_subst_proof() -> String {
         "(instantiate_at arg v d))"
     );
     let beta_ctor = concat!(
-        "(par_reduces_p0.beta env (instantiate_at A v d) (instantiate_at A' v d) ",
+        "(@par_reduces_p0.beta env (instantiate_at A v d) (instantiate_at A' v d) ",
         "(instantiate_at body v (Nat.succ d)) (instantiate_at body' v (Nat.succ d)) ",
         "(instantiate_at arg v d) (instantiate_at arg' v d) ",
         "(ihA v d closed liftclosed) (ihbody v (Nat.succ d) closed liftclosed) (iharg v d closed liftclosed))"
@@ -987,7 +987,7 @@ fn par0_subst_proof() -> String {
                 "(fun (ty : KExpr) (ty' : KExpr) (body : KExpr) (body' : KExpr) ",
                 "(_hty : par_reduces_p0 env ty ty') (_hbody : par_reduces_p0 env body body') ",
                 "(ihty : {ih_ty}) (ihbody : {ih_body}) (v : KExpr) (d : Nat) (closed : RecEnvClosed env) (liftclosed : RecEnvLiftClosed env) => ",
-                "{ctor} env (instantiate_at ty v d) (instantiate_at ty' v d) ",
+                "@{ctor} env (instantiate_at ty v d) (instantiate_at ty' v d) ",
                 "(instantiate_at body v (Nat.succ d)) (instantiate_at body' v (Nat.succ d)) ",
                 "(ihty v d closed liftclosed) (ihbody v (Nat.succ d) closed liftclosed))"
             ),
@@ -1001,7 +1001,7 @@ fn par0_subst_proof() -> String {
     let let_lhs_head =
         "(KExpr.let_ (instantiate_at ty v d) (instantiate_at val v d) (instantiate_at body v (Nat.succ d)))";
     let let_ctor = concat!(
-        "(par_reduces_p0.let_ env (instantiate_at ty v d) (instantiate_at ty' v d) ",
+        "(@par_reduces_p0.let_ env (instantiate_at ty v d) (instantiate_at ty' v d) ",
         "(instantiate_at val v d) (instantiate_at val' v d) ",
         "(instantiate_at body v (Nat.succ d)) (instantiate_at body' v (Nat.succ d)) ",
         "(ihty v d closed liftclosed) (ihval v d closed liftclosed) (ihbody v (Nat.succ d) closed liftclosed))"
@@ -1030,7 +1030,7 @@ fn par0_subst_proof() -> String {
             "(_hbody : par_reduces_p0 env body body') ",
             "(ihty : {ih_ty}) (ihval : {ih_val}) (ihbody : {ih_body}) ",
             "(v : KExpr) (d : Nat) (closed : RecEnvClosed env) (liftclosed : RecEnvLiftClosed env) => ",
-            "par_reduces_p0.let_cong env (instantiate_at ty v d) (instantiate_at ty' v d) ",
+            "@par_reduces_p0.let_cong env (instantiate_at ty v d) (instantiate_at ty' v d) ",
             "(instantiate_at val v d) (instantiate_at val' v d) ",
             "(instantiate_at body v (Nat.succ d)) (instantiate_at body' v (Nat.succ d)) ",
             "(ihty v d closed liftclosed) (ihval v d closed liftclosed) (ihbody v (Nat.succ d) closed liftclosed))"
@@ -1049,7 +1049,7 @@ fn par0_subst_proof() -> String {
             "(hgate : iota_step env (KExpr.app f a0) r0) (hfire : iota_step env (KExpr.app f' a0') r) ",
             "(ihf : {ih_f}) (iha : {ih_a}) ",
             "(v : KExpr) (d : Nat) (closed : RecEnvClosed env) (liftclosed : RecEnvLiftClosed env) => ",
-            "par_reduces_p0.iota_0 env (instantiate_at f v d) (instantiate_at f' v d) ",
+            "@par_reduces_p0.iota_0 env (instantiate_at f v d) (instantiate_at f' v d) ",
             "(instantiate_at a0 v d) (instantiate_at a0' v d) (instantiate_at r v d) (instantiate_at r0 v d) ",
             "(ihf v d closed liftclosed) (iha v d closed liftclosed) ",
             "(iota_subst_commutes env (KExpr.app f a0) r0 v d closed hgate) ",
@@ -1064,7 +1064,7 @@ fn par0_subst_proof() -> String {
             "(fun (s : Name) (i : Nat) (sub : KExpr) (sub' : KExpr) ",
             "(_hsub : par_reduces_p0 env sub sub') (ihsub : {ih_sub}) ",
             "(v : KExpr) (d : Nat) (closed : RecEnvClosed env) (liftclosed : RecEnvLiftClosed env) => ",
-            "par_reduces_p0.proj env s i ",
+            "@par_reduces_p0.proj env s i ",
             "(instantiate_at sub v d) (instantiate_at sub' v d) ",
             "(ihsub v d closed liftclosed))"
         ),
@@ -1074,7 +1074,7 @@ fn par0_subst_proof() -> String {
         concat!(
             "fun (env : RecEnv) (v0 : KExpr) (v0' : KExpr) (vv0 : KExpr) (d0 : Nat) ",
             "(closed0 : RecEnvClosed env) (liftclosed0 : RecEnvLiftClosed env) (h0 : par_reduces_p0 env v0 v0') => ",
-            "par_reduces_p0.rec env {motive} ",
+            "@par_reduces_p0.rec env {motive} ",
             "{refl_arm} {beta_arm} {app_arm} ",
             "{lam_arm} {pi_arm} {forall_arm} {let_arm} {iota_arm} {let_cong_arm} {proj_arm} ",
             "v0 v0' h0 vv0 d0 closed0 liftclosed0"
@@ -1102,15 +1102,15 @@ fn par0_subst_proof() -> String {
 fn par_reduces_p0_lam_inv_proof() -> String {
     let motive = concat!(
         "(fun (e : KExpr) (e' : KExpr) (_h : par_reduces_p0 env e e') => ",
-        "Eq KExpr e (KExpr.lam ty body) -> C e')"
+        "@Eq KExpr e (KExpr.lam ty body) -> C e')"
     );
 
     // refl: reduct e; build C (lam ty body), transport to C e.
     let refl_arm = concat!(
-        "(fun (e : KExpr) (eq : Eq KExpr e (KExpr.lam ty body)) => ",
-        "Eq.substType KExpr C (KExpr.lam ty body) e ",
-        "(Eq.symm KExpr e (KExpr.lam ty body) eq) ",
-        "(klam ty body (par_reduces_p0.refl env ty) (par_reduces_p0.refl env body)))"
+        "(fun (e : KExpr) (eq : @Eq KExpr e (KExpr.lam ty body)) => ",
+        "@Eq.substType KExpr C (KExpr.lam ty body) e ",
+        "(@Eq.symm KExpr e (KExpr.lam ty body) eq) ",
+        "(klam ty body (@par_reduces_p0.refl env ty) (@par_reduces_p0.refl env body)))"
     );
 
     // beta: source app (lam A b0) arg — app /= lam.
@@ -1119,10 +1119,10 @@ fn par_reduces_p0_lam_inv_proof() -> String {
         "(arg : KExpr) (arg' : KExpr) ",
         "(_hA : par_reduces_p0 env A A') (_hb0 : par_reduces_p0 env b0 b0') ",
         "(_harg : par_reduces_p0 env arg arg') ",
-        "(_ihA : Eq KExpr A (KExpr.lam ty body) -> C A') ",
-        "(_ihb0 : Eq KExpr b0 (KExpr.lam ty body) -> C b0') ",
-        "(_iharg : Eq KExpr arg (KExpr.lam ty body) -> C arg') ",
-        "(eq : Eq KExpr (KExpr.app (KExpr.lam A b0) arg) (KExpr.lam ty body)) => ",
+        "(_ihA : @Eq KExpr A (KExpr.lam ty body) -> C A') ",
+        "(_ihb0 : @Eq KExpr b0 (KExpr.lam ty body) -> C b0') ",
+        "(_iharg : @Eq KExpr arg (KExpr.lam ty body) -> C arg') ",
+        "(eq : @Eq KExpr (KExpr.app (KExpr.lam A b0) arg) (KExpr.lam ty body)) => ",
         "app_ne_lam (KExpr.lam A b0) arg ty body (C (instantiate b0' arg')) eq)"
     );
 
@@ -1130,9 +1130,9 @@ fn par_reduces_p0_lam_inv_proof() -> String {
     let app_arm = concat!(
         "(fun (g : KExpr) (g' : KExpr) (b : KExpr) (b' : KExpr) ",
         "(_hg : par_reduces_p0 env g g') (_hb : par_reduces_p0 env b b') ",
-        "(_ihg : Eq KExpr g (KExpr.lam ty body) -> C g') ",
-        "(_ihb : Eq KExpr b (KExpr.lam ty body) -> C b') ",
-        "(eq : Eq KExpr (KExpr.app g b) (KExpr.lam ty body)) => ",
+        "(_ihg : @Eq KExpr g (KExpr.lam ty body) -> C g') ",
+        "(_ihb : @Eq KExpr b (KExpr.lam ty body) -> C b') ",
+        "(eq : @Eq KExpr (KExpr.app g b) (KExpr.lam ty body)) => ",
         "app_ne_lam g b ty body (C (KExpr.app g' b')) eq)"
     );
 
@@ -1140,13 +1140,13 @@ fn par_reduces_p0_lam_inv_proof() -> String {
     let lam_arm = concat!(
         "(fun (t0 : KExpr) (t0' : KExpr) (b0 : KExpr) (b0' : KExpr) ",
         "(ht : par_reduces_p0 env t0 t0') (hb : par_reduces_p0 env b0 b0') ",
-        "(_iht : Eq KExpr t0 (KExpr.lam ty body) -> C t0') ",
-        "(_ihb : Eq KExpr b0 (KExpr.lam ty body) -> C b0') ",
-        "(eq : Eq KExpr (KExpr.lam t0 b0) (KExpr.lam ty body)) => ",
+        "(_iht : @Eq KExpr t0 (KExpr.lam ty body) -> C t0') ",
+        "(_ihb : @Eq KExpr b0 (KExpr.lam ty body) -> C b0') ",
+        "(eq : @Eq KExpr (KExpr.lam t0 b0) (KExpr.lam ty body)) => ",
         "klam t0' b0' ",
-        "(Eq.substType KExpr (fun (x : KExpr) => par_reduces_p0 env x t0') t0 ty ",
+        "(@Eq.substType KExpr (fun (x : KExpr) => par_reduces_p0 env x t0') t0 ty ",
         "(lam_inj_fst t0 b0 ty body eq) ht) ",
-        "(Eq.substType KExpr (fun (x : KExpr) => par_reduces_p0 env x b0') b0 body ",
+        "(@Eq.substType KExpr (fun (x : KExpr) => par_reduces_p0 env x b0') b0 body ",
         "(lam_inj_snd t0 b0 ty body eq) hb))"
     );
 
@@ -1154,9 +1154,9 @@ fn par_reduces_p0_lam_inv_proof() -> String {
     let pi_arm = concat!(
         "(fun (dom : KExpr) (dom' : KExpr) (b0 : KExpr) (b0' : KExpr) ",
         "(_hd : par_reduces_p0 env dom dom') (_hb0 : par_reduces_p0 env b0 b0') ",
-        "(_ihd : Eq KExpr dom (KExpr.lam ty body) -> C dom') ",
-        "(_ihb0 : Eq KExpr b0 (KExpr.lam ty body) -> C b0') ",
-        "(eq : Eq KExpr (KExpr.pi dom b0) (KExpr.lam ty body)) => ",
+        "(_ihd : @Eq KExpr dom (KExpr.lam ty body) -> C dom') ",
+        "(_ihb0 : @Eq KExpr b0 (KExpr.lam ty body) -> C b0') ",
+        "(eq : @Eq KExpr (KExpr.pi dom b0) (KExpr.lam ty body)) => ",
         "pi_ne_lam dom b0 ty body (C (KExpr.pi dom' b0')) eq)"
     );
 
@@ -1164,9 +1164,9 @@ fn par_reduces_p0_lam_inv_proof() -> String {
     let forall_arm = concat!(
         "(fun (dom : KExpr) (dom' : KExpr) (b0 : KExpr) (b0' : KExpr) ",
         "(_hd : par_reduces_p0 env dom dom') (_hb0 : par_reduces_p0 env b0 b0') ",
-        "(_ihd : Eq KExpr dom (KExpr.lam ty body) -> C dom') ",
-        "(_ihb0 : Eq KExpr b0 (KExpr.lam ty body) -> C b0') ",
-        "(eq : Eq KExpr (KExpr.forall_ dom b0) (KExpr.lam ty body)) => ",
+        "(_ihd : @Eq KExpr dom (KExpr.lam ty body) -> C dom') ",
+        "(_ihb0 : @Eq KExpr b0 (KExpr.lam ty body) -> C b0') ",
+        "(eq : @Eq KExpr (KExpr.forall_ dom b0) (KExpr.lam ty body)) => ",
         "pi_ne_lam dom b0 ty body (C (KExpr.forall_ dom' b0')) eq)"
     );
 
@@ -1179,12 +1179,12 @@ fn par_reduces_p0_lam_inv_proof() -> String {
             "(b0 : KExpr) (b0' : KExpr) ",
             "(_ht0 : par_reduces_p0 env t0 t0') (_hv : par_reduces_p0 env v v') ",
             "(_hb0 : par_reduces_p0 env b0 b0') ",
-            "(_iht0 : Eq KExpr t0 (KExpr.lam ty body) -> C t0') ",
-            "(_ihv : Eq KExpr v (KExpr.lam ty body) -> C v') ",
-            "(_ihb0 : Eq KExpr b0 (KExpr.lam ty body) -> C b0') ",
-            "(eq : Eq KExpr (KExpr.let_ t0 v b0) (KExpr.lam ty body)) => ",
-            "Empty.rec (fun (_ : Empty) => C (instantiate b0' v')) ",
-            "(Eq.substType KExpr {discr} (KExpr.let_ t0 v b0) (KExpr.lam ty body) eq Nat.zero))"
+            "(_iht0 : @Eq KExpr t0 (KExpr.lam ty body) -> C t0') ",
+            "(_ihv : @Eq KExpr v (KExpr.lam ty body) -> C v') ",
+            "(_ihb0 : @Eq KExpr b0 (KExpr.lam ty body) -> C b0') ",
+            "(eq : @Eq KExpr (KExpr.let_ t0 v b0) (KExpr.lam ty body)) => ",
+            "@Empty.rec (fun (_ : Empty) => C (instantiate b0' v')) ",
+            "(@Eq.substType KExpr {discr} (KExpr.let_ t0 v b0) (KExpr.lam ty body) eq Nat.zero))"
         ),
         discr = KEXPR_NOT_LAM_INLINE,
     );
@@ -1197,12 +1197,12 @@ fn par_reduces_p0_lam_inv_proof() -> String {
             "(b0 : KExpr) (b0' : KExpr) ",
             "(_ht0 : par_reduces_p0 env t0 t0') (_hv : par_reduces_p0 env v v') ",
             "(_hb0 : par_reduces_p0 env b0 b0') ",
-            "(_iht0 : Eq KExpr t0 (KExpr.lam ty body) -> C t0') ",
-            "(_ihv : Eq KExpr v (KExpr.lam ty body) -> C v') ",
-            "(_ihb0 : Eq KExpr b0 (KExpr.lam ty body) -> C b0') ",
-            "(eq : Eq KExpr (KExpr.let_ t0 v b0) (KExpr.lam ty body)) => ",
-            "Empty.rec (fun (_ : Empty) => C (KExpr.let_ t0' v' b0')) ",
-            "(Eq.substType KExpr {discr} (KExpr.let_ t0 v b0) (KExpr.lam ty body) eq Nat.zero))"
+            "(_iht0 : @Eq KExpr t0 (KExpr.lam ty body) -> C t0') ",
+            "(_ihv : @Eq KExpr v (KExpr.lam ty body) -> C v') ",
+            "(_ihb0 : @Eq KExpr b0 (KExpr.lam ty body) -> C b0') ",
+            "(eq : @Eq KExpr (KExpr.let_ t0 v b0) (KExpr.lam ty body)) => ",
+            "@Empty.rec (fun (_ : Empty) => C (KExpr.let_ t0' v' b0')) ",
+            "(@Eq.substType KExpr {discr} (KExpr.let_ t0 v b0) (KExpr.lam ty body) eq Nat.zero))"
         ),
         discr = KEXPR_NOT_LAM_INLINE,
     );
@@ -1213,9 +1213,9 @@ fn par_reduces_p0_lam_inv_proof() -> String {
         "(fun (f : KExpr) (f' : KExpr) (a : KExpr) (a' : KExpr) (r : KExpr) (r0 : KExpr) ",
         "(_hf : par_reduces_p0 env f f') (_ha : par_reduces_p0 env a a') ",
         "(_hgate : iota_step env (KExpr.app f a) r0) (_hfire : iota_step env (KExpr.app f' a') r) ",
-        "(_ihf : Eq KExpr f (KExpr.lam ty body) -> C f') ",
-        "(_iha : Eq KExpr a (KExpr.lam ty body) -> C a') ",
-        "(eq : Eq KExpr (KExpr.app f a) (KExpr.lam ty body)) => ",
+        "(_ihf : @Eq KExpr f (KExpr.lam ty body) -> C f') ",
+        "(_iha : @Eq KExpr a (KExpr.lam ty body) -> C a') ",
+        "(eq : @Eq KExpr (KExpr.app f a) (KExpr.lam ty body)) => ",
         "app_ne_lam f a ty body (C r) eq)"
     );
 
@@ -1223,8 +1223,8 @@ fn par_reduces_p0_lam_inv_proof() -> String {
     let proj_arm = concat!(
         "(fun (s : Name) (i : Nat) (sub : KExpr) (sub' : KExpr) ",
         "(_hsub : par_reduces_p0 env sub sub') ",
-        "(_ihsub : Eq KExpr sub (KExpr.lam ty body) -> C sub') ",
-        "(eq : Eq KExpr (KExpr.proj s i sub) (KExpr.lam ty body)) => ",
+        "(_ihsub : @Eq KExpr sub (KExpr.lam ty body) -> C sub') ",
+        "(eq : @Eq KExpr (KExpr.proj s i sub) (KExpr.lam ty body)) => ",
         "proj_ne_lam s i sub ty body (C (KExpr.proj s i sub')) eq)"
     );
 
@@ -1235,10 +1235,10 @@ fn par_reduces_p0_lam_inv_proof() -> String {
             "(klam : forall (ty' : KExpr) (body' : KExpr), ",
             "par_reduces_p0 env ty ty' -> par_reduces_p0 env body body' -> ",
             "C (KExpr.lam ty' body')) => ",
-            "par_reduces_p0.rec env {motive} ",
+            "@par_reduces_p0.rec env {motive} ",
             "{refl_arm} {beta_arm} {app_arm} ",
             "{lam_arm} {pi_arm} {forall_arm} {let_arm} {iota_arm} {let_cong_arm} {proj_arm} ",
-            "(KExpr.lam ty body) t h (Eq.refl KExpr (KExpr.lam ty body))"
+            "(KExpr.lam ty body) t h (@Eq.refl KExpr (KExpr.lam ty body))"
         ),
         motive = motive,
         refl_arm = refl_arm,
@@ -1264,10 +1264,10 @@ fn par_reduces_p0_lam_inv_proof() -> String {
 fn dev0_refl_proof() -> String {
     let motive = "(fun (e : KExpr) => par_reduces_p0 env e (dev0 env e))";
 
-    let sort_arm = "(fun (n : Level) => par_reduces_p0.refl env (KExpr.sort n))";
-    let bvar_arm = "(fun (i : Nat) => par_reduces_p0.refl env (KExpr.bvar i))";
+    let sort_arm = "(fun (n : Level) => @par_reduces_p0.refl env (KExpr.sort n))";
+    let bvar_arm = "(fun (i : Nat) => @par_reduces_p0.refl env (KExpr.bvar i))";
     let const_arm =
-        "(fun (nm : Name) (us : ListType Level) => par_reduces_p0.refl env (KExpr.const nm us))";
+        "(fun (nm : Name) (us : ListType Level) => @par_reduces_p0.refl env (KExpr.const nm us))";
 
     // lam/pi binder arm: dev0 env (HEAD ty b) = HEAD (dev0 ty)(dev0 b) (dev0_lam/dev0_pi).
     let binder_arm = |ctor: &str, head: &str, unfold: &str| -> String {
@@ -1275,11 +1275,11 @@ fn dev0_refl_proof() -> String {
             concat!(
                 "(fun (ty : KExpr) (b : KExpr) ",
                 "(ihty : par_reduces_p0 env ty (dev0 env ty)) (ihb : par_reduces_p0 env b (dev0 env b)) => ",
-                "Eq.substType KExpr ",
+                "@Eq.substType KExpr ",
                 "(fun (x : KExpr) => par_reduces_p0 env ({head} ty b) x) ",
                 "({head} (dev0 env ty) (dev0 env b)) (dev0 env ({head} ty b)) ",
-                "(Eq.symm KExpr (dev0 env ({head} ty b)) ({head} (dev0 env ty) (dev0 env b)) ({unfold} env ty b)) ",
-                "({ctor} env ty (dev0 env ty) b (dev0 env b) ihty ihb))"
+                "(@Eq.symm KExpr (dev0 env ({head} ty b)) ({head} (dev0 env ty) (dev0 env b)) ({unfold} env ty b)) ",
+                "(@{ctor} env ty (dev0 env ty) b (dev0 env b) ihty ihb))"
             ),
             ctor = ctor,
             head = head,
@@ -1296,26 +1296,26 @@ fn dev0_refl_proof() -> String {
     let dev_opt = "(iota_reduct env (KExpr.app (dev0 env f) (dev0 env a)))";
 
     // app congruence on the two IHs: par_reduces_p0 env (app f a)(app df da).
-    let app_cong = "(par_reduces_p0.app env f (dev0 env f) a (dev0 env a) ihf iha)";
+    let app_cong = "(@par_reduces_p0.app env f (dev0 env f) a (dev0 env a) ihf iha)";
 
     // INNER convoy over o2 : iota_reduct env (app df da). The some arm fires iota_0; the
     // none arm reassembles via app_cong (opt_default none dflt = dflt = app df da).
     // r0 is the gate witness; eqn : gate_opt = some r0 is the gate iota_step.
     let inner_none = format!(
-        "(fun (eqn2 : Eq (OptionType KExpr) {dev_opt} (OptionType.none KExpr)) => {app_cong})",
+        "(fun (eqn2 : @Eq (OptionType KExpr) {dev_opt} (@OptionType.none KExpr)) => {app_cong})",
         dev_opt = dev_opt,
         app_cong = app_cong,
     );
     let inner_some = format!(
         concat!(
-            "(fun (r : KExpr) (eqn2 : Eq (OptionType KExpr) {dev_opt} (OptionType.some KExpr r)) => ",
-            "par_reduces_p0.iota_0 env f (dev0 env f) a (dev0 env a) r r0 ihf iha eqn eqn2)"
+            "(fun (r : KExpr) (eqn2 : @Eq (OptionType KExpr) {dev_opt} (@OptionType.some KExpr r)) => ",
+            "@par_reduces_p0.iota_0 env f (dev0 env f) a (dev0 env a) r r0 ihf iha eqn eqn2)"
         ),
         dev_opt = dev_opt,
     );
     let inner_motive = format!(
         concat!(
-            "(fun (o : OptionType KExpr) => Eq (OptionType KExpr) {dev_opt} o -> ",
+            "(fun (o : OptionType KExpr) => @Eq (OptionType KExpr) {dev_opt} o -> ",
             "par_reduces_p0 env (KExpr.app f a) (opt_default o {dflt}))"
         ),
         dev_opt = dev_opt,
@@ -1324,8 +1324,8 @@ fn dev0_refl_proof() -> String {
     // proof of par_reduces_p0 env (app f a) (opt_default dev_opt dflt).
     let on_inner = format!(
         concat!(
-            "(OptionType.rec KExpr {inner_motive} {inner_none} {inner_some} {dev_opt} ",
-            "(Eq.refl (OptionType KExpr) {dev_opt}))"
+            "(@OptionType.rec KExpr {inner_motive} {inner_none} {inner_some} {dev_opt} ",
+            "(@Eq.refl (OptionType KExpr) {dev_opt}))"
         ),
         inner_motive = inner_motive,
         inner_none = inner_none,
@@ -1336,13 +1336,13 @@ fn dev0_refl_proof() -> String {
     // OUTER convoy over o : iota_reduct env (app f a) (dev0's LITERAL gate). The none
     // arm reassembles via app_cong; the some arm (binds r0, eqn) runs the inner convoy.
     let outer_none = format!(
-        "(fun (eqn : Eq (OptionType KExpr) {gate_opt} (OptionType.none KExpr)) => {app_cong})",
+        "(fun (eqn : @Eq (OptionType KExpr) {gate_opt} (@OptionType.none KExpr)) => {app_cong})",
         gate_opt = gate_opt,
         app_cong = app_cong,
     );
     let outer_some = format!(
         concat!(
-            "(fun (r0 : KExpr) (eqn : Eq (OptionType KExpr) {gate_opt} (OptionType.some KExpr r0)) => ",
+            "(fun (r0 : KExpr) (eqn : @Eq (OptionType KExpr) {gate_opt} (@OptionType.some KExpr r0)) => ",
             "{on_inner})"
         ),
         gate_opt = gate_opt,
@@ -1352,9 +1352,9 @@ fn dev0_refl_proof() -> String {
     // dev_opt dflt (the dev0 some-branch reduct); the none arm yields dflt.
     let outer_motive = format!(
         concat!(
-            "(fun (o : OptionType KExpr) => Eq (OptionType KExpr) {gate_opt} o -> ",
+            "(fun (o : OptionType KExpr) => @Eq (OptionType KExpr) {gate_opt} o -> ",
             "par_reduces_p0 env (KExpr.app f a) ",
-            "(OptionType.rec KExpr (fun (_ : OptionType KExpr) => KExpr) ",
+            "(@OptionType.rec KExpr (fun (_ : OptionType KExpr) => KExpr) ",
             "{dflt} ",
             "(fun (_ : KExpr) => opt_default {dev_opt} {dflt}) ",
             "o))"
@@ -1365,8 +1365,8 @@ fn dev0_refl_proof() -> String {
     );
     let on_gate = format!(
         concat!(
-            "(OptionType.rec KExpr {outer_motive} {outer_none} {outer_some} {gate_opt} ",
-            "(Eq.refl (OptionType KExpr) {gate_opt}))"
+            "(@OptionType.rec KExpr {outer_motive} {outer_none} {outer_some} {gate_opt} ",
+            "(@Eq.refl (OptionType KExpr) {gate_opt}))"
         ),
         outer_motive = outer_motive,
         outer_none = outer_none,
@@ -1379,7 +1379,7 @@ fn dev0_refl_proof() -> String {
     // evaluated at o = gate_opt — matches on_gate's conclusion.
     let false_body = format!(
         concat!(
-            "(OptionType.rec KExpr (fun (_ : OptionType KExpr) => KExpr) ",
+            "(@OptionType.rec KExpr (fun (_ : OptionType KExpr) => KExpr) ",
             "{dflt} ",
             "(fun (_ : KExpr) => opt_default {dev_opt} {dflt}) ",
             "{gate_opt})"
@@ -1390,9 +1390,9 @@ fn dev0_refl_proof() -> String {
     );
     let eq_dev0 = format!(
         concat!(
-            "(Eq.subst Bool ",
-            "(fun (bcond : Bool) => Eq KExpr (dev0 env (KExpr.app f a)) ",
-            "(Bool.rec (fun (_ : Bool) => KExpr) ",
+            "(@Eq.subst Bool ",
+            "(fun (bcond : Bool) => @Eq KExpr (dev0 env (KExpr.app f a)) ",
+            "(@Bool.rec (fun (_ : Bool) => KExpr) ",
             "{false_body} ",
             "(instantiate (kexpr_lam_body {df}) {da}) bcond)) ",
             "(kexpr_is_lam f) Bool.false hfalse ",
@@ -1404,11 +1404,11 @@ fn dev0_refl_proof() -> String {
     );
     let false_branch = format!(
         concat!(
-            "(fun (hfalse : Eq Bool (kexpr_is_lam f) Bool.false) => ",
-            "Eq.substType KExpr ",
+            "(fun (hfalse : @Eq Bool (kexpr_is_lam f) Bool.false) => ",
+            "@Eq.substType KExpr ",
             "(fun (x : KExpr) => par_reduces_p0 env (KExpr.app f a) x) ",
             "{false_body} (dev0 env (KExpr.app f a)) ",
-            "(Eq.symm KExpr (dev0 env (KExpr.app f a)) {false_body} {eq_dev0}) ",
+            "(@Eq.symm KExpr (dev0 env (KExpr.app f a)) {false_body} {eq_dev0}) ",
             "{on_gate})"
         ),
         false_body = false_body,
@@ -1420,10 +1420,10 @@ fn dev0_refl_proof() -> String {
     // (dev0_app_lam). Recover A ⇒_p0 dev0 A, b0 ⇒_p0 dev0 b0 from ihf via dev0_lam +
     // par_reduces_p0_lam_inv, then par_reduces_p0.beta. Verbatim shape of cd_refl's lam branch.
     let ihf_lam = concat!(
-        "(Eq.substType KExpr (fun (x : KExpr) => par_reduces_p0 env (KExpr.lam A b0) x) ",
+        "(@Eq.substType KExpr (fun (x : KExpr) => par_reduces_p0 env (KExpr.lam A b0) x) ",
         "(dev0 env (KExpr.lam A b0)) (KExpr.lam (dev0 env A) (dev0 env b0)) ",
         "(dev0_lam env A b0) ",
-        "(Eq.substType KExpr (fun (g : KExpr) => par_reduces_p0 env g (dev0 env g)) ",
+        "(@Eq.substType KExpr (fun (g : KExpr) => par_reduces_p0 env g (dev0 env g)) ",
         "f (KExpr.lam A b0) hf ihf))"
     );
     let beta_goal =
@@ -1431,25 +1431,25 @@ fn dev0_refl_proof() -> String {
     let klam_inv = concat!(
         "(fun (ty2 : KExpr) (body2 : KExpr) ",
         "(hty2 : par_reduces_p0 env A ty2) (hbody2 : par_reduces_p0 env b0 body2) ",
-        "(zeq : Eq KExpr (KExpr.lam ty2 body2) (KExpr.lam (dev0 env A) (dev0 env b0))) => ",
-        "par_reduces_p0.beta env A (dev0 env A) b0 (dev0 env b0) a (dev0 env a) ",
-        "(Eq.substType KExpr (fun (x : KExpr) => par_reduces_p0 env A x) ty2 (dev0 env A) ",
+        "(zeq : @Eq KExpr (KExpr.lam ty2 body2) (KExpr.lam (dev0 env A) (dev0 env b0))) => ",
+        "@par_reduces_p0.beta env A (dev0 env A) b0 (dev0 env b0) a (dev0 env a) ",
+        "(@Eq.substType KExpr (fun (x : KExpr) => par_reduces_p0 env A x) ty2 (dev0 env A) ",
         "(lam_inj_fst ty2 body2 (dev0 env A) (dev0 env b0) zeq) hty2) ",
-        "(Eq.substType KExpr (fun (x : KExpr) => par_reduces_p0 env b0 x) body2 (dev0 env b0) ",
+        "(@Eq.substType KExpr (fun (x : KExpr) => par_reduces_p0 env b0 x) body2 (dev0 env b0) ",
         "(lam_inj_snd ty2 body2 (dev0 env A) (dev0 env b0) zeq) hbody2) ",
         "iha)"
     );
     let p_lam = format!(
         concat!(
-            "(Eq.substType KExpr ",
+            "(@Eq.substType KExpr ",
             "(fun (x : KExpr) => par_reduces_p0 env (KExpr.app (KExpr.lam A b0) a) x) ",
             "(instantiate (dev0 env b0) (dev0 env a)) (dev0 env (KExpr.app (KExpr.lam A b0) a)) ",
-            "(Eq.symm KExpr (dev0 env (KExpr.app (KExpr.lam A b0) a)) (instantiate (dev0 env b0) (dev0 env a)) ",
+            "(@Eq.symm KExpr (dev0 env (KExpr.app (KExpr.lam A b0) a)) (instantiate (dev0 env b0) (dev0 env a)) ",
             "(dev0_app_lam env A b0 a)) ",
             "(par_reduces_p0_lam_inv env A b0 (KExpr.lam (dev0 env A) (dev0 env b0)) ",
-            "(fun (z : KExpr) => Eq KExpr z (KExpr.lam (dev0 env A) (dev0 env b0)) -> {beta_goal}) ",
+            "(fun (z : KExpr) => @Eq KExpr z (KExpr.lam (dev0 env A) (dev0 env b0)) -> {beta_goal}) ",
             "{ihf_lam} {klam_inv} ",
-            "(Eq.refl KExpr (KExpr.lam (dev0 env A) (dev0 env b0)))))"
+            "(@Eq.refl KExpr (KExpr.lam (dev0 env A) (dev0 env b0)))))"
         ),
         beta_goal = beta_goal,
         ihf_lam = ihf_lam,
@@ -1457,11 +1457,11 @@ fn dev0_refl_proof() -> String {
     );
     let lam_branch = format!(
         concat!(
-            "(fun (A : KExpr) (b0 : KExpr) (hf : Eq KExpr f (KExpr.lam A b0)) => ",
-            "Eq.substType KExpr ",
+            "(fun (A : KExpr) (b0 : KExpr) (hf : @Eq KExpr f (KExpr.lam A b0)) => ",
+            "@Eq.substType KExpr ",
             "(fun (g : KExpr) => par_reduces_p0 env (KExpr.app g a) (dev0 env (KExpr.app g a))) ",
             "(KExpr.lam A b0) f ",
-            "(Eq.symm KExpr f (KExpr.lam A b0) hf) ",
+            "(@Eq.symm KExpr f (KExpr.lam A b0) hf) ",
             "{p_lam})"
         ),
         p_lam = p_lam,
@@ -1486,12 +1486,12 @@ fn dev0_refl_proof() -> String {
         "(ihty : par_reduces_p0 env ty (dev0 env ty)) ",
         "(ihval : par_reduces_p0 env val (dev0 env val)) ",
         "(ihbody : par_reduces_p0 env body (dev0 env body)) => ",
-        "Eq.substType KExpr ",
+        "@Eq.substType KExpr ",
         "(fun (x : KExpr) => par_reduces_p0 env (KExpr.let_ ty val body) x) ",
         "(instantiate (dev0 env body) (dev0 env val)) (dev0 env (KExpr.let_ ty val body)) ",
-        "(Eq.symm KExpr (dev0 env (KExpr.let_ ty val body)) (instantiate (dev0 env body) (dev0 env val)) ",
+        "(@Eq.symm KExpr (dev0 env (KExpr.let_ ty val body)) (instantiate (dev0 env body) (dev0 env val)) ",
         "(dev0_let env ty val body)) ",
-        "(par_reduces_p0.let_ env ty (dev0 env ty) val (dev0 env val) body (dev0 env body) ihty ihval ihbody))"
+        "(@par_reduces_p0.let_ env ty (dev0 env ty) val (dev0 env val) body (dev0 env body) ihty ihval ihbody))"
     );
 
     // proj arm: dev0 descends into the scrutinee (dev0 env (proj s i sub) = proj s i
@@ -1499,16 +1499,16 @@ fn dev0_refl_proof() -> String {
     let proj_arm = concat!(
         "(fun (s : Name) (i : Nat) (sub : KExpr) ",
         "(ihsub : par_reduces_p0 env sub (dev0 env sub)) => ",
-        "par_reduces_p0.proj env s i sub (dev0 env sub) ihsub)"
+        "@par_reduces_p0.proj env s i sub (dev0 env sub) ihsub)"
     );
 
     // lit arm: dev0 env (lit v) = lit v (defeq); reflexive par-step.
-    let lit_arm = "(fun (v : Nat) => par_reduces_p0.refl env (KExpr.lit v))";
+    let lit_arm = "(fun (v : Nat) => @par_reduces_p0.refl env (KExpr.lit v))";
 
     format!(
         concat!(
             "fun (env : RecEnv) (e0 : KExpr) => ",
-            "KExpr.rec {motive} ",
+            "@KExpr.rec {motive} ",
             "{sort_arm} {bvar_arm} {app_arm} ",
             "{lam_arm} {pi_arm} {const_arm} {let_arm} {proj_arm} {lit_arm} ",
             "e0"
@@ -1549,9 +1549,9 @@ fn par_subst_refl_p0_full_proof() -> String {
     let transport = |xl: &str, xr: &str, eql: &str, eqr: &str, t: &str| -> String {
         let inner = format!(
             concat!(
-                "(Eq.substType KExpr (fun (y : KExpr) => par_reduces_p0 env y {xr}) ",
+                "(@Eq.substType KExpr (fun (y : KExpr) => par_reduces_p0 env y {xr}) ",
                 "{xl} {goal_l} ",
-                "(Eq.symm KExpr {goal_l} {xl} {eql}) {t})"
+                "(@Eq.symm KExpr {goal_l} {xl} {eql}) {t})"
             ),
             xr = xr,
             xl = xl,
@@ -1561,10 +1561,10 @@ fn par_subst_refl_p0_full_proof() -> String {
         );
         format!(
             concat!(
-                "(Eq.substType KExpr ",
+                "(@Eq.substType KExpr ",
                 "(fun (y : KExpr) => par_reduces_p0 env {goal_l} y) ",
                 "{xr} {goal_r} ",
-                "(Eq.symm KExpr {goal_r} {xr} {eqr}) {inner})"
+                "(@Eq.symm KExpr {goal_r} {xr} {eqr}) {inner})"
             ),
             goal_l = goal_l,
             xr = xr,
@@ -1592,7 +1592,7 @@ fn par_subst_refl_p0_full_proof() -> String {
         let xr = "(KExpr.bvar i)";
         let eql = format!(
             concat!(
-                "(Eq.trans KExpr {goal_l} (instantiate_bvar_at i d v) (KExpr.bvar i) ",
+                "(@Eq.trans KExpr {goal_l} (instantiate_bvar_at i d v) (KExpr.bvar i) ",
                 "(instantiate_at_bvar i v d) ",
                 "(instantiate_bvar_at_below i d v {w_di}))"
             ),
@@ -1601,14 +1601,14 @@ fn par_subst_refl_p0_full_proof() -> String {
         );
         let eqr = format!(
             concat!(
-                "(Eq.trans KExpr {goal_r} (instantiate_bvar_at i d v') (KExpr.bvar i) ",
+                "(@Eq.trans KExpr {goal_r} (instantiate_bvar_at i d v') (KExpr.bvar i) ",
                 "(instantiate_at_bvar i v' d) ",
                 "(instantiate_bvar_at_below i d v' {w_di}))"
             ),
             goal_r = goal_r,
             w_di = w_di,
         );
-        let t = "(par_reduces_p0.refl env (KExpr.bvar i))";
+        let t = "(@par_reduces_p0.refl env (KExpr.bvar i))";
         transport(xl, xr, &eql, &eqr, t)
     };
 
@@ -1620,7 +1620,7 @@ fn par_subst_refl_p0_full_proof() -> String {
         let xr = "(KExpr.bvar (Nat.sub i (Nat.succ Nat.zero)))";
         let eql = format!(
             concat!(
-                "(Eq.trans KExpr {goal_l} (instantiate_bvar_at i d v) ",
+                "(@Eq.trans KExpr {goal_l} (instantiate_bvar_at i d v) ",
                 "(KExpr.bvar (Nat.sub i (Nat.succ Nat.zero))) ",
                 "(instantiate_at_bvar i v d) ",
                 "(instantiate_bvar_at_above i d v {h_di0} {w_id}))"
@@ -1631,7 +1631,7 @@ fn par_subst_refl_p0_full_proof() -> String {
         );
         let eqr = format!(
             concat!(
-                "(Eq.trans KExpr {goal_r} (instantiate_bvar_at i d v') ",
+                "(@Eq.trans KExpr {goal_r} (instantiate_bvar_at i d v') ",
                 "(KExpr.bvar (Nat.sub i (Nat.succ Nat.zero))) ",
                 "(instantiate_at_bvar i v' d) ",
                 "(instantiate_bvar_at_above i d v' {h_di0} {w_id}))"
@@ -1640,7 +1640,7 @@ fn par_subst_refl_p0_full_proof() -> String {
             h_di0 = h_di0,
             w_id = w_id,
         );
-        let t = "(par_reduces_p0.refl env (KExpr.bvar (Nat.sub i (Nat.succ Nat.zero))))";
+        let t = "(@par_reduces_p0.refl env (KExpr.bvar (Nat.sub i (Nat.succ Nat.zero))))";
         transport(xl, xr, &eql, &eqr, t)
     };
 
@@ -1648,22 +1648,22 @@ fn par_subst_refl_p0_full_proof() -> String {
         concat!(
             "(fun (i : Nat) (v : KExpr) (v' : KExpr) (d : Nat) ",
             "(liftclosed : RecEnvLiftClosed env) (h : par_reduces_p0 env v v') => ",
-            "Nat.rec ",
-            "(fun (g : Nat) => Eq Nat (Nat.sub i d) g -> ",
+            "@Nat.rec ",
+            "(fun (g : Nat) => @Eq Nat (Nat.sub i d) g -> ",
             "par_reduces_p0 env {goal_l} {goal_r}) ",
-            "(fun (h_id : Eq Nat (Nat.sub i d) Nat.zero) => ",
-            "Nat.rec ",
-            "(fun (g2 : Nat) => Eq Nat (Nat.sub d i) g2 -> ",
+            "(fun (h_id : @Eq Nat (Nat.sub i d) Nat.zero) => ",
+            "@Nat.rec ",
+            "(fun (g2 : Nat) => @Eq Nat (Nat.sub d i) g2 -> ",
             "par_reduces_p0 env {goal_l} {goal_r}) ",
-            "(fun (h_di0 : Eq Nat (Nat.sub d i) Nat.zero) => {leaf_eq}) ",
+            "(fun (h_di0 : @Eq Nat (Nat.sub d i) Nat.zero) => {leaf_eq}) ",
             "(fun (k2 : Nat) ",
-            "(_ : Eq Nat (Nat.sub d i) k2 -> par_reduces_p0 env {goal_l} {goal_r}) ",
-            "(h_di : Eq Nat (Nat.sub d i) (Nat.succ k2)) => {leaf_below}) ",
-            "(Nat.sub d i) (Eq.refl Nat (Nat.sub d i))) ",
+            "(_ : @Eq Nat (Nat.sub d i) k2 -> par_reduces_p0 env {goal_l} {goal_r}) ",
+            "(h_di : @Eq Nat (Nat.sub d i) (Nat.succ k2)) => {leaf_below}) ",
+            "(Nat.sub d i) (@Eq.refl Nat (Nat.sub d i))) ",
             "(fun (k4 : Nat) ",
-            "(_ : Eq Nat (Nat.sub i d) k4 -> par_reduces_p0 env {goal_l} {goal_r}) ",
-            "(h_id : Eq Nat (Nat.sub i d) (Nat.succ k4)) => {leaf_above}) ",
-            "(Nat.sub i d) (Eq.refl Nat (Nat.sub i d)))"
+            "(_ : @Eq Nat (Nat.sub i d) k4 -> par_reduces_p0 env {goal_l} {goal_r}) ",
+            "(h_id : @Eq Nat (Nat.sub i d) (Nat.succ k4)) => {leaf_above}) ",
+            "(Nat.sub i d) (@Eq.refl Nat (Nat.sub i d)))"
         ),
         goal_l = goal_l,
         goal_r = goal_r,
@@ -1675,12 +1675,12 @@ fn par_subst_refl_p0_full_proof() -> String {
     let sort_arm = concat!(
         "(fun (sv : Level) (v : KExpr) (v' : KExpr) (d : Nat) ",
         "(_lc : RecEnvLiftClosed env) (_h : par_reduces_p0 env v v') => ",
-        "par_reduces_p0.refl env (KExpr.sort sv))"
+        "@par_reduces_p0.refl env (KExpr.sort sv))"
     );
     let const_arm = concat!(
         "(fun (nm : Name) (us : ListType Level) (v : KExpr) (v' : KExpr) (d : Nat) ",
         "(_lc : RecEnvLiftClosed env) (_h : par_reduces_p0 env v v') => ",
-        "par_reduces_p0.refl env (KExpr.const nm us))"
+        "@par_reduces_p0.refl env (KExpr.const nm us))"
     );
 
     let app_arm = format!(
@@ -1688,7 +1688,7 @@ fn par_subst_refl_p0_full_proof() -> String {
             "(fun (f : KExpr) (a0 : KExpr) ",
             "(ihf : {ih_f}) (iha : {ih_a}) ",
             "(v : KExpr) (v' : KExpr) (d : Nat) (lc : RecEnvLiftClosed env) (h : par_reduces_p0 env v v') => ",
-            "par_reduces_p0.app env ",
+            "@par_reduces_p0.app env ",
             "(instantiate_at f v d) (instantiate_at f v' d) ",
             "(instantiate_at a0 v d) (instantiate_at a0 v' d) ",
             "(ihf v v' d lc h) (iha v v' d lc h))"
@@ -1703,7 +1703,7 @@ fn par_subst_refl_p0_full_proof() -> String {
                 "(fun (ty : KExpr) (body : KExpr) ",
                 "(ihty : {ih_ty}) (ihbody : {ih_body}) ",
                 "(v : KExpr) (v' : KExpr) (d : Nat) (lc : RecEnvLiftClosed env) (h : par_reduces_p0 env v v') => ",
-                "{star_cong} env ",
+                "@{star_cong} env ",
                 "(instantiate_at ty v d) (instantiate_at ty v' d) ",
                 "(instantiate_at body v (Nat.succ d)) (instantiate_at body v' (Nat.succ d)) ",
                 "(ihty v v' d lc h) (ihbody v v' (Nat.succ d) lc h))"
@@ -1722,7 +1722,7 @@ fn par_subst_refl_p0_full_proof() -> String {
             "(fun (ty : KExpr) (val : KExpr) (body : KExpr) ",
             "(ihty : {ih_ty}) (ihval : {ih_val}) (ihbody : {ih_body}) ",
             "(v : KExpr) (v' : KExpr) (d : Nat) (lc : RecEnvLiftClosed env) (h : par_reduces_p0 env v v') => ",
-            "par_reduces_p0.let_cong env ",
+            "@par_reduces_p0.let_cong env ",
             "(instantiate_at ty v d) (instantiate_at ty v' d) ",
             "(instantiate_at val v d) (instantiate_at val v' d) ",
             "(instantiate_at body v (Nat.succ d)) (instantiate_at body v' (Nat.succ d)) ",
@@ -1738,7 +1738,7 @@ fn par_subst_refl_p0_full_proof() -> String {
         concat!(
             "(fun (s : Name) (i : Nat) (sub : KExpr) (ihsub : {ih_sub}) ",
             "(v : KExpr) (v' : KExpr) (d : Nat) (lc : RecEnvLiftClosed env) (h : par_reduces_p0 env v v') => ",
-            "par_reduces_p0.proj env s i ",
+            "@par_reduces_p0.proj env s i ",
             "(instantiate_at sub v d) (instantiate_at sub v' d) ",
             "(ihsub v v' d lc h))"
         ),
@@ -1749,13 +1749,13 @@ fn par_subst_refl_p0_full_proof() -> String {
     let lit_arm = concat!(
         "(fun (litv : Nat) (v : KExpr) (v' : KExpr) (d : Nat) ",
         "(_lc : RecEnvLiftClosed env) (_h : par_reduces_p0 env v v') => ",
-        "par_reduces_p0.refl env (KExpr.lit litv))"
+        "@par_reduces_p0.refl env (KExpr.lit litv))"
     );
 
     format!(
         concat!(
             "fun (env : RecEnv) (e0 : KExpr) => ",
-            "KExpr.rec {motive} ",
+            "@KExpr.rec {motive} ",
             "{sort_arm} {bvar_arm} {app_arm} ",
             "{lam_arm} {pi_arm} {const_arm} {let_arm} {proj_arm} {lit_arm} ",
             "e0"
@@ -1805,7 +1805,7 @@ fn par_subst_p0_proof() -> String {
             "(ihf : {ih_f}) (iha : {ih_a}) ",
             "(v : KExpr) (v' : KExpr) (d : Nat) (h : par_reduces_p0 env v v') ",
             "(closed : RecEnvClosed env) (liftclosed : RecEnvLiftClosed env) => ",
-            "par_reduces_p0.app env ",
+            "@par_reduces_p0.app env ",
             "(instantiate_at f v d) (instantiate_at f' v' d) ",
             "(instantiate_at a0 v d) (instantiate_at a0' v' d) ",
             "(ihf v v' d h closed liftclosed) (iha v v' d h closed liftclosed))"
@@ -1822,7 +1822,7 @@ fn par_subst_p0_proof() -> String {
                 "(ihty : {ih_ty}) (ihbody : {ih_body}) ",
                 "(v : KExpr) (v' : KExpr) (d : Nat) (h : par_reduces_p0 env v v') ",
                 "(closed : RecEnvClosed env) (liftclosed : RecEnvLiftClosed env) => ",
-                "{ctor} env ",
+                "@{ctor} env ",
                 "(instantiate_at ty v d) (instantiate_at ty' v' d) ",
                 "(instantiate_at body v (Nat.succ d)) (instantiate_at body' v' (Nat.succ d)) ",
                 "(ihty v v' d h closed liftclosed) (ihbody v v' (Nat.succ d) h closed liftclosed))"
@@ -1855,10 +1855,10 @@ fn par_subst_p0_proof() -> String {
         );
         format!(
             concat!(
-                "(Eq.substType KExpr ",
+                "(@Eq.substType KExpr ",
                 "(fun (x : KExpr) => par_reduces_p0 env {lhs_head} x) ",
                 "{ctor_rhs} {goal_rhs} ",
-                "(Eq.symm KExpr {goal_rhs} {ctor_rhs} {eq}) ",
+                "(@Eq.symm KExpr {goal_rhs} {ctor_rhs} {eq}) ",
                 "{ctor_term})"
             ),
             lhs_head = lhs_head,
@@ -1875,7 +1875,7 @@ fn par_subst_p0_proof() -> String {
         "(instantiate_at arg v d))"
     );
     let beta_ctor = concat!(
-        "(par_reduces_p0.beta env ",
+        "(@par_reduces_p0.beta env ",
         "(instantiate_at A v d) (instantiate_at A' v' d) ",
         "(instantiate_at body v (Nat.succ d)) (instantiate_at body' v' (Nat.succ d)) ",
         "(instantiate_at arg v d) (instantiate_at arg' v' d) ",
@@ -1903,7 +1903,7 @@ fn par_subst_p0_proof() -> String {
     let let_lhs_head =
         "(KExpr.let_ (instantiate_at ty v d) (instantiate_at val v d) (instantiate_at body v (Nat.succ d)))";
     let let_ctor = concat!(
-        "(par_reduces_p0.let_ env ",
+        "(@par_reduces_p0.let_ env ",
         "(instantiate_at ty v d) (instantiate_at ty' v' d) ",
         "(instantiate_at val v d) (instantiate_at val' v' d) ",
         "(instantiate_at body v (Nat.succ d)) (instantiate_at body' v' (Nat.succ d)) ",
@@ -1936,7 +1936,7 @@ fn par_subst_p0_proof() -> String {
             "(ihty : {ih_ty}) (ihval : {ih_val}) (ihbody : {ih_body}) ",
             "(v : KExpr) (v' : KExpr) (d : Nat) (h : par_reduces_p0 env v v') ",
             "(closed : RecEnvClosed env) (liftclosed : RecEnvLiftClosed env) => ",
-            "par_reduces_p0.let_cong env ",
+            "@par_reduces_p0.let_cong env ",
             "(instantiate_at ty v d) (instantiate_at ty' v' d) ",
             "(instantiate_at val v d) (instantiate_at val' v' d) ",
             "(instantiate_at body v (Nat.succ d)) (instantiate_at body' v' (Nat.succ d)) ",
@@ -1962,7 +1962,7 @@ fn par_subst_p0_proof() -> String {
             "(ihf : {ih_f}) (iha : {ih_a}) ",
             "(v : KExpr) (v' : KExpr) (d : Nat) (h : par_reduces_p0 env v v') ",
             "(closed : RecEnvClosed env) (liftclosed : RecEnvLiftClosed env) => ",
-            "par_reduces_p0.iota_0 env ",
+            "@par_reduces_p0.iota_0 env ",
             "(instantiate_at f v d) (instantiate_at f' v' d) ",
             "(instantiate_at a0 v d) (instantiate_at a0' v' d) ",
             "(instantiate_at r v' d) (instantiate_at r0 v d) ",
@@ -1981,7 +1981,7 @@ fn par_subst_p0_proof() -> String {
             "(_hsub : par_reduces_p0 env sub sub') (ihsub : {ih_sub}) ",
             "(v : KExpr) (v' : KExpr) (d : Nat) (h : par_reduces_p0 env v v') ",
             "(closed : RecEnvClosed env) (liftclosed : RecEnvLiftClosed env) => ",
-            "par_reduces_p0.proj env s i ",
+            "@par_reduces_p0.proj env s i ",
             "(instantiate_at sub v d) (instantiate_at sub' v' d) ",
             "(ihsub v v' d h closed liftclosed))"
         ),
@@ -1993,7 +1993,7 @@ fn par_subst_p0_proof() -> String {
             "fun (env : RecEnv) (e0 : KExpr) (e0' : KExpr) (v0 : KExpr) (v0' : KExpr) (d0 : Nat) ",
             "(h_ee : par_reduces_p0 env e0 e0') (h_vv : par_reduces_p0 env v0 v0') ",
             "(closed0 : RecEnvClosed env) (liftclosed0 : RecEnvLiftClosed env) => ",
-            "par_reduces_p0.rec env {motive} ",
+            "@par_reduces_p0.rec env {motive} ",
             "{refl_arm} {beta_arm} {app_arm} ",
             "{lam_arm} {pi_arm} {forall_arm} {let_arm} {iota_arm} {let_cong_arm} {proj_arm} ",
             "e0 e0' h_ee v0 v0' d0 h_vv closed0 liftclosed0"
@@ -2060,12 +2060,12 @@ fn boundary_reduct_app() -> String {
 fn par_reduces_p0_redex_preserved_boundary_type() -> String {
     "forall (env : RecEnv) (f : KExpr) (f' : KExpr) (a : KExpr) (a' : KExpr) (r0 : KExpr), \
      RecEnvCtorNoRecMeta env -> \
-     Eq (OptionType KExpr) (iota_reduct env f) (OptionType.none KExpr) -> \
+     @Eq (OptionType KExpr) (iota_reduct env f) (@OptionType.none KExpr) -> \
      iota_step env (KExpr.app f a) r0 -> \
      par_reduces_p0 env f f' -> par_reduces_p0 env a a' -> \
      forall (C : Type), \
      (forall (rg : KExpr), \
-      Eq (OptionType KExpr) (iota_reduct env (KExpr.app f' a')) (OptionType.some KExpr rg) -> C) -> C"
+      @Eq (OptionType KExpr) (iota_reduct env (KExpr.app f' a')) (@OptionType.some KExpr rg) -> C) -> C"
         .to_string()
 }
 
@@ -2098,17 +2098,17 @@ fn par_reduces_p0_redex_preserved_boundary_proof() -> String {
     // The boundary inverter's continuation: recover the witnesses, build recon, call k.
     let kont = format!(
         "(fun (recname : Name) (meta : RecMeta) (major : KExpr) (cname : Name) (rule : RecRule) \
-         (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.app f a))) (OptionType.some Name recname)) \
-         (h2 : Eq (OptionType RecMeta) (recmeta_for env recname) (OptionType.some RecMeta meta)) \
-         (h3 : Eq (OptionType KExpr) (list_head (list_drop {major_idx} {kargs_app})) (OptionType.some KExpr major)) \
-         (h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname)) \
-         (h5 : Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule)) \
-         (fields : Eq Bool (iota_fields_ok rule (kapp_args major)) Bool.true) \
-         (arity : Eq Bool (nat_eqb (name_list_len (kconst_params (recmeta_signature meta))) \
+         (h1 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.app f a))) (@OptionType.some Name recname)) \
+         (h2 : @Eq (OptionType RecMeta) (recmeta_for env recname) (@OptionType.some RecMeta meta)) \
+         (h3 : @Eq (OptionType KExpr) (list_head (list_drop {major_idx} {kargs_app})) (@OptionType.some KExpr major)) \
+         (h4 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (@OptionType.some Name cname)) \
+         (h5 : @Eq (OptionType RecRule) (recrule_for env recname cname) (@OptionType.some RecRule rule)) \
+         (fields : @Eq Bool (iota_fields_ok rule (kapp_args major)) Bool.true) \
+         (arity : @Eq Bool (nat_eqb (name_list_len (kconst_params (recmeta_signature meta))) \
           (level_list_len (kexpr_const_levels (kapp_fn (KExpr.app f a))))) Bool.true) \
-         (h5r : Eq (OptionType KExpr) (OptionType.some KExpr {reduct_app}) (OptionType.some KExpr r0)) \
-         (hbnd : Eq KExpr major a) \
-         (hidx : Eq Nat {major_idx} {len_f}) => \
+         (h5r : @Eq (OptionType KExpr) (@OptionType.some KExpr {reduct_app}) (@OptionType.some KExpr r0)) \
+         (hbnd : @Eq KExpr major a) \
+         (hidx : @Eq Nat {major_idx} {len_f}) => \
          k {reduct_m} {recon})",
         reduct_app = boundary_reduct_app(),
     );
@@ -2116,12 +2116,12 @@ fn par_reduces_p0_redex_preserved_boundary_proof() -> String {
     format!(
         "fun (env : RecEnv) (f : KExpr) (f' : KExpr) (a : KExpr) (a' : KExpr) (r0 : KExpr) \
          (disjoint : RecEnvCtorNoRecMeta env) \
-         (hfn : Eq (OptionType KExpr) (iota_reduct env f) (OptionType.none KExpr)) \
+         (hfn : @Eq (OptionType KExpr) (iota_reduct env f) (@OptionType.none KExpr)) \
          (hgate : iota_step env (KExpr.app f a) r0) \
          (hf : par_reduces_p0 env f f') (ha : par_reduces_p0 env a a') \
          (C : Type) \
          (k : forall (rg : KExpr), \
-              Eq (OptionType KExpr) (iota_reduct env (KExpr.app f' a')) (OptionType.some KExpr rg) -> C) => \
+              @Eq (OptionType KExpr) (iota_reduct env (KExpr.app f' a')) (@OptionType.some KExpr rg) -> C) => \
          iota_reduct_app_minimal_boundary_idx_type env f a r0 hgate hfn C {kont}",
         kont = kont,
     )
@@ -2146,9 +2146,8 @@ mod guarded_boundary_tests {
     fn p0_boundary_keeps_actual_source_and_output_universes() {
         let source = par_reduces_p0_redex_preserved_boundary_proof();
         assert!(source.contains("h4 h5 fields arity hbnd hidx"));
-        assert!(
-            source.contains("(fields : Eq Bool (iota_fields_ok rule (kapp_args major)) Bool.true)")
-        );
+        assert!(source
+            .contains("(fields : @Eq Bool (iota_fields_ok rule (kapp_args major)) Bool.true)"));
         assert!(boundary_reduct_app().contains("kexpr_const_levels (kapp_fn (KExpr.app f a))"));
         assert!(p0_redex_reduct_m().contains("kexpr_const_levels (kapp_fn (KExpr.app f' a'))"));
         assert!(p0_redex_reduct_m().contains("recursor_rhs_instance"));

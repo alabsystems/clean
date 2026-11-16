@@ -64,10 +64,10 @@ const LEAVES: [Leaf; 4] = [
         binders: "(u1 : Level) (u2 : Level)",
         left: "(KExpr.sort u1)",
         right: "(KExpr.sort u2)",
-        eqs: "(hu : Eq Level u1 u2)",
+        eqs: "(hu : @Eq Level u1 u2)",
         transport: "Eq.substType Level \
-                    (fun (z : Level) => Eq (OptionType KExpr) \
-                    (whnf_fuel_red the_red_env n b) (OptionType.some KExpr (KExpr.sort z))) \
+                    (fun (z : Level) => @Eq (OptionType KExpr) \
+                    (whnf_fuel_red the_red_env n b) (@OptionType.some KExpr (KExpr.sort z))) \
                     u2 u1 (Eq.symm Level u1 u2 hu) hb",
         intro: "def_eq_struct_intro_sort (def_eq_fuel the_red_env n) u1",
     },
@@ -76,10 +76,10 @@ const LEAVES: [Leaf; 4] = [
         binders: "(v1 : Nat) (v2 : Nat)",
         left: "(KExpr.lit v1)",
         right: "(KExpr.lit v2)",
-        eqs: "(hv : Eq Nat v1 v2)",
+        eqs: "(hv : @Eq Nat v1 v2)",
         transport: "Eq.substType Nat \
-                    (fun (z : Nat) => Eq (OptionType KExpr) \
-                    (whnf_fuel_red the_red_env n b) (OptionType.some KExpr (KExpr.lit z))) \
+                    (fun (z : Nat) => @Eq (OptionType KExpr) \
+                    (whnf_fuel_red the_red_env n b) (@OptionType.some KExpr (KExpr.lit z))) \
                     v2 v1 (Eq.symm Nat v1 v2 hv) hb",
         intro: "def_eq_struct_intro_lit (def_eq_fuel the_red_env n) v1",
     },
@@ -88,10 +88,10 @@ const LEAVES: [Leaf; 4] = [
         binders: "(i1 : Nat) (i2 : Nat)",
         left: "(KExpr.bvar i1)",
         right: "(KExpr.bvar i2)",
-        eqs: "(hi : Eq Nat i1 i2)",
+        eqs: "(hi : @Eq Nat i1 i2)",
         transport: "Eq.substType Nat \
-                    (fun (z : Nat) => Eq (OptionType KExpr) \
-                    (whnf_fuel_red the_red_env n b) (OptionType.some KExpr (KExpr.bvar z))) \
+                    (fun (z : Nat) => @Eq (OptionType KExpr) \
+                    (whnf_fuel_red the_red_env n b) (@OptionType.some KExpr (KExpr.bvar z))) \
                     i2 i1 (Eq.symm Nat i1 i2 hi) hb",
         intro: "def_eq_struct_intro_bvar (def_eq_fuel the_red_env n) i1",
     },
@@ -100,18 +100,18 @@ const LEAVES: [Leaf; 4] = [
         binders: "(cn1 : Name) (cus1 : ListType Level) (cn2 : Name) (cus2 : ListType Level)",
         left: "(KExpr.const cn1 cus1)",
         right: "(KExpr.const cn2 cus2)",
-        eqs: "(hcn : Eq Name cn1 cn2) (hcus : Eq (ListType Level) cus1 cus2)",
+        eqs: "(hcn : @Eq Name cn1 cn2) (hcus : @Eq (ListType Level) cus1 cus2)",
         // Two payloads, so two nested transports: the universe list first, then
         // the name.
         transport: "Eq.substType Name \
-                    (fun (z : Name) => Eq (OptionType KExpr) \
+                    (fun (z : Name) => @Eq (OptionType KExpr) \
                     (whnf_fuel_red the_red_env n b) \
-                    (OptionType.some KExpr (KExpr.const z cus1))) \
+                    (@OptionType.some KExpr (KExpr.const z cus1))) \
                     cn2 cn1 (Eq.symm Name cn1 cn2 hcn) \
                     (Eq.substType (ListType Level) \
-                    (fun (z : ListType Level) => Eq (OptionType KExpr) \
+                    (fun (z : ListType Level) => @Eq (OptionType KExpr) \
                     (whnf_fuel_red the_red_env n b) \
-                    (OptionType.some KExpr (KExpr.const cn2 z))) \
+                    (@OptionType.some KExpr (KExpr.const cn2 z))) \
                     cus2 cus1 (Eq.symm (ListType Level) cus1 cus2 hcus) hb)",
         intro: "def_eq_struct_intro_const (def_eq_fuel the_red_env n) cn1 cus1",
     },
@@ -139,12 +139,12 @@ impl Specification {
                 let src = format!(
                     "def def_eq_complete_leaf_{head} (n : Nat) (a : KExpr) (b : KExpr) \
                      {binders} \
-                     (ha : Eq (OptionType KExpr) (whnf_fuel_red the_red_env n a) \
-                     (OptionType.some KExpr {left})) \
-                     (hb : Eq (OptionType KExpr) (whnf_fuel_red the_red_env n b) \
-                     (OptionType.some KExpr {right})) \
+                     (ha : @Eq (OptionType KExpr) (whnf_fuel_red the_red_env n a) \
+                     (@OptionType.some KExpr {left})) \
+                     (hb : @Eq (OptionType KExpr) (whnf_fuel_red the_red_env n b) \
+                     (@OptionType.some KExpr {right})) \
                      {eqs} : DefEqFuelAccepts a b := \
-                     DefEqFuelAccepts.mk a b (Nat.succ n) \
+                     @DefEqFuelAccepts.mk a b (Nat.succ n) \
                      (def_eq_fuel_of_struct n a b {left} {left} ha \
                      ({transport}) ({intro}))",
                     head = lf.head,
@@ -241,7 +241,7 @@ mod tests {
     fn test_payload_equality_is_transported_into_the_second_leg() {
         for (lf, src) in LEAVES.iter().zip(terms()) {
             let substs = src.matches("Eq.substType").count();
-            let eq_count = lf.eqs.matches(" : Eq ").count();
+            let eq_count = lf.eqs.matches(" : @Eq ").count();
             assert_eq!(
                 substs, eq_count,
                 "{}: one transport per payload equality ({eq_count} expected)",

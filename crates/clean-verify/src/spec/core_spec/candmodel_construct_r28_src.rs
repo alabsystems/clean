@@ -23,12 +23,14 @@ const B1: &str = "(lift_at B Nat.zero (Nat.succ Nat.zero))";
 /// byte-identical to R17's, since `InertTy.konst` feeds them straight to
 /// `WKC.konst`.
 fn defval_none(n: &str) -> String {
-    format!("Eq (OptionType KExpr) (defval_for (red_def the_red_env) {n}) (OptionType.none KExpr)")
+    format!(
+        "@Eq (OptionType KExpr) (defval_for (red_def the_red_env) {n}) (@OptionType.none KExpr)"
+    )
 }
 
 fn recmeta_none(n: &str) -> String {
     format!(
-        "Eq (OptionType RecMeta) (recmeta_for (red_rec the_red_env) {n}) (OptionType.none RecMeta)"
+        "@Eq (OptionType RecMeta) (recmeta_for (red_rec the_red_env) {n}) (@OptionType.none RecMeta)"
     )
 }
 
@@ -75,7 +77,7 @@ pub(super) fn ty_inert_wkc() -> String {
 pub(super) fn val_inert_wkc() -> String {
     format!(
         "fun (D : Nat -> Sk) (T : KExpr) (h : InertTy T) => \
-         InertTy.rec (fun (z : KExpr) (_hz : InertTy z) => WKC D z Sk.ty) \
+         @InertTy.rec (fun (z : KExpr) (_hz : InertTy z) => WKC D z Sk.ty) \
          (fun (n : Name) (us : ListType Level) (hd : {dv}) (hr : {rm}) => WKC.konst D n us hd hr) \
          (fun (A : KExpr) (B : KExpr) (_hA : InertTy A) (_hB : InertTy B) \
          (ihA : WKC D A Sk.ty) (ihB : WKC D B Sk.ty) => r25_arrowWkc D A B ihA ihB) \
@@ -101,34 +103,34 @@ pub(super) fn val_inert_wkc() -> String {
 /// `r25_arrow`'s own lift, once at `(succ d, k)` for the codomain, and once at
 /// `(d, k)` for the domain.
 pub(super) fn ty_inert_lift() -> String {
-    "forall (T : KExpr), InertTy T -> forall (d : Nat) (k : Nat), Eq KExpr (lift_at T d k) T"
+    "forall (T : KExpr), InertTy T -> forall (d : Nat) (k : Nat), @Eq KExpr (lift_at T d k) T"
         .to_string()
 }
 
 pub(super) fn val_inert_lift() -> String {
-    let ih = "forall (d2 : Nat) (k2 : Nat), Eq KExpr (lift_at z2 d2 k2) z2";
+    let ih = "forall (d2 : Nat) (k2 : Nat), @Eq KExpr (lift_at z2 d2 k2) z2";
     let ih_a = ih.replace("z2", "A");
     let ih_b = ih.replace("z2", "B");
     // `lift_at B1 (succ d) k = B1`, obtained by rewriting B1 back to B.
     let h_b1 = format!(
-        "(Eq.substType KExpr (fun (z : KExpr) => Eq KExpr (lift_at z (Nat.succ d) k) z) B {B1} \
-         (Eq.symm KExpr {B1} B (ihB Nat.zero (Nat.succ Nat.zero))) (ihB (Nat.succ d) k))"
+        "(@Eq.substType KExpr (fun (z : KExpr) => @Eq KExpr (lift_at z (Nat.succ d) k) z) B {B1} \
+         (@Eq.symm KExpr {B1} B (ihB Nat.zero (Nat.succ Nat.zero))) (ihB (Nat.succ d) k))"
     );
     let arrow = format!(
-        "(Eq.substType KExpr \
-         (fun (za : KExpr) => Eq KExpr (KExpr.pi za (lift_at {B1} (Nat.succ d) k)) (KExpr.pi A {B1})) \
-         A (lift_at A d k) (Eq.symm KExpr (lift_at A d k) A (ihA d k)) \
-         (Eq.substType KExpr \
-         (fun (zb : KExpr) => Eq KExpr (KExpr.pi A zb) (KExpr.pi A {B1})) \
+        "(@Eq.substType KExpr \
+         (fun (za : KExpr) => @Eq KExpr (KExpr.pi za (lift_at {B1} (Nat.succ d) k)) (KExpr.pi A {B1})) \
+         A (lift_at A d k) (@Eq.symm KExpr (lift_at A d k) A (ihA d k)) \
+         (@Eq.substType KExpr \
+         (fun (zb : KExpr) => @Eq KExpr (KExpr.pi A zb) (KExpr.pi A {B1})) \
          {B1} (lift_at {B1} (Nat.succ d) k) \
-         (Eq.symm KExpr (lift_at {B1} (Nat.succ d) k) {B1} {h_b1}) \
-         (Eq.refl KExpr (KExpr.pi A {B1}))))"
+         (@Eq.symm KExpr (lift_at {B1} (Nat.succ d) k) {B1} {h_b1}) \
+         (@Eq.refl KExpr (KExpr.pi A {B1}))))"
     );
     format!(
         "fun (T : KExpr) (h : InertTy T) => \
-         InertTy.rec (fun (z2 : KExpr) (_hz : InertTy z2) => {ih}) \
+         @InertTy.rec (fun (z2 : KExpr) (_hz : InertTy z2) => {ih}) \
          (fun (n : Name) (us : ListType Level) (_hd : {dv}) (_hr : {rm}) (d : Nat) (k : Nat) => \
-         Eq.refl KExpr (KExpr.const n us)) \
+         @Eq.refl KExpr (KExpr.const n us)) \
          (fun (A : KExpr) (B : KExpr) (_hA : InertTy A) (_hB : InertTy B) \
          (ihA : {ih_a}) (ihB : {ih_b}) (d : Nat) (k : Nat) => {arrow}) \
          T h",
@@ -151,34 +153,34 @@ pub(super) fn val_inert_lift() -> String {
 /// `psubst s T` on the type side, exactly as R6's `synTy_fundamental` needs no
 /// `psubst_instantiate`.
 pub(super) fn ty_inert_psubst() -> String {
-    "forall (T : KExpr), InertTy T -> forall (s : Nat -> KExpr), Eq KExpr (psubst s T) T"
+    "forall (T : KExpr), InertTy T -> forall (s : Nat -> KExpr), @Eq KExpr (psubst s T) T"
         .to_string()
 }
 
 pub(super) fn val_inert_psubst() -> String {
-    let ih = "forall (s2 : Nat -> KExpr), Eq KExpr (psubst s2 z2) z2";
+    let ih = "forall (s2 : Nat -> KExpr), @Eq KExpr (psubst s2 z2) z2";
     let ih_a = ih.replace("z2", "A");
     let ih_b = ih.replace("z2", "B");
     let h_b1 = format!(
-        "(Eq.substType KExpr (fun (z : KExpr) => Eq KExpr (psubst (up s) z) z) B {B1} \
-         (Eq.symm KExpr {B1} B (r28_inertTy_lift B hBi Nat.zero (Nat.succ Nat.zero))) \
+        "(@Eq.substType KExpr (fun (z : KExpr) => @Eq KExpr (psubst (up s) z) z) B {B1} \
+         (@Eq.symm KExpr {B1} B (r28_inertTy_lift B hBi Nat.zero (Nat.succ Nat.zero))) \
          (ihB (up s)))"
     );
     let arrow = format!(
-        "(Eq.substType KExpr \
-         (fun (za : KExpr) => Eq KExpr (KExpr.pi za (psubst (up s) {B1})) (KExpr.pi A {B1})) \
-         A (psubst s A) (Eq.symm KExpr (psubst s A) A (ihA s)) \
-         (Eq.substType KExpr \
-         (fun (zb : KExpr) => Eq KExpr (KExpr.pi A zb) (KExpr.pi A {B1})) \
+        "(@Eq.substType KExpr \
+         (fun (za : KExpr) => @Eq KExpr (KExpr.pi za (psubst (up s) {B1})) (KExpr.pi A {B1})) \
+         A (psubst s A) (@Eq.symm KExpr (psubst s A) A (ihA s)) \
+         (@Eq.substType KExpr \
+         (fun (zb : KExpr) => @Eq KExpr (KExpr.pi A zb) (KExpr.pi A {B1})) \
          {B1} (psubst (up s) {B1}) \
-         (Eq.symm KExpr (psubst (up s) {B1}) {B1} {h_b1}) \
-         (Eq.refl KExpr (KExpr.pi A {B1}))))"
+         (@Eq.symm KExpr (psubst (up s) {B1}) {B1} {h_b1}) \
+         (@Eq.refl KExpr (KExpr.pi A {B1}))))"
     );
     format!(
         "fun (T : KExpr) (h : InertTy T) => \
-         InertTy.rec (fun (z2 : KExpr) (_hz : InertTy z2) => {ih}) \
+         @InertTy.rec (fun (z2 : KExpr) (_hz : InertTy z2) => {ih}) \
          (fun (n : Name) (us : ListType Level) (_hd : {dv}) (_hr : {rm}) (s : Nat -> KExpr) => \
-         Eq.refl KExpr (KExpr.const n us)) \
+         @Eq.refl KExpr (KExpr.const n us)) \
          (fun (A : KExpr) (B : KExpr) (_hA : InertTy A) (hBi : InertTy B) \
          (ihA : {ih_a}) (ihB : {ih_b}) (s : Nat -> KExpr) => {arrow}) \
          T h",
@@ -202,12 +204,12 @@ pub(super) fn ty_inert_whnf_acc() -> String {
 
 pub(super) fn val_inert_whnf_acc() -> String {
     let h_b1 = format!(
-        "(Eq.substType KExpr (fun (z : KExpr) => whnf_acc z) B {B1} \
-         (Eq.symm KExpr {B1} B (r28_inertTy_lift B hBi Nat.zero (Nat.succ Nat.zero))) ihB)"
+        "(@Eq.substType KExpr (fun (z : KExpr) => whnf_acc z) B {B1} \
+         (@Eq.symm KExpr {B1} B (r28_inertTy_lift B hBi Nat.zero (Nat.succ Nat.zero))) ihB)"
     );
     format!(
         "fun (T : KExpr) (h : InertTy T) => \
-         InertTy.rec (fun (z : KExpr) (_hz : InertTy z) => whnf_acc z) \
+         @InertTy.rec (fun (z : KExpr) (_hz : InertTy z) => whnf_acc z) \
          (fun (n : Name) (us : ListType Level) (hd : {dv}) (_hr : {rm}) => \
          whnf_acc.intro (KExpr.const n us) \
          (fun (g2 : KExpr) (hs : whnf_step (KExpr.const n us) g2) => \
@@ -229,7 +231,7 @@ pub(super) fn val_inert_whnf_acc() -> String {
 /// no-imports convention — and simplified: that one descends the application
 /// spine, which this has no use for.
 pub(super) fn src_not_bvar() -> String {
-    "def r28_notBvar (e : KExpr) : Type := KExpr.rec (fun (_z : KExpr) => Type) \
+    "def r28_notBvar (e : KExpr) : Type := @KExpr.rec (fun (_z : KExpr) => Type) \
      (fun (sl : Level) => ConstFreeUnit) \
      (fun (bi : Nat) => Empty) \
      (fun (af : KExpr) (aa : KExpr) (_cf : Type) (_ca : Type) => ConstFreeUnit) \
@@ -268,19 +270,19 @@ pub(super) fn ty_inert_not_total() -> String {
 pub(super) fn val_inert_not_total() -> String {
     format!(
         "fun (h : InertTy (KExpr.bvar Nat.zero)) => \
-         InertTy.rec (fun (z : KExpr) (_hz : InertTy z) => \
-         Eq KExpr z (KExpr.bvar Nat.zero) -> Empty) \
+         @InertTy.rec (fun (z : KExpr) (_hz : InertTy z) => \
+         @Eq KExpr z (KExpr.bvar Nat.zero) -> Empty) \
          (fun (n : Name) (us : ListType Level) (_hd : {dv}) (_hr : {rm}) \
-         (he : Eq KExpr (KExpr.const n us) (KExpr.bvar Nat.zero)) => \
-         Eq.substType KExpr r28_notBvar (KExpr.const n us) (KExpr.bvar Nat.zero) he \
+         (he : @Eq KExpr (KExpr.const n us) (KExpr.bvar Nat.zero)) => \
+         @Eq.substType KExpr r28_notBvar (KExpr.const n us) (KExpr.bvar Nat.zero) he \
          ConstFreeUnit.triv) \
          (fun (A : KExpr) (B : KExpr) (_hA : InertTy A) (_hB : InertTy B) \
-         (_ihA : Eq KExpr A (KExpr.bvar Nat.zero) -> Empty) \
-         (_ihB : Eq KExpr B (KExpr.bvar Nat.zero) -> Empty) \
-         (he : Eq KExpr (r25_arrow A B) (KExpr.bvar Nat.zero)) => \
-         Eq.substType KExpr r28_notBvar (r25_arrow A B) (KExpr.bvar Nat.zero) he \
+         (_ihA : @Eq KExpr A (KExpr.bvar Nat.zero) -> Empty) \
+         (_ihB : @Eq KExpr B (KExpr.bvar Nat.zero) -> Empty) \
+         (he : @Eq KExpr (r25_arrow A B) (KExpr.bvar Nat.zero)) => \
+         @Eq.substType KExpr r28_notBvar (r25_arrow A B) (KExpr.bvar Nat.zero) he \
          ConstFreeUnit.triv) \
-         (KExpr.bvar Nat.zero) h (Eq.refl KExpr (KExpr.bvar Nat.zero))",
+         (KExpr.bvar Nat.zero) h (@Eq.refl KExpr (KExpr.bvar Nat.zero))",
         dv = defval_none("n"),
         rm = recmeta_none("n"),
     )
@@ -296,16 +298,16 @@ pub(super) fn val_inert_not_total() -> String {
 /// does and the arrow arm is closing for some other reason.
 #[cfg(test)]
 pub(super) fn probe_lift_fixed_depth() -> String {
-    let ih = "Eq KExpr (lift_at z2 Nat.zero (Nat.succ Nat.zero)) z2";
+    let ih = "@Eq KExpr (lift_at z2 Nat.zero (Nat.succ Nat.zero)) z2";
     format!(
         "def r28_probe_lift_fixed_depth : forall (T : KExpr), InertTy T -> \
-         Eq KExpr (lift_at T Nat.zero (Nat.succ Nat.zero)) T := \
+         @Eq KExpr (lift_at T Nat.zero (Nat.succ Nat.zero)) T := \
          fun (T : KExpr) (h : InertTy T) => \
-         InertTy.rec (fun (z2 : KExpr) (_hz : InertTy z2) => {ih}) \
+         @InertTy.rec (fun (z2 : KExpr) (_hz : InertTy z2) => {ih}) \
          (fun (n : Name) (us : ListType Level) (_hd : {dv}) (_hr : {rm}) => \
-         Eq.refl KExpr (KExpr.const n us)) \
+         @Eq.refl KExpr (KExpr.const n us)) \
          (fun (A : KExpr) (B : KExpr) (_hA : InertTy A) (_hB : InertTy B) \
-         (ihA : {ih_a}) (ihB : {ih_b}) => Eq.refl KExpr (r25_arrow A B)) \
+         (ihA : {ih_a}) (ihB : {ih_b}) => @Eq.refl KExpr (r25_arrow A B)) \
          T h",
         dv = defval_none("n"),
         rm = recmeta_none("n"),

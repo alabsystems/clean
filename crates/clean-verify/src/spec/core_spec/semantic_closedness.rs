@@ -15,7 +15,7 @@ impl Specification {
         self.add_recursive_def(
             r"def kexprUniverseEq_preserves_closed_at (e : KExpr) (e2 : KExpr) (h : KExprUniverseEq e e2) :
  forall (d : Nat), is_closed_at e d -> is_closed_at e2 d :=
- KExprUniverseEq.rec
+ @KExprUniverseEq.rec
  (fun (x : KExpr) (y : KExpr) (_h : KExprUniverseEq x y) =>
  forall (d : Nat), is_closed_at x d -> is_closed_at y d)
  (fun (u : Level) (v : Level) (_h : levelEqSem u v) => fun (d : Nat) (_hc : is_closed_at (KExpr.sort u) d) => is_closed_at.sort v d)
@@ -51,11 +51,11 @@ impl Specification {
         self.add_recursive_def(
             r"def kernel_infers_in_constant_result_closed (R : RedEnv) (tenv : KDeclEnv)
  (G : ListType KExpr) (n : Name) (us : ListType Level) (T : KExpr)
- (stored : forall (sig : KConstSig), Eq (OptionType KConstSig) (tenv n) (OptionType.some KConstSig sig) ->
+ (stored : forall (sig : KConstSig), @Eq (OptionType KConstSig) (tenv n) (@OptionType.some KConstSig sig) ->
  is_closed_at (kconst_type sig) Nat.zero)
  (h : KernelInfersIn R tenv G (KExpr.const n us) T) : is_closed_at T Nat.zero :=
  kernel_infers_in_constant_inv R tenv G n us T h (is_closed_at T Nat.zero)
- (fun (A : KExpr) (lookup : Eq (OptionType KExpr) (kdecl_type_at tenv n us) (OptionType.some KExpr A))
+ (fun (A : KExpr) (lookup : @Eq (OptionType KExpr) (kdecl_type_at tenv n us) (@OptionType.some KExpr A))
  (related : KExprUniverseEq A T) =>
  kexprUniverseEq_preserves_closed_at A T related Nat.zero
  (kdecl_type_at_closed tenv n us A stored lookup))",
@@ -64,7 +64,7 @@ impl Specification {
         self.add_recursive_def(
             r"def kernel_infers_in_constant_loose_result_refused (R : RedEnv) (tenv : KDeclEnv)
  (G : ListType KExpr) (n : Name) (us : ListType Level) (i : Nat)
- (stored : forall (sig : KConstSig), Eq (OptionType KConstSig) (tenv n) (OptionType.some KConstSig sig) ->
+ (stored : forall (sig : KConstSig), @Eq (OptionType KConstSig) (tenv n) (@OptionType.some KConstSig sig) ->
  is_closed_at (kconst_type sig) Nat.zero)
  (h : KernelInfersIn R tenv G (KExpr.const n us) (KExpr.bvar i)) : Empty :=
  not_lt_zero i
@@ -74,7 +74,7 @@ impl Specification {
         )?;
         self.add_recursive_def(
             r"def semantic_constant_imax_stored_closed (sig : KConstSig)
- (found : Eq (OptionType KConstSig) (acceptance_constant_imax_tenv Name.anonymous) (OptionType.some KConstSig sig)) :
+ (found : @Eq (OptionType KConstSig) (acceptance_constant_imax_tenv Name.anonymous) (@OptionType.some KConstSig sig)) :
  is_closed_at (kconst_type sig) Nat.zero :=
  Eq.substType KConstSig (fun (s : KConstSig) => is_closed_at (kconst_type s) Nat.zero)
  acceptance_constant_imax_sig sig
@@ -86,7 +86,7 @@ impl Specification {
             r"def semantic_constant_imax_result_closed (R : RedEnv) (G : ListType KExpr) (u : Level) :
  is_closed_at (KExpr.sort Level.zero) Nat.zero :=
  kernel_infers_in_constant_result_closed R acceptance_constant_imax_tenv G Name.anonymous
- (ListType.cons Level u (ListType.nil Level)) (KExpr.sort Level.zero)
+ (@ListType.cons Level u (@ListType.nil Level)) (KExpr.sort Level.zero)
  semantic_constant_imax_stored_closed (kernel_infers_in_constant_imax_zero R G u)",
             "Concrete caller connects actual semantic constant inference, its stored signature invariant and the derived output closedness theorem, with all premises discharged.",
         )?;

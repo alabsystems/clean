@@ -40,11 +40,11 @@ impl Specification {
     pub(super) fn add_declaration_lookup_reflexivity(&mut self) -> Result<(), SpecError> {
         self.add_definition(SpecDefinition {
             name: "nat_eqb_refl".to_string(),
-            type_src: "forall (n : Nat), Eq Bool (nat_eqb n n) Bool.true".to_string(),
+            type_src: "forall (n : Nat), @Eq Bool (nat_eqb n n) Bool.true".to_string(),
             value_src: Some(
                 concat!(
                     "fun (n : Nat) => ",
-                    "Eq.cong Nat Bool ",
+                    "@Eq.cong Nat Bool ",
                     "(fun (s : Nat) => nat_is_zero (Nat.add s s)) ",
                     "(Nat.sub n n) Nat.zero ",
                     "(nat_sub_self n)",
@@ -81,11 +81,11 @@ impl Specification {
         )?;
         for (source, description) in [
             (
-                "def kconst_params (sig : KConstSig) : ListType Name := KConstSig.rec (fun (_ : KConstSig) => ListType Name) (fun (params : ListType Name) (_ty : KExpr) => params) sig",
+                "def kconst_params (sig : KConstSig) : ListType Name := @KConstSig.rec (fun (_ : KConstSig) => ListType Name) (fun (params : ListType Name) (_ty : KExpr) => params) sig",
                 "Project the ordered universe parameter names from the constant signature.",
             ),
             (
-                "def kconst_type (sig : KConstSig) : KExpr := KConstSig.rec (fun (_ : KConstSig) => KExpr) (fun (_params : ListType Name) (ty : KExpr) => ty) sig",
+                "def kconst_type (sig : KConstSig) : KExpr := @KConstSig.rec (fun (_ : KConstSig) => KExpr) (fun (_params : ListType Name) (ty : KExpr) => ty) sig",
                 "Project the schematic, not yet instantiated, constant type.",
             ),
         ] {
@@ -108,11 +108,11 @@ impl Specification {
                 "Partial declaration-signature lookup. This carrier alone imposes no environment well-formedness or source correspondence.",
             ),
             (
-                "def kdef_signature (defn : KDefSig) : KConstSig := KDefSig.rec (fun (_ : KDefSig) => KConstSig) (fun (sig : KConstSig) (_value : KExpr) => sig) defn",
+                "def kdef_signature (defn : KDefSig) : KConstSig := @KDefSig.rec (fun (_ : KDefSig) => KConstSig) (fun (sig : KConstSig) (_value : KExpr) => sig) defn",
                 "Project the single signature shared by definition typing and value instantiation.",
             ),
             (
-                "def kdef_value (defn : KDefSig) : KExpr := KDefSig.rec (fun (_ : KDefSig) => KExpr) (fun (_sig : KConstSig) (value : KExpr) => value) defn",
+                "def kdef_value (defn : KDefSig) : KExpr := @KDefSig.rec (fun (_ : KDefSig) => KExpr) (fun (_sig : KConstSig) (value : KExpr) => value) defn",
                 "Project a definition's schematic, not yet instantiated, value.",
             ),
             (
@@ -124,11 +124,11 @@ impl Specification {
                 "Instantiate the definition value with the same parameter list used to instantiate its signature's type. No second value-specific parameter list exists.",
             ),
             (
-                "def kconst_arity (sig : KConstSig) (us : ListType Level) : Prop := Eq Nat (name_list_len (kconst_params sig)) (level_list_len us)",
+                "def kconst_arity (sig : KConstSig) (us : ListType Level) : Prop := @Eq Nat (name_list_len (kconst_params sig)) (level_list_len us)",
                 "Explicit exact-arity premise: declared parameter count equals supplied level count. This proposition is not automatically checked by the raw instantiation operations.",
             ),
             (
-                "def kdecl_type_at (env : KDeclEnv) (n : Name) (us : ListType Level) : OptionType KExpr := OptionType.rec KConstSig (fun (_found : OptionType KConstSig) => OptionType KExpr) (OptionType.none KExpr) (fun (sig : KConstSig) => Bool.rec (fun (_guard : Bool) => OptionType KExpr) (OptionType.none KExpr) (OptionType.some KExpr (kconst_inst_type sig us)) (nat_eqb (name_list_len (kconst_params sig)) (level_list_len us))) (env n)",
+                "def kdecl_type_at (env : KDeclEnv) (n : Name) (us : ListType Level) : OptionType KExpr := @OptionType.rec KConstSig (fun (_found : OptionType KConstSig) => OptionType KExpr) (@OptionType.none KExpr) (fun (sig : KConstSig) => @Bool.rec (fun (_guard : Bool) => OptionType KExpr) (@OptionType.none KExpr) (@OptionType.some KExpr (kconst_inst_type sig us)) (nat_eqb (name_list_len (kconst_params sig)) (level_list_len us))) (env n)",
                 "Computed universe-aware declaration lookup: missing name or mismatched arity returns none; otherwise returns the signature's instantiated type. No uninterpreted lookup or assumed guard reflection.",
             ),
         ] {
@@ -187,11 +187,11 @@ mod tests {
                 );
             }
             spec.add_recursive_def(
-                "def early_signature_params (ps : ListType Name) (ty : KExpr) : Eq (ListType Name) (kconst_params (KConstSig.mk ps ty)) ps := Eq.refl (ListType Name) ps",
+                "def early_signature_params (ps : ListType Name) (ty : KExpr) : @Eq (ListType Name) (kconst_params (KConstSig.mk ps ty)) ps := @Eq.refl (ListType Name) ps",
                 "Stored ordered parameters project before recursor or instantiation registration.",
             ).expect("early parameter projection");
             spec.add_recursive_def(
-                "def early_signature_type (ps : ListType Name) (ty : KExpr) : Eq KExpr (kconst_type (KConstSig.mk ps ty)) ty := Eq.refl KExpr ty",
+                "def early_signature_type (ps : ListType Name) (ty : KExpr) : @Eq KExpr (kconst_type (KConstSig.mk ps ty)) ty := @Eq.refl KExpr ty",
                 "Stored schematic type projects before recursor or instantiation registration.",
             ).expect("early type projection");
             for name in ["early_signature_params", "early_signature_type"] {
@@ -207,7 +207,7 @@ mod tests {
                 "Test universe parameter u; this name is model syntax, not a source-name correspondence claim.",
             ),
             (
-                "def signature_test_params : ListType Name := ListType.cons Name signature_test_u (ListType.nil Name)",
+                "def signature_test_params : ListType Name := @ListType.cons Name signature_test_u (@ListType.nil Name)",
                 "One declared universe parameter.",
             ),
             (
@@ -219,7 +219,7 @@ mod tests {
                 "Definition fixture with value Sort u and type Sort (succ u). The tests check instantiation computations, not a typing judgment.",
             ),
             (
-                "def signature_test_env : KDeclEnv := fun (_name : Name) => OptionType.some KConstSig signature_test_const",
+                "def signature_test_env : KDeclEnv := fun (_name : Name) => @OptionType.some KConstSig signature_test_const",
                 "A value of the declaration-environment carrier; no well-formedness claim.",
             ),
         ] {
@@ -266,7 +266,7 @@ mod tests {
                 assert_checked_without_axioms(&spec, name);
             }
             for (suffix, level) in [("zero", "Level.zero"), ("one", "(Level.succ Level.zero)")] {
-                let args = format!("(ListType.cons Level {level} (ListType.nil Level))");
+                let args = format!("(@ListType.cons Level {level} (@ListType.nil Level))");
                 for (component, lhs, rhs) in [
                     (
                         "type",
@@ -281,7 +281,9 @@ mod tests {
                 ] {
                     let name = format!("signature_test_{component}_{suffix}");
                     spec.add_recursive_def(
-                        &format!("def {name} : Eq KExpr ({lhs}) ({rhs}) := Eq.refl KExpr ({rhs})"),
+                        &format!(
+                            "def {name} : @Eq KExpr ({lhs}) ({rhs}) := @Eq.refl KExpr ({rhs})"
+                        ),
                         "Checked computation for a shared-signature universe instantiation.",
                     )
                     .expect("type/value instantiation must compute");
@@ -289,14 +291,14 @@ mod tests {
                 }
                 let name = format!("signature_test_arity_{suffix}");
                 spec.add_recursive_def(
-                    &format!("def {name} : kconst_arity signature_test_const {args} := Eq.refl Nat (Nat.succ Nat.zero)"),
+                    &format!("def {name} : kconst_arity signature_test_const {args} := @Eq.refl Nat (Nat.succ Nat.zero)"),
                     "One argument satisfies the fixture's one-parameter arity premise.",
                 )
                 .expect("matching arity");
                 assert_checked_without_axioms(&spec, &name);
                 let name = format!("signature_test_checked_lookup_{suffix}");
                 spec.add_recursive_def(
-                    &format!("def {name} : Eq (OptionType KExpr) (kdecl_type_at signature_test_env signature_test_u {args}) (OptionType.some KExpr (KExpr.sort (Level.succ {level}))) := Eq.refl (OptionType KExpr) (OptionType.some KExpr (KExpr.sort (Level.succ {level})))"),
+                    &format!("def {name} : @Eq (OptionType KExpr) (kdecl_type_at signature_test_env signature_test_u {args}) (@OptionType.some KExpr (KExpr.sort (Level.succ {level}))) := @Eq.refl (OptionType KExpr) (@OptionType.some KExpr (KExpr.sort (Level.succ {level})))"),
                     "Computed lookup at this universe argument returns its actual instantiated type.",
                 )
                 .expect("arity-checked universe-aware lookup");
@@ -305,15 +307,15 @@ mod tests {
             for (name, source) in [
                 (
                     "signature_test_shared_params",
-                    "def signature_test_shared_params : Eq (ListType Name) (kconst_params (kdef_signature signature_test_def)) signature_test_params := Eq.refl (ListType Name) signature_test_params",
+                    "def signature_test_shared_params : @Eq (ListType Name) (kconst_params (kdef_signature signature_test_def)) signature_test_params := @Eq.refl (ListType Name) signature_test_params",
                 ),
                 (
                     "signature_test_shared_signature",
-                    "def signature_test_shared_signature : Eq KConstSig (kdef_signature signature_test_def) signature_test_const := Eq.refl KConstSig signature_test_const",
+                    "def signature_test_shared_signature : @Eq KConstSig (kdef_signature signature_test_def) signature_test_const := @Eq.refl KConstSig signature_test_const",
                 ),
                 (
                     "signature_test_env_lookup",
-                    "def signature_test_env_lookup : Eq (OptionType KConstSig) (signature_test_env signature_test_u) (OptionType.some KConstSig signature_test_const) := Eq.refl (OptionType KConstSig) (OptionType.some KConstSig signature_test_const)",
+                    "def signature_test_env_lookup : @Eq (OptionType KConstSig) (signature_test_env signature_test_u) (@OptionType.some KConstSig signature_test_const) := @Eq.refl (OptionType KConstSig) (@OptionType.some KConstSig signature_test_const)",
                 ),
             ] {
                 spec.add_recursive_def(source, "Checked signature projection or lookup computation.")
@@ -329,14 +331,14 @@ mod tests {
             let mut spec = signature_spec();
             add_sort_definition(&mut spec);
             spec.add_recursive_def(
-                "def signature_test_missing_arity_refuted : kconst_arity signature_test_const (ListType.nil Level) -> Empty := fun (h : kconst_arity signature_test_const (ListType.nil Level)) => Eq.substType Nat (fun (n : Nat) => Nat.rec (fun (_ : Nat) => Type) Empty (fun (_ : Nat) (_ : Type) => Nat) n) (Nat.succ Nat.zero) Nat.zero h Nat.zero",
+                "def signature_test_missing_arity_refuted : kconst_arity signature_test_const (@ListType.nil Level) -> Empty := fun (h : kconst_arity signature_test_const (@ListType.nil Level)) => @Eq.substType Nat (fun (n : Nat) => @Nat.rec (fun (_ : Nat) => Type) Empty (fun (_ : Nat) (_ : Type) => Nat) n) (Nat.succ Nat.zero) Nat.zero h Nat.zero",
                 "An actual refutation of one parameter with zero arguments, using only equality transport and Nat's constructors.",
             )
             .expect("missing-argument arity must be refutable");
             assert_checked_without_axioms(&spec, "signature_test_missing_arity_refuted");
             assert!(spec
                 .add_recursive_def(
-                    "def signature_test_forged_missing_arity : kconst_arity signature_test_const (ListType.nil Level) := Eq.refl Nat Nat.zero",
+                    "def signature_test_forged_missing_arity : kconst_arity signature_test_const (@ListType.nil Level) := @Eq.refl Nat Nat.zero",
                     "Negative control: the raw instantiation default cannot forge exact arity.",
                 )
                 .is_err());
@@ -344,7 +346,7 @@ mod tests {
                 .definitions()
                 .contains_key("signature_test_forged_missing_arity"));
             spec.add_recursive_def(
-                "def signature_test_raw_missing_argument_default : Eq KExpr (kdef_inst_value signature_test_def (ListType.nil Level)) (KExpr.sort Level.zero) := Eq.refl KExpr (KExpr.sort Level.zero)",
+                "def signature_test_raw_missing_argument_default : @Eq KExpr (kdef_inst_value signature_test_def (@ListType.nil Level)) (KExpr.sort Level.zero) := @Eq.refl KExpr (KExpr.sort Level.zero)",
                 "The raw operation retains its zero default even though the separate arity proposition is refuted. Future typing and delta callers must require the premise.",
             )
             .expect("raw instantiation is deliberately total");
@@ -352,15 +354,15 @@ mod tests {
             for (name, source) in [
                 (
                     "signature_test_lookup_missing_argument",
-                    "def signature_test_lookup_missing_argument : Eq (OptionType KExpr) (kdecl_type_at signature_test_env signature_test_u (ListType.nil Level)) (OptionType.none KExpr) := Eq.refl (OptionType KExpr) (OptionType.none KExpr)",
+                    "def signature_test_lookup_missing_argument : @Eq (OptionType KExpr) (kdecl_type_at signature_test_env signature_test_u (@ListType.nil Level)) (@OptionType.none KExpr) := @Eq.refl (OptionType KExpr) (@OptionType.none KExpr)",
                 ),
                 (
                     "signature_test_lookup_extra_argument",
-                    "def signature_test_lookup_extra_argument : Eq (OptionType KExpr) (kdecl_type_at signature_test_env signature_test_u (ListType.cons Level Level.zero (ListType.cons Level Level.zero (ListType.nil Level)))) (OptionType.none KExpr) := Eq.refl (OptionType KExpr) (OptionType.none KExpr)",
+                    "def signature_test_lookup_extra_argument : @Eq (OptionType KExpr) (kdecl_type_at signature_test_env signature_test_u (@ListType.cons Level Level.zero (@ListType.cons Level Level.zero (@ListType.nil Level)))) (@OptionType.none KExpr) := @Eq.refl (OptionType KExpr) (@OptionType.none KExpr)",
                 ),
                 (
                     "signature_test_lookup_missing_name",
-                    "def signature_test_lookup_missing_name : Eq (OptionType KExpr) (kdecl_type_at (fun (_name : Name) => OptionType.none KConstSig) signature_test_u (ListType.cons Level Level.zero (ListType.nil Level))) (OptionType.none KExpr) := Eq.refl (OptionType KExpr) (OptionType.none KExpr)",
+                    "def signature_test_lookup_missing_name : @Eq (OptionType KExpr) (kdecl_type_at (fun (_name : Name) => @OptionType.none KConstSig) signature_test_u (@ListType.cons Level Level.zero (@ListType.nil Level))) (@OptionType.none KExpr) := @Eq.refl (OptionType KExpr) (@OptionType.none KExpr)",
                 ),
             ] {
                 spec.add_recursive_def(source, "Computed lookup refuses missing declarations and incorrect argument counts.")
@@ -369,13 +371,13 @@ mod tests {
             }
             assert!(spec
                 .add_recursive_def(
-                    "def signature_test_forged_short_lookup : Eq (OptionType KExpr) (kdecl_type_at signature_test_env signature_test_u (ListType.nil Level)) (OptionType.some KExpr (KExpr.sort (Level.succ Level.zero))) := Eq.refl (OptionType KExpr) (OptionType.some KExpr (KExpr.sort (Level.succ Level.zero)))",
+                    "def signature_test_forged_short_lookup : @Eq (OptionType KExpr) (kdecl_type_at signature_test_env signature_test_u (@ListType.nil Level)) (@OptionType.some KExpr (KExpr.sort (Level.succ Level.zero))) := @Eq.refl (OptionType KExpr) (@OptionType.some KExpr (KExpr.sort (Level.succ Level.zero)))",
                     "Negative control: raw instantiation's default must not escape the lookup's arity check.",
                 )
                 .is_err());
             assert!(spec
                 .add_recursive_def(
-                    "def signature_test_type_value_confusion : Eq KExpr (kconst_inst_type signature_test_const (ListType.cons Level Level.zero (ListType.nil Level))) (KExpr.sort Level.zero) := Eq.refl KExpr (KExpr.sort Level.zero)",
+                    "def signature_test_type_value_confusion : @Eq KExpr (kconst_inst_type signature_test_const (@ListType.cons Level Level.zero (@ListType.nil Level))) (KExpr.sort Level.zero) := @Eq.refl KExpr (KExpr.sort Level.zero)",
                     "Negative control: the instantiated type is Sort (succ zero), not the definition's Sort zero value.",
                 )
                 .is_err());

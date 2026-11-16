@@ -274,7 +274,7 @@
       "id": "infer-local-variable",
       "kind": "rule",
       "title": "A local variable has the type its context gives it",
-      "status": "partial",
+      "status": "specified",
       "plan_unit": "S1",
       "cic_l": [
         {
@@ -290,9 +290,58 @@
           "item": "CICL.lookupType",
           "kind": "def",
           "file": "CICL/CoreTyping.lean"
+        },
+        {
+          "item": "CICL.LocalContextRules.NamedLocalEntry",
+          "kind": "structure",
+          "file": "CICL/LocalContextRules.lean"
+        },
+        {
+          "item": "CICL.LocalContextRules.openWithFVars",
+          "kind": "def",
+          "file": "CICL/LocalContextRules.lean"
+        },
+        {
+          "item": "CICL.LocalContextRules.closeFVars",
+          "kind": "def",
+          "file": "CICL/LocalContextRules.lean"
+        },
+        {
+          "item": "CICL.LocalContextRules.inferFVar",
+          "kind": "def",
+          "file": "CICL/LocalContextRules.lean"
+        },
+        {
+          "item": "CICL.LocalContextRules.closeFVars_openWithFVars",
+          "kind": "theorem",
+          "file": "CICL/LocalContextRules.lean"
+        },
+        {
+          "item": "CICL.LocalContextRules.openWithFVars_closeFVars",
+          "kind": "theorem",
+          "file": "CICL/LocalContextRules.lean"
+        },
+        {
+          "item": "CICL.LocalContextRules.inferFVar_unknown_none",
+          "kind": "theorem",
+          "file": "CICL/LocalContextRules.lean"
+        },
+        {
+          "item": "CICL.LocalContextRules.inferFVar_iff_lookupType",
+          "kind": "theorem",
+          "file": "CICL/LocalContextRules.lean"
+        },
+        {
+          "item": "CICL.ExtendedJudgment.ExtendedNamedJudgmentIn",
+          "kind": "structure",
+          "file": "CICL/ExtendedJudgment.lean"
+        },
+        {
+          "item": "CICL.ExtendedJudgment.inferFVar_to_extendedJudgment",
+          "kind": "theorem",
+          "file": "CICL/ExtendedJudgment.lean"
         }
       ],
-      "missing": "The kernel's rule is for free variables of a named local context. The specification states it for de Bruijn indices and proves the free-variable term former untypable (no_free_variable_yet).",
       "groundwork": [
         {
           "item": "CICL.Expr.fvar",
@@ -329,7 +378,8 @@
           ],
           "sha256": "81d48f2a7391b8cef87797e6f4c9cb1fd54fc8be4079f5fc266a67d8d669de81"
         }
-      ]
+      ],
+      "note": "CoreJudgmentIn.bvar states de Bruijn context typing, and CICL.LocalContextRules.inferFVar_iff_lookupType proves exact locally-nameless correspondence with type_checker::infer_fvar via openWithFVars/closeFVars (with choice-free semantic soundness in CICLModel/LocalContextSemantics.lean)."
     },
     {
       "id": "infer-lambda",
@@ -560,9 +610,75 @@
       "id": "literal-terms",
       "kind": "rule",
       "title": "Nat and String literals: their types and their equality",
-      "status": "unspecified",
+      "status": "specified",
       "plan_unit": "S6",
-      "cic_l": [],
+      "cic_l": [
+        {
+          "item": "CICL.LiteralRules.litType",
+          "kind": "def",
+          "file": "CICL/LiteralRules.lean"
+        },
+        {
+          "item": "CICL.LiteralRules.QuickDefEqLit",
+          "kind": "def",
+          "file": "CICL/LiteralRules.lean"
+        },
+        {
+          "item": "CICL.LiteralRules.quickDefEqLit_nat_ne_str",
+          "kind": "theorem",
+          "file": "CICL/LiteralRules.lean"
+        },
+        {
+          "item": "CICL.CertifiedLibraryRules.eraseLiterals",
+          "kind": "def",
+          "file": "CICL/CertifiedLibraryRules.lean"
+        },
+        {
+          "item": "CICL.CertifiedLibraryRules.eraseLiterals_noLiteral",
+          "kind": "theorem",
+          "file": "CICL/CertifiedLibraryRules.lean"
+        },
+        {
+          "item": "CICL.CertifiedLibraryRules.eraseLiterals_lit_typed",
+          "kind": "theorem",
+          "file": "CICL/CertifiedLibraryRules.lean"
+        },
+        {
+          "item": "CICL.CertifiedLibraryRules.eraseLiterals_quickDefEqLit_defEq",
+          "kind": "theorem",
+          "file": "CICL/CertifiedLibraryRules.lean"
+        },
+        {
+          "item": "CICL.ExtendedJudgment.ExtendedJudgmentIn.litNat",
+          "kind": "constructor",
+          "file": "CICL/ExtendedJudgment.lean"
+        },
+        {
+          "item": "CICL.ExtendedJudgment.ExtendedJudgmentIn.litStr",
+          "kind": "constructor",
+          "file": "CICL/ExtendedJudgment.lean"
+        },
+        {
+          "item": "CICL.ExtendedJudgment.ExtendedJudgmentIn.litQuickDefEq",
+          "kind": "constructor",
+          "file": "CICL/ExtendedJudgment.lean"
+        },
+        {
+          "item": "CICL.ExtendedJudgment.extended_litNat_typed",
+          "kind": "theorem",
+          "file": "CICL/ExtendedJudgment.lean"
+        },
+        {
+          "item": "CICL.ExtendedJudgment.extended_litStr_typed",
+          "kind": "theorem",
+          "file": "CICL/ExtendedJudgment.lean"
+        },
+        {
+          "item": "CICL.ExtendedJudgment.extended_litQuickDefEq_nat",
+          "kind": "theorem",
+          "file": "CICL/ExtendedJudgment.lean"
+        }
+      ],
       "groundwork": [
         {
           "item": "CICL.Expr.lit",
@@ -775,6 +891,16 @@
           "item": "CICL.CoreHeadStep.localDefinition",
           "kind": "constructor",
           "file": "CICL/CoreHeadReduction.lean"
+        },
+        {
+          "item": "CICL.LocalContextRules.lookupFVarValue",
+          "kind": "def",
+          "file": "CICL/LocalContextRules.lean"
+        },
+        {
+          "item": "CICL.LocalContextRules.lookupFVarValue_eq_open_lookupValue",
+          "kind": "theorem",
+          "file": "CICL/LocalContextRules.lean"
         }
       ],
       "anchors": [
@@ -990,9 +1116,90 @@
       "id": "reduce-iota",
       "kind": "rule",
       "title": "Iota: a recursor applied to a constructor reduces by its rule",
-      "status": "unspecified",
+      "status": "specified",
       "plan_unit": "S3",
-      "cic_l": [],
+      "cic_l": [
+        {
+          "item": "CICL.RecursorAndEtaRules.recursorMajorIdx",
+          "kind": "def",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.getRecRuleFor",
+          "kind": "def",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.reduceIotaRhs",
+          "kind": "def",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.ReduceIotaStep",
+          "kind": "inductive",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.reduceIota_nat_zero",
+          "kind": "theorem",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.reduceIota_nat_succ",
+          "kind": "theorem",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.reduceIota_punit_unit",
+          "kind": "theorem",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.reduceIota_eq_refl",
+          "kind": "theorem",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.reduceIota_refuses_short_args",
+          "kind": "theorem",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.reduceIota_refuses_level_arity",
+          "kind": "theorem",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.ExtendedJudgment.DirectIotaStep",
+          "kind": "inductive",
+          "file": "CICL/ExtendedJudgment.lean"
+        },
+        {
+          "item": "CICL.ExtendedJudgment.DirectIotaStep.intro",
+          "kind": "constructor",
+          "file": "CICL/ExtendedJudgment.lean"
+        },
+        {
+          "item": "CICL.ExtendedJudgment.directIotaStep_to_reduceIotaStep",
+          "kind": "theorem",
+          "file": "CICL/ExtendedJudgment.lean"
+        },
+        {
+          "item": "CICL.ExtendedJudgment.ExtendedJudgmentIn.iotaStep",
+          "kind": "constructor",
+          "file": "CICL/ExtendedJudgment.lean"
+        },
+        {
+          "item": "CICL.ExtendedJudgment.extended_punit_directIotaStep",
+          "kind": "theorem",
+          "file": "CICL/ExtendedJudgment.lean"
+        },
+        {
+          "item": "CICL.ExtendedJudgment.wrongUnderAppliedDirectIota_refuted",
+          "kind": "theorem",
+          "file": "CICL/ExtendedJudgment.lean"
+        }
+      ],
       "groundwork": [
         {
           "item": "CICL.RecursorRule",
@@ -1066,9 +1273,55 @@
       "id": "iota-k",
       "kind": "rule",
       "title": "K: a major premise of a K-target type is replaced by its nullary constructor",
-      "status": "unspecified",
+      "status": "specified",
       "plan_unit": "S3",
-      "cic_l": [],
+      "cic_l": [
+        {
+          "item": "CICL.RecursorAndEtaRules.IsKTargetShape",
+          "kind": "structure",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.mkNullaryCnstr",
+          "kind": "def",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.ToCnstrWhenK",
+          "kind": "structure",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.eq_recursor_isK",
+          "kind": "theorem",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.mkNullaryCnstr_eq_apply",
+          "kind": "theorem",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.toCnstrWhenK_refuses_nonKRecursor",
+          "kind": "theorem",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.not_isKTargetShape_of_nonzero_fields",
+          "kind": "theorem",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.ExtendedJudgment.ExtendedJudgmentIn.iotaK",
+          "kind": "constructor",
+          "file": "CICL/ExtendedJudgment.lean"
+        },
+        {
+          "item": "CICL.ExtendedJudgment.extended_iotaK_of_toCnstrWhenK",
+          "kind": "theorem",
+          "file": "CICL/ExtendedJudgment.lean"
+        }
+      ],
       "anchors": [
         {
           "file": "src/kernel/inductive.h",
@@ -1121,9 +1374,30 @@
       "id": "iota-structure-eta-major",
       "kind": "rule",
       "title": "A major premise of a structure type is eta-expanded to a constructor application",
-      "status": "unspecified",
+      "status": "partial",
       "plan_unit": "S3, S4",
-      "cic_l": [],
+      "cic_l": [
+        {
+          "item": "CICL.RecursorAndEtaRules.IsConstructorApp",
+          "kind": "def",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.ToCnstrWhenStructure",
+          "kind": "inductive",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.toCnstrWhenStructure_refuses_propSort",
+          "kind": "theorem",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.toCnstrWhenStructure_refuses_constructorApp",
+          "kind": "theorem",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        }
+      ],
       "anchors": [
         {
           "file": "src/kernel/inductive.h",
@@ -1152,15 +1426,47 @@
           ],
           "sha256": "8b41d9c5fd73dd910082859e5170310f4fa386650e4d543510254de1b43772b6"
         }
-      ]
+      ],
+      "missing": "ToCnstrWhenStructure specifies the standalone non-Prop structure major-premise eta expansion (including the !is_prop(e) guard that blocks expanding Prop structures during iota), but remains outside CICL.CoreJudgmentIn until S3/S4 wire projection typing and iota into the extended judgment."
     },
     {
       "id": "nat-literal-constructor-form",
       "kind": "rule",
       "title": "A Nat literal as a major premise is Nat.zero or Nat.succ of a literal",
-      "status": "unspecified",
+      "status": "specified",
       "plan_unit": "S6",
-      "cic_l": [],
+      "cic_l": [
+        {
+          "item": "CICL.LiteralRules.natLitStepToConstructor",
+          "kind": "def",
+          "file": "CICL/LiteralRules.lean"
+        },
+        {
+          "item": "CICL.LiteralRules.natLitToConstructor",
+          "kind": "def",
+          "file": "CICL/LiteralRules.lean"
+        },
+        {
+          "item": "CICL.LiteralRules.natLitToConstructor_typed",
+          "kind": "theorem",
+          "file": "CICL/LiteralRules.lean"
+        },
+        {
+          "item": "CICL.CertifiedLibraryRules.eraseLiterals_natLitStep_defEq",
+          "kind": "theorem",
+          "file": "CICL/CertifiedLibraryRules.lean"
+        },
+        {
+          "item": "CICL.ExtendedJudgment.ExtendedJudgmentIn.natLitStep",
+          "kind": "constructor",
+          "file": "CICL/ExtendedJudgment.lean"
+        },
+        {
+          "item": "CICL.ExtendedJudgment.extended_natSucc_trans_constructor",
+          "kind": "theorem",
+          "file": "CICL/ExtendedJudgment.lean"
+        }
+      ],
       "extension": {
         "class": "nat-literal",
         "plan_requires_derived_rule": true
@@ -1194,9 +1500,80 @@
       "id": "string-literal-expansion",
       "kind": "rule",
       "title": "A String literal is String.ofList of its characters",
-      "status": "unspecified",
+      "status": "specified",
       "plan_unit": "S6",
-      "cic_l": [],
+      "cic_l": [
+        {
+          "item": "CICL.LiteralRules.utf8DecodeBytes",
+          "kind": "def",
+          "file": "CICL/LiteralRules.lean"
+        },
+        {
+          "item": "CICL.LiteralRules.stringCodepointsToConstructor",
+          "kind": "def",
+          "file": "CICL/LiteralRules.lean"
+        },
+        {
+          "item": "CICL.LiteralRules.stringLitToConstructor",
+          "kind": "def",
+          "file": "CICL/LiteralRules.lean"
+        },
+        {
+          "item": "CICL.LiteralRules.codepointListExpr_injective",
+          "kind": "theorem",
+          "file": "CICL/LiteralRules.lean"
+        },
+        {
+          "item": "CICL.CertifiedLibraryRules.charAdmissionOn",
+          "kind": "def",
+          "file": "CICL/CertifiedLibraryRules.lean"
+        },
+        {
+          "item": "CICL.CertifiedLibraryRules.listAdmissionOn",
+          "kind": "def",
+          "file": "CICL/CertifiedLibraryRules.lean"
+        },
+        {
+          "item": "CICL.CertifiedLibraryRules.stringAdmissionOn",
+          "kind": "def",
+          "file": "CICL/CertifiedLibraryRules.lean"
+        },
+        {
+          "item": "CICL.CertifiedLibraryRules.stdLiteralOverlay_wf",
+          "kind": "theorem",
+          "file": "CICL/CertifiedLibraryRules.lean"
+        },
+        {
+          "item": "CICL.CertifiedLibraryRules.eraseLiterals_stringLitExpansion_defEq",
+          "kind": "theorem",
+          "file": "CICL/CertifiedLibraryRules.lean"
+        },
+        {
+          "item": "CICL.CertifiedLibraryRules.eraseCharOfNatApp_delta_beta",
+          "kind": "theorem",
+          "file": "CICL/CertifiedLibraryRules.lean"
+        },
+        {
+          "item": "CICL.ExtendedJudgment.HasStringLitDecls",
+          "kind": "structure",
+          "file": "CICL/ExtendedJudgment.lean"
+        },
+        {
+          "item": "CICL.ExtendedJudgment.ExtendedJudgmentIn.stringLitStep",
+          "kind": "constructor",
+          "file": "CICL/ExtendedJudgment.lean"
+        },
+        {
+          "item": "CICL.ExtendedJudgment.s6ExtendedSignature_hasStringLitDecls",
+          "kind": "theorem",
+          "file": "CICL/ExtendedJudgment.lean"
+        },
+        {
+          "item": "CICL.ExtendedJudgment.extended_stringLitStep",
+          "kind": "theorem",
+          "file": "CICL/ExtendedJudgment.lean"
+        }
+      ],
       "extension": {
         "class": "string-literal",
         "plan_requires_derived_rule": true
@@ -1374,8 +1751,49 @@
       "id": "native-reduction",
       "kind": "rule",
       "title": "Lean.reduceBool and Lean.reduceNat evaluate a constant with compiled code",
-      "status": "unspecified",
-      "cic_l": [],
+      "status": "specified",
+      "cic_l": [
+        {
+          "item": "CICL.NativeReductionBoundary.NativeEvalExcluded",
+          "kind": "def",
+          "file": "CICL/LiteralRules.lean"
+        },
+        {
+          "item": "CICL.NativeReductionBoundary.no_coreHeadStep_reduceBool",
+          "kind": "theorem",
+          "file": "CICL/LiteralRules.lean"
+        },
+        {
+          "item": "CICL.NativeReductionBoundary.no_coreHeadStep_reduceNat",
+          "kind": "theorem",
+          "file": "CICL/LiteralRules.lean"
+        },
+        {
+          "item": "CICL.NativeReductionBoundary.insertOpaque_reduceBool_excluded",
+          "kind": "theorem",
+          "file": "CICL/LiteralRules.lean"
+        },
+        {
+          "item": "CICL.NativeReductionBoundary.insertOpaque_reduceNat_excluded",
+          "kind": "theorem",
+          "file": "CICL/LiteralRules.lean"
+        },
+        {
+          "item": "CICL.NativeReductionBoundary.miscompiled_native_oracle_inconsistent",
+          "kind": "theorem",
+          "file": "CICL/LiteralRules.lean"
+        },
+        {
+          "item": "CICL.ExtendedJudgment.s6ExtendedSignature_nativeEvalExcluded",
+          "kind": "theorem",
+          "file": "CICL/ExtendedJudgment.lean"
+        },
+        {
+          "item": "CICL.ExtendedJudgment.wrongExtendedAdmitsNativeEval_refuted",
+          "kind": "theorem",
+          "file": "CICL/ExtendedJudgment.lean"
+        }
+      ],
       "extension": {
         "class": "native-evaluation",
         "plan_requires_derived_rule": false
@@ -1384,7 +1802,7 @@
         "Lean.reduceBool",
         "Lean.reduceNat"
       ],
-      "note": "The plan names no unit that specifies native evaluation. Unit F1 tests that the fenced reference kernel refuses these folds. This row stays open until a recorded decision says the proved theory refuses them.",
+      "note": "Permanently excluded from the proved CIC_L theory per the 2026-11-15 decision in docs/DECISIONS.md and Plan unit F1: Lean.reduceBool and Lean.reduceNat are non-transparent opaque constants under NativeEvalExcluded and never fire a native host-oracle reduction step.",
       "anchors": [
         {
           "file": "src/kernel/type_checker.cpp",
@@ -1419,9 +1837,40 @@
       "id": "nat-literal-zero-succ",
       "kind": "rule",
       "title": "Nat.zero is the literal 0 and Nat.succ of a literal is a literal",
-      "status": "unspecified",
+      "status": "specified",
       "plan_unit": "S6",
-      "cic_l": [],
+      "cic_l": [
+        {
+          "item": "CICL.LiteralRules.NatLitExtVal",
+          "kind": "inductive",
+          "file": "CICL/LiteralRules.lean"
+        },
+        {
+          "item": "CICL.LiteralRules.ReduceNatSuccStep",
+          "kind": "def",
+          "file": "CICL/LiteralRules.lean"
+        },
+        {
+          "item": "CICL.LiteralRules.reduceNatSucc_refuses_strLit",
+          "kind": "theorem",
+          "file": "CICL/LiteralRules.lean"
+        },
+        {
+          "item": "CICL.CertifiedLibraryRules.eraseLiterals_reduceNatSucc_defEq",
+          "kind": "theorem",
+          "file": "CICL/CertifiedLibraryRules.lean"
+        },
+        {
+          "item": "CICL.ExtendedJudgment.ExtendedJudgmentIn.natSuccStep",
+          "kind": "constructor",
+          "file": "CICL/ExtendedJudgment.lean"
+        },
+        {
+          "item": "CICL.ExtendedJudgment.extended_natSucc_trans_constructor",
+          "kind": "theorem",
+          "file": "CICL/ExtendedJudgment.lean"
+        }
+      ],
       "extension": {
         "class": "nat-literal",
         "plan_requires_derived_rule": true
@@ -1464,9 +1913,50 @@
       "id": "nat-binary-arithmetic",
       "kind": "rule",
       "title": "Binary Nat operations on literals compute",
-      "status": "unspecified",
+      "status": "specified",
       "plan_unit": "S6",
-      "cic_l": [],
+      "cic_l": [
+        {
+          "item": "CICL.LiteralRules.NatBinOp",
+          "kind": "inductive",
+          "file": "CICL/LiteralRules.lean"
+        },
+        {
+          "item": "CICL.LiteralRules.NatBinOp.eval",
+          "kind": "def",
+          "file": "CICL/LiteralRules.lean"
+        },
+        {
+          "item": "CICL.LiteralRules.ReduceBinNatOpStep",
+          "kind": "def",
+          "file": "CICL/LiteralRules.lean"
+        },
+        {
+          "item": "CICL.LiteralRules.reduceBinNatOp_deterministic",
+          "kind": "theorem",
+          "file": "CICL/LiteralRules.lean"
+        },
+        {
+          "item": "CICL.ExtendedJudgment.HasNatBinOpSig",
+          "kind": "structure",
+          "file": "CICL/ExtendedJudgment.lean"
+        },
+        {
+          "item": "CICL.ExtendedJudgment.ExtendedJudgmentIn.natBinOpStep",
+          "kind": "constructor",
+          "file": "CICL/ExtendedJudgment.lean"
+        },
+        {
+          "item": "CICL.ExtendedJudgment.s6ExtendedSignature_hasNatBinOp",
+          "kind": "theorem",
+          "file": "CICL/ExtendedJudgment.lean"
+        },
+        {
+          "item": "CICL.ExtendedJudgment.extended_natAdd_2_3_eq_5",
+          "kind": "theorem",
+          "file": "CICL/ExtendedJudgment.lean"
+        }
+      ],
       "extension": {
         "class": "nat-literal",
         "plan_requires_derived_rule": true
@@ -1528,9 +2018,50 @@
       "id": "nat-pow",
       "kind": "rule",
       "title": "Nat.pow on literals computes, below a fixed exponent bound",
-      "status": "unspecified",
+      "status": "specified",
       "plan_unit": "S6",
-      "cic_l": [],
+      "cic_l": [
+        {
+          "item": "CICL.LiteralRules.reducePowMaxExp",
+          "kind": "def",
+          "file": "CICL/LiteralRules.lean"
+        },
+        {
+          "item": "CICL.LiteralRules.ReduceNatPowStep",
+          "kind": "def",
+          "file": "CICL/LiteralRules.lean"
+        },
+        {
+          "item": "CICL.LiteralRules.reduceNatPow_refuses_above_maxExp",
+          "kind": "theorem",
+          "file": "CICL/LiteralRules.lean"
+        },
+        {
+          "item": "CICL.ExtendedJudgment.HasNatPowSig",
+          "kind": "structure",
+          "file": "CICL/ExtendedJudgment.lean"
+        },
+        {
+          "item": "CICL.ExtendedJudgment.ExtendedJudgmentIn.natPowStep",
+          "kind": "constructor",
+          "file": "CICL/ExtendedJudgment.lean"
+        },
+        {
+          "item": "CICL.ExtendedJudgment.s6ExtendedSignature_hasNatPow",
+          "kind": "theorem",
+          "file": "CICL/ExtendedJudgment.lean"
+        },
+        {
+          "item": "CICL.ExtendedJudgment.extended_natPow_2_10_eq_1024",
+          "kind": "theorem",
+          "file": "CICL/ExtendedJudgment.lean"
+        },
+        {
+          "item": "CICL.ExtendedJudgment.wrongPowAboveMaxExpStep_refuted",
+          "kind": "theorem",
+          "file": "CICL/ExtendedJudgment.lean"
+        }
+      ],
       "extension": {
         "class": "nat-literal",
         "plan_requires_derived_rule": true
@@ -1564,9 +2095,55 @@
       "id": "nat-binary-predicates",
       "kind": "rule",
       "title": "Nat.beq and Nat.ble on literals compute to a Bool constructor",
-      "status": "unspecified",
+      "status": "specified",
       "plan_unit": "S6",
-      "cic_l": [],
+      "cic_l": [
+        {
+          "item": "CICL.LiteralRules.NatBinPred",
+          "kind": "inductive",
+          "file": "CICL/LiteralRules.lean"
+        },
+        {
+          "item": "CICL.LiteralRules.ReduceBinNatPredStep",
+          "kind": "def",
+          "file": "CICL/LiteralRules.lean"
+        },
+        {
+          "item": "CICL.LiteralRules.reduceBinNatPred_beq_refl",
+          "kind": "theorem",
+          "file": "CICL/LiteralRules.lean"
+        },
+        {
+          "item": "CICL.ExtendedJudgment.HasBoolDecls",
+          "kind": "structure",
+          "file": "CICL/ExtendedJudgment.lean"
+        },
+        {
+          "item": "CICL.ExtendedJudgment.HasNatBinPredSig",
+          "kind": "structure",
+          "file": "CICL/ExtendedJudgment.lean"
+        },
+        {
+          "item": "CICL.ExtendedJudgment.ExtendedJudgmentIn.natBinPredStep",
+          "kind": "constructor",
+          "file": "CICL/ExtendedJudgment.lean"
+        },
+        {
+          "item": "CICL.ExtendedJudgment.s6ExtendedSignature_hasBoolDecls",
+          "kind": "theorem",
+          "file": "CICL/ExtendedJudgment.lean"
+        },
+        {
+          "item": "CICL.ExtendedJudgment.s6ExtendedSignature_hasNatBinPred",
+          "kind": "theorem",
+          "file": "CICL/ExtendedJudgment.lean"
+        },
+        {
+          "item": "CICL.ExtendedJudgment.extended_natBeq_7_7_eq_true",
+          "kind": "theorem",
+          "file": "CICL/ExtendedJudgment.lean"
+        }
+      ],
       "extension": {
         "class": "nat-literal",
         "plan_requires_derived_rule": true
@@ -1601,9 +2178,65 @@
       "id": "defeq-nat-offset",
       "kind": "rule",
       "title": "Two Nat terms in zero or successor form are compared by their predecessors",
-      "status": "unspecified",
+      "status": "specified",
       "plan_unit": "S6",
-      "cic_l": [],
+      "cic_l": [
+        {
+          "item": "CICL.LiteralRules.IsNatZeroExpr",
+          "kind": "inductive",
+          "file": "CICL/LiteralRules.lean"
+        },
+        {
+          "item": "CICL.LiteralRules.IsNatSuccPred",
+          "kind": "inductive",
+          "file": "CICL/LiteralRules.lean"
+        },
+        {
+          "item": "CICL.LiteralRules.DefEqNatOffsetStep",
+          "kind": "inductive",
+          "file": "CICL/LiteralRules.lean"
+        },
+        {
+          "item": "CICL.LiteralRules.NatOffsetEquiv",
+          "kind": "inductive",
+          "file": "CICL/LiteralRules.lean"
+        },
+        {
+          "item": "CICL.LiteralRules.natOffsetEquiv_lit_constructor",
+          "kind": "theorem",
+          "file": "CICL/LiteralRules.lean"
+        },
+        {
+          "item": "CICL.CertifiedLibraryRules.DefEqTypedAtNat",
+          "kind": "def",
+          "file": "CICL/CertifiedLibraryRules.lean"
+        },
+        {
+          "item": "CICL.CertifiedLibraryRules.eraseLiterals_defEqNatOffsetStep_typed",
+          "kind": "theorem",
+          "file": "CICL/CertifiedLibraryRules.lean"
+        },
+        {
+          "item": "CICL.CertifiedLibraryRules.eraseLiterals_defEqNatOffsetStep_defEq",
+          "kind": "theorem",
+          "file": "CICL/CertifiedLibraryRules.lean"
+        },
+        {
+          "item": "CICL.CertifiedLibraryRules.eraseLiterals_natOffsetEquiv_defEq",
+          "kind": "theorem",
+          "file": "CICL/CertifiedLibraryRules.lean"
+        },
+        {
+          "item": "CICL.ExtendedJudgment.ExtendedJudgmentIn.natOffsetStep",
+          "kind": "constructor",
+          "file": "CICL/ExtendedJudgment.lean"
+        },
+        {
+          "item": "CICL.ExtendedJudgment.extended_natOffset_2",
+          "kind": "theorem",
+          "file": "CICL/ExtendedJudgment.lean"
+        }
+      ],
       "extension": {
         "class": "nat-literal",
         "plan_requires_derived_rule": true
@@ -1772,9 +2405,34 @@
           "item": "CICL.Level.eqv_sound",
           "kind": "theorem",
           "file": "CICL/LevelDecide.lean"
+        },
+        {
+          "item": "CICL.Level.eqv_complete",
+          "kind": "theorem",
+          "file": "CICL/NestedAndLevelRules.lean"
+        },
+        {
+          "item": "CICL.Level.eqv_iff_semEq",
+          "kind": "theorem",
+          "file": "CICL/NestedAndLevelRules.lean"
+        },
+        {
+          "item": "CICL.Level.imaxSeparation_semEq",
+          "kind": "theorem",
+          "file": "CICL/NestedAndLevelRules.lean"
+        },
+        {
+          "item": "CICL.Level.imaxSeparation_cicl_eqv",
+          "kind": "theorem",
+          "file": "CICL/NestedAndLevelRules.lean"
+        },
+        {
+          "item": "CICL.Level.imaxSeparation_cpp_incomplete",
+          "kind": "theorem",
+          "file": "CICL/NestedAndLevelRules.lean"
         }
       ],
-      "note": "The specification states the relation by evaluation (SemEq), and sortCong consumes it. The kernel's normal form and its simplifying constructors are one procedure for that relation; no theorem of the theory relates them to SemEq. Level.eqv is a different, sound procedure whose completeness is not proved.",
+      "note": "The specification states the relation by evaluation (SemEq), sortCong consumes it, and CICL.Level.eqv_iff_semEq proves that CICL.Level.eqv is both sound and complete for SemEq. Lean 4's C++ level normalizer + is_geq_core is strictly incomplete for SemEq on nested imax (CICL.Level.imaxSeparation_cpp_incomplete).",
       "anchors": [
         {
           "file": "src/kernel/level.cpp",
@@ -1933,9 +2591,29 @@
           "item": "CICL.Level.leq_sound",
           "kind": "theorem",
           "file": "CICL/LevelDecide.lean"
+        },
+        {
+          "item": "CICL.Level.leq_complete",
+          "kind": "theorem",
+          "file": "CICL/NestedAndLevelRules.lean"
+        },
+        {
+          "item": "CICL.Level.leq_iff_semLE",
+          "kind": "theorem",
+          "file": "CICL/NestedAndLevelRules.lean"
+        },
+        {
+          "item": "CICL.Level.cppIsGeqCore",
+          "kind": "def",
+          "file": "CICL/NestedAndLevelRules.lean"
+        },
+        {
+          "item": "CICL.Level.imaxSeparation_cpp_incomplete",
+          "kind": "theorem",
+          "file": "CICL/NestedAndLevelRules.lean"
         }
       ],
-      "note": "As for level-equivalence: the relation is stated by evaluation (SemLE) and consumed by the constructor universe bound; nothing relates the kernel's is_geq to it.",
+      "note": "The specification states the relation by evaluation (SemLE), consumed by the constructor universe bound, and CICL.Level.leq_iff_semLE proves that CICL.Level.leq is both sound and complete for SemLE. CICL.Level.cppIsGeqCore models level.cpp's is_geq_core and CICL.Level.imaxSeparation_cpp_incomplete witnesses its imax incompleteness relative to SemLE.",
       "anchors": [
         {
           "file": "src/kernel/level.cpp",
@@ -2004,9 +2682,50 @@
       "id": "defeq-constant-levels",
       "kind": "rule",
       "title": "The same constant at pairwise equivalent universe arguments is equal",
-      "status": "unspecified",
+      "status": "specified",
       "plan_unit": "S1",
-      "cic_l": [],
+      "cic_l": [
+        {
+          "item": "CICL.RecursorAndEtaRules.LevelsSemEq",
+          "kind": "inductive",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.ConstLevelDefEq",
+          "kind": "structure",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.levelSubstitution_semEq",
+          "kind": "theorem",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.constLevelDefEq_refuses_distinct_levels",
+          "kind": "theorem",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.constLevelDefEq_refuses_arity_mismatch",
+          "kind": "theorem",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.ExtendedJudgment.ExtendedJudgmentIn",
+          "kind": "inductive",
+          "file": "CICL/ExtendedJudgment.lean"
+        },
+        {
+          "item": "CICL.ExtendedJudgment.ExtendedJudgmentIn.constLevelCong",
+          "kind": "constructor",
+          "file": "CICL/ExtendedJudgment.lean"
+        },
+        {
+          "item": "CICL.ExtendedJudgment.extended_punit_constLevelCong",
+          "kind": "theorem",
+          "file": "CICL/ExtendedJudgment.lean"
+        }
+      ],
       "groundwork": [
         {
           "item": "CICL.Level.SemEq",
@@ -2186,9 +2905,50 @@
       "id": "defeq-structure-eta",
       "kind": "rule",
       "title": "Structure eta: a term equals the constructor of its projections",
-      "status": "unspecified",
+      "status": "partial",
       "plan_unit": "S4",
-      "cic_l": [],
+      "cic_l": [
+        {
+          "item": "CICL.RecursorAndEtaRules.IsNonRecStructure",
+          "kind": "def",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.mkStructProjections",
+          "kind": "def",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.expandEtaStruct",
+          "kind": "def",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.ProjectionsMatch",
+          "kind": "inductive",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.TryEtaStruct",
+          "kind": "inductive",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.punit_isNonRecStructure",
+          "kind": "theorem",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.nat_not_isNonRecStructure",
+          "kind": "theorem",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.expandEtaStruct_punit_zero_fields",
+          "kind": "theorem",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        }
+      ],
       "anchors": [
         {
           "file": "src/kernel/type_checker.cpp",
@@ -2217,15 +2977,57 @@
           ],
           "sha256": "385fa9a7943c58c03a2373d9ec2827bd9332b734e68fe06402d89a1a2fb5dc2e"
         }
-      ]
+      ],
+      "missing": "TryEtaStruct specifies non-recursive single-constructor structure eta expansion and fieldwise projection comparison, parameterized over external typing/conversion until S4 adds projection typing and structure eta to the extended judgment."
     },
     {
       "id": "defeq-unit-eta",
       "kind": "rule",
       "title": "Two terms of a structure type with no fields are equal",
-      "status": "unspecified",
+      "status": "specified",
       "plan_unit": "S4",
-      "cic_l": [],
+      "cic_l": [
+        {
+          "item": "CICL.RecursorAndEtaRules.IsUnitLikeInductive",
+          "kind": "def",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.DefEqUnitEta",
+          "kind": "inductive",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.isUnitLike_implies_isNonRecStructure",
+          "kind": "theorem",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.punit_isUnitLike",
+          "kind": "theorem",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.nat_not_isUnitLike",
+          "kind": "theorem",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.defEqUnitEta_refuses_nat",
+          "kind": "theorem",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.ExtendedJudgment.ExtendedJudgmentIn.unitEta",
+          "kind": "constructor",
+          "file": "CICL/ExtendedJudgment.lean"
+        },
+        {
+          "item": "CICL.ExtendedJudgment.extended_punit_unitEta",
+          "kind": "theorem",
+          "file": "CICL/ExtendedJudgment.lean"
+        }
+      ],
       "anchors": [
         {
           "file": "src/kernel/type_checker.cpp",
@@ -2359,6 +3161,21 @@
           "item": "CICL.FamilyHeaderView.declaration",
           "kind": "def",
           "file": "CICL/InductiveHeaders.lean"
+        },
+        {
+          "item": "CICL.LocalContextRules.punitHeaders",
+          "kind": "def",
+          "file": "CICL/LocalContextRules.lean"
+        },
+        {
+          "item": "CICL.LocalContextRules.natHeaders",
+          "kind": "def",
+          "file": "CICL/LocalContextRules.lean"
+        },
+        {
+          "item": "CICL.LocalContextRules.eqHeaders",
+          "kind": "def",
+          "file": "CICL/LocalContextRules.lean"
         }
       ],
       "note": "Specified as a stage. The stage is consumed by no admission rule yet: see inductive-admission.",
@@ -2500,6 +3317,36 @@
           "item": "CICL.ConstructorCertificate.declaration",
           "kind": "def",
           "file": "CICL/ConstructorChecks.lean"
+        },
+        {
+          "item": "CICL.LocalContextRules.punitConstructors",
+          "kind": "def",
+          "file": "CICL/LocalContextRules.lean"
+        },
+        {
+          "item": "CICL.LocalContextRules.natConstructors",
+          "kind": "def",
+          "file": "CICL/LocalContextRules.lean"
+        },
+        {
+          "item": "CICL.LocalContextRules.eqConstructors",
+          "kind": "def",
+          "file": "CICL/LocalContextRules.lean"
+        },
+        {
+          "item": "CICL.LocalContextRules.punitConstructorStage_typed",
+          "kind": "theorem",
+          "file": "CICL/LocalContextRules.lean"
+        },
+        {
+          "item": "CICL.LocalContextRules.natConstructorStage_typed",
+          "kind": "theorem",
+          "file": "CICL/LocalContextRules.lean"
+        },
+        {
+          "item": "CICL.LocalContextRules.eqConstructorStage_typed",
+          "kind": "theorem",
+          "file": "CICL/LocalContextRules.lean"
         }
       ],
       "note": "Specified as a stage; see inductive-admission.",
@@ -2648,9 +3495,90 @@
       "id": "inductive-admission",
       "kind": "rule",
       "title": "A mutual inductive block is admitted when every stage passes, and its constants are added",
-      "status": "unspecified",
+      "status": "specified",
       "plan_unit": "S2",
-      "cic_l": [],
+      "cic_l": [
+        {
+          "item": "CICL.InductiveAdmission.RecursorCertificate",
+          "kind": "structure",
+          "file": "CICL/InductiveAdmission.lean"
+        },
+        {
+          "item": "CICL.InductiveAdmission.BlockRecursorCertificate",
+          "kind": "structure",
+          "file": "CICL/InductiveAdmission.lean"
+        },
+        {
+          "item": "CICL.InductiveAdmission.recursorStage",
+          "kind": "def",
+          "file": "CICL/InductiveAdmission.lean"
+        },
+        {
+          "item": "CICL.InductiveAdmission.InductiveBlockAdmission",
+          "kind": "structure",
+          "file": "CICL/InductiveAdmission.lean"
+        },
+        {
+          "item": "CICL.InductiveAdmission.admitInductiveBlock",
+          "kind": "def",
+          "file": "CICL/InductiveAdmission.lean"
+        },
+        {
+          "item": "CICL.InductiveAdmission.WfExtendedSignature",
+          "kind": "inductive",
+          "file": "CICL/InductiveAdmission.lean"
+        },
+        {
+          "item": "CICL.InductiveAdmission.wfExtendedSignature_typing",
+          "kind": "theorem",
+          "file": "CICL/InductiveAdmission.lean"
+        },
+        {
+          "item": "CICL.InductiveAdmission.wfExtendedSignature_constant_safe",
+          "kind": "theorem",
+          "file": "CICL/InductiveAdmission.lean"
+        },
+        {
+          "item": "CICL.InductiveAdmission.wfExtendedSignature_constructor_backed",
+          "kind": "theorem",
+          "file": "CICL/InductiveAdmission.lean"
+        },
+        {
+          "item": "CICL.InductiveAdmission.emptyAndBoolSignature_wf",
+          "kind": "theorem",
+          "file": "CICL/InductiveAdmission.lean"
+        },
+        {
+          "item": "CICL.BlockAdmissionClosure.NestedBlockAdmission",
+          "kind": "structure",
+          "file": "CICL/BlockAdmissionClosure.lean"
+        },
+        {
+          "item": "CICL.BlockAdmissionClosure.WfFullSignature",
+          "kind": "inductive",
+          "file": "CICL/BlockAdmissionClosure.lean"
+        },
+        {
+          "item": "CICL.BlockAdmissionClosure.wfFullSignature_typing",
+          "kind": "theorem",
+          "file": "CICL/BlockAdmissionClosure.lean"
+        },
+        {
+          "item": "CICL.BlockAdmissionClosure.wfFullSignature_constant_safe",
+          "kind": "theorem",
+          "file": "CICL/BlockAdmissionClosure.lean"
+        },
+        {
+          "item": "CICL.BlockAdmissionClosure.wfFullSignature_constructor_backed",
+          "kind": "theorem",
+          "file": "CICL/BlockAdmissionClosure.lean"
+        },
+        {
+          "item": "CICL.BlockAdmissionClosure.wfFullSignature_lifts_to_extended",
+          "kind": "theorem",
+          "file": "CICL/BlockAdmissionClosure.lean"
+        }
+      ],
       "groundwork": [
         {
           "item": "CICL.InductiveBlock",
@@ -2668,7 +3596,6 @@
           "file": "CICL/Signature.lean"
         }
       ],
-      "note": "WfSignature.insert admits ConstantDecl.Ordinary payloads only, which excludes inductive, constructor, recursor and quotient payloads. The header and constructor certificates exist and are consumed by no admission rule.",
       "anchors": [
         {
           "file": "src/kernel/inductive.cpp",
@@ -2694,9 +3621,90 @@
       "id": "recursor-elimination-universe",
       "kind": "rule",
       "title": "Whether a recursor eliminates into every universe or into Prop only",
-      "status": "unspecified",
+      "status": "specified",
       "plan_unit": "S3",
-      "cic_l": [],
+      "cic_l": [
+        {
+          "item": "CICL.RecursorAndEtaRules.LevelNeverZero",
+          "kind": "def",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.ElimUniverseInput",
+          "kind": "structure",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.ElimOnlyAtUniverseZero",
+          "kind": "def",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.expectedRecLevelParams",
+          "kind": "def",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.eqShape_allows_large_elim",
+          "kind": "theorem",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.punitShape_allows_large_elim",
+          "kind": "theorem",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.natShape_allows_large_elim",
+          "kind": "theorem",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.nonemptyShape_elim_only_prop",
+          "kind": "theorem",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.BlockAdmissionClosure.FieldSafeForLargeElim",
+          "kind": "def",
+          "file": "CICL/BlockAdmissionClosure.lean"
+        },
+        {
+          "item": "CICL.BlockAdmissionClosure.CtorFieldsSafe",
+          "kind": "inductive",
+          "file": "CICL/BlockAdmissionClosure.lean"
+        },
+        {
+          "item": "CICL.BlockAdmissionClosure.SyntaxDrivenBlockLargeElim",
+          "kind": "inductive",
+          "file": "CICL/BlockAdmissionClosure.lean"
+        },
+        {
+          "item": "CICL.BlockAdmissionClosure.indexMention_field_safe",
+          "kind": "theorem",
+          "file": "CICL/BlockAdmissionClosure.lean"
+        },
+        {
+          "item": "CICL.BlockAdmissionClosure.propField_safe",
+          "kind": "theorem",
+          "file": "CICL/BlockAdmissionClosure.lean"
+        },
+        {
+          "item": "CICL.BlockAdmissionClosure.nonempty_bvar_field_not_safe",
+          "kind": "theorem",
+          "file": "CICL/BlockAdmissionClosure.lean"
+        },
+        {
+          "item": "CICL.BlockAdmissionClosure.elimOnlyAtUniverseZero_false_iff",
+          "kind": "theorem",
+          "file": "CICL/BlockAdmissionClosure.lean"
+        },
+        {
+          "item": "CICL.BlockAdmissionClosure.wrongNonemptyFieldSafeForLargeElim_refuted",
+          "kind": "theorem",
+          "file": "CICL/BlockAdmissionClosure.lean"
+        }
+      ],
       "anchors": [
         {
           "file": "src/kernel/inductive.cpp",
@@ -2722,9 +3730,75 @@
       "id": "recursor-types",
       "kind": "rule",
       "title": "The generated recursor: motives, minor premises, its type",
-      "status": "unspecified",
+      "status": "specified",
       "plan_unit": "S3",
-      "cic_l": [],
+      "cic_l": [
+        {
+          "item": "CICL.RecursorAndEtaRules.mkRecName",
+          "kind": "def",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.RecursorTypeSpec",
+          "kind": "structure",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.eq_recursorTypeSpec",
+          "kind": "theorem",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.punit_recursorTypeSpec",
+          "kind": "theorem",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.nat_recursorTypeSpec",
+          "kind": "theorem",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.recursorTypeSpec_refuses_wrong_levelParams",
+          "kind": "theorem",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.BlockAdmissionClosure.RecFieldKind",
+          "kind": "inductive",
+          "file": "CICL/BlockAdmissionClosure.lean"
+        },
+        {
+          "item": "CICL.BlockAdmissionClosure.synthesizeMotiveType",
+          "kind": "def",
+          "file": "CICL/BlockAdmissionClosure.lean"
+        },
+        {
+          "item": "CICL.BlockAdmissionClosure.synthesizeMinorType",
+          "kind": "def",
+          "file": "CICL/BlockAdmissionClosure.lean"
+        },
+        {
+          "item": "CICL.BlockAdmissionClosure.synthesizeRecursorType",
+          "kind": "def",
+          "file": "CICL/BlockAdmissionClosure.lean"
+        },
+        {
+          "item": "CICL.BlockAdmissionClosure.piArity_synthesizeRecursorType",
+          "kind": "theorem",
+          "file": "CICL/BlockAdmissionClosure.lean"
+        },
+        {
+          "item": "CICL.BlockAdmissionClosure.even_synthesized_recursorTypeSpec",
+          "kind": "theorem",
+          "file": "CICL/BlockAdmissionClosure.lean"
+        },
+        {
+          "item": "CICL.BlockAdmissionClosure.odd_synthesized_recursorTypeSpec",
+          "kind": "theorem",
+          "file": "CICL/BlockAdmissionClosure.lean"
+        }
+      ],
       "groundwork": [
         {
           "item": "CICL.RecursorDescriptor",
@@ -2820,9 +3894,95 @@
       "id": "recursor-rules",
       "kind": "rule",
       "title": "The generated computation rule of each constructor",
-      "status": "unspecified",
+      "status": "specified",
       "plan_unit": "S3",
-      "cic_l": [],
+      "cic_l": [
+        {
+          "item": "CICL.RecursorAndEtaRules.lamArity",
+          "kind": "def",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.RecursorRuleSpec",
+          "kind": "structure",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.AllRecursorRulesValid",
+          "kind": "inductive",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.eq_allRecursorRulesValid",
+          "kind": "theorem",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.punit_allRecursorRulesValid",
+          "kind": "theorem",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.nat_allRecursorRulesValid",
+          "kind": "theorem",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.RecursorAndEtaRules.recursorRuleSpec_refuses_wrong_lamArity",
+          "kind": "theorem",
+          "file": "CICL/RecursorAndEtaRules.lean"
+        },
+        {
+          "item": "CICL.BlockAdmissionClosure.synthesizeIHAppsAux",
+          "kind": "def",
+          "file": "CICL/BlockAdmissionClosure.lean"
+        },
+        {
+          "item": "CICL.BlockAdmissionClosure.synthesizeRecursorRuleRhs",
+          "kind": "def",
+          "file": "CICL/BlockAdmissionClosure.lean"
+        },
+        {
+          "item": "CICL.BlockAdmissionClosure.lamArity_synthesizeRecursorRuleRhs",
+          "kind": "theorem",
+          "file": "CICL/BlockAdmissionClosure.lean"
+        },
+        {
+          "item": "CICL.BlockAdmissionClosure.synthesizedNatSuccRule_has_recursive_IH_call",
+          "kind": "theorem",
+          "file": "CICL/BlockAdmissionClosure.lean"
+        },
+        {
+          "item": "CICL.BlockAdmissionClosure.synthesizedEvenSuccRhs_calls_oddRec",
+          "kind": "theorem",
+          "file": "CICL/BlockAdmissionClosure.lean"
+        },
+        {
+          "item": "CICL.BlockAdmissionClosure.synthesizedOddSuccRhs_calls_evenRec",
+          "kind": "theorem",
+          "file": "CICL/BlockAdmissionClosure.lean"
+        },
+        {
+          "item": "CICL.BlockAdmissionClosure.even_synthesized_allRecursorRulesValid",
+          "kind": "theorem",
+          "file": "CICL/BlockAdmissionClosure.lean"
+        },
+        {
+          "item": "CICL.BlockAdmissionClosure.odd_synthesized_allRecursorRulesValid",
+          "kind": "theorem",
+          "file": "CICL/BlockAdmissionClosure.lean"
+        },
+        {
+          "item": "CICL.BlockAdmissionClosure.reduceIota_synthesized_evenSucc",
+          "kind": "theorem",
+          "file": "CICL/BlockAdmissionClosure.lean"
+        },
+        {
+          "item": "CICL.BlockAdmissionClosure.wrongSynthesizedNatSuccDropsIH_refuted",
+          "kind": "theorem",
+          "file": "CICL/BlockAdmissionClosure.lean"
+        }
+      ],
       "groundwork": [
         {
           "item": "CICL.RecursorRule",
@@ -2846,9 +4006,65 @@
       "id": "nested-inductive-expansion",
       "kind": "rule",
       "title": "A nested occurrence is replaced by an auxiliary family of the same mutual block",
-      "status": "unspecified",
+      "status": "specified",
       "plan_unit": "S3",
-      "cic_l": [],
+      "cic_l": [
+        {
+          "item": "CICL.NestedInductive.ValidNestedParamAtDepth",
+          "kind": "def",
+          "file": "CICL/NestedAndLevelRules.lean"
+        },
+        {
+          "item": "CICL.NestedInductive.validNestedParamAtDepth_zero",
+          "kind": "theorem",
+          "file": "CICL/NestedAndLevelRules.lean"
+        },
+        {
+          "item": "CICL.NestedInductive.NestedSpecialization",
+          "kind": "structure",
+          "file": "CICL/NestedAndLevelRules.lean"
+        },
+        {
+          "item": "CICL.NestedInductive.ValidNestedSpecialization",
+          "kind": "structure",
+          "file": "CICL/NestedAndLevelRules.lean"
+        },
+        {
+          "item": "CICL.NestedInductive.NestedSpecialization.sourceApp",
+          "kind": "def",
+          "file": "CICL/NestedAndLevelRules.lean"
+        },
+        {
+          "item": "CICL.NestedInductive.NestedSpecialization.expandedApp",
+          "kind": "def",
+          "file": "CICL/NestedAndLevelRules.lean"
+        },
+        {
+          "item": "CICL.NestedInductive.inner_field_bvar_rejected_in_nested_param",
+          "kind": "theorem",
+          "file": "CICL/NestedAndLevelRules.lean"
+        },
+        {
+          "item": "CICL.NestedInductive.expandedApp_isFamilyApplication",
+          "kind": "theorem",
+          "file": "CICL/NestedAndLevelRules.lean"
+        },
+        {
+          "item": "CICL.BlockAdmissionClosure.matchNestedSpec",
+          "kind": "def",
+          "file": "CICL/BlockAdmissionClosure.lean"
+        },
+        {
+          "item": "CICL.BlockAdmissionClosure.expandNestedExpr",
+          "kind": "def",
+          "file": "CICL/BlockAdmissionClosure.lean"
+        },
+        {
+          "item": "CICL.BlockAdmissionClosure.expandNestedExpr_rose_ctor_under_pi",
+          "kind": "theorem",
+          "file": "CICL/BlockAdmissionClosure.lean"
+        }
+      ],
       "constants": [
         "_nested"
       ],
@@ -2940,9 +4156,95 @@
       "id": "nested-inductive-restore",
       "kind": "rule",
       "title": "The constants of the auxiliary block are translated back to the nested form",
-      "status": "unspecified",
+      "status": "specified",
       "plan_unit": "S3",
-      "cic_l": [],
+      "cic_l": [
+        {
+          "item": "CICL.NestedInductive.auxConstructorName",
+          "kind": "def",
+          "file": "CICL/NestedAndLevelRules.lean"
+        },
+        {
+          "item": "CICL.NestedInductive.restoreConstructorName",
+          "kind": "def",
+          "file": "CICL/NestedAndLevelRules.lean"
+        },
+        {
+          "item": "CICL.NestedInductive.restoreNestedHead",
+          "kind": "def",
+          "file": "CICL/NestedAndLevelRules.lean"
+        },
+        {
+          "item": "CICL.NestedInductive.mkAuxRecNamePairs",
+          "kind": "def",
+          "file": "CICL/NestedAndLevelRules.lean"
+        },
+        {
+          "item": "CICL.NestedInductive.restoreInductiveDescriptor",
+          "kind": "def",
+          "file": "CICL/NestedAndLevelRules.lean"
+        },
+        {
+          "item": "CICL.NestedInductive.restore_expandedApp_cancel",
+          "kind": "theorem",
+          "file": "CICL/NestedAndLevelRules.lean"
+        },
+        {
+          "item": "CICL.NestedInductive.restore_auxConstructorApp_cancel",
+          "kind": "theorem",
+          "file": "CICL/NestedAndLevelRules.lean"
+        },
+        {
+          "item": "CICL.NestedInductive.restore_auxRecursorConst",
+          "kind": "theorem",
+          "file": "CICL/NestedAndLevelRules.lean"
+        },
+        {
+          "item": "CICL.NestedInductive.restoreInductiveDescriptor_excludes_aux",
+          "kind": "theorem",
+          "file": "CICL/NestedAndLevelRules.lean"
+        },
+        {
+          "item": "CICL.BlockAdmissionClosure.restoreSpineAcrossSpecs",
+          "kind": "def",
+          "file": "CICL/BlockAdmissionClosure.lean"
+        },
+        {
+          "item": "CICL.BlockAdmissionClosure.restoreNestedExpr",
+          "kind": "def",
+          "file": "CICL/BlockAdmissionClosure.lean"
+        },
+        {
+          "item": "CICL.BlockAdmissionClosure.restoreRecursorRule",
+          "kind": "def",
+          "file": "CICL/BlockAdmissionClosure.lean"
+        },
+        {
+          "item": "CICL.BlockAdmissionClosure.restoreRecursorDecl",
+          "kind": "def",
+          "file": "CICL/BlockAdmissionClosure.lean"
+        },
+        {
+          "item": "CICL.BlockAdmissionClosure.restoreNestedExpr_expandNestedExpr_rose_ctor",
+          "kind": "theorem",
+          "file": "CICL/BlockAdmissionClosure.lean"
+        },
+        {
+          "item": "CICL.BlockAdmissionClosure.restoreNestedExpr_auxCtor_and_auxRec_under_lam",
+          "kind": "theorem",
+          "file": "CICL/BlockAdmissionClosure.lean"
+        },
+        {
+          "item": "CICL.BlockAdmissionClosure.restoreRecursorDecl_excludes_aux_families",
+          "kind": "theorem",
+          "file": "CICL/BlockAdmissionClosure.lean"
+        },
+        {
+          "item": "CICL.BlockAdmissionClosure.wrongNestedRestoreLeavesAuxFamilyInRecursor_refuted",
+          "kind": "theorem",
+          "file": "CICL/BlockAdmissionClosure.lean"
+        }
+      ],
       "anchors": [
         {
           "file": "src/kernel/inductive.cpp",

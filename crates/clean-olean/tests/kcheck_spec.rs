@@ -34,13 +34,29 @@
 //! `ann_closed_transport`, `value_scope_transport`, and `walkTele_inTele`).
 //! What it does not show: any step theorem (unit C3) or the landed C2 checker
 //! itself.
+//!
+//! Every pin, statement and specification alike, is the meaning digest
+//! (`support/meaning_digest.rs`) of its constant: the constant and every
+//! definition, inductive and compiler auxiliary of the package it reaches,
+//! down to Init. A recursive definition's body in its `._f` auxiliary, and a
+//! definition a pinned statement names, are inside its pin. The package is
+//! the theories the fixture family `kcheck_spec` compiles: `cic_l`,
+//! `cic_l_model` and `kcheck_spec`. Re-pin with
+//! `CLEAN_REPIN_STATEMENT_PINS=1 scripts/heavy_gate.sh run 16 kcheck-spec-repin --
+//! "$(rustup run trust rustc --print sysroot)/bin/targo" --unverified test -p
+//! clean-olean --locked --test kcheck_spec`: the run rewrites
+//! `theories/kcheck_spec/statement_pins.json` and still fails, and the next
+//! run without the variable confirms it.
+
+#[path = "support/meaning_digest.rs"]
+mod meaning_digest;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::OsStr;
 use std::path::Path;
 use std::process::Command;
 
-use clean_kernel::env::{ConstantInfo, Declaration, Environment};
+use clean_kernel::env::{Declaration, Environment};
 use clean_kernel::{Expr, KernelEnvError, KernelTypeError, Name, ReferenceRefusal};
 use clean_olean::recheck_closed::ClosedRecheckOptions;
 use clean_olean::test_support::compiled_fixture_dir;
@@ -48,7 +64,7 @@ use clean_olean::{
     load_module_with_deps, read_artifact, reference_base_closed, require_pinned_lean_lib_path,
     ArtifactDepth,
 };
-use sha2::{Digest, Sha256};
+use meaning_digest::{MeaningDigests, Package};
 
 /// The module that imports every other module of the package.
 const ROOT: &str = "KCheckSpec.Contracts";
@@ -179,9 +195,9 @@ const FORGED_STATEMENTS: &[(&str, &str)] = &[
     ),
 ];
 
-/// The definitions C2 and C3 are written against. A structure is pinned by its
-/// constructor, an inductive type by its constructors, a definition by its type
-/// and value together.
+/// The definitions C2 and C3 are written against, each pinned by its meaning
+/// digest. A constructor's digest reaches its inductive type and that type's
+/// every constructor, so a structure is pinned whole by its constructor.
 const SPECIFICATION: &[&str] = &[
     "KCheckSpec.Base.signatureEntry",
     "KCheckSpec.Base.SignatureFamilyMatches",
@@ -307,26 +323,43 @@ fn order_stems() -> Vec<&'static str> {
         .collect()
 }
 
-fn hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+/// Every pin key with the constant whose meaning digest it holds: each
+/// contract and forged statement's proposition definition in
+/// `KCheckSpec.Contracts`, then each specification object.
+fn pin_roots() -> Vec<(&'static str, Name)> {
+    CONTRACTS
+        .iter()
+        .chain(FORGED_STATEMENTS)
+        .map(|(_, pin)| (*pin, name(&format!("KCheckSpec.Contracts.{pin}"))))
+        .chain(
+            SPECIFICATION
+                .iter()
+                .copied()
+                .chain(IMPORTED_SPECIFICATION.iter().map(|(object, _)| *object))
+                .map(|object| (object, name(object))),
+        )
+        .collect()
 }
 
-fn digest(statement: &Expr) -> String {
-    let bytes = bincode::serde::encode_to_vec(statement, bincode::config::standard())
-        .expect("serialize a statement");
-    hex(&Sha256::digest(&bytes))
-}
-
-/// A definition's type and value, in that order, in one digest.
-fn constant_digest(constant: &ConstantInfo) -> String {
-    let mut hasher = Sha256::new();
-    for part in std::iter::once(&constant.type_).chain(constant.value.as_ref()) {
-        let bytes = bincode::serde::encode_to_vec(part, bincode::config::standard())
-            .expect("serialize a specification part");
-        hasher.update((bytes.len() as u64).to_le_bytes());
-        hasher.update(&bytes);
+/// Pin key → meaning digest over `env`, and one line describing the closures.
+fn pin_digests(env: &Environment, package: &Package) -> (BTreeMap<String, String>, String) {
+    let digests = MeaningDigests::new(env, package);
+    let mut pins = BTreeMap::new();
+    let mut roots = Vec::new();
+    for (key, root) in pin_roots() {
+        let digest = digests
+            .digest(&root)
+            .unwrap_or_else(|error| panic!("{error}"));
+        assert!(
+            pins.insert(key.to_owned(), digest).is_none(),
+            "{key} is listed twice"
+        );
+        roots.push(root);
     }
-    hex(&hasher.finalize())
+    let described = digests
+        .describe(package, &roots)
+        .unwrap_or_else(|error| panic!("{error}"));
+    (pins, described)
 }
 
 /// Copy a package directory without its `.lake` build directory.
@@ -473,6 +506,11 @@ fn kcheck_spec_rechecks_through_two_kernels_with_pinned_statements() {
     let mut loaded = Environment::for_lean_replay();
     let summaries = load_module_with_deps(&mut loaded, ROOT, &[compiled.clone(), lib])
         .expect("load the compiled specification");
+    let package = Package::of_fixture(
+        &compiled,
+        "kcheck_spec",
+        &["cic_l", "cic_l_model", "kcheck_spec"],
+    );
 
     // The subjects are the constants the package's own modules declare, read
     // from each artifact's name table, as in `kcheck_core.rs`: a `CICL.*`
@@ -526,27 +564,9 @@ fn kcheck_spec_rechecks_through_two_kernels_with_pinned_statements() {
     }
 
     // Untrusted calibration metadata, emitted before the expensive reference
-    // replay. It never grants a pass or skips any gate below.
-    let mut calibration_pins = BTreeMap::new();
-    for (_, pin) in CONTRACTS.iter().chain(FORGED_STATEMENTS) {
-        let contract = loaded
-            .get_const(&name(&format!("KCheckSpec.Contracts.{pin}")))
-            .expect("compiled independent contract");
-        calibration_pins.insert(
-            (*pin).to_owned(),
-            digest(contract.value.as_ref().expect("contract body")),
-        );
-    }
-    for object in SPECIFICATION
-        .iter()
-        .copied()
-        .chain(IMPORTED_SPECIFICATION.iter().map(|(n, _)| *n))
-    {
-        let constant = loaded.get_const(&name(object)).expect("compiled interface");
-        assert!(calibration_pins
-            .insert(object.to_owned(), constant_digest(constant))
-            .is_none());
-    }
+    // replay: the meaning digests over the loaded environment. It never grants
+    // a pass or skips any gate below.
+    let (calibration_pins, _) = pin_digests(&loaded, &package);
     eprintln!(
         "spec-calibration-pins {}",
         serde_json::to_string(&calibration_pins).expect("candidate pins")
@@ -629,19 +649,6 @@ fn kcheck_spec_rechecks_through_two_kernels_with_pinned_statements() {
             .clone()
             .unwrap_or_else(|| panic!("{pin} is not a proposition definition"))
     };
-    let mut observed_pins: BTreeMap<String, String> = BTreeMap::new();
-    for pin in CONTRACTS
-        .iter()
-        .chain(FORGED_STATEMENTS)
-        .map(|(_, pin)| *pin)
-    {
-        assert!(
-            observed_pins
-                .insert(pin.to_owned(), digest(&statement(pin)))
-                .is_none(),
-            "{pin} is listed twice"
-        );
-    }
     for (object, imported_from) in SPECIFICATION.iter().map(|object| (*object, None)).chain(
         IMPORTED_SPECIFICATION
             .iter()
@@ -667,16 +674,33 @@ fn kcheck_spec_rechecks_through_two_kernels_with_pinned_statements() {
         } else {
             assert!(targets.contains(&subject), "{object} is not a subject");
         }
-        let constant = loaded.get_const(&subject).expect("resident subject");
-        assert!(
-            observed_pins
-                .insert(object.to_owned(), constant_digest(constant))
-                .is_none(),
-            "{object} is listed twice"
-        );
     }
+    // Over what the reference kernel admitted.
+    let (observed_pins, described) = pin_digests(kernel.environment(), &package);
     for (pin, value) in &observed_pins {
         eprintln!("statement-pin {pin} {value}");
+    }
+    eprintln!("{described}");
+    // The case the landing check of Revision 5 found: `Term.instPis`'s value
+    // is a `List.brecOn` wrapper, its body is in `Term.instPis._f`, and the old
+    // pins of `instPis`, `walkTele_inTele` and `C3Owes` did not move when that
+    // body did. Each closure now holds the body.
+    {
+        let digests = MeaningDigests::new(kernel.environment(), &package);
+        let body = name("KCheckSpec.Term.instPis._f");
+        for pinned in [
+            "KCheckSpec.Term.instPis",
+            "KCheckSpec.walkTele_inTele",
+            "KCheckSpec.C3Owes",
+        ] {
+            let closure = digests
+                .closure(&name(pinned))
+                .unwrap_or_else(|error| panic!("{error}"));
+            assert!(
+                closure.contains(&body),
+                "the pin of {pinned} must reach the body of Term.instPis ({body})"
+            );
+        }
     }
     assert_eq!(
         observed_pins.len(),
@@ -698,10 +722,13 @@ fn kcheck_spec_rechecks_through_two_kernels_with_pinned_statements() {
         observed_closures, committed_closures,
         "observed axiom closures differ from theories/kcheck_spec/axiom_closures.json"
     );
-    assert_eq!(
-        observed_pins, committed_pins,
-        "observed statements differ from theories/kcheck_spec/statement_pins.json"
-    );
+    if let Err(failure) = meaning_digest::check_pins(
+        &observed_pins,
+        &committed_pins,
+        "theories/kcheck_spec/statement_pins.json",
+    ) {
+        panic!("{failure}");
+    }
 
     // Each theorem's own proof is admitted at the statement pinned for it, and
     // refused at `False`.

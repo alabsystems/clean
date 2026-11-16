@@ -169,7 +169,7 @@ pub(crate) const EXPR_MODEL_CORE: &[RetainedLiteral] = &[
     },
     RetainedLiteral {
         kind: LiteralKind::RecursiveDef,
-        source: r"def lift_bvar_at (idx : Nat) (cutoff : Nat) (amount : Nat) : KExpr := Nat.rec (fun _ => KExpr) (KExpr.bvar (Nat.add idx amount)) (fun _ _ => KExpr.bvar idx) (Nat.sub cutoff idx)",
+        source: r"def lift_bvar_at (idx : Nat) (cutoff : Nat) (amount : Nat) : KExpr := @Nat.rec (fun _ => KExpr) (KExpr.bvar (Nat.add idx amount)) (fun _ _ => KExpr.bvar idx) (Nat.sub cutoff idx)",
         description: r"Compute lifted bvar: if idx >= cutoff, add amount; else keep. Part of #410.",
     },
     RetainedLiteral {
@@ -193,12 +193,12 @@ pub(crate) const EXPR_MODEL_CORE: &[RetainedLiteral] = &[
     },
     RetainedLiteral {
         kind: LiteralKind::RecursiveDef,
-        source: r"def instantiate_bvar_geq (idx : Nat) (depth : Nat) (val : KExpr) : KExpr := Nat.rec (fun _ => KExpr) (lift_at val Nat.zero depth) (fun _ _ => KExpr.bvar (Nat.sub idx (Nat.succ Nat.zero))) (Nat.sub idx depth)",
+        source: r"def instantiate_bvar_geq (idx : Nat) (depth : Nat) (val : KExpr) : KExpr := @Nat.rec (fun _ => KExpr) (lift_at val Nat.zero depth) (fun _ _ => KExpr.bvar (Nat.sub idx (Nat.succ Nat.zero))) (Nat.sub idx depth)",
         description: r"Helper: if idx == depth, substitute with lifted val; if idx > depth, decrement. Part of #643.",
     },
     RetainedLiteral {
         kind: LiteralKind::RecursiveDef,
-        source: r"def instantiate_bvar_at (idx : Nat) (depth : Nat) (val : KExpr) : KExpr := Nat.rec (fun _ => KExpr) (instantiate_bvar_geq idx depth val) (fun _ _ => KExpr.bvar idx) (Nat.sub depth idx)",
+        source: r"def instantiate_bvar_at (idx : Nat) (depth : Nat) (val : KExpr) : KExpr := @Nat.rec (fun _ => KExpr) (instantiate_bvar_geq idx depth val) (fun _ _ => KExpr.bvar idx) (Nat.sub depth idx)",
         description: r"Helper: three-way comparison idx vs depth for bvar substitution. Part of #643.",
     },
     RetainedLiteral {

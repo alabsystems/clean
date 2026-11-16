@@ -210,6 +210,23 @@ def main():
             print(f"| {name} | {target} | {added} | {changed} | {counts.get('removed', 0)} |")
         print('\nAll target files await semantic qualification; unchanged files receive no parity credit.')
 
+    # Re-derive the seed inventory rather than trusting summary literals. This
+    # is offline accounting only and cannot mint readiness or timing evidence.
+    import replacement_performance_inventory as perf
+    performance_dir = ROOT / perf.OUTPUT
+    if performance_dir.exists():
+        objects, provenance = perf.load_inputs(ROOT)
+        manifest = perf.build_manifest(objects['cases'], objects['files'], provenance)
+        perf.check_artifacts(performance_dir, perf.artifacts(manifest))
+        counts = manifest['summary']
+        print('\nPerformance workload seed inventory (no timing or parity credit):')
+        print(f"P01: {counts['p01_seed_workloads']} import seeds; "
+              f"P02: {counts['p02_seed_variants']} elaborate variants over {counts['p02_seed_roots']} roots. "
+              f"{counts['b01_variants_deferred']} other B01 variants remain explicitly deferred.")
+        print(f"Ready {counts['ready']}; measured {counts['measured']}; qualified {counts['qualified']}; "
+              f"full workload manifests closed {counts['full_workload_manifests_closed']}. "
+              'Compatible Mathlib, complete dependencies and equivalent execution contracts remain open.')
+
 
 
 if __name__ == '__main__':

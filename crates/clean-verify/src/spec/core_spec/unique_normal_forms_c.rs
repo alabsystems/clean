@@ -80,7 +80,7 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (env : RecEnv) (e : KExpr) => ",
-                    "forall (e' : KExpr), par_reduces_c env e e' -> Eq KExpr e e'"
+                    "forall (e' : KExpr), par_reduces_c env e e' -> @Eq KExpr e e'"
                 )
                 .to_string(),
             ),
@@ -118,24 +118,24 @@ impl Specification {
             name: "normal_c_star_eq".to_string(),
             type_src: concat!(
                 "forall (env : RecEnv) (n : KExpr) (m : KExpr), ",
-                "is_normal_c env n -> par_reduces_c_star env n m -> Eq KExpr n m"
+                "is_normal_c env n -> par_reduces_c_star env n m -> @Eq KExpr n m"
             )
             .to_string(),
             value_src: Some(
                 concat!(
                     "fun (env : RecEnv) (n : KExpr) (m : KExpr) ",
                     "(hn : is_normal_c env n) (h : par_reduces_c_star env n m) => ",
-                    "par_reduces_c_star.rec env ",
+                    "@par_reduces_c_star.rec env ",
                     "(fun (x : KExpr) (y : KExpr) (_h : par_reduces_c_star env x y) => ",
-                    "is_normal_c env x -> Eq KExpr x y) ",
-                    "(fun (e : KExpr) (_hx : is_normal_c env e) => Eq.refl KExpr e) ",
+                    "is_normal_c env x -> @Eq KExpr x y) ",
+                    "(fun (e : KExpr) (_hx : is_normal_c env e) => @Eq.refl KExpr e) ",
                     "(fun (e : KExpr) (e' : KExpr) (e'' : KExpr) ",
                     "(hstep : par_reduces_c env e e') ",
                     "(_htail : par_reduces_c_star env e' e'') ",
-                    "(ih : is_normal_c env e' -> Eq KExpr e' e'') ",
+                    "(ih : is_normal_c env e' -> @Eq KExpr e' e'') ",
                     "(hx : is_normal_c env e) => ",
-                    "Eq.trans KExpr e e' e'' (hx e' hstep) ",
-                    "(ih (Eq.subst KExpr (fun (z : KExpr) => is_normal_c env z) ",
+                    "@Eq.trans KExpr e e' e'' (hx e' hstep) ",
+                    "(ih (@Eq.subst KExpr (fun (z : KExpr) => is_normal_c env z) ",
                     "e e' (hx e' hstep) hx))) ",
                     "n m h hn"
                 )
@@ -184,7 +184,7 @@ impl Specification {
                 "RecEnvClosed env -> RecEnvLiftClosed env -> ",
                 "par_reduces_c_star env e n1 -> par_reduces_c_star env e n2 -> ",
                 "is_normal_c env n1 -> is_normal_c env n2 -> ",
-                "Eq KExpr n1 n2"
+                "@Eq KExpr n1 n2"
             )
             .to_string(),
             value_src: Some(
@@ -195,12 +195,12 @@ impl Specification {
                     "(h1 : par_reduces_c_star env e n1) (h2 : par_reduces_c_star env e n2) ",
                     "(hn1 : is_normal_c env n1) (hn2 : is_normal_c env n2) => ",
                     "@par_strips_witness_c_star.rec env n1 n2 ",
-                    "(fun (_w : par_strips_witness_c_star env n1 n2) => Eq KExpr n1 n2) ",
+                    "(fun (_w : par_strips_witness_c_star env n1 n2) => @Eq KExpr n1 n2) ",
                     "(fun (e3 : KExpr) ",
                     "(l1 : par_reduces_c_star env n1 e3) (l2 : par_reduces_c_star env n2 e3) => ",
-                    "Eq.trans KExpr n1 e3 n2 ",
+                    "@Eq.trans KExpr n1 e3 n2 ",
                     "(normal_c_star_eq env n1 e3 hn1 l1) ",
-                    "(Eq.symm KExpr n2 e3 (normal_c_star_eq env n2 e3 hn2 l2))) ",
+                    "(@Eq.symm KExpr n2 e3 (normal_c_star_eq env n2 e3 hn2 l2))) ",
                     "(par_reduces_c_star_diamond env e n1 n2 i1 i2 i3 i4 h1 h2)"
                 )
                 .to_string(),
@@ -255,7 +255,7 @@ impl Specification {
                 "par_reduces_c_star (red_rec faithful_red_env) e n2 -> ",
                 "is_normal_c (red_rec faithful_red_env) n1 -> ",
                 "is_normal_c (red_rec faithful_red_env) n2 -> ",
-                "Eq KExpr n1 n2"
+                "@Eq KExpr n1 n2"
             )
             .to_string(),
             value_src: Some(

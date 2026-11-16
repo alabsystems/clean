@@ -76,20 +76,20 @@ impl Specification {
             name: "delta_reduct_app_eq".to_string(),
             type_src: concat!(
                 "forall (f : KExpr) (x : KExpr) (val : KExpr), ",
-                "Eq KExpr (apply_spine (kapp_args (KExpr.app f x)) val) ",
+                "@Eq KExpr (apply_spine (kapp_args (KExpr.app f x)) val) ",
                 "(KExpr.app (apply_spine (kapp_args f) val) x)"
             )
             .to_string(),
             value_src: Some(
                 concat!(
                     "fun (f : KExpr) (x : KExpr) (val : KExpr) => ",
-                    "Eq.trans KExpr ",
+                    "@Eq.trans KExpr ",
                     "(apply_spine (kapp_args (KExpr.app f x)) val) ",
-                    "(apply_spine (list_append (kapp_args f) (ListType.cons KExpr x (ListType.nil KExpr))) val) ",
+                    "(apply_spine (list_append (kapp_args f) (@ListType.cons KExpr x (@ListType.nil KExpr))) val) ",
                     "(KExpr.app (apply_spine (kapp_args f) val) x) ",
-                    "(Eq.cong (ListType KExpr) KExpr (fun (L : ListType KExpr) => apply_spine L val) ",
+                    "(@Eq.cong (ListType KExpr) KExpr (fun (L : ListType KExpr) => apply_spine L val) ",
                     "(kapp_args (KExpr.app f x)) ",
-                    "(list_append (kapp_args f) (ListType.cons KExpr x (ListType.nil KExpr))) ",
+                    "(list_append (kapp_args f) (@ListType.cons KExpr x (@ListType.nil KExpr))) ",
                     "(kapp_args_app f x)) ",
                     "(apply_spine_snoc (kapp_args f) x val)"
                 )
@@ -128,33 +128,33 @@ impl Specification {
             let ax = "(KExpr.app f x)";
             let af0x = "(KExpr.app f0 x)";
             let f2 = format!(
-                "(fun (val : KExpr) => OptionType.some KExpr (apply_spine (kapp_args {ax}) val))"
+                "(fun (val : KExpr) => @OptionType.some KExpr (apply_spine (kapp_args {ax}) val))"
             );
             let query_f = "(kdef_value_at env dname (kexpr_const_levels (kapp_fn f)))";
             let query_ax = format!("(kdef_value_at env dname (kexpr_const_levels (kapp_fn {ax})))");
             let f1 = format!("(fun (dname : Name) => opt_bind KExpr KExpr {query_ax} {f2})");
             // Level-1 app-side head lookup: const-name survives app (kapp_fn_app).
             let h1a = format!(
-                "(Eq.trans (OptionType Name) (kexpr_const_name (kapp_fn {ax})) (kexpr_const_name (kapp_fn f)) (OptionType.some Name dname) \
-                 (Eq.cong KExpr (OptionType Name) (fun (H : KExpr) => kexpr_const_name H) (kapp_fn {ax}) (kapp_fn f) (kapp_fn_app f x)) \
+                "(@Eq.trans (OptionType Name) (kexpr_const_name (kapp_fn {ax})) (kexpr_const_name (kapp_fn f)) (@OptionType.some Name dname) \
+                 (@Eq.cong KExpr (OptionType Name) (fun (H : KExpr) => kexpr_const_name H) (kapp_fn {ax}) (kapp_fn f) (kapp_fn_app f x)) \
                  h1)"
             );
             // kapp_fn_app preserves the entire head, hence its actual universe
             // arguments and the arity-checked, instantiated value lookup.
             let h2a = format!(
-                "(Eq.trans (OptionType KExpr) {query_ax} {query_f} (OptionType.some KExpr val) \
-                 (Eq.cong KExpr (OptionType KExpr) \
+                "(@Eq.trans (OptionType KExpr) {query_ax} {query_f} (@OptionType.some KExpr val) \
+                 (@Eq.cong KExpr (OptionType KExpr) \
                    (fun (H : KExpr) => kdef_value_at env dname (kexpr_const_levels H)) \
                    (kapp_fn {ax}) (kapp_fn f) (kapp_fn_app f x)) h2)"
             );
             // Level-2: some (apply_spine (kapp_args (app f x)) val) = some (app f0 x).
             // reduct factors (delta_reduct_app_eq) then app-congs the f0-equation (h2r).
             let hf2 = format!(
-                "(Eq.cong KExpr (OptionType KExpr) (fun (X : KExpr) => OptionType.some KExpr X) \
+                "(@Eq.cong KExpr (OptionType KExpr) (fun (X : KExpr) => @OptionType.some KExpr X) \
                  (apply_spine (kapp_args {ax}) val) {af0x} \
-                 (Eq.trans KExpr (apply_spine (kapp_args {ax}) val) (KExpr.app (apply_spine (kapp_args f) val) x) {af0x} \
+                 (@Eq.trans KExpr (apply_spine (kapp_args {ax}) val) (KExpr.app (apply_spine (kapp_args f) val) x) {af0x} \
                  (delta_reduct_app_eq f x val) \
-                 (Eq.cong KExpr KExpr (fun (Y : KExpr) => KExpr.app Y x) (apply_spine (kapp_args f) val) f0 \
+                 (@Eq.cong KExpr KExpr (fun (Y : KExpr) => KExpr.app Y x) (apply_spine (kapp_args f) val) f0 \
                  (option_some_inj KExpr (apply_spine (kapp_args f) val) f0 h2r))))"
             );
             let recon = format!(
@@ -163,17 +163,17 @@ impl Specification {
             );
             let kont = format!(
                 "(fun (dname : Name) (val : KExpr) \
-                 (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn f)) (OptionType.some Name dname)) \
-                 (h2 : Eq (OptionType KExpr) {query_f} (OptionType.some KExpr val)) \
-                 (h2r : Eq (OptionType KExpr) (OptionType.some KExpr (apply_spine (kapp_args f) val)) (OptionType.some KExpr f0)) => \
+                 (h1 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn f)) (@OptionType.some Name dname)) \
+                 (h2 : @Eq (OptionType KExpr) {query_f} (@OptionType.some KExpr val)) \
+                 (h2r : @Eq (OptionType KExpr) (@OptionType.some KExpr (apply_spine (kapp_args f) val)) (@OptionType.some KExpr f0)) => \
                  {recon})"
             );
             let goal_c = format!(
-                "(Eq (OptionType KExpr) (delta_reduct env {ax}) (OptionType.some KExpr {af0x}))"
+                "(@Eq (OptionType KExpr) (delta_reduct env {ax}) (@OptionType.some KExpr {af0x}))"
             );
             let value = format!(
                 "fun (env : DefEnv) (f : KExpr) (f0 : KExpr) (x : KExpr) \
-                 (h : Eq (OptionType KExpr) (delta_reduct env f) (OptionType.some KExpr f0)) => \
+                 (h : @Eq (OptionType KExpr) (delta_reduct env f) (@OptionType.some KExpr f0)) => \
                  delta_reduct_some_inv env f f0 {goal_c} h {kont}"
             );
             self.add_definition(SpecDefinition {
@@ -225,7 +225,7 @@ impl Specification {
             let afa = "(KExpr.app f arg)";
             let f0v = "(apply_spine (kapp_args f) val)";
             let f2f =
-                "(fun (val : KExpr) => OptionType.some KExpr (apply_spine (kapp_args f) val))"
+                "(fun (val : KExpr) => @OptionType.some KExpr (apply_spine (kapp_args f) val))"
                     .to_string();
             let query_f = "(kdef_value_at env dname (kexpr_const_levels (kapp_fn f)))";
             let query_afa =
@@ -233,42 +233,42 @@ impl Specification {
             let f1f = format!("(fun (dname : Name) => opt_bind KExpr KExpr {query_f} {f2f})");
             // head lookup on f from the app-head lookup (kapp_fn_app, symm).
             let h1f = format!(
-                "(Eq.trans (OptionType Name) (kexpr_const_name (kapp_fn f)) (kexpr_const_name (kapp_fn {afa})) (OptionType.some Name dname) \
-                 (Eq.cong KExpr (OptionType Name) (fun (H : KExpr) => kexpr_const_name H) (kapp_fn f) (kapp_fn {afa}) \
-                 (Eq.symm KExpr (kapp_fn {afa}) (kapp_fn f) (kapp_fn_app f arg))) \
+                "(@Eq.trans (OptionType Name) (kexpr_const_name (kapp_fn f)) (kexpr_const_name (kapp_fn {afa})) (@OptionType.some Name dname) \
+                 (@Eq.cong KExpr (OptionType Name) (fun (H : KExpr) => kexpr_const_name H) (kapp_fn f) (kapp_fn {afa}) \
+                 (@Eq.symm KExpr (kapp_fn {afa}) (kapp_fn f) (kapp_fn_app f arg))) \
                  h1)"
             );
             let h2f = format!(
-                "(Eq.trans (OptionType KExpr) {query_f} {query_afa} (OptionType.some KExpr val) \
-                 (Eq.cong KExpr (OptionType KExpr) \
+                "(@Eq.trans (OptionType KExpr) {query_f} {query_afa} (@OptionType.some KExpr val) \
+                 (@Eq.cong KExpr (OptionType KExpr) \
                    (fun (H : KExpr) => kdef_value_at env dname (kexpr_const_levels H)) \
                    (kapp_fn f) (kapp_fn {afa}) \
-                   (Eq.symm KExpr (kapp_fn {afa}) (kapp_fn f) (kapp_fn_app f arg))) h2)"
+                   (@Eq.symm KExpr (kapp_fn {afa}) (kapp_fn f) (kapp_fn_app f arg))) h2)"
             );
             // reduct slot on f is Eq.refl (f0 := apply_spine (kapp_args f) val).
-            let hf2f = format!("(Eq.refl (OptionType KExpr) (OptionType.some KExpr {f0v}))");
+            let hf2f = format!("(@Eq.refl (OptionType KExpr) (@OptionType.some KExpr {f0v}))");
             let reduct_f = format!(
                 "opt_bind_some_intro Name KExpr (kexpr_const_name (kapp_fn f)) {f1f} dname {f0v} {h1f} \
                  (opt_bind_some_intro KExpr KExpr {query_f} {f2f} val {f0v} {h2f} {hf2f})"
             );
             // b = app f0 arg : b = apply_spine (kapp_args (app f arg)) val = app f0 arg.
             let beq = format!(
-                "(Eq.trans KExpr b (apply_spine (kapp_args {afa}) val) (KExpr.app {f0v} arg) \
-                 (Eq.symm KExpr (apply_spine (kapp_args {afa}) val) b \
+                "(@Eq.trans KExpr b (apply_spine (kapp_args {afa}) val) (KExpr.app {f0v} arg) \
+                 (@Eq.symm KExpr (apply_spine (kapp_args {afa}) val) b \
                  (option_some_inj KExpr (apply_spine (kapp_args {afa}) val) b h2r)) \
                  (delta_reduct_app_eq f arg val))"
             );
             let kont = format!(
                 "(fun (dname : Name) (val : KExpr) \
-                 (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn {afa})) (OptionType.some Name dname)) \
-                 (h2 : Eq (OptionType KExpr) {query_afa} (OptionType.some KExpr val)) \
-                 (h2r : Eq (OptionType KExpr) (OptionType.some KExpr (apply_spine (kapp_args {afa}) val)) (OptionType.some KExpr b)) => \
+                 (h1 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn {afa})) (@OptionType.some Name dname)) \
+                 (h2 : @Eq (OptionType KExpr) {query_afa} (@OptionType.some KExpr val)) \
+                 (h2r : @Eq (OptionType KExpr) (@OptionType.some KExpr (apply_spine (kapp_args {afa}) val)) (@OptionType.some KExpr b)) => \
                  k {f0v} ({reduct_f}) ({beq}))"
             );
             let value = format!(
                 "fun (env : DefEnv) (f : KExpr) (arg : KExpr) (b : KExpr) (C : Prop) \
-                 (h : Eq (OptionType KExpr) (delta_reduct env {afa}) (OptionType.some KExpr b)) \
-                 (k : forall (f0 : KExpr), delta_step env f f0 -> Eq KExpr b (KExpr.app f0 arg) -> C) => \
+                 (h : @Eq (OptionType KExpr) (delta_reduct env {afa}) (@OptionType.some KExpr b)) \
+                 (k : forall (f0 : KExpr), delta_step env f f0 -> @Eq KExpr b (KExpr.app f0 arg) -> C) => \
                  delta_reduct_some_inv env {afa} b C h {kont}"
             );
             self.add_definition(SpecDefinition {
@@ -276,7 +276,7 @@ impl Specification {
                 type_src: concat!(
                     "forall (env : DefEnv) (f : KExpr) (arg : KExpr) (b : KExpr) (C : Prop), ",
                     "delta_step env (KExpr.app f arg) b -> ",
-                    "(forall (f0 : KExpr), delta_step env f f0 -> Eq KExpr b (KExpr.app f0 arg) -> C) -> C"
+                    "(forall (f0 : KExpr), delta_step env f f0 -> @Eq KExpr b (KExpr.app f0 arg) -> C) -> C"
                 )
                 .to_string(),
                 value_src: Some(value),
@@ -394,20 +394,20 @@ impl Specification {
             let star_call = |a: &str, b: &str, hab: &str| {
                 if vary_first {
                     format!(
-                        "({star_cong} env {a} {b} {fixed} {fixed} {hab} (delta_cong_star.refl env {fixed}))"
+                        "({star_cong} env {a} {b} {fixed} {fixed} {hab} (@delta_cong_star.refl env {fixed}))"
                     )
                 } else {
                     format!(
-                        "({star_cong} env {fixed} {fixed} {a} {b} (delta_cong_star.refl env {fixed}) {hab})"
+                        "({star_cong} env {fixed} {fixed} {a} {b} (@delta_cong_star.refl env {fixed}) {hab})"
                     )
                 }
             };
             // delta_cong env (wrap C) (wrap D) from hcd : delta_cong env C D.
             let single_call = |c: &str, d: &str, hcd: &str| {
                 if vary_first {
-                    format!("({single_cong} env {c} {d} {fixed} {hcd})")
+                    format!("(@{single_cong} env {c} {d} {fixed} {hcd})")
                 } else {
-                    format!("({single_cong} env {fixed} {c} {d} {hcd})")
+                    format!("(@{single_cong} env {fixed} {c} {d} {hcd})")
                 }
             };
             let type_src = format!(
@@ -424,9 +424,9 @@ impl Specification {
                  (fun (_w : par_strong_join_d env u0 u1) => \
                  par_strong_join_d env {wrap_u0} {wrap_u1}) \
                  (fun (hz : delta_cong_star env u0 u1) => \
-                 par_strong_join_d.zero env {wrap_u0} {wrap_u1} {star_zero}) \
+                 @par_strong_join_d.zero env {wrap_u0} {wrap_u1} {star_zero}) \
                  (fun (dd : KExpr) (hbd : delta_cong_star env u0 dd) (hcd : delta_cong env u1 dd) => \
-                 par_strong_join_d.one env {wrap_u0} {wrap_u1} {wrap_dd} {star_one} {single_one}) \
+                 @par_strong_join_d.one env {wrap_u0} {wrap_u1} {wrap_dd} {star_one} {single_one}) \
                  h",
                 wrap_u0 = wrap("u0"),
                 wrap_u1 = wrap("u1"),
@@ -485,12 +485,12 @@ impl Specification {
                     "(fun (_w : par_strong_join_d env u0 u1) => ",
                     "par_strong_join_d env (KExpr.proj s i u0) (KExpr.proj s i u1)) ",
                     "(fun (hz : delta_cong_star env u0 u1) => ",
-                    "par_strong_join_d.zero env (KExpr.proj s i u0) (KExpr.proj s i u1) ",
+                    "@par_strong_join_d.zero env (KExpr.proj s i u0) (KExpr.proj s i u1) ",
                     "(delta_cong_star_proj env s i u0 u1 hz)) ",
                     "(fun (dd : KExpr) (hbd : delta_cong_star env u0 dd) (hcd : delta_cong env u1 dd) => ",
-                    "par_strong_join_d.one env (KExpr.proj s i u0) (KExpr.proj s i u1) (KExpr.proj s i dd) ",
+                    "@par_strong_join_d.one env (KExpr.proj s i u0) (KExpr.proj s i u1) (KExpr.proj s i dd) ",
                     "(delta_cong_star_proj env s i u0 dd hbd) ",
-                    "(delta_cong.proj_s env s i u1 dd hcd)) ",
+                    "(@delta_cong.proj_s env s i u1 dd hcd)) ",
                     "h"
                 )
                 .to_string(),
@@ -540,22 +540,22 @@ impl Specification {
             let star_call = |a: &str, b: &str, hab: &str| {
                 match slot {
                 0 => format!(
-                    "(delta_cong_star_let env {a} {b} {f1} {f1} {f2} {f2} {hab} (delta_cong_star.refl env {f1}) (delta_cong_star.refl env {f2}))"
+                    "(delta_cong_star_let env {a} {b} {f1} {f1} {f2} {f2} {hab} (@delta_cong_star.refl env {f1}) (@delta_cong_star.refl env {f2}))"
                 ),
                 1 => format!(
-                    "(delta_cong_star_let env {f1} {f1} {a} {b} {f2} {f2} (delta_cong_star.refl env {f1}) {hab} (delta_cong_star.refl env {f2}))"
+                    "(delta_cong_star_let env {f1} {f1} {a} {b} {f2} {f2} (@delta_cong_star.refl env {f1}) {hab} (@delta_cong_star.refl env {f2}))"
                 ),
                 _ => format!(
-                    "(delta_cong_star_let env {f1} {f1} {f2} {f2} {a} {b} (delta_cong_star.refl env {f1}) (delta_cong_star.refl env {f2}) {hab})"
+                    "(delta_cong_star_let env {f1} {f1} {f2} {f2} {a} {b} (@delta_cong_star.refl env {f1}) (@delta_cong_star.refl env {f2}) {hab})"
                 ),
             }
             };
             // delta_cong env (wrap C) (wrap D) from hcd : delta_cong env C D
             // (ctor arg orders: let_t (t t' v b), let_v (t v v' b), let_b (t v b b')).
             let single_call = |c: &str, d: &str, hcd: &str| match slot {
-                0 => format!("({single_cong} env {c} {d} {f1} {f2} {hcd})"),
-                1 => format!("({single_cong} env {f1} {c} {d} {f2} {hcd})"),
-                _ => format!("({single_cong} env {f1} {f2} {c} {d} {hcd})"),
+                0 => format!("(@{single_cong} env {c} {d} {f1} {f2} {hcd})"),
+                1 => format!("(@{single_cong} env {f1} {c} {d} {f2} {hcd})"),
+                _ => format!("(@{single_cong} env {f1} {f2} {c} {d} {hcd})"),
             };
             let type_src = format!(
                 "forall (env : RedEnv) (u0 : KExpr) (u1 : KExpr) ({f1} : KExpr) ({f2} : KExpr), \
@@ -571,9 +571,9 @@ impl Specification {
                  (fun (_w : par_strong_join_d env u0 u1) => \
                  par_strong_join_d env {wrap_u0} {wrap_u1}) \
                  (fun (hz : delta_cong_star env u0 u1) => \
-                 par_strong_join_d.zero env {wrap_u0} {wrap_u1} {star_zero}) \
+                 @par_strong_join_d.zero env {wrap_u0} {wrap_u1} {star_zero}) \
                  (fun (dd : KExpr) (hbd : delta_cong_star env u0 dd) (hcd : delta_cong env u1 dd) => \
-                 par_strong_join_d.one env {wrap_u0} {wrap_u1} {wrap_dd} {star_one} {single_one}) \
+                 @par_strong_join_d.one env {wrap_u0} {wrap_u1} {wrap_dd} {star_one} {single_one}) \
                  h",
                 wrap_u0 = wrap("u0"),
                 wrap_u1 = wrap("u1"),
@@ -773,8 +773,8 @@ fn delta_strips_semi_strip_of_strong_proof() -> String {
     let refl_arm = concat!(
         "(fun (r : KExpr) => ",
         "fun (b : KExpr) (hrb : delta_cong env r b) => ",
-        "par_strips_witness_d_star.intro env b r b ",
-        "(delta_cong_star.refl env b) ",
+        "@par_strips_witness_d_star.intro env b r b ",
+        "(@delta_cong_star.refl env b) ",
         "(delta_cong_subsumes_star env r b hrb))"
     );
     // step arm: head x => x1, tail x1 =>* y, ih on the tail. Strip a single x => b.
@@ -786,9 +786,9 @@ fn delta_strips_semi_strip_of_strong_proof() -> String {
     // with the tail x1 =>* y to land b =>* y; meet at y (no IH needed).
     let zero_arm = concat!(
         "(fun (hbx1 : delta_cong_star env b x1) => ",
-        "par_strips_witness_d_star.intro env b y y ",
+        "@par_strips_witness_d_star.intro env b y y ",
         "(delta_cong_star_trans env b x1 y hbx1 htail) ",
-        "(delta_cong_star.refl env y))"
+        "(@delta_cong_star.refl env y))"
     );
     // one arm: the x1-leg took ONE step x1 => d, with b =>* d. Feed d into the IH
     // (a single step x1 => d), project the witness, close the b-side via b =>* d =>* m2.
@@ -797,7 +797,7 @@ fn delta_strips_semi_strip_of_strong_proof() -> String {
         "@par_strips_witness_d_star.rec env d y ",
         "(fun (_w : par_strips_witness_d_star env d y) => par_strips_witness_d_star env b y) ",
         "(fun (m2 : KExpr) (hdm2 : delta_cong_star env d m2) (hym2 : delta_cong_star env y m2) => ",
-        "par_strips_witness_d_star.intro env b y m2 ",
+        "@par_strips_witness_d_star.intro env b y m2 ",
         "(delta_cong_star_trans env b d m2 hbd hdm2) ",
         "hym2) ",
         "(ih d hx1d))"
@@ -820,7 +820,7 @@ fn delta_strips_semi_strip_of_strong_proof() -> String {
         concat!(
             "fun (env : RedEnv) (SC : {sc_ty}) (a : KExpr) (c : KExpr) ",
             "(hac : delta_cong_star env a c) => ",
-            "delta_cong_star.rec env {motive} {refl_arm} {step_arm} a c hac"
+            "@delta_cong_star.rec env {motive} {refl_arm} {step_arm} a c hac"
         ),
         sc_ty = sc_ty,
         motive = motive,
@@ -847,8 +847,8 @@ fn delta_cong_star_diamond_of_strong_proof() -> String {
     let refl_arm = concat!(
         "(fun (r : KExpr) => ",
         "fun (z : KExpr) (hrz : delta_cong_star env r z) => ",
-        "par_strips_witness_d_star.intro env r z z hrz ",
-        "(delta_cong_star.refl env z))"
+        "@par_strips_witness_d_star.intro env r z z hrz ",
+        "(@delta_cong_star.refl env z))"
     );
     // step arm: head x => x1, tail x1 =>* y, ih on the tail. Strip x => x1 from the
     // z-leg x =>* z via the semi-strip, then recurse and re-close.
@@ -856,7 +856,7 @@ fn delta_cong_star_diamond_of_strong_proof() -> String {
         "(@par_strips_witness_d_star.rec env y m1 ",
         "(fun (_w : par_strips_witness_d_star env y m1) => par_strips_witness_d_star env y z) ",
         "(fun (m2 : KExpr) (hym2 : delta_cong_star env y m2) (hm1m2 : delta_cong_star env m1 m2) => ",
-        "par_strips_witness_d_star.intro env y z m2 hym2 ",
+        "@par_strips_witness_d_star.intro env y z m2 hym2 ",
         "(delta_cong_star_trans env z m1 m2 hzm1 hm1m2)) ",
         "(ih m1 hx1m1))"
     );
@@ -885,7 +885,7 @@ fn delta_cong_star_diamond_of_strong_proof() -> String {
         concat!(
             "fun (env : RedEnv) (SC : {sc_ty}) (e : KExpr) (e1 : KExpr) (e2 : KExpr) ",
             "(h1 : delta_cong_star env e e1) (h2 : delta_cong_star env e e2) => ",
-            "delta_cong_star.rec env {motive} {refl_arm} {step_arm} e e1 h1 e2 h2"
+            "@delta_cong_star.rec env {motive} {refl_arm} {step_arm} e e1 h1 e2 h2"
         ),
         sc_ty = sc_ty,
         motive = motive,

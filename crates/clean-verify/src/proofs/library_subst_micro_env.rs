@@ -21,7 +21,7 @@ impl ProofLibrary {
                 "def_eq_respects_subst_at",
                 concat!(
                     "fun (A : KExpr) (B : KExpr) (val : KExpr) (depth : Nat) (wd : DefEnvWellformed the_red_env) (wr : RecEnvWellformed (red_rec the_red_env)) (h : DefEq A B) => ",
-                    "DefEq.rec ",
+                    "@DefEq.rec ",
                     "(fun (a : KExpr) (b : KExpr) (_h : DefEq a b) => ",
                     "forall (w : KExpr) (d : Nat), DefEq (instantiate_at a w d) (instantiate_at b w d)) ",
                     "(fun (a : KExpr) (w : KExpr) (d : Nat) => DefEq.refl (instantiate_at a w d)) ",
@@ -182,20 +182,20 @@ impl ProofLibrary {
                     "(KExpr.app (KExpr.lam (instantiate_at A val depth) (instantiate_at body val (Nat.succ depth))) ",
                     "(instantiate_at arg val depth)) ",
                     "(instantiate (instantiate_at body val (Nat.succ depth)) (instantiate_at arg val depth)) ",
-                    "(Eq.trans KExpr ",
+                    "(@Eq.trans KExpr ",
                     "(instantiate_at (KExpr.app (KExpr.lam A body) arg) val depth) ",
                     "(KExpr.app (instantiate_at (KExpr.lam A body) val depth) (instantiate_at arg val depth)) ",
                     "(KExpr.app (KExpr.lam (instantiate_at A val depth) (instantiate_at body val (Nat.succ depth))) ",
                     "(instantiate_at arg val depth)) ",
                     "(instantiate_at_app (KExpr.lam A body) arg val depth) ",
-                    "(Eq.cong KExpr KExpr ",
+                    "(@Eq.cong KExpr KExpr ",
                     "(fun (x : KExpr) => KExpr.app x (instantiate_at arg val depth)) ",
                     "(instantiate_at (KExpr.lam A body) val depth) ",
                     "(KExpr.lam (instantiate_at A val depth) (instantiate_at body val (Nat.succ depth))) ",
                     "(instantiate_at_lam A body val depth))) ",
                     "(DefEq.beta (instantiate_at A val depth) (instantiate_at body val (Nat.succ depth)) ",
                     "(instantiate_at arg val depth))) ",
-                    "(Eq.symm KExpr ",
+                    "(@Eq.symm KExpr ",
                     "(instantiate_at (instantiate body arg) val depth) ",
                     "(instantiate_at (instantiate_at body val (Nat.succ depth)) (instantiate_at arg val depth) Nat.zero) ",
                     "(instantiate_nested_commutes_zero_subst body arg val depth))"
@@ -232,7 +232,7 @@ impl ProofLibrary {
                 concat!(
                     "fun (B : KExpr) (a : KExpr) (a' : KExpr) (d : Nat) ",
                     "(hf : RedEnvFaithful the_red_env) (h : DefEq a a') => ",
-                    "KExpr.rec ",
+                    "@KExpr.rec ",
                     "(fun (e : KExpr) => ",
                     "forall (a0 : KExpr) (a0' : KExpr) (d0 : Nat), DefEq a0 a0' -> ",
                     "DefEq (instantiate_at e a0 d0) (instantiate_at e a0' d0)) ",
@@ -444,7 +444,7 @@ impl ProofLibrary {
                 "micro_verify_sound",
                 concat!(
                     "fun (cert : MicroCert) (e : MicroExpr) (T0 : MicroExpr) ",
-                    "(_h : Eq MicroExpr (micro_verify cert e) T0) => micro_has_type_total e T0",
+                    "(_h : @Eq MicroExpr (micro_verify cert e) T0) => micro_has_type_total e T0",
                 ),
                 "Micro-checker soundness: if verify succeeds with type T, then e : T. \
                  VACUITY-DRAINED to the totality corollary (micro_has_type_total); \
@@ -460,7 +460,7 @@ impl ProofLibrary {
                 concat!(
                     "fun (e : MicroExpr) (T : MicroExpr) (e' : MicroExpr) ",
                     "(ht : micro_has_type e T) ",
-                    "(heq : Eq Bool (micro_def_eq e e') Bool.true) => ",
+                    "(heq : @Eq Bool (micro_def_eq e e') Bool.true) => ",
                     "micro_def_eq_preserves_typing e e' T ht heq",
                 ),
                 "Micro-checker type preservation: forwards to micro_def_eq_preserves_typing.",
@@ -492,7 +492,7 @@ impl ProofLibrary {
                     "fun (env : KEnv) (env' : KEnv) ",
                     "(h_ext : DefinitionalExtension env env') ",
                     "(h_sound : EnvSound env) => ",
-                    "DefinitionalExtension.rec ",
+                    "@DefinitionalExtension.rec ",
                     "(fun (src_env : KEnv) (dst_env : KEnv) (h_ext_step : DefinitionalExtension src_env dst_env) => EnvSound src_env -> EnvSound dst_env) ",
                     "(fun (base : KEnv) (base_sound : EnvSound base) => base_sound) ",
                     "(fun (src_env : KEnv) (dst_env : KEnv) (h_const : ConstantExtension src_env dst_env) ",

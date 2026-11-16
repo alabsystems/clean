@@ -715,16 +715,14 @@ fn replay_inductive_families_for(
             // `.olean`-sourced corpora carry their own convenience definitions,
             // so install only the kernel certificate and let those arrive via
             // the normal checked `add_decl` path.
-            match replay_inductive_family_checked(
+            // Whether or not it installs, the result needs no handling here:
+            // a family left uninstalled is rejected fail-closed by the gate below.
+            let _ = replay_inductive_family_checked(
                 env,
                 reader,
                 idx,
                 InductiveReplayPolicy::LeanFaithful,
-            ) {
-                Ok(true) => {}
-                // Not installed: the gate will reject fail-closed below.
-                Ok(false) | Err(_) => {}
-            }
+            );
         }
     });
 }
@@ -1023,11 +1021,12 @@ fn synthesize_named_candidate(name: &str, tactic: &str) -> Result<PremiseCandida
             score: 1.0,
             source_system: clean_mathverse::types::SourceSystem::try_from(header.source_system)
                 .unwrap_or(clean_mathverse::types::SourceSystem::Isabelle),
-            // Search metadata only. A by-name citation did not come from ranking,
-            // and nothing on the load path reads these — the ACTUAL admission
-            // decision is `TrustGate::accepts_dependency` over the header's real
-            // `import_confidence`, in `validate_dependency_loader_trust`.
-            trust_level: clean_mathverse::types::TrustLevel::KernelVerified,
+            // Derived from the header exactly as for a search candidate, never
+            // a fixed tier. Nothing on the load path reads it: the ACTUAL
+            // admission decision is `TrustGate::accepts_dependency` over the
+            // header's real `import_confidence`, in
+            // `validate_dependency_loader_trust`.
+            trust_level: clean_mathverse::types::TrustLevel::from(&header),
             match_reason: clean_mathverse::premise_select::MatchReason::NameSimilarity,
             header,
         })
@@ -1132,7 +1131,10 @@ pub(crate) fn mathverse_apply_named(
             .ok_or(TacticError::NoGoals)?
             .target
             .clone();
-        let goal_params = crate::auto_param_ext::collect_universe_params(&goal_target, &[]);
+        // The production collector (iterative, no depth cap), not the
+        // test-only `auto_param_ext` prototype: a parameter deep in the goal
+        // must still be pinned rigid.
+        let goal_params = crate::infer::collect_level_params(&[&goal_target]);
         if std::env::var("CLEAN_UNIV_DEBUG").is_ok() {
             eprintln!("UNIV_DEBUG: goal universe params = {goal_params:?}");
         }

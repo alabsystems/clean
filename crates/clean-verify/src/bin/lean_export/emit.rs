@@ -21,7 +21,7 @@ use crate::{Item, ItemKind};
 ///
 /// Note this `set_option` BEATS a `-D maxRecDepth=N` on the command line, so
 /// tuning the limit means editing here, not the invocation.
-pub fn header(roots: &[String]) -> String {
+pub(crate) fn header(roots: &[String]) -> String {
     format!(
         "/-\n\
          CleanVerifyExport.lean — MACHINE-GENERATED foreign-kernel cross-check.\n\
@@ -115,7 +115,7 @@ pub fn header(roots: &[String]) -> String {
 /// of the two declarations would have left the other red: anything in 12M..13M
 /// clears `dstep40` and still fails `deref_activation`, and anything in
 /// 4M..11M clears neither.
-pub fn footer(roots: &[String], renames: &HashMap<String, String>) -> String {
+pub(crate) fn footer(roots: &[String], renames: &HashMap<String, String>) -> String {
     let mut s = String::from("\n-- ==== flagship axiom audits ====\n");
     for r in roots {
         let mapped = renames.get(r).cloned().unwrap_or_else(|| r.clone());
@@ -127,7 +127,7 @@ pub fn footer(roots: &[String], renames: &HashMap<String, String>) -> String {
     s
 }
 
-pub fn emit_item(
+pub(crate) fn emit_item(
     env: &Environment,
     item: &Item,
     renames: &HashMap<String, String>,

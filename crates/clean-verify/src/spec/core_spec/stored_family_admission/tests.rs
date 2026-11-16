@@ -28,8 +28,8 @@ const EXPECTED_PROOFS: &[&str] = &[
 
 const ADMISSION_TYPE: &str = r"forall (env : KEnv) (depth : Nat) (prior : KEnv)
  (family np : Nat) (ty : KExpr) (ctors : CtorDecls),
- EnvSound env -> Eq (OptionType KEnv) (sfa_entry_at env depth)
-  (OptionType.some KEnv (KEnv.addInductive prior family np ty ctors)) ->
+ EnvSound env -> @Eq (OptionType KEnv) (sfa_entry_at env depth)
+  (@OptionType.some KEnv (KEnv.addInductive prior family np ty ctors)) ->
  InductiveExtension prior (KEnv.addInductive prior family np ty ctors)";
 
 // Independent concrete applications of the generic theorem. Neither supplies an
@@ -39,13 +39,13 @@ const CALLERS: &[(&str, &str)] = &[
         "sfa_prior_family_caller",
         r"sfa_stored_family_admission env_freshness_second env_freshness_one KEnv.empty Nat.zero Nat.zero
  env_freshness_type (env_freshness_ctors env_freshness_one) env_freshness_acceptance_preserves_sound
- (Eq.refl (OptionType KEnv) (OptionType.some KEnv env_freshness_first))",
+ (@Eq.refl (OptionType KEnv) (@OptionType.some KEnv env_freshness_first))",
     ),
     (
         "sfa_constant_tail_caller",
         r"sfa_stored_family_admission env_freshness_const_result env_freshness_one KEnv.empty Nat.zero Nat.zero
  env_freshness_type (env_freshness_ctors env_freshness_one) env_freshness_const_preserves_sound
- (Eq.refl (OptionType KEnv) (OptionType.some KEnv env_freshness_first))",
+ (@Eq.refl (OptionType KEnv) (@OptionType.some KEnv env_freshness_first))",
     ),
 ];
 
@@ -312,13 +312,13 @@ fn stored_family_admission_computed_history_slots() {
     run_with_stack(|| {
         let spec = shared_spec();
         for (source, expected) in [
-            ("sfa_entry_at env_freshness_second Nat.zero", "OptionType.some KEnv env_freshness_second"),
-            ("sfa_entry_at env_freshness_second env_freshness_one", "OptionType.some KEnv env_freshness_first"),
-            ("sfa_entry_at env_freshness_second env_freshness_two", "OptionType.none KEnv"),
-            ("sfa_entry_at env_freshness_const_result Nat.zero", "OptionType.some KEnv env_freshness_const_result"),
-            ("sfa_entry_at env_freshness_const_result env_freshness_one", "OptionType.some KEnv env_freshness_first"),
-            ("sfa_entry_at KEnv.empty Nat.zero", "OptionType.none KEnv"),
-            ("sfa_entry_at KEnv.empty env_freshness_one", "OptionType.none KEnv"),
+            ("sfa_entry_at env_freshness_second Nat.zero", "@OptionType.some KEnv env_freshness_second"),
+            ("sfa_entry_at env_freshness_second env_freshness_one", "@OptionType.some KEnv env_freshness_first"),
+            ("sfa_entry_at env_freshness_second env_freshness_two", "@OptionType.none KEnv"),
+            ("sfa_entry_at env_freshness_const_result Nat.zero", "@OptionType.some KEnv env_freshness_const_result"),
+            ("sfa_entry_at env_freshness_const_result env_freshness_one", "@OptionType.some KEnv env_freshness_first"),
+            ("sfa_entry_at KEnv.empty Nat.zero", "@OptionType.none KEnv"),
+            ("sfa_entry_at KEnv.empty env_freshness_one", "@OptionType.none KEnv"),
             ("sfa_entries KEnv.empty", "Nat"),
             ("sfa_entries env_freshness_first", "ProdType Nat (InductiveExtension KEnv.empty env_freshness_first)"),
             ("sfa_entries env_freshness_second", "ProdType (sfa_entries env_freshness_first) (InductiveExtension env_freshness_first env_freshness_second)"),

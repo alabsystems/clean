@@ -61,7 +61,7 @@ use super::dag::{
 /// Errors from parsing or converting SMT-LIB2 proof format.
 #[derive(Debug, Error)]
 #[non_exhaustive]
-pub enum SmtLib2ProofError {
+pub(crate) enum SmtLib2ProofError {
     /// Unexpected token during parsing.
     #[error("parse error at offset {offset}: expected {expected}, found {found:?}")]
     UnexpectedToken {

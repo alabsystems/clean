@@ -64,49 +64,40 @@ fn def(env: &mut Environment, name: &str, type_: Expr, value: Expr) {
     .unwrap_or_else(|e| panic!("`{name}` is well-typed: {e:?}"));
 }
 
-/// The fields of `struct Environment` carrying `#[serde(skip)]`, read off the
-/// source, so the hand-moved list cannot drift from the struct.
-fn serde_skipped_fields_in_source() -> Vec<String> {
-    let source = include_str!("mod.rs");
-    let body = source
-        .split_once("pub struct Environment {")
-        .expect("the struct is in mod.rs")
-        .1;
-    let body = &body[..body.find("\n}\n").expect("the struct ends")];
-    let mut skipped = Vec::new();
-    let mut pending_skip = false;
-    for line in body.lines().map(str::trim) {
-        if line.starts_with("#[serde(") && line.contains("skip") {
-            pending_skip = true;
-        } else if let Some((field, _)) = line
-            .strip_prefix("pub(crate) ")
-            .or_else(|| line.strip_prefix("pub "))
-            .unwrap_or(line)
-            .split_once(':')
-            .filter(|(field, _)| {
-                !field.is_empty()
-                    && field
-                        .chars()
-                        .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '_')
-            })
-        {
-            if pending_skip {
-                skipped.push(field.to_string());
+/// The macro emits this inventory from the same fields and attributes as
+/// `Environment`; formatting or wrapping the field table cannot hide a skip.
+fn serde_skipped_fields(fields: &[(&str, &[&str])]) -> Vec<String> {
+    fields
+        .iter()
+        .filter_map(|(field, attributes)| {
+            let mut skipped = false;
+            for attribute in *attributes {
+                let compact: String = attribute.chars().filter(|ch| !ch.is_whitespace()).collect();
+                if compact.starts_with("serde(") {
+                    match compact.as_str() {
+                        "serde(skip)" => skipped = true,
+                        "serde(default)" => {}
+                        other => panic!("unmodeled serde field attribute on `{field}`: {other}"),
+                    }
+                }
             }
-            pending_skip = false;
-        }
-    }
-    skipped
+            skipped.then(|| (*field).to_string())
+        })
+        .collect()
+}
+
+fn transient_field_census_matches(fields: &[(&str, &[&str])]) -> bool {
+    let mut in_declaration = serde_skipped_fields(fields);
+    in_declaration.sort();
+    let mut handled: Vec<String> = TRANSIENT_FIELDS.iter().map(|s| (*s).to_string()).collect();
+    handled.sort();
+    in_declaration == handled
 }
 
 #[test]
 fn transient_fields_are_exactly_the_serde_skipped_ones() {
-    let mut in_source = serde_skipped_fields_in_source();
-    in_source.sort();
-    let mut handled: Vec<String> = TRANSIENT_FIELDS.iter().map(|s| (*s).to_string()).collect();
-    handled.sort();
-    assert_eq!(
-        in_source, handled,
+    assert!(
+        transient_field_census_matches(crate::env::ENVIRONMENT_FIELD_ATTRIBUTES),
         "a serde-skipped Environment field must be moved by `transplant_heavy`, or a replay \
          silently resets it"
     );
@@ -871,4 +862,20 @@ fn a_missing_attribute_tag_is_a_difference() {
             .is_some_and(|why| why.contains("attrExtension")),
         "{difference:?}"
     );
+}
+
+#[test]
+fn transient_field_inventory_rejects_missing_and_extra_skipped_rows() {
+    let fields = crate::env::ENVIRONMENT_FIELD_ATTRIBUTES;
+    assert!(transient_field_census_matches(fields));
+    let omitted: Vec<_> = fields
+        .iter()
+        .copied()
+        .filter(|(name, _)| *name != "lazy_source")
+        .collect();
+    assert_eq!(omitted.len() + 1, fields.len());
+    assert!(!transient_field_census_matches(&omitted));
+    let mut extra = fields.to_vec();
+    extra.push(("unhandled_transient_control", &["serde(skip)"]));
+    assert!(!transient_field_census_matches(&extra));
 }

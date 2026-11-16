@@ -226,6 +226,10 @@ pub struct TraceObservation {
     /// Ordinary candidate/refusal from this caller; None for atomic blocks.
     /// This is never the diagnostic journal and never an admission verdict.
     pub advice_candidate: Option<AdviceCandidateObservation>,
+    /// Candidate advice from the feature-gated tracing journal beside the
+    /// fenced reference entry, not from the production checker.
+    #[serde(skip)]
+    pub advice_frame: Vec<u8>,
     /// Successful-path token count (a partial prefix when tracing refused).
     pub partial_tokens: usize,
     /// Alternative charge with a REFL certificate per identity-walk argument.
@@ -322,6 +326,7 @@ fn observe(
         trace_refusal: refusal,
         reference_accepted: false,
         advice_candidate: None,
+        advice_frame: clean_kernel::kcheck_trace::advice::encode_frame(tracer.journal.tokens()),
         partial_tokens: tracer.journal.tokens().len(),
         uncompressed_spine_tokens: tracer.journal.tokens().len() as u64
             + tracer

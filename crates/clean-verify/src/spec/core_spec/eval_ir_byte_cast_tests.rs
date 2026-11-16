@@ -25,7 +25,7 @@ fn equality(spec: &mut Specification, name: &str, ty: &str, actual: &str, expect
     add(
         spec,
         &format!(
-            "def {name} (ctx : IRByteContextV1) : Eq ({ty}) ({actual}) ({expected}) := Eq.refl ({ty}) ({expected})"
+            "def {name} (ctx : IRByteContextV1) : @Eq ({ty}) ({actual}) ({expected}) := @Eq.refl ({ty}) ({expected})"
         ),
     );
 }
@@ -64,9 +64,9 @@ fn byte_bitcast_ptr_identity_is_general_checked_and_inhabited() {
                 &mut spec,
                 &format!(
                     "def byte_bitcast_ptr_by_law_{index} (ctx : IRByteContextV1) :
-  Eq IRStepResult (ir_byte_cast_eval_v1 ctx IRCastOp.bitcast IRTy.ptr_ IRTy.ptr_ ({value}))
+  @Eq IRStepResult (ir_byte_cast_eval_v1 ctx IRCastOp.bitcast IRTy.ptr_ IRTy.ptr_ ({value}))
     (IRStepResult.value ({value})) :=
-  ir_byte_bitcast_ptr_identity_v1 ctx ({value}) (Eq.refl Bool Bool.true)"
+  ir_byte_bitcast_ptr_identity_v1 ctx ({value}) (@Eq.refl Bool Bool.true)"
                 ),
             );
         }
@@ -74,9 +74,9 @@ fn byte_bitcast_ptr_identity_is_general_checked_and_inhabited() {
             &mut spec,
             "byte_bitcast_ptr_changed_value",
             "def byte_bitcast_ptr_changed_value (ctx : IRByteContextV1) :
-  Eq IRStepResult (ir_byte_cast_eval_v1 ctx IRCastOp.bitcast IRTy.ptr_ IRTy.ptr_ (IRScalar.ptr_ 16))
+  @Eq IRStepResult (ir_byte_cast_eval_v1 ctx IRCastOp.bitcast IRTy.ptr_ IRTy.ptr_ (IRScalar.ptr_ 16))
     (IRStepResult.value (IRScalar.ptr_ 17)) :=
-  ir_byte_bitcast_ptr_identity_v1 ctx (IRScalar.ptr_ 16) (Eq.refl Bool Bool.true)",
+  ir_byte_bitcast_ptr_identity_v1 ctx (IRScalar.ptr_ 16) (@Eq.refl Bool Bool.true)",
         );
     });
 }
@@ -106,8 +106,8 @@ fn byte_bitcast_ptr_refuses_mixed_types_and_retains_integer_and_legacy_meanings(
             // Every carrier, including a well-formed pointer, must fail this
             // unsupported type pair before the operand's representation check.
             add(&mut spec, &format!("def byte_bitcast_ptr_unsupported_{index} (ctx : IRByteContextV1) (value : IRScalar) :
-  Eq IRStepResult (ir_byte_cast_eval_v1 ctx IRCastOp.bitcast ({src}) ({dst}) value)
-    ir_width_fault := Eq.refl IRStepResult ir_width_fault"));
+  @Eq IRStepResult (ir_byte_cast_eval_v1 ctx IRCastOp.bitcast ({src}) ({dst}) value)
+    ir_width_fault := @Eq.refl IRStepResult ir_width_fault"));
         }
         equality(
             &mut spec,
@@ -154,39 +154,39 @@ fn byte_bitcast_ptr_rejects_noncanonical_and_wrong_carriers() {
             &mut spec,
             "byte_bitcast_ptr_zero_representation",
             "def byte_bitcast_ptr_zero_representation (ctx : IRByteContextV1) :
-  Eq IRStepResult (ir_byte_cast_eval_v1 ctx IRCastOp.bitcast IRTy.ptr_ IRTy.ptr_ (IRScalar.ptr_ 0))
+  @Eq IRStepResult (ir_byte_cast_eval_v1 ctx IRCastOp.bitcast IRTy.ptr_ IRTy.ptr_ (IRScalar.ptr_ 0))
     (IRStepResult.value (IRScalar.ptr_ 0)) :=
-  ir_byte_bitcast_ptr_identity_v1 ctx (IRScalar.ptr_ 0) (Eq.refl Bool Bool.true)",
+  ir_byte_bitcast_ptr_identity_v1 ctx (IRScalar.ptr_ 0) (@Eq.refl Bool Bool.true)",
         );
     });
 }
 
-const EMPTY_NAT: &str = "(IRList.nil Nat)";
-const RESULTS: &str = "(IRList.cons Nat 99 (IRList.nil Nat))";
-const WORLD: &str = "(IRByteWorldV1.mk Nat (ir_byte_memory_empty_v1 128) host
-  (IRList.cons Nat 2 (IRList.cons Nat 1 (IRList.nil Nat))) 3)";
+const EMPTY_NAT: &str = "(@IRList.nil Nat)";
+const RESULTS: &str = "(@IRList.cons Nat 99 (@IRList.nil Nat))";
+const WORLD: &str = "(@IRByteWorldV1.mk Nat (ir_byte_memory_empty_v1 128) host
+  (@IRList.cons Nat 2 (@IRList.cons Nat 1 (@IRList.nil Nat))) 3)";
 const FRAME: &str = "(IRFrame.mk 9 7 1
-  (IRList.cons IRBinding (IRBinding.mk 40 (IRScalar.ptr_ 16))
-    (IRList.cons IRBinding (IRBinding.mk 88 (IRScalar.int_ 55)) (IRList.nil IRBinding)))
-  (IRList.cons Nat 123 (IRList.nil Nat)))";
-const TAIL: &str = "(IRList.cons IRFrame (IRFrame.mk 3 4 5 (IRList.nil IRBinding)
-  (IRList.cons Nat 55 (IRList.nil Nat))) (IRList.nil IRFrame))";
+  (@IRList.cons IRBinding (IRBinding.mk 40 (IRScalar.ptr_ 16))
+    (@IRList.cons IRBinding (IRBinding.mk 88 (IRScalar.int_ 55)) (@IRList.nil IRBinding)))
+  (@IRList.cons Nat 123 (@IRList.nil Nat)))";
+const TAIL: &str = "(@IRList.cons IRFrame (IRFrame.mk 3 4 5 (@IRList.nil IRBinding)
+  (@IRList.cons Nat 55 (@IRList.nil Nat))) (@IRList.nil IRFrame))";
 
 fn machine(frame: &str) -> String {
-    format!("(IRMachine.mk (IRList.cons IRFrame {frame} {TAIL}) (IRList.nil IRMemSlot) 77)")
+    format!("(IRMachine.mk (@IRList.cons IRFrame {frame} {TAIL}) (@IRList.nil IRMemSlot) 77)")
 }
 fn context(result_ty: &str) -> String {
     format!(
         "(IRByteContextV1.mk
  (IRModule.mk
-  (IRList.cons IRFunc (IRFunc.mk 9 (IRList.cons Nat 40 {EMPTY_NAT}) 7
-   (IRList.cons IRBlock (IRBlock.mk 7 {EMPTY_NAT}
-    (IRList.cons IRNode (IRNode.mk IRInst.unreachable {EMPTY_NAT})
-     (IRList.cons IRNode (IRNode.mk (IRInst.cast IRCastOp.bitcast IRTy.ptr_ IRTy.ptr_ 40) {RESULTS})
-      (IRList.nil IRNode)))) (IRList.nil IRBlock))) (IRList.nil IRFunc)) (IRList.nil IRGlobal))
- (IRList.nil IRByteLayoutV1) (IRList.nil IRByteSignatureV1) (IRList.nil IRByteFunctionV1)
- (IRList.cons IRByteSiteV1 (IRByteSiteV1.mk 9 7 1 0 1
-  (IRList.cons IRTy ({result_ty}) (IRList.nil IRTy))) (IRList.nil IRByteSiteV1)))"
+  (@IRList.cons IRFunc (IRFunc.mk 9 (@IRList.cons Nat 40 {EMPTY_NAT}) 7
+   (@IRList.cons IRBlock (IRBlock.mk 7 {EMPTY_NAT}
+    (@IRList.cons IRNode (IRNode.mk IRInst.unreachable {EMPTY_NAT})
+     (@IRList.cons IRNode (IRNode.mk (IRInst.cast IRCastOp.bitcast IRTy.ptr_ IRTy.ptr_ 40) {RESULTS})
+      (@IRList.nil IRNode)))) (@IRList.nil IRBlock))) (@IRList.nil IRFunc)) (@IRList.nil IRGlobal))
+ (@IRList.nil IRByteLayoutV1) (@IRList.nil IRByteSignatureV1) (@IRList.nil IRByteFunctionV1)
+ (@IRList.cons IRByteSiteV1 (IRByteSiteV1.mk 9 7 1 0 1
+  (@IRList.cons IRTy ({result_ty}) (@IRList.nil IRTy))) (@IRList.nil IRByteSiteV1)))"
     )
 }
 
@@ -198,21 +198,21 @@ fn byte_bitcast_ptr_actual_fetched_step_binds_once_and_preserves_world_without_a
         let run = |result_ty: &str| {
             format!(
                 "ir_byte_step_v1 Nat {} providers
-  (IRByteConfigV1.running Nat {} {WORLD})",
+  (@IRByteConfigV1.running Nat {} {WORLD})",
                 context(result_ty),
                 machine(FRAME)
             )
         };
         let frame = format!(
             "(ir_frame_advance (ir_frame_set_many {FRAME} {RESULTS}
-  (IRList.cons IRScalar (IRScalar.ptr_ 16) (IRList.nil IRScalar))))"
+  (@IRList.cons IRScalar (IRScalar.ptr_ 16) (@IRList.nil IRScalar))))"
         );
-        let expected = format!("IRByteConfigV1.running Nat {} {WORLD}", machine(&frame));
+        let expected = format!("@IRByteConfigV1.running Nat {} {WORLD}", machine(&frame));
         add(
             &mut spec,
             &format!(
                 "def byte_bitcast_ptr_fetched {params} :
-  Eq (IRByteConfigV1 Nat) ({}) ({expected}) := Eq.refl (IRByteConfigV1 Nat) ({expected})",
+  @Eq (IRByteConfigV1 Nat) ({}) ({expected}) := @Eq.refl (IRByteConfigV1 Nat) ({expected})",
                 run("IRTy.ptr_")
             ),
         );
@@ -220,12 +220,12 @@ fn byte_bitcast_ptr_actual_fetched_step_binds_once_and_preserves_world_without_a
         // pointer grants no allocation/access right. A bad result lane faults
         // at this fetched instruction without changing any bytes or host state.
         let failed =
-            format!("IRByteConfigV1.halted Nat (IROutcome.type_error IRFault.bad_field) {WORLD}");
+            format!("@IRByteConfigV1.halted Nat (IROutcome.type_error IRFault.bad_field) {WORLD}");
         add(
             &mut spec,
             &format!(
                 "def byte_bitcast_ptr_bad_site {params} :
-  Eq (IRByteConfigV1 Nat) ({}) ({failed}) := Eq.refl (IRByteConfigV1 Nat) ({failed})",
+  @Eq (IRByteConfigV1 Nat) ({}) ({failed}) := @Eq.refl (IRByteConfigV1 Nat) ({failed})",
                 run("IRTy.uint_ 64")
             ),
         );
@@ -234,17 +234,17 @@ fn byte_bitcast_ptr_actual_fetched_step_binds_once_and_preserves_world_without_a
             "byte_bitcast_ptr_changed_world",
             &format!(
                 "def byte_bitcast_ptr_changed_world {params} :
-  Eq (IRByteConfigV1 Nat) ({}) ({}) := byte_bitcast_ptr_fetched providers host",
+  @Eq (IRByteConfigV1 Nat) ({}) ({}) := byte_bitcast_ptr_fetched providers host",
                 run("IRTy.ptr_"),
                 expected.replace("host", "(Nat.succ host)")
             ),
         );
         let load_context = "(IRByteContextV1.mk
-  (IRModule.mk (IRList.nil IRFunc) (IRList.nil IRGlobal))
-  (IRList.cons IRByteLayoutV1
-    (IRByteLayoutV1.mk (IRTy.uint_ 64) 8 8 (IRList.nil IRTy) (IRList.nil Nat))
-    (IRList.nil IRByteLayoutV1))
-  (IRList.nil IRByteSignatureV1) (IRList.nil IRByteFunctionV1) (IRList.nil IRByteSiteV1))";
+  (IRModule.mk (@IRList.nil IRFunc) (@IRList.nil IRGlobal))
+  (@IRList.cons IRByteLayoutV1
+    (IRByteLayoutV1.mk (IRTy.uint_ 64) 8 8 (@IRList.nil IRTy) (@IRList.nil Nat))
+    (@IRList.nil IRByteLayoutV1))
+  (@IRList.nil IRByteSignatureV1) (@IRList.nil IRByteFunctionV1) (@IRList.nil IRByteSiteV1))";
         equality(
             &mut spec,
             "byte_bitcast_ptr_no_dereference_right",
@@ -258,7 +258,7 @@ fn byte_bitcast_ptr_actual_fetched_step_binds_once_and_preserves_world_without_a
             &mut spec,
             "byte_bitcast_ptr_empty_allocation_inaccessible",
             "Bool",
-            "ir_byte_accessible_v1 (IRList.nil IRByteAllocationV1) 16 8 8",
+            "ir_byte_accessible_v1 (@IRList.nil IRByteAllocationV1) 16 8 8",
             "Bool.false",
         );
     });

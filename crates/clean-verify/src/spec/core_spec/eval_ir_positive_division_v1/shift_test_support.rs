@@ -173,7 +173,7 @@ pub(super) fn restoring_result(shift: Shift, word: u64) -> String {
         Shift::Logical => scalar_result(&q),
         Shift::Arithmetic => {
             let fill = quotient("ir_nat_pow2 64", 64);
-            scalar_result(&format!("Bool.rec (fun (_ : Bool) => Nat) ({q}) (Nat.add ({q}) (Nat.sub (ir_nat_pow2 64) ({fill}))) (ir_sign_bit 64 {word})"))
+            scalar_result(&format!("@Bool.rec (fun (_ : Bool) => Nat) ({q}) (Nat.add ({q}) (Nat.sub (ir_nat_pow2 64) ({fill}))) (ir_sign_bit 64 {word})"))
         }
     }
 }
@@ -188,7 +188,7 @@ pub(super) fn claim(
 ) -> String {
     let endpoint = operation(shift, word, width, amount);
     let middle = restoring_result(shift, word);
-    format!("def {name} : Eq IRStepResult ({endpoint}) ({result}) := Eq.trans IRStepResult ({endpoint}) ({middle}) ({result}) ({} {word} (Eq.refl Bool Bool.true)) (Eq.refl IRStepResult ({result}))", shift.law())
+    format!("def {name} : @Eq IRStepResult ({endpoint}) ({result}) := @Eq.trans IRStepResult ({endpoint}) ({middle}) ({result}) ({} {word} (@Eq.refl Bool Bool.true)) (@Eq.refl IRStepResult ({result}))", shift.law())
 }
 
 pub(super) fn check_consumer(spec: &mut Specification, name: &str, source: &str) {

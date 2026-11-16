@@ -365,8 +365,8 @@ TY_NAMES = {c: n for c, n, _ in match_arms("ir_ty_shape", "IRTy")}
 BLOCK = "(f : IRFrame) (t : IRList IRFrame) (rest : IRList IRFrame) (mem : IRList IRMemSlot) (na : Nat)"
 BARGS = "f t rest mem na"
 APP = "(ir_frames_app t rest)"
-S0 = "(IRMachine.mk (IRList.cons IRFrame f t) mem na)"
-S1 = f"(IRMachine.mk (IRList.cons IRFrame f {APP}) mem na)"
+S0 = "(IRMachine.mk (@IRList.cons IRFrame f t) mem na)"
+S1 = f"(IRMachine.mk (@IRList.cons IRFrame f {APP}) mem na)"
 VS = "(IRList IRScalar)"
 
 # The module-extension block: two `IRModule.mk` modules and the two extension
@@ -379,17 +379,17 @@ M0 = "(IRModule.mk fs0 gs0)"
 M1 = "(IRModule.mk fs gs)"
 FBLOCK = "(f : IRFrame) (t : IRList IRFrame) (mem : IRList IRMemSlot) (na : Nat)"
 FARGS = "f t mem na"
-HF_TY = ("forall (kf : Nat) (gf : IRFunc), Eq (IROption IRFunc) (ir_func_find fs0 kf) (IROption.some IRFunc gf) -> "
-         "Eq (IROption IRFunc) (ir_func_find fs kf) (IROption.some IRFunc gf)")
-HG_TY = ("forall (kg : Nat) (gg : IRGlobal), Eq (IROption IRGlobal) (ir_global_find gs0 kg) (IROption.some IRGlobal gg) -> "
-         "Eq (IROption IRGlobal) (ir_global_find gs kg) (IROption.some IRGlobal gg)")
+HF_TY = ("forall (kf : Nat) (gf : IRFunc), @Eq (IROption IRFunc) (ir_func_find fs0 kf) (@IROption.some IRFunc gf) -> "
+         "@Eq (IROption IRFunc) (ir_func_find fs kf) (@IROption.some IRFunc gf)")
+HG_TY = ("forall (kg : Nat) (gg : IRGlobal), @Eq (IROption IRGlobal) (ir_global_find gs0 kg) (@IROption.some IRGlobal gg) -> "
+         "@Eq (IROption IRGlobal) (ir_global_find gs kg) (@IROption.some IRGlobal gg)")
 PREMISE = {"hf": f"(hf : {HF_TY})", "hg": f"(hg : {HG_TY})"}
 
 # The ENCODINGS premise of the mkv module axis (crystal link 4 M0 W3): the two
 # tables answer every row lookup identically (a hit AND a miss) and have the same
 # length, which is the view's fuel. Only the `load` arm reads it.
-HE_TY = "forall (te : IRTy), Eq (IROption IREnc) (ir_enc_find es0 te) (ir_enc_find es te)"
-HL_TY = "Eq Nat (ir_enc_len es0) (ir_enc_len es)"
+HE_TY = "forall (te : IRTy), @Eq (IROption IREnc) (ir_enc_find es0 te) (ir_enc_find es te)"
+HL_TY = "@Eq Nat (ir_enc_len es0) (ir_enc_len es)"
 PREMISE["he"] = f"(henc : {HE_TY})"
 PREMISE["hl"] = f"(hlen : {HL_TY})"
 # Set only inside `_module_variant(True)`: the builders below read it to thread
@@ -417,17 +417,17 @@ def atm(tpl: str, M: str) -> str:
 
 def stk_goal(tpl: str) -> str:
     """`Eq IRConfig (H S1 ..) (ir_config_stack (H S0 ..) rest)` for a template over {S}."""
-    return f"Eq IRConfig {at(tpl, S1)} (ir_config_stack {at(tpl, S0)} rest)"
+    return f"@Eq IRConfig {at(tpl, S1)} (ir_config_stack {at(tpl, S0)} rest)"
 
 
 def mext_goal(tpl: str) -> str:
     """`Eq IRConfig (H M0 ..) (H M ..)` for a template over {M} (the machine is S0)."""
-    return f"Eq IRConfig {atm(tpl, M0)} {atm(tpl, M1)}"
+    return f"@Eq IRConfig {atm(tpl, M0)} {atm(tpl, M1)}"
 
 
 def mext_prem(tpl: str) -> str:
     """The running premise on the M0 side."""
-    return f"Eq Bool (ir_stk_running {atm(tpl, M0)}) Bool.true"
+    return f"@Eq Bool (ir_stk_running {atm(tpl, M0)}) Bool.true"
 
 
 def mext_stmt(tpl: str) -> str:
@@ -440,7 +440,7 @@ def running(frames: str, mem: str = "mem", na: str = "na") -> str:
 
 
 def cons(x: str, xs: str) -> str:
-    return f"(IRList.cons IRFrame {x} {xs})"
+    return f"(@IRList.cons IRFrame {x} {xs})"
 
 
 def halted(o: str) -> str:
@@ -460,7 +460,7 @@ def ub(fault: str) -> str:
 
 
 def refl(ty: str, x: str) -> str:
-    return f"Eq.refl {ty} {x}"
+    return f"@Eq.refl {ty} {x}"
 
 
 def defn(name: str, binders: str, ty: str, body: str) -> str:
@@ -502,13 +502,13 @@ def uses(name: str, term: str) -> bool:
 
 
 def bool_rec(var: str, motive, false_case: str, true_case: str, major: str) -> str:
-    return f"Bool.rec (fun ({var} : Bool) => {motive(var)}) ({false_case}) ({true_case}) {major}"
+    return f"@Bool.rec (fun ({var} : Bool) => {motive(var)}) ({false_case}) ({true_case}) {major}"
 
 
 def opt_rec(param: str, var: str, motive, none_case: str, some_binder: tuple[str, str],
             some_case: str, major: str) -> str:
     sb, sty = some_binder
-    return (f"IROption.rec {param} (fun ({var} : IROption {param}) => {motive(var)}) "
+    return (f"@IROption.rec {param} (fun ({var} : IROption {param}) => {motive(var)}) "
             f"({none_case}) (fun ({sb} : {sty}) => {some_case}) {major}")
 
 
@@ -523,17 +523,17 @@ def neutral_opt_rec(param: str, var: str, motive, none_case: str, some_binder: t
         raise SystemExit(f"gen_stack_lemmas: unknown --form {FORM!r}")
     T = f"(IROption {param})"
     sb, sty = some_binder
-    none = f"(IROption.none {param})"
-    some = f"(IROption.some {param} {sb})"
+    none = f"(@IROption.none {param})"
+    some = f"(@IROption.some {param} {sb})"
 
     def transport(known: str, term: str) -> str:
-        return (f"Eq.subst {T} (fun ({var}1 : IROption {param}) => {motive(var + '1')}) {known} {scrut} "
-                f"(Eq.symm {T} {scrut} {known} h{var}) ({term})")
+        return (f"@Eq.subst {T} (fun ({var}1 : IROption {param}) => {motive(var + '1')}) {known} {scrut} "
+                f"(@Eq.symm {T} {scrut} {known} h{var}) ({term})")
 
-    return (f"IROption.rec {param} (fun ({var} : IROption {param}) => Eq {T} {scrut} {var} -> {goal}) "
-            f"(fun (h{var} : Eq {T} {scrut} {none}) => {transport(none, none_case)}) "
-            f"(fun ({sb} : {sty}) (h{var} : Eq {T} {scrut} {some}) => {transport(some, some_case)}) "
-            f"{scrut} (Eq.refl {T} {scrut})")
+    return (f"@IROption.rec {param} (fun ({var} : IROption {param}) => @Eq {T} {scrut} {var} -> {goal}) "
+            f"(fun (h{var} : @Eq {T} {scrut} {none}) => {transport(none, none_case)}) "
+            f"(fun ({sb} : {sty}) (h{var} : @Eq {T} {scrut} {some}) => {transport(some, some_case)}) "
+            f"{scrut} (@Eq.refl {T} {scrut})")
 
 
 def fam_rec(fam: str, var: str, motive, arms: dict, default, major: str, names: dict[str, list[str]],
@@ -556,7 +556,7 @@ def fam_rec(fam: str, var: str, motive, arms: dict, default, major: str, names: 
         if hyp is not None:
             binders.append(f"({'h' if uses('h', body) else '_'} : {hyp(ctor_app(fam, ctor, fnames))})")
         minors.append(f"(fun {' '.join(binders)} => {body})" if binders else f"({body})")
-    return f"{fam}.rec (fun ({var} : {fam}) => {motive(var)}) {' '.join(minors)} {major}"
+    return f"@{fam}.rec (fun ({var} : {fam}) => {motive(var)}) {' '.join(minors)} {major}"
 
 
 def ext_lookup(T: str, find: str, l0: str, l1: str, hyp: str, key: str, body0, body1,
@@ -574,18 +574,18 @@ def ext_lookup(T: str, find: str, l0: str, l1: str, hyp: str, key: str, body0, b
     form: the direct form has no `he` to hand to the premise."""
     OT = f"(IROption {T})"
     scrut, other = f"({find} {l0} {key})", f"({find} {l1} {key})"
-    none = f"(IROption.none {T})"
-    some = f"(IROption.some {T} {found})"
-    prem = lambda o: f"Eq Bool (ir_stk_running {body0(o)}) Bool.true"
-    goal = lambda o: f"Eq IRConfig {body0(o)} {body1(other)}"
-    none_minor = (f"(fun (_ : Eq {OT} {scrut} {none}) (h : {prem(none)}) => "
+    none = f"(@IROption.none {T})"
+    some = f"(@IROption.some {T} {found})"
+    prem = lambda o: f"@Eq Bool (ir_stk_running {body0(o)}) Bool.true"
+    goal = lambda o: f"@Eq IRConfig {body0(o)} {body1(other)}"
+    none_minor = (f"(fun (_ : @Eq {OT} {scrut} {none}) (h : {prem(none)}) => "
                   f"ir_bool_false_ne_true ({goal(none)}) h)")
     hname = "h" if uses("h", some_term) else "_"
-    some_minor = (f"(fun ({found} : {T}) (he : Eq {OT} {scrut} {some}) ({hname} : {prem(some)}) => "
-                  f"Eq.subst {OT} (fun (o2 : IROption {T}) => Eq IRConfig {body0(some)} {body1('o2')}) {some} {other} "
-                  f"(Eq.symm {OT} {other} {some} ({hyp} {key} {found} he)) ({some_term}))")
-    return (f"IROption.rec {T} (fun (o : IROption {T}) => Eq {OT} {scrut} o -> {prem('o')} -> {goal('o')}) "
-            f"{none_minor} {some_minor} {scrut} (Eq.refl {OT} {scrut})")
+    some_minor = (f"(fun ({found} : {T}) (he : @Eq {OT} {scrut} {some}) ({hname} : {prem(some)}) => "
+                  f"@Eq.subst {OT} (fun (o2 : IROption {T}) => @Eq IRConfig {body0(some)} {body1('o2')}) {some} {other} "
+                  f"(@Eq.symm {OT} {other} {some} ({hyp} {key} {found} he)) ({some_term}))")
+    return (f"@IROption.rec {T} (fun (o : IROption {T}) => @Eq {OT} {scrut} o -> {prem('o')} -> {goal('o')}) "
+            f"{none_minor} {some_minor} {scrut} (@Eq.refl {OT} {scrut})")
 
 
 # --------------------------------------------------------------------------
@@ -670,8 +670,8 @@ def resolve_subst(x: str, motive_body, inner: str) -> str:
     """Transport `inner`, stated at `(ir_resolve S0 x)`, to `(ir_resolve S1 x)`.
     `motive_body(vs)` is the statement with the resolved list abstracted."""
     r0, r1 = f"(ir_resolve {S0} {x})", f"(ir_resolve {S1} {x})"
-    return (f"Eq.subst {VS} (fun (vs : IRList IRScalar) => {motive_body('vs')}) {r0} {r1} "
-            f"(Eq.symm {VS} {r1} {r0} (ir_resolve_stack {BARGS} {x})) ({inner})")
+    return (f"@Eq.subst {VS} (fun (vs : IRList IRScalar) => {motive_body('vs')}) {r0} {r1} "
+            f"(@Eq.symm {VS} {r1} {r0} (ir_resolve_stack {BARGS} {x})) ({inner})")
 
 
 # The abstracted helper bodies the neutral-major motives quote. Each is the
@@ -680,33 +680,33 @@ def resolve_subst(x: str, motive_body, inner: str) -> str:
 
 
 def switch_n_body(m: str, S: str, o: str) -> str:
-    return (f"(IROption.rec IRSwitchCase (fun (_ : IROption IRSwitchCase) => IRConfig) "
+    return (f"(@IROption.rec IRSwitchCase (fun (_ : IROption IRSwitchCase) => IRConfig) "
             f"(ir_jump {m} {S} dflt dargs) "
             f"(fun (c : IRSwitchCase) => ir_jump {m} {S} (ir_case_target c) (ir_case_args c)) {o})")
 
 
 def call_exec_body(S: str, o: str) -> str:
     # The callee binder is renamed g: the source's `f` would capture the frame.
-    return (f"(IROption.rec IRFunc (fun (_ : IROption IRFunc) => IRConfig) "
+    return (f"(@IROption.rec IRFunc (fun (_ : IROption IRFunc) => IRConfig) "
             f"(IRConfig.halted (IROutcome.stuck IRFault.no_func)) "
             f"(fun (g : IRFunc) => ir_push {S} rs g (ir_resolve {S} args)) {o})")
 
 
 def alloca_exec_body(S: str, o: str) -> str:
-    return (f"(IROption.rec Nat (fun (_ : IROption Nat) => IRConfig) "
+    return (f"(@IROption.rec Nat (fun (_ : IROption Nat) => IRConfig) "
             f"(IRConfig.halted (IROutcome.type_error IRFault.not_int)) "
             f"(fun (k : Nat) => ir_alloca_k {S} rs k) {o})")
 
 
 def globaladdr_body(o: str) -> str:
-    return (f"(IROption.rec IRGlobal (fun (_ : IROption IRGlobal) => IRStepResult) "
+    return (f"(@IROption.rec IRGlobal (fun (_ : IROption IRGlobal) => IRStepResult) "
             f"(IRStepResult.fault (IROutcome.type_error IRFault.no_global)) "
             f"(fun (_ : IRGlobal) => IRStepResult.value (IRScalar.ptr_ g)) {o})")
 
 
 def body_checks() -> list[str]:
     """Each abstracted body, re-instantiated at the source's own names and major,
-    must BE the source body after its explicit recursor-head `@`."""
+    must BE the source body."""
     bad = []
     cases = [
         ("ir_switch_n", switch_n_body("m", "s", "(ir_case_find cases n)")),
@@ -715,7 +715,7 @@ def body_checks() -> list[str]:
         ("ir_globaladdr_eval", globaladdr_body("(ir_global_find (ir_mod_globals m) g)")),
     ]
     for helper, quoted in cases:
-        if "@" + quoted[1:-1] != machine(helper).body:
+        if quoted[1:-1] != machine(helper).body:
             bad.append(f"{helper}: the abstracted body the motives quote is not the machine's own body")
     return bad
 
@@ -731,23 +731,23 @@ def body_checks() -> list[str]:
 
 def c_getd() -> str:
     binders, _, tpl = sig("ir_getd")
-    return defn("ir_getd_stack", binders, f"Eq IRScalar {at(tpl, S1)} {at(tpl, S0)}",
+    return defn("ir_getd_stack", binders, f"@Eq IRScalar {at(tpl, S1)} {at(tpl, S0)}",
                 refl("IRScalar", "(ir_frame_get f k)"))
 
 
 def c_mach_mem() -> str:
     binders, _, tpl = sig("ir_mach_mem")
-    return defn("ir_mach_mem_stack", binders, f"Eq (IRList IRMemSlot) {at(tpl, S1)} {at(tpl, S0)}",
+    return defn("ir_mach_mem_stack", binders, f"@Eq (IRList IRMemSlot) {at(tpl, S1)} {at(tpl, S0)}",
                 refl("(IRList IRMemSlot)", "mem"))
 
 
 def c_resolve() -> str:
     binders, _, _ = sig("ir_resolve")
-    mot = lambda v: f"Eq {VS} (ir_resolve {S1} {v}) (ir_resolve {S0} {v})"
-    body = (f"IRList.rec Nat (fun (ids0 : IRList Nat) => {mot('ids0')}) "
-            f"({refl(VS, '(IRList.nil IRScalar)')}) "
+    mot = lambda v: f"@Eq {VS} (ir_resolve {S1} {v}) (ir_resolve {S0} {v})"
+    body = (f"@IRList.rec Nat (fun (ids0 : IRList Nat) => {mot('ids0')}) "
+            f"({refl(VS, '(@IRList.nil IRScalar)')}) "
             f"(fun (i : Nat) (ids2 : IRList Nat) (ih : {mot('ids2')}) => "
-            f"ir_eq_cong {VS} {VS} (fun (vs : IRList IRScalar) => IRList.cons IRScalar (ir_frame_get f i) vs) "
+            f"ir_eq_cong {VS} {VS} (fun (vs : IRList IRScalar) => @IRList.cons IRScalar (ir_frame_get f i) vs) "
             f"(ir_resolve {S1} ids2) (ir_resolve {S0} ids2) ih) ids")
     return defn("ir_resolve_stack", binders, mot("ids"), body)
 
@@ -769,7 +769,7 @@ def d_bind() -> str:
 def d_bind_result() -> str:
     binders, _, _ = sig("ir_bind_result")
     mot = lambda r: stk_goal(f"(ir_bind_result {{S}} rs {r})")
-    body = (f"IRStepResult.rec (fun (r0 : IRStepResult) => {mot('r0')}) "
+    body = (f"@IRStepResult.rec (fun (r0 : IRStepResult) => {mot('r0')}) "
             f"(fun (v : IRScalar) => ir_bind_stack {BARGS} rs v) "
             f"(fun (o : IROutcome) => {refl('IRConfig', halted('o'))}) r")
     assert [c for c, _ in ctors("IRStepResult")] == ["value", "fault"]
@@ -805,7 +805,7 @@ def d_goto() -> str:
 
 def d_push() -> str:
     callee = ("(IRFrame.mk (ir_func_id g) (ir_func_entry g) Nat.zero "
-              "(ir_bind_params (ir_func_params g) vs (IRList.nil IRBinding)) rs)")
+              "(ir_bind_params (ir_func_params g) vs (@IRList.nil IRBinding)) rs)")
     return _refl_writer("ir_push", running(cons(callee, cons("(ir_frame_advance f)", APP))))
 
 
@@ -813,22 +813,22 @@ def d_ret_to() -> str:
     d = machine("ir_ret_to")
     assert d.names == ["dests", "rest", "mem", "na", "vs"], d.names
     def mot(v: str) -> str:
-        return (f"Eq Bool (ir_stk_running (ir_ret_to ds {v} mem na vs)) Bool.true -> "
-                f"Eq IRConfig (ir_ret_to ds (ir_frames_app {v} rest) mem na vs) "
+        return (f"@Eq Bool (ir_stk_running (ir_ret_to ds {v} mem na vs)) Bool.true -> "
+                f"@Eq IRConfig (ir_ret_to ds (ir_frames_app {v} rest) mem na vs) "
                 f"(ir_config_stack (ir_ret_to ds {v} mem na vs) rest)")
-    nil = "(IRList.nil IRFrame)"
-    nil_goal = (f"Eq IRConfig (ir_ret_to ds (ir_frames_app {nil} rest) mem na vs) "
+    nil = "(@IRList.nil IRFrame)"
+    nil_goal = (f"@Eq IRConfig (ir_ret_to ds (ir_frames_app {nil} rest) mem na vs) "
                 f"(ir_config_stack (ir_ret_to ds {nil} mem na vs) rest)")
-    nil_minor = (f"(fun (h0 : Eq Bool (ir_stk_running (ir_ret_to ds {nil} mem na vs)) Bool.true) => "
+    nil_minor = (f"(fun (h0 : @Eq Bool (ir_stk_running (ir_ret_to ds {nil} mem na vs)) Bool.true) => "
                  f"ir_bool_false_ne_true ({nil_goal}) h0)")
     cons_minor = (f"(fun (g : IRFrame) (t2 : IRList IRFrame) (_ih : {mot('t2')}) "
-                  f"(h0 : Eq Bool (ir_stk_running (ir_ret_to ds (IRList.cons IRFrame g t2) mem na vs)) Bool.true) => "
+                  f"(h0 : @Eq Bool (ir_stk_running (ir_ret_to ds (@IRList.cons IRFrame g t2) mem na vs)) Bool.true) => "
                   f"{refl('IRConfig', running(cons('(ir_frame_set_many g ds vs)', '(ir_frames_app t2 rest)')))})")
-    body = f"IRList.rec IRFrame (fun (t0 : IRList IRFrame) => {mot('t0')}) {nil_minor} {cons_minor} t h"
+    body = f"@IRList.rec IRFrame (fun (t0 : IRList IRFrame) => {mot('t0')}) {nil_minor} {cons_minor} t h"
     binders = ("(ds : IRList Nat) (rest : IRList IRFrame) (mem : IRList IRMemSlot) (na : Nat) "
                "(vs : IRList IRScalar) (t : IRList IRFrame) "
-               "(h : Eq Bool (ir_stk_running (ir_ret_to ds t mem na vs)) Bool.true)")
-    ty = (f"Eq IRConfig (ir_ret_to ds (ir_frames_app t rest) mem na vs) "
+               "(h : @Eq Bool (ir_stk_running (ir_ret_to ds t mem na vs)) Bool.true)")
+    ty = (f"@Eq IRConfig (ir_ret_to ds (ir_frames_app t rest) mem na vs) "
           f"(ir_config_stack (ir_ret_to ds t mem na vs) rest)")
     return defn("ir_ret_to_stack", binders, ty, body)
 
@@ -887,7 +887,7 @@ def e_jump_func() -> str:
 def e_jump() -> str:
     binders, _, tpl = sig("ir_jump", m_first=True)
     cur = f"(ir_cur_func m {S0})"
-    mot = lambda vs: f"Eq IRConfig (ir_jump_func {S1} tgt {vs} {cur}) (ir_config_stack {at(tpl, S0)} rest)"
+    mot = lambda vs: f"@Eq IRConfig (ir_jump_func {S1} tgt {vs} {cur}) (ir_config_stack {at(tpl, S0)} rest)"
     body = resolve_subst("args", mot, f"ir_jump_func_stack {BARGS} tgt (ir_resolve {S0} args) {cur}")
     return defn("ir_jump_stack", binders, stk_goal(tpl), body)
 
@@ -909,7 +909,7 @@ def e_condbr_exec() -> str:
 
 def e_switch_n() -> str:
     binders, _, tpl = sig("ir_switch_n", m_first=True)
-    mot = lambda o: f"Eq IRConfig {switch_n_body('m', S1, o)} (ir_config_stack {switch_n_body('m', S0, o)} rest)"
+    mot = lambda o: f"@Eq IRConfig {switch_n_body('m', S1, o)} (ir_config_stack {switch_n_body('m', S0, o)} rest)"
     body = neutral_opt_rec("IRSwitchCase", "o0", mot, f"ir_jump_stack m {BARGS} dflt dargs",
                            ("c", "IRSwitchCase"),
                            f"ir_jump_stack m {BARGS} (ir_case_target c) (ir_case_args c)",
@@ -927,8 +927,8 @@ def e_switch_exec() -> str:
 
 def e_call_exec() -> str:
     binders, _, tpl = sig("ir_call_exec", m_first=True)
-    mot = lambda o: f"Eq IRConfig {call_exec_body(S1, o)} (ir_config_stack {call_exec_body(S0, o)} rest)"
-    some_mot = lambda vs: (f"Eq IRConfig (ir_push {S1} rs g {vs}) "
+    mot = lambda o: f"@Eq IRConfig {call_exec_body(S1, o)} (ir_config_stack {call_exec_body(S0, o)} rest)"
+    some_mot = lambda vs: (f"@Eq IRConfig (ir_push {S1} rs g {vs}) "
                            f"(ir_config_stack (ir_push {S0} rs g (ir_resolve {S0} args)) rest)")
     some_case = resolve_subst("args", some_mot, f"ir_push_stack {BARGS} rs g (ir_resolve {S0} args)")
     body = neutral_opt_rec("IRFunc", "o0", mot, refl("IRConfig", stuck("no_func")), ("g", "IRFunc"),
@@ -963,10 +963,10 @@ def e_assert_exec() -> str:
 def e_alloca_exec() -> str:
     binders, _, _ = sig("ir_alloca_exec")
     mot = lambda c: stk_goal(f"(ir_alloca_exec {{S}} rs {c})")
-    inner_mot = lambda o: f"Eq IRConfig {alloca_exec_body(S1, o)} (ir_config_stack {alloca_exec_body(S0, o)} rest)"
+    inner_mot = lambda o: f"@Eq IRConfig {alloca_exec_body(S1, o)} (ir_config_stack {alloca_exec_body(S0, o)} rest)"
     inner = neutral_opt_rec("Nat", "o1", inner_mot, refl("IRConfig", tyerr("not_int")), ("k", "Nat"),
                             f"ir_alloca_k_stack {BARGS} rs k", "(ir_as_int (ir_frame_get f i))",
-                            mot("(IROption.some Nat i)"))
+                            mot("(@IROption.some Nat i)"))
     body = opt_rec("Nat", "c0", mot, f"ir_alloca_k_stack {BARGS} rs (Nat.succ Nat.zero)", ("i", "Nat"),
                    inner, "c")
     return defn("ir_alloca_exec_stack", binders, mot("c"), body)
@@ -1039,7 +1039,7 @@ def arm_proof(ctor: str, names: list[str], rhs: str, tpl: str,
         return refl("IRConfig", f"({rhs})")
     if rhs.startswith("ir_return_exec s "):
         (ids,) = rhs.split()[2:]
-        mot = lambda vs: (f"Eq IRConfig (ir_ret_to (ir_frame_dests f) (ir_frames_app t rest) mem na {vs}) "
+        mot = lambda vs: (f"@Eq IRConfig (ir_ret_to (ir_frame_dests f) (ir_frames_app t rest) mem na {vs}) "
                           f"(ir_config_stack {at(tpl, S0)} rest)")
         return resolve_subst(ids, mot, f"{ret_lemma} (ir_frame_dests f) rest mem na (ir_resolve {S0} {ids}) t {ret_prem}")
     term, resolves = stackify(rhs)
@@ -1048,7 +1048,7 @@ def arm_proof(ctor: str, names: list[str], rhs: str, tpl: str,
     (x,) = resolves
     assert term.startswith(f"ir_bind_result_stack {BARGS} rs "), (ctor, term)
     evaluator = term[len(f"ir_bind_result_stack {BARGS} rs "):]
-    mot = lambda vs: (f"Eq IRConfig (ir_bind_result {S1} rs {evaluator.replace(f'(ir_resolve {S0} {x})', vs)}) "
+    mot = lambda vs: (f"@Eq IRConfig (ir_bind_result {S1} rs {evaluator.replace(f'(ir_resolve {S0} {x})', vs)}) "
                       f"(ir_config_stack {at(tpl, S0)} rest)")
     return resolve_subst(x, mot, term)
 
@@ -1056,7 +1056,7 @@ def arm_proof(ctor: str, names: list[str], rhs: str, tpl: str,
 def arm_lemma(ctor: str, names: list[str], types: list[str], rhs: str) -> str:
     tpl = f"(ir_exec m {inst_app(ctor, names)} rs {{S}})"
     fields = " ".join(f"({n} : {ty})" for n, ty in zip(names, types))
-    binders = f"(m : IRModule) {BLOCK} (rs : IRList Nat) {fields + ' ' if fields else ''}(hrun : Eq Bool (ir_stk_running {at(tpl, S0)}) Bool.true)"
+    binders = f"(m : IRModule) {BLOCK} (rs : IRList Nat) {fields + ' ' if fields else ''}(hrun : @Eq Bool (ir_stk_running {at(tpl, S0)}) Bool.true)"
     return defn(f"ir_stk_arm_{ctor}", binders, stk_goal(tpl), arm_proof(ctor, names, rhs, tpl))
 
 
@@ -1071,14 +1071,14 @@ def arm_builder(ctor: str, names: list[str], types: list[str], rhs: str):
 
 def g_stk_step() -> str:
     mk = lambda fs: f"(IRMachine.mk {fs} mem na)"
-    mot_s = lambda s0: (f"Eq Bool (ir_stk_running (ir_step m {s0})) Bool.true -> "
-                        f"Eq IRConfig (ir_step m (ir_mach_stack {s0} rest)) (ir_config_stack (ir_step m {s0}) rest)")
+    mot_s = lambda s0: (f"@Eq Bool (ir_stk_running (ir_step m {s0})) Bool.true -> "
+                        f"@Eq IRConfig (ir_step m (ir_mach_stack {s0} rest)) (ir_config_stack (ir_step m {s0}) rest)")
     mot_fs = lambda fs0: mot_s(mk(fs0))
     bl, pc = "(ir_frame_block f)", "(ir_frame_pc f)"
 
     def layer(step):
-        return lambda o: (f"Eq Bool (ir_stk_running {step(S0, o)}) Bool.true -> "
-                          f"Eq IRConfig {step(S1, o)} (ir_config_stack {step(S0, o)} rest)")
+        return lambda o: (f"@Eq Bool (ir_stk_running {step(S0, o)}) Bool.true -> "
+                          f"@Eq IRConfig {step(S1, o)} (ir_config_stack {step(S0, o)} rest)")
 
     step_f = lambda S, o: f"(ir_step_f m {S} {bl} {pc} {o})"
     step_b = lambda S, o: f"(ir_step_b m {S} {pc} {o})"
@@ -1089,8 +1089,8 @@ def g_stk_step() -> str:
     mot_nd, mot_i = layer(exec_node), layer(exec_i)
 
     def none_minor(step, param: str, fault: str) -> str:
-        none = f"(IROption.none {param})"
-        return (f"fun (_ : Eq Bool (ir_stk_running {step(S0, none)}) Bool.true) => "
+        none = f"(@IROption.none {param})"
+        return (f"fun (_ : @Eq Bool (ir_stk_running {step(S0, none)}) Bool.true) => "
                 f"{refl('IRConfig', stuck(fault))}")
 
     inst_minors = []
@@ -1101,9 +1101,9 @@ def g_stk_step() -> str:
             inst_minors.append(f"(fun {fields} => {call})")
         else:
             inst_minors.append(f"({call})")
-    inst_rec = f"IRInst.rec (fun (i0 : IRInst) => {mot_i('i0')}) {' '.join(inst_minors)} i"
+    inst_rec = f"@IRInst.rec (fun (i0 : IRInst) => {mot_i('i0')}) {' '.join(inst_minors)} i"
     assert [c for c, _ in ctors("IRNode")] == ["mk"] and ctors("IRNode")[0][1] == ["IRInst", "IRList Nat"]
-    node_rec = f"IRNode.rec (fun (n0 : IRNode) => {mot_nd('n0')}) (fun (i : IRInst) (rs : IRList Nat) => {inst_rec}) nd"
+    node_rec = f"@IRNode.rec (fun (n0 : IRNode) => {mot_nd('n0')}) (fun (i : IRInst) (rs : IRList Nat) => {inst_rec}) nd"
     n_scrut = f"(ir_nodes_get (ir_block_nodes bk) {pc})"
     n_rec = neutral_opt_rec("IRNode", "on", mot_n, none_minor(step_n, "IRNode", "fetch_past_end"),
                             ("nd", "IRNode"), node_rec, n_scrut, mot_n(n_scrut))
@@ -1113,18 +1113,18 @@ def g_stk_step() -> str:
     f_scrut = "(ir_func_find (ir_mod_funcs m) (ir_frame_func f))"
     f_rec = neutral_opt_rec("IRFunc", "o", mot_f, none_minor(step_f, "IRFunc", "no_func"),
                             ("fn", "IRFunc"), b_rec, f_scrut, mot_f(f_scrut))
-    nil = "(IRList.nil IRFrame)"
-    nil_minor = (f"(fun (h : Eq Bool (ir_stk_running (ir_step m {mk(nil)})) Bool.true) => "
-                 f"ir_bool_false_ne_true (Eq IRConfig (ir_step m (ir_mach_stack {mk(nil)} rest)) "
+    nil = "(@IRList.nil IRFrame)"
+    nil_minor = (f"(fun (h : @Eq Bool (ir_stk_running (ir_step m {mk(nil)})) Bool.true) => "
+                 f"ir_bool_false_ne_true (@Eq IRConfig (ir_step m (ir_mach_stack {mk(nil)} rest)) "
                  f"(ir_config_stack (ir_step m {mk(nil)}) rest)) h)")
     cons_minor = f"(fun (f : IRFrame) (t : IRList IRFrame) (_ih : {mot_fs('t')}) => {f_rec})"
-    list_rec = f"IRList.rec IRFrame (fun (fs0 : IRList IRFrame) => {mot_fs('fs0')}) {nil_minor} {cons_minor} fs"
+    list_rec = f"@IRList.rec IRFrame (fun (fs0 : IRList IRFrame) => {mot_fs('fs0')}) {nil_minor} {cons_minor} fs"
     assert ctors("IRMachine")[0][1] == ["IRList IRFrame", "IRList IRMemSlot", "Nat"]
-    body = (f"IRMachine.rec (fun (s0 : IRMachine) => {mot_s('s0')}) "
+    body = (f"@IRMachine.rec (fun (s0 : IRMachine) => {mot_s('s0')}) "
             f"(fun (fs : IRList IRFrame) (mem : IRList IRMemSlot) (na : Nat) => {list_rec}) s hrun")
     binders = ("(m : IRModule) (s : IRMachine) (rest : IRList IRFrame) "
-               "(hrun : Eq Bool (ir_stk_running (ir_step m s)) Bool.true)")
-    return defn("ir_stk_step", binders, "Eq IRConfig (ir_step m (ir_mach_stack s rest)) (ir_config_stack (ir_step m s) rest)", body)
+               "(hrun : @Eq Bool (ir_stk_running (ir_step m s)) Bool.true)")
+    return defn("ir_stk_step", binders, "@Eq IRConfig (ir_step m (ir_mach_stack s rest)) (ir_config_stack (ir_step m s) rest)", body)
 
 
 # ==========================================================================
@@ -1144,7 +1144,7 @@ def x_jump() -> str:
     binders, _, tpl = msig("ir_jump", "hf")
     body = lambda o: f"(ir_jump_func {S0} tgt (ir_resolve {S0} args) {o})"
     term = ext_lookup("IRFunc", "ir_func_find", "fs0", "fs", "hf", "(ir_frame_func f)", body, body, "gf",
-                      refl("IRConfig", body("(IROption.some IRFunc gf)")))
+                      refl("IRConfig", body("(@IROption.some IRFunc gf)")))
     return defn("ir_mext_jump", f"{binders} {_hrun(tpl)}", mext_goal(tpl), f"{term} hrun")
 
 
@@ -1171,13 +1171,13 @@ def x_condbr_exec() -> str:
 def x_switch_n() -> str:
     binders, _, tpl = msig("ir_switch_n", "hf")
     body_o = lambda M, o: switch_n_body(M, S0, o)
-    mot = lambda o: (f"Eq Bool (ir_stk_running {body_o(M0, o)}) Bool.true -> "
-                     f"Eq IRConfig {body_o(M0, o)} {body_o(M1, o)}")
-    none = "(IROption.none IRSwitchCase)"
-    some = "(IROption.some IRSwitchCase c)"
-    none_case = (f"fun (h : Eq Bool (ir_stk_running {body_o(M0, none)}) Bool.true) => "
+    mot = lambda o: (f"@Eq Bool (ir_stk_running {body_o(M0, o)}) Bool.true -> "
+                     f"@Eq IRConfig {body_o(M0, o)} {body_o(M1, o)}")
+    none = "(@IROption.none IRSwitchCase)"
+    some = "(@IROption.some IRSwitchCase c)"
+    none_case = (f"fun (h : @Eq Bool (ir_stk_running {body_o(M0, none)}) Bool.true) => "
                  f"ir_mext_jump {MARGS} hf {FARGS} dflt dargs h")
-    some_case = (f"fun (h : Eq Bool (ir_stk_running {body_o(M0, some)}) Bool.true) => "
+    some_case = (f"fun (h : @Eq Bool (ir_stk_running {body_o(M0, some)}) Bool.true) => "
                  f"ir_mext_jump {MARGS} hf {FARGS} (ir_case_target c) (ir_case_args c) h")
     scrut = "(ir_case_find cases n)"
     body = neutral_opt_rec("IRSwitchCase", "o0", mot, none_case, ("c", "IRSwitchCase"), some_case, scrut, mot(scrut))
@@ -1198,7 +1198,7 @@ def x_call_exec() -> str:
     binders, _, tpl = msig("ir_call_exec", "hf")
     body = lambda o: call_exec_body(S0, o)
     term = ext_lookup("IRFunc", "ir_func_find", "fs0", "fs", "hf", "fid", body, body, "gf",
-                      refl("IRConfig", body("(IROption.some IRFunc gf)")))
+                      refl("IRConfig", body("(@IROption.some IRFunc gf)")))
     return defn("ir_mext_call_exec", f"{binders} {_hrun(tpl)}", mext_goal(tpl), f"{term} hrun")
 
 
@@ -1218,7 +1218,7 @@ def x_globaladdr() -> str:
     tpl = f"(ir_bind_result {S0} rs (ir_globaladdr_eval {{M}} g))"
     body = lambda o: f"(ir_bind_result {S0} rs {globaladdr_body(o)})"
     term = ext_lookup("IRGlobal", "ir_global_find", "gs0", "gs", "hg", "g", body, body, "gg",
-                      refl("IRConfig", body("(IROption.some IRGlobal gg)")))
+                      refl("IRConfig", body("(@IROption.some IRGlobal gg)")))
     return defn("ir_mext_globaladdr", f"{binders} {_hrun(tpl)}", mext_goal(tpl), f"{term} hrun")
 
 
@@ -1310,14 +1310,14 @@ def mext_arm_builder(ctor: str, names: list[str], types: list[str], rhs: str):
 
 def g_mext_step() -> str:
     mk = lambda fr: f"(IRMachine.mk {fr} mem na)"
-    mot_s = lambda s0: (f"Eq Bool (ir_stk_running (ir_step {M0} {s0})) Bool.true -> "
-                        f"Eq IRConfig (ir_step {M0} {s0}) (ir_step {M1} {s0})")
+    mot_s = lambda s0: (f"@Eq Bool (ir_stk_running (ir_step {M0} {s0})) Bool.true -> "
+                        f"@Eq IRConfig (ir_step {M0} {s0}) (ir_step {M1} {s0})")
     mot_fr = lambda fr0: mot_s(mk(fr0))
     bl, pc = "(ir_frame_block f)", "(ir_frame_pc f)"
 
     def layer(step):
-        return lambda o: (f"Eq Bool (ir_stk_running {step(M0, o)}) Bool.true -> "
-                          f"Eq IRConfig {step(M0, o)} {step(M1, o)}")
+        return lambda o: (f"@Eq Bool (ir_stk_running {step(M0, o)}) Bool.true -> "
+                          f"@Eq IRConfig {step(M0, o)} {step(M1, o)}")
 
     step_f = lambda M, o: f"(ir_step_f {M} {S0} {bl} {pc} {o})"
     step_b = lambda M, o: f"(ir_step_b {M} {S0} {pc} {o})"
@@ -1327,8 +1327,8 @@ def g_mext_step() -> str:
     mot_b, mot_n, mot_nd, mot_i = layer(step_b), layer(step_n), layer(exec_node), layer(exec_i)
 
     def none_minor(step, param: str, fault: str) -> str:
-        none = f"(IROption.none {param})"
-        return (f"fun (_ : Eq Bool (ir_stk_running {step(M0, none)}) Bool.true) => "
+        none = f"(@IROption.none {param})"
+        return (f"fun (_ : @Eq Bool (ir_stk_running {step(M0, none)}) Bool.true) => "
                 f"{refl('IRConfig', stuck(fault))}")
 
     inst_minors = []
@@ -1340,8 +1340,8 @@ def g_mext_step() -> str:
             inst_minors.append(f"(fun {fields} => {call})")
         else:
             inst_minors.append(f"({call})")
-    inst_rec = f"IRInst.rec (fun (i0 : IRInst) => {mot_i('i0')}) {' '.join(inst_minors)} i"
-    node_rec = f"IRNode.rec (fun (n0 : IRNode) => {mot_nd('n0')}) (fun (i : IRInst) (rs : IRList Nat) => {inst_rec}) nd"
+    inst_rec = f"@IRInst.rec (fun (i0 : IRInst) => {mot_i('i0')}) {' '.join(inst_minors)} i"
+    node_rec = f"@IRNode.rec (fun (n0 : IRNode) => {mot_nd('n0')}) (fun (i : IRInst) (rs : IRList Nat) => {inst_rec}) nd"
     n_scrut = f"(ir_nodes_get (ir_block_nodes bk) {pc})"
     n_rec = neutral_opt_rec("IRNode", "on", mot_n, none_minor(step_n, "IRNode", "fetch_past_end"),
                             ("nd", "IRNode"), node_rec, n_scrut, mot_n(n_scrut))
@@ -1353,38 +1353,38 @@ def g_mext_step() -> str:
     # applied to the running premise at `some fn`.
     f_conv = ext_lookup("IRFunc", "ir_func_find", "fs0", "fs", "hf", "(ir_frame_func f)",
                         lambda o: step_f(M0, o), lambda o: step_f(M1, o), "fn", f"{b_rec} h")
-    nil = "(IRList.nil IRFrame)"
-    nil_minor = (f"(fun (_ : Eq Bool (ir_stk_running (ir_step {M0} {mk(nil)})) Bool.true) => "
+    nil = "(@IRList.nil IRFrame)"
+    nil_minor = (f"(fun (_ : @Eq Bool (ir_stk_running (ir_step {M0} {mk(nil)})) Bool.true) => "
                  f"{refl('IRConfig', stuck('no_frame'))})")
     cons_minor = f"(fun (f : IRFrame) (t : IRList IRFrame) (_ih : {mot_fr('t')}) => {f_conv})"
-    list_rec = f"IRList.rec IRFrame (fun (fr0 : IRList IRFrame) => {mot_fr('fr0')}) {nil_minor} {cons_minor} fr"
-    body = (f"IRMachine.rec (fun (s0 : IRMachine) => {mot_s('s0')}) "
+    list_rec = f"@IRList.rec IRFrame (fun (fr0 : IRList IRFrame) => {mot_fr('fr0')}) {nil_minor} {cons_minor} fr"
+    body = (f"@IRMachine.rec (fun (s0 : IRMachine) => {mot_s('s0')}) "
             f"(fun (fr : IRList IRFrame) (mem : IRList IRMemSlot) (na : Nat) => {list_rec}) s hrun")
     binders = (f"{MBLOCK} {PREMISE['hf']} {PREMISE['hg']}{_enc_binders()} (s : IRMachine) "
-               f"(hrun : Eq Bool (ir_stk_running (ir_step {M0} s)) Bool.true)")
-    return defn("ir_mext_step", binders, f"Eq IRConfig (ir_step {M0} s) (ir_step {M1} s)", body)
+               f"(hrun : @Eq Bool (ir_stk_running (ir_step {M0} s)) Bool.true)")
+    return defn("ir_mext_step", binders, f"@Eq IRConfig (ir_step {M0} s) (ir_step {M1} s)", body)
 
 
 def g_mext_steps() -> str:
-    stmt = lambda k: (f"forall (c : IRConfig), Eq Bool (ir_stk_running (ir_steps {k} {M0} c)) Bool.true -> "
-                      f"Eq IRConfig (ir_steps {k} {M0} c) (ir_steps {k} {M1} c)")
-    mot_c = lambda c0: (f"Eq Bool (ir_stk_running (ir_steps (Nat.succ k) {M0} {c0})) Bool.true -> "
-                        f"Eq IRConfig (ir_steps (Nat.succ k) {M0} {c0}) (ir_steps (Nat.succ k) {M1} {c0})")
+    stmt = lambda k: (f"forall (c : IRConfig), @Eq Bool (ir_stk_running (ir_steps {k} {M0} c)) Bool.true -> "
+                      f"@Eq IRConfig (ir_steps {k} {M0} c) (ir_steps {k} {M1} c)")
+    mot_c = lambda c0: (f"@Eq Bool (ir_stk_running (ir_steps (Nat.succ k) {M0} {c0})) Bool.true -> "
+                        f"@Eq IRConfig (ir_steps (Nat.succ k) {M0} {c0}) (ir_steps (Nat.succ k) {M1} {c0})")
     a = f"(ir_steps k {M0} (ir_step {M0} s))"
     b = f"(ir_steps k {M1} (ir_step {M0} s))"
     c = f"(ir_steps k {M1} (ir_step {M1} s))"
     running_minor = (
-        f"(fun (s : IRMachine) (hrun : Eq Bool (ir_stk_running (ir_steps (Nat.succ k) {M0} (IRConfig.running s))) Bool.true) => "
-        f"Eq.trans IRConfig {a} {b} {c} (ih (ir_step {M0} s) hrun) "
+        f"(fun (s : IRMachine) (hrun : @Eq Bool (ir_stk_running (ir_steps (Nat.succ k) {M0} (IRConfig.running s))) Bool.true) => "
+        f"@Eq.trans IRConfig {a} {b} {c} (ih (ir_step {M0} s) hrun) "
         f"(ir_eq_cong IRConfig IRConfig (fun (c1 : IRConfig) => ir_steps k {M1} c1) (ir_step {M0} s) (ir_step {M1} s) "
         f"(ir_mext_step {MARGS} hf hg{_enc_args()} s (ir_stk_running_back {M0} k (ir_step {M0} s) hrun))))")
-    halted_minor = (f"(fun (o : IROutcome) (_ : Eq Bool (ir_stk_running (ir_steps (Nat.succ k) {M0} (IRConfig.halted o))) Bool.true) => "
+    halted_minor = (f"(fun (o : IROutcome) (_ : @Eq Bool (ir_stk_running (ir_steps (Nat.succ k) {M0} (IRConfig.halted o))) Bool.true) => "
                     f"{refl('IRConfig', halted('o'))})")
-    zero = (f"(fun (c : IRConfig) (_ : Eq Bool (ir_stk_running (ir_steps Nat.zero {M0} c)) Bool.true) => "
+    zero = (f"(fun (c : IRConfig) (_ : @Eq Bool (ir_stk_running (ir_steps Nat.zero {M0} c)) Bool.true) => "
             f"{refl('IRConfig', 'c')})")
     succ = (f"(fun (k : Nat) (ih : {stmt('k')}) => fun (c : IRConfig) => "
-            f"IRConfig.rec (fun (c0 : IRConfig) => {mot_c('c0')}) {running_minor} {halted_minor} c)")
-    body = f"Nat.rec (fun (k : Nat) => {stmt('k')}) {zero} {succ} n"
+            f"@IRConfig.rec (fun (c0 : IRConfig) => {mot_c('c0')}) {running_minor} {halted_minor} c)")
+    body = f"@Nat.rec (fun (k : Nat) => {stmt('k')}) {zero} {succ} n"
     binders = f"{MBLOCK} {PREMISE['hf']} {PREMISE['hg']}{_enc_binders()} (n : Nat)"
     return defn("ir_mext_steps", binders, stmt("n"), body)
 
@@ -1411,7 +1411,7 @@ def g_mext_steps() -> str:
 # writer that reads the tail (ir_ret_to), and the main term.
 
 FALSE_K = "(fun (_ : IRFrame) (_ : IRList IRFrame) (_ : Bool) => Bool.false)"
-NIL_F = "(IRList.nil IRFrame)"
+NIL_F = "(@IRList.nil IRFrame)"
 
 
 def frames_case(nil_val: str, t: str) -> str:
@@ -1419,13 +1419,13 @@ def frames_case(nil_val: str, t: str) -> str:
     the Bool that is `nil_val` on an empty list and false on a cons. With
     nil_val = Bool.true it IS ir_frames_is_nil's body, which is how the classifier
     premise at a ret node becomes the arm's `t is not nil` premise by iota."""
-    return f"(IRList.rec IRFrame (fun (_ : IRList IRFrame) => Bool) {nil_val} {FALSE_K} {t})"
+    return f"(@IRList.rec IRFrame (fun (_ : IRList IRFrame) => Bool) {nil_val} {FALSE_K} {t})"
 
 
 def node_prem(cls: str) -> str:
     """The classifier premise at a cons machine `f :: t`, with the fetch layer's
     Bool abstracted: false iff t is a cons, or t is empty and the fetch is not ret."""
-    return f"Eq Bool {frames_case(cls, 't')} Bool.false"
+    return f"@Eq Bool {frames_case(cls, 't')} Bool.false"
 
 
 def k_frames_is_nil() -> str:
@@ -1443,24 +1443,24 @@ def k_inst_is_ret() -> str:
 def k_node_is_ret() -> str:
     assert [c for c, _ in ctors("IRNode")] == ["mk"]
     return defn("ir_node_is_ret", "(n : IRNode)", "Bool",
-                "IRNode.rec (fun (_ : IRNode) => Bool) (fun (i : IRInst) (_ : IRList Nat) => ir_inst_is_ret i) n")
+                "@IRNode.rec (fun (_ : IRNode) => Bool) (fun (i : IRInst) (_ : IRList Nat) => ir_inst_is_ret i) n")
 
 
 def k_fetch_n_ret() -> str:
     return defn("ir_fetch_n_ret", "(on : IROption IRNode)", "Bool",
-                "IROption.rec IRNode (fun (_ : IROption IRNode) => Bool) Bool.false "
+                "@IROption.rec IRNode (fun (_ : IROption IRNode) => Bool) Bool.false "
                 "(fun (n : IRNode) => ir_node_is_ret n) on")
 
 
 def k_fetch_b_ret() -> str:
     return defn("ir_fetch_b_ret", "(pc : Nat) (ob : IROption IRBlock)", "Bool",
-                "IROption.rec IRBlock (fun (_ : IROption IRBlock) => Bool) Bool.false "
+                "@IROption.rec IRBlock (fun (_ : IROption IRBlock) => Bool) Bool.false "
                 "(fun (b : IRBlock) => ir_fetch_n_ret (ir_nodes_get (ir_block_nodes b) pc)) ob")
 
 
 def k_fetch_f_ret() -> str:
     return defn("ir_fetch_f_ret", "(bl : Nat) (pc : Nat) (of : IROption IRFunc)", "Bool",
-                "IROption.rec IRFunc (fun (_ : IROption IRFunc) => Bool) Bool.false "
+                "@IROption.rec IRFunc (fun (_ : IROption IRFunc) => Bool) Bool.false "
                 "(fun (fn : IRFunc) => ir_fetch_b_ret pc (ir_block_find (ir_func_blocks fn) bl)) of")
 
 
@@ -1471,15 +1471,15 @@ def cls_f_at(fr: str, m: str = "m") -> str:
 
 
 def k_botret() -> str:
-    body = ("IRMachine.rec (fun (_ : IRMachine) => Bool) "
+    body = ("@IRMachine.rec (fun (_ : IRMachine) => Bool) "
             "(fun (fs : IRList IRFrame) (_ : IRList IRMemSlot) (_ : Nat) => "
-            "IRList.rec IRFrame (fun (_ : IRList IRFrame) => Bool) Bool.false "
+            "@IRList.rec IRFrame (fun (_ : IRList IRFrame) => Bool) Bool.false "
             f"(fun (f : IRFrame) (t : IRList IRFrame) (_ : Bool) => {frames_case(cls_f_at('f'), 't')[1:-1]}) fs) s")
     return defn("ir_stk_botret", "(m : IRModule) (s : IRMachine)", "Bool", body)
 
 
 def k_pin(name: str, binders: str, lhs: str, rhs: str) -> str:
-    return defn(name, binders, f"Eq Bool {lhs} {rhs}", refl("Bool", rhs))
+    return defn(name, binders, f"@Eq Bool {lhs} {rhs}", refl("Bool", rhs))
 
 
 def k_pins() -> list[tuple[str, str, object, str]]:
@@ -1492,7 +1492,7 @@ def k_pins() -> list[tuple[str, str, object, str]]:
         ("ir_frames_is_nil_nil", "", f"(ir_frames_is_nil {NIL_F})", "Bool.true",
          "the empty frame list IS nil"),
         ("ir_frames_is_nil_cons", "(f : IRFrame) (t : IRList IRFrame)",
-         "(ir_frames_is_nil (IRList.cons IRFrame f t))", "Bool.false", "a cons is not nil, whatever its tail"),
+         "(ir_frames_is_nil (@IRList.cons IRFrame f t))", "Bool.false", "a cons is not nil, whatever its tail"),
         ("ir_inst_is_ret_ret", "(ids : IRList Nat)", "(ir_inst_is_ret (IRInst.ret ids))", "Bool.true",
          "the ret constructor is classified ret, at every operand list"),
         ("ir_inst_is_ret_call", "(fid : Nat) (args : IRList Nat)", "(ir_inst_is_ret (IRInst.call fid args))",
@@ -1501,7 +1501,7 @@ def k_pins() -> list[tuple[str, str, object, str]]:
          "the classifier is FALSE on the empty frame list -- which is why every theorem over it also takes "
          "the nonempty premise: the empty list is outside the commuting class but not a bottom ret"),
         ("ir_stk_botret_two", f"{blk} (f : IRFrame) (g : IRFrame) (t : IRList IRFrame)",
-         f"(ir_stk_botret m {mk('(IRList.cons IRFrame f (IRList.cons IRFrame g t))')})", "Bool.false",
+         f"(ir_stk_botret m {mk('(@IRList.cons IRFrame f (@IRList.cons IRFrame g t))')})", "Bool.false",
          "the classifier is FALSE on two or more frames, whatever the head fetches: a ret there pops into a "
          "caller that is part of the standalone run, so it commutes"),
     ]
@@ -1515,21 +1515,21 @@ def k_pins() -> list[tuple[str, str, object, str]]:
 
 def d_stkn_ret_to() -> str:
     def mot(v: str) -> str:
-        return (f"Eq Bool (ir_frames_is_nil {v}) Bool.false -> "
-                f"Eq IRConfig (ir_ret_to ds (ir_frames_app {v} rest) mem na vs) "
+        return (f"@Eq Bool (ir_frames_is_nil {v}) Bool.false -> "
+                f"@Eq IRConfig (ir_ret_to ds (ir_frames_app {v} rest) mem na vs) "
                 f"(ir_config_stack (ir_ret_to ds {v} mem na vs) rest)")
-    nil_goal = (f"Eq IRConfig (ir_ret_to ds (ir_frames_app {NIL_F} rest) mem na vs) "
+    nil_goal = (f"@Eq IRConfig (ir_ret_to ds (ir_frames_app {NIL_F} rest) mem na vs) "
                 f"(ir_config_stack (ir_ret_to ds {NIL_F} mem na vs) rest)")
-    nil_minor = (f"(fun (h0 : Eq Bool (ir_frames_is_nil {NIL_F}) Bool.false) => "
-                 f"ir_bool_false_ne_true ({nil_goal}) (Eq.symm Bool (ir_frames_is_nil {NIL_F}) Bool.false h0))")
+    nil_minor = (f"(fun (h0 : @Eq Bool (ir_frames_is_nil {NIL_F}) Bool.false) => "
+                 f"ir_bool_false_ne_true ({nil_goal}) (@Eq.symm Bool (ir_frames_is_nil {NIL_F}) Bool.false h0))")
     cons_minor = (f"(fun (g : IRFrame) (t2 : IRList IRFrame) (_ih : {mot('t2')}) "
-                  f"(_ : Eq Bool (ir_frames_is_nil (IRList.cons IRFrame g t2)) Bool.false) => "
+                  f"(_ : @Eq Bool (ir_frames_is_nil (@IRList.cons IRFrame g t2)) Bool.false) => "
                   f"{refl('IRConfig', running(cons('(ir_frame_set_many g ds vs)', '(ir_frames_app t2 rest)')))})")
-    body = f"IRList.rec IRFrame (fun (t0 : IRList IRFrame) => {mot('t0')}) {nil_minor} {cons_minor} t h"
+    body = f"@IRList.rec IRFrame (fun (t0 : IRList IRFrame) => {mot('t0')}) {nil_minor} {cons_minor} t h"
     binders = ("(ds : IRList Nat) (rest : IRList IRFrame) (mem : IRList IRMemSlot) (na : Nat) "
                "(vs : IRList IRScalar) (t : IRList IRFrame) "
-               "(h : Eq Bool (ir_frames_is_nil t) Bool.false)")
-    ty = (f"Eq IRConfig (ir_ret_to ds (ir_frames_app t rest) mem na vs) "
+               "(h : @Eq Bool (ir_frames_is_nil t) Bool.false)")
+    ty = (f"@Eq IRConfig (ir_ret_to ds (ir_frames_app t rest) mem na vs) "
           f"(ir_config_stack (ir_ret_to ds t mem na vs) rest)")
     return defn("ir_stkn_ret_to", binders, ty, body)
 
@@ -1543,7 +1543,7 @@ def stkn_arm_lemma(ctor: str, names: list[str], types: list[str], rhs: str) -> s
     parts = ["(m : IRModule)", BLOCK, "(rs : IRList Nat)"]
     parts += [f"({n} : {ty})" for n, ty in zip(names, types)]
     if is_ret_rhs(rhs):
-        parts.append("(ht : Eq Bool (ir_frames_is_nil t) Bool.false)")
+        parts.append("(ht : @Eq Bool (ir_frames_is_nil t) Bool.false)")
     return defn(f"ir_stkn_arm_{ctor}", " ".join(parts), stk_goal(tpl),
                 arm_proof(ctor, names, rhs, tpl, ret_lemma="ir_stkn_ret_to", ret_prem="ht"))
 
@@ -1569,23 +1569,23 @@ def _fetch_layers():
 
 def g_stkn_step() -> str:
     mk = lambda fs: f"(IRMachine.mk {fs} mem na)"
-    goal_s = lambda s0: (f"Eq IRConfig (ir_step m (ir_mach_stack {s0} rest)) "
+    goal_s = lambda s0: (f"@Eq IRConfig (ir_step m (ir_mach_stack {s0} rest)) "
                          f"(ir_config_stack (ir_step m {s0}) rest)")
-    hc_s = lambda s0: f"Eq Bool (ir_stk_botret m {s0}) Bool.false"
-    mot_s = lambda s0: (f"Eq Bool (ir_frames_is_nil (ir_mach_frames {s0})) Bool.false -> "
+    hc_s = lambda s0: f"@Eq Bool (ir_stk_botret m {s0}) Bool.false"
+    mot_s = lambda s0: (f"@Eq Bool (ir_frames_is_nil (ir_mach_frames {s0})) Bool.false -> "
                         f"{hc_s(s0)} -> {goal_s(s0)}")
-    mot_fs = lambda fs0: f"Eq Bool (ir_frames_is_nil {fs0}) Bool.false -> {hc_s(mk(fs0))} -> {goal_s(mk(fs0))}"
+    mot_fs = lambda fs0: f"@Eq Bool (ir_frames_is_nil {fs0}) Bool.false -> {hc_s(mk(fs0))} -> {goal_s(mk(fs0))}"
     bl, pc, F, B, N, ND, I = _fetch_layers()
 
     def layer(step, cls):
         return lambda o: (f"{node_prem(cls(o))} -> "
-                          f"Eq IRConfig {step(S1, o)} (ir_config_stack {step(S0, o)} rest)")
+                          f"@Eq IRConfig {step(S1, o)} (ir_config_stack {step(S0, o)} rest)")
 
     mot_f, mot_b, mot_n = layer(*F), layer(*B), layer(*N)
     mot_nd, mot_i = layer(*ND), layer(*I)
 
     def none_minor(cls, param: str, fault: str) -> str:
-        none = "(IROption.none " + param + ")"
+        none = "(@IROption.none " + param + ")"
         return f"fun (_ : {node_prem(cls(none))}) => {refl('IRConfig', stuck(fault))}"
 
     inst_minors = []
@@ -1597,8 +1597,8 @@ def g_stkn_step() -> str:
             inst_minors.append(f"(fun {fields} (hp : {prem}) => {call} hp)")
         else:
             inst_minors.append(f"(fun {fields + ' ' if fields else ''}(_ : {prem}) => {call})")
-    inst_rec = f"IRInst.rec (fun (i0 : IRInst) => {mot_i('i0')}) {' '.join(inst_minors)} i"
-    node_rec = f"IRNode.rec (fun (n0 : IRNode) => {mot_nd('n0')}) (fun (i : IRInst) (rs : IRList Nat) => {inst_rec}) nd"
+    inst_rec = f"@IRInst.rec (fun (i0 : IRInst) => {mot_i('i0')}) {' '.join(inst_minors)} i"
+    node_rec = f"@IRNode.rec (fun (n0 : IRNode) => {mot_nd('n0')}) (fun (i : IRInst) (rs : IRList Nat) => {inst_rec}) nd"
     n_scrut = f"(ir_nodes_get (ir_block_nodes bk) {pc})"
     n_rec = neutral_opt_rec("IRNode", "on", mot_n, none_minor(N[1], "IRNode", "fetch_past_end"),
                             ("nd", "IRNode"), node_rec, n_scrut, mot_n(n_scrut))
@@ -1608,50 +1608,50 @@ def g_stkn_step() -> str:
     f_scrut = "(ir_func_find (ir_mod_funcs m) (ir_frame_func f))"
     f_rec = neutral_opt_rec("IRFunc", "o", mot_f, none_minor(F[1], "IRFunc", "no_func"),
                             ("fn", "IRFunc"), b_rec, f_scrut, mot_f(f_scrut))
-    nil_minor = (f"(fun (h : Eq Bool (ir_frames_is_nil {NIL_F}) Bool.false) (_ : {hc_s(mk(NIL_F))}) => "
-                 f"ir_bool_false_ne_true ({goal_s(mk(NIL_F))}) (Eq.symm Bool (ir_frames_is_nil {NIL_F}) Bool.false h))")
+    nil_minor = (f"(fun (h : @Eq Bool (ir_frames_is_nil {NIL_F}) Bool.false) (_ : {hc_s(mk(NIL_F))}) => "
+                 f"ir_bool_false_ne_true ({goal_s(mk(NIL_F))}) (@Eq.symm Bool (ir_frames_is_nil {NIL_F}) Bool.false h))")
     cons_minor = (f"(fun (f : IRFrame) (t : IRList IRFrame) (_ih : {mot_fs('t')}) "
-                  f"(_ : Eq Bool (ir_frames_is_nil (IRList.cons IRFrame f t)) Bool.false) => {f_rec})")
-    list_rec = f"IRList.rec IRFrame (fun (fs0 : IRList IRFrame) => {mot_fs('fs0')}) {nil_minor} {cons_minor} fs"
-    body = (f"IRMachine.rec (fun (s0 : IRMachine) => {mot_s('s0')}) "
+                  f"(_ : @Eq Bool (ir_frames_is_nil (@IRList.cons IRFrame f t)) Bool.false) => {f_rec})")
+    list_rec = f"@IRList.rec IRFrame (fun (fs0 : IRList IRFrame) => {mot_fs('fs0')}) {nil_minor} {cons_minor} fs"
+    body = (f"@IRMachine.rec (fun (s0 : IRMachine) => {mot_s('s0')}) "
             f"(fun (fs : IRList IRFrame) (mem : IRList IRMemSlot) (na : Nat) => {list_rec}) s hne hc")
     binders = ("(m : IRModule) (s : IRMachine) (rest : IRList IRFrame) "
-               "(hne : Eq Bool (ir_frames_is_nil (ir_mach_frames s)) Bool.false) "
-               "(hc : Eq Bool (ir_stk_botret m s) Bool.false)")
+               "(hne : @Eq Bool (ir_frames_is_nil (ir_mach_frames s)) Bool.false) "
+               "(hc : @Eq Bool (ir_stk_botret m s) Bool.false)")
     return defn("ir_stkn_step", binders, goal_s("s"), body)
 
 
 def g_botret_false_of_running() -> str:
     mk = lambda fs: f"(IRMachine.mk {fs} mem na)"
-    run = lambda c: f"Eq Bool (ir_stk_running {c}) Bool.true"
-    mot_s = lambda s0: f"{run('(ir_step m ' + s0 + ')')} -> Eq Bool (ir_stk_botret m {s0}) Bool.false"
+    run = lambda c: f"@Eq Bool (ir_stk_running {c}) Bool.true"
+    mot_s = lambda s0: f"{run('(ir_step m ' + s0 + ')')} -> @Eq Bool (ir_stk_botret m {s0}) Bool.false"
     mot_fs = lambda fs0: mot_s(mk(fs0))
     S0n = mk(cons("f", NIL_F))
     bl, pc, F, B, N, ND, I = _fetch_layers()
 
     def layer(step, cls):
-        return lambda o: f"{run(step(S0n, o))} -> Eq Bool {cls(o)} Bool.false"
+        return lambda o: f"{run(step(S0n, o))} -> @Eq Bool {cls(o)} Bool.false"
 
     mot_f, mot_b, mot_n = layer(*F), layer(*B), layer(*N)
     mot_nd, mot_i = layer(*ND), layer(*I)
 
     def none_minor(step, cls, param: str) -> str:
-        none = f"(IROption.none {param})"
+        none = f"(@IROption.none {param})"
         return (f"fun (h : {run(step(S0n, none))}) => "
-                f"ir_bool_false_ne_true (Eq Bool {cls(none)} Bool.false) h")
+                f"ir_bool_false_ne_true (@Eq Bool {cls(none)} Bool.false) h")
 
     inst_minors = []
     for ctor, names, types, rhs in ARMS:
         fields = " ".join(f"({n} : {ty})" for n, ty in zip(names, types))
         prem = run(I[0](S0n, inst_app(ctor, names)))
-        concl = f"Eq Bool {I[1](inst_app(ctor, names))} Bool.false"
+        concl = f"@Eq Bool {I[1](inst_app(ctor, names))} Bool.false"
         lead = f"fun {fields + ' ' if fields else ''}"
         if is_ret_rhs(rhs):
             inst_minors.append(f"({lead}(h : {prem}) => ir_bool_false_ne_true ({concl}) h)")
         else:
             inst_minors.append(f"({lead}(_ : {prem}) => {refl('Bool', 'Bool.false')})")
-    inst_rec = f"IRInst.rec (fun (i0 : IRInst) => {mot_i('i0')}) {' '.join(inst_minors)} i"
-    node_rec = f"IRNode.rec (fun (n0 : IRNode) => {mot_nd('n0')}) (fun (i : IRInst) (rs : IRList Nat) => {inst_rec}) nd"
+    inst_rec = f"@IRInst.rec (fun (i0 : IRInst) => {mot_i('i0')}) {' '.join(inst_minors)} i"
+    node_rec = f"@IRNode.rec (fun (n0 : IRNode) => {mot_nd('n0')}) (fun (i : IRInst) (rs : IRList Nat) => {inst_rec}) nd"
     n_scrut = f"(ir_nodes_get (ir_block_nodes bk) {pc})"
     n_rec = neutral_opt_rec("IRNode", "on", mot_n, none_minor(N[0], N[1], "IRNode"),
                             ("nd", "IRNode"), node_rec, n_scrut, mot_n(n_scrut))
@@ -1663,20 +1663,20 @@ def g_botret_false_of_running() -> str:
                             ("fn", "IRFunc"), b_rec, f_scrut, mot_f(f_scrut))
     def t_mot(t0: str) -> str:
         step = "(ir_step m " + mk(cons("f", t0)) + ")"
-        return f"{run(step)} -> Eq Bool {frames_case(cls_f_at('f'), t0)} Bool.false"
+        return f"{run(step)} -> @Eq Bool {frames_case(cls_f_at('f'), t0)} Bool.false"
 
     step_two = "(ir_step m " + mk(cons("f", cons("g", "t2"))) + ")"
     t_cons = (f"(fun (g : IRFrame) (t2 : IRList IRFrame) (_ih : {t_mot('t2')}) "
               f"(_ : {run(step_two)}) => {refl('Bool', 'Bool.false')})")
-    t_rec = f"IRList.rec IRFrame (fun (t0 : IRList IRFrame) => {t_mot('t0')}) ({f_rec}) {t_cons} t"
+    t_rec = f"@IRList.rec IRFrame (fun (t0 : IRList IRFrame) => {t_mot('t0')}) ({f_rec}) {t_cons} t"
     step_nil = "(ir_step m " + mk(NIL_F) + ")"
     nil_minor = f"(fun (_ : {run(step_nil)}) => {refl('Bool', 'Bool.false')})"
     cons_minor = f"(fun (f : IRFrame) (t : IRList IRFrame) (_ih : {mot_fs('t')}) => {t_rec})"
-    list_rec = f"IRList.rec IRFrame (fun (fs0 : IRList IRFrame) => {mot_fs('fs0')}) {nil_minor} {cons_minor} fs"
-    body = (f"IRMachine.rec (fun (s0 : IRMachine) => {mot_s('s0')}) "
+    list_rec = f"@IRList.rec IRFrame (fun (fs0 : IRList IRFrame) => {mot_fs('fs0')}) {nil_minor} {cons_minor} fs"
+    body = (f"@IRMachine.rec (fun (s0 : IRMachine) => {mot_s('s0')}) "
             f"(fun (fs : IRList IRFrame) (mem : IRList IRMemSlot) (na : Nat) => {list_rec}) s hrun")
     binders = f"(m : IRModule) (s : IRMachine) (hrun : {run('(ir_step m s)')})"
-    return defn("ir_stk_botret_false_of_running", binders, "Eq Bool (ir_stk_botret m s) Bool.false", body)
+    return defn("ir_stk_botret_false_of_running", binders, "@Eq Bool (ir_stk_botret m s) Bool.false", body)
 
 
 # --------------------------------------------------------------------------
@@ -1928,41 +1928,41 @@ def from_mkv(term: str) -> str:
 
 def _ir_opt_rec(param: str, res: str, none: str, some: str, major: str, motive: str | None = None) -> str:
     mot = motive or f"(fun (_ : IROption {param}) => {res})"
-    return f"(IROption.rec {param} {mot} {none} {some} {major})"
+    return f"(@IROption.rec {param} {mot} {none} {some} {major})"
 
 
 def v_view_word() -> str:
     """ir_view_word respects a pointwise-equal payload view (one IREnc.rec)."""
-    goal = lambda e: f"Eq IRScalar (ir_view_word r0 {e} v) (ir_view_word r1 {e} v)"
+    goal = lambda e: f"@Eq IRScalar (ir_view_word r0 {e} v) (ir_view_word r1 {e} v)"
     cong = lambda img, args: (f"ir_eq_cong IRScalar IRScalar (fun (x : IRScalar) => {img} x {args} v) "
                               f"(r0 p v) (r1 p v) (h p v)")
-    body = (f"IREnc.rec (fun (e0 : IREnc) => {goal('e0')}) "
+    body = (f"@IREnc.rec (fun (e0 : IREnc) => {goal('e0')}) "
             f"(fun (k : Nat) (no : Nat) (so : Nat) (p : IRTy) => {cong('ir_niche_image', 'no so')}) "
             f"(fun (k : Nat) (i : Nat) (c : Nat) (p : IRTy) => {cong('ir_wrap_image', 'i c')}) e")
     binders = (f"(r0 : {VIEW_FN}) (r1 : {VIEW_FN}) "
-               f"(h : forall (p : IRTy) (v : IRScalar), Eq IRScalar (r0 p v) (r1 p v)) (e : IREnc) (v : IRScalar)")
+               f"(h : forall (p : IRTy) (v : IRScalar), @Eq IRScalar (r0 p v) (r1 p v)) (e : IREnc) (v : IRScalar)")
     return defn("ir_enc_agree_view_word", binders, goal("e"), body)
 
 
 def v_view_ty() -> str:
     """The view at every fuel agrees when the two tables find every row alike."""
     stmt = lambda n: (f"forall (t : IRTy) (v : IRScalar), "
-                      f"Eq IRScalar (ir_view_ty es0 {n} t v) (ir_view_ty es {n} t v)")
+                      f"@Eq IRScalar (ir_view_ty es0 {n} t v) (ir_view_ty es {n} t v)")
     word = lambda tbl: f"(fun (e : IREnc) => ir_view_word (ir_view_ty {tbl} k) e v)"
     opt = lambda word_tbl, major: _ir_opt_rec("IREnc", "IRScalar", "v", word(word_tbl), major)
     mid = opt("es0", "(ir_enc_find es t)")
     cong1 = (f"ir_eq_cong (IROption IREnc) IRScalar (fun (o : IROption IREnc) => {opt('es0', 'o')}) "
              f"(ir_enc_find es0 t) (ir_enc_find es t) (henc t)")
     rec2 = _ir_opt_rec(
-        "IREnc", "", "(Eq.refl IRScalar v)",
+        "IREnc", "", "(@Eq.refl IRScalar v)",
         f"(fun (e : IREnc) => ir_enc_agree_view_word (ir_view_ty es0 k) (ir_view_ty es k) ih e v)",
         "(ir_enc_find es t)",
-        motive=f"(fun (o : IROption IREnc) => Eq IRScalar {opt('es0', 'o')} {opt('es', 'o')})")
+        motive=f"(fun (o : IROption IREnc) => @Eq IRScalar {opt('es0', 'o')} {opt('es', 'o')})")
     succ = (f"(fun (k : Nat) (ih : {stmt('k')}) => fun (t : IRTy) (v : IRScalar) => "
-            f"Eq.trans IRScalar (ir_view_ty es0 (Nat.succ k) t v) {mid} (ir_view_ty es (Nat.succ k) t v) "
+            f"@Eq.trans IRScalar (ir_view_ty es0 (Nat.succ k) t v) {mid} (ir_view_ty es (Nat.succ k) t v) "
             f"({cong1}) ({rec2}))")
-    body = (f"Nat.rec (fun (n0 : Nat) => {stmt('n0')}) "
-            f"(fun (t : IRTy) (v : IRScalar) => Eq.refl IRScalar v) {succ} n")
+    body = (f"@Nat.rec (fun (n0 : Nat) => {stmt('n0')}) "
+            f"(fun (t : IRTy) (v : IRScalar) => @Eq.refl IRScalar v) {succ} n")
     return defn("ir_enc_agree_view_ty", f"{ENC_TBL} {PREMISE['he']} (n : Nat)", stmt("n"), body)
 
 
@@ -1980,19 +1980,19 @@ def v_load_view() -> str:
           f"(ir_enc_len es0) (ir_enc_len es) hlen")
     w2 = (f"ir_enc_agree_view_word (ir_view_ty es0 (ir_enc_len es)) (ir_view_ty es (ir_enc_len es)) "
           f"(ir_enc_agree_view_ty es0 es henc (ir_enc_len es)) e v")
-    word = f"Eq.trans IRScalar {a} {b} {c} ({w1}) ({w2})"
-    result_e = (f"IRStepResult.rec (fun (r0 : IRStepResult) => "
-                f"Eq IRStepResult (ir_view_result es0 e r0) (ir_view_result es e r0)) "
+    word = f"@Eq.trans IRScalar {a} {b} {c} ({w1}) ({w2})"
+    result_e = (f"@IRStepResult.rec (fun (r0 : IRStepResult) => "
+                f"@Eq IRStepResult (ir_view_result es0 e r0) (ir_view_result es e r0)) "
                 f"(fun (v : IRScalar) => ir_eq_cong IRScalar IRStepResult (fun (x : IRScalar) => IRStepResult.value x) "
                 f"{a} {c} ({word})) "
-                f"(fun (o : IROutcome) => Eq.refl IRStepResult (IRStepResult.fault o)) r")
+                f"(fun (o : IROutcome) => @Eq.refl IRStepResult (IRStepResult.fault o)) r")
     rec2 = _ir_opt_rec(
-        "IREnc", "", "(Eq.refl IRStepResult r)", f"(fun (e : IREnc) => {result_e})", "(ir_enc_find es t)",
-        motive=f"(fun (o : IROption IREnc) => Eq IRStepResult {opt('es0', 'o')} {opt('es', 'o')})")
-    body = (f"Eq.trans IRStepResult (ir_load_view es0 t r) {mid} (ir_load_view es t r) "
+        "IREnc", "", "(@Eq.refl IRStepResult r)", f"(fun (e : IREnc) => {result_e})", "(ir_enc_find es t)",
+        motive=f"(fun (o : IROption IREnc) => @Eq IRStepResult {opt('es0', 'o')} {opt('es', 'o')})")
+    body = (f"@Eq.trans IRStepResult (ir_load_view es0 t r) {mid} (ir_load_view es t r) "
             f"({cong1}) ({rec2})")
     binders = f"{ENC_TBL} {PREMISE['he']} {PREMISE['hl']} (t : IRTy) (r : IRStepResult)"
-    return defn("ir_enc_agree_load_view", binders, "Eq IRStepResult (ir_load_view es0 t r) (ir_load_view es t r)", body)
+    return defn("ir_enc_agree_load_view", binders, "@Eq IRStepResult (ir_load_view es0 t r) (ir_load_view es t r)", body)
 
 
 def v_mext_run() -> str:
@@ -2000,13 +2000,13 @@ def v_mext_run() -> str:
     s0 = f"(ir_steps k {MV0} c)"
     s1 = f"(ir_steps k {MV1} c)"
     run2 = "(IRConfig.running s2)"
-    back = (f"Eq.subst IRConfig (fun (c1 : IRConfig) => Eq Bool (ir_stk_running c1) Bool.true) {run2} {s0} "
-            f"(Eq.symm IRConfig {s0} {run2} hrun) (Eq.refl Bool Bool.true)")
-    body = (f"Eq.trans IRConfig {s1} {s0} {run2} "
-            f"(Eq.symm IRConfig {s0} {s1} (ir_mextv_steps {MVARGS} hf hg henc hlen k c ({back}))) hrun")
+    back = (f"@Eq.subst IRConfig (fun (c1 : IRConfig) => @Eq Bool (ir_stk_running c1) Bool.true) {run2} {s0} "
+            f"(@Eq.symm IRConfig {s0} {run2} hrun) (@Eq.refl Bool Bool.true)")
+    body = (f"@Eq.trans IRConfig {s1} {s0} {run2} "
+            f"(@Eq.symm IRConfig {s0} {s1} (ir_mextv_steps {MVARGS} hf hg henc hlen k c ({back}))) hrun")
     binders = (f"{MVBLOCK} {PREMISE['hf']} {PREMISE['hg']} {PREMISE['he']} {PREMISE['hl']} "
-               f"(k : Nat) (c : IRConfig) (s2 : IRMachine) (hrun : Eq IRConfig {s0} {run2})")
-    return defn("ir_mextv_run", binders, f"Eq IRConfig {s1} {run2}", body)
+               f"(k : Nat) (c : IRConfig) (s2 : IRMachine) (hrun : @Eq IRConfig {s0} {run2})")
+    return defn("ir_mextv_run", binders, f"@Eq IRConfig {s1} {run2}", body)
 
 
 MKV_D = ("The mkv twin (M0 := IRModule.mkv fs0 gs0 es0, M := IRModule.mkv fs gs es) of the mk term, minted by "
@@ -2285,209 +2285,209 @@ def render_rust(terms: dict[str, str]) -> str:
 # sha256 of every term as emitted (in the default --form direct). See the
 # module doc for what these pins are (and are not) evidence of.
 PINNED_DIGESTS: dict = {
-    "SRC_ADVANCE_SET_MEM_STACK": "594f96f42fac87ad7a1abfb1626687b9f3f9b5a6f415e26730f0db3bd74aa0a2",
-    "SRC_ADVANCE_STACK": "8fe86ef541c9abebacb5f76fa4a8fcd444dc3eea9a34960ab27de15d14bfd30e",
-    "SRC_ALLOCA_EXEC_STACK": "6f3219b7d3eee252591f2d9ba2f557340e993e2a2f0ab31589ee5c214eeb71b6",
-    "SRC_ALLOCA_K_STACK": "2f1b30dd797a4acc9fc3fd7aedffa192cff26ea9f554e4e6c9c4abfa525fee50",
-    "SRC_ASSERT_B_STACK": "0111f708b964fc512a23e0d460883641467d72656576ea835db38e92b50cc54e",
-    "SRC_ASSERT_EXEC_STACK": "d91d880a6224f1c5e41eb292debcf471d25c0312bf2f3153ddf6860e64a7f9fb",
-    "SRC_BIND2_STACK": "b6aef4e11feb8658b2bded7794d7243e3f6e13727c4440a64847d78ebdb8f058",
-    "SRC_BIND_RESULT_STACK": "15c8b58ad35054c0a9edb79147997300894a0cd8a97bccae11c9f22f680d5d62",
-    "SRC_BIND_STACK": "bea5865245fe92c45c948c85de8209ad3d485910ccdf3aa6dd1cd4490b63c7ad",
-    "SRC_CALLIND_EXEC_STACK": "c98fbdce6f5b75478334b8c4ef78674bd5375184d7212a0cc2ae322344c9b951",
-    "SRC_CALL_EXEC_STACK": "ae038cc02c2478616973d13205e9c1e8a8f7768b7fddda1e0222e6540ed961fa",
-    "SRC_CONDBR_B_STACK": "2d380eb72fcc528d2a1b61a83fd2cf8d023841fa7e98540547d9911647fc519a",
-    "SRC_CONDBR_EXEC_STACK": "1c1eb1b295768c5cdb8bea0dac053519cd86b420515e43a06b2f2aa94c0d9b6f",
-    "SRC_ENC_AGREE_LOAD_VIEW": "88ff661bdc29d43ce4b4732ca0a2b492d20cb44df4e4a62bcace66a91bdd8380",
-    "SRC_ENC_AGREE_VIEW_TY": "35807a6897804e51445fbd06d7a7c7a956f59f731c25992d552b042602327682",
-    "SRC_ENC_AGREE_VIEW_WORD": "c26111c8ade5cb97206adf44c6632daef73ffb342a9262532f818e28eaf5b188",
-    "SRC_FETCH_B_RET": "88173a5c25bdd0356d8009224916e526c185fe334142233b006724b77870a4c1",
-    "SRC_FETCH_F_RET": "04ac79cfdacf8ff2c6d65f90210832377b1f94cd881ea5d22344af093c1b9891",
-    "SRC_FETCH_N_RET": "c089b460a1ed8fcc3aae9340cfcd482e1d68c830ac1d6294fe635ea5d9492af6",
-    "SRC_FRAMES_IS_NIL": "c92ea5adcd7d846dbd4dd17bebb9669571a79c2b14bc3381882d4167d356ef4a",
-    "SRC_FRAMES_IS_NIL_CONS": "5306f187512309acae5f4267028aef33f675768c5196491ad3fa047994ada165",
-    "SRC_FRAMES_IS_NIL_NIL": "fa7464d12e1c5da0f03ae6fe1e873a2797fb66675ecedc6b409a52ce1df5a9e5",
-    "SRC_GETD_STACK": "5704fffc5cc309c82de5b290b40430e370600070f61c2a9d7f914111d9b114c0",
-    "SRC_GOTO_STACK": "6f699cd2d89bfdaefcb076a049124c143a6d3587703c778bc7c60478ee872af5",
-    "SRC_INST_IS_RET": "2597b0ecae3ed09715c30e89f4477a7c46eb8e8b68b005009e4fba2d7fe015d2",
-    "SRC_INST_IS_RET_CALL": "5f1c838493b70b77d2d86d18cd6fb7cbc8fd6248ca9e9d90ba3532f840d87f59",
-    "SRC_INST_IS_RET_RET": "043d0256de933709e597bf9e45e8b4f451fc8141306b8365bf93b59b659f4fcd",
-    "SRC_JUMP_BLOCK_STACK": "c5601b06a57eb205a7f2533cb0d732533cf57fe04a1f17ca4ffc15487b7e8997",
-    "SRC_JUMP_FUNC_STACK": "3f3c0a686dc817e1a81675d3a3d135aa1cac5eb7860e1ff28e75d504a72cd172",
-    "SRC_JUMP_STACK": "94b28113d07e9f660aaaba9836056b361d324084f0e4ed72edac2fe6731f8ad4",
-    "SRC_MACH_MEM_STACK": "1119e707652101b4dac9aa32775c8d419eef9e07868ab7832ba36577c7097b8a",
-    "SRC_MEXTV_ARM_ALLOCA": "6a498918ad2d6eddb6452c87311e61e5d501b0988bc4099063bdd9b6be5f48ac",
-    "SRC_MEXTV_ARM_ASSERT": "3b59e63d051ae942c365b745c37255348ce6d28ada6f30a14b7425915da9c80b",
-    "SRC_MEXTV_ARM_ATOMIC_FETCH_ADD_RELAXED_U64_SEQ": "f95326670f9971c44a66124a12a3f1bb5d44d336d3f0176a6560124fbeb8bfec",
-    "SRC_MEXTV_ARM_ATOMIC_FETCH_ADD_RELAXED_USIZE_SEQ": "c4719835b84814819e439d35244c833b12ab063a0c3a1d9e0eb67636c451e1a8",
-    "SRC_MEXTV_ARM_BINOP": "6d8af8dee028f20b409e28edfb9f8a9177b07580cdcee56e61f27348135dfe57",
-    "SRC_MEXTV_ARM_BORROW": "f888a674fd354e0c36bd2da9bb3693c52954667bf10fc91149699d023dc48b1a",
-    "SRC_MEXTV_ARM_BR": "ea11cd04a5f6c99d5a104182f97f75e5214369d8a9eab00ce0609e169d9156bd",
-    "SRC_MEXTV_ARM_CALL": "4fd55c16dfaad0eaa8721a63974f3d0cbc46883173ad31612ec0771207e78671",
-    "SRC_MEXTV_ARM_CALLINDIRECT": "84c2917c407e6a094f96b4d1850dee39cc60d9e1bd0139f9db6ad35bfc3f7aa6",
-    "SRC_MEXTV_ARM_CAST": "4b52bedcae75962bd1b05938ce1a42dbc56fd608d03add06bb34eae24b9f416d",
-    "SRC_MEXTV_ARM_CONDBR": "8dd252c3e323a41674beb1dc25f389cccd586073d01b922afd5cd12f9febadd3",
-    "SRC_MEXTV_ARM_CONST_": "6f965d042bed8da17cf17005711059346a74d7fb18fb2e739e464b726468e7f8",
-    "SRC_MEXTV_ARM_COPY": "21b2286ded0212643225a94d7a715cabb893286550e8b3c84c0bc999cbb3f988",
-    "SRC_MEXTV_ARM_EXTRACTELEMENT": "ab51ae0aa0c0dc72733ad663dcf781e8aabc884db9b600eedb17ecfab3b82d75",
-    "SRC_MEXTV_ARM_EXTRACTFIELD": "ecc981de686868bf7ab0c039416ed2f627f985f4d9769d7fc3f5fcfd162b6304",
-    "SRC_MEXTV_ARM_FCMP": "f060b8eec0b984b4a9bdeac6e05b2219c536fefffa1f1cc5fc100406f184ef9c",
-    "SRC_MEXTV_ARM_GEP": "288690ec69c8bd49f559840cd4181c75059e024cf009ec0f12ef1fcc24a9dab7",
-    "SRC_MEXTV_ARM_GLOBALADDR": "675ccd7ccb0eaf73d8fa04b0630ed374dd86a717d89f0a90cb4df1f9fbd4fca8",
-    "SRC_MEXTV_ARM_ICMP": "0f26b19ee61d5322424c79e6f550f029cc0e54b1b3fe19b7281fafd2f92d7ee0",
-    "SRC_MEXTV_ARM_INSERTFIELD": "2061ff6b1dae6e3f7ac34d3dd4ffe1a2ec62e8b6487fc92b81db3be0b4aa14b4",
-    "SRC_MEXTV_ARM_LOAD": "532243788780e690543fe1f9c4e18ad4ea24d3ddc21f7718892efd6c0338e730",
-    "SRC_MEXTV_ARM_OVERFLOW": "755c10e7c52804a99115123a4a5ca0e45775c9c93f04f4561c9db338c5aa9d27",
-    "SRC_MEXTV_ARM_PTRDATA": "0a5653da8c2c87eb914eceb77beae1bcc8a60d3915e280cdc6a585463085ad3d",
-    "SRC_MEXTV_ARM_PTRFROMPARTS": "7ca1ac230badaa1fb4aaac49bca97ed2c53808c18cb4538643abc1ce6fd9c6dc",
-    "SRC_MEXTV_ARM_PTRMETADATA": "e0a7dc2dd47a78656484f727fabe0c46b010970b2457ab7535198ea056117033",
-    "SRC_MEXTV_ARM_RELEASE": "428e6b35a0501b49a8db65ff3e7b7c3940944839d88d66ae6f09245950068e3b",
-    "SRC_MEXTV_ARM_RET": "26cd402b196460addca8d089c63f1eeb6ef96f5013f1ea4e0d90f6e2ac6db810",
-    "SRC_MEXTV_ARM_SELECT": "081b64af8dd77eb71803c368077daf049fe466b5f33c7ea6284419e17588003f",
-    "SRC_MEXTV_ARM_STORE": "424131221b0c0a216077247652b8fc448ddde4fe1dcbbe05acd2d8b825ede87f",
-    "SRC_MEXTV_ARM_SWITCH": "d4679eeec91d471590bcd3b2d68bdb060f0ab33358916d34e98c765d41bd7c4c",
-    "SRC_MEXTV_ARM_UNDEF": "17fec3783fb68d1e548bc994f07b058fcf5055a561a75e4827ac66ac4d3e4204",
-    "SRC_MEXTV_ARM_UNOP": "a9c5430a2b2bf2767b147f303e21e0ba9a90e676a6b4920b46990d55afe32ca2",
-    "SRC_MEXTV_ARM_UNREACHABLE": "d75bf57fd618f3cae7b814ebdb1144e4d188b6f78cb4edf4f2eef4ee7ae43612",
-    "SRC_MEXTV_CALLIND_EXEC": "2d07bc5a30e382e9cb8109062cac63ada5f8f72c6bceed95d61dcaeeb2611da8",
-    "SRC_MEXTV_CALL_EXEC": "91847fa8982f7724a37ca0972a2452689e3bd3b3943c4c1e25dc2b1b05d28ba4",
-    "SRC_MEXTV_CONDBR_B": "38f69b33777b529418bccc92a97d92e139d87b9eac8f6d323ea496deaae6ba63",
-    "SRC_MEXTV_CONDBR_EXEC": "c9d3a32f9ef0dc78c0d7b24d01f24a14fa9a9ce5e664d47335d579273338c792",
-    "SRC_MEXTV_GLOBALADDR": "220c8211ee6354e642396d0421939d5ec9ae5de37bdf436a5c7feeb9fde2e179",
-    "SRC_MEXTV_JUMP": "4e51e9e89fda230362007f21a94195ecbe868e569d031a4bd5ef548368dbd222",
-    "SRC_MEXTV_RUN": "b208a09b6c42ccefefabb74799d01f4a4b6e5d7e4c87141b3d8dead4a59f76e8",
-    "SRC_MEXTV_STEP": "c9100ab3bfac484f23abec360ad301bee1a96b0fe9c7f6febff301c5f1c4452a",
-    "SRC_MEXTV_STEPS": "e2777ddf1953381d4c93382a5bd5935e9daec27c6a0a2c3a6147f522c3489bec",
-    "SRC_MEXTV_SWITCH_EXEC": "32d5cbb07877a1c6a79f98eeeb8477e3df3204a77fd8f5efe01939a0853c8663",
-    "SRC_MEXTV_SWITCH_N": "620e42de47c7377365ae309c60913d59127c8e76a6ccf324ffe299d9821dad49",
-    "SRC_MEXT_ARM_ALLOCA": "c5a2e9d1657712927e30c98b8fb35849fa982b7cf334ca66b3d541630ca4eba4",
-    "SRC_MEXT_ARM_ASSERT": "f83ec5c0b30b028356c0b7f765777ada9e9ff4e72c784b321c72c522aec639bf",
-    "SRC_MEXT_ARM_ATOMIC_FETCH_ADD_RELAXED_U64_SEQ": "3b45bdec85abdf491e16d9fb534881760bdaf4f15e662f9403eb863e129a8d7f",
-    "SRC_MEXT_ARM_ATOMIC_FETCH_ADD_RELAXED_USIZE_SEQ": "828c8ae24345a26c6700d329d830d5ab4557a495518ffd7d9fe9cf7c3478ab64",
-    "SRC_MEXT_ARM_BINOP": "5c58960468b7bea890558f8a8bee22a6088988788863588788dc47d7176a4df9",
-    "SRC_MEXT_ARM_BORROW": "a29658b0a8428457922953b288d95613857ecf3605c26fba322cfaff14f6b6a4",
-    "SRC_MEXT_ARM_BR": "600a3a551b9d8b3ee565d0562e05e2f3ef10db7d90c6830a8395d72bcf8d15e8",
-    "SRC_MEXT_ARM_CALL": "f7850a4b2c25df4936cc2c7d836417e7fca836111330fb6250c7dd213c81313e",
-    "SRC_MEXT_ARM_CALLINDIRECT": "8249146b1adc9f53eadc67a036c1c9a5b35e814f571e1ae3a0c32447f515eb48",
-    "SRC_MEXT_ARM_CAST": "5a955caec34f2b66c8a63708615aa3a3b8f359a2ff5cb150221f8b147764186d",
-    "SRC_MEXT_ARM_CONDBR": "8b06b405ebae120f92ac1d25c7d94e04d906c18d3816ec7a6e0316a9a4f4ed31",
-    "SRC_MEXT_ARM_CONST_": "08776b3df1efefbe03a17b003285012466070871cbc4b37d6f5c9fc3a774e5eb",
-    "SRC_MEXT_ARM_COPY": "3fbddc14c3a4730306f3e048683472440c2da68190aa2560f2de5ae2063df3f6",
-    "SRC_MEXT_ARM_EXTRACTELEMENT": "6492d9882ccf93a21dccf3a69acd0851f8c4a5f5c9e17713cf00dd3b62cc998b",
-    "SRC_MEXT_ARM_EXTRACTFIELD": "5ee139bec55e4cab704a2256fb6d8c065b1fac08bc38082a5951b0d19fe7098b",
-    "SRC_MEXT_ARM_FCMP": "9241cc0086121590f349377bf30c28504f82c6544c0d442653624249e00e132a",
-    "SRC_MEXT_ARM_GEP": "3021c32269b664a5fd4a28a103ff3f0a99a0aa4cfb993bf74ee60bfdffc64113",
-    "SRC_MEXT_ARM_GLOBALADDR": "33936aca862759c58873a8481d763bf4a4621e83a67d494ad9c5b58854c44379",
-    "SRC_MEXT_ARM_ICMP": "ccacd85019a441ba1d0e466586d73550f2a33a7d4adb0b5d32755b5aae9731c3",
-    "SRC_MEXT_ARM_INSERTFIELD": "bd9504a04c77f30c10ac48b8ea02800c0bc655be88897b7fe7128ac4d24ea9af",
-    "SRC_MEXT_ARM_LOAD": "d6f9a9e4ad40620e2c76bb73c2b7376a5015f2d7044f8941b98bf7bfe1c5cc7b",
-    "SRC_MEXT_ARM_OVERFLOW": "b848e244e36ba450216da14544aadf63bd83192c20562d032d44523fde0fdcee",
-    "SRC_MEXT_ARM_PTRDATA": "4405c6732df5da75e82eaac9cd3e93faad7c7fb72c45aab725e834ba77a6a6e5",
-    "SRC_MEXT_ARM_PTRFROMPARTS": "607673215fb792cb69d2f7634cec1cdf23bdef82b9a5e80e875228aeb06d32ac",
-    "SRC_MEXT_ARM_PTRMETADATA": "b52ffeb2f124e070fcd212b7161e02fc0f1f8516eab74b45e14350038fab90d6",
-    "SRC_MEXT_ARM_RELEASE": "fec5559a280b1df79eb4932e4c3e9e22870f54c88760c32431f9a2975514aff7",
-    "SRC_MEXT_ARM_RET": "93d0fa7ba945820209afdf53e81155ba0570316398064c1fe59c5b4d30f91302",
-    "SRC_MEXT_ARM_SELECT": "d340f9fac023d6969ba61418ea066306fd26c00ebee0907611fa0ebd1f9770a7",
-    "SRC_MEXT_ARM_STORE": "5245464bf87d751e5361f2c6ddc696862675f4ac3c4bcf0db0005cd96879231c",
-    "SRC_MEXT_ARM_SWITCH": "4a3795fd4e1591ac17cddab2acd229f21ba67983ff4c42a60dc76b662ab4b17f",
-    "SRC_MEXT_ARM_UNDEF": "182b8e35a46755159f3ad3718e97a3d34d66fd9214633fc4a6a2a58e91a31df4",
-    "SRC_MEXT_ARM_UNOP": "c70777d00d1319eb01c55a93f2b54fcf64129c301bf68898af2d43359b334475",
-    "SRC_MEXT_ARM_UNREACHABLE": "2080c7a4b5263a0fd6b17f89293df833c67a9350f559afdf8b6d99bc330492cd",
-    "SRC_MEXT_CALLIND_EXEC": "2bf5bf240a7ff5f1cda2b75364a79acf59d658630c8361bd1be3f1aeed84d473",
-    "SRC_MEXT_CALL_EXEC": "d753da455b9e6ae9300dfa853cd213508547cc37e03082007a1762f3c83548b8",
-    "SRC_MEXT_CONDBR_B": "e6a72b1c57abe2ba59f6c3d7b74693753312eed6febebe257ca903f525279edd",
-    "SRC_MEXT_CONDBR_EXEC": "0f6c361717361db0e5cf1609df81589c7f065d828cc0447bcb6c92f0923b30fc",
-    "SRC_MEXT_GLOBALADDR": "f0f704868a6996e7ac866a4a94afe859b1f71401367e5781e0c7cf4a520a13b7",
-    "SRC_MEXT_JUMP": "22023b879684aef4f25b1c93fc1d7ce918fd421ad0fb9d29f013d737f8f1411b",
-    "SRC_MEXT_STEP": "df913d9e81c4c31dc722318915ed8cd089ad300c16e9af647a99d2188d40bf45",
-    "SRC_MEXT_STEPS": "011cbf80f78c58c2860ff2d374594479d30452572d0326f62867b6ee2e657fa2",
-    "SRC_MEXT_SWITCH_EXEC": "15123fdf945675fb1688766bdf2603862fe362b17847c40214cf55c2e9556015",
-    "SRC_MEXT_SWITCH_N": "b4e2b3097ce9c7b3d0bd5957ca3577d641a6d13c7aa77cd722851f81c5e2f366",
-    "SRC_NODE_IS_RET": "aa686a6daa74ad69f44d3d81230e34f266d38ff23313f7e7d23656852bbc8637",
-    "SRC_OVERFLOW_EXEC_STACK": "8128611d51f03cdf79d5a45a86675f32e0dac014a2c5ca2e5aaa2fda3fedf5c2",
-    "SRC_OVERFLOW_INTS_STACK": "ef364b2fc81f18d2712770db05b31741f200f87706655ac0d341620fb1a12813",
-    "SRC_OVERFLOW_VALS_STACK": "b31c463d7527f8bc8ebe6dfa4dc706f2d731eeb91b9af4d140326ee08021fff4",
-    "SRC_PUSH_STACK": "8cbcf2f0b15f5ea88a1167e63656c1b696559544d472b5cd565732ac6a9beb42",
-    "SRC_RESOLVE_STACK": "8095a89bdea969b0ec8bec095269b28ec89d5da091ebc084222d6d1ac7363ac9",
-    "SRC_RET_TO_STACK": "381b584ade8778160836661efe7c33e084288f715675524035596e61e0cf14b3",
-    "SRC_STKN_ARM_ALLOCA": "d101e7d66d3a04456d2143698d0689073d00787a3f80edad92addd80b3586580",
-    "SRC_STKN_ARM_ASSERT": "a9305414b4c626ec0ea59693ce38bf9e13a6a88f2db51a9d9b83e31f961d4340",
-    "SRC_STKN_ARM_ATOMIC_FETCH_ADD_RELAXED_U64_SEQ": "ed8e7e5d327d57b1efeef81114ddaf6da0fed84d1db7b4fa41884577db3a241b",
-    "SRC_STKN_ARM_ATOMIC_FETCH_ADD_RELAXED_USIZE_SEQ": "34b9d912f91f2f21adaf1d3a4731fbcb80327e184d41ef5d9698172684843a2e",
-    "SRC_STKN_ARM_BINOP": "ed84fec54ba5f3fc5334bf3bed68b947f976b6eef0cee44af07486b73dc65ae8",
-    "SRC_STKN_ARM_BORROW": "09e363a0b9ed9fb80dc07f2d2f988b5a16b0e3470299d515d02497966a117d02",
-    "SRC_STKN_ARM_BR": "a485c858d259298ce687c970bf5c38fd6d51b01f501ae386ab10e2117e8c4466",
-    "SRC_STKN_ARM_CALL": "7301300bc28ef8c6c9a345835f12b5fd591338a0299da2d0b2f2f739b4f785a0",
-    "SRC_STKN_ARM_CALLINDIRECT": "631e6cdba0346467415d1c6d3d65ec7dc85d6a515d93b38c87dfecee2b579e27",
-    "SRC_STKN_ARM_CAST": "35c2e96979f3899c77414be5f66726ec2c63fcc52dc3998670c0f02fb49fa6b2",
-    "SRC_STKN_ARM_CONDBR": "5eeef8bb920dd307f1a0f42fdc3166e7cc0465f845735275595cd2d7cb148fbb",
-    "SRC_STKN_ARM_CONST_": "d2fbf8ab2ea4eeea0db45789201f9cc120339a3a25004dd208126fc6c0654b89",
-    "SRC_STKN_ARM_COPY": "baafd7fb6fd489d4f096078f6622e1c7a0ad1cf2aa0341f3f09c53a4f874c919",
-    "SRC_STKN_ARM_EXTRACTELEMENT": "d5036dcb9da45e4d09d6bec22a0231512cf0335eee708494aba33d779d24690b",
-    "SRC_STKN_ARM_EXTRACTFIELD": "49320e97a6ac00e574712b776cb52baff85a548cf21ef6b6634bc2794be72fb1",
-    "SRC_STKN_ARM_FCMP": "fa6577445c3f98b6ab85c1650cb16fd9860c152b1aa05e5bf57c5c2a0ea41043",
-    "SRC_STKN_ARM_GEP": "d34d33ff09459a33dfa0935524a20ed3a6d202ff4e1f0ad853608d3cdd850583",
-    "SRC_STKN_ARM_GLOBALADDR": "f90e01df070332f16f2cae93695cccac0e30d1f22fbad456bb755fab9f2bb936",
-    "SRC_STKN_ARM_ICMP": "03219efc4f279a3c983a6dd830b5eebc6002d75003c8a58a78bbfd9cede686ca",
-    "SRC_STKN_ARM_INSERTFIELD": "1a9e125fb00e8492e278f328ae79e24c6bccf90bf075de533044959385c2c330",
-    "SRC_STKN_ARM_LOAD": "c52e884d511e746f696c48f0a66048111cfa4a5585d22901ece8fd89db59d692",
-    "SRC_STKN_ARM_OVERFLOW": "154f8a80b24495345417b90f7a5abafdd2e2f38a91e9bd9df39eee70c7c4c7a4",
-    "SRC_STKN_ARM_PTRDATA": "88768d1e4e1b4388c1e0b14ece32c7156e5a6a56c76dfbe94dea720546513a91",
-    "SRC_STKN_ARM_PTRFROMPARTS": "20fa1c27b051cc1db093f8e597bde91049cbae0d3dba41c956bb3ba6cef7b649",
-    "SRC_STKN_ARM_PTRMETADATA": "5f5e25634ca8c38a1ea44b71be55f76d6597a140b7617c6049d62162aaaedb1c",
-    "SRC_STKN_ARM_RELEASE": "f56848661457ccf06a648c9892aa087bfb019ad1ae0ae45162065e5c27292234",
-    "SRC_STKN_ARM_RET": "09db9565b3a67036faa3c6d76c3142cb5a706e87db054ae3f5b27794a8920d06",
-    "SRC_STKN_ARM_SELECT": "4983f4fdcb3fd514c7f35303d2a1a8049eb8dc3232b0bd328122e195a82bf18a",
-    "SRC_STKN_ARM_STORE": "2d8cd5bc696096af13330c9c2d825fea3067cef7a613657885f7e6159c7db87e",
-    "SRC_STKN_ARM_SWITCH": "d6ad717efa1f0ab7e770be304c7e0a3db3aaf0a3acb1cacd6151bae9ad4e051a",
-    "SRC_STKN_ARM_UNDEF": "9036e328426f8c04ff7da5b2ee38286c2bf45bf03e5cf5e9ea7e9f10b0188692",
-    "SRC_STKN_ARM_UNOP": "d5b32112d8e411fc02d96963807e67abdeac8a92407263fb5ed0afe124a9e309",
-    "SRC_STKN_ARM_UNREACHABLE": "b661032fc223b127467f53c95d2359a548379a3694306ec4ca3f194e68e27a39",
-    "SRC_STKN_RET_TO": "6db4a93a32d31f88e8fa5a34791f6f56c75a0cedc575062b778c09725ec93e02",
-    "SRC_STKN_STEP": "524f2a37611daa86230d172216cbb8d9d55ef8b7a8939143d5872e859a776972",
-    "SRC_STK_ARM_ALLOCA": "60835b0dad029e80ad790525247932caaab0f72e97917762fcf674990630248a",
-    "SRC_STK_ARM_ASSERT": "2497c5764a0238ebc38d6dea8d71719aaf0eee92449814520d53970269229cb4",
-    "SRC_STK_ARM_ATOMIC_FETCH_ADD_RELAXED_U64_SEQ": "55881eb16f92f1ad3968aaa5418f7ed7b1c98a9080f7c6aa99ac5f97b3ab1c6f",
-    "SRC_STK_ARM_ATOMIC_FETCH_ADD_RELAXED_USIZE_SEQ": "b7bd9da25d7c44707532ab23062c6822de58a894ef533237b3e325cc3deb3d8d",
-    "SRC_STK_ARM_BINOP": "397b0691189554e8fd5c4bca736e2cbf85e1b5257ff31a1af36008321eab310d",
-    "SRC_STK_ARM_BORROW": "6f7faafab4c00ec9e29162787453bc4dfd948b1f96880d3c0323ae7c69f4a036",
-    "SRC_STK_ARM_BR": "e9c88c35f302451520eadfd33e42f9c76543a0a33c1f5c861dbbc3dfecad2a76",
-    "SRC_STK_ARM_CALL": "2bf6a3f409dd07e3fc2d4e61340aeea05ceb91eda46922b21321e0fe8a476ddb",
-    "SRC_STK_ARM_CALLINDIRECT": "4dd712b32fb5a40daba105970aff7ae1def0f7ab39d54bdc96bb2e185d2a235d",
-    "SRC_STK_ARM_CAST": "3ae5f85ed1e6be71655fc54803f8b0db1cd008ead00e42705eff306aed2d40ec",
-    "SRC_STK_ARM_CONDBR": "cf07f425657eb11793803747b09bc6b3fd8221eb7d37aaa7e6a443aa9330a372",
-    "SRC_STK_ARM_CONST_": "8cb3669f4ec85676aa6de1c0cfbdfa6041ddf2e6f9070f6dbda6284c86e76d8e",
-    "SRC_STK_ARM_COPY": "96727c41b5a11387ea6de8f3d930954cd078f308892c168c508c8c1b1653d038",
-    "SRC_STK_ARM_EXTRACTELEMENT": "4265b9312c9fa21fe8358f2da554a7b06ae4537c1ed470da7e96471d9007b22e",
-    "SRC_STK_ARM_EXTRACTFIELD": "32282102737caa8ba0286221cb2216c3adb13563159632a50948df3066433462",
-    "SRC_STK_ARM_FCMP": "93ef88c3fb9ee0abb5180a34b230baee1ff538db8430030a316b7c167774be91",
-    "SRC_STK_ARM_GEP": "088e34b683a320b96d6c4b4f52985d4cc6cae730ca04dd17dd63c77266a4c5dc",
-    "SRC_STK_ARM_GLOBALADDR": "d0d3ab94f30ff556313d6acfebe0b925b37665c27a6587b87e2ac82c0cf1ed75",
-    "SRC_STK_ARM_ICMP": "30756831efdd1b8c53bce880a1781a5409f810d77e915f2b285263b2284a0484",
-    "SRC_STK_ARM_INSERTFIELD": "2c084b6fb0e96e79e8a87e28b7315ce2f37ae11f4081b99f0a240c60d03a2f9f",
-    "SRC_STK_ARM_LOAD": "3b598bef70fc364d8adaafdb42de091b6403dbc621c123d7a495c8fbbc9267a3",
-    "SRC_STK_ARM_OVERFLOW": "b597a49eb954ec5451e245ae811e7622616d729bd19bd2bbf13e45c040451a97",
-    "SRC_STK_ARM_PTRDATA": "9e872183d8fdf4ee5941afe1f59361474adb629ccf4504d8aef15fb3a1bc0724",
-    "SRC_STK_ARM_PTRFROMPARTS": "2197f5c5e473c448e9046f5fd37e420256e29a16e06a62d5a9c3cf724b80de01",
-    "SRC_STK_ARM_PTRMETADATA": "ddfb31f7aa6b5a9298ee641298a215960d7c6f4c69cb9026f4e5d2a7aeaf4ac7",
-    "SRC_STK_ARM_RELEASE": "0a84816b8564c3ad7728f9e97b19766c6db0c296cae8f574de1756515950d090",
-    "SRC_STK_ARM_RET": "71b66f8f575805ecc8528b045a2a9bac88602dc82c97a8f2d7bcc5b2aa7df758",
-    "SRC_STK_ARM_SELECT": "5d921ebd0d2497889d471afc07256d7dd00ce5d9d004344afbb7cfd548e7d403",
-    "SRC_STK_ARM_STORE": "e01c62b5edbac4fef6e633e4f340e883a0a285ace60491c8c2e67e620bca7012",
-    "SRC_STK_ARM_SWITCH": "48d5d877d32720bdde8119c3f516f622556556a5f69f3521618f8dfd2b07e86a",
-    "SRC_STK_ARM_UNDEF": "fd3c01d02d6fb87c95bc4c84712e04997d526bcbf2513c019561bb25e1b41f91",
-    "SRC_STK_ARM_UNOP": "8e1cbedf42633990bd8df9f7ca38397e0e45b82f3d8295b93964152467355ccc",
-    "SRC_STK_ARM_UNREACHABLE": "596a4615ed7b7e5b66b3e326f90c4676a75a3b81d0ba90dd96c9b6c5277a910d",
-    "SRC_STK_BOTRET": "8a3535d972cd5cf0e6bf4085e18b78f16d47179358666eceb924edd051392092",
-    "SRC_STK_BOTRET_FALSE_OF_RUNNING": "e5b2fa9046c0b759a70ecd41208d1094cd8d5329f05a0250a0bc6d20b76a4efd",
-    "SRC_STK_BOTRET_NIL": "57f25ba2d508c87f21b867a38d2e01239636d9283d37de2e47eb51fd8bcbc1a2",
-    "SRC_STK_BOTRET_TWO": "33e01ca62ac259a1fb1723b512073c32630b117281b6b41c287dadef3d213627",
-    "SRC_STK_STEP": "5b1153165336bf880ab7350a5fc9b64a34fa3ea8215ce2fc52d526fad5ec5d6b",
-    "SRC_STORE_CHECKED_STACK": "a571c586fcb96594fa024f1c3e08cfa9cf7a4d7c11c8ec51cdc765b67d27dc1b",
-    "SRC_STORE_EXEC_STACK": "f2409e03f929590da9dff273676e50f9f574fe39ae107fd0b770f839baed32c9",
-    "SRC_STORE_LIVE_STACK": "8c31c21e91f3c5832411443caa459d6a4c91ad43cd359b853734f3728d6e7aa2",
-    "SRC_SWITCH_EXEC_STACK": "b4600edf24ebef7789865fbb4ef54a3a024d716e013998dc55b64dd6c495102b",
-    "SRC_SWITCH_N_STACK": "5fa726f7ab7bf9c115efc1abd698c4fa8de3678aaeaa4288e8796082311e79f6",
+    "SRC_ADVANCE_SET_MEM_STACK": "2816beb45bc2d30174960c764772c7e6d3e26926c7bc3d46ed306be6ab911dfe",
+    "SRC_ADVANCE_STACK": "18fe77c79d1d0dc3bc62f7c6c3945e89c548f5116e6242c0b83ecdf6fe35d9d1",
+    "SRC_ALLOCA_EXEC_STACK": "2a835dfebffe6d091d66d8b12ac0d31083b0fd1ed6084d19041fcdec4673017a",
+    "SRC_ALLOCA_K_STACK": "6784b8577fcc13662b0f355ab621344eb3cea6af8315198adbeea805c40073ca",
+    "SRC_ASSERT_B_STACK": "37dd7847a2920d40912ba02f50b5cca9372bd08e6e81f1b11e1287d073e75d0c",
+    "SRC_ASSERT_EXEC_STACK": "788d46435c6f299ab55681b70a7f0f066c6032627d7e2ba0f93395345aafa158",
+    "SRC_BIND2_STACK": "d3d6a67a6cf76c33be86a55e76f5e2cd4f180f70123a7baed52d633d89bbf0b2",
+    "SRC_BIND_RESULT_STACK": "0f5fee56555c301721721579b43255265e9277e29a26cb3957bdaa19942867c4",
+    "SRC_BIND_STACK": "ab8c6ee7483cf4bdf2c1c00d99ebfeddf756531498b5ac308728aa03d55c5f0b",
+    "SRC_CALLIND_EXEC_STACK": "864be03e15a73b0e9c499b7d38e6363b42c5aafdf3a7ce20e4fa590e611f652e",
+    "SRC_CALL_EXEC_STACK": "0fbb342c0a17404d203d9d618b399f0661cd777bc418249628233e47b14fa5df",
+    "SRC_CONDBR_B_STACK": "3c9c1a790327ce86e151e0d02a082d056757657d5ddf4d261b3122a12b06f0b3",
+    "SRC_CONDBR_EXEC_STACK": "40ca638fac84d901feef7f699d275aca29d88df59f37019be104c8b7ced1d9d0",
+    "SRC_ENC_AGREE_LOAD_VIEW": "a03f656ea70fa5b4ab0451fd698a1c0cd8651725f4671170ea53223ad457630b",
+    "SRC_ENC_AGREE_VIEW_TY": "c14ad29de326c7ecf046f29602c2af772684b8606aba2bbb621a9a11521d70c5",
+    "SRC_ENC_AGREE_VIEW_WORD": "32a9a3d442653ec38dc416fbaab01b41d7c8db585d53c5c7f5679e53e026d77d",
+    "SRC_FETCH_B_RET": "fbd13e072a41e6dcd378f20850e5f870c860eec1d0735471cb76dc7880679bd1",
+    "SRC_FETCH_F_RET": "2cf2b643b331a98ec23ebde683e7eccd0fade64a0263776097753188333f4da5",
+    "SRC_FETCH_N_RET": "a85c7b1aa5784d437b7ff68e7f9b8aa7eb30dcacb9ef6774b74c56079fc4988d",
+    "SRC_FRAMES_IS_NIL": "c1d7471d679a474052d2fdb017fb37daa043ac17bfbc47e0d057fc88f0017e78",
+    "SRC_FRAMES_IS_NIL_CONS": "779d8f6cba8f2bcb17bbffd0a4075ce6417dfa02e41d30f533ae21dd823ca50f",
+    "SRC_FRAMES_IS_NIL_NIL": "c3acd8a8b6e6130189d40a47fc9bd9305261714ff1327d392a93ee4a10bfe87e",
+    "SRC_GETD_STACK": "cc47a72eb17d4d6f729ce0dda6014fe4943b73ce0297bb6fd8a044437ac3a671",
+    "SRC_GOTO_STACK": "9c36a3a64d25c9aadfd8346f4302a528ebb8ef15617891b15fff6f61e40947dd",
+    "SRC_INST_IS_RET": "b842502d3046c67d6576320002ea64a57ff26098fd0514c9693d263ffa605896",
+    "SRC_INST_IS_RET_CALL": "eff8746447361bed7a0c3b4acf570d88235d2d806538b3106d714fd4a934fab5",
+    "SRC_INST_IS_RET_RET": "78b39c537e236b4c82965b0dd18ed1e5e8a2d1c78541c7220401c5742d9c4a5c",
+    "SRC_JUMP_BLOCK_STACK": "b0390503225b64f72f9c9c95c704ac9c6b71b80bf3965aa1b6268d3120b08264",
+    "SRC_JUMP_FUNC_STACK": "47515c352a75f6290b8636c7ac79e9e561a01edf4c541af8f574f86feed175de",
+    "SRC_JUMP_STACK": "e195d38ed2d76580b233da242ac35207d0f91f182eec7d61f4df8f2a77a3949a",
+    "SRC_MACH_MEM_STACK": "b5a462d154349d1fd801bcc545d8f187d545808205e10361ee835a285f9e2b01",
+    "SRC_MEXTV_ARM_ALLOCA": "11a161328f29ce8d2855c0ab60f62f2bd55450a37d1a6d320566a5afef736a8e",
+    "SRC_MEXTV_ARM_ASSERT": "8f7ac3d3733dc0ce7b30c4e19f7033908b74e641a2932282fa246768cc2bd950",
+    "SRC_MEXTV_ARM_ATOMIC_FETCH_ADD_RELAXED_U64_SEQ": "5c3ecde5eff6b799991d8daf5f4e81d60a0b90ca006c433ed2291eb979572e31",
+    "SRC_MEXTV_ARM_ATOMIC_FETCH_ADD_RELAXED_USIZE_SEQ": "56d72ecd7da30bf6ca173a6d0d5d702a1e8e4876413d4037cc62870c6121fedb",
+    "SRC_MEXTV_ARM_BINOP": "1660ac86ac9bea5685e0ce62cdae79b21d6576bbc01d7507a28e2a33b018d1f6",
+    "SRC_MEXTV_ARM_BORROW": "f546ebfc8063c577b558afca46cd5f55f6ded14d09825ab1ce129e05bb783755",
+    "SRC_MEXTV_ARM_BR": "46a6959aa571fadefd42af84d133ada9d5dfa54aa5b15d7b8abbd0ae96d492e4",
+    "SRC_MEXTV_ARM_CALL": "6b30938623e2b25f9be26ac97bca5539951f4ad1d17ee4aaf19a8336df3c9b37",
+    "SRC_MEXTV_ARM_CALLINDIRECT": "2db9fdc521711acd1eac5213cf4a339a1036dc95b61401b6ac59efde36e894d8",
+    "SRC_MEXTV_ARM_CAST": "c93af6f4b9aefed78c51fdf8869baa462e50d6adbbe1135d97a52ad23bc7952a",
+    "SRC_MEXTV_ARM_CONDBR": "7ecc8279d41a6ab0a64f378f97520479b2753b568a715dd1ad1aa4092ba409e3",
+    "SRC_MEXTV_ARM_CONST_": "455c6845872048e66a9b1e10b6a150cbc912ff5964de8fbefbdd1f63b37ab27e",
+    "SRC_MEXTV_ARM_COPY": "dd92b5e5866342eaba1b936abb1799ab0b704d541a6ad52f55c064fe976b9988",
+    "SRC_MEXTV_ARM_EXTRACTELEMENT": "dea33e9f19b5501eef8aac52dd41dcf41d01fe0e07b0fd352d96d5b85687ec1b",
+    "SRC_MEXTV_ARM_EXTRACTFIELD": "b581b96126fca31019789fc24d31921ec8b0e9ddbdb30463083ff320c3f0b772",
+    "SRC_MEXTV_ARM_FCMP": "8a8a18b04273d5d1c20d2d0fff2f3dd3d2f9309a00ac0e1da5f1975a06286774",
+    "SRC_MEXTV_ARM_GEP": "c35623c48a2b126690381cef9a6468581c31824802a8dbd0d151eef17cf637b6",
+    "SRC_MEXTV_ARM_GLOBALADDR": "16c508b903bc20db42546faece72da152e806778ff97e3f58562f9ea6dad339d",
+    "SRC_MEXTV_ARM_ICMP": "4bca29cbb12717396355beb27d551e114ed8d6f56a01b7653a922cde830b3ae4",
+    "SRC_MEXTV_ARM_INSERTFIELD": "8757becb210f354b1436aa8caa74c9379a4b47c97899e4e987a58d39a2ea1161",
+    "SRC_MEXTV_ARM_LOAD": "69b704e9ea58c0f8bd05ed540d45eca71e456b0da67d33f67242e3140b890476",
+    "SRC_MEXTV_ARM_OVERFLOW": "c059c849c881efbbc336bb0aaa067446a63e05d4f428a861d99888b4375545e1",
+    "SRC_MEXTV_ARM_PTRDATA": "cbb75bdce8fe367b51e555cc8772301e6d5687387bd756828e24851860156164",
+    "SRC_MEXTV_ARM_PTRFROMPARTS": "e1c2154c06a9b033b07dc8dba25f24e5a0c66ec974362c5fd703d892abf716a1",
+    "SRC_MEXTV_ARM_PTRMETADATA": "79f8578ad3f5e5648664e3a488769ad94161067a72a9db0eb85028728b187076",
+    "SRC_MEXTV_ARM_RELEASE": "26893bf78c142c5cce9216084a263a653b7d52f2c5b24376b0447acf5acc5768",
+    "SRC_MEXTV_ARM_RET": "89c2f72c2b84194f21cf7ba2f216820b1ce61a112af4a54bbb7b9c14a398b0b2",
+    "SRC_MEXTV_ARM_SELECT": "2ea10d029303f3306bbfc9ac42bf6a82696f49f314c798cbe6e9fa5050edbeb9",
+    "SRC_MEXTV_ARM_STORE": "a3bb716d774bfd38c9728e166f67d646acd701b283368a269a8d71b36cca0214",
+    "SRC_MEXTV_ARM_SWITCH": "d7008ee1d16c3a0a7e0dfb95ea33976e0c3b1cd853431c43fd47342c31d14404",
+    "SRC_MEXTV_ARM_UNDEF": "99e76f631bcc4d27b4bdc39fbd8e68d703484ce967de2c8645fb139985a6b2e5",
+    "SRC_MEXTV_ARM_UNOP": "7468e753303b69f85175b7438bf8b24503aa7a8a2eb5c1d3b6048a5d9140d01d",
+    "SRC_MEXTV_ARM_UNREACHABLE": "cd30d014a9656a242009166838a8ff7356bcfe5153c50003d4714b3672f6c380",
+    "SRC_MEXTV_CALLIND_EXEC": "c459c1e929289d9db3bb9945c958df235bf56e9ce1186557f23677126e2ab0f6",
+    "SRC_MEXTV_CALL_EXEC": "739f8f9d147494cb17f19702333c769a8021aa21a5d7df4680495a39dd116bdc",
+    "SRC_MEXTV_CONDBR_B": "f22f7f36bcabd730eea1e6c451d6b495937fe87e834c27b5f21a928728ee1cec",
+    "SRC_MEXTV_CONDBR_EXEC": "d325f6273744db01924672bf5387ba5bb27e9bb8fdb5de6e129ec2c34ca600bd",
+    "SRC_MEXTV_GLOBALADDR": "d2afde4389939fb0072099bd4c5ceda17ec179eba55496416961f94bd459db33",
+    "SRC_MEXTV_JUMP": "37739e72badcd1bdeaf0f6c53fae3e8b9756adb14efe4d097db72fb1384f422c",
+    "SRC_MEXTV_RUN": "74bd5c54fa1b1071185797a1c2d3540f7ae94aacf4b0a67d073d725e22e386f0",
+    "SRC_MEXTV_STEP": "2a820104b76e9a872eb0d3f839ed785deb637968a7aa03ad0d95cf09bc0b87c0",
+    "SRC_MEXTV_STEPS": "f248cee1641e66d715869b46d8f26645e442b5c5b7cb9ee07a4c1a43fea854e3",
+    "SRC_MEXTV_SWITCH_EXEC": "bf3172d6147fc6db6319aab4b70e83c5feff96b0d057b1eebc44a4eb655da74c",
+    "SRC_MEXTV_SWITCH_N": "2f4e495b185f4f3a2d5fdb04314200a9ea69fb097dbb12a8565b7d4bedc04a35",
+    "SRC_MEXT_ARM_ALLOCA": "6d46a29f277cd3f6bf4e7eb77de8c95bda3c8d0078386756c06e2ba197209769",
+    "SRC_MEXT_ARM_ASSERT": "077d71dab110c62451b5f176e895542d88f74b07475eb934930ef47dbb3aae29",
+    "SRC_MEXT_ARM_ATOMIC_FETCH_ADD_RELAXED_U64_SEQ": "22a06158ae3e6fd554847347b347be234948e69e7b63911aaa0d1e0bea80f868",
+    "SRC_MEXT_ARM_ATOMIC_FETCH_ADD_RELAXED_USIZE_SEQ": "ceee576937da3ff851a3539ef5360148e868982c084acdfb631374a79563c36d",
+    "SRC_MEXT_ARM_BINOP": "1a1241d80f643b136b5aa009261196cce688ad1f3142441dffbc46bd572e0678",
+    "SRC_MEXT_ARM_BORROW": "4aa661bf303510493eb98096024e54e475e855158c6e3d500f85a896c6df89c9",
+    "SRC_MEXT_ARM_BR": "1093ba3ee841a4a6fec69214e54beb9dddb4d6080242d9077b6c34989d89c031",
+    "SRC_MEXT_ARM_CALL": "0a6b18940fe80f2d551e1e6380e3b16d61470eeed4a77fdb7dc11b37d03c3ae2",
+    "SRC_MEXT_ARM_CALLINDIRECT": "1677564faa9d02951f086bcfa5fe904fd2ff5d287cacb33f1ff6501220534fa8",
+    "SRC_MEXT_ARM_CAST": "bd503e8d064e76c4fa66a24a2db17dc2165f5ef7aa5ea3967cff4cf8dcbd1b1b",
+    "SRC_MEXT_ARM_CONDBR": "91a439f9effe5630d5e76de9af75a4ff7502c053927ffc4e83c317973685de74",
+    "SRC_MEXT_ARM_CONST_": "05948f6a070a4ae05c458d337143420737bb5fbf777896416e61d8a21c772048",
+    "SRC_MEXT_ARM_COPY": "eb21ebecb8cfed15313f242756b3f52423560f6e16f36c6c7d59befaf0626796",
+    "SRC_MEXT_ARM_EXTRACTELEMENT": "996c7fe346fa8fbee8dd4ad41e4916011837afaf0138191573c1f6eb002c30ae",
+    "SRC_MEXT_ARM_EXTRACTFIELD": "fa2632d44e1a83d365329f8adee6cf65ffd76966a7742b5a14f56ad53b91cff6",
+    "SRC_MEXT_ARM_FCMP": "2b47bc70a0c0cdb3522d3cffc558278a947d0d62920604b9c3be6f5d1f554c5a",
+    "SRC_MEXT_ARM_GEP": "f16aca0f81c2101c32fee989476caf59e2d79eee6e023c2e7aafcf25ceeab6e5",
+    "SRC_MEXT_ARM_GLOBALADDR": "d24a39bdf95fd503d4fbe5ad0e7420fed784dbfb72c088e4150ad9b5515a4eec",
+    "SRC_MEXT_ARM_ICMP": "49c1b612169b77ed3ac5711a4bef21918c35ae07eafa2992fe4f97391a5f4ebd",
+    "SRC_MEXT_ARM_INSERTFIELD": "e9e5df18f519040b854b408e2997f35e19768c0f29344663a998cd3e75f7b81b",
+    "SRC_MEXT_ARM_LOAD": "867bdb650bea5c6a79d9bd57ab0767b4542a63a5f883e15b51ff83428b9b9219",
+    "SRC_MEXT_ARM_OVERFLOW": "6b9ce801f802dc1bd3f3f371ee06644027a311b0a868c4e55d8223f6edc88bcd",
+    "SRC_MEXT_ARM_PTRDATA": "51d84eb446c26a93998c716264af08622704dfdc0a18c85280b726ea60de5c58",
+    "SRC_MEXT_ARM_PTRFROMPARTS": "c00897414702de0b2a2b1c5b34212cd8177056cd7e8681c2b739bc0d45e261c2",
+    "SRC_MEXT_ARM_PTRMETADATA": "ac7f37c57d03f7ec41788710b4eb856a690f83c34503102bb17b25434fbed015",
+    "SRC_MEXT_ARM_RELEASE": "49bb23e4d18d8478357474030ede7b5fd665e64a3d8a7204a9d224627a0d35fb",
+    "SRC_MEXT_ARM_RET": "b82c50024475e7bffa24be00d6ab89aec09ae300df78c396ba254c544976f47b",
+    "SRC_MEXT_ARM_SELECT": "61e3f789773971430a21bc1b20f68e96195516db47842456bda7cf47692fedb8",
+    "SRC_MEXT_ARM_STORE": "94f4981cac2f581952fedff6dc648840dcac5ada222b291bf4508636bbe6c2b4",
+    "SRC_MEXT_ARM_SWITCH": "6e2b37ea523400312e1edc373cbc82171e9d3b5b01e212a0a4b8c2e3bf96e9a0",
+    "SRC_MEXT_ARM_UNDEF": "2e87b1d704c24d17b77be4f4b374ff5b2362b0bd30a3f7048d38c424709d6423",
+    "SRC_MEXT_ARM_UNOP": "51b823c77193ae023f760eb55e2538387908e9324f686a5508bdc51ddd2ef714",
+    "SRC_MEXT_ARM_UNREACHABLE": "04eea04ebc6bed073f32d55a8c125c775d7be6c6d5f8b870c8b43e7f4c616a2b",
+    "SRC_MEXT_CALLIND_EXEC": "96ce2c2e5d41fbab54775b0b4722cf7167a994e4f7a94691b27d5182fc50f09c",
+    "SRC_MEXT_CALL_EXEC": "64118be620d12ac81b4dc5ec52d5e241bc7ec3e5b99f1774d75c305735848fed",
+    "SRC_MEXT_CONDBR_B": "ae7f5c4c8cb55297776993d5b46b62c9b5253286684fc51f610614c4bc596ef3",
+    "SRC_MEXT_CONDBR_EXEC": "4f4062ed67fb585dc8ebe720c19995ebadb85897e3c552569fe563d677a29c8b",
+    "SRC_MEXT_GLOBALADDR": "e8c95895698588022c4ec75a8e4c7bb7de4edddbfdcd207c536818813eea3f09",
+    "SRC_MEXT_JUMP": "e234bebb7d6678c7f80f7bf7faa89b7f9fc905d9526df60f8be1e753b1d89486",
+    "SRC_MEXT_STEP": "8dcdc64732c0a7cde8086179a34f0e116edc6421113a7c289a68bc34ea5a5dba",
+    "SRC_MEXT_STEPS": "64eb6c5ba3be660567055ade99a4ce93cb8415e3d3bf76d10b49689d89656dd9",
+    "SRC_MEXT_SWITCH_EXEC": "b5a943c8f3a72bfdb2a66556172f30750f0307cfb4f0a10627d76547c601eda2",
+    "SRC_MEXT_SWITCH_N": "eddc12eb63cb6ca78dfade0d4ebe9d726e0afb7e5b392c8a30dd841354d3237f",
+    "SRC_NODE_IS_RET": "6ac47e6b66dc0f6be46b2eed0ca42dbd5d3a31bfc6cad4cd6e29148aa84c3d75",
+    "SRC_OVERFLOW_EXEC_STACK": "a57c72c977e72013c46724103165e2ae80546a27417de76185fa17f9b6a473da",
+    "SRC_OVERFLOW_INTS_STACK": "0d131e528fdf851998ec7f02b11c4070e030b91238487672887e0c286e7e8dd2",
+    "SRC_OVERFLOW_VALS_STACK": "adfd72415ffbfd4a325b293ff0a5ab89f3ffc28e47b08fd321b79fee936250f1",
+    "SRC_PUSH_STACK": "283851d73f2aaffc290bd67ecd8658337a8ad1982c35f5bd738f405fe42adf01",
+    "SRC_RESOLVE_STACK": "daf922bc1cc7c583b912cdc6d26d791d2c38fe416aa48a666a67c1c70f338d59",
+    "SRC_RET_TO_STACK": "07795400639f958d203769ffbf0f7f03a85b0ef61f99cc0a4359edbb41de0eb6",
+    "SRC_STKN_ARM_ALLOCA": "29443e5b63eaf889faa7afd7a92352f390db5f3e58373bb3204e110150f8d99a",
+    "SRC_STKN_ARM_ASSERT": "fc9fa31160e0a8d6056b9e6adc721e3be0d3a07bc0ea5a9d78dee2b45cad0abc",
+    "SRC_STKN_ARM_ATOMIC_FETCH_ADD_RELAXED_U64_SEQ": "c338e2e6e1b4b6e4188fca451d566b1ea519f3e6e690d8d0295b1bf8bc89fb5a",
+    "SRC_STKN_ARM_ATOMIC_FETCH_ADD_RELAXED_USIZE_SEQ": "e43c6e00e03fee6cd18ea8eb9081cfbea0cf1004082c81fd7d1a76ed186ded12",
+    "SRC_STKN_ARM_BINOP": "bfc160093213a2e4ee8346e10c419937bdbd76151d0a583eabc57d02864aecac",
+    "SRC_STKN_ARM_BORROW": "0f336562abb23d8846e63479abf6d8c48da1d6bca08ab209657577d80e36defd",
+    "SRC_STKN_ARM_BR": "146a3969df2b615f88f4c6de4f79e148412fa378e59b5467b6a72ea8b2c15c2d",
+    "SRC_STKN_ARM_CALL": "a7b047c3eaae826f51b6a7654867c7910c3008069f3e05572b5273a3a24d9834",
+    "SRC_STKN_ARM_CALLINDIRECT": "7640000f6e505ec236adc9e21502b1e00706edbdd6a931f52b272f2d883c4388",
+    "SRC_STKN_ARM_CAST": "8e1bbec472e699d986b2d6b75fe428cb3baed697f879f18760631847485f0fa2",
+    "SRC_STKN_ARM_CONDBR": "9eb75e42906d4f161b1323dbbdd507b50b8ad339e343d30494704e27e01a125c",
+    "SRC_STKN_ARM_CONST_": "f173cfaa3406b379b0c478a93ce81d4daa8f55c18f42625132247b2199808bf9",
+    "SRC_STKN_ARM_COPY": "9f31e9d47c78dbbef7fbc24071fec423882ac84320e02956ca0d4954d486d029",
+    "SRC_STKN_ARM_EXTRACTELEMENT": "1ffca1b190496cf738c0084afd08f0616e0169be119ccfa88fbde7bc57b6a22f",
+    "SRC_STKN_ARM_EXTRACTFIELD": "973c9a66a95911963719db4da84eede8e4c0227fbe4c67a79119b4613af3b010",
+    "SRC_STKN_ARM_FCMP": "2c215ce20631145b8f9aa144396c1946967c553f5f8d5cf9fb9b64fd4ba24bed",
+    "SRC_STKN_ARM_GEP": "c345d56821632e26eca7c59d88dc57cabf86e12c17376fb9e8bfb6779ac01e25",
+    "SRC_STKN_ARM_GLOBALADDR": "af5adfedef744c499fe917785b80013f532e4fbb709c86592e950b9713292f02",
+    "SRC_STKN_ARM_ICMP": "5d1d7401a60544ca35c92959902ef03762f48ae850855d83ca1a07fee28ad568",
+    "SRC_STKN_ARM_INSERTFIELD": "3f591f09bbda76eaf68a0f99f8009cc9caff5ac5abcea2fb3c87cd07f84254d7",
+    "SRC_STKN_ARM_LOAD": "747b0c42589b1a0243211329db32eddc310cfdcc40feb8b4c5a3f7a47f93b853",
+    "SRC_STKN_ARM_OVERFLOW": "593b402b516218a50f13fe272d5e1f4a8d972809ca5ae8cc1c8f81304136776f",
+    "SRC_STKN_ARM_PTRDATA": "a92e132649f4ef6506aa147ba2b358ef8fbaa352786099096066753631ec08cd",
+    "SRC_STKN_ARM_PTRFROMPARTS": "533e679fde6a9348416677d37584948d4cd1a11a5b643088a1b49d6a0892270f",
+    "SRC_STKN_ARM_PTRMETADATA": "4b336101f5bc5f0c4b1c93a3035eaf9178ac6a59ebcad2e3976650e8a6028161",
+    "SRC_STKN_ARM_RELEASE": "5f52b6dd52264bf466d90921903dda700ce8448e9056d01aadc2f579b4557687",
+    "SRC_STKN_ARM_RET": "9b5ec8b4c1c90ce4f57cc834c4aeec40b289cb3c2b3b8856ebc759cfb7579383",
+    "SRC_STKN_ARM_SELECT": "5a9cb9ca968acede06ee3d2cb1fad0c71a0cbd510711490120e18779359c26de",
+    "SRC_STKN_ARM_STORE": "994371593e090bb3e0c1d1b569f76724db318654b29d08b3716de6e377aaceb6",
+    "SRC_STKN_ARM_SWITCH": "c91aa990b8e1fe52b4817f989fdf1b6b2a54b4c09961a2d6e93a8f10529cf678",
+    "SRC_STKN_ARM_UNDEF": "78033ec8deeea05d04f36748e27160c82d1960935cd573f931b6a57d836d748f",
+    "SRC_STKN_ARM_UNOP": "0063da1b555c028d7788f73dbabc3f29cd8cefa4ffeb49e596288a07c629090a",
+    "SRC_STKN_ARM_UNREACHABLE": "a52b1aa15155fff6bce45eadfb5c10b794b9982962727c091fa89431b97d81e1",
+    "SRC_STKN_RET_TO": "67f4543a11340b2e363ba6d1e08f7b5227aee289ddb5c91a69123708706b55e7",
+    "SRC_STKN_STEP": "ca3ca591af80ef2e5d2ce10e7ab4d3be0bc6c6f640981737106ed6bee1b93ba5",
+    "SRC_STK_ARM_ALLOCA": "82c2668881fb6215b767be852960f047a58807a548933c153cb5752dbf0d8b55",
+    "SRC_STK_ARM_ASSERT": "19cd21084ffe35ac1c29d241cb74c417bbb688c639550304db282dfc8965282a",
+    "SRC_STK_ARM_ATOMIC_FETCH_ADD_RELAXED_U64_SEQ": "84f7dbbe6ef08a00bff684b7e6d442f74090b679b3a261635de12806e9b7a29e",
+    "SRC_STK_ARM_ATOMIC_FETCH_ADD_RELAXED_USIZE_SEQ": "45022bcef6feb5dd6d63902c576540b6c806fad6011c172dec78ab0357ab1ebc",
+    "SRC_STK_ARM_BINOP": "62ebe6cfb7c68d85b064634f2f9f811d28dcc2c09309e834cf460dc9d2756035",
+    "SRC_STK_ARM_BORROW": "b7c02ea24bac83d268387ec40a2573b14439cd32fd0a8359ed0e0500adb75127",
+    "SRC_STK_ARM_BR": "d12fa02a46678ccde7f3c15b562f24cb3fc63edc8d2335a159b99d21e7cecadb",
+    "SRC_STK_ARM_CALL": "e205c1493dedce22a9a2601ff19632783512d7a42b27daf4c81ec35c1afcfdb1",
+    "SRC_STK_ARM_CALLINDIRECT": "1e41bc1a54209218184311651b53a9a1712e11bd5f70c369ad4c30c1f852a9df",
+    "SRC_STK_ARM_CAST": "2022cc53e4e131ef98fd2227fb92bf1ab0e16460fad969226ac82d00244b4546",
+    "SRC_STK_ARM_CONDBR": "31a4ce4ba6695805f36c679c84d7810fd8d723468b2ed128418b7e03f0460da9",
+    "SRC_STK_ARM_CONST_": "34d5ea21c1584c0fcc4205b49e5dd821febb56c39683f122ddee71cdd0757cac",
+    "SRC_STK_ARM_COPY": "566e9b83354fd77b8876037a9eb4099ba1ea7c7b68dae0ce8dd94bec72b1bf69",
+    "SRC_STK_ARM_EXTRACTELEMENT": "6372e47827e9679b65931831ec5a881ad2f1cf55b9251a7b5591a8b427bb155a",
+    "SRC_STK_ARM_EXTRACTFIELD": "8aac0272e2da78a353d0f7e135ed986a76cd0298146970b28ce75471a0b4c9e7",
+    "SRC_STK_ARM_FCMP": "33ea2f606a9010398eda83be1390af8de3bc5bbc3b9b4971e538f66e20b52657",
+    "SRC_STK_ARM_GEP": "41792ca2dd9fdc8af4fb25b974b6d001bbad5f3edfccbefc1a88adf21981d997",
+    "SRC_STK_ARM_GLOBALADDR": "c684573ed60a5b023915911b07eb7212435294c085839ba7bdc9a2d63d5566d5",
+    "SRC_STK_ARM_ICMP": "8e659be35a827691015eec5ccb3fc812cfd9dc2c5e4bc0bc06271f16845bad6f",
+    "SRC_STK_ARM_INSERTFIELD": "c2e6443858cb05049055d1648e878e7d2c41d7f45371c37be97eeb3b2d5e9776",
+    "SRC_STK_ARM_LOAD": "b5a81c930931d3cbca409221614cf5d4d28341b9a7f7be11af4af064dd74c080",
+    "SRC_STK_ARM_OVERFLOW": "6ae8a8c8243af5aca3d873b294186ccd2451ff2f7add3a1fbab81525fd1fa407",
+    "SRC_STK_ARM_PTRDATA": "9b61c3a909e63714fe17569a84e8c51225e84685a8be67bf026878e323168ecd",
+    "SRC_STK_ARM_PTRFROMPARTS": "00ca63f5effb36821ca187c7676318180f664522c2ccb4ef0c57e6772e95739a",
+    "SRC_STK_ARM_PTRMETADATA": "5c02bc7d2cfd139400bc6bad9c4685a3b0c53d98b0d9649ed51dac4bef7dcfbe",
+    "SRC_STK_ARM_RELEASE": "a03cfb2417c0618c4bc55c518b60f15ceb5061d054cbcb0d16da0ef5f0d26e56",
+    "SRC_STK_ARM_RET": "ea624d56d53e397f7e104854a3895b78c23a86cfba01c2e3b37ac01ebcf547ae",
+    "SRC_STK_ARM_SELECT": "b45e668ccf82f80bdb4023dd823491f9c5433d1e177ce0256cd5af192fa1d9b1",
+    "SRC_STK_ARM_STORE": "6bbbdc01bb80bafb8badc218fd0638ddd8f3e3c5d653079370f520995cde31a9",
+    "SRC_STK_ARM_SWITCH": "f114134bd9dd99f63768796e2fbcb32825420c8ad396fcd0478985313cc23ef3",
+    "SRC_STK_ARM_UNDEF": "9d1b6a201570e428824d55dc4b20b51fa2d35f8e5eec8774b6f9f8a70bd8f1f6",
+    "SRC_STK_ARM_UNOP": "1e74473f23b4bc6dc8058d57a05acbce83d50dd666c59d1c84749ee68b5bcb72",
+    "SRC_STK_ARM_UNREACHABLE": "244bc3d232145b4ff86e0945f8ff7813d39353ee92ab90472d2c7d0b285555ad",
+    "SRC_STK_BOTRET": "65493b6472d59eea395919597ef4c26d45beccdf2d684b097ec1f39913071947",
+    "SRC_STK_BOTRET_FALSE_OF_RUNNING": "5c4b318b5b50e63a87bf2dadb9a41f955596619255164e84e2747d1e9750c450",
+    "SRC_STK_BOTRET_NIL": "29abe260799ccf7eeb55f5f36a1568eee72f520125e8946e82bcf20b2ba0ca92",
+    "SRC_STK_BOTRET_TWO": "4cc11a589e1eba179174f046934a748fd24537a05345728dbb1e317097ad9a2d",
+    "SRC_STK_STEP": "585d7572e5ba37e003b4e1a392af909858de6b87039089bf4846fa8d33cbd21f",
+    "SRC_STORE_CHECKED_STACK": "62dc1538bc3b8acf36c06f1080b86703c693e20b43cc7671eabf8a4c7e10d9eb",
+    "SRC_STORE_EXEC_STACK": "edd01fba8aa14f565ecaeec4b492b1b243fb143ed1a1f01b6aec292209ed8d38",
+    "SRC_STORE_LIVE_STACK": "686210fa05358afb89ca35fedaee8e70959c1986d988ad76c3b9acead46f4b0c",
+    "SRC_SWITCH_EXEC_STACK": "f2dce6751d86276e261ec34315c9606182b0ed686920a9072b6b442e15be1d5f",
+    "SRC_SWITCH_N_STACK": "a3fbd7de5a87500e016bd3352a4c62f0fa1fbd68433ff0b6a07eff554f1560d0",
 }
 
 

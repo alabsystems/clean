@@ -39,7 +39,7 @@ impl Specification {
         ] {
             self.add_recursive_def(
                 &format!(
-                    "def {name} (meta : KIndMeta) : {result_type} := KIndMeta.rec (fun (_ : KIndMeta) => {result_type}) (fun (sig : KConstSig) (np : Nat) (ni : Nat) (ctors : ListType Name) (all_names : ListType Name) => {field}) meta"
+                    "def {name} (meta : KIndMeta) : {result_type} := @KIndMeta.rec (fun (_ : KIndMeta) => {result_type}) (fun (sig : KConstSig) (np : Nat) (ni : Nat) (ctors : ListType Name) (all_names : ListType Name) => {field}) meta"
                 ),
                 "Project one stored inductive metadata field without changing its representation.",
             )?;
@@ -53,7 +53,7 @@ impl Specification {
         ] {
             self.add_recursive_def(
                 &format!(
-                    "def {name} (meta : KCtorMeta) : {result_type} := KCtorMeta.rec (fun (_ : KCtorMeta) => {result_type}) (fun (sig : KConstSig) (parent : Name) (np : Nat) (nf : Nat) (idx : Nat) => {field}) meta"
+                    "def {name} (meta : KCtorMeta) : {result_type} := @KCtorMeta.rec (fun (_ : KCtorMeta) => {result_type}) (fun (sig : KConstSig) (parent : Name) (np : Nat) (nf : Nat) (idx : Nat) => {field}) meta"
                 ),
                 "Project one stored constructor metadata field without changing its representation.",
             )?;
@@ -71,18 +71,18 @@ impl Specification {
         // older value, matching a kind check after declaration lookup.
         self.add_recursive_def(
             r"def kind_for (env : IndCtorEnv) (target : Name) : OptionType KIndMeta :=
-IndCtorEnv.rec (fun (_ : IndCtorEnv) => Name -> OptionType KIndMeta)
-  (fun (_ : Name) => OptionType.none KIndMeta)
-  (fun (_tail : IndCtorEnv) (n : Name) (meta : KIndMeta) (ih : Name -> OptionType KIndMeta) => fun (q : Name) => Bool.rec (fun (_ : Bool) => OptionType KIndMeta) (ih q) (OptionType.some KIndMeta meta) (name_eqb n q))
-  (fun (_tail : IndCtorEnv) (n : Name) (_meta : KCtorMeta) (ih : Name -> OptionType KIndMeta) => fun (q : Name) => Bool.rec (fun (_ : Bool) => OptionType KIndMeta) (ih q) (OptionType.none KIndMeta) (name_eqb n q)) env target",
+@IndCtorEnv.rec (fun (_ : IndCtorEnv) => Name -> OptionType KIndMeta)
+  (fun (_ : Name) => @OptionType.none KIndMeta)
+  (fun (_tail : IndCtorEnv) (n : Name) (meta : KIndMeta) (ih : Name -> OptionType KIndMeta) => fun (q : Name) => @Bool.rec (fun (_ : Bool) => OptionType KIndMeta) (ih q) (@OptionType.some KIndMeta meta) (name_eqb n q))
+  (fun (_tail : IndCtorEnv) (n : Name) (_meta : KCtorMeta) (ih : Name -> OptionType KIndMeta) => fun (q : Name) => @Bool.rec (fun (_ : Bool) => OptionType KIndMeta) (ih q) (@OptionType.none KIndMeta) (name_eqb n q)) env target",
             "Computed inductive lookup in the shared metadata table, with missing/wrong-kind results and newest-name shadowing.",
         )?;
         self.add_recursive_def(
             r"def kctor_for (env : IndCtorEnv) (target : Name) : OptionType KCtorMeta :=
-IndCtorEnv.rec (fun (_ : IndCtorEnv) => Name -> OptionType KCtorMeta)
-  (fun (_ : Name) => OptionType.none KCtorMeta)
-  (fun (_tail : IndCtorEnv) (n : Name) (_meta : KIndMeta) (ih : Name -> OptionType KCtorMeta) => fun (q : Name) => Bool.rec (fun (_ : Bool) => OptionType KCtorMeta) (ih q) (OptionType.none KCtorMeta) (name_eqb n q))
-  (fun (_tail : IndCtorEnv) (n : Name) (meta : KCtorMeta) (ih : Name -> OptionType KCtorMeta) => fun (q : Name) => Bool.rec (fun (_ : Bool) => OptionType KCtorMeta) (ih q) (OptionType.some KCtorMeta meta) (name_eqb n q)) env target",
+@IndCtorEnv.rec (fun (_ : IndCtorEnv) => Name -> OptionType KCtorMeta)
+  (fun (_ : Name) => @OptionType.none KCtorMeta)
+  (fun (_tail : IndCtorEnv) (n : Name) (_meta : KIndMeta) (ih : Name -> OptionType KCtorMeta) => fun (q : Name) => @Bool.rec (fun (_ : Bool) => OptionType KCtorMeta) (ih q) (@OptionType.none KCtorMeta) (name_eqb n q))
+  (fun (_tail : IndCtorEnv) (n : Name) (meta : KCtorMeta) (ih : Name -> OptionType KCtorMeta) => fun (q : Name) => @Bool.rec (fun (_ : Bool) => OptionType KCtorMeta) (ih q) (@OptionType.some KCtorMeta meta) (name_eqb n q)) env target",
             "Computed constructor lookup in the shared metadata table, retaining actual parameter/field/index/signature data.",
         )?;
         Ok(())
@@ -130,8 +130,8 @@ mod tests {
                 ("kind_all_names", "ListType Name", "all_names"),
             ] {
                 check(&mut spec, &format!("metadata_test_{field}"),
-                    &format!("forall (sig : KConstSig) (np : Nat) (ni : Nat) (ctors : ListType Name) (all_names : ListType Name), Eq ({ty}) ({field} (KIndMeta.mk sig np ni ctors all_names)) {expected}"),
-                    &format!("fun (sig : KConstSig) (np : Nat) (ni : Nat) (ctors : ListType Name) (all_names : ListType Name) => Eq.refl ({ty}) {expected}"));
+                    &format!("forall (sig : KConstSig) (np : Nat) (ni : Nat) (ctors : ListType Name) (all_names : ListType Name), @Eq ({ty}) ({field} (KIndMeta.mk sig np ni ctors all_names)) {expected}"),
+                    &format!("fun (sig : KConstSig) (np : Nat) (ni : Nat) (ctors : ListType Name) (all_names : ListType Name) => @Eq.refl ({ty}) {expected}"));
             }
             for (field, ty, expected) in [
                 ("kctor_sig", "KConstSig", "sig"),
@@ -141,8 +141,8 @@ mod tests {
                 ("kctor_index", "Nat", "idx"),
             ] {
                 check(&mut spec, &format!("metadata_test_{field}"),
-                    &format!("forall (sig : KConstSig) (parent : Name) (np : Nat) (nf : Nat) (idx : Nat), Eq ({ty}) ({field} (KCtorMeta.mk sig parent np nf idx)) {expected}"),
-                    &format!("fun (sig : KConstSig) (parent : Name) (np : Nat) (nf : Nat) (idx : Nat) => Eq.refl ({ty}) {expected}"));
+                    &format!("forall (sig : KConstSig) (parent : Name) (np : Nat) (nf : Nat) (idx : Nat), @Eq ({ty}) ({field} (KCtorMeta.mk sig parent np nf idx)) {expected}"),
+                    &format!("fun (sig : KConstSig) (parent : Name) (np : Nat) (nf : Nat) (idx : Nat) => @Eq.refl ({ty}) {expected}"));
             }
         });
     }
@@ -152,18 +152,18 @@ mod tests {
         run_with_stack(|| {
             let mut spec = seed();
             for (suffix, lookup, result_ty, env, expected) in [
-                ("ind", "kind_for", "KIndMeta", "(IndCtorEnv.addInd IndCtorEnv.empty Name.anonymous im)", "OptionType.some KIndMeta im"),
-                ("ctor", "kctor_for", "KCtorMeta", "(IndCtorEnv.addCtor IndCtorEnv.empty Name.anonymous cm)", "OptionType.some KCtorMeta cm"),
-                ("ctor_hides_ind", "kind_for", "KIndMeta", "(IndCtorEnv.addCtor (IndCtorEnv.addInd IndCtorEnv.empty Name.anonymous im) Name.anonymous cm)", "OptionType.none KIndMeta"),
-                ("ind_hides_ctor", "kctor_for", "KCtorMeta", "(IndCtorEnv.addInd (IndCtorEnv.addCtor IndCtorEnv.empty Name.anonymous cm) Name.anonymous im)", "OptionType.none KCtorMeta"),
-                ("other_ctor", "kind_for", "KIndMeta", "(IndCtorEnv.addCtor (IndCtorEnv.addInd IndCtorEnv.empty Name.anonymous im) (Name.str Name.anonymous Nat.zero) cm)", "OptionType.some KIndMeta im"),
-                ("other_ind", "kctor_for", "KCtorMeta", "(IndCtorEnv.addInd (IndCtorEnv.addCtor IndCtorEnv.empty Name.anonymous cm) (Name.str Name.anonymous Nat.zero) im)", "OptionType.some KCtorMeta cm"),
-                ("missing_ind", "kind_for", "KIndMeta", "IndCtorEnv.empty", "OptionType.none KIndMeta"),
-                ("missing_ctor", "kctor_for", "KCtorMeta", "IndCtorEnv.empty", "OptionType.none KCtorMeta"),
+                ("ind", "kind_for", "KIndMeta", "(IndCtorEnv.addInd IndCtorEnv.empty Name.anonymous im)", "@OptionType.some KIndMeta im"),
+                ("ctor", "kctor_for", "KCtorMeta", "(IndCtorEnv.addCtor IndCtorEnv.empty Name.anonymous cm)", "@OptionType.some KCtorMeta cm"),
+                ("ctor_hides_ind", "kind_for", "KIndMeta", "(IndCtorEnv.addCtor (IndCtorEnv.addInd IndCtorEnv.empty Name.anonymous im) Name.anonymous cm)", "@OptionType.none KIndMeta"),
+                ("ind_hides_ctor", "kctor_for", "KCtorMeta", "(IndCtorEnv.addInd (IndCtorEnv.addCtor IndCtorEnv.empty Name.anonymous cm) Name.anonymous im)", "@OptionType.none KCtorMeta"),
+                ("other_ctor", "kind_for", "KIndMeta", "(IndCtorEnv.addCtor (IndCtorEnv.addInd IndCtorEnv.empty Name.anonymous im) (Name.str Name.anonymous Nat.zero) cm)", "@OptionType.some KIndMeta im"),
+                ("other_ind", "kctor_for", "KCtorMeta", "(IndCtorEnv.addInd (IndCtorEnv.addCtor IndCtorEnv.empty Name.anonymous cm) (Name.str Name.anonymous Nat.zero) im)", "@OptionType.some KCtorMeta cm"),
+                ("missing_ind", "kind_for", "KIndMeta", "IndCtorEnv.empty", "@OptionType.none KIndMeta"),
+                ("missing_ctor", "kctor_for", "KCtorMeta", "IndCtorEnv.empty", "@OptionType.none KCtorMeta"),
             ] {
                 check(&mut spec, &format!("metadata_lookup_{suffix}"),
-                    &format!("forall (im : KIndMeta) (cm : KCtorMeta), Eq (OptionType {result_ty}) ({lookup} {env} Name.anonymous) ({expected})"),
-                    &format!("fun (im : KIndMeta) (cm : KCtorMeta) => Eq.refl (OptionType {result_ty}) ({expected})"));
+                    &format!("forall (im : KIndMeta) (cm : KCtorMeta), @Eq (OptionType {result_ty}) ({lookup} {env} Name.anonymous) ({expected})"),
+                    &format!("fun (im : KIndMeta) (cm : KCtorMeta) => @Eq.refl (OptionType {result_ty}) ({expected})"));
             }
         });
     }
@@ -195,8 +195,8 @@ mod tests {
                 ),
             ] {
                 check(&mut spec, &format!("metadata_preserves_{suffix}"),
-                    &format!("forall (r : RecEnv) (d : DefEnv) (ic : IndCtorEnv) (e : KExpr), Eq ({ty}) ({lhs}) ({rhs})"),
-                    &format!("fun (r : RecEnv) (d : DefEnv) (ic : IndCtorEnv) (e : KExpr) => Eq.refl ({ty}) ({rhs})"));
+                    &format!("forall (r : RecEnv) (d : DefEnv) (ic : IndCtorEnv) (e : KExpr), @Eq ({ty}) ({lhs}) ({rhs})"),
+                    &format!("fun (r : RecEnv) (d : DefEnv) (ic : IndCtorEnv) (e : KExpr) => @Eq.refl ({ty}) ({rhs})"));
             }
         });
     }
@@ -206,11 +206,11 @@ mod tests {
         run_with_stack(|| {
             let mut spec = seed();
             for (name, ty, value) in [
-                ("metadata_bad_kind", "forall (cm : KCtorMeta) (im : KIndMeta), Eq (OptionType KIndMeta) (kind_for (IndCtorEnv.addCtor IndCtorEnv.empty Name.anonymous cm) Name.anonymous) (OptionType.some KIndMeta im)", "fun (cm : KCtorMeta) (im : KIndMeta) => Eq.refl (OptionType KIndMeta) (OptionType.some KIndMeta im)"),
-                ("metadata_bad_fields", "forall (sig : KConstSig), Eq Nat (kctor_num_fields (KCtorMeta.mk sig Name.anonymous Nat.zero Nat.zero Nat.zero)) (Nat.succ Nat.zero)", "fun (sig : KConstSig) => Eq.refl Nat (Nat.succ Nat.zero)"),
-                ("metadata_bad_parent", "forall (sig : KConstSig), Eq Name (kctor_parent (KCtorMeta.mk sig Name.anonymous Nat.zero Nat.zero Nat.zero)) (Name.str Name.anonymous Nat.zero)", "fun (sig : KConstSig) => Eq.refl Name (Name.str Name.anonymous Nat.zero)"),
-                ("metadata_bad_all_names", "forall (sig : KConstSig) (ctors : ListType Name), Eq (ListType Name) (kind_all_names (KIndMeta.mk sig Nat.zero Nat.zero ctors (ListType.cons Name Name.anonymous (ListType.nil Name)))) (ListType.nil Name)", "fun (sig : KConstSig) (ctors : ListType Name) => Eq.refl (ListType Name) (ListType.nil Name)"),
-                ("metadata_bad_block_order", "forall (sig : KConstSig), Eq (ListType Name) (kind_all_names (KIndMeta.mk sig Nat.zero Nat.zero (ListType.nil Name) (ListType.cons Name Name.anonymous (ListType.cons Name (Name.str Name.anonymous Nat.zero) (ListType.nil Name))))) (ListType.cons Name (Name.str Name.anonymous Nat.zero) (ListType.cons Name Name.anonymous (ListType.nil Name)))", "fun (sig : KConstSig) => Eq.refl (ListType Name) (ListType.cons Name (Name.str Name.anonymous Nat.zero) (ListType.cons Name Name.anonymous (ListType.nil Name)))"),
+                ("metadata_bad_kind", "forall (cm : KCtorMeta) (im : KIndMeta), @Eq (OptionType KIndMeta) (kind_for (IndCtorEnv.addCtor IndCtorEnv.empty Name.anonymous cm) Name.anonymous) (@OptionType.some KIndMeta im)", "fun (cm : KCtorMeta) (im : KIndMeta) => @Eq.refl (OptionType KIndMeta) (@OptionType.some KIndMeta im)"),
+                ("metadata_bad_fields", "forall (sig : KConstSig), @Eq Nat (kctor_num_fields (KCtorMeta.mk sig Name.anonymous Nat.zero Nat.zero Nat.zero)) (Nat.succ Nat.zero)", "fun (sig : KConstSig) => @Eq.refl Nat (Nat.succ Nat.zero)"),
+                ("metadata_bad_parent", "forall (sig : KConstSig), @Eq Name (kctor_parent (KCtorMeta.mk sig Name.anonymous Nat.zero Nat.zero Nat.zero)) (Name.str Name.anonymous Nat.zero)", "fun (sig : KConstSig) => @Eq.refl Name (Name.str Name.anonymous Nat.zero)"),
+                ("metadata_bad_all_names", "forall (sig : KConstSig) (ctors : ListType Name), @Eq (ListType Name) (kind_all_names (KIndMeta.mk sig Nat.zero Nat.zero ctors (@ListType.cons Name Name.anonymous (@ListType.nil Name)))) (@ListType.nil Name)", "fun (sig : KConstSig) (ctors : ListType Name) => @Eq.refl (ListType Name) (@ListType.nil Name)"),
+                ("metadata_bad_block_order", "forall (sig : KConstSig), @Eq (ListType Name) (kind_all_names (KIndMeta.mk sig Nat.zero Nat.zero (@ListType.nil Name) (@ListType.cons Name Name.anonymous (@ListType.cons Name (Name.str Name.anonymous Nat.zero) (@ListType.nil Name))))) (@ListType.cons Name (Name.str Name.anonymous Nat.zero) (@ListType.cons Name Name.anonymous (@ListType.nil Name)))", "fun (sig : KConstSig) => @Eq.refl (ListType Name) (@ListType.cons Name (Name.str Name.anonymous Nat.zero) (@ListType.cons Name Name.anonymous (@ListType.nil Name)))"),
             ] {
                 let source = format!("def {name} : {ty} := {value}");
                 clean_parser::parse_decl(&source).expect("false equation is syntactically valid");

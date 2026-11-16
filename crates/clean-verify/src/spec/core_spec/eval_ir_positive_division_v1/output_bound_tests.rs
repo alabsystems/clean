@@ -162,7 +162,7 @@ impl Shift {
             Self::Logical => q,
             Self::Arithmetic => {
                 let fill = quotient("ir_nat_pow2 64", 64);
-                format!("Bool.rec (fun (_ : Bool) => Nat) ({q}) (Nat.add ({q}) (Nat.sub (ir_nat_pow2 64) ({fill}))) (ir_sign_bit 64 ({word}))")
+                format!("@Bool.rec (fun (_ : Bool) => Nat) ({q}) (Nat.add ({q}) (Nat.sub (ir_nat_pow2 64) ({fill}))) (ir_sign_bit 64 ({word}))")
             }
         }
     }
@@ -255,17 +255,17 @@ fn output_bounds_connect_arbitrary_full64_actual_operations_to_nominal_result_fi
             let source = format!(
                 "def {name} (ctx : IRByteContextV1) (word : Nat) \
                  (inputBound : Nat.lt word (ir_nat_pow2 64)) : \
-                 And (Eq IRStepResult \
+                 And (@Eq IRStepResult \
                    (ir_binop_eval IRBinOp.{op} (IRTy.{carrier} 64) (IRScalar.int_ word) (IRScalar.int_ 3)) \
                    (IRStepResult.value ({value}))) \
-                 (Eq Bool (ir_byte_value_matches_v1 ctx (IRTy.{carrier} 64) ({value})) Bool.true) := \
-                 let fits : Eq Bool (ir_nat_ltb word (ir_nat_pow2 64)) Bool.true := \
+                 (@Eq Bool (ir_byte_value_matches_v1 ctx (IRTy.{carrier} 64) ({value})) Bool.true) := \
+                 let fits : @Eq Bool (ir_nat_ltb word (ir_nat_pow2 64)) Bool.true := \
                    ir_byte_ltb_of_lt_v1 word (ir_nat_pow2 64) inputBound; \
                  @And.intro \
-                   (Eq IRStepResult \
+                   (@Eq IRStepResult \
                      (ir_binop_eval IRBinOp.{op} (IRTy.{carrier} 64) (IRScalar.int_ word) (IRScalar.int_ 3)) \
                      (IRStepResult.value ({value}))) \
-                   (Eq Bool (ir_byte_value_matches_v1 ctx (IRTy.{carrier} 64) ({value})) Bool.true) \
+                   (@Eq Bool (ir_byte_value_matches_v1 ctx (IRTy.{carrier} 64) ({value})) Bool.true) \
                    ({operation_law} word fits) \
                    ({value_fit_law} ctx ({word}) ({bound} word fits))"
             );
@@ -293,13 +293,13 @@ fn output_bounds_cover_zero_transition_and_full64_positive_and_negative_encoding
                 let name = format!("derived_bound_{}_{}", shift.opcode(), word);
                 let result = shift.value(&word.to_string());
                 let law = shift.bound_law();
-                add_checked(&mut spec, &name, &format!("def {name} : Eq Bool (ir_nat_ltb ({result}) (ir_nat_pow2 64)) Bool.true := {law} {word} (Eq.refl Bool Bool.true)"));
+                add_checked(&mut spec, &name, &format!("def {name} : @Eq Bool (ir_nat_ltb ({result}) (ir_nat_pow2 64)) Bool.true := {law} {word} (@Eq.refl Bool Bool.true)"));
                 let expected = match shift {
                     Shift::Logical => word >> 3,
                     Shift::Arithmetic => ((word as i64) >> 3) as u64,
                 };
                 let literal_name = format!("{name}_independent_residue");
-                add_checked(&mut spec, &literal_name, &format!("def {literal_name} : Eq Nat ({result}) {expected} := Eq.refl Nat {expected}"));
+                add_checked(&mut spec, &literal_name, &format!("def {literal_name} : @Eq Nat ({result}) {expected} := @Eq.refl Nat {expected}"));
             }
         }
     });
@@ -352,14 +352,14 @@ fn output_bounds_refuse_known_false_quotient_fill_and_fuel_changes_without_resou
                 "ir_nat_ltb (Nat.add 8 (Nat.sub 8 9)) 8".into(),
             ),
         ] {
-            let false_goal = elaborate(spec, &format!("Eq Bool ({false_boolean}) Bool.false"));
-            let false_proof = elaborate(spec, "Eq.refl Bool Bool.false");
+            let false_goal = elaborate(spec, &format!("@Eq Bool ({false_boolean}) Bool.false"));
+            let false_proof = elaborate(spec, "@Eq.refl Bool Bool.false");
             let checker = strict_checker(spec);
             checker
                 .check_type(&false_proof, &false_goal)
                 .expect("independent false normal form");
-            let bad_goal = elaborate(spec, &format!("Eq Bool ({false_boolean}) Bool.true"));
-            let bad_proof = elaborate(spec, "Eq.refl Bool Bool.true");
+            let bad_goal = elaborate(spec, &format!("@Eq Bool ({false_boolean}) Bool.true"));
+            let bad_proof = elaborate(spec, "@Eq.refl Bool Bool.true");
             let error = checker
                 .check_type(&bad_proof, &bad_goal)
                 .expect_err("mathematically false bound");
@@ -377,14 +377,14 @@ fn output_bounds_refuse_known_false_quotient_fill_and_fuel_changes_without_resou
         let checker = strict_checker(spec);
         checker
             .check_type(
-                &elaborate(spec, "Eq.refl Nat 0"),
-                &elaborate(spec, &format!("Eq Nat ({zero_fill}) 0")),
+                &elaborate(spec, "@Eq.refl Nat 0"),
+                &elaborate(spec, &format!("@Eq Nat ({zero_fill}) 0")),
             )
             .expect("zero restoring fuel yields quotient zero, not 2^61");
         let error = checker
             .check_type(
                 &elaborate(spec, "ir_positive_division_u64_fill_quotient_by_three_v1"),
-                &elaborate(spec, &format!("Eq Nat ({zero_fill}) (ir_nat_pow2 61)")),
+                &elaborate(spec, &format!("@Eq Nat ({zero_fill}) (ir_nat_pow2 61)")),
             )
             .expect_err("actual fuel64 equality cannot certify fuel0");
         assert!(matches!(error, TypeError::TypeMismatch { .. }), "{error}");
@@ -412,7 +412,7 @@ fn output_bound_installer_refuses_every_collision_and_rolls_back_a_late_false_la
         }
         let mut spec = shifted().clone();
         let before = spec.clone();
-        const FALSE_LAST: &str = "def ir_byte_ashr_i64_by_three_result_bound_v1 : Eq Bool Bool.true Bool.false := Eq.refl Bool Bool.false";
+        const FALSE_LAST: &str = "def ir_byte_ashr_i64_by_three_result_bound_v1 : @Eq Bool Bool.true Bool.false := @Eq.refl Bool Bool.false";
         let rows = output_bounds::LAWS.iter().copied().map(|(name, source)| {
             if name == "ir_byte_ashr_i64_by_three_result_bound_v1" {
                 (name, FALSE_LAST)

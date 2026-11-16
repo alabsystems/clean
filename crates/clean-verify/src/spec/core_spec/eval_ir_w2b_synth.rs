@@ -87,7 +87,7 @@ use crate::spec::Specification;
 //   bb1: store u32 %0, ptr %2; %3 = load u32, ptr %2; ret %3
 //   bb2: %4 = load u32, ptr %2; ret %4
 
-const SRC_IR_W2B_AL_B0: &str = "def ir_w2b_al_b0 : IRBlock := IRBlock.mk ir_d0 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.alloca (IRTy.uint_ 32) (IROption.none Nat)) ir_d2) (ir_nd (IRInst.condbr ir_d1 ir_d1 ir_nl0 ir_d2 ir_nl0)))";
+const SRC_IR_W2B_AL_B0: &str = "def ir_w2b_al_b0 : IRBlock := IRBlock.mk ir_d0 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.alloca (IRTy.uint_ 32) (@IROption.none Nat)) ir_d2) (ir_nd (IRInst.condbr ir_d1 ir_d1 ir_nl0 ir_d2 ir_nl0)))";
 
 const SRC_IR_W2B_AL_B1: &str = "def ir_w2b_al_b1 : IRBlock := IRBlock.mk ir_d1 ir_nl0 (ir_bd3 (ir_nd (IRInst.store (IRTy.uint_ 32) ir_d2 ir_d0 Bool.false)) (ir_nd1 (IRInst.load (IRTy.uint_ 32) ir_d2 Bool.false) ir_d3) (ir_nd (IRInst.ret (ir_nl1 ir_d3))))";
 
@@ -95,7 +95,7 @@ const SRC_IR_W2B_AL_B2: &str = "def ir_w2b_al_b2 : IRBlock := IRBlock.mk ir_d2 i
 
 const SRC_IR_W2B_AL_FUNC: &str = "def ir_w2b_al_func : IRFunc := IRFunc.mk ir_d0 (ir_nl2 ir_d0 ir_d1) ir_d0 (ir_blk ir_w2b_al_b0 (ir_blk ir_w2b_al_b1 (ir_blk ir_w2b_al_b2 ir_blk0)))";
 
-const SRC_IR_W2B_AL_MODULE: &str = "def ir_w2b_al_module : IRModule := IRModule.mk (IRList.cons IRFunc ir_w2b_al_func (IRList.nil IRFunc)) (IRList.nil IRGlobal)";
+const SRC_IR_W2B_AL_MODULE: &str = "def ir_w2b_al_module : IRModule := IRModule.mk (@IRList.cons IRFunc ir_w2b_al_func (@IRList.nil IRFunc)) (@IRList.nil IRGlobal)";
 
 /// The `alloca` micro-module's definitions, in registration order — the lines
 /// the battery registers, re-exported rather than re-typed.
@@ -110,22 +110,22 @@ pub fn ir_w2b_al_module_defs() -> &'static [&'static str] {
     ]
 }
 
-const SRC_IR_W2B_AL_ON_STORE: &str = "def ir_w2b_al_on_store (x : Nat) : Eq IROutcome (ir_eval ir_d8 ir_w2b_al_module ir_d0 (IRList.cons IRScalar (IRScalar.int_ x) (IRList.cons IRScalar (IRScalar.bool_ Bool.true) (IRList.nil IRScalar))) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 (IRScalar.int_ x))) := Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.int_ x)))";
+const SRC_IR_W2B_AL_ON_STORE: &str = "def ir_w2b_al_on_store (x : Nat) : @Eq IROutcome (ir_eval ir_d8 ir_w2b_al_module ir_d0 (@IRList.cons IRScalar (IRScalar.int_ x) (@IRList.cons IRScalar (IRScalar.bool_ Bool.true) (@IRList.nil IRScalar))) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 (IRScalar.int_ x))) := @Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.int_ x)))";
 
-const SRC_IR_W2B_AL_ON_UNINIT: &str = "def ir_w2b_al_on_uninit (x : Nat) : Eq IROutcome (ir_eval ir_d8 ir_w2b_al_module ir_d0 (IRList.cons IRScalar (IRScalar.int_ x) (IRList.cons IRScalar (IRScalar.bool_ Bool.false) (IRList.nil IRScalar))) ir_mem0 ir_d0) (IROutcome.ub IRFault.uninit) := Eq.refl IROutcome (IROutcome.ub IRFault.uninit)";
+const SRC_IR_W2B_AL_ON_UNINIT: &str = "def ir_w2b_al_on_uninit (x : Nat) : @Eq IROutcome (ir_eval ir_d8 ir_w2b_al_module ir_d0 (@IRList.cons IRScalar (IRScalar.int_ x) (@IRList.cons IRScalar (IRScalar.bool_ Bool.false) (@IRList.nil IRScalar))) ir_mem0 ir_d0) (IROutcome.ub IRFault.uninit) := @Eq.refl IROutcome (IROutcome.ub IRFault.uninit)";
 
-const SRC_IR_W2B_AL_NONBOOL: &str = "def ir_w2b_al_nonbool (x : Nat) (n : Nat) : Eq IROutcome (ir_eval ir_d8 ir_w2b_al_module ir_d0 (IRList.cons IRScalar (IRScalar.int_ x) (IRList.cons IRScalar (IRScalar.int_ n) (IRList.nil IRScalar))) ir_mem0 ir_d0) (IROutcome.type_error IRFault.not_bool) := Eq.refl IROutcome (IROutcome.type_error IRFault.not_bool)";
+const SRC_IR_W2B_AL_NONBOOL: &str = "def ir_w2b_al_nonbool (x : Nat) (n : Nat) : @Eq IROutcome (ir_eval ir_d8 ir_w2b_al_module ir_d0 (@IRList.cons IRScalar (IRScalar.int_ x) (@IRList.cons IRScalar (IRScalar.int_ n) (@IRList.nil IRScalar))) ir_mem0 ir_d0) (IROutcome.type_error IRFault.not_bool) := @Eq.refl IROutcome (IROutcome.type_error IRFault.not_bool)";
 
 // ── ptrdata: thin data-lane identity inside a store/load round-trip ───────
 //
 //   bb0(%0: u32): %1 = alloca u32; store u32 %0, ptr %1;
 //                 %2 = ptr_data ptr %1; %3 = load u32, ptr %2; ret %3
 
-const SRC_IR_W2B_PD_B0: &str = "def ir_w2b_pd_b0 : IRBlock := IRBlock.mk ir_d0 ir_nl0 (IRList.cons IRNode (ir_nd1 (IRInst.alloca (IRTy.uint_ 32) (IROption.none Nat)) ir_d1) (IRList.cons IRNode (ir_nd (IRInst.store (IRTy.uint_ 32) ir_d1 ir_d0 Bool.false)) (ir_bd3 (ir_nd1 (IRInst.ptrdata IRTy.ptr_ ir_d1) ir_d2) (ir_nd1 (IRInst.load (IRTy.uint_ 32) ir_d2 Bool.false) ir_d3) (ir_nd (IRInst.ret (ir_nl1 ir_d3))))))";
+const SRC_IR_W2B_PD_B0: &str = "def ir_w2b_pd_b0 : IRBlock := IRBlock.mk ir_d0 ir_nl0 (@IRList.cons IRNode (ir_nd1 (IRInst.alloca (IRTy.uint_ 32) (@IROption.none Nat)) ir_d1) (@IRList.cons IRNode (ir_nd (IRInst.store (IRTy.uint_ 32) ir_d1 ir_d0 Bool.false)) (ir_bd3 (ir_nd1 (IRInst.ptrdata IRTy.ptr_ ir_d1) ir_d2) (ir_nd1 (IRInst.load (IRTy.uint_ 32) ir_d2 Bool.false) ir_d3) (ir_nd (IRInst.ret (ir_nl1 ir_d3))))))";
 
 const SRC_IR_W2B_PD_FUNC: &str = "def ir_w2b_pd_func : IRFunc := IRFunc.mk ir_d0 (ir_nl1 ir_d0) ir_d0 (ir_blk ir_w2b_pd_b0 ir_blk0)";
 
-const SRC_IR_W2B_PD_MODULE: &str = "def ir_w2b_pd_module : IRModule := IRModule.mk (IRList.cons IRFunc ir_w2b_pd_func (IRList.nil IRFunc)) (IRList.nil IRGlobal)";
+const SRC_IR_W2B_PD_MODULE: &str = "def ir_w2b_pd_module : IRModule := IRModule.mk (@IRList.cons IRFunc ir_w2b_pd_func (@IRList.nil IRFunc)) (@IRList.nil IRGlobal)";
 
 /// The `ptrdata` micro-module's definitions, in registration order.
 #[must_use]
@@ -133,13 +133,13 @@ pub fn ir_w2b_pd_module_defs() -> &'static [&'static str] {
     &[SRC_IR_W2B_PD_B0, SRC_IR_W2B_PD_FUNC, SRC_IR_W2B_PD_MODULE]
 }
 
-const SRC_IR_W2B_PD_ON_ROUNDTRIP: &str = "def ir_w2b_pd_on_roundtrip (x : Nat) : Eq IROutcome (ir_eval ir_d8 ir_w2b_pd_module ir_d0 (ir_vl1 (IRScalar.int_ x)) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 (IRScalar.int_ x))) := Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.int_ x)))";
+const SRC_IR_W2B_PD_ON_ROUNDTRIP: &str = "def ir_w2b_pd_on_roundtrip (x : Nat) : @Eq IROutcome (ir_eval ir_d8 ir_w2b_pd_module ir_d0 (ir_vl1 (IRScalar.int_ x)) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 (IRScalar.int_ x))) := @Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.int_ x)))";
 
-const SRC_IR_W2B_PD_FAT: &str = "def ir_w2b_pd_fat (d : Nat) (md : Nat) : Eq IRStepResult (ir_ptrdata_eval (IRScalar.fat_ d md)) (IRStepResult.value (IRScalar.ptr_ d)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.ptr_ d))";
+const SRC_IR_W2B_PD_FAT: &str = "def ir_w2b_pd_fat (d : Nat) (md : Nat) : @Eq IRStepResult (ir_ptrdata_eval (IRScalar.fat_ d md)) (IRStepResult.value (IRScalar.ptr_ d)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.ptr_ d))";
 
-const SRC_IR_W2B_PD_NULL: &str = "def ir_w2b_pd_null : Eq IRStepResult (ir_ptrdata_eval IRScalar.nullptr_) (IRStepResult.value IRScalar.nullptr_) := Eq.refl IRStepResult (IRStepResult.value IRScalar.nullptr_)";
+const SRC_IR_W2B_PD_NULL: &str = "def ir_w2b_pd_null : @Eq IRStepResult (ir_ptrdata_eval IRScalar.nullptr_) (IRStepResult.value IRScalar.nullptr_) := @Eq.refl IRStepResult (IRStepResult.value IRScalar.nullptr_)";
 
-const SRC_IR_W2B_PD_NOT_PTR: &str = "def ir_w2b_pd_not_ptr (n : Nat) : Eq IRStepResult (ir_ptrdata_eval (IRScalar.int_ n)) (IRStepResult.fault (IROutcome.type_error IRFault.not_ptr)) := Eq.refl IRStepResult (IRStepResult.fault (IROutcome.type_error IRFault.not_ptr))";
+const SRC_IR_W2B_PD_NOT_PTR: &str = "def ir_w2b_pd_not_ptr (n : Nat) : @Eq IRStepResult (ir_ptrdata_eval (IRScalar.int_ n)) (IRStepResult.fault (IROutcome.type_error IRFault.not_ptr)) := @Eq.refl IRStepResult (IRStepResult.fault (IROutcome.type_error IRFault.not_ptr))";
 
 // ── ptrmetadata: str-fat rebuild, metadata projection returns the length ──
 //
@@ -147,11 +147,11 @@ const SRC_IR_W2B_PD_NOT_PTR: &str = "def ir_w2b_pd_not_ptr (n : Nat) : Eq IRStep
 //     %3 = ptr_from_parts fatptr<str> ptr %2, u64 %1;
 //     %4 = ptr_metadata fatptr<str> %3 to u64; ret %4
 
-const SRC_IR_W2B_PM_B0: &str = "def ir_w2b_pm_b0 : IRBlock := IRBlock.mk ir_d0 ir_nl0 (IRList.cons IRNode (ir_nd1 (IRInst.alloca (IRTy.uint_ 32) (IROption.none Nat)) ir_d2) (IRList.cons IRNode (ir_nd (IRInst.store (IRTy.uint_ 32) ir_d2 ir_d0 Bool.false)) (ir_bd3 (ir_nd1 (IRInst.ptrfromparts (IRTy.fatptr_ (IRTy.uint_ 8)) (IRTy.uint_ 64) ir_d2 ir_d1) ir_d3) (ir_nd1 (IRInst.ptrmetadata (IRTy.fatptr_ (IRTy.uint_ 8)) (IRTy.uint_ 64) ir_d3) ir_d4) (ir_nd (IRInst.ret (ir_nl1 ir_d4))))))";
+const SRC_IR_W2B_PM_B0: &str = "def ir_w2b_pm_b0 : IRBlock := IRBlock.mk ir_d0 ir_nl0 (@IRList.cons IRNode (ir_nd1 (IRInst.alloca (IRTy.uint_ 32) (@IROption.none Nat)) ir_d2) (@IRList.cons IRNode (ir_nd (IRInst.store (IRTy.uint_ 32) ir_d2 ir_d0 Bool.false)) (ir_bd3 (ir_nd1 (IRInst.ptrfromparts (IRTy.fatptr_ (IRTy.uint_ 8)) (IRTy.uint_ 64) ir_d2 ir_d1) ir_d3) (ir_nd1 (IRInst.ptrmetadata (IRTy.fatptr_ (IRTy.uint_ 8)) (IRTy.uint_ 64) ir_d3) ir_d4) (ir_nd (IRInst.ret (ir_nl1 ir_d4))))))";
 
 const SRC_IR_W2B_PM_FUNC: &str = "def ir_w2b_pm_func : IRFunc := IRFunc.mk ir_d0 (ir_nl2 ir_d0 ir_d1) ir_d0 (ir_blk ir_w2b_pm_b0 ir_blk0)";
 
-const SRC_IR_W2B_PM_MODULE: &str = "def ir_w2b_pm_module : IRModule := IRModule.mk (IRList.cons IRFunc ir_w2b_pm_func (IRList.nil IRFunc)) (IRList.nil IRGlobal)";
+const SRC_IR_W2B_PM_MODULE: &str = "def ir_w2b_pm_module : IRModule := IRModule.mk (@IRList.cons IRFunc ir_w2b_pm_func (@IRList.nil IRFunc)) (@IRList.nil IRGlobal)";
 
 /// The `ptrmetadata` micro-module's definitions, in registration order.
 #[must_use]
@@ -159,11 +159,11 @@ pub fn ir_w2b_pm_module_defs() -> &'static [&'static str] {
     &[SRC_IR_W2B_PM_B0, SRC_IR_W2B_PM_FUNC, SRC_IR_W2B_PM_MODULE]
 }
 
-const SRC_IR_W2B_PM_ON_LEN: &str = "def ir_w2b_pm_on_len (x : Nat) (n : Nat) : Eq IROutcome (ir_eval ir_d8 ir_w2b_pm_module ir_d0 (IRList.cons IRScalar (IRScalar.int_ x) (IRList.cons IRScalar (IRScalar.int_ n) (IRList.nil IRScalar))) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 (IRScalar.int_ n))) := Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.int_ n)))";
+const SRC_IR_W2B_PM_ON_LEN: &str = "def ir_w2b_pm_on_len (x : Nat) (n : Nat) : @Eq IROutcome (ir_eval ir_d8 ir_w2b_pm_module ir_d0 (@IRList.cons IRScalar (IRScalar.int_ x) (@IRList.cons IRScalar (IRScalar.int_ n) (@IRList.nil IRScalar))) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 (IRScalar.int_ n))) := @Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.int_ n)))";
 
-const SRC_IR_W2B_PM_THIN: &str = "def ir_w2b_pm_thin (mt : IRTy) (a : Nat) : Eq IRStepResult (ir_ptrmeta_eval mt (IRScalar.ptr_ a)) (IRStepResult.value IRScalar.unit_) := Eq.refl IRStepResult (IRStepResult.value IRScalar.unit_)";
+const SRC_IR_W2B_PM_THIN: &str = "def ir_w2b_pm_thin (mt : IRTy) (a : Nat) : @Eq IRStepResult (ir_ptrmeta_eval mt (IRScalar.ptr_ a)) (IRStepResult.value IRScalar.unit_) := @Eq.refl IRStepResult (IRStepResult.value IRScalar.unit_)";
 
-const SRC_IR_W2B_PM_NOT_PTR: &str = "def ir_w2b_pm_not_ptr (mt : IRTy) (n : Nat) : Eq IRStepResult (ir_ptrmeta_eval mt (IRScalar.int_ n)) (IRStepResult.fault (IROutcome.type_error IRFault.not_ptr)) := Eq.refl IRStepResult (IRStepResult.fault (IROutcome.type_error IRFault.not_ptr))";
+const SRC_IR_W2B_PM_NOT_PTR: &str = "def ir_w2b_pm_not_ptr (mt : IRTy) (n : Nat) : @Eq IRStepResult (ir_ptrmeta_eval mt (IRScalar.int_ n)) (IRStepResult.fault (IROutcome.type_error IRFault.not_ptr)) := @Eq.refl IRStepResult (IRStepResult.fault (IROutcome.type_error IRFault.not_ptr))";
 
 // ── ptrfromparts: thin and fat rebuilds, each observed through a deref ────
 //
@@ -173,15 +173,15 @@ const SRC_IR_W2B_PM_NOT_PTR: &str = "def ir_w2b_pm_not_ptr (mt : IRTy) (n : Nat)
 //   bb2: %7 = ptr_from_parts fatptr<str> ptr %4, u64 %1;
 //        %8 = ptr_data fatptr<str> %7; %9 = load u32, ptr %8; ret %9
 
-const SRC_IR_W2B_PP_B0: &str = "def ir_w2b_pp_b0 : IRBlock := IRBlock.mk ir_d0 ir_nl0 (ir_bd3 (ir_nd1 (IRInst.alloca (IRTy.uint_ 32) (IROption.none Nat)) ir_d4) (ir_nd (IRInst.store (IRTy.uint_ 32) ir_d4 ir_d0 Bool.false)) (ir_nd (IRInst.condbr ir_d3 ir_d1 ir_nl0 ir_d2 ir_nl0)))";
+const SRC_IR_W2B_PP_B0: &str = "def ir_w2b_pp_b0 : IRBlock := IRBlock.mk ir_d0 ir_nl0 (ir_bd3 (ir_nd1 (IRInst.alloca (IRTy.uint_ 32) (@IROption.none Nat)) ir_d4) (ir_nd (IRInst.store (IRTy.uint_ 32) ir_d4 ir_d0 Bool.false)) (ir_nd (IRInst.condbr ir_d3 ir_d1 ir_nl0 ir_d2 ir_nl0)))";
 
 const SRC_IR_W2B_PP_B1: &str = "def ir_w2b_pp_b1 : IRBlock := IRBlock.mk ir_d1 ir_nl0 (ir_bd3 (ir_nd1 (IRInst.ptrfromparts IRTy.ptr_ IRTy.unit_ ir_d4 ir_d2) ir_d5) (ir_nd1 (IRInst.load (IRTy.uint_ 32) ir_d5 Bool.false) ir_d6) (ir_nd (IRInst.ret (ir_nl1 ir_d6))))";
 
-const SRC_IR_W2B_PP_B2: &str = "def ir_w2b_pp_b2 : IRBlock := IRBlock.mk ir_d2 ir_nl0 (IRList.cons IRNode (ir_nd1 (IRInst.ptrfromparts (IRTy.fatptr_ (IRTy.uint_ 8)) (IRTy.uint_ 64) ir_d4 ir_d1) ir_d7) (ir_bd3 (ir_nd1 (IRInst.ptrdata (IRTy.fatptr_ (IRTy.uint_ 8)) ir_d7) ir_d8) (ir_nd1 (IRInst.load (IRTy.uint_ 32) ir_d8 Bool.false) ir_d9) (ir_nd (IRInst.ret (ir_nl1 ir_d9)))))";
+const SRC_IR_W2B_PP_B2: &str = "def ir_w2b_pp_b2 : IRBlock := IRBlock.mk ir_d2 ir_nl0 (@IRList.cons IRNode (ir_nd1 (IRInst.ptrfromparts (IRTy.fatptr_ (IRTy.uint_ 8)) (IRTy.uint_ 64) ir_d4 ir_d1) ir_d7) (ir_bd3 (ir_nd1 (IRInst.ptrdata (IRTy.fatptr_ (IRTy.uint_ 8)) ir_d7) ir_d8) (ir_nd1 (IRInst.load (IRTy.uint_ 32) ir_d8 Bool.false) ir_d9) (ir_nd (IRInst.ret (ir_nl1 ir_d9)))))";
 
-const SRC_IR_W2B_PP_FUNC: &str = "def ir_w2b_pp_func : IRFunc := IRFunc.mk ir_d0 (IRList.cons Nat ir_d0 (IRList.cons Nat ir_d1 (IRList.cons Nat ir_d2 (IRList.cons Nat ir_d3 (IRList.nil Nat))))) ir_d0 (ir_blk ir_w2b_pp_b0 (ir_blk ir_w2b_pp_b1 (ir_blk ir_w2b_pp_b2 ir_blk0)))";
+const SRC_IR_W2B_PP_FUNC: &str = "def ir_w2b_pp_func : IRFunc := IRFunc.mk ir_d0 (@IRList.cons Nat ir_d0 (@IRList.cons Nat ir_d1 (@IRList.cons Nat ir_d2 (@IRList.cons Nat ir_d3 (@IRList.nil Nat))))) ir_d0 (ir_blk ir_w2b_pp_b0 (ir_blk ir_w2b_pp_b1 (ir_blk ir_w2b_pp_b2 ir_blk0)))";
 
-const SRC_IR_W2B_PP_MODULE: &str = "def ir_w2b_pp_module : IRModule := IRModule.mk (IRList.cons IRFunc ir_w2b_pp_func (IRList.nil IRFunc)) (IRList.nil IRGlobal)";
+const SRC_IR_W2B_PP_MODULE: &str = "def ir_w2b_pp_module : IRModule := IRModule.mk (@IRList.cons IRFunc ir_w2b_pp_func (@IRList.nil IRFunc)) (@IRList.nil IRGlobal)";
 
 /// The `ptrfromparts` micro-module's definitions, in registration order.
 #[must_use]
@@ -195,17 +195,17 @@ pub fn ir_w2b_pp_module_defs() -> &'static [&'static str] {
     ]
 }
 
-const SRC_IR_W2B_PP_ON_THIN: &str = "def ir_w2b_pp_on_thin (x : Nat) (n : Nat) : Eq IROutcome (ir_eval ir_d8 ir_w2b_pp_module ir_d0 (IRList.cons IRScalar (IRScalar.int_ x) (IRList.cons IRScalar (IRScalar.int_ n) (IRList.cons IRScalar IRScalar.unit_ (IRList.cons IRScalar (IRScalar.bool_ Bool.true) (IRList.nil IRScalar))))) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 (IRScalar.int_ x))) := Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.int_ x)))";
+const SRC_IR_W2B_PP_ON_THIN: &str = "def ir_w2b_pp_on_thin (x : Nat) (n : Nat) : @Eq IROutcome (ir_eval ir_d8 ir_w2b_pp_module ir_d0 (@IRList.cons IRScalar (IRScalar.int_ x) (@IRList.cons IRScalar (IRScalar.int_ n) (@IRList.cons IRScalar IRScalar.unit_ (@IRList.cons IRScalar (IRScalar.bool_ Bool.true) (@IRList.nil IRScalar))))) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 (IRScalar.int_ x))) := @Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.int_ x)))";
 
-const SRC_IR_W2B_PP_ON_FAT: &str = "def ir_w2b_pp_on_fat (x : Nat) (n : Nat) : Eq IROutcome (ir_eval ir_d8 ir_w2b_pp_module ir_d0 (IRList.cons IRScalar (IRScalar.int_ x) (IRList.cons IRScalar (IRScalar.int_ n) (IRList.cons IRScalar IRScalar.unit_ (IRList.cons IRScalar (IRScalar.bool_ Bool.false) (IRList.nil IRScalar))))) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 (IRScalar.int_ x))) := Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.int_ x)))";
+const SRC_IR_W2B_PP_ON_FAT: &str = "def ir_w2b_pp_on_fat (x : Nat) (n : Nat) : @Eq IROutcome (ir_eval ir_d8 ir_w2b_pp_module ir_d0 (@IRList.cons IRScalar (IRScalar.int_ x) (@IRList.cons IRScalar (IRScalar.int_ n) (@IRList.cons IRScalar IRScalar.unit_ (@IRList.cons IRScalar (IRScalar.bool_ Bool.false) (@IRList.nil IRScalar))))) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 (IRScalar.int_ x))) := @Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.int_ x)))";
 
-const SRC_IR_W2B_PP_VTABLE: &str = "def ir_w2b_pp_vtable (a : Nat) (x : Nat) : Eq IRStepResult (ir_ptrparts_at a (IRScalar.ptr_ x)) (IRStepResult.value (IRScalar.fat_ a x)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.fat_ a x))";
+const SRC_IR_W2B_PP_VTABLE: &str = "def ir_w2b_pp_vtable (a : Nat) (x : Nat) : @Eq IRStepResult (ir_ptrparts_at a (IRScalar.ptr_ x)) (IRStepResult.value (IRScalar.fat_ a x)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.fat_ a x))";
 
-const SRC_IR_W2B_PP_FNPTR: &str = "def ir_w2b_pp_fnptr (a : Nat) (f : Nat) : Eq IRStepResult (ir_ptrparts_at a (IRScalar.fnptr_ f)) (IRStepResult.value (IRScalar.fat_ a f)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.fat_ a f))";
+const SRC_IR_W2B_PP_FNPTR: &str = "def ir_w2b_pp_fnptr (a : Nat) (f : Nat) : @Eq IRStepResult (ir_ptrparts_at a (IRScalar.fnptr_ f)) (IRStepResult.value (IRScalar.fat_ a f)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.fat_ a f))";
 
-const SRC_IR_W2B_PP_BAD_MD: &str = "def ir_w2b_pp_bad_md (a : Nat) (b : Bool) : Eq IRStepResult (ir_ptrparts_at a (IRScalar.bool_ b)) (IRStepResult.fault (IROutcome.type_error IRFault.not_int)) := Eq.refl IRStepResult (IRStepResult.fault (IROutcome.type_error IRFault.not_int))";
+const SRC_IR_W2B_PP_BAD_MD: &str = "def ir_w2b_pp_bad_md (a : Nat) (b : Bool) : @Eq IRStepResult (ir_ptrparts_at a (IRScalar.bool_ b)) (IRStepResult.fault (IROutcome.type_error IRFault.not_int)) := @Eq.refl IRStepResult (IRStepResult.fault (IROutcome.type_error IRFault.not_int))";
 
-const SRC_IR_W2B_PP_NULL_DATA: &str = "def ir_w2b_pp_null_data (md : IRScalar) : Eq IRStepResult (ir_ptrparts_eval IRScalar.nullptr_ md) (IRStepResult.fault (IROutcome.ub IRFault.null_deref)) := Eq.refl IRStepResult (IRStepResult.fault (IROutcome.ub IRFault.null_deref))";
+const SRC_IR_W2B_PP_NULL_DATA: &str = "def ir_w2b_pp_null_data (md : IRScalar) : @Eq IRStepResult (ir_ptrparts_eval IRScalar.nullptr_ md) (IRStepResult.fault (IROutcome.ub IRFault.null_deref)) := @Eq.refl IRStepResult (IRStepResult.fault (IROutcome.ub IRFault.null_deref))";
 
 impl Specification {
     /// The W2b synthetic micro-modules (memory tranche) and their

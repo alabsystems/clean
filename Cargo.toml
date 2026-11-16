@@ -62,7 +62,7 @@ default-members = [
 ]
 
 [workspace.package]
-version = "0.9.2"
+version = "0.9.3"
 edition = "2021"
 # Minimum Supported Rust Version. The codebase uses if-let chains (1.87),
 # the `[lints]` workspace inheritance (1.74), and various clippy lints
@@ -255,7 +255,7 @@ clean-cake = { path = "crates/clean-cake" }
 # advancing only this edge splits TrustIR's nominal Rust types when Clean's
 # all-features tests pass TrustCG values back into Clean. TrustIR's successor
 # advances to this Clean revision after it is published.
-trust-ir-contract = { git = "https://github.com/alabsystems/trust-ir.git", rev = "a98dfbbe7f0b7ee8c60f2ee7c2cfd641ba850b87" }
+trust-ir-contract = { git = "https://github.com/alabsystems/trust-ir.git", rev = "8bae728257b123d6394b2dc049b3573ad885049f" }
 clean-lsp = { path = "crates/clean-lsp" }
 clean-macro = { path = "crates/clean-macro" }
 clean-math-project = { path = "crates/clean-math-project" }

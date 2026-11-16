@@ -220,6 +220,11 @@ pub fn reflect_inst(inst: &Inst) -> Result<(Expr, LeanLemmaRef), ReflectError> {
         Inst::MakeClosure { .. } => unsupported(
             "MakeClosure (runtime captures, trust-ir v63: out of Fragment-1, fail-closed)",
         ),
+        // The fact remains source-owned DATA. Fragment-1 has no semantics
+        // that can consume it or erase this operation into an ordinary pointer.
+        Inst::BoxDeref { .. } => unsupported(
+            "BoxDeref (source validity/pointee semantics: out of Fragment-1, fail-closed)",
+        ),
         // trust-ir v67-v69 tensor instructions compute whole tensor values;
         // Fragment-1 has no tensor term. Refused by name.
         Inst::TensorContract { .. }

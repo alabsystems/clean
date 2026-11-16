@@ -35,52 +35,52 @@ fn list(ty: &str, values: &[String]) -> String {
     values
         .iter()
         .rev()
-        .fold(format!("(IRList.nil {ty})"), |tail, value| {
-            format!("(IRList.cons {ty} {value} {tail})")
+        .fold(format!("(@IRList.nil {ty})"), |tail, value| {
+            format!("(@IRList.cons {ty} {value} {tail})")
         })
 }
 
 const TY: &str = "(IRTy.array_ (IRTy.uint_ 8) 16)";
-const PTR_TYPES: &str = "(IRList.cons IRTy IRTy.ptr_ (IRList.nil IRTy))";
-const RESULTS: &str = "(IRList.cons Nat 99 (IRList.nil Nat))";
+const PTR_TYPES: &str = "(@IRList.cons IRTy IRTy.ptr_ (@IRList.nil IRTy))";
+const RESULTS: &str = "(@IRList.cons Nat 99 (@IRList.nil Nat))";
 const LOCALS: &str =
-    "(IRList.cons IRBinding (IRBinding.mk 40 (IRScalar.bool_ Bool.true)) (IRList.nil IRBinding))";
-const CURRENT: &str = "(IRFrame.mk 9 7 2 (IRList.cons IRBinding (IRBinding.mk 40 (IRScalar.bool_ Bool.true)) (IRList.nil IRBinding)) (IRList.nil Nat))";
-const TAIL: &str = "(IRList.cons IRFrame (IRFrame.mk 3 4 5 (IRList.nil IRBinding) (IRList.nil Nat)) (IRList.nil IRFrame))";
-const LEGACY: &str = "(IRList.nil IRMemSlot)";
-const OWNERS: &str = "(IRList.cons Nat 1 (IRList.nil Nat))";
-const ROWS: &str = "(IRList.cons IRByteAllocationV1 (IRByteAllocationV1.mk 16 8 1 Bool.true)
-  (IRList.cons IRByteAllocationV1 (IRByteAllocationV1.mk 48 8 3 Bool.false)
-    (IRList.cons IRByteAllocationV1 (IRByteAllocationV1.mk 32 8 0 Bool.true) (IRList.nil IRByteAllocationV1))))";
+    "(@IRList.cons IRBinding (IRBinding.mk 40 (IRScalar.bool_ Bool.true)) (@IRList.nil IRBinding))";
+const CURRENT: &str = "(IRFrame.mk 9 7 2 (@IRList.cons IRBinding (IRBinding.mk 40 (IRScalar.bool_ Bool.true)) (@IRList.nil IRBinding)) (@IRList.nil Nat))";
+const TAIL: &str = "(@IRList.cons IRFrame (IRFrame.mk 3 4 5 (@IRList.nil IRBinding) (@IRList.nil Nat)) (@IRList.nil IRFrame))";
+const LEGACY: &str = "(@IRList.nil IRMemSlot)";
+const OWNERS: &str = "(@IRList.cons Nat 1 (@IRList.nil Nat))";
+const ROWS: &str = "(@IRList.cons IRByteAllocationV1 (IRByteAllocationV1.mk 16 8 1 Bool.true)
+  (@IRList.cons IRByteAllocationV1 (IRByteAllocationV1.mk 48 8 3 Bool.false)
+    (@IRList.cons IRByteAllocationV1 (IRByteAllocationV1.mk 32 8 0 Bool.true) (@IRList.nil IRByteAllocationV1))))";
 
 fn frame(fid: u64, block: u64, pc: u64) -> String {
-    format!("(IRFrame.mk {fid} {block} {pc} {LOCALS} (IRList.nil Nat))")
+    format!("(IRFrame.mk {fid} {block} {pc} {LOCALS} (@IRList.nil Nat))")
 }
 
 fn machine(frame: &str) -> String {
-    format!("(IRMachine.mk (IRList.cons IRFrame {frame} {TAIL}) {LEGACY} 1)")
+    format!("(IRMachine.mk (@IRList.cons IRFrame {frame} {TAIL}) {LEGACY} 1)")
 }
 
 fn world() -> String {
-    format!("(IRByteWorldV1.mk Nat (IRByteMemoryV1.mk {ROWS} bytes 65) host (IRList.cons Nat 2 {OWNERS}) 5)")
+    format!("(@IRByteWorldV1.mk Nat (IRByteMemoryV1.mk {ROWS} bytes 65) host (@IRList.cons Nat 2 {OWNERS}) 5)")
 }
 
 fn node() -> String {
-    format!("(IRNode.mk (IRInst.alloca {TY} (IROption.none Nat)) {RESULTS})")
+    format!("(IRNode.mk (IRInst.alloca {TY} (@IROption.none Nat)) {RESULTS})")
 }
 
 fn block(node: &str) -> String {
     let nodes = list("IRNode", &[
-        "(IRNode.mk (IRInst.const_ IRTy.bool_ (IRConst.bool_ Bool.true)) (IRList.cons Nat 11 (IRList.nil Nat)))".into(),
-        "(IRNode.mk (IRInst.const_ (IRTy.int_ 64) (IRConst.int_ 1)) (IRList.cons Nat 12 (IRList.nil Nat)))".into(),
+        "(IRNode.mk (IRInst.const_ IRTy.bool_ (IRConst.bool_ Bool.true)) (@IRList.cons Nat 11 (@IRList.nil Nat)))".into(),
+        "(IRNode.mk (IRInst.const_ (IRTy.int_ 64) (IRConst.int_ 1)) (@IRList.cons Nat 12 (@IRList.nil Nat)))".into(),
         node.into(),
-        format!("(IRNode.mk (IRInst.ret {RESULTS}) (IRList.nil Nat))"),
+        format!("(IRNode.mk (IRInst.ret {RESULTS}) (@IRList.nil Nat))"),
     ]);
-    format!("(IRBlock.mk 7 (IRList.nil Nat) {nodes})")
+    format!("(IRBlock.mk 7 (@IRList.nil Nat) {nodes})")
 }
 
 fn function(block: &str) -> String {
-    format!("(IRFunc.mk 9 (IRList.cons Nat 40 (IRList.nil Nat)) 7 (IRList.cons IRBlock {block} (IRList.nil IRBlock)))")
+    format!("(IRFunc.mk 9 (@IRList.cons Nat 40 (@IRList.nil Nat)) 7 (@IRList.cons IRBlock {block} (@IRList.nil IRBlock)))")
 }
 
 fn site(fid: u64, block: u64, pc: u64, results: &str) -> String {
@@ -89,10 +89,10 @@ fn site(fid: u64, block: u64, pc: u64, results: &str) -> String {
 
 fn context(function: &str, site: &str) -> String {
     format!("(IRByteContextV1.mk
-      (IRModule.mk (IRList.cons IRFunc {function} (IRList.nil IRFunc)) (IRList.nil IRGlobal))
-      (IRList.cons IRByteLayoutV1 (IRByteLayoutV1.mk {TY} 16 1 (IRList.nil IRTy) (IRList.nil Nat)) (IRList.nil IRByteLayoutV1))
-      (IRList.nil IRByteSignatureV1) (IRList.nil IRByteFunctionV1)
-      (IRList.cons IRByteSiteV1 {site} (IRList.nil IRByteSiteV1)))")
+      (IRModule.mk (@IRList.cons IRFunc {function} (@IRList.nil IRFunc)) (@IRList.nil IRGlobal))
+      (@IRList.cons IRByteLayoutV1 (IRByteLayoutV1.mk {TY} 16 1 (@IRList.nil IRTy) (@IRList.nil Nat)) (@IRList.nil IRByteLayoutV1))
+      (@IRList.nil IRByteSignatureV1) (@IRList.nil IRByteFunctionV1)
+      (@IRList.cons IRByteSiteV1 {site} (@IRList.nil IRByteSiteV1)))")
 }
 
 fn fixture(spec: &mut Specification) {
@@ -138,30 +138,30 @@ fn fixture(spec: &mut Specification) {
             "fetch_layout_found",
             "IRByteLayoutV1",
             format!("ir_byte_layout_v1 fetch_context {TY}"),
-            format!("(IRByteLayoutV1.mk {TY} 16 1 (IRList.nil IRTy) (IRList.nil Nat))"),
+            format!("(IRByteLayoutV1.mk {TY} 16 1 (@IRList.nil IRTy) (@IRList.nil Nat))"),
         ),
     ] {
         add(
             spec,
             name,
             &format!(
-                "def {name} : Eq (IROption {ty}) ({actual}) (IROption.some {ty} {value}) :=
-          Eq.refl (IROption {ty}) (IROption.some {ty} {value})"
+                "def {name} : @Eq (IROption {ty}) ({actual}) (@IROption.some {ty} {value}) :=
+          @Eq.refl (IROption {ty}) (@IROption.some {ty} {value})"
             ),
         );
     }
 }
 
 fn expected() -> String {
-    let values = "(IRList.cons IRScalar (IRScalar.ptr_ 72) (IRList.nil IRScalar))";
-    format!("(IRByteConfigV1.running Nat
-      (IRMachine.mk (IRList.cons IRFrame (ir_frame_advance (ir_frame_set_many {CURRENT} {RESULTS} {values})) {TAIL}) {LEGACY} 1)
+    let values = "(@IRList.cons IRScalar (IRScalar.ptr_ 72) (@IRList.nil IRScalar))";
+    format!("(@IRByteConfigV1.running Nat
+      (IRMachine.mk (@IRList.cons IRFrame (ir_frame_advance (ir_frame_set_many {CURRENT} {RESULTS} {values})) {TAIL}) {LEGACY} 1)
       (ir_byte_with_memory_v1 Nat {} (ir_byte_fresh_memory_v1 {ROWS} bytes 72 16 2)))", world())
 }
 
 fn step(ctx: &str, current: &str) -> String {
     format!(
-        "(ir_byte_step_v1 Nat {ctx} providers (IRByteConfigV1.running Nat {} {}))",
+        "(ir_byte_step_v1 Nat {ctx} providers (@IRByteConfigV1.running Nat {} {}))",
         machine(current),
         world()
     )
@@ -178,14 +178,14 @@ fn byte_fetched_step_roots_are_public_checked_and_axiom_free() {
 }
 
 fn arithmetic_frame(left: &str, right: &str) -> String {
-    format!("(IRFrame.mk 9 7 2 (IRList.cons IRBinding (IRBinding.mk 40 ({left}))
-      (IRList.cons IRBinding (IRBinding.mk 78 ({right})) (IRList.nil IRBinding))) (IRList.nil Nat))")
+    format!("(IRFrame.mk 9 7 2 (@IRList.cons IRBinding (IRBinding.mk 40 ({left}))
+      (@IRList.cons IRBinding (IRBinding.mk 78 ({right})) (@IRList.nil IRBinding))) (@IRList.nil Nat))")
 }
 
 fn arithmetic_context(instruction: &str, results: &str, result_types: &str) -> String {
     let node = format!("(IRNode.mk ({instruction}) {results})");
     let body = block(&node);
-    let function = format!("(IRFunc.mk 9 (IRList.cons Nat 40 (IRList.cons Nat 78 (IRList.nil Nat))) 7 (IRList.cons IRBlock {body} (IRList.nil IRBlock)))");
+    let function = format!("(IRFunc.mk 9 (@IRList.cons Nat 40 (@IRList.cons Nat 78 (@IRList.nil Nat))) 7 (@IRList.cons IRBlock {body} (@IRList.nil IRBlock)))");
     context(&function, &site(9, 7, 2, result_types))
 }
 
@@ -193,7 +193,7 @@ fn arithmetic_context(instruction: &str, results: &str, result_types: &str) -> S
 fn byte_binop_fetched_faults_and_float_profile_refusals_preserve_world() {
     crate::test_utils::run_with_stack(|| {
         let mut spec = crate::eval_ir::build_byte_prelude_spec_v1_with_stack().unwrap();
-        let integers = "(IRList.cons IRTy (IRTy.int_ 4) (IRList.nil IRTy))";
+        let integers = "(@IRList.cons IRTy (IRTy.int_ 4) (@IRList.nil IRTy))";
         for (case, (op, left, right, fault)) in [
             ("udiv", 3, 0, "div_zero"),
             ("sdiv", 3, 0, "div_zero"),
@@ -221,28 +221,28 @@ fn byte_binop_fetched_faults_and_float_profile_refusals_preserve_world() {
                 ),
             );
             let expected = format!(
-                "(IRByteConfigV1.halted Nat (IROutcome.ub IRFault.{fault}) {})",
+                "(@IRByteConfigV1.halted Nat (IROutcome.ub IRFault.{fault}) {})",
                 world()
             );
             add(&mut spec, &format!("fetch_binop_fault_{case}"), &format!(
-                "def fetch_binop_fault_{case} (providers : IRByteProvidersV1 Nat) (bytes : Nat -> IROption Nat) (host : Nat) : Eq (IRByteConfigV1 Nat) {actual} {expected} := Eq.refl (IRByteConfigV1 Nat) {expected}"));
+                "def fetch_binop_fault_{case} (providers : IRByteProvidersV1 Nat) (bytes : Nat -> IROption Nat) (host : Nat) : @Eq (IRByteConfigV1 Nat) {actual} {expected} := @Eq.refl (IRByteConfigV1 Nat) {expected}"));
         }
         for op in ["fadd", "fsub", "fmul", "fdiv", "frem", "fmin", "fmax"] {
             let ctx = arithmetic_context(
                 &format!("IRInst.binop IRBinOp.{op} (IRTy.float_ 64) 40 78"),
                 RESULTS,
-                "(IRList.cons IRTy (IRTy.float_ 64) (IRList.nil IRTy))",
+                "(@IRList.cons IRTy (IRTy.float_ 64) (@IRList.nil IRTy))",
             );
             let actual = step(
                 &ctx,
                 &arithmetic_frame("IRScalar.float_ 0", "IRScalar.float_ 0"),
             );
             let expected = format!(
-                "(IRByteConfigV1.halted Nat (IROutcome.type_error IRFault.bad_field) {})",
+                "(@IRByteConfigV1.halted Nat (IROutcome.type_error IRFault.bad_field) {})",
                 world()
             );
             add(&mut spec, &format!("fetch_binop_float_refuses_{op}"), &format!(
-                "def fetch_binop_float_refuses_{op} (providers : IRByteProvidersV1 Nat) (bytes : Nat -> IROption Nat) (host : Nat) : Eq (IRByteConfigV1 Nat) {actual} {expected} := Eq.refl (IRByteConfigV1 Nat) {expected}"));
+                "def fetch_binop_float_refuses_{op} (providers : IRByteProvidersV1 Nat) (bytes : Nat -> IROption Nat) (host : Nat) : @Eq (IRByteConfigV1 Nat) {actual} {expected} := @Eq.refl (IRByteConfigV1 Nat) {expected}"));
         }
     });
 }
@@ -251,10 +251,10 @@ fn byte_binop_fetched_faults_and_float_profile_refusals_preserve_world() {
 fn byte_binop_fault_precedence_is_carrier_then_evaluator_then_result() {
     crate::test_utils::run_with_stack(|| {
         let mut spec = crate::eval_ir::build_byte_prelude_spec_v1_with_stack().unwrap();
-        let one_type = "(IRList.cons IRTy (IRTy.int_ 4) (IRList.nil IRTy))";
+        let one_type = "(@IRList.cons IRTy (IRTy.int_ 4) (@IRList.nil IRTy))";
         let two_types =
-            "(IRList.cons IRTy (IRTy.int_ 4) (IRList.cons IRTy (IRTy.int_ 4) (IRList.nil IRTy)))";
-        let two_results = "(IRList.cons Nat 99 (IRList.cons Nat 100 (IRList.nil Nat)))";
+            "(@IRList.cons IRTy (IRTy.int_ 4) (@IRList.cons IRTy (IRTy.int_ 4) (@IRList.nil IRTy)))";
+        let two_results = "(@IRList.cons Nat 99 (@IRList.cons Nat 100 (@IRList.nil Nat)))";
         for (case, (op, left, right, results, types, outcome)) in [
             (
                 "udiv",
@@ -304,9 +304,9 @@ fn byte_binop_fault_precedence_is_carrier_then_evaluator_then_result() {
                     &format!("IRScalar.int_ {right}"),
                 ),
             );
-            let expected = format!("(IRByteConfigV1.halted Nat ({outcome}) {})", world());
+            let expected = format!("(@IRByteConfigV1.halted Nat ({outcome}) {})", world());
             add(&mut spec, &format!("fetch_binop_precedence_{case}"), &format!(
-                "def fetch_binop_precedence_{case} (providers : IRByteProvidersV1 Nat) (bytes : Nat -> IROption Nat) (host : Nat) : Eq (IRByteConfigV1 Nat) {actual} {expected} := Eq.refl (IRByteConfigV1 Nat) {expected}"));
+                "def fetch_binop_precedence_{case} (providers : IRByteProvidersV1 Nat) (bytes : Nat -> IROption Nat) (host : Nat) : @Eq (IRByteConfigV1 Nat) {actual} {expected} := @Eq.refl (IRByteConfigV1 Nat) {expected}"));
         }
     });
 }
@@ -315,7 +315,7 @@ fn byte_binop_fault_precedence_is_carrier_then_evaluator_then_result() {
 fn byte_add_sub_fetched_steps_reject_carriers_widths_and_result_lanes() {
     crate::test_utils::run_with_stack(|| {
         let mut spec = crate::eval_ir::build_byte_prelude_spec_v1_with_stack().unwrap();
-        let integers = "(IRList.cons IRTy (IRTy.uint_ 64) (IRList.nil IRTy))";
+        let integers = "(@IRList.cons IRTy (IRTy.uint_ 64) (@IRList.nil IRTy))";
         for op in ["add", "sub"] {
             for (case, (ty, left, right, rhs, results, result_types)) in [
                 ("IRTy.uint_ 64", "IRScalar.bool_ Bool.true", "IRScalar.int_ 1", 78, RESULTS, integers),
@@ -326,16 +326,16 @@ fn byte_add_sub_fetched_steps_reject_carriers_widths_and_result_lanes() {
                 ("IRTy.uint_ 0", "IRScalar.int_ 0", "IRScalar.int_ 0", 78, RESULTS, integers),
                 ("IRTy.int_ 129", "IRScalar.int_ 0", "IRScalar.int_ 0", 78, RESULTS, integers),
                 ("IRTy.bool_", "IRScalar.int_ 0", "IRScalar.int_ 0", 78, RESULTS, integers),
-                ("IRTy.uint_ 64", "IRScalar.int_ 1", "IRScalar.int_ 0", 78, RESULTS, "(IRList.cons IRTy IRTy.bool_ (IRList.nil IRTy))"),
-                ("IRTy.uint_ 64", "IRScalar.int_ 1", "IRScalar.int_ 0", 78, "(IRList.nil Nat)", "(IRList.nil IRTy)"),
-                ("IRTy.uint_ 64", "IRScalar.int_ 1", "IRScalar.int_ 0", 78, "(IRList.cons Nat 99 (IRList.cons Nat 100 (IRList.nil Nat)))", "(IRList.cons IRTy (IRTy.uint_ 64) (IRList.cons IRTy (IRTy.uint_ 64) (IRList.nil IRTy)))"),
+                ("IRTy.uint_ 64", "IRScalar.int_ 1", "IRScalar.int_ 0", 78, RESULTS, "(@IRList.cons IRTy IRTy.bool_ (@IRList.nil IRTy))"),
+                ("IRTy.uint_ 64", "IRScalar.int_ 1", "IRScalar.int_ 0", 78, "(@IRList.nil Nat)", "(@IRList.nil IRTy)"),
+                ("IRTy.uint_ 64", "IRScalar.int_ 1", "IRScalar.int_ 0", 78, "(@IRList.cons Nat 99 (@IRList.cons Nat 100 (@IRList.nil Nat)))", "(@IRList.cons IRTy (IRTy.uint_ 64) (@IRList.cons IRTy (IRTy.uint_ 64) (@IRList.nil IRTy)))"),
             ].into_iter().enumerate() {
                 let instruction = format!("IRInst.binop IRBinOp.{op} ({ty}) 40 {rhs}");
                 let ctx = arithmetic_context(&instruction, results, result_types);
                 let actual = step(&ctx, &arithmetic_frame(left, right));
-                let expected = format!("(IRByteConfigV1.halted Nat (IROutcome.type_error IRFault.bad_field) {})", world());
+                let expected = format!("(@IRByteConfigV1.halted Nat (IROutcome.type_error IRFault.bad_field) {})", world());
                 add(&mut spec, &format!("fetch_arithmetic_refuses_{op}_{case}"), &format!(
-                    "def fetch_arithmetic_refuses_{op}_{case} (providers : IRByteProvidersV1 Nat) (bytes : Nat -> IROption Nat) (host : Nat) : Eq (IRByteConfigV1 Nat) {actual} {expected} := Eq.refl (IRByteConfigV1 Nat) {expected}"));
+                    "def fetch_arithmetic_refuses_{op}_{case} (providers : IRByteProvidersV1 Nat) (bytes : Nat -> IROption Nat) (host : Nat) : @Eq (IRByteConfigV1 Nat) {actual} {expected} := @Eq.refl (IRByteConfigV1 Nat) {expected}"));
             }
         }
         // Byte-native two-result Overflow is a distinct instruction. These
@@ -354,11 +354,11 @@ fn byte_add_sub_fetched_steps_reject_carriers_widths_and_result_lanes() {
                 &arithmetic_frame("IRScalar.bool_ Bool.true", "IRScalar.int_ 0"),
             );
             let expected = format!(
-                "(IRByteConfigV1.halted Nat (IROutcome.type_error IRFault.not_int) {})",
+                "(@IRByteConfigV1.halted Nat (IROutcome.type_error IRFault.not_int) {})",
                 world()
             );
             add(&mut spec, &format!("fetch_overflow_not_int_{case}"), &format!(
-                "def fetch_overflow_not_int_{case} (providers : IRByteProvidersV1 Nat) (bytes : Nat -> IROption Nat) (host : Nat) : Eq (IRByteConfigV1 Nat) {actual} {expected} := Eq.refl (IRByteConfigV1 Nat) {expected}"));
+                "def fetch_overflow_not_int_{case} (providers : IRByteProvidersV1 Nat) (bytes : Nat -> IROption Nat) (host : Nat) : @Eq (IRByteConfigV1 Nat) {actual} {expected} := @Eq.refl (IRByteConfigV1 Nat) {expected}"));
         }
     });
 }
@@ -367,7 +367,7 @@ fn byte_add_sub_fetched_steps_reject_carriers_widths_and_result_lanes() {
 fn byte_add_sub_fetched_step_proof_is_bound_to_actual_instruction_and_world() {
     crate::test_utils::run_with_stack(|| {
         let mut spec = crate::eval_ir::build_byte_prelude_spec_v1_with_stack().unwrap();
-        let integers = "(IRList.cons IRTy (IRTy.uint_ 64) (IRList.nil IRTy))";
+        let integers = "(@IRList.cons IRTy (IRTy.uint_ 64) (@IRList.nil IRTy))";
         let current = arithmetic_frame("IRScalar.int_ 250", "IRScalar.int_ 10");
         let ctx = arithmetic_context(
             "IRInst.binop IRBinOp.add (IRTy.uint_ 64) 40 78",
@@ -375,11 +375,11 @@ fn byte_add_sub_fetched_step_proof_is_bound_to_actual_instruction_and_world() {
             integers,
         );
         let actual = step(&ctx, &current);
-        let expected = format!("(IRByteConfigV1.running Nat
-          (IRMachine.mk (IRList.cons IRFrame (ir_frame_advance (ir_frame_set_many {current} {RESULTS}
-            (IRList.cons IRScalar (IRScalar.int_ 260) (IRList.nil IRScalar)))) {TAIL}) {LEGACY} 1) {})", world());
+        let expected = format!("(@IRByteConfigV1.running Nat
+          (IRMachine.mk (@IRList.cons IRFrame (ir_frame_advance (ir_frame_set_many {current} {RESULTS}
+            (@IRList.cons IRScalar (IRScalar.int_ 260) (@IRList.nil IRScalar)))) {TAIL}) {LEGACY} 1) {})", world());
         add(&mut spec, "fetch_arithmetic_exact", &format!(
-            "def fetch_arithmetic_exact (providers : IRByteProvidersV1 Nat) (bytes : Nat -> IROption Nat) (host : Nat) : Eq (IRByteConfigV1 Nat) {actual} {expected} := Eq.refl (IRByteConfigV1 Nat) {expected}"));
+            "def fetch_arithmetic_exact (providers : IRByteProvidersV1 Nat) (bytes : Nat -> IROption Nat) (host : Nat) : @Eq (IRByteConfigV1 Nat) {actual} {expected} := @Eq.refl (IRByteConfigV1 Nat) {expected}"));
         for (case, instruction, results) in [
             (
                 "opcode",
@@ -399,7 +399,7 @@ fn byte_add_sub_fetched_step_proof_is_bound_to_actual_instruction_and_world() {
             (
                 "destination",
                 "IRInst.binop IRBinOp.add (IRTy.uint_ 64) 40 78",
-                "(IRList.cons Nat 100 (IRList.nil Nat))",
+                "(@IRList.cons Nat 100 (@IRList.nil Nat))",
             ),
         ] {
             let changed = step(
@@ -407,18 +407,18 @@ fn byte_add_sub_fetched_step_proof_is_bound_to_actual_instruction_and_world() {
                 &current,
             );
             reject(&mut spec, &format!(
-                "def fetch_arithmetic_wrong_{case} (providers : IRByteProvidersV1 Nat) (bytes : Nat -> IROption Nat) (host : Nat) : Eq (IRByteConfigV1 Nat) {changed} {expected} := fetch_arithmetic_exact providers bytes host"));
+                "def fetch_arithmetic_wrong_{case} (providers : IRByteProvidersV1 Nat) (bytes : Nat -> IROption Nat) (host : Nat) : @Eq (IRByteConfigV1 Nat) {changed} {expected} := fetch_arithmetic_exact providers bytes host"));
         }
         let changed = step(
             &ctx,
             &arithmetic_frame("IRScalar.int_ 249", "IRScalar.int_ 10"),
         );
         reject(&mut spec, &format!(
-            "def fetch_arithmetic_wrong_input (providers : IRByteProvidersV1 Nat) (bytes : Nat -> IROption Nat) (host : Nat) : Eq (IRByteConfigV1 Nat) {changed} {expected} := fetch_arithmetic_exact providers bytes host"));
+            "def fetch_arithmetic_wrong_input (providers : IRByteProvidersV1 Nat) (bytes : Nat -> IROption Nat) (host : Nat) : @Eq (IRByteConfigV1 Nat) {changed} {expected} := fetch_arithmetic_exact providers bytes host"));
         let changed_world = expected.replace("bytes 65", "bytes 66");
         assert_ne!(changed_world, expected);
         reject(&mut spec, &format!(
-            "def fetch_arithmetic_wrong_world (providers : IRByteProvidersV1 Nat) (bytes : Nat -> IROption Nat) (host : Nat) : Eq (IRByteConfigV1 Nat) {actual} {changed_world} := fetch_arithmetic_exact providers bytes host"));
+            "def fetch_arithmetic_wrong_world (providers : IRByteProvidersV1 Nat) (bytes : Nat -> IROption Nat) (host : Nat) : @Eq (IRByteConfigV1 Nat) {actual} {changed_world} := fetch_arithmetic_exact providers bytes host"));
     });
 }
 
@@ -428,16 +428,16 @@ fn byte_fetched_alloca_uses_real_sparse_ids_pc_and_preserves_world() {
         let mut spec = Specification::new_eval_ir_byte_prelude_spec_v1().unwrap();
         fixture(&mut spec);
         let high = "(@And.intro (Nat.lt 24 65)
-          (ir_byte_high_water_v1 (IRList.cons IRByteAllocationV1 (IRByteAllocationV1.mk 48 8 3 Bool.false)
-            (IRList.cons IRByteAllocationV1 (IRByteAllocationV1.mk 32 8 0 Bool.true) (IRList.nil IRByteAllocationV1))) 65)
+          (ir_byte_high_water_v1 (@IRList.cons IRByteAllocationV1 (IRByteAllocationV1.mk 48 8 3 Bool.false)
+            (@IRList.cons IRByteAllocationV1 (IRByteAllocationV1.mk 32 8 0 Bool.true) (@IRList.nil IRByteAllocationV1))) 65)
           (Nat.le_add_right 25 40)
           (@And.intro (Nat.lt 56 65)
-            (ir_byte_high_water_v1 (IRList.cons IRByteAllocationV1 (IRByteAllocationV1.mk 32 8 0 Bool.true) (IRList.nil IRByteAllocationV1)) 65)
+            (ir_byte_high_water_v1 (@IRList.cons IRByteAllocationV1 (IRByteAllocationV1.mk 32 8 0 Bool.true) (@IRList.nil IRByteAllocationV1)) 65)
             (Nat.le_add_right 57 8)
             (@And.intro (Nat.lt 40 65) True (Nat.le_add_right 41 24) True.intro)))".to_string();
         let args = format!("Nat {ROWS} bytes 65 host 2 {OWNERS} 5 {CURRENT} {TAIL} {LEGACY} 1
           fetch_context providers 99 1 fetch_function fetch_block (Nat.zero_lt_succ 64)
-          (Nat.le_add_right 89 18446744073709551527) {high} fetch_layout_found (Eq.refl Bool Bool.true)
+          (Nat.le_add_right 89 18446744073709551527) {high} fetch_layout_found (@Eq.refl Bool Bool.true)
           fetch_function_found fetch_block_found fetch_node_found fetch_site_found");
         let actual = step("fetch_context", CURRENT);
         let result = expected();
@@ -447,11 +447,11 @@ fn byte_fetched_alloca_uses_real_sparse_ids_pc_and_preserves_world() {
             &format!(
                 "def fetch_actual_exact
           (providers : IRByteProvidersV1 Nat) (bytes : Nat -> IROption Nat) (host : Nat) :
-          Eq (IRByteConfigV1 Nat) {actual} {result} := ir_byte_step_frame16_exact_v1 {args}"
+          @Eq (IRByteConfigV1 Nat) {actual} {result} := ir_byte_step_frame16_exact_v1 {args}"
             ),
         );
-        let predicate = "(fun (c : IRByteConfigV1 Nat) => IRByteConfigV1.rec Nat (fun (_ : IRByteConfigV1 Nat) => Prop)
-          (fun (s : IRMachine) (w : IRByteWorldV1 Nat) => Eq Bool (ir_byte_world_valid_v1 Nat s w) Bool.true)
+        let predicate = "(fun (c : IRByteConfigV1 Nat) => @IRByteConfigV1.rec Nat (fun (_ : IRByteConfigV1 Nat) => Prop)
+          (fun (s : IRMachine) (w : IRByteWorldV1 Nat) => @Eq Bool (ir_byte_world_valid_v1 Nat s w) Bool.true)
           (fun (_ : IROutcome) (_ : IRByteWorldV1 Nat) => False) c)";
         add(
             &mut spec,
@@ -473,7 +473,7 @@ fn byte_fetched_alloca_uses_real_sparse_ids_pc_and_preserves_world() {
             &format!(
                 "def fetch_wrong_owner
           (providers : IRByteProvidersV1 Nat) (bytes : Nat -> IROption Nat) (host : Nat) :
-          Eq (IRByteConfigV1 Nat) {actual} {wrong} := fetch_actual_exact providers bytes host"
+          @Eq (IRByteConfigV1 Nat) {actual} {wrong} := fetch_actual_exact providers bytes host"
             ),
         );
     });
@@ -523,21 +523,21 @@ fn byte_fetched_step_mutations_follow_actual_faults_not_shadow_metadata() {
             ),
             (
                 "wrong_arity",
-                context("fetch_function", &site(9, 7, 2, "(IRList.nil IRTy)")),
+                context("fetch_function", &site(9, 7, 2, "(@IRList.nil IRTy)")),
                 CURRENT.into(),
                 "IROutcome.type_error IRFault.bad_field",
             ),
         ];
         for (label, ctx, current, outcome) in scenarios {
             let actual = step(&ctx, &current);
-            let failed = format!("(IRByteConfigV1.halted Nat ({outcome}) {})", world());
+            let failed = format!("(@IRByteConfigV1.halted Nat ({outcome}) {})", world());
             add(
                 &mut spec,
                 &format!("fetch_observed_{label}"),
                 &format!(
                     "def fetch_observed_{label}
               (providers : IRByteProvidersV1 Nat) (bytes : Nat -> IROption Nat) (host : Nat) :
-              Eq (IRByteConfigV1 Nat) {actual} {failed} := Eq.refl (IRByteConfigV1 Nat) {failed}"
+              @Eq (IRByteConfigV1 Nat) {actual} {failed} := @Eq.refl (IRByteConfigV1 Nat) {failed}"
                 ),
             );
             reject(
@@ -545,7 +545,7 @@ fn byte_fetched_step_mutations_follow_actual_faults_not_shadow_metadata() {
                 &format!(
                     "def fetch_bad_{label}
               (providers : IRByteProvidersV1 Nat) (bytes : Nat -> IROption Nat) (host : Nat) :
-              Eq (IRByteConfigV1 Nat) {actual} {} := Eq.refl (IRByteConfigV1 Nat) {}",
+              @Eq (IRByteConfigV1 Nat) {actual} {} := @Eq.refl (IRByteConfigV1 Nat) {}",
                     expected(),
                     expected()
                 ),
@@ -556,16 +556,16 @@ fn byte_fetched_step_mutations_follow_actual_faults_not_shadow_metadata() {
         let changed_node = format!("(IRNode.mk (IRInst.const_ IRTy.ptr_ IRConst.null_) {RESULTS})");
         let changed_ctx = context(&function(&block(&changed_node)), "fetch_site");
         let actual = step(&changed_ctx, CURRENT);
-        let null_values = "(IRList.cons IRScalar IRScalar.nullptr_ (IRList.nil IRScalar))";
-        let changed = format!("(IRByteConfigV1.running Nat
-          (IRMachine.mk (IRList.cons IRFrame (ir_frame_advance (ir_frame_set_many {CURRENT} {RESULTS} {null_values})) {TAIL}) {LEGACY} 1) {})", world());
+        let null_values = "(@IRList.cons IRScalar IRScalar.nullptr_ (@IRList.nil IRScalar))";
+        let changed = format!("(@IRByteConfigV1.running Nat
+          (IRMachine.mk (@IRList.cons IRFrame (ir_frame_advance (ir_frame_set_many {CURRENT} {RESULTS} {null_values})) {TAIL}) {LEGACY} 1) {})", world());
         add(
             &mut spec,
             "fetch_changed_instruction_observed",
             &format!(
                 "def fetch_changed_instruction_observed
           (providers : IRByteProvidersV1 Nat) (bytes : Nat -> IROption Nat) (host : Nat) :
-          Eq (IRByteConfigV1 Nat) {actual} {changed} := Eq.refl (IRByteConfigV1 Nat) {changed}"
+          @Eq (IRByteConfigV1 Nat) {actual} {changed} := @Eq.refl (IRByteConfigV1 Nat) {changed}"
             ),
         );
         reject(
@@ -573,7 +573,7 @@ fn byte_fetched_step_mutations_follow_actual_faults_not_shadow_metadata() {
             &format!(
                 "def fetch_changed_instruction_bad
           (providers : IRByteProvidersV1 Nat) (bytes : Nat -> IROption Nat) (host : Nat) :
-          Eq (IRByteConfigV1 Nat) {actual} {} := Eq.refl (IRByteConfigV1 Nat) {}",
+          @Eq (IRByteConfigV1 Nat) {actual} {} := @Eq.refl (IRByteConfigV1 Nat) {}",
                 expected(),
                 expected()
             ),

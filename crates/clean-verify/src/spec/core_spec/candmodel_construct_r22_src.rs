@@ -20,7 +20,7 @@ const INST0: &str = "(instantiate (KExpr.bvar Nat.zero) (KExpr.sort Level.zero))
 
 /// R15's CPS continuation shape, at `xval`.
 fn sem_k(d: &str, e2: &str, s: &str, src: &str, c: &str) -> String {
-    format!("forall (zh2 : WKC {d} {e2} {s}), (forall (zr : VEnvD {d}), Eq (VD {s}) (xval {d} {e2} {s} zh2 zr) ({src} zr)) -> {c}")
+    format!("forall (zh2 : WKC {d} {e2} {s}), (forall (zr : VEnvD {d}), @Eq (VD {s}) (xval {d} {e2} {s} zh2 zr) ({src} zr)) -> {c}")
 }
 
 // ================================================================
@@ -46,7 +46,7 @@ pub(super) fn val_xval_star_sem() -> String {
         sem_k("D", "qw", "qs", "(xval D qe qs qd)", "qC")
     );
     let m_refl = format!(
-        "(fun (qe : KExpr) (qs : Sk) (qd : WKC D qe qs) (qC : Type) (qk : {}) => qk qd (fun (zr : VEnvD D) => Eq.refl (VD qs) (xval D qe qs qd zr)))",
+        "(fun (qe : KExpr) (qs : Sk) (qd : WKC D qe qs) (qC : Type) (qk : {}) => qk qd (fun (zr : VEnvD D) => @Eq.refl (VD qs) (xval D qe qs qd zr)))",
         sem_k("D", "qe", "qs", "(xval D qe qs qd)", "qC")
     );
     let ih = format!(
@@ -54,18 +54,18 @@ pub(super) fn val_xval_star_sem() -> String {
         sem_k("D", "qe3", "qs", "(xval D qe2 qs qd)", "qC")
     );
     let m_step = format!(
-        "(fun (qe : KExpr) (qe2 : KExpr) (qe3 : KExpr) (qst : whnf_step qe qe2) (qrest : whnfStar qe2 qe3) {ih} (qs : Sk) (qd : WKC D qe qs) (qC : Type) (qk : {}) => r21_xval_step_sem D qe qs qd qe2 qst qC (fun (zh2 : WKC D qe2 qs) (zhv : forall (zr : VEnvD D), Eq (VD qs) (xval D qe2 qs zh2 zr) (xval D qe qs qd zr)) => qih qs zh2 qC (fun (zhw : WKC D qe3 qs) (zhv2 : forall (zr : VEnvD D), Eq (VD qs) (xval D qe3 qs zhw zr) (xval D qe2 qs zh2 zr)) => qk zhw (fun (zr : VEnvD D) => Eq.trans (VD qs) (xval D qe3 qs zhw zr) (xval D qe2 qs zh2 zr) (xval D qe qs qd zr) (zhv2 zr) (zhv zr)))))",
+        "(fun (qe : KExpr) (qe2 : KExpr) (qe3 : KExpr) (qst : whnf_step qe qe2) (qrest : whnfStar qe2 qe3) {ih} (qs : Sk) (qd : WKC D qe qs) (qC : Type) (qk : {}) => r21_xval_step_sem D qe qs qd qe2 qst qC (fun (zh2 : WKC D qe2 qs) (zhv : forall (zr : VEnvD D), @Eq (VD qs) (xval D qe2 qs zh2 zr) (xval D qe qs qd zr)) => qih qs zh2 qC (fun (zhw : WKC D qe3 qs) (zhv2 : forall (zr : VEnvD D), @Eq (VD qs) (xval D qe3 qs zhw zr) (xval D qe2 qs zh2 zr)) => qk zhw (fun (zr : VEnvD D) => @Eq.trans (VD qs) (xval D qe3 qs zhw zr) (xval D qe2 qs zh2 zr) (xval D qe qs qd zr) (zhv2 zr) (zhv zr)))))",
         sem_k("D", "qe3", "qs", "(xval D qe qs qd)", "qC")
     );
-    format!("fun (D : Nat -> Sk) (e : KExpr) (w : KExpr) (hstar : whnfStar e w) => whnfStar.rec {mot} {m_refl} {m_step} e w hstar")
+    format!("fun (D : Nat -> Sk) (e : KExpr) (w : KExpr) (hstar : whnfStar e w) => @whnfStar.rec {mot} {m_refl} {m_step} e w hstar")
 }
 
 /// **`r22_xval_step_star`** — the ∀-form along a whole sequence. R16's
 /// `val_step_star` with `PropBox` reused and `r17_xval_irrel` in place of
 /// `r16_sval_irrel`.
-pub(super) const TY_XVAL_STEP_STAR: &str = "forall (D : Nat -> Sk) (e : KExpr) (w : KExpr) (hstar : whnfStar e w) (s : Sk) (h : WKC D e s) (hw : WKC D w s) (r : VEnvD D), Eq (VD s) (xval D w s hw r) (xval D e s h r)";
+pub(super) const TY_XVAL_STEP_STAR: &str = "forall (D : Nat -> Sk) (e : KExpr) (w : KExpr) (hstar : whnfStar e w) (s : Sk) (h : WKC D e s) (hw : WKC D w s) (r : VEnvD D), @Eq (VD s) (xval D w s hw r) (xval D e s h r)";
 
-pub(super) const VAL_XVAL_STEP_STAR: &str = "fun (D : Nat -> Sk) (e : KExpr) (w : KExpr) (hstar : whnfStar e w) (s : Sk) (h : WKC D e s) (hw : WKC D w s) (r : VEnvD D) => r16_unbox (Eq (VD s) (xval D w s hw r) (xval D e s h r)) (r22_xval_star_sem D e w hstar s h (PropBox (Eq (VD s) (xval D w s hw r) (xval D e s h r))) (fun (zhw : WKC D w s) (zhv : forall (zr : VEnvD D), Eq (VD s) (xval D w s zhw zr) (xval D e s h zr)) => r16_propBox_intro (Eq (VD s) (xval D w s hw r) (xval D e s h r)) (Eq.trans (VD s) (xval D w s hw r) (xval D w s zhw r) (xval D e s h r) (r17_xval_irrel D w s hw zhw r) (zhv r))))";
+pub(super) const VAL_XVAL_STEP_STAR: &str = "fun (D : Nat -> Sk) (e : KExpr) (w : KExpr) (hstar : whnfStar e w) (s : Sk) (h : WKC D e s) (hw : WKC D w s) (r : VEnvD D) => r16_unbox (@Eq (VD s) (xval D w s hw r) (xval D e s h r)) (r22_xval_star_sem D e w hstar s h (PropBox (@Eq (VD s) (xval D w s hw r) (xval D e s h r))) (fun (zhw : WKC D w s) (zhv : forall (zr : VEnvD D), @Eq (VD s) (xval D w s zhw zr) (xval D e s h zr)) => r16_propBox_intro (@Eq (VD s) (xval D w s hw r) (xval D e s h r)) (@Eq.trans (VD s) (xval D w s hw r) (xval D w s zhw r) (xval D e s h r) (r17_xval_irrel D w s hw zhw r) (zhv r))))";
 
 // ================================================================
 // Group B — THE NATIVE CONVERSION LEMMA.
@@ -88,7 +88,7 @@ pub(super) const VAL_XVAL_STEP_STAR: &str = "fun (D : Nat -> Sk) (e : KExpr) (w 
 /// comparing two derivations of one judgment.
 pub(super) const TY_XVAL_CONV: &str = "forall (D : Nat -> Sk) (e1 : KExpr) (e2 : KExpr) (w : KExpr) (s : Sk) (h1 : WKC D e1 s) (h2 : WKC D e2 s) (r : VEnvD D) (t : KExpr), whnfStar e1 w -> whnfStar e2 w -> vcarD s (xval D e1 s h1 r) t -> vcarD s (xval D e2 s h2 r) t";
 
-pub(super) const VAL_XVAL_CONV: &str = "fun (D : Nat -> Sk) (e1 : KExpr) (e2 : KExpr) (w : KExpr) (s : Sk) (h1 : WKC D e1 s) (h2 : WKC D e2 s) (r : VEnvD D) (t : KExpr) (st1 : whnfStar e1 w) (st2 : whnfStar e2 w) (hm : vcarD s (xval D e1 s h1 r) t) => r22_xval_star_sem D e1 w st1 s h1 (vcarD s (xval D e2 s h2 r) t) (fun (zhw : WKC D w s) (zhv : forall (zr : VEnvD D), Eq (VD s) (xval D w s zhw zr) (xval D e1 s h1 zr)) => Eq.substType (VD s) (fun (qv : VD s) => vcarD s qv t) (xval D e1 s h1 r) (xval D e2 s h2 r) (Eq.trans (VD s) (xval D e1 s h1 r) (xval D w s zhw r) (xval D e2 s h2 r) (Eq.symm (VD s) (xval D w s zhw r) (xval D e1 s h1 r) (zhv r)) (r22_xval_step_star D e2 w st2 s h2 zhw r)) hm)";
+pub(super) const VAL_XVAL_CONV: &str = "fun (D : Nat -> Sk) (e1 : KExpr) (e2 : KExpr) (w : KExpr) (s : Sk) (h1 : WKC D e1 s) (h2 : WKC D e2 s) (r : VEnvD D) (t : KExpr) (st1 : whnfStar e1 w) (st2 : whnfStar e2 w) (hm : vcarD s (xval D e1 s h1 r) t) => r22_xval_star_sem D e1 w st1 s h1 (vcarD s (xval D e2 s h2 r) t) (fun (zhw : WKC D w s) (zhv : forall (zr : VEnvD D), @Eq (VD s) (xval D w s zhw zr) (xval D e1 s h1 zr)) => @Eq.substType (VD s) (fun (qv : VD s) => vcarD s qv t) (xval D e1 s h1 r) (xval D e2 s h2 r) (@Eq.trans (VD s) (xval D e1 s h1 r) (xval D w s zhw r) (xval D e2 s h2 r) (@Eq.symm (VD s) (xval D w s zhw r) (xval D e1 s h1 r) (zhv r)) (r22_xval_step_star D e2 w st2 s h2 zhw r)) hm)";
 
 // ================================================================
 // Group C — the drift checks and the reach witnesses.
@@ -102,7 +102,7 @@ pub(super) const VAL_CONV_EXTENDS: &str = "fun (D : Nat -> Sk) (e1 : KExpr) (e2 
 
 /// **`r22_step_star_extends_transported`** — the same for R18's
 /// `r18_xval_step_star`.
-pub(super) const TY_STAR_EXTENDS: &str = "forall (D : Nat -> Sk) (e : KExpr) (w : KExpr) (hstar : whnfStar e w) (s : Sk) (h : WK D e s) (hw : WK D w s) (r : VEnvD D), Eq (VD s) (xval D w s (r17_wk_wkc D w s hw) r) (xval D e s (r17_wk_wkc D e s h) r)";
+pub(super) const TY_STAR_EXTENDS: &str = "forall (D : Nat -> Sk) (e : KExpr) (w : KExpr) (hstar : whnfStar e w) (s : Sk) (h : WK D e s) (hw : WK D w s) (r : VEnvD D), @Eq (VD s) (xval D w s (r17_wk_wkc D w s hw) r) (xval D e s (r17_wk_wkc D e s h) r)";
 
 pub(super) const VAL_STAR_EXTENDS: &str = "fun (D : Nat -> Sk) (e : KExpr) (w : KExpr) (hstar : whnfStar e w) (s : Sk) (h : WK D e s) (hw : WK D w s) (r : VEnvD D) => r22_xval_step_star D e w hstar s (r17_wk_wkc D e s h) (r17_wk_wkc D w s hw) r";
 
@@ -114,7 +114,7 @@ pub(super) fn src_let_star() -> String {
 
 /// **`r22_step_star_reaches_let`** — the ∀-form star law at that ζ sequence.
 pub(super) fn ty_star_reaches_let() -> String {
-    format!("forall (r : VEnvD r12_betaEnv), Eq (VD {KDTY}) (xval r12_betaEnv {INST0} {KDTY} r17_wkc_step_let_witness r) (xval r12_betaEnv r17_letTerm {KDTY} r17_let_witness r)")
+    format!("forall (r : VEnvD r12_betaEnv), @Eq (VD {KDTY}) (xval r12_betaEnv {INST0} {KDTY} r17_wkc_step_let_witness r) (xval r12_betaEnv r17_letTerm {KDTY} r17_let_witness r)")
 }
 
 pub(super) fn val_star_reaches_let() -> String {
@@ -154,7 +154,7 @@ pub(super) fn probe_conv_without_second_star() -> String {
 /// different variable derivations, so the kernel must refuse.
 #[cfg(test)]
 pub(super) fn probe_star_refl() -> String {
-    format!("def r22_star_refl_probe : {TY_XVAL_STEP_STAR} := fun (D : Nat -> Sk) (e : KExpr) (w : KExpr) (hstar : whnfStar e w) (s : Sk) (h : WKC D e s) (hw : WKC D w s) (r : VEnvD D) => Eq.refl (VD s) (xval D w s hw r)")
+    format!("def r22_star_refl_probe : {TY_XVAL_STEP_STAR} := fun (D : Nat -> Sk) (e : KExpr) (w : KExpr) (hstar : whnfStar e w) (s : Sk) (h : WKC D e s) (hw : WKC D w s) (r : VEnvD D) => @Eq.refl (VD s) (xval D w s hw r)")
 }
 
 // ================================================================

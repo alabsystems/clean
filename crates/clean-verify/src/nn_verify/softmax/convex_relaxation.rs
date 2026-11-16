@@ -48,7 +48,7 @@ use super::lse::{log_sum_exp, softmax};
 /// Result of softmax convex relaxation over a box `[lower, upper]`.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
-pub struct SoftmaxRelaxation {
+pub(crate) struct SoftmaxRelaxation {
     /// Per-output lower bounds on `softmax(x)_i` for `x in [l, u]`.
     pub lower: Vec<f64>,
     /// Per-output upper bounds on `softmax(x)_i` for `x in [l, u]`.
@@ -112,7 +112,10 @@ impl LinearBound {
 ///
 /// Panics if bounds have different lengths, are empty, or lower > upper.
 #[must_use]
-pub fn softmax_convex_relaxation(lower_bounds: &[f64], upper_bounds: &[f64]) -> SoftmaxRelaxation {
+pub(crate) fn softmax_convex_relaxation(
+    lower_bounds: &[f64],
+    upper_bounds: &[f64],
+) -> SoftmaxRelaxation {
     let n = lower_bounds.len();
     assert_eq!(n, upper_bounds.len(), "bounds must have equal length");
     assert!(n > 0, "must have at least one dimension");
@@ -275,7 +278,7 @@ pub(crate) fn lse_secant_upper_bound(lower: &[f64], upper: &[f64]) -> LinearBoun
 ///
 /// Returns the maximum violation (negative if all bounds hold).
 #[must_use]
-pub fn verify_relaxation_soundness(
+pub(crate) fn verify_relaxation_soundness(
     x: &[f64],
     lower_bounds: &[f64],
     upper_bounds: &[f64],
@@ -318,7 +321,7 @@ pub fn verify_relaxation_soundness(
 /// the tightness guarantee. The epsilon prevents division by zero
 /// when the input range is zero (point interval).
 #[must_use]
-pub fn tightness_ratio(relaxation: &SoftmaxRelaxation) -> f64 {
+pub(crate) fn tightness_ratio(relaxation: &SoftmaxRelaxation) -> f64 {
     let eps = 1e-15;
     relaxation.max_gap / (relaxation.input_range + eps)
 }
@@ -332,7 +335,7 @@ pub fn tightness_ratio(relaxation: &SoftmaxRelaxation) -> f64 {
 ///
 /// Returns `(is_tight, actual_ratio)`.
 #[must_use]
-pub fn verify_o_range_tightness(
+pub(crate) fn verify_o_range_tightness(
     relaxation: &SoftmaxRelaxation,
     tightness_constant: f64,
 ) -> (bool, f64) {

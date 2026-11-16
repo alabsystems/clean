@@ -108,14 +108,14 @@ pub use import::{
     parse_module_incremental, parse_module_incremental_types_only, parse_module_parts,
     parse_module_types_only, parse_typed_imports, read_artifact, require_clean_payload_imports,
     resolve_typed_module_path, scoped_instance_idx, search_paths_in_world, source_world_for_file,
-    source_world_of, stored_family_members, toolchain_versions_from_search_paths,
-    type_binder_name_idx, type_binder_names, typed_module_rel_path, ActiveStdlibToolchain,
-    ArtifactDepth, ArtifactRead, CapturedModuleBytes, ConstantConvertSession, DefaultFnBinderState,
-    DeferredRecursor, DeferredRecursorStatus, ExprSharingStats, ImportError, ImportKinds,
-    ImportWorld, ImportWorldRefusal, LeanWorldScope, LoadSummary, ModuleCache, OleanImportPolicy,
-    ScopedInstanceState, SearchPathBuilder, SkippedConstant, SourceWorldDecision,
-    SourceWorldRefusal, StoredFamilyMembers, TypeBinderNameState, TypedImport, TypedImportFlags,
-    UnpinnedOleanImportPolicy,
+    source_world_for_snapshot, source_world_of, stored_family_members,
+    toolchain_versions_from_search_paths, type_binder_name_idx, type_binder_names,
+    typed_module_rel_path, ActiveStdlibToolchain, ArtifactDepth, ArtifactRead, CapturedModuleBytes,
+    ConstantConvertSession, DefaultFnBinderState, DeferredRecursor, DeferredRecursorStatus,
+    ExprSharingStats, ImportError, ImportKinds, ImportWorld, ImportWorldRefusal, LeanWorldScope,
+    LoadSummary, ModuleCache, OleanImportPolicy, ScopedInstanceState, SearchPathBuilder,
+    SkippedConstant, SourceWorldDecision, SourceWorldRefusal, StoredFamilyMembers,
+    TypeBinderNameState, TypedImport, TypedImportFlags, UnpinnedOleanImportPolicy,
 };
 pub use import::{load_modules_with_deps_checked_with_limits, ModuleCaptureLimits};
 pub use import_reverification_metric::{

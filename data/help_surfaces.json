@@ -638,10 +638,9 @@
     },
     {
       "path": "crates/clean-verify/src/bin/ir_mint_gen.rs",
-      "prose_sha256": "38dbe64ea96ab60115b163e5f27c95599001b42866ff8732dd7baeb804bc039b",
-      "verified": "2026-09-10",
-      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow; findings fixed in e27a91b5f; the 2026-09-13 drift sweep READ this surface against its crate's diff and found the moved code reaches none of its claims \u2014 so `verified` stands (a drift pass is narrower than a read against the handler) and `drift_swept` records the commit the drift question was answered up to",
-      "drift_swept": "7b41ae718c12934fa303cc6b62e66ec3fe1f4ccb"
+      "prose_sha256": "94736cf89cc2d0cd21c98c61c60d91f6852aa57bc885c06d06ff0024dd33efd7",
+      "verified": "2026-11-16",
+      "method": "re-read 2026-11-16 against run()/usage()/check_outputs() after 5e17412a29 and 1efc6170b7 added `--check`: the two documented invocations are the two arms of run() (a leading `--check`, then exactly four positionals; a second `--check` in the prefix slot is refused with the usage line), `--check` recomputes defs.txt and mint.json in memory and compares their exact bytes without writing (exit 1 out of date, 2 unreadable), the usage line names the same optional flag and four positionals, and `tests/crystal_a2_mint.rs` (in spec_suite) is the fail-closed re-run the doc names. Earlier reads: the 2026-09-10 sweep agent-workflow (findings fixed in e27a91b5f) and the 2026-09-13 drift sweep"
     },
     {
       "path": "crates/clean-verify/src/bin/lean_export/main.rs",
@@ -690,6 +689,12 @@
       "prose_sha256": "48aead6e171b4c45925d70d8157236d06f430be6d21338e395703c833d2e60f8",
       "verified": "2026-11-13",
       "method": "read 2026-11-13 by the hook-legs lane against its own check() and run(): USAGE `clean_export_check --reference [--json] [--permit <axiom>]... <export.ndjson>` matches the parser (`--reference` ignored once routed, `--json`, a repeatable `--permit` that needs a value, exactly one non-flag path, any other `--` option refused as `unknown reference option`); a usage problem, an export that cannot be opened, a thread that cannot start or panics, or a report that cannot be rendered prints the problem and USAGE and exits 2; otherwise the report goes to stdout as one JSON line with `--json`, each reader error, refusal and unpermitted axiom to stderr, and the exit is 0 exactly when report.accepted, else 1. The module doc's `reads export bytes through the fence` holds: reference_check_export_reader decides through reference_base_closed, the fenced clean_kernel::ReferenceKernel entry."
+    },
+    {
+      "path": "crates/clean-olean/src/bin/kcheck_advice_emit.rs",
+      "prose_sha256": "d9b002a2c4c833e772f0e22ec6286874b6f153c5f1bc313310c2afc37055e82e",
+      "verified": "2026-11-16",
+      "method": "read 2026-11-16 by the K2 advice-emitter lane against main(): the first argument is the required export path, the second must be `--out`, the third is the required output path, and any missing, reordered or trailing argument returns the exact usage line as an error; main opens the export, runs export_advice_frames, writes length-prefixed frames to the output, and prints exactly one JSON line with frames, non_empty and the written bytes' sha256. The module text truthfully limits this to feature-gated candidate advice beside the fenced reference entry: it makes no replay or production-checker claim, and kcheck decides the bytes."
     },
     {
       "path": "crates/clean-olean/src/bin/kcheck_trace_experiment.rs",
@@ -762,6 +767,54 @@
     {
       "path": "crates/clean-tla/src/bin/tlaps_bench.rs",
       "reason": "a shim over `clean tlaps <verb>` (run\u2192bench, validate, show; bare \u2192 bench \u2014 matches); help in crates/clean-tla/src/bench/cli.rs (rostered)"
+    },
+    {
+      "path": "crates/clean-verify/src/spec/core_spec/generated/ir_cf.core.txt",
+      "reason": "a generated A2 mint fixture, not prose: it reaches crates/clean-verify/src/bin/ir_mint_gen.rs by include_str! only inside that file's `#[cfg(test)] mod tests` (the CASES table its byte-parity tests compare against), so it is compiled into the test binary and never into the shipped ir_mint_gen, which reads core/tags/out-dir only as paths named on its command line; its help text is the rostered ir_mint_gen.rs doc and usage line (classified 2026-11-16)"
+    },
+    {
+      "path": "crates/clean-verify/src/spec/core_spec/generated/ir_cf.defs.txt",
+      "reason": "a generated A2 mint fixture, not prose: it reaches crates/clean-verify/src/bin/ir_mint_gen.rs by include_str! only inside that file's `#[cfg(test)] mod tests` (the CASES table its byte-parity tests compare against), so it is compiled into the test binary and never into the shipped ir_mint_gen, which reads core/tags/out-dir only as paths named on its command line; its help text is the rostered ir_mint_gen.rs doc and usage line (classified 2026-11-16)"
+    },
+    {
+      "path": "crates/clean-verify/src/spec/core_spec/generated/ir_cf.mint.json",
+      "reason": "a generated A2 mint fixture, not prose: it reaches crates/clean-verify/src/bin/ir_mint_gen.rs by include_str! only inside that file's `#[cfg(test)] mod tests` (the CASES table its byte-parity tests compare against), so it is compiled into the test binary and never into the shipped ir_mint_gen, which reads core/tags/out-dir only as paths named on its command line; its help text is the rostered ir_mint_gen.rs doc and usage line (classified 2026-11-16)"
+    },
+    {
+      "path": "crates/clean-verify/src/spec/core_spec/generated/ir_cf.tags.json",
+      "reason": "a generated A2 mint fixture, not prose: it reaches crates/clean-verify/src/bin/ir_mint_gen.rs by include_str! only inside that file's `#[cfg(test)] mod tests` (the CASES table its byte-parity tests compare against), so it is compiled into the test binary and never into the shipped ir_mint_gen, which reads core/tags/out-dir only as paths named on its command line; its help text is the rostered ir_mint_gen.rs doc and usage line (classified 2026-11-16)"
+    },
+    {
+      "path": "crates/clean-verify/src/spec/core_spec/generated/ir_itc.core.txt",
+      "reason": "a generated A2 mint fixture, not prose: it reaches crates/clean-verify/src/bin/ir_mint_gen.rs by include_str! only inside that file's `#[cfg(test)] mod tests` (the CASES table its byte-parity tests compare against), so it is compiled into the test binary and never into the shipped ir_mint_gen, which reads core/tags/out-dir only as paths named on its command line; its help text is the rostered ir_mint_gen.rs doc and usage line (classified 2026-11-16)"
+    },
+    {
+      "path": "crates/clean-verify/src/spec/core_spec/generated/ir_itc.defs.txt",
+      "reason": "a generated A2 mint fixture, not prose: it reaches crates/clean-verify/src/bin/ir_mint_gen.rs by include_str! only inside that file's `#[cfg(test)] mod tests` (the CASES table its byte-parity tests compare against), so it is compiled into the test binary and never into the shipped ir_mint_gen, which reads core/tags/out-dir only as paths named on its command line; its help text is the rostered ir_mint_gen.rs doc and usage line (classified 2026-11-16)"
+    },
+    {
+      "path": "crates/clean-verify/src/spec/core_spec/generated/ir_itc.mint.json",
+      "reason": "a generated A2 mint fixture, not prose: it reaches crates/clean-verify/src/bin/ir_mint_gen.rs by include_str! only inside that file's `#[cfg(test)] mod tests` (the CASES table its byte-parity tests compare against), so it is compiled into the test binary and never into the shipped ir_mint_gen, which reads core/tags/out-dir only as paths named on its command line; its help text is the rostered ir_mint_gen.rs doc and usage line (classified 2026-11-16)"
+    },
+    {
+      "path": "crates/clean-verify/src/spec/core_spec/generated/ir_itc.tags.json",
+      "reason": "a generated A2 mint fixture, not prose: it reaches crates/clean-verify/src/bin/ir_mint_gen.rs by include_str! only inside that file's `#[cfg(test)] mod tests` (the CASES table its byte-parity tests compare against), so it is compiled into the test binary and never into the shipped ir_mint_gen, which reads core/tags/out-dir only as paths named on its command line; its help text is the rostered ir_mint_gen.rs doc and usage line (classified 2026-11-16)"
+    },
+    {
+      "path": "crates/clean-verify/src/spec/core_spec/generated/ir_sh.core.txt",
+      "reason": "a generated A2 mint fixture, not prose: it reaches crates/clean-verify/src/bin/ir_mint_gen.rs by include_str! only inside that file's `#[cfg(test)] mod tests` (the CASES table its byte-parity tests compare against), so it is compiled into the test binary and never into the shipped ir_mint_gen, which reads core/tags/out-dir only as paths named on its command line; its help text is the rostered ir_mint_gen.rs doc and usage line (classified 2026-11-16)"
+    },
+    {
+      "path": "crates/clean-verify/src/spec/core_spec/generated/ir_sh.defs.txt",
+      "reason": "a generated A2 mint fixture, not prose: it reaches crates/clean-verify/src/bin/ir_mint_gen.rs by include_str! only inside that file's `#[cfg(test)] mod tests` (the CASES table its byte-parity tests compare against), so it is compiled into the test binary and never into the shipped ir_mint_gen, which reads core/tags/out-dir only as paths named on its command line; its help text is the rostered ir_mint_gen.rs doc and usage line (classified 2026-11-16)"
+    },
+    {
+      "path": "crates/clean-verify/src/spec/core_spec/generated/ir_sh.mint.json",
+      "reason": "a generated A2 mint fixture, not prose: it reaches crates/clean-verify/src/bin/ir_mint_gen.rs by include_str! only inside that file's `#[cfg(test)] mod tests` (the CASES table its byte-parity tests compare against), so it is compiled into the test binary and never into the shipped ir_mint_gen, which reads core/tags/out-dir only as paths named on its command line; its help text is the rostered ir_mint_gen.rs doc and usage line (classified 2026-11-16)"
+    },
+    {
+      "path": "crates/clean-verify/src/spec/core_spec/generated/ir_sh.tags.json",
+      "reason": "a generated A2 mint fixture, not prose: it reaches crates/clean-verify/src/bin/ir_mint_gen.rs by include_str! only inside that file's `#[cfg(test)] mod tests` (the CASES table its byte-parity tests compare against), so it is compiled into the test binary and never into the shipped ir_mint_gen, which reads core/tags/out-dir only as paths named on its command line; its help text is the rostered ir_mint_gen.rs doc and usage line (classified 2026-11-16)"
     },
     {
       "path": "crates/clean/src/bin/clean.rs",

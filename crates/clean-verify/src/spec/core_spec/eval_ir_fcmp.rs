@@ -203,7 +203,7 @@ impl Specification {
                 "(ir_f64_is_neg a)",
             ),
             "Binary64 VALUE order on non-NaN patterns — the sign-magnitude order the format \
-             was designed to sort by. Outer Bool.rec on a's sign, inner on b's; minor order \
+             was designed to sort by. Outer @Bool.rec on a's sign, inner on b's; minor order \
              is (false, true) so each FIRST minor is the non-negative case. Both \
              non-negative: magnitude order (finite < infinity falls out because the infinity \
              magnitude bounds every finite one). Both negative: magnitude order REVERSED. \

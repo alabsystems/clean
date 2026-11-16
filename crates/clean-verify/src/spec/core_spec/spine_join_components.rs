@@ -59,7 +59,7 @@ impl Specification {
         self.add_inductive(
             "inductive ProjJoinComponents (s1 : Name) (i1 : Nat) (u1 : KExpr) (s2 : Name) \
              (i2 : Nat) (u2 : KExpr) : Type\n\
-             | mk : Eq Name s1 s2 -> Eq Nat i1 i2 -> \
+             | mk : @Eq Name s1 s2 -> @Eq Nat i1 i2 -> \
              par_strips_witness_cd_star the_red_env u1 u2 -> \
              ProjJoinComponents s1 i1 u1 s2 i2 u2",
             "ProjJoinComponents s1 i1 u1 s2 i2 u2: two joinable projections agree on their struct \
@@ -122,13 +122,13 @@ impl Specification {
 
         // The two component joins, once g1 = g2 and x1 = x2 are known.
         let build = String::from(
-            "(fun (hsame : Eq KExpr (KExpr.app g1 x1) (KExpr.app g2 x2)) => \
-             BinderJoinComponents.mk f1 a1 f2 a2 \
-             (par_strips_witness_cd_star.intro the_red_env f1 f2 g1 hlf \
+            "(fun (hsame : @Eq KExpr (KExpr.app g1 x1) (KExpr.app g2 x2)) => \
+             @BinderJoinComponents.mk f1 a1 f2 a2 \
+             (@par_strips_witness_cd_star.intro the_red_env f1 f2 g1 hlf \
              (Eq.substType KExpr \
              (fun (z : KExpr) => par_reduces_cd_star the_red_env f2 z) \
              g2 g1 (Eq.symm KExpr g1 g2 (app_inj_fst g1 x1 g2 x2 hsame)) hrf)) \
-             (par_strips_witness_cd_star.intro the_red_env a1 a2 x1 hla \
+             (@par_strips_witness_cd_star.intro the_red_env a1 a2 x1 hla \
              (Eq.substType KExpr \
              (fun (z : KExpr) => par_reduces_cd_star the_red_env a2 z) \
              x2 x1 (Eq.symm KExpr x1 x2 (app_inj_snd g1 x1 g2 x2 hsame)) hra))) \
@@ -168,14 +168,14 @@ impl Specification {
             if rigid {
                 // Witness form: unpack with StuckAppRedWitness.rec.
                 format!(
-                    "StuckAppRedWitness.rec the_red_env {fst} {snd} w \
+                    "@StuckAppRedWitness.rec the_red_env {fst} {snd} w \
                      (fun (_x : StuckAppRedWitness the_red_env {fst} {snd} w) => {goal}) \
                      (fun ({g} : KExpr) ({x} : KExpr) \
-                     ({heq} : Eq KExpr w (KExpr.app {g} {x})) \
+                     ({heq} : @Eq KExpr w (KExpr.app {g} {x})) \
                      ({lf} : par_reduces_cd_star the_red_env {fst} {g}) \
                      ({la} : par_reduces_cd_star the_red_env {snd} {x}) => BODY) \
                      (par_reduces_cd_star_rigid_app_inv the_red_env {form} w {leg} \
-                     {fst} {snd} {ev} (Eq.refl KExpr {form}))"
+                     {fst} {snd} {ev} (@Eq.refl KExpr {form}))"
                 )
             } else {
                 // Continuation form: pass the answer type directly.
@@ -184,7 +184,7 @@ impl Specification {
                     "par_reduces_cd_star_neutral_app_inv_eq {fst} {snd} w ({goal}) {ev} {ii} \
                      {leg} \
                      (fun ({g} : KExpr) ({x} : KExpr) \
-                     ({heq} : Eq KExpr w (KExpr.app {g} {x})) \
+                     ({heq} : @Eq KExpr w (KExpr.app {g} {x})) \
                      ({lf} : par_reduces_cd_star the_red_env {fst} {g}) \
                      ({la} : par_reduces_cd_star the_red_env {snd} {x}) \
                      (_n2 : iota_neutral {g}) \
@@ -227,11 +227,11 @@ impl Specification {
     fn proj_components_src() -> String {
         let goal = "ProjJoinComponents s1 i1 u1 s2 i2 u2";
         let build = String::from(
-            "(fun (hsame : Eq KExpr (KExpr.proj s1 i1 v1) (KExpr.proj s2 i2 v2)) => \
-             ProjJoinComponents.mk s1 i1 u1 s2 i2 u2 \
+            "(fun (hsame : @Eq KExpr (KExpr.proj s1 i1 v1) (KExpr.proj s2 i2 v2)) => \
+             @ProjJoinComponents.mk s1 i1 u1 s2 i2 u2 \
              (proj_inj_name s1 i1 v1 s2 i2 v2 hsame) \
              (proj_inj_idx s1 i1 v1 s2 i2 v2 hsame) \
-             (par_strips_witness_cd_star.intro the_red_env u1 u2 v1 hl1 \
+             (@par_strips_witness_cd_star.intro the_red_env u1 u2 v1 hl1 \
              (Eq.substType KExpr \
              (fun (z : KExpr) => par_reduces_cd_star the_red_env u2 z) \
              v2 v1 (Eq.symm KExpr v1 v2 (proj_inj_sub s1 i1 v1 s2 i2 v2 hsame)) hl2))) \
@@ -245,12 +245,12 @@ impl Specification {
                 ("s2", "i2", "u2", "v2", "heq2", "hl2", "hrw")
             };
             format!(
-                "ProjRedWitness.rec the_red_env {s} {i} {u} w \
+                "@ProjRedWitness.rec the_red_env {s} {i} {u} w \
                  (fun (_x : ProjRedWitness the_red_env {s} {i} {u} w) => {goal}) \
-                 (fun ({v} : KExpr) ({heq} : Eq KExpr w (KExpr.proj {s} {i} {v})) \
+                 (fun ({v} : KExpr) ({heq} : @Eq KExpr w (KExpr.proj {s} {i} {v})) \
                  ({hl} : par_reduces_cd_star the_red_env {u} {v}) => BODY) \
                  (par_reduces_cd_star_proj_inv the_red_env (KExpr.proj {s} {i} {u}) w {leg} \
-                 {s} {i} {u} (Eq.refl KExpr (KExpr.proj {s} {i} {u})))"
+                 {s} {i} {u} (@Eq.refl KExpr (KExpr.proj {s} {i} {u})))"
             )
         };
         let inner = invert(2).replace("BODY", &build);

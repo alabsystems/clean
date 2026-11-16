@@ -132,7 +132,7 @@ impl Specification {
                 .to_string(),
             value_src: Some(
                 "fun (nv : Nat) (enc : ClausePolyEncoding nv) => \
-                 ClausePolyEncoding.rec nv \
+                 @ClausePolyEncoding.rec nv \
                    (fun (e : ClausePolyEncoding nv) => ClausePolySoundness nv e) \
                    (fun (var : Nat) => ClausePolySoundness.single_pos nv var) \
                    (fun (var : Nat) => ClausePolySoundness.single_neg nv var) \
@@ -168,7 +168,7 @@ impl Specification {
             type_src: "forall (nv : Nat), TseitinSeparation nv".to_string(),
             value_src: Some(
                 "fun (nv : Nat) => \
-                 Nat.rec \
+                 @Nat.rec \
                    (fun (k : Nat) => TseitinSeparation k) \
                    (TseitinSeparation.single_vertex 0) \
                    (fun (m : Nat) (ih : TseitinSeparation m) => \
@@ -201,7 +201,7 @@ impl Specification {
                 .to_string(),
             value_src: Some(
                 "fun (mp : Nat) (step : GroebnerStep mp) => \
-                 GroebnerStep.rec mp \
+                 @GroebnerStep.rec mp \
                    (fun (s : GroebnerStep mp) => GroebnerTerminates mp s) \
                    (GroebnerTerminates.initial mp) \
                    (fun (i : Nat) (j : Nat) \

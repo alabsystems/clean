@@ -256,8 +256,8 @@ fn list(ty: &str, items: &[String]) -> String {
     items
         .iter()
         .rev()
-        .fold(format!("(IRList.nil {ty})"), |tail, item| {
-            format!("(IRList.cons {ty} {item} {tail})")
+        .fold(format!("(@IRList.nil {ty})"), |tail, item| {
+            format!("(@IRList.cons {ty} {item} {tail})")
         })
 }
 
@@ -302,12 +302,12 @@ pub fn clean_context(chain: &WatChain) -> String {
             0,
             vec![
                 node(
-                    format!("IRInst.alloca {w} (IROption.none Nat)"),
+                    format!("IRInst.alloca {w} (@IROption.none Nat)"),
                     &[3],
                     &["IRTy.ptr_"],
                 ),
                 node(
-                    "IRInst.condbr 2 1 (IRList.nil Nat) 2 (IRList.nil Nat)".to_owned(),
+                    "IRInst.condbr 2 1 (@IRList.nil Nat) 2 (@IRList.nil Nat)".to_owned(),
                     &[],
                     &[],
                 ),
@@ -338,7 +338,7 @@ pub fn clean_context(chain: &WatChain) -> String {
             .map(|n| format!("(IRNode.mk ({}) {})", n.inst, nats(&n.results)))
             .collect();
         block_terms.push(format!(
-            "(IRBlock.mk {id} (IRList.nil Nat) {})",
+            "(IRBlock.mk {id} (@IRList.nil Nat) {})",
             list("IRNode", &node_terms)
         ));
         for (pc, n) in nodes.iter().enumerate() {
@@ -357,9 +357,9 @@ pub fn clean_context(chain: &WatChain) -> String {
     let layouts = list(
         "IRByteLayoutV1",
         &[
-            "(IRByteLayoutV1.mk IRTy.bool_ 1 1 (IRList.nil IRTy) (IRList.nil Nat))".to_owned(),
-            "(IRByteLayoutV1.mk IRTy.ptr_ 8 8 (IRList.nil IRTy) (IRList.nil Nat))".to_owned(),
-            format!("(IRByteLayoutV1.mk {w} 8 8 (IRList.nil IRTy) (IRList.nil Nat))"),
+            "(IRByteLayoutV1.mk IRTy.bool_ 1 1 (@IRList.nil IRTy) (@IRList.nil Nat))".to_owned(),
+            "(IRByteLayoutV1.mk IRTy.ptr_ 8 8 (@IRList.nil IRTy) (@IRList.nil Nat))".to_owned(),
+            format!("(IRByteLayoutV1.mk {w} 8 8 (@IRList.nil IRTy) (@IRList.nil Nat))"),
         ],
     );
     let signature = format!(
@@ -371,7 +371,7 @@ pub fn clean_context(chain: &WatChain) -> String {
         list("IRTy", &[w.to_owned(), w.to_owned()])
     );
     format!(
-        "def {} : IRByteContextV1 := IRByteContextV1.mk (IRModule.mk {} (IRList.nil IRGlobal)) \
+        "def {} : IRByteContextV1 := IRByteContextV1.mk (IRModule.mk {} (@IRList.nil IRGlobal)) \
          {layouts} {} {} {}",
         clean_context_name(chain),
         list("IRFunc", &[func]),
@@ -388,7 +388,7 @@ pub fn clean_context(chain: &WatChain) -> String {
 /// provider call would be a stuck run, never an answer.
 const WAT_NO_IMPORT: &str = "def wat_no_import : IRByteProvidersV1 Nat := \
      fun (_ : Nat) (_ : IRList IRScalar) (mem : IRByteMemoryV1) (host : Nat) => \
-     IRByteImportResultV1.mk Nat (IROutcome.stuck IRFault.no_func) mem host";
+     @IRByteImportResultV1.mk Nat (IROutcome.stuck IRFault.no_func) mem host";
 
 fn clean_args(args: &[WatArg; 3]) -> String {
     let scalars: Vec<String> = args
@@ -438,7 +438,7 @@ fn byte_outcome(ctx: &str, fuel: u32, args: &[WatArg; 3]) -> String {
 }
 
 fn obligation(name: &str, actual: &str, outcome: &str) -> String {
-    format!("def {name} : Eq IROutcome ({actual}) {outcome} := Eq.refl IROutcome {outcome}")
+    format!("def {name} : @Eq IROutcome ({actual}) {outcome} := @Eq.refl IROutcome {outcome}")
 }
 
 /// The least fuel at which the kernel accepts `outcome` for a run of the

@@ -15,11 +15,23 @@ use serde::{Deserialize, Serialize};
 
 use super::origin::ConstantOrigin;
 use super::types::ConstantInfo;
-use super::Environment;
+use super::{Environment, EnvironmentDeserialize};
+
+// Only the private field carrier derives Deserialize. Direct calls to
+// `Environment::deserialize` and generic/nested serde restores therefore use
+// this trait implementation. Skipped validation stamps stay at their defaults;
+// the matcher index is re-derived solely from its persisted storage.
+impl<'de> Deserialize<'de> for Environment {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let mut environment = EnvironmentDeserialize::deserialize(deserializer)?.into_environment();
+        environment.rebuild_matcher_index();
+        Ok(environment)
+    }
+}
 
 /// JSON-friendly intermediate representation of Environment
 /// Uses Vec instead of HashMap for JSON compatibility
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct JsonEnvironment {
     /// Semantic checker input, retained across JSON round trips.
     #[serde(default)]
@@ -44,7 +56,7 @@ pub struct JsonEnvironment {
 }
 
 /// Information about structure fields for a given structure type
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct StructureFieldInfo {
     /// Name of the structure type
     pub struct_name: Name,
@@ -53,7 +65,7 @@ pub struct StructureFieldInfo {
 }
 
 /// JSON-friendly origin metadata entry.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ConstantOriginInfo {
     /// Name of the constant.
     pub name: Name,
@@ -147,6 +159,17 @@ impl Environment {
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
         let json_env = JsonEnvironment::from_env(self);
         serde_json::to_string(&json_env)
+    }
+
+    /// Observe exactly the existing JSON projection as owned typed data.
+    ///
+    /// Expression clones retain their shared children. This does not serialize
+    /// a tree, restore an environment, or grant checking or provenance status.
+    /// Fields outside JsonEnvironment, including skipped runtime state, are
+    /// not observed.
+    #[must_use]
+    pub fn json_observation(&self) -> JsonEnvironment {
+        JsonEnvironment::from_env(self)
     }
 
     /// Serialize the environment to pretty JSON

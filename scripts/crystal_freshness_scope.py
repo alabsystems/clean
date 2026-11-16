@@ -192,7 +192,7 @@ SCHEMA = "clean.crystal.freshness_scope/v2"
 # `cumulative_ever` to `pub struct Environment`, which strict_monads pins, so the
 # 10-18 record's digest no longer matched; a fresh dump with the same compiler and
 # driver found all 19 chains numbering-only or identical, zero structural.
-RECORD = "data/crystal_chain_revalidation_2026-11-14_athead_6e2c1dab4.json"
+RECORD = "data/crystal_chain_revalidation_2026-11-15_athead_35f090bb3.json"
 
 # chain stem -> (defining source file, a pattern that must occur in it, the
 # ITEMS pinned for that body, why those items).

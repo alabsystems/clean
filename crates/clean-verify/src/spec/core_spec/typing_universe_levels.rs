@@ -25,7 +25,7 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (n : Nat) (m : Nat) => ",
-                    "Nat.rec (fun (_ : Nat) => Nat) ",
+                    "@Nat.rec (fun (_ : Nat) => Nat) ",
                     "Nat.zero ",
                     "(fun (m' : Nat) (_ : Nat) => ",
                     "Nat.add n (Nat.sub (Nat.succ m') n)) ",
@@ -56,15 +56,15 @@ impl Specification {
             name: "sort_universe_consistency".to_string(),
             type_src: concat!(
                 "forall (n : Level) (m : Level), ",
-                "Eq KExpr (KExpr.sort n) (KExpr.sort m) -> Eq Level n m"
+                "@Eq KExpr (KExpr.sort n) (KExpr.sort m) -> @Eq Level n m"
             )
             .to_string(),
             value_src: Some(
                 concat!(
                     "fun (n : Level) (m : Level) ",
-                    "(h : Eq KExpr (KExpr.sort n) (KExpr.sort m)) => ",
-                    "Eq.cong KExpr Level ",
-                    "(fun (e : KExpr) => KExpr.rec (fun (_ : KExpr) => Level) ",
+                    "(h : @Eq KExpr (KExpr.sort n) (KExpr.sort m)) => ",
+                    "@Eq.cong KExpr Level ",
+                    "(fun (e : KExpr) => @KExpr.rec (fun (_ : KExpr) => Level) ",
                     "(fun (k : Level) => k) ",
                     "(fun (_ : Nat) => n) ",
                     "(fun (_ : KExpr) (_ : KExpr) (_ : Level) (_ : Level) => n) ",

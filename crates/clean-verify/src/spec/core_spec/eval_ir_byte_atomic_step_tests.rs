@@ -17,8 +17,8 @@ mod mutations;
 const CONFIG: &str = "IRByteConfigV1 Nat";
 const PARAMS: &str = "(providers : IRByteProvidersV1 Nat)
   (bytes : Nat -> IROption Nat) (host : Nat)";
-const RESULTS: &str = "(IRList.cons Nat 99 (IRList.nil Nat))";
-const RESULT_TYPES: &str = "(IRList.cons IRTy (IRTy.uint_ 64) (IRList.nil IRTy))";
+const RESULTS: &str = "(@IRList.cons Nat 99 (@IRList.nil Nat))";
+const RESULT_TYPES: &str = "(@IRList.cons IRTy (IRTy.uint_ 64) (@IRList.nil IRTy))";
 const INSTRUCTION: &str = "IRInst.atomic_fetch_add_relaxed_u64_seq 40 78";
 const BEFORE: &str = "(atomic_step_frame (IRScalar.ptr_ 16) (IRScalar.int_ 1))";
 const MEMORY: &str = "(atomic_step_memory bytes)";
@@ -51,13 +51,13 @@ fn equality(spec: &mut Specification, name: &str, ty: &str, actual: &str, expect
     add(
         spec,
         &format!("{name} {PARAMS}"),
-        &format!("Eq ({ty}) ({actual}) ({expected})"),
-        &format!("Eq.refl ({ty}) ({expected})"),
+        &format!("@Eq ({ty}) ({actual}) ({expected})"),
+        &format!("@Eq.refl ({ty}) ({expected})"),
     );
 }
 
 fn reject(spec: &mut Specification, name: &str, actual: &str, wrong: &str, proof: &str) {
-    let source = format!("def {name} {PARAMS} : Eq ({CONFIG}) ({actual}) ({wrong}) := {proof}");
+    let source = format!("def {name} {PARAMS} : @Eq ({CONFIG}) ({actual}) ({wrong}) := {proof}");
     let error = spec
         .add_recursive_def(&source, "Deliberately false fetched fetch-add endpoint")
         .expect_err("incorrect execution endpoint must fail");
@@ -67,17 +67,17 @@ fn reject(spec: &mut Specification, name: &str, actual: &str, wrong: &str, proof
 
 fn block(instruction: &str, results: &str) -> String {
     format!(
-        "(IRBlock.mk 7 (IRList.nil Nat)
-        (IRList.cons IRNode (IRNode.mk IRInst.unreachable (IRList.nil Nat))
-          (IRList.cons IRNode (IRNode.mk IRInst.unreachable (IRList.nil Nat))
-            (IRList.cons IRNode (IRNode.mk ({instruction}) {results}) (IRList.nil IRNode)))))"
+        "(IRBlock.mk 7 (@IRList.nil Nat)
+        (@IRList.cons IRNode (IRNode.mk IRInst.unreachable (@IRList.nil Nat))
+          (@IRList.cons IRNode (IRNode.mk IRInst.unreachable (@IRList.nil Nat))
+            (@IRList.cons IRNode (IRNode.mk ({instruction}) {results}) (@IRList.nil IRNode)))))"
     )
 }
 
 fn function(block: &str) -> String {
     format!(
-        "(IRFunc.mk 9 (IRList.cons Nat 40 (IRList.cons Nat 78 (IRList.nil Nat))) 7
-      (IRList.cons IRBlock {block} (IRList.nil IRBlock)))"
+        "(IRFunc.mk 9 (@IRList.cons Nat 40 (@IRList.cons Nat 78 (@IRList.nil Nat))) 7
+      (@IRList.cons IRBlock {block} (@IRList.nil IRBlock)))"
     )
 }
 
@@ -85,33 +85,33 @@ fn context(instruction: &str, results: &str, types: &str, site_pc: u64) -> Strin
     let function = function(&block(instruction, results));
     format!(
         "(IRByteContextV1.mk
-  (IRModule.mk (IRList.cons IRFunc {function} (IRList.nil IRFunc)) (IRList.nil IRGlobal))
-  (IRList.cons IRByteLayoutV1
-    (IRByteLayoutV1.mk (IRTy.uint_ 64) 8 8 (IRList.nil IRTy) (IRList.nil Nat))
-    (IRList.nil IRByteLayoutV1))
-  (IRList.nil IRByteSignatureV1) (IRList.nil IRByteFunctionV1)
-  (IRList.cons IRByteSiteV1 (IRByteSiteV1.mk 9 7 {site_pc} 0 1 {types})
-    (IRList.nil IRByteSiteV1)))"
+  (IRModule.mk (@IRList.cons IRFunc {function} (@IRList.nil IRFunc)) (@IRList.nil IRGlobal))
+  (@IRList.cons IRByteLayoutV1
+    (IRByteLayoutV1.mk (IRTy.uint_ 64) 8 8 (@IRList.nil IRTy) (@IRList.nil Nat))
+    (@IRList.nil IRByteLayoutV1))
+  (@IRList.nil IRByteSignatureV1) (@IRList.nil IRByteFunctionV1)
+  (@IRList.cons IRByteSiteV1 (IRByteSiteV1.mk 9 7 {site_pc} 0 1 {types})
+    (@IRList.nil IRByteSiteV1)))"
     )
 }
 
 fn world(memory: &str) -> String {
-    format!("(IRByteWorldV1.mk Nat {memory} host atomic_step_owners 5)")
+    format!("(@IRByteWorldV1.mk Nat {memory} host atomic_step_owners 5)")
 }
 
 fn step(ctx: &str, frame: &str, memory: &str) -> String {
     format!(
         "ir_byte_step_v1 Nat {ctx} providers
-  (IRByteConfigV1.running Nat (atomic_step_machine {frame}) {})",
+  (@IRByteConfigV1.running Nat (atomic_step_machine {frame}) {})",
         world(memory)
     )
 }
 
 fn expected() -> String {
     format!(
-        "IRByteConfigV1.running Nat
+        "@IRByteConfigV1.running Nat
   (atomic_step_machine (ir_frame_advance (ir_frame_set_many {BEFORE} {RESULTS}
-    (IRList.cons IRScalar (IRScalar.int_ 41) (IRList.nil IRScalar))))) {}",
+    (@IRList.cons IRScalar (IRScalar.int_ 41) (@IRList.nil IRScalar))))) {}",
         world(UPDATED)
     )
 }
@@ -123,33 +123,33 @@ fn fixture() -> Specification {
         (
             "atomic_step_allocations",
             "IRList IRByteAllocationV1",
-            "IRList.cons IRByteAllocationV1 (IRByteAllocationV1.mk 16 32 2 Bool.true)
-  (IRList.cons IRByteAllocationV1 (IRByteAllocationV1.mk 64 8 3 Bool.false)
-    (IRList.cons IRByteAllocationV1 (IRByteAllocationV1.mk 80 8 0 Bool.true)
-      (IRList.nil IRByteAllocationV1)))",
+            "@IRList.cons IRByteAllocationV1 (IRByteAllocationV1.mk 16 32 2 Bool.true)
+  (@IRList.cons IRByteAllocationV1 (IRByteAllocationV1.mk 64 8 3 Bool.false)
+    (@IRList.cons IRByteAllocationV1 (IRByteAllocationV1.mk 80 8 0 Bool.true)
+      (@IRList.nil IRByteAllocationV1)))",
         ),
-        ("atomic_step_owners", "IRList Nat", "IRList.cons Nat 2 (IRList.cons Nat 1 (IRList.nil Nat))"),
+        ("atomic_step_owners", "IRList Nat", "@IRList.cons Nat 2 (@IRList.cons Nat 1 (@IRList.nil Nat))"),
         (
             "atomic_step_tail",
             "IRList IRFrame",
-            "IRList.cons IRFrame (IRFrame.mk 3 4 5
-  (IRList.cons IRBinding (IRBinding.mk 777 (IRScalar.int_ 88)) (IRList.nil IRBinding))
-  (IRList.cons Nat 55 (IRList.nil Nat))) (IRList.nil IRFrame)",
+            "@IRList.cons IRFrame (IRFrame.mk 3 4 5
+  (@IRList.cons IRBinding (IRBinding.mk 777 (IRScalar.int_ 88)) (@IRList.nil IRBinding))
+  (@IRList.cons Nat 55 (@IRList.nil Nat))) (@IRList.nil IRFrame)",
         ),
         (
             "atomic_step_frame (pointer increment : IRScalar)",
             "IRFrame",
             "IRFrame.mk 9 7 2
-  (IRList.cons IRBinding (IRBinding.mk 40 pointer)
-    (IRList.cons IRBinding (IRBinding.mk 78 increment)
-      (IRList.cons IRBinding (IRBinding.mk 99 (IRScalar.int_ 777))
-        (IRList.cons IRBinding (IRBinding.mk 55 (IRScalar.bool_ Bool.true)) (IRList.nil IRBinding)))))
-  (IRList.cons Nat 123 (IRList.nil Nat))",
+  (@IRList.cons IRBinding (IRBinding.mk 40 pointer)
+    (@IRList.cons IRBinding (IRBinding.mk 78 increment)
+      (@IRList.cons IRBinding (IRBinding.mk 99 (IRScalar.int_ 777))
+        (@IRList.cons IRBinding (IRBinding.mk 55 (IRScalar.bool_ Bool.true)) (@IRList.nil IRBinding)))))
+  (@IRList.cons Nat 123 (@IRList.nil Nat))",
         ),
         (
             "atomic_step_machine (frame : IRFrame)",
             "IRMachine",
-            "IRMachine.mk (IRList.cons IRFrame frame atomic_step_tail) (IRList.nil IRMemSlot) 17",
+            "IRMachine.mk (@IRList.cons IRFrame frame atomic_step_tail) (@IRList.nil IRMemSlot) 17",
         ),
         (
             "atomic_step_memory (bytes : Nat -> IROption Nat)",
@@ -157,7 +157,7 @@ fn fixture() -> Specification {
             "IRByteMemoryV1.mk atomic_step_allocations
   (ir_byte_write_word_v1 (ir_byte_write_word_v1 bytes 32 8 77) 16 8 41) 128",
         ),
-        ("atomic_step_blank", "Nat -> IROption Nat", "fun (_ : Nat) => IROption.none Nat"),
+        ("atomic_step_blank", "Nat -> IROption Nat", "fun (_ : Nat) => @IROption.none Nat"),
         (
             "atomic_step_result (c : IRByteConfigV1 Nat) (id : Nat)",
             "IRScalar",
@@ -227,13 +227,13 @@ fn byte_atomic_fetched_step_binds_old_result_and_preserves_exact_world() {
                 "updated",
                 "IROption Nat",
                 format!("ir_byte_read_word_v1 (ir_byte_mem_bytes_v1 ({memory})) 8 16"),
-                "IROption.some Nat 42",
+                "@IROption.some Nat 42",
             ),
             (
                 "frame",
                 "IROption Nat",
                 format!("ir_byte_read_word_v1 (ir_byte_mem_bytes_v1 ({memory})) 8 32"),
-                "IROption.some Nat 77",
+                "@IROption.some Nat 77",
             ),
             (
                 "allocations",
@@ -287,46 +287,46 @@ fn byte_atomic_fetched_theorem_has_inhabited_representation_and_lookup_premises(
         let site = format!("(IRByteSiteV1.mk 9 7 2 0 1 {RESULT_TYPES})");
         let args = format!(
             "Nat atomic_step_context providers {BEFORE} atomic_step_tail
-  (IRList.nil IRMemSlot) 17 {MEMORY} host atomic_step_owners 5
+  (@IRList.nil IRMemSlot) 17 {MEMORY} host atomic_step_owners 5
   40 78 99 0 1 {function} {block} 16 41 1
   (Nat.le_add_right 17 18446744073709551599)
-  (Eq.refl (IROption IRByteLayoutV1)
-    (IROption.some IRByteLayoutV1
-      (IRByteLayoutV1.mk (IRTy.uint_ 64) 8 8 (IRList.nil IRTy) (IRList.nil Nat))))
-  (Eq.refl Bool Bool.true)
+  (@Eq.refl (IROption IRByteLayoutV1)
+    (@IROption.some IRByteLayoutV1
+      (IRByteLayoutV1.mk (IRTy.uint_ 64) 8 8 (@IRList.nil IRTy) (@IRList.nil Nat))))
+  (@Eq.refl Bool Bool.true)
   (ir_byte_u64_rep_write_v1
     (IRByteMemoryV1.mk atomic_step_allocations (ir_byte_write_word_v1 bytes 32 8 77) 128) 16 41)
   (Nat.le_add_right 43 18446744073709551573)
-  (Eq.refl Bool Bool.true)
-  (Eq.refl IRScalar (IRScalar.ptr_ 16))
-  (Eq.refl IRScalar (IRScalar.int_ 1))
-  (Eq.refl (IROption IRFunc) (IROption.some IRFunc {function}))
-  (Eq.refl (IROption IRBlock) (IROption.some IRBlock {block}))
-  (Eq.refl (IROption IRNode) (IROption.some IRNode {node}))
-  (Eq.refl (IROption IRByteSiteV1) (IROption.some IRByteSiteV1 {site}))"
+  (@Eq.refl Bool Bool.true)
+  (@Eq.refl IRScalar (IRScalar.ptr_ 16))
+  (@Eq.refl IRScalar (IRScalar.int_ 1))
+  (@Eq.refl (IROption IRFunc) (@IROption.some IRFunc {function}))
+  (@Eq.refl (IROption IRBlock) (@IROption.some IRBlock {block}))
+  (@Eq.refl (IROption IRNode) (@IROption.some IRNode {node}))
+  (@Eq.refl (IROption IRByteSiteV1) (@IROption.some IRByteSiteV1 {site}))"
         );
         let actual = step("atomic_step_context", BEFORE, MEMORY);
         add(
             &mut spec,
             &format!("atomic_step_by_law {PARAMS}"),
-            &format!("Eq ({CONFIG}) ({actual}) ({})", expected()),
+            &format!("@Eq ({CONFIG}) ({actual}) ({})", expected()),
             &format!("ir_byte_step_fetch_add_relaxed_u64_seq_below_v1 {args}"),
         );
         let run = format!(
             "ir_byte_run_v1 Nat atomic_step_context providers 1
-  (IRByteConfigV1.running Nat (atomic_step_machine {BEFORE}) {})",
+  (@IRByteConfigV1.running Nat (atomic_step_machine {BEFORE}) {})",
             world(MEMORY)
         );
         add(
             &mut spec,
             &format!("atomic_step_run_by_law {PARAMS}"),
-            &format!("Eq ({CONFIG}) ({run}) ({})", expected()),
+            &format!("@Eq ({CONFIG}) ({run}) ({})", expected()),
             &format!("ir_byte_run_fetch_add_relaxed_u64_seq_one_v1 {args}"),
         );
         let predicate = "(fun (c : IRByteConfigV1 Nat) =>
-  IRByteConfigV1.rec Nat (fun (_ : IRByteConfigV1 Nat) => Prop)
+  @IRByteConfigV1.rec Nat (fun (_ : IRByteConfigV1 Nat) => Prop)
     (fun (s : IRMachine) (w : IRByteWorldV1 Nat) =>
-      Eq Bool (ir_byte_world_valid_v1 Nat s w) Bool.true)
+      @Eq Bool (ir_byte_world_valid_v1 Nat s w) Bool.true)
     (fun (_ : IROutcome) (_ : IRByteWorldV1 Nat) => False) c)";
         add(
             &mut spec,
@@ -344,13 +344,13 @@ fn byte_atomic_fetched_theorem_has_inhabited_representation_and_lookup_premises(
         add(
             &mut spec,
             &format!("atomic_step_new_by_law {PARAMS}"),
-            &format!("Eq (IROption Nat) ({}) (IROption.some Nat 42)", read(16)),
+            &format!("@Eq (IROption Nat) ({}) (@IROption.some Nat 42)", read(16)),
             &format!("ir_byte_step_fetch_add_relaxed_u64_seq_new_v1 {args}"),
         );
         add(
             &mut spec,
             &format!("atomic_step_frame_by_law {PARAMS}"),
-            &format!("Eq (IROption Nat) ({}) (IROption.some Nat 77)", read(32)),
+            &format!("@Eq (IROption Nat) ({}) (@IROption.some Nat 77)", read(32)),
             &format!(
                 "ir_byte_step_fetch_add_relaxed_u64_seq_frame_v1 {args} 32 8
   (@Or.inr (Nat.le (Nat.add 32 8) 16) (Nat.le (Nat.add 16 8) 32)
@@ -360,7 +360,7 @@ fn byte_atomic_fetched_theorem_has_inhabited_representation_and_lookup_premises(
         let changed = step(
             &context(
                 INSTRUCTION,
-                "(IRList.cons Nat 100 (IRList.nil Nat))",
+                "(@IRList.cons Nat 100 (@IRList.nil Nat))",
                 RESULT_TYPES,
                 2,
             ),

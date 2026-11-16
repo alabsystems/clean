@@ -238,9 +238,9 @@ const PI00: &str = "(KExpr.pi (KExpr.sort Level.zero) (KExpr.sort Level.zero))";
 /// The fragment's identity function, annotated at the base type.
 const IDLAM0: &str = "(KExpr.lam (KExpr.sort Level.zero) (KExpr.bvar Nat.zero))";
 /// The empty context.
-const NILCTX: &str = "(ListType.nil KExpr)";
+const NILCTX: &str = "(@ListType.nil KExpr)";
 /// The empty universe-parameter list.
-const NILUS: &str = "(ListType.nil Level)";
+const NILUS: &str = "(@ListType.nil Level)";
 /// The fixed definition environment every δ statement here is relative to.
 const DENV: &str = "(red_def the_red_env)";
 /// A REAL reflected kernel name with NO definitional value: `DefEnv`, the
@@ -248,11 +248,11 @@ const DENV: &str = "(red_def the_red_env)";
 /// `none`.
 const DEADNAME: &str = "fixture_def_env_name";
 /// The bare const at that name.
-const DEADCONST: &str = "(KExpr.const fixture_def_env_name (ListType.nil Level))";
+const DEADCONST: &str = "(KExpr.const fixture_def_env_name (@ListType.nil Level))";
 /// A REAL reflected kernel name that IS delta-defined — the outermost `DefEnv`
 /// entry `def_env_lift_closed_b` (R2's `kcre_witness_delta_head`), whose value
 /// is `kcre_witness_delta_value`.
-const LIVECONST: &str = "(KExpr.const kcre_witness_delta_head (ListType.nil Level))";
+const LIVECONST: &str = "(KExpr.const kcre_witness_delta_head (@ListType.nil Level))";
 /// The semantic name occurring in that value: `def_env_closed_b`. Its actual
 /// rank and the witness head's rank are recomputed from the current bodies.
 const LIVEREF: &str = "fixture_def_env_closed_b_name";
@@ -296,13 +296,13 @@ pub(super) fn src_r9_rank_tbl_chunks(ranks: &[u64]) -> Vec<(String, String)> {
     for (idx, start) in starts.iter().enumerate().rev() {
         let end = (start + R9_TBL_CHUNK).min(ranks.len());
         let tail = if idx + 1 == starts.len() {
-            "(ListType.nil Nat)".to_string()
+            "(@ListType.nil Nat)".to_string()
         } else {
             format!("r9_rank_tbl_{}", starts[idx + 1])
         };
         let mut acc = tail;
         for r in ranks[*start..end].iter().rev() {
-            acc = format!("(ListType.cons Nat {} {acc})", nat_lit(*r));
+            acc = format!("(@ListType.cons Nat {} {acc})", nat_lit(*r));
         }
         let name = format!("r9_rank_tbl_{start}");
         out.push((name.clone(), format!("def {name} : ListType Nat := {acc}")));
@@ -319,9 +319,9 @@ pub(super) fn src_r9_rank_tbl() -> String {
 /// An explicit `Nat.rec` with a `ListType Nat -> Nat` motive (the `nat_lt_b`
 /// idiom) rather than a `match`, so the reduction behaviour on a concrete index
 /// is the one the checker needs and nothing depends on match compilation.
-pub(super) const SRC_R9_RANK_NTH: &str = "def r9_rank_nth (k : Nat) (l : ListType Nat) : Nat := Nat.rec (fun (_ : Nat) => ListType Nat -> Nat) (fun (l0 : ListType Nat) => ListType.rec Nat (fun (_ : ListType Nat) => Nat) Nat.zero (fun (x : Nat) (_ : ListType Nat) (_ : Nat) => x) l0) (fun (_ : Nat) (ih : ListType Nat -> Nat) => fun (l0 : ListType Nat) => ListType.rec Nat (fun (_ : ListType Nat) => Nat) Nat.zero (fun (_ : Nat) (rest : ListType Nat) (_ : Nat) => ih rest) l0) k l";
+pub(super) const SRC_R9_RANK_NTH: &str = "def r9_rank_nth (k : Nat) (l : ListType Nat) : Nat := @Nat.rec (fun (_ : Nat) => ListType Nat -> Nat) (fun (l0 : ListType Nat) => @ListType.rec Nat (fun (_ : ListType Nat) => Nat) Nat.zero (fun (x : Nat) (_ : ListType Nat) (_ : Nat) => x) l0) (fun (_ : Nat) (ih : ListType Nat -> Nat) => fun (l0 : ListType Nat) => @ListType.rec Nat (fun (_ : ListType Nat) => Nat) Nat.zero (fun (_ : Nat) (rest : ListType Nat) (_ : Nat) => ih rest) l0) k l";
 
-pub(super) const SRC_RK: &str = "def rk (c : Name) : Nat := Name.rec (fun (_ : Name) => Nat) Nat.zero (fun (p : Name) (k : Nat) (_ : Nat) => Name.rec (fun (_ : Name) => Nat) (r9_rank_nth k r9_rank_tbl) (fun (_ : Name) (_ : Nat) (_ : Nat) => Nat.zero) p) c";
+pub(super) const SRC_RK: &str = "def rk (c : Name) : Nat := @Name.rec (fun (_ : Name) => Nat) Nat.zero (fun (p : Name) (k : Nat) (_ : Nat) => @Name.rec (fun (_ : Name) => Nat) (r9_rank_nth k r9_rank_tbl) (fun (_ : Name) (_ : Nat) (_ : Nat) => Nat.zero) p) c";
 
 pub(super) const SRC_CONST_OCCURS: &str = r"def const_occurs (c : Name) (e : KExpr) : Bool := match e with
 | KExpr.sort n => Bool.false
@@ -334,61 +334,61 @@ pub(super) const SRC_CONST_OCCURS: &str = r"def const_occurs (c : Name) (e : KEx
 | KExpr.proj s i sub => const_occurs c sub
 | KExpr.lit n => Bool.false";
 
-pub(super) const SRC_DELTA_BOOL_AND_CONG: &str = r"def delta_bool_and_cong : forall (a : Bool) (b : Bool) (c : Bool) (d : Bool), Eq Bool a b -> Eq Bool c d -> Eq Bool (Bool.and a c) (Bool.and b d) :=
-fun (a : Bool) (b : Bool) (c : Bool) (d : Bool) (h1 : Eq Bool a b) (h2 : Eq Bool c d) =>
-  Eq.trans Bool (Bool.and a c) (Bool.and b c) (Bool.and b d)
-    (Eq.cong Bool Bool (fun (x : Bool) => Bool.and x c) a b h1)
-    (Eq.cong Bool Bool (fun (x : Bool) => Bool.and b x) c d h2)";
+pub(super) const SRC_DELTA_BOOL_AND_CONG: &str = r"def delta_bool_and_cong : forall (a : Bool) (b : Bool) (c : Bool) (d : Bool), @Eq Bool a b -> @Eq Bool c d -> @Eq Bool (Bool.and a c) (Bool.and b d) :=
+fun (a : Bool) (b : Bool) (c : Bool) (d : Bool) (h1 : @Eq Bool a b) (h2 : @Eq Bool c d) =>
+  @Eq.trans Bool (Bool.and a c) (Bool.and b c) (Bool.and b d)
+    (@Eq.cong Bool Bool (fun (x : Bool) => Bool.and x c) a b h1)
+    (@Eq.cong Bool Bool (fun (x : Bool) => Bool.and b x) c d h2)";
 
-pub(super) const SRC_RANK_DOMINATES_B_INSTL: &str = r"def rank_dominates_b_instL : forall (r : Nat) (s : Name -> Level) (e : KExpr), Eq Bool (rank_dominates_b r (instL s e)) (rank_dominates_b r e) :=
-fun (r : Nat) (s : Name -> Level) (e : KExpr) => KExpr.rec (fun (q : KExpr) => Eq Bool (rank_dominates_b r (instL s q)) (rank_dominates_b r q))
-  (fun (u : Level) => Eq.refl Bool Bool.true)
-  (fun (i : Nat) => Eq.refl Bool Bool.true)
-  (fun (a : KExpr) (b : KExpr) (ha : Eq Bool (rank_dominates_b r (instL s a)) (rank_dominates_b r a)) (hb : Eq Bool (rank_dominates_b r (instL s b)) (rank_dominates_b r b)) =>
+pub(super) const SRC_RANK_DOMINATES_B_INSTL: &str = r"def rank_dominates_b_instL : forall (r : Nat) (s : Name -> Level) (e : KExpr), @Eq Bool (rank_dominates_b r (instL s e)) (rank_dominates_b r e) :=
+fun (r : Nat) (s : Name -> Level) (e : KExpr) => @KExpr.rec (fun (q : KExpr) => @Eq Bool (rank_dominates_b r (instL s q)) (rank_dominates_b r q))
+  (fun (u : Level) => @Eq.refl Bool Bool.true)
+  (fun (i : Nat) => @Eq.refl Bool Bool.true)
+  (fun (a : KExpr) (b : KExpr) (ha : @Eq Bool (rank_dominates_b r (instL s a)) (rank_dominates_b r a)) (hb : @Eq Bool (rank_dominates_b r (instL s b)) (rank_dominates_b r b)) =>
     delta_bool_and_cong (rank_dominates_b r (instL s a)) (rank_dominates_b r a) (rank_dominates_b r (instL s b)) (rank_dominates_b r b) ha hb)
-  (fun (a : KExpr) (b : KExpr) (ha : Eq Bool (rank_dominates_b r (instL s a)) (rank_dominates_b r a)) (hb : Eq Bool (rank_dominates_b r (instL s b)) (rank_dominates_b r b)) =>
+  (fun (a : KExpr) (b : KExpr) (ha : @Eq Bool (rank_dominates_b r (instL s a)) (rank_dominates_b r a)) (hb : @Eq Bool (rank_dominates_b r (instL s b)) (rank_dominates_b r b)) =>
     delta_bool_and_cong (rank_dominates_b r (instL s a)) (rank_dominates_b r a) (rank_dominates_b r (instL s b)) (rank_dominates_b r b) ha hb)
-  (fun (a : KExpr) (b : KExpr) (ha : Eq Bool (rank_dominates_b r (instL s a)) (rank_dominates_b r a)) (hb : Eq Bool (rank_dominates_b r (instL s b)) (rank_dominates_b r b)) =>
+  (fun (a : KExpr) (b : KExpr) (ha : @Eq Bool (rank_dominates_b r (instL s a)) (rank_dominates_b r a)) (hb : @Eq Bool (rank_dominates_b r (instL s b)) (rank_dominates_b r b)) =>
     delta_bool_and_cong (rank_dominates_b r (instL s a)) (rank_dominates_b r a) (rank_dominates_b r (instL s b)) (rank_dominates_b r b) ha hb)
-  (fun (n : Name) (us : ListType Level) => Eq.refl Bool (nat_lt_b (rk n) r))
-  (fun (a : KExpr) (v : KExpr) (b : KExpr) (ha : Eq Bool (rank_dominates_b r (instL s a)) (rank_dominates_b r a)) (hv : Eq Bool (rank_dominates_b r (instL s v)) (rank_dominates_b r v)) (hb : Eq Bool (rank_dominates_b r (instL s b)) (rank_dominates_b r b)) =>
+  (fun (n : Name) (us : ListType Level) => @Eq.refl Bool (nat_lt_b (rk n) r))
+  (fun (a : KExpr) (v : KExpr) (b : KExpr) (ha : @Eq Bool (rank_dominates_b r (instL s a)) (rank_dominates_b r a)) (hv : @Eq Bool (rank_dominates_b r (instL s v)) (rank_dominates_b r v)) (hb : @Eq Bool (rank_dominates_b r (instL s b)) (rank_dominates_b r b)) =>
     delta_bool_and_cong (rank_dominates_b r (instL s a)) (rank_dominates_b r a)
     (Bool.and (rank_dominates_b r (instL s v)) (rank_dominates_b r (instL s b)))
     (Bool.and (rank_dominates_b r v) (rank_dominates_b r b)) ha
     (delta_bool_and_cong (rank_dominates_b r (instL s v)) (rank_dominates_b r v) (rank_dominates_b r (instL s b)) (rank_dominates_b r b) hv hb))
-  (fun (n : Name) (i : Nat) (sub : KExpr) (h : Eq Bool (rank_dominates_b r (instL s sub)) (rank_dominates_b r sub)) => h)
-  (fun (i : Nat) => Eq.refl Bool Bool.true) e";
+  (fun (n : Name) (i : Nat) (sub : KExpr) (h : @Eq Bool (rank_dominates_b r (instL s sub)) (rank_dominates_b r sub)) => h)
+  (fun (i : Nat) => @Eq.refl Bool Bool.true) e";
 
-pub(super) const SRC_KEXPR_IS_LAM_B_INSTL: &str = r"def kexpr_is_lam_b_instL : forall (s : Name -> Level) (e : KExpr), Eq Bool (kexpr_is_lam_b (instL s e)) (kexpr_is_lam_b e) :=
-fun (s : Name -> Level) (e : KExpr) => KExpr.rec (fun (q : KExpr) => Eq Bool (kexpr_is_lam_b (instL s q)) (kexpr_is_lam_b q))
-  (fun (u : Level) => Eq.refl Bool Bool.false)
-  (fun (i : Nat) => Eq.refl Bool Bool.false)
-  (fun (a : KExpr) (b : KExpr) (_ha : Eq Bool (kexpr_is_lam_b (instL s a)) (kexpr_is_lam_b a)) (_hb : Eq Bool (kexpr_is_lam_b (instL s b)) (kexpr_is_lam_b b)) => Eq.refl Bool Bool.false)
-  (fun (a : KExpr) (b : KExpr) (_ha : Eq Bool (kexpr_is_lam_b (instL s a)) (kexpr_is_lam_b a)) (_hb : Eq Bool (kexpr_is_lam_b (instL s b)) (kexpr_is_lam_b b)) => Eq.refl Bool Bool.true)
-  (fun (a : KExpr) (b : KExpr) (_ha : Eq Bool (kexpr_is_lam_b (instL s a)) (kexpr_is_lam_b a)) (_hb : Eq Bool (kexpr_is_lam_b (instL s b)) (kexpr_is_lam_b b)) => Eq.refl Bool Bool.false)
-  (fun (n : Name) (us : ListType Level) => Eq.refl Bool Bool.false)
-  (fun (a : KExpr) (v : KExpr) (b : KExpr) (_ha : Eq Bool (kexpr_is_lam_b (instL s a)) (kexpr_is_lam_b a)) (_hv : Eq Bool (kexpr_is_lam_b (instL s v)) (kexpr_is_lam_b v)) (_hb : Eq Bool (kexpr_is_lam_b (instL s b)) (kexpr_is_lam_b b)) => Eq.refl Bool Bool.false)
-  (fun (n : Name) (i : Nat) (sub : KExpr) (_h : Eq Bool (kexpr_is_lam_b (instL s sub)) (kexpr_is_lam_b sub)) => Eq.refl Bool Bool.false)
-  (fun (i : Nat) => Eq.refl Bool Bool.false) e";
+pub(super) const SRC_KEXPR_IS_LAM_B_INSTL: &str = r"def kexpr_is_lam_b_instL : forall (s : Name -> Level) (e : KExpr), @Eq Bool (kexpr_is_lam_b (instL s e)) (kexpr_is_lam_b e) :=
+fun (s : Name -> Level) (e : KExpr) => @KExpr.rec (fun (q : KExpr) => @Eq Bool (kexpr_is_lam_b (instL s q)) (kexpr_is_lam_b q))
+  (fun (u : Level) => @Eq.refl Bool Bool.false)
+  (fun (i : Nat) => @Eq.refl Bool Bool.false)
+  (fun (a : KExpr) (b : KExpr) (_ha : @Eq Bool (kexpr_is_lam_b (instL s a)) (kexpr_is_lam_b a)) (_hb : @Eq Bool (kexpr_is_lam_b (instL s b)) (kexpr_is_lam_b b)) => @Eq.refl Bool Bool.false)
+  (fun (a : KExpr) (b : KExpr) (_ha : @Eq Bool (kexpr_is_lam_b (instL s a)) (kexpr_is_lam_b a)) (_hb : @Eq Bool (kexpr_is_lam_b (instL s b)) (kexpr_is_lam_b b)) => @Eq.refl Bool Bool.true)
+  (fun (a : KExpr) (b : KExpr) (_ha : @Eq Bool (kexpr_is_lam_b (instL s a)) (kexpr_is_lam_b a)) (_hb : @Eq Bool (kexpr_is_lam_b (instL s b)) (kexpr_is_lam_b b)) => @Eq.refl Bool Bool.false)
+  (fun (n : Name) (us : ListType Level) => @Eq.refl Bool Bool.false)
+  (fun (a : KExpr) (v : KExpr) (b : KExpr) (_ha : @Eq Bool (kexpr_is_lam_b (instL s a)) (kexpr_is_lam_b a)) (_hv : @Eq Bool (kexpr_is_lam_b (instL s v)) (kexpr_is_lam_b v)) (_hb : @Eq Bool (kexpr_is_lam_b (instL s b)) (kexpr_is_lam_b b)) => @Eq.refl Bool Bool.false)
+  (fun (n : Name) (i : Nat) (sub : KExpr) (_h : @Eq Bool (kexpr_is_lam_b (instL s sub)) (kexpr_is_lam_b sub)) => @Eq.refl Bool Bool.false)
+  (fun (i : Nat) => @Eq.refl Bool Bool.false) e";
 
-pub(super) const SRC_DEF_ENV_RANKED_VALUE_AT: &str = r"def def_env_ranked_value_at : forall (env : DefEnv) (n : Name) (us : ListType Level) (v : KExpr), Eq (OptionType KExpr) (kdef_value_at env n us) (OptionType.some KExpr v) -> Eq Bool (def_env_ranked_b env) Bool.true -> Eq Bool (rank_dominates_b (rk n) v) Bool.true :=fun (env : DefEnv) (n : Name) (us : ListType Level) (v : KExpr) (h : Eq (OptionType KExpr) (kdef_value_at env n us) (OptionType.some KExpr v)) (hb : Eq Bool (def_env_ranked_b env) Bool.true) =>
-kdef_value_at_guard_inv env n us v (Eq Bool (rank_dominates_b (rk n) v) Bool.true) h
-  (fun (defn : KDefSig) (hraw : Eq (OptionType KDefSig) (kdef_for env n) (OptionType.some KDefSig defn))
-    (_hg : Eq Bool (nat_eqb (name_list_len (kconst_params (kdef_signature defn))) (level_list_len us)) Bool.true)
-    (hv : Eq KExpr v (kdef_inst_value defn us)) =>
-    Eq.trans Bool (rank_dominates_b (rk n) v) (rank_dominates_b (rk n) (kdef_inst_value defn us)) Bool.true
-      (Eq.cong KExpr Bool (fun (e : KExpr) => (rank_dominates_b (rk n) e)) v (kdef_inst_value defn us) hv)
-      (Eq.trans Bool (rank_dominates_b (rk n) (kdef_inst_value defn us)) (rank_dominates_b (rk n) (kdef_value defn)) Bool.true (rank_dominates_b_instL (rk n) (paramSubstN (kconst_params (kdef_signature defn)) us) (kdef_value defn))
+pub(super) const SRC_DEF_ENV_RANKED_VALUE_AT: &str = r"def def_env_ranked_value_at : forall (env : DefEnv) (n : Name) (us : ListType Level) (v : KExpr), @Eq (OptionType KExpr) (kdef_value_at env n us) (@OptionType.some KExpr v) -> @Eq Bool (def_env_ranked_b env) Bool.true -> @Eq Bool (rank_dominates_b (rk n) v) Bool.true :=fun (env : DefEnv) (n : Name) (us : ListType Level) (v : KExpr) (h : @Eq (OptionType KExpr) (kdef_value_at env n us) (@OptionType.some KExpr v)) (hb : @Eq Bool (def_env_ranked_b env) Bool.true) =>
+kdef_value_at_guard_inv env n us v (@Eq Bool (rank_dominates_b (rk n) v) Bool.true) h
+  (fun (defn : KDefSig) (hraw : @Eq (OptionType KDefSig) (kdef_for env n) (@OptionType.some KDefSig defn))
+    (_hg : @Eq Bool (nat_eqb (name_list_len (kconst_params (kdef_signature defn))) (level_list_len us)) Bool.true)
+    (hv : @Eq KExpr v (kdef_inst_value defn us)) =>
+    @Eq.trans Bool (rank_dominates_b (rk n) v) (rank_dominates_b (rk n) (kdef_inst_value defn us)) Bool.true
+      (@Eq.cong KExpr Bool (fun (e : KExpr) => (rank_dominates_b (rk n) e)) v (kdef_inst_value defn us) hv)
+      (@Eq.trans Bool (rank_dominates_b (rk n) (kdef_inst_value defn us)) (rank_dominates_b (rk n) (kdef_value defn)) Bool.true (rank_dominates_b_instL (rk n) (paramSubstN (kconst_params (kdef_signature defn)) us) (kdef_value defn))
         (def_env_ranked_b_sound env n (kdef_value defn) (kdef_raw_value_of_lookup env n defn hraw) hb)))";
 
-pub(super) const SRC_DEF_ENV_ALL_LAM_VALUE_AT: &str = r"def def_env_all_lam_value_at : forall (env : DefEnv) (n : Name) (us : ListType Level) (v : KExpr), Eq (OptionType KExpr) (kdef_value_at env n us) (OptionType.some KExpr v) -> Eq Bool (def_env_all_lam_b env) Bool.true -> Eq Bool (kexpr_is_lam_b v) Bool.true :=fun (env : DefEnv) (n : Name) (us : ListType Level) (v : KExpr) (h : Eq (OptionType KExpr) (kdef_value_at env n us) (OptionType.some KExpr v)) (hb : Eq Bool (def_env_all_lam_b env) Bool.true) =>
-kdef_value_at_guard_inv env n us v (Eq Bool (kexpr_is_lam_b v) Bool.true) h
-  (fun (defn : KDefSig) (hraw : Eq (OptionType KDefSig) (kdef_for env n) (OptionType.some KDefSig defn))
-    (_hg : Eq Bool (nat_eqb (name_list_len (kconst_params (kdef_signature defn))) (level_list_len us)) Bool.true)
-    (hv : Eq KExpr v (kdef_inst_value defn us)) =>
-    Eq.trans Bool (kexpr_is_lam_b v) (kexpr_is_lam_b (kdef_inst_value defn us)) Bool.true
-      (Eq.cong KExpr Bool (fun (e : KExpr) => (kexpr_is_lam_b e)) v (kdef_inst_value defn us) hv)
-      (Eq.trans Bool (kexpr_is_lam_b (kdef_inst_value defn us)) (kexpr_is_lam_b (kdef_value defn)) Bool.true (kexpr_is_lam_b_instL (paramSubstN (kconst_params (kdef_signature defn)) us) (kdef_value defn))
+pub(super) const SRC_DEF_ENV_ALL_LAM_VALUE_AT: &str = r"def def_env_all_lam_value_at : forall (env : DefEnv) (n : Name) (us : ListType Level) (v : KExpr), @Eq (OptionType KExpr) (kdef_value_at env n us) (@OptionType.some KExpr v) -> @Eq Bool (def_env_all_lam_b env) Bool.true -> @Eq Bool (kexpr_is_lam_b v) Bool.true :=fun (env : DefEnv) (n : Name) (us : ListType Level) (v : KExpr) (h : @Eq (OptionType KExpr) (kdef_value_at env n us) (@OptionType.some KExpr v)) (hb : @Eq Bool (def_env_all_lam_b env) Bool.true) =>
+kdef_value_at_guard_inv env n us v (@Eq Bool (kexpr_is_lam_b v) Bool.true) h
+  (fun (defn : KDefSig) (hraw : @Eq (OptionType KDefSig) (kdef_for env n) (@OptionType.some KDefSig defn))
+    (_hg : @Eq Bool (nat_eqb (name_list_len (kconst_params (kdef_signature defn))) (level_list_len us)) Bool.true)
+    (hv : @Eq KExpr v (kdef_inst_value defn us)) =>
+    @Eq.trans Bool (kexpr_is_lam_b v) (kexpr_is_lam_b (kdef_inst_value defn us)) Bool.true
+      (@Eq.cong KExpr Bool (fun (e : KExpr) => (kexpr_is_lam_b e)) v (kdef_inst_value defn us) hv)
+      (@Eq.trans Bool (kexpr_is_lam_b (kdef_inst_value defn us)) (kexpr_is_lam_b (kdef_value defn)) Bool.true (kexpr_is_lam_b_instL (paramSubstN (kconst_params (kdef_signature defn)) us) (kdef_value defn))
         (def_env_all_lam_b_sound env n (kdef_value defn) (kdef_raw_value_of_lookup env n defn hraw) hb)))";
 
 pub(super) const SRC_RANK_DOMINATES_B: &str = r"def rank_dominates_b (r : Nat) (e : KExpr) : Bool := match e with
@@ -407,13 +407,13 @@ pub(super) const SRC_DEF_ENV_RANKED_B: &str = r"def def_env_ranked_b (env : DefE
 | DefEnv.addDef tail dname defn => Bool.and (rank_dominates_b (rk dname) (kdef_value defn)) (def_env_ranked_b tail)";
 
 pub(super) fn ty_the_red_env_ranked() -> String {
-    format!("Eq Bool (def_env_ranked_b {DENV}) Bool.true")
+    format!("@Eq Bool (def_env_ranked_b {DENV}) Bool.true")
 }
 
-pub(super) const VAL_THE_RED_ENV_RANKED: &str = "Eq.refl Bool Bool.true";
+pub(super) const VAL_THE_RED_ENV_RANKED: &str = "@Eq.refl Bool Bool.true";
 
 pub(super) const TY_BOOL_CASES_EQ: &str =
-    "forall (p : Bool) (C : Type), (Eq Bool p Bool.true -> C) -> (Eq Bool p Bool.false -> C) -> C";
+    "forall (p : Bool) (C : Type), (@Eq Bool p Bool.true -> C) -> (@Eq Bool p Bool.false -> C) -> C";
 
 /// CASE ANALYSIS BY REFLECTION, and the shape matters.
 ///
@@ -430,47 +430,47 @@ pub(super) const TY_BOOL_CASES_EQ: &str =
 /// So this uses the reflection motive `fun zp => Eq Bool p zp -> C`, where the
 /// binder likewise appears only as an argument of `Eq`, each minor takes one
 /// binder, and the recursor is applied to `p` and then to `Eq.refl Bool p`.
-pub(super) const VAL_BOOL_CASES_EQ: &str = "fun (p : Bool) (C : Type) (kt : Eq Bool p Bool.true -> C) (kf : Eq Bool p Bool.false -> C) => Bool.rec (fun (zp : Bool) => Eq Bool p zp -> C) (fun (hf : Eq Bool p Bool.false) => kf hf) (fun (ht : Eq Bool p Bool.true) => kt ht) p (Eq.refl Bool p)";
+pub(super) const VAL_BOOL_CASES_EQ: &str = "fun (p : Bool) (C : Type) (kt : @Eq Bool p Bool.true -> C) (kf : @Eq Bool p Bool.false -> C) => @Bool.rec (fun (zp : Bool) => @Eq Bool p zp -> C) (fun (hf : @Eq Bool p Bool.false) => kf hf) (fun (ht : @Eq Bool p Bool.true) => kt ht) p (@Eq.refl Bool p)";
 
-pub(super) const TY_BOR_FALSE_CASE: &str = "forall (q : Bool) (p : Bool), Eq Bool p Bool.false -> Eq Bool (Bool.or p q) Bool.true -> Eq Bool q Bool.true";
+pub(super) const TY_BOR_FALSE_CASE: &str = "forall (q : Bool) (p : Bool), @Eq Bool p Bool.false -> @Eq Bool (Bool.or p q) Bool.true -> @Eq Bool q Bool.true";
 
 /// No `Bool.rec` at all: rewrite `p` to `Bool.false` inside the hypothesis and
 /// let the RETURN-position ascription do the `Bool.or Bool.false q` reduction —
 /// which is `band_eq_true_right`'s true arm verbatim in shape, the one place
 /// the elaborator is measured to perform this reduction.
-pub(super) const VAL_BOR_FALSE_CASE: &str = "fun (q : Bool) (p : Bool) (hp : Eq Bool p Bool.false) (h : Eq Bool (Bool.or p q) Bool.true) => Eq.subst Bool (fun (w : Bool) => Eq Bool (Bool.or w q) Bool.true) p Bool.false hp h";
+pub(super) const VAL_BOR_FALSE_CASE: &str = "fun (q : Bool) (p : Bool) (hp : @Eq Bool p Bool.false) (h : @Eq Bool (Bool.or p q) Bool.true) => @Eq.subst Bool (fun (w : Bool) => @Eq Bool (Bool.or w q) Bool.true) p Bool.false hp h";
 
-pub(super) const TY_BOR_EQ_TRUE_INV: &str = "forall (p : Bool) (q : Bool) (C : Type), Eq Bool (Bool.or p q) Bool.true -> (Eq Bool p Bool.true -> C) -> (Eq Bool q Bool.true -> C) -> C";
+pub(super) const TY_BOR_EQ_TRUE_INV: &str = "forall (p : Bool) (q : Bool) (C : Type), @Eq Bool (Bool.or p q) Bool.true -> (@Eq Bool p Bool.true -> C) -> (@Eq Bool q Bool.true -> C) -> C";
 
-pub(super) const VAL_BOR_EQ_TRUE_INV: &str = "fun (p : Bool) (q : Bool) (C : Type) (h : Eq Bool (Bool.or p q) Bool.true) (kl : Eq Bool p Bool.true -> C) (kr : Eq Bool q Bool.true -> C) => bool_cases_eq p C kl (fun (hf : Eq Bool p Bool.false) => kr (bor_false_case q p hf h))";
+pub(super) const VAL_BOR_EQ_TRUE_INV: &str = "fun (p : Bool) (q : Bool) (C : Type) (h : @Eq Bool (Bool.or p q) Bool.true) (kl : @Eq Bool p Bool.true -> C) (kr : @Eq Bool q Bool.true -> C) => bool_cases_eq p C kl (fun (hf : @Eq Bool p Bool.false) => kr (bor_false_case q p hf h))";
 
-pub(super) const TY_DEF_ENV_RANKED_B_SOUND: &str = "forall (env : DefEnv) (dname : Name) (defval : KExpr), Eq (OptionType KExpr) (defval_for env dname) (OptionType.some KExpr defval) -> Eq Bool (def_env_ranked_b env) Bool.true -> Eq Bool (rank_dominates_b (rk dname) defval) Bool.true";
+pub(super) const TY_DEF_ENV_RANKED_B_SOUND: &str = "forall (env : DefEnv) (dname : Name) (defval : KExpr), @Eq (OptionType KExpr) (defval_for env dname) (@OptionType.some KExpr defval) -> @Eq Bool (def_env_ranked_b env) Bool.true -> @Eq Bool (rank_dominates_b (rk dname) defval) Bool.true";
 
 pub(super) fn val_def_env_ranked_b_sound() -> String {
-    let goal = "Eq Bool (rank_dominates_b (rk dname) defval) Bool.true";
-    let motive = format!("(fun (e : DefEnv) => Eq (OptionType KExpr) (defval_for e dname) (OptionType.some KExpr defval) -> Eq Bool (def_env_ranked_b e) Bool.true -> {goal})");
-    let m_empty = format!("(fun (hlk : Eq (OptionType KExpr) (defval_for DefEnv.empty dname) (OptionType.some KExpr defval)) (_hb : Eq Bool (def_env_ranked_b DefEnv.empty) Bool.true) => option_none_ne_some KExpr defval ({goal}) hlk)");
+    let goal = "@Eq Bool (rank_dominates_b (rk dname) defval) Bool.true";
+    let motive = format!("(fun (e : DefEnv) => @Eq (OptionType KExpr) (defval_for e dname) (@OptionType.some KExpr defval) -> @Eq Bool (def_env_ranked_b e) Bool.true -> {goal})");
+    let m_empty = format!("(fun (hlk : @Eq (OptionType KExpr) (defval_for DefEnv.empty dname) (@OptionType.some KExpr defval)) (_hb : @Eq Bool (def_env_ranked_b DefEnv.empty) Bool.true) => option_none_ne_some KExpr defval ({goal}) hlk)");
     // The FIRE branch is where this differs from def_env_closed_b_sound: the
     // per-entry test mentions the entry's OWN name, so the rank has to be
     // transported along name_eqb_eq before the value is.
     let m_add = format!(
-        "(fun (tail : DefEnv) (dn : Name) (defn : KDefSig) (ih : Eq (OptionType KExpr) (defval_for tail dname) (OptionType.some KExpr defval) -> Eq Bool (def_env_ranked_b tail) Bool.true -> {goal}) (hlk : Eq (OptionType KExpr) (defval_for (DefEnv.addDef tail dn defn) dname) (OptionType.some KExpr defval)) (hb : Eq Bool (def_env_ranked_b (DefEnv.addDef tail dn defn)) Bool.true) => opt_pick_some_inv KExpr (name_eqb dn dname) (kdef_value defn) (defval_for tail dname) defval ({goal}) hlk (fun (ht : Eq Bool (name_eqb dn dname) Bool.true) (hval : Eq KExpr (kdef_value defn) defval) => Eq.subst KExpr (fun (w : KExpr) => Eq Bool (rank_dominates_b (rk dname) w) Bool.true) (kdef_value defn) defval hval (Eq.subst Name (fun (w : Name) => Eq Bool (rank_dominates_b (rk w) (kdef_value defn)) Bool.true) dn dname (name_eqb_eq dn dname ht) (band_eq_true_left (rank_dominates_b (rk dn) (kdef_value defn)) (def_env_ranked_b tail) hb))) (fun (_hf : Eq Bool (name_eqb dn dname) Bool.false) (htail : Eq (OptionType KExpr) (defval_for tail dname) (OptionType.some KExpr defval)) => ih htail (band_eq_true_right (rank_dominates_b (rk dn) (kdef_value defn)) (def_env_ranked_b tail) hb)))"
+        "(fun (tail : DefEnv) (dn : Name) (defn : KDefSig) (ih : @Eq (OptionType KExpr) (defval_for tail dname) (@OptionType.some KExpr defval) -> @Eq Bool (def_env_ranked_b tail) Bool.true -> {goal}) (hlk : @Eq (OptionType KExpr) (defval_for (DefEnv.addDef tail dn defn) dname) (@OptionType.some KExpr defval)) (hb : @Eq Bool (def_env_ranked_b (DefEnv.addDef tail dn defn)) Bool.true) => opt_pick_some_inv KExpr (name_eqb dn dname) (kdef_value defn) (defval_for tail dname) defval ({goal}) hlk (fun (ht : @Eq Bool (name_eqb dn dname) Bool.true) (hval : @Eq KExpr (kdef_value defn) defval) => @Eq.subst KExpr (fun (w : KExpr) => @Eq Bool (rank_dominates_b (rk dname) w) Bool.true) (kdef_value defn) defval hval (@Eq.subst Name (fun (w : Name) => @Eq Bool (rank_dominates_b (rk w) (kdef_value defn)) Bool.true) dn dname (name_eqb_eq dn dname ht) (band_eq_true_left (rank_dominates_b (rk dn) (kdef_value defn)) (def_env_ranked_b tail) hb))) (fun (_hf : @Eq Bool (name_eqb dn dname) Bool.false) (htail : @Eq (OptionType KExpr) (defval_for tail dname) (@OptionType.some KExpr defval)) => ih htail (band_eq_true_right (rank_dominates_b (rk dn) (kdef_value defn)) (def_env_ranked_b tail) hb)))"
     );
-    format!("fun (env : DefEnv) (dname : Name) (defval : KExpr) => DefEnv.rec {motive} {m_empty} {m_add} env")
+    format!("fun (env : DefEnv) (dname : Name) (defval : KExpr) => @DefEnv.rec {motive} {m_empty} {m_add} env")
 }
 
-pub(super) const TY_RANK_DOMINATES_OCCURS: &str = "forall (r : Nat) (c2 : Name) (e : KExpr), Eq Bool (rank_dominates_b r e) Bool.true -> Eq Bool (const_occurs c2 e) Bool.true -> Lt (rk c2) r";
+pub(super) const TY_RANK_DOMINATES_OCCURS: &str = "forall (r : Nat) (c2 : Name) (e : KExpr), @Eq Bool (rank_dominates_b r e) Bool.true -> @Eq Bool (const_occurs c2 e) Bool.true -> Lt (rk c2) r";
 
 pub(super) fn val_rank_dominates_occurs() -> String {
     let goal = "Lt (rk c2) r";
     let ih = |x: &str| {
-        format!("Eq Bool (rank_dominates_b r {x}) Bool.true -> Eq Bool (const_occurs c2 {x}) Bool.true -> {goal}")
+        format!("@Eq Bool (rank_dominates_b r {x}) Bool.true -> @Eq Bool (const_occurs c2 {x}) Bool.true -> {goal}")
     };
-    let motive = format!("(fun (qe : KExpr) => Eq Bool (rank_dominates_b r qe) Bool.true -> Eq Bool (const_occurs c2 qe) Bool.true -> {goal})");
+    let motive = format!("(fun (qe : KExpr) => @Eq Bool (rank_dominates_b r qe) Bool.true -> @Eq Bool (const_occurs c2 qe) Bool.true -> {goal})");
     // A leaf mentions no const at all, so its occurrence hypothesis is
     // Eq Bool Bool.false Bool.true.
     let leaf = |binders: &str, subj: &str| {
-        format!("(fun {binders} (_hd : Eq Bool (rank_dominates_b r {subj}) Bool.true) (ho : Eq Bool (const_occurs c2 {subj}) Bool.true) => bool_false_ne_true_t ({goal}) ho)")
+        format!("(fun {binders} (_hd : @Eq Bool (rank_dominates_b r {subj}) Bool.true) (ho : @Eq Bool (const_occurs c2 {subj}) Bool.true) => bool_false_ne_true_t ({goal}) ho)")
     };
     let a_sort = leaf("(qn : Level)", "(KExpr.sort qn)");
     let a_bvar = leaf("(qi : Nat)", "(KExpr.bvar qi)");
@@ -480,7 +480,7 @@ pub(super) fn val_rank_dominates_occurs() -> String {
     let binary = |ctor: &str, l: &str, rr: &str| {
         let subj = format!("(KExpr.{ctor} {l} {rr})");
         format!(
-            "(fun ({l} : KExpr) ({rr} : KExpr) (qih1 : {}) (qih2 : {}) (hd : Eq Bool (rank_dominates_b r {subj}) Bool.true) (ho : Eq Bool (const_occurs c2 {subj}) Bool.true) => bor_eq_true_inv (const_occurs c2 {l}) (const_occurs c2 {rr}) ({goal}) ho (fun (h1 : Eq Bool (const_occurs c2 {l}) Bool.true) => qih1 (band_eq_true_left (rank_dominates_b r {l}) (rank_dominates_b r {rr}) hd) h1) (fun (h2 : Eq Bool (const_occurs c2 {rr}) Bool.true) => qih2 (band_eq_true_right (rank_dominates_b r {l}) (rank_dominates_b r {rr}) hd) h2))",
+            "(fun ({l} : KExpr) ({rr} : KExpr) (qih1 : {}) (qih2 : {}) (hd : @Eq Bool (rank_dominates_b r {subj}) Bool.true) (ho : @Eq Bool (const_occurs c2 {subj}) Bool.true) => bor_eq_true_inv (const_occurs c2 {l}) (const_occurs c2 {rr}) ({goal}) ho (fun (h1 : @Eq Bool (const_occurs c2 {l}) Bool.true) => qih1 (band_eq_true_left (rank_dominates_b r {l}) (rank_dominates_b r {rr}) hd) h1) (fun (h2 : @Eq Bool (const_occurs c2 {rr}) Bool.true) => qih2 (band_eq_true_right (rank_dominates_b r {l}) (rank_dominates_b r {rr}) hd) h2))",
             ih(l),
             ih(rr)
         )
@@ -492,42 +492,42 @@ pub(super) fn val_rank_dominates_occurs() -> String {
     // nat_lt_b (rk n) r, and the occurrence test IS name_eqb c2 n, so
     // name_eqb_eq turns the second into the identification that lets the first
     // be read at c2.
-    let a_const = "(fun (qn : Name) (qus : ListType Level) (hd : Eq Bool (rank_dominates_b r (KExpr.const qn qus)) Bool.true) (ho : Eq Bool (const_occurs c2 (KExpr.const qn qus)) Bool.true) => Eq.substType Name (fun (w : Name) => Lt (rk w) r) qn c2 (Eq.symm Name c2 qn (name_eqb_eq c2 qn ho)) (nat_lt_b_sound (rk qn) r hd))".to_string();
+    let a_const = "(fun (qn : Name) (qus : ListType Level) (hd : @Eq Bool (rank_dominates_b r (KExpr.const qn qus)) Bool.true) (ho : @Eq Bool (const_occurs c2 (KExpr.const qn qus)) Bool.true) => @Eq.substType Name (fun (w : Name) => Lt (rk w) r) qn c2 (@Eq.symm Name c2 qn (name_eqb_eq c2 qn ho)) (nat_lt_b_sound (rk qn) r hd))".to_string();
     let a_let = format!(
-        "(fun (qlty : KExpr) (qlv : KExpr) (qlb : KExpr) (qih1 : {}) (qih2 : {}) (qih3 : {}) (hd : Eq Bool (rank_dominates_b r (KExpr.let_ qlty qlv qlb)) Bool.true) (ho : Eq Bool (const_occurs c2 (KExpr.let_ qlty qlv qlb)) Bool.true) => bor_eq_true_inv (const_occurs c2 qlty) (Bool.or (const_occurs c2 qlv) (const_occurs c2 qlb)) ({goal}) ho (fun (h1 : Eq Bool (const_occurs c2 qlty) Bool.true) => qih1 (band_eq_true_left (rank_dominates_b r qlty) (Bool.and (rank_dominates_b r qlv) (rank_dominates_b r qlb)) hd) h1) (fun (hrest : Eq Bool (Bool.or (const_occurs c2 qlv) (const_occurs c2 qlb)) Bool.true) => bor_eq_true_inv (const_occurs c2 qlv) (const_occurs c2 qlb) ({goal}) hrest (fun (h2 : Eq Bool (const_occurs c2 qlv) Bool.true) => qih2 (band_eq_true_left (rank_dominates_b r qlv) (rank_dominates_b r qlb) (band_eq_true_right (rank_dominates_b r qlty) (Bool.and (rank_dominates_b r qlv) (rank_dominates_b r qlb)) hd)) h2) (fun (h3 : Eq Bool (const_occurs c2 qlb) Bool.true) => qih3 (band_eq_true_right (rank_dominates_b r qlv) (rank_dominates_b r qlb) (band_eq_true_right (rank_dominates_b r qlty) (Bool.and (rank_dominates_b r qlv) (rank_dominates_b r qlb)) hd)) h3)))",
+        "(fun (qlty : KExpr) (qlv : KExpr) (qlb : KExpr) (qih1 : {}) (qih2 : {}) (qih3 : {}) (hd : @Eq Bool (rank_dominates_b r (KExpr.let_ qlty qlv qlb)) Bool.true) (ho : @Eq Bool (const_occurs c2 (KExpr.let_ qlty qlv qlb)) Bool.true) => bor_eq_true_inv (const_occurs c2 qlty) (Bool.or (const_occurs c2 qlv) (const_occurs c2 qlb)) ({goal}) ho (fun (h1 : @Eq Bool (const_occurs c2 qlty) Bool.true) => qih1 (band_eq_true_left (rank_dominates_b r qlty) (Bool.and (rank_dominates_b r qlv) (rank_dominates_b r qlb)) hd) h1) (fun (hrest : @Eq Bool (Bool.or (const_occurs c2 qlv) (const_occurs c2 qlb)) Bool.true) => bor_eq_true_inv (const_occurs c2 qlv) (const_occurs c2 qlb) ({goal}) hrest (fun (h2 : @Eq Bool (const_occurs c2 qlv) Bool.true) => qih2 (band_eq_true_left (rank_dominates_b r qlv) (rank_dominates_b r qlb) (band_eq_true_right (rank_dominates_b r qlty) (Bool.and (rank_dominates_b r qlv) (rank_dominates_b r qlb)) hd)) h2) (fun (h3 : @Eq Bool (const_occurs c2 qlb) Bool.true) => qih3 (band_eq_true_right (rank_dominates_b r qlv) (rank_dominates_b r qlb) (band_eq_true_right (rank_dominates_b r qlty) (Bool.and (rank_dominates_b r qlv) (rank_dominates_b r qlb)) hd)) h3)))",
         ih("qlty"),
         ih("qlv"),
         ih("qlb")
     );
     let a_proj = format!(
-        "(fun (qps : Name) (qpidx : Nat) (qsub : KExpr) (qihs : {}) (hd : Eq Bool (rank_dominates_b r (KExpr.proj qps qpidx qsub)) Bool.true) (ho : Eq Bool (const_occurs c2 (KExpr.proj qps qpidx qsub)) Bool.true) => qihs hd ho)",
+        "(fun (qps : Name) (qpidx : Nat) (qsub : KExpr) (qihs : {}) (hd : @Eq Bool (rank_dominates_b r (KExpr.proj qps qpidx qsub)) Bool.true) (ho : @Eq Bool (const_occurs c2 (KExpr.proj qps qpidx qsub)) Bool.true) => qihs hd ho)",
         ih("qsub")
     );
-    format!("fun (r : Nat) (c2 : Name) (e : KExpr) => KExpr.rec {motive} {a_sort} {a_bvar} {a_app} {a_lam} {a_pi} {a_const} {a_let} {a_proj} {a_lit} e")
+    format!("fun (r : Nat) (c2 : Name) (e : KExpr) => @KExpr.rec {motive} {a_sort} {a_bvar} {a_app} {a_lam} {a_pi} {a_const} {a_let} {a_proj} {a_lit} e")
 }
 
-pub(super) const TY_DELTA_STEP_DEFVAL_INV: &str = "forall (env : DefEnv) (c : Name) (us : ListType Level) (body : KExpr), delta_step env (KExpr.const c us) body -> Eq (OptionType KExpr) (kdef_value_at env c us) (OptionType.some KExpr body)";
+pub(super) const TY_DELTA_STEP_DEFVAL_INV: &str = "forall (env : DefEnv) (c : Name) (us : ListType Level) (body : KExpr), delta_step env (KExpr.const c us) body -> @Eq (OptionType KExpr) (kdef_value_at env c us) (@OptionType.some KExpr body)";
 
-pub(super) const VAL_DELTA_STEP_DEFVAL_INV: &str = "fun (env : DefEnv) (c : Name) (us : ListType Level) (body : KExpr) (hd : delta_step env (KExpr.const c us) body) => opt_bind_some_inv KExpr KExpr (kdef_value_at env c us) (fun (v : KExpr) => OptionType.some KExpr v) body (Eq (OptionType KExpr) (kdef_value_at env c us) (OptionType.some KExpr body)) hd (fun (w : KExpr) (hw : Eq (OptionType KExpr) (kdef_value_at env c us) (OptionType.some KExpr w)) (hfw : Eq (OptionType KExpr) (OptionType.some KExpr w) (OptionType.some KExpr body)) => Eq.trans (OptionType KExpr) (kdef_value_at env c us) (OptionType.some KExpr w) (OptionType.some KExpr body) hw hfw)";
+pub(super) const VAL_DELTA_STEP_DEFVAL_INV: &str = "fun (env : DefEnv) (c : Name) (us : ListType Level) (body : KExpr) (hd : delta_step env (KExpr.const c us) body) => opt_bind_some_inv KExpr KExpr (kdef_value_at env c us) (fun (v : KExpr) => @OptionType.some KExpr v) body (@Eq (OptionType KExpr) (kdef_value_at env c us) (@OptionType.some KExpr body)) hd (fun (w : KExpr) (hw : @Eq (OptionType KExpr) (kdef_value_at env c us) (@OptionType.some KExpr w)) (hfw : @Eq (OptionType KExpr) (@OptionType.some KExpr w) (@OptionType.some KExpr body)) => @Eq.trans (OptionType KExpr) (kdef_value_at env c us) (@OptionType.some KExpr w) (@OptionType.some KExpr body) hw hfw)";
 
 pub(super) fn ty_the_red_env_delta_rank_decrease() -> String {
-    format!("forall (c : Name) (us : ListType Level) (body : KExpr) (c2 : Name), delta_step {DENV} (KExpr.const c us) body -> Eq Bool (const_occurs c2 body) Bool.true -> Lt (rk c2) (rk c)")
+    format!("forall (c : Name) (us : ListType Level) (body : KExpr) (c2 : Name), delta_step {DENV} (KExpr.const c us) body -> @Eq Bool (const_occurs c2 body) Bool.true -> Lt (rk c2) (rk c)")
 }
 
 pub(super) fn val_the_red_env_delta_rank_decrease() -> String {
-    format!("fun (c : Name) (us : ListType Level) (body : KExpr) (c2 : Name) (hd : delta_step {DENV} (KExpr.const c us) body) (ho : Eq Bool (const_occurs c2 body) Bool.true) => rank_dominates_occurs (rk c) c2 body (def_env_ranked_value_at {DENV} c us body (delta_step_defval_inv {DENV} c us body hd) the_red_env_ranked) ho")
+    format!("fun (c : Name) (us : ListType Level) (body : KExpr) (c2 : Name) (hd : delta_step {DENV} (KExpr.const c us) body) (ho : @Eq Bool (const_occurs c2 body) Bool.true) => rank_dominates_occurs (rk c) c2 body (def_env_ranked_value_at {DENV} c us body (delta_step_defval_inv {DENV} c us body hd) the_red_env_ranked) ho")
 }
 
 pub(super) const TY_R9_LT_IRREFL: &str = "forall (n : Nat), Lt n n -> Empty";
 
-pub(super) const VAL_R9_LT_IRREFL: &str = "fun (n : Nat) (h : Lt n n) => Lt.rec (fun (qa : Nat) (qb : Nat) (_ : Lt qa qb) => Eq Nat qa qb -> Empty) (fun (qn : Nat) (hq : Eq Nat Nat.zero (Nat.succ qn)) => Eq.substType Nat (fun (w : Nat) => Nat.rec (fun (_ : Nat) => Type) Nat (fun (_ : Nat) (_ : Type) => Empty) w) Nat.zero (Nat.succ qn) hq Nat.zero) (fun (qn : Nat) (qm : Nat) (_qh : Lt qn qm) (qih : Eq Nat qn qm -> Empty) (hq : Eq Nat (Nat.succ qn) (Nat.succ qm)) => qih (Eq.cong Nat Nat (fun (w : Nat) => Nat.rec (fun (_ : Nat) => Nat) Nat.zero (fun (p : Nat) (_ : Nat) => p) w) (Nat.succ qn) (Nat.succ qm) hq)) n n h (Eq.refl Nat n)";
+pub(super) const VAL_R9_LT_IRREFL: &str = "fun (n : Nat) (h : Lt n n) => @Lt.rec (fun (qa : Nat) (qb : Nat) (_ : Lt qa qb) => @Eq Nat qa qb -> Empty) (fun (qn : Nat) (hq : @Eq Nat Nat.zero (Nat.succ qn)) => @Eq.substType Nat (fun (w : Nat) => @Nat.rec (fun (_ : Nat) => Type) Nat (fun (_ : Nat) (_ : Type) => Empty) w) Nat.zero (Nat.succ qn) hq Nat.zero) (fun (qn : Nat) (qm : Nat) (_qh : Lt qn qm) (qih : @Eq Nat qn qm -> Empty) (hq : @Eq Nat (Nat.succ qn) (Nat.succ qm)) => qih (@Eq.cong Nat Nat (fun (w : Nat) => @Nat.rec (fun (_ : Nat) => Nat) Nat.zero (fun (p : Nat) (_ : Nat) => p) w) (Nat.succ qn) (Nat.succ qm) hq)) n n h (@Eq.refl Nat n)";
 
 pub(super) fn ty_the_red_env_no_delta_cycle() -> String {
-    format!("forall (c : Name) (us : ListType Level) (body : KExpr), delta_step {DENV} (KExpr.const c us) body -> Eq Bool (const_occurs c body) Bool.true -> Empty")
+    format!("forall (c : Name) (us : ListType Level) (body : KExpr), delta_step {DENV} (KExpr.const c us) body -> @Eq Bool (const_occurs c body) Bool.true -> Empty")
 }
 
 pub(super) fn val_the_red_env_no_delta_cycle() -> String {
-    format!("fun (c : Name) (us : ListType Level) (body : KExpr) (hd : delta_step {DENV} (KExpr.const c us) body) (ho : Eq Bool (const_occurs c body) Bool.true) => r9_lt_irrefl (rk c) (the_red_env_delta_rank_decrease c us body c hd ho)")
+    format!("fun (c : Name) (us : ListType Level) (body : KExpr) (hd : delta_step {DENV} (KExpr.const c us) body) (ho : @Eq Bool (const_occurs c body) Bool.true) => r9_lt_irrefl (rk c) (the_red_env_delta_rank_decrease c us body c hd ho)")
 }
 
 // ================================================================
@@ -536,20 +536,20 @@ pub(super) fn val_the_red_env_no_delta_cycle() -> String {
 // ================================================================
 
 pub(super) fn ty_r9_const_delta_dead() -> String {
-    format!("forall (c : Name) (us : ListType Level), Eq (OptionType KExpr) (defval_for {DENV} c) (OptionType.none KExpr) -> forall (g2 : KExpr) (C : Type), delta_step {DENV} (KExpr.const c us) g2 -> C")
+    format!("forall (c : Name) (us : ListType Level), @Eq (OptionType KExpr) (defval_for {DENV} c) (@OptionType.none KExpr) -> forall (g2 : KExpr) (C : Type), delta_step {DENV} (KExpr.const c us) g2 -> C")
 }
 
 pub(super) fn val_r9_const_delta_dead() -> String {
-    let dead = format!("(delta_reduct_no_raw_value {DENV} (KExpr.const c us) c (Eq.refl (OptionType Name) (OptionType.some Name c)) hn)");
-    format!("fun (c : Name) (us : ListType Level) (hn : Eq (OptionType KExpr) (defval_for {DENV} c) (OptionType.none KExpr)) (g2 : KExpr) (C : Type) (hd : delta_step {DENV} (KExpr.const c us) g2) => option_none_ne_some_type KExpr g2 C (Eq.trans (OptionType KExpr) (OptionType.none KExpr) (delta_reduct {DENV} (KExpr.const c us)) (OptionType.some KExpr g2) (Eq.symm (OptionType KExpr) (delta_reduct {DENV} (KExpr.const c us)) (OptionType.none KExpr) {dead}) hd)")
+    let dead = format!("(delta_reduct_no_raw_value {DENV} (KExpr.const c us) c (@Eq.refl (OptionType Name) (@OptionType.some Name c)) hn)");
+    format!("fun (c : Name) (us : ListType Level) (hn : @Eq (OptionType KExpr) (defval_for {DENV} c) (@OptionType.none KExpr)) (g2 : KExpr) (C : Type) (hd : delta_step {DENV} (KExpr.const c us) g2) => option_none_ne_some_type KExpr g2 C (@Eq.trans (OptionType KExpr) (@OptionType.none KExpr) (delta_reduct {DENV} (KExpr.const c us)) (@OptionType.some KExpr g2) (@Eq.symm (OptionType KExpr) (delta_reduct {DENV} (KExpr.const c us)) (@OptionType.none KExpr) {dead}) hd)")
 }
 
 pub(super) fn ty_whnfacc_const_dead() -> String {
-    format!("forall (c : Name) (us : ListType Level), Eq (OptionType KExpr) (defval_for {DENV} c) (OptionType.none KExpr) -> whnf_acc (KExpr.const c us)")
+    format!("forall (c : Name) (us : ListType Level), @Eq (OptionType KExpr) (defval_for {DENV} c) (@OptionType.none KExpr) -> whnf_acc (KExpr.const c us)")
 }
 
 pub(super) fn val_whnfacc_const_dead() -> String {
-    format!("fun (c : Name) (us : ListType Level) (hn : Eq (OptionType KExpr) (defval_for {DENV} c) (OptionType.none KExpr)) => whnf_acc.intro (KExpr.const c us) (fun (e2 : KExpr) (hs : whnf_step (KExpr.const c us) e2) => constRedex_whnf_inv c us e2 (whnf_acc e2) hs (fun (hdl : delta_step {DENV} (KExpr.const c us) e2) => r9_const_delta_dead c us hn e2 (whnf_acc e2) hdl))")
+    format!("fun (c : Name) (us : ListType Level) (hn : @Eq (OptionType KExpr) (defval_for {DENV} c) (@OptionType.none KExpr)) => whnf_acc.intro (KExpr.const c us) (fun (e2 : KExpr) (hs : whnf_step (KExpr.const c us) e2) => constRedex_whnf_inv c us e2 (whnf_acc e2) hs (fun (hdl : delta_step {DENV} (KExpr.const c us) e2) => r9_const_delta_dead c us hn e2 (whnf_acc e2) hdl))")
 }
 
 pub(super) fn ty_candinterp_delta_expand_sort() -> String {
@@ -566,30 +566,30 @@ pub(super) const TY_R9_CONST_IS_NEUTRAL: &str =
 pub(super) const VAL_R9_CONST_IS_NEUTRAL: &str =
     "fun (c : Name) (us : ListType Level) => ConstFreeUnit.triv";
 
-pub(super) const TY_R9_CONST_HEADFREE_ABSURD: &str = "forall (c : Name) (us : ListType Level), Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.const c us))) (OptionType.none Name) -> Empty";
+pub(super) const TY_R9_CONST_HEADFREE_ABSURD: &str = "forall (c : Name) (us : ListType Level), @Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.const c us))) (@OptionType.none Name) -> Empty";
 
-pub(super) const VAL_R9_CONST_HEADFREE_ABSURD: &str = "fun (c : Name) (us : ListType Level) (h : Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.const c us))) (OptionType.none Name)) => option_none_ne_some_type Name c Empty (Eq.symm (OptionType Name) (OptionType.some Name c) (OptionType.none Name) h)";
+pub(super) const VAL_R9_CONST_HEADFREE_ABSURD: &str = "fun (c : Name) (us : ListType Level) (h : @Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.const c us))) (@OptionType.none Name)) => option_none_ne_some_type Name c Empty (@Eq.symm (OptionType Name) (@OptionType.some Name c) (@OptionType.none Name) h)";
 
-pub(super) const TY_R9_CONST_OBSTRUCTION_LOCATED: &str = "forall (c : Name) (us : ListType Level), AndType (Neutral (KExpr.const c us)) (Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.const c us))) (OptionType.none Name) -> Empty)";
+pub(super) const TY_R9_CONST_OBSTRUCTION_LOCATED: &str = "forall (c : Name) (us : ListType Level), AndType (Neutral (KExpr.const c us)) (@Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.const c us))) (@OptionType.none Name) -> Empty)";
 
-pub(super) const VAL_R9_CONST_OBSTRUCTION_LOCATED: &str = "fun (c : Name) (us : ListType Level) => AndType.intro (Neutral (KExpr.const c us)) (Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.const c us))) (OptionType.none Name) -> Empty) ConstFreeUnit.triv (r9_const_headfree_absurd c us)";
+pub(super) const VAL_R9_CONST_OBSTRUCTION_LOCATED: &str = "fun (c : Name) (us : ListType Level) => @AndType.intro (Neutral (KExpr.const c us)) (@Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.const c us))) (@OptionType.none Name) -> Empty) ConstFreeUnit.triv (r9_const_headfree_absurd c us)";
 
 // ================================================================
 // Group C — the judgment.
 // ================================================================
 
 /// `TypingCtx.var`'s rule, transcribed (R8's, unchanged).
-const VAR_RULE_LIFTED: &str = "| var : forall (G : ListType KExpr) (i : Nat) (A : KExpr), Eq (OptionType KExpr) (ctx_lookup G i) (OptionType.some KExpr A) -> SynTyC G (KExpr.bvar i) (lift_at A Nat.zero (Nat.succ i))";
+const VAR_RULE_LIFTED: &str = "| var : forall (G : ListType KExpr) (i : Nat) (A : KExpr), @Eq (OptionType KExpr) (ctx_lookup G i) (@OptionType.some KExpr A) -> SynTyC G (KExpr.bvar i) (lift_at A Nat.zero (Nat.succ i))";
 
 /// `TypingCtx.pi`'s formation rule, transcribed (R8's, unchanged).
-const PI_RULE_IMAX: &str = "| pi : forall (G : ListType KExpr) (A : KExpr) (B : KExpr) (n : Level) (m : Level), SynTyC G A (KExpr.sort n) -> SynTyC (ListType.cons KExpr A G) B (KExpr.sort m) -> SynTyC G (KExpr.pi A B) (KExpr.sort (Level.imax n m))";
+const PI_RULE_IMAX: &str = "| pi : forall (G : ListType KExpr) (A : KExpr) (B : KExpr) (n : Level) (m : Level), SynTyC G A (KExpr.sort n) -> SynTyC (@ListType.cons KExpr A G) B (KExpr.sort m) -> SynTyC G (KExpr.pi A B) (KExpr.sort (Level.imax n m))";
 
 /// The zeta rule at R8's sort-annotated fragment.
-const LET_RULE_SORT: &str = "| letTy : forall (G : ListType KExpr) (n : Level) (m : Level) (v : KExpr) (b : KExpr), SynTyC G v (KExpr.sort n) -> SynTyC (ListType.cons KExpr (KExpr.sort n) G) b (KExpr.sort m) -> SynTyC G (KExpr.let_ (KExpr.sort n) v b) (KExpr.sort m)";
+const LET_RULE_SORT: &str = "| letTy : forall (G : ListType KExpr) (n : Level) (m : Level) (v : KExpr) (b : KExpr), SynTyC G v (KExpr.sort n) -> SynTyC (@ListType.cons KExpr (KExpr.sort n) G) b (KExpr.sort m) -> SynTyC G (KExpr.let_ (KExpr.sort n) v b) (KExpr.sort m)";
 
 /// THE DEAD-CONST RULE: a constant with no definitional value in the real
 /// reflected env is whnf-STUCK, hence in the base candidate at any sort.
-const KONST_DEAD_RULE: &str = "| konstDead : forall (G : ListType KExpr) (c : Name) (us : ListType Level) (m : Level), Eq (OptionType KExpr) (defval_for (red_def the_red_env) c) (OptionType.none KExpr) -> SynTyC G (KExpr.const c us) (KExpr.sort m)";
+const KONST_DEAD_RULE: &str = "| konstDead : forall (G : ListType KExpr) (c : Name) (us : ListType Level) (m : Level), @Eq (OptionType KExpr) (defval_for (red_def the_red_env) c) (@OptionType.none KExpr) -> SynTyC G (KExpr.const c us) (KExpr.sort m)";
 
 /// THE DELTA RULE: a constant is at `sort m` if its real δ-unfolding is.
 const KONST_DELTA_RULE: &str = "| konstDelta : forall (G : ListType KExpr) (c : Name) (us : ListType Level) (m : Level) (body : KExpr), delta_step (red_def the_red_env) (KExpr.const c us) body -> SynTyC G body (KExpr.sort m) -> SynTyC G (KExpr.const c us) (KExpr.sort m)";
@@ -601,7 +601,7 @@ pub(super) fn src_syn_ty_c() -> String {
          | sort : forall (G : ListType KExpr) (n : Level), SynTyC G (KExpr.sort n) (KExpr.sort (Level.succ n))\n\
          {PI_RULE_IMAX}\n\
          | app : forall (G : ListType KExpr) (A : KExpr) (B : KExpr) (f : KExpr) (a : KExpr), SynTyC G f (KExpr.pi A B) -> SynTyC G a A -> SynTyC G (KExpr.app f a) B\n\
-         | lam : forall (G : ListType KExpr) (A : KExpr) (B : KExpr) (b : KExpr), SimpleTy A -> SynTyC (ListType.cons KExpr A G) b B -> SynTyC G (KExpr.lam A b) (KExpr.pi A B)\n\
+         | lam : forall (G : ListType KExpr) (A : KExpr) (B : KExpr) (b : KExpr), SimpleTy A -> SynTyC (@ListType.cons KExpr A G) b B -> SynTyC G (KExpr.lam A b) (KExpr.pi A B)\n\
          {LET_RULE_SORT}\n\
          {KONST_DEAD_RULE}\n\
          {KONST_DELTA_RULE}"
@@ -625,52 +625,52 @@ pub(super) const REC_APPLICAND: &str = " G e T h";
 /// to and including its last motive case.
 pub(super) fn val_syntyc_fundamental_head() -> String {
     let motive = "(fun (qG : ListType KExpr) (qe : KExpr) (qT : KExpr) (_ : SynTyC qG qe qT) => forall (qs : Nat -> KExpr), SubstOK qs qG -> candInterp qT (psubst qs qe))";
-    let m_var = "(fun (qG : ListType KExpr) (qi : Nat) (qA : KExpr) (qhget : Eq (OptionType KExpr) (ctx_lookup qG qi) (OptionType.some KExpr qA)) (qs : Nat -> KExpr) (qhs : SubstOK qs qG) => candInterp_lift qA Nat.zero (Nat.succ qi) (qs qi) (qhs qi qA qhget))";
+    let m_var = "(fun (qG : ListType KExpr) (qi : Nat) (qA : KExpr) (qhget : @Eq (OptionType KExpr) (ctx_lookup qG qi) (@OptionType.some KExpr qA)) (qs : Nat -> KExpr) (qhs : SubstOK qs qG) => candInterp_lift qA Nat.zero (Nat.succ qi) (qs qi) (qhs qi qA qhget))";
     let m_sort = "(fun (qG : ListType KExpr) (qn : Level) (qs : Nat -> KExpr) (_qhs : SubstOK qs qG) => candInterp_sort_mem (Level.succ qn) (KExpr.sort qn) (whnfAcc_sort qn))";
     let fresh_ext = |dom: &str| {
         format!("(substOK_extend qs qG {dom} (KExpr.bvar Nat.zero) (candInterp_var {dom} Nat.zero) qhs)")
     };
     let body_acc = |ihname: &str, cod: &str, body: &str, dom: &str| {
         format!(
-            "(whnfAcc_of_instantiate_bvar0 (psubst (up qs) {body}) (Eq.substType KExpr (fun (qw : KExpr) => whnf_acc qw) (psubst (scons (KExpr.bvar Nat.zero) qs) {body}) (instantiate (psubst (up qs) {body}) (KExpr.bvar Nat.zero)) (psubst_scons_instantiate {body} (KExpr.bvar Nat.zero) qs) (candInterp_cr1 {cod} (psubst (scons (KExpr.bvar Nat.zero) qs) {body}) ({ihname} (scons (KExpr.bvar Nat.zero) qs) {ext}))))",
+            "(whnfAcc_of_instantiate_bvar0 (psubst (up qs) {body}) (@Eq.substType KExpr (fun (qw : KExpr) => whnf_acc qw) (psubst (scons (KExpr.bvar Nat.zero) qs) {body}) (instantiate (psubst (up qs) {body}) (KExpr.bvar Nat.zero)) (psubst_scons_instantiate {body} (KExpr.bvar Nat.zero) qs) (candInterp_cr1 {cod} (psubst (scons (KExpr.bvar Nat.zero) qs) {body}) ({ihname} (scons (KExpr.bvar Nat.zero) qs) {ext}))))",
             ext = fresh_ext(dom)
         )
     };
     let ih_pi_a =
         "forall (qs2 : Nat -> KExpr), SubstOK qs2 qG -> candInterp (KExpr.sort qn) (psubst qs2 qA)";
-    let ih_pi_b = "forall (qs2 : Nat -> KExpr), SubstOK qs2 (ListType.cons KExpr qA qG) -> candInterp (KExpr.sort qm) (psubst qs2 qB)";
+    let ih_pi_b = "forall (qs2 : Nat -> KExpr), SubstOK qs2 (@ListType.cons KExpr qA qG) -> candInterp (KExpr.sort qm) (psubst qs2 qB)";
     let m_pi = format!(
-        "(fun (qG : ListType KExpr) (qA : KExpr) (qB : KExpr) (qn : Level) (qm : Level) (_qhA : SynTyC qG qA (KExpr.sort qn)) (_qhB : SynTyC (ListType.cons KExpr qA qG) qB (KExpr.sort qm)) (qihA : {ih_pi_a}) (qihB : {ih_pi_b}) (qs : Nat -> KExpr) (qhs : SubstOK qs qG) => candInterp_sort_mem (Level.imax qn qm) (KExpr.pi (psubst qs qA) (psubst (up qs) qB)) (whnfAcc_pi (psubst qs qA) (psubst (up qs) qB) (candInterp_cr1 (KExpr.sort qn) (psubst qs qA) (qihA qs qhs)) {codacc}))",
+        "(fun (qG : ListType KExpr) (qA : KExpr) (qB : KExpr) (qn : Level) (qm : Level) (_qhA : SynTyC qG qA (KExpr.sort qn)) (_qhB : SynTyC (@ListType.cons KExpr qA qG) qB (KExpr.sort qm)) (qihA : {ih_pi_a}) (qihB : {ih_pi_b}) (qs : Nat -> KExpr) (qhs : SubstOK qs qG) => candInterp_sort_mem (Level.imax qn qm) (KExpr.pi (psubst qs qA) (psubst (up qs) qB)) (whnfAcc_pi (psubst qs qA) (psubst (up qs) qB) (candInterp_cr1 (KExpr.sort qn) (psubst qs qA) (qihA qs qhs)) {codacc}))",
         codacc = body_acc("qihB", "(KExpr.sort qm)", "qB", "qA")
     );
     let m_app = "(fun (qG : ListType KExpr) (qA : KExpr) (qB : KExpr) (qf : KExpr) (qa : KExpr) (_qhf : SynTyC qG qf (KExpr.pi qA qB)) (_qha : SynTyC qG qa qA) (qihf : forall (qs : Nat -> KExpr), SubstOK qs qG -> candInterp (KExpr.pi qA qB) (psubst qs qf)) (qiha : forall (qs : Nat -> KExpr), SubstOK qs qG -> candInterp qA (psubst qs qa)) (qs : Nat -> KExpr) (qhs : SubstOK qs qG) => candInterp_app qA qB (psubst qs qf) (psubst qs qa) (qihf qs qhs) (qiha qs qhs))";
-    let ih_lam = "forall (qs2 : Nat -> KExpr), SubstOK qs2 (ListType.cons KExpr qA qG) -> candInterp qB (psubst qs2 qb)";
-    let hty = "(Eq.substType KExpr (fun (qw : KExpr) => whnf_acc qw) qA (psubst qs qA) (Eq.symm KExpr (psubst qs qA) qA (simpleTy_psubst qA qhA qs)) (simpleTy_whnfAcc qA qhA))";
-    let hfam = "(fun (qb2 : KExpr) (qstar : betaStar (psubst (up qs) qb) qb2) (qa : KExpr) (qha : candInterp qA qa) => candInterp_betaStar_closed qB (instantiate (psubst (up qs) qb) qa) (instantiate qb2 qa) (betaStar_inst_transport_env (psubst (up qs) qb) qb2 qstar qa) (Eq.substType KExpr (fun (qw : KExpr) => candInterp qB qw) (psubst (scons qa qs) qb) (instantiate (psubst (up qs) qb) qa) (psubst_scons_instantiate qb qa qs) (qih (scons qa qs) (substOK_extend qs qG qA qa qha qhs))))";
+    let ih_lam = "forall (qs2 : Nat -> KExpr), SubstOK qs2 (@ListType.cons KExpr qA qG) -> candInterp qB (psubst qs2 qb)";
+    let hty = "(@Eq.substType KExpr (fun (qw : KExpr) => whnf_acc qw) qA (psubst qs qA) (@Eq.symm KExpr (psubst qs qA) qA (simpleTy_psubst qA qhA qs)) (simpleTy_whnfAcc qA qhA))";
+    let hfam = "(fun (qb2 : KExpr) (qstar : betaStar (psubst (up qs) qb) qb2) (qa : KExpr) (qha : candInterp qA qa) => candInterp_betaStar_closed qB (instantiate (psubst (up qs) qb) qa) (instantiate qb2 qa) (betaStar_inst_transport_env (psubst (up qs) qb) qb2 qstar qa) (@Eq.substType KExpr (fun (qw : KExpr) => candInterp qB qw) (psubst (scons qa qs) qb) (instantiate (psubst (up qs) qb) qa) (psubst_scons_instantiate qb qa qs) (qih (scons qa qs) (substOK_extend qs qG qA qa qha qhs))))";
     let m_lam = format!(
-        "(fun (qG : ListType KExpr) (qA : KExpr) (qB : KExpr) (qb : KExpr) (qhA : SimpleTy qA) (_qhb : SynTyC (ListType.cons KExpr qA qG) qb qB) (qih : {ih_lam}) (qs : Nat -> KExpr) (qhs : SubstOK qs qG) => candInterp_lam qA qB (psubst qs qA) (psubst (up qs) qb) {hty} {bodyacc} {hfam})",
+        "(fun (qG : ListType KExpr) (qA : KExpr) (qB : KExpr) (qb : KExpr) (qhA : SimpleTy qA) (_qhb : SynTyC (@ListType.cons KExpr qA qG) qb qB) (qih : {ih_lam}) (qs : Nat -> KExpr) (qhs : SubstOK qs qG) => candInterp_lam qA qB (psubst qs qA) (psubst (up qs) qb) {hty} {bodyacc} {hfam})",
         bodyacc = body_acc("qih", "qB", "qb", "qA")
     );
     let ih_let_v =
         "forall (qs2 : Nat -> KExpr), SubstOK qs2 qG -> candInterp (KExpr.sort qn) (psubst qs2 qv)";
-    let ih_let_b = "forall (qs2 : Nat -> KExpr), SubstOK qs2 (ListType.cons KExpr (KExpr.sort qn) qG) -> candInterp (KExpr.sort qm) (psubst qs2 qb)";
-    let let_fam = "(fun (qb2 : KExpr) (qstar : betaStar (psubst (up qs) qb) qb2) (qv2 : KExpr) (qhv2 : whnf_acc qv2) => candInterp_betaStar_closed (KExpr.sort qm) (instantiate (psubst (up qs) qb) qv2) (instantiate qb2 qv2) (betaStar_inst_transport_env (psubst (up qs) qb) qb2 qstar qv2) (Eq.substType KExpr (fun (qw : KExpr) => candInterp (KExpr.sort qm) qw) (psubst (scons qv2 qs) qb) (instantiate (psubst (up qs) qb) qv2) (psubst_scons_instantiate qb qv2 qs) (qihb (scons qv2 qs) (substOK_extend qs qG (KExpr.sort qn) qv2 qhv2 qhs))))";
+    let ih_let_b = "forall (qs2 : Nat -> KExpr), SubstOK qs2 (@ListType.cons KExpr (KExpr.sort qn) qG) -> candInterp (KExpr.sort qm) (psubst qs2 qb)";
+    let let_fam = "(fun (qb2 : KExpr) (qstar : betaStar (psubst (up qs) qb) qb2) (qv2 : KExpr) (qhv2 : whnf_acc qv2) => candInterp_betaStar_closed (KExpr.sort qm) (instantiate (psubst (up qs) qb) qv2) (instantiate qb2 qv2) (betaStar_inst_transport_env (psubst (up qs) qb) qb2 qstar qv2) (@Eq.substType KExpr (fun (qw : KExpr) => candInterp (KExpr.sort qm) qw) (psubst (scons qv2 qs) qb) (instantiate (psubst (up qs) qb) qv2) (psubst_scons_instantiate qb qv2 qs) (qihb (scons qv2 qs) (substOK_extend qs qG (KExpr.sort qn) qv2 qhv2 qhs))))";
     let m_let = format!(
-        "(fun (qG : ListType KExpr) (qn : Level) (qm : Level) (qv : KExpr) (qb : KExpr) (_qhv : SynTyC qG qv (KExpr.sort qn)) (_qhb : SynTyC (ListType.cons KExpr (KExpr.sort qn) qG) qb (KExpr.sort qm)) (qihv : {ih_let_v}) (qihb : {ih_let_b}) (qs : Nat -> KExpr) (qhs : SubstOK qs qG) => whnfAcc_zeta_expand (KExpr.sort qn) (whnfAcc_sort qn) (psubst (up qs) qb) {bodyacc} {let_fam} (psubst qs qv) (qihv qs qhs))",
+        "(fun (qG : ListType KExpr) (qn : Level) (qm : Level) (qv : KExpr) (qb : KExpr) (_qhv : SynTyC qG qv (KExpr.sort qn)) (_qhb : SynTyC (@ListType.cons KExpr (KExpr.sort qn) qG) qb (KExpr.sort qm)) (qihv : {ih_let_v}) (qihb : {ih_let_b}) (qs : Nat -> KExpr) (qhs : SubstOK qs qG) => whnfAcc_zeta_expand (KExpr.sort qn) (whnfAcc_sort qn) (psubst (up qs) qb) {bodyacc} {let_fam} (psubst qs qv) (qihv qs qhs))",
         bodyacc = body_acc("qihb", "(KExpr.sort qm)", "qb", "(KExpr.sort qn)")
     );
     // konstDead: psubst is inert on a const, and candInterp at a sort IS the
     // base whole-SN set, so the arm is the stuck-const accessibility outright.
-    let m_konst_dead = format!("(fun (qG : ListType KExpr) (qc : Name) (qus : ListType Level) (qm : Level) (qhn : Eq (OptionType KExpr) (defval_for {DENV} qc) (OptionType.none KExpr)) (qs : Nat -> KExpr) (_qhs : SubstOK qs qG) => whnfAcc_const_dead qc qus qhn)");
+    let m_konst_dead = format!("(fun (qG : ListType KExpr) (qc : Name) (qus : ListType Level) (qm : Level) (qhn : @Eq (OptionType KExpr) (defval_for {DENV} qc) (@OptionType.none KExpr)) (qs : Nat -> KExpr) (_qhs : SubstOK qs qG) => whnfAcc_const_dead qc qus qhn)");
     // konstDelta: THE DELTA ARM. The body IH is instantiated at idsubst and
     // collapsed by psubst_id, because the engine wants membership of the body
     // ITSELF and psubst is inert on the const the rule concludes at.
     let ih_konst = "forall (qs2 : Nat -> KExpr), SubstOK qs2 qG -> candInterp (KExpr.sort qm) (psubst qs2 qbody)";
     let m_konst_delta = format!(
-        "(fun (qG : ListType KExpr) (qc : Name) (qus : ListType Level) (qm : Level) (qbody : KExpr) (qhd : delta_step {DENV} (KExpr.const qc qus) qbody) (_qhb : SynTyC qG qbody (KExpr.sort qm)) (qih : {ih_konst}) (qs : Nat -> KExpr) (qhs : SubstOK qs qG) => candInterp_delta_expand_sort qm qc qus qbody qhd (Eq.substType KExpr (fun (qw : KExpr) => candInterp (KExpr.sort qm) qw) (psubst idsubst qbody) qbody (psubst_id qbody) (qih idsubst (substOK_idsubst qG))))"
+        "(fun (qG : ListType KExpr) (qc : Name) (qus : ListType Level) (qm : Level) (qbody : KExpr) (qhd : delta_step {DENV} (KExpr.const qc qus) qbody) (_qhb : SynTyC qG qbody (KExpr.sort qm)) (qih : {ih_konst}) (qs : Nat -> KExpr) (qhs : SubstOK qs qG) => candInterp_delta_expand_sort qm qc qus qbody qhd (@Eq.substType KExpr (fun (qw : KExpr) => candInterp (KExpr.sort qm) qw) (psubst idsubst qbody) qbody (psubst_id qbody) (qih idsubst (substOK_idsubst qG))))"
     );
     format!(
-        "fun (G : ListType KExpr) (e : KExpr) (T : KExpr) (h : SynTyC G e T) => SynTyC.rec {motive} {m_var} {m_sort} {m_pi} {m_app} {m_lam} {m_let} {m_konst_dead} {m_konst_delta}"
+        "fun (G : ListType KExpr) (e : KExpr) (T : KExpr) (h : SynTyC G e T) => @SynTyC.rec {motive} {m_var} {m_sort} {m_pi} {m_app} {m_lam} {m_let} {m_konst_dead} {m_konst_delta}"
     )
 }
 
@@ -685,12 +685,12 @@ pub(super) const VAL_SYNTYC_SN_SUBST: &str = "fun (G : ListType KExpr) (e : KExp
 pub(super) const TY_SYNTYC_SN: &str =
     "forall (G : ListType KExpr) (e : KExpr) (T : KExpr), SynTyC G e T -> whnf_acc e";
 
-pub(super) const VAL_SYNTYC_SN: &str = "fun (G : ListType KExpr) (e : KExpr) (T : KExpr) (h : SynTyC G e T) => Eq.substType KExpr (fun (qw : KExpr) => whnf_acc qw) (psubst idsubst e) e (psubst_id e) (synTyC_sn_subst G e T h idsubst (substOK_idsubst G))";
+pub(super) const VAL_SYNTYC_SN: &str = "fun (G : ListType KExpr) (e : KExpr) (T : KExpr) (h : SynTyC G e T) => @Eq.substType KExpr (fun (qw : KExpr) => whnf_acc qw) (psubst idsubst e) e (psubst_id e) (synTyC_sn_subst G e T h idsubst (substOK_idsubst G))";
 
 pub(super) const TY_SYNTYC_SN_CLOSED: &str =
-    "forall (e : KExpr) (T : KExpr), SynTyC (ListType.nil KExpr) e T -> whnf_acc e";
+    "forall (e : KExpr) (T : KExpr), SynTyC (@ListType.nil KExpr) e T -> whnf_acc e";
 
-pub(super) const VAL_SYNTYC_SN_CLOSED: &str = "fun (e : KExpr) (T : KExpr) (h : SynTyC (ListType.nil KExpr) e T) => synTyC_sn (ListType.nil KExpr) e T h";
+pub(super) const VAL_SYNTYC_SN_CLOSED: &str = "fun (e : KExpr) (T : KExpr) (h : SynTyC (@ListType.nil KExpr) e T) => synTyC_sn (@ListType.nil KExpr) e T h";
 
 // ================================================================
 // Group E — the δ rule's vacuity over the REAL env, PROVED.
@@ -712,25 +712,25 @@ pub(super) const SRC_DEF_ENV_ALL_LAM_B: &str = r"def def_env_all_lam_b (env : De
 | DefEnv.addDef tail dname defn => Bool.and (kexpr_is_lam_b (kdef_value defn)) (def_env_all_lam_b tail)";
 
 pub(super) fn ty_r9_the_red_env_all_lam() -> String {
-    format!("Eq Bool (def_env_all_lam_b {DENV}) Bool.true")
+    format!("@Eq Bool (def_env_all_lam_b {DENV}) Bool.true")
 }
 
-pub(super) const VAL_R9_THE_RED_ENV_ALL_LAM: &str = "Eq.refl Bool Bool.true";
+pub(super) const VAL_R9_THE_RED_ENV_ALL_LAM: &str = "@Eq.refl Bool Bool.true";
 
-pub(super) const TY_DEF_ENV_ALL_LAM_B_SOUND: &str = "forall (env : DefEnv) (dname : Name) (defval : KExpr), Eq (OptionType KExpr) (defval_for env dname) (OptionType.some KExpr defval) -> Eq Bool (def_env_all_lam_b env) Bool.true -> Eq Bool (kexpr_is_lam_b defval) Bool.true";
+pub(super) const TY_DEF_ENV_ALL_LAM_B_SOUND: &str = "forall (env : DefEnv) (dname : Name) (defval : KExpr), @Eq (OptionType KExpr) (defval_for env dname) (@OptionType.some KExpr defval) -> @Eq Bool (def_env_all_lam_b env) Bool.true -> @Eq Bool (kexpr_is_lam_b defval) Bool.true";
 
 pub(super) fn val_def_env_all_lam_b_sound() -> String {
-    let goal = "Eq Bool (kexpr_is_lam_b defval) Bool.true";
-    let motive = format!("(fun (e : DefEnv) => Eq (OptionType KExpr) (defval_for e dname) (OptionType.some KExpr defval) -> Eq Bool (def_env_all_lam_b e) Bool.true -> {goal})");
-    let m_empty = format!("(fun (hlk : Eq (OptionType KExpr) (defval_for DefEnv.empty dname) (OptionType.some KExpr defval)) (_hb : Eq Bool (def_env_all_lam_b DefEnv.empty) Bool.true) => option_none_ne_some KExpr defval ({goal}) hlk)");
+    let goal = "@Eq Bool (kexpr_is_lam_b defval) Bool.true";
+    let motive = format!("(fun (e : DefEnv) => @Eq (OptionType KExpr) (defval_for e dname) (@OptionType.some KExpr defval) -> @Eq Bool (def_env_all_lam_b e) Bool.true -> {goal})");
+    let m_empty = format!("(fun (hlk : @Eq (OptionType KExpr) (defval_for DefEnv.empty dname) (@OptionType.some KExpr defval)) (_hb : @Eq Bool (def_env_all_lam_b DefEnv.empty) Bool.true) => option_none_ne_some KExpr defval ({goal}) hlk)");
     let m_add = format!(
-        "(fun (tail : DefEnv) (dn : Name) (defn : KDefSig) (ih : Eq (OptionType KExpr) (defval_for tail dname) (OptionType.some KExpr defval) -> Eq Bool (def_env_all_lam_b tail) Bool.true -> {goal}) (hlk : Eq (OptionType KExpr) (defval_for (DefEnv.addDef tail dn defn) dname) (OptionType.some KExpr defval)) (hb : Eq Bool (def_env_all_lam_b (DefEnv.addDef tail dn defn)) Bool.true) => opt_pick_some_inv KExpr (name_eqb dn dname) (kdef_value defn) (defval_for tail dname) defval ({goal}) hlk (fun (_ht : Eq Bool (name_eqb dn dname) Bool.true) (hval : Eq KExpr (kdef_value defn) defval) => Eq.subst KExpr (fun (w : KExpr) => Eq Bool (kexpr_is_lam_b w) Bool.true) (kdef_value defn) defval hval (band_eq_true_left (kexpr_is_lam_b (kdef_value defn)) (def_env_all_lam_b tail) hb)) (fun (_hf : Eq Bool (name_eqb dn dname) Bool.false) (htail : Eq (OptionType KExpr) (defval_for tail dname) (OptionType.some KExpr defval)) => ih htail (band_eq_true_right (kexpr_is_lam_b (kdef_value defn)) (def_env_all_lam_b tail) hb)))"
+        "(fun (tail : DefEnv) (dn : Name) (defn : KDefSig) (ih : @Eq (OptionType KExpr) (defval_for tail dname) (@OptionType.some KExpr defval) -> @Eq Bool (def_env_all_lam_b tail) Bool.true -> {goal}) (hlk : @Eq (OptionType KExpr) (defval_for (DefEnv.addDef tail dn defn) dname) (@OptionType.some KExpr defval)) (hb : @Eq Bool (def_env_all_lam_b (DefEnv.addDef tail dn defn)) Bool.true) => opt_pick_some_inv KExpr (name_eqb dn dname) (kdef_value defn) (defval_for tail dname) defval ({goal}) hlk (fun (_ht : @Eq Bool (name_eqb dn dname) Bool.true) (hval : @Eq KExpr (kdef_value defn) defval) => @Eq.subst KExpr (fun (w : KExpr) => @Eq Bool (kexpr_is_lam_b w) Bool.true) (kdef_value defn) defval hval (band_eq_true_left (kexpr_is_lam_b (kdef_value defn)) (def_env_all_lam_b tail) hb)) (fun (_hf : @Eq Bool (name_eqb dn dname) Bool.false) (htail : @Eq (OptionType KExpr) (defval_for tail dname) (@OptionType.some KExpr defval)) => ih htail (band_eq_true_right (kexpr_is_lam_b (kdef_value defn)) (def_env_all_lam_b tail) hb)))"
     );
-    format!("fun (env : DefEnv) (dname : Name) (defval : KExpr) => DefEnv.rec {motive} {m_empty} {m_add} env")
+    format!("fun (env : DefEnv) (dname : Name) (defval : KExpr) => @DefEnv.rec {motive} {m_empty} {m_add} env")
 }
 
 pub(super) fn ty_r9_real_delta_body_is_lam() -> String {
-    format!("forall (c : Name) (us : ListType Level) (body : KExpr), delta_step {DENV} (KExpr.const c us) body -> Eq Bool (kexpr_is_lam_b body) Bool.true")
+    format!("forall (c : Name) (us : ListType Level) (body : KExpr), delta_step {DENV} (KExpr.const c us) body -> @Eq Bool (kexpr_is_lam_b body) Bool.true")
 }
 
 pub(super) fn val_r9_real_delta_body_is_lam() -> String {
@@ -748,9 +748,9 @@ pub(super) fn val_r9_real_delta_body_is_lam() -> String {
 /// 2026-08-26: `Type mismatch: expected valid type, got ExpectedSort(App(Lam(…,
 /// KExpr, Sort 1), FVar))`. A def with the declared result type `Type` has a
 /// definite sort at every use site, so both discriminators are registered.
-pub(super) const SRC_R9_SORT_DISCR: &str = "def r9_sort_discr (T : KExpr) : Type := KExpr.rec (fun (_ : KExpr) => Type) (fun (_ : Level) => Empty) (fun (_ : Nat) => Nat) (fun (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) => Nat) (fun (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) => Nat) (fun (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) => Nat) (fun (_ : Name) (_ : ListType Level) => Nat) (fun (_ : KExpr) (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) (_ : Type) => Nat) (fun (_ : Name) (_ : Nat) (_ : KExpr) (_ : Type) => Nat) (fun (_ : Nat) => Nat) T";
+pub(super) const SRC_R9_SORT_DISCR: &str = "def r9_sort_discr (T : KExpr) : Type := @KExpr.rec (fun (_ : KExpr) => Type) (fun (_ : Level) => Empty) (fun (_ : Nat) => Nat) (fun (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) => Nat) (fun (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) => Nat) (fun (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) => Nat) (fun (_ : Name) (_ : ListType Level) => Nat) (fun (_ : KExpr) (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) (_ : Type) => Nat) (fun (_ : Name) (_ : Nat) (_ : KExpr) (_ : Type) => Nat) (fun (_ : Nat) => Nat) T";
 
-pub(super) const SRC_R9_CONST_DISCR: &str = "def r9_const_discr (e : KExpr) : Type := KExpr.rec (fun (_ : KExpr) => Type) (fun (_ : Level) => Nat) (fun (_ : Nat) => Nat) (fun (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) => Nat) (fun (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) => Nat) (fun (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) => Nat) (fun (_ : Name) (_ : ListType Level) => Empty) (fun (_ : KExpr) (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) (_ : Type) => Nat) (fun (_ : Name) (_ : Nat) (_ : KExpr) (_ : Type) => Nat) (fun (_ : Nat) => Nat) e";
+pub(super) const SRC_R9_CONST_DISCR: &str = "def r9_const_discr (e : KExpr) : Type := @KExpr.rec (fun (_ : KExpr) => Type) (fun (_ : Level) => Nat) (fun (_ : Nat) => Nat) (fun (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) => Nat) (fun (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) => Nat) (fun (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) => Nat) (fun (_ : Name) (_ : ListType Level) => Empty) (fun (_ : KExpr) (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) (_ : Type) => Nat) (fun (_ : Name) (_ : Nat) (_ : KExpr) (_ : Type) => Nat) (fun (_ : Nat) => Nat) e";
 
 fn kexpr_discr_sort() -> String {
     "r9_sort_discr".to_string()
@@ -760,22 +760,22 @@ fn kexpr_discr_const() -> String {
     "r9_const_discr".to_string()
 }
 
-pub(super) const TY_SYNTYC_NO_LAM_AT_SORT: &str = "forall (G : ListType KExpr) (e : KExpr) (m : Level), SynTyC G e (KExpr.sort m) -> Eq Bool (kexpr_is_lam_b e) Bool.true -> Empty";
+pub(super) const TY_SYNTYC_NO_LAM_AT_SORT: &str = "forall (G : ListType KExpr) (e : KExpr) (m : Level), SynTyC G e (KExpr.sort m) -> @Eq Bool (kexpr_is_lam_b e) Bool.true -> Empty";
 
 pub(super) fn val_syntyc_no_lam_at_sort() -> String {
     let d = kexpr_discr_sort();
-    let motive = format!("(fun (qG : ListType KExpr) (qe : KExpr) (qT : KExpr) (_ : SynTyC qG qe qT) => Eq Bool (kexpr_is_lam_b qe) Bool.true -> {d} qT)");
+    let motive = format!("(fun (qG : ListType KExpr) (qe : KExpr) (qT : KExpr) (_ : SynTyC qG qe qT) => @Eq Bool (kexpr_is_lam_b qe) Bool.true -> {d} qT)");
     // The IH binders are the MOTIVE at each recursive premise's subject and
     // type — a STUCK discriminator wherever the type is a variable, never `Nat`.
     let ih =
-        |subj: &str, ty: &str| format!("Eq Bool (kexpr_is_lam_b {subj}) Bool.true -> {d} {ty}");
+        |subj: &str, ty: &str| format!("@Eq Bool (kexpr_is_lam_b {subj}) Bool.true -> {d} {ty}");
     // Every rule but `lam` concludes at a subject that is not a lam, so its
     // is-lam hypothesis is Bool.false = Bool.true.
     let refute = |binders: &str, subj: &str, concl: &str| {
-        format!("(fun {binders} (hl : Eq Bool (kexpr_is_lam_b {subj}) Bool.true) => bool_false_ne_true_t ({d} {concl}) hl)")
+        format!("(fun {binders} (hl : @Eq Bool (kexpr_is_lam_b {subj}) Bool.true) => bool_false_ne_true_t ({d} {concl}) hl)")
     };
     let m_var = refute(
-        "(qG : ListType KExpr) (qi : Nat) (qA : KExpr) (_qhget : Eq (OptionType KExpr) (ctx_lookup qG qi) (OptionType.some KExpr qA))",
+        "(qG : ListType KExpr) (qi : Nat) (qA : KExpr) (_qhget : @Eq (OptionType KExpr) (ctx_lookup qG qi) (@OptionType.some KExpr qA))",
         "(KExpr.bvar qi)",
         "(lift_at qA Nat.zero (Nat.succ qi))",
     );
@@ -785,33 +785,33 @@ pub(super) fn val_syntyc_no_lam_at_sort() -> String {
         "(KExpr.sort (Level.succ qn))",
     );
     let m_pi = format!(
-        "(fun (qG : ListType KExpr) (qA : KExpr) (qB : KExpr) (qn : Level) (qm : Level) (_qhA : SynTyC qG qA (KExpr.sort qn)) (_qhB : SynTyC (ListType.cons KExpr qA qG) qB (KExpr.sort qm)) (_qihA : {}) (_qihB : {}) (hl : Eq Bool (kexpr_is_lam_b (KExpr.pi qA qB)) Bool.true) => bool_false_ne_true_t ({d} (KExpr.sort (Level.imax qn qm))) hl)",
+        "(fun (qG : ListType KExpr) (qA : KExpr) (qB : KExpr) (qn : Level) (qm : Level) (_qhA : SynTyC qG qA (KExpr.sort qn)) (_qhB : SynTyC (@ListType.cons KExpr qA qG) qB (KExpr.sort qm)) (_qihA : {}) (_qihB : {}) (hl : @Eq Bool (kexpr_is_lam_b (KExpr.pi qA qB)) Bool.true) => bool_false_ne_true_t ({d} (KExpr.sort (Level.imax qn qm))) hl)",
         ih("qA", "(KExpr.sort qn)"),
         ih("qB", "(KExpr.sort qm)")
     );
     let m_app = format!(
-        "(fun (qG : ListType KExpr) (qA : KExpr) (qB : KExpr) (qf : KExpr) (qa : KExpr) (_qhf : SynTyC qG qf (KExpr.pi qA qB)) (_qha : SynTyC qG qa qA) (_qihf : {}) (_qiha : {}) (hl : Eq Bool (kexpr_is_lam_b (KExpr.app qf qa)) Bool.true) => bool_false_ne_true_t ({d} qB) hl)",
+        "(fun (qG : ListType KExpr) (qA : KExpr) (qB : KExpr) (qf : KExpr) (qa : KExpr) (_qhf : SynTyC qG qf (KExpr.pi qA qB)) (_qha : SynTyC qG qa qA) (_qihf : {}) (_qiha : {}) (hl : @Eq Bool (kexpr_is_lam_b (KExpr.app qf qa)) Bool.true) => bool_false_ne_true_t ({d} qB) hl)",
         ih("qf", "(KExpr.pi qA qB)"),
         ih("qa", "qA")
     );
     // THE ONE ARM THAT IS NOT A REFUTATION: a lam IS a lam, and its type is a
     // pi, where the discriminator is Nat.
     let m_lam = format!(
-        "(fun (qG : ListType KExpr) (qA : KExpr) (qB : KExpr) (qb : KExpr) (_qhA : SimpleTy qA) (_qhb : SynTyC (ListType.cons KExpr qA qG) qb qB) (_qih : {}) (_hl : Eq Bool (kexpr_is_lam_b (KExpr.lam qA qb)) Bool.true) => Nat.zero)",
+        "(fun (qG : ListType KExpr) (qA : KExpr) (qB : KExpr) (qb : KExpr) (_qhA : SimpleTy qA) (_qhb : SynTyC (@ListType.cons KExpr qA qG) qb qB) (_qih : {}) (_hl : @Eq Bool (kexpr_is_lam_b (KExpr.lam qA qb)) Bool.true) => Nat.zero)",
         ih("qb", "qB")
     );
     let m_let = format!(
-        "(fun (qG : ListType KExpr) (qn : Level) (qm : Level) (qv : KExpr) (qb : KExpr) (_qhv : SynTyC qG qv (KExpr.sort qn)) (_qhb : SynTyC (ListType.cons KExpr (KExpr.sort qn) qG) qb (KExpr.sort qm)) (_qihv : {}) (_qihb : {}) (hl : Eq Bool (kexpr_is_lam_b (KExpr.let_ (KExpr.sort qn) qv qb)) Bool.true) => bool_false_ne_true_t ({d} (KExpr.sort qm)) hl)",
+        "(fun (qG : ListType KExpr) (qn : Level) (qm : Level) (qv : KExpr) (qb : KExpr) (_qhv : SynTyC qG qv (KExpr.sort qn)) (_qhb : SynTyC (@ListType.cons KExpr (KExpr.sort qn) qG) qb (KExpr.sort qm)) (_qihv : {}) (_qihb : {}) (hl : @Eq Bool (kexpr_is_lam_b (KExpr.let_ (KExpr.sort qn) qv qb)) Bool.true) => bool_false_ne_true_t ({d} (KExpr.sort qm)) hl)",
         ih("qv", "(KExpr.sort qn)"),
         ih("qb", "(KExpr.sort qm)")
     );
-    let m_konst_dead = format!("(fun (qG : ListType KExpr) (qc : Name) (qus : ListType Level) (qm : Level) (_qhn : Eq (OptionType KExpr) (defval_for {DENV} qc) (OptionType.none KExpr)) (hl : Eq Bool (kexpr_is_lam_b (KExpr.const qc qus)) Bool.true) => bool_false_ne_true_t ({d} (KExpr.sort qm)) hl)");
+    let m_konst_dead = format!("(fun (qG : ListType KExpr) (qc : Name) (qus : ListType Level) (qm : Level) (_qhn : @Eq (OptionType KExpr) (defval_for {DENV} qc) (@OptionType.none KExpr)) (hl : @Eq Bool (kexpr_is_lam_b (KExpr.const qc qus)) Bool.true) => bool_false_ne_true_t ({d} (KExpr.sort qm)) hl)");
     let m_konst_delta = format!(
-        "(fun (qG : ListType KExpr) (qc : Name) (qus : ListType Level) (qm : Level) (qbody : KExpr) (_qhd : delta_step {DENV} (KExpr.const qc qus) qbody) (_qhb : SynTyC qG qbody (KExpr.sort qm)) (_qih : {}) (hl : Eq Bool (kexpr_is_lam_b (KExpr.const qc qus)) Bool.true) => bool_false_ne_true_t ({d} (KExpr.sort qm)) hl)",
+        "(fun (qG : ListType KExpr) (qc : Name) (qus : ListType Level) (qm : Level) (qbody : KExpr) (_qhd : delta_step {DENV} (KExpr.const qc qus) qbody) (_qhb : SynTyC qG qbody (KExpr.sort qm)) (_qih : {}) (hl : @Eq Bool (kexpr_is_lam_b (KExpr.const qc qus)) Bool.true) => bool_false_ne_true_t ({d} (KExpr.sort qm)) hl)",
         ih("qbody", "(KExpr.sort qm)")
     );
     format!(
-        "fun (G : ListType KExpr) (e : KExpr) (m : Level) (h : SynTyC G e (KExpr.sort m)) => SynTyC.rec {motive} {m_var} {m_sort} {m_pi} {m_app} {m_lam} {m_let} {m_konst_dead} {m_konst_delta} G e (KExpr.sort m) h"
+        "fun (G : ListType KExpr) (e : KExpr) (m : Level) (h : SynTyC G e (KExpr.sort m)) => @SynTyC.rec {motive} {m_var} {m_sort} {m_pi} {m_app} {m_lam} {m_let} {m_konst_dead} {m_konst_delta} G e (KExpr.sort m) h"
     )
 }
 
@@ -832,14 +832,14 @@ pub(super) const TY_SYNTYL_TO_SYNTYC: &str =
 
 pub(super) fn val_syntyl_to_syntyc() -> String {
     let motive = "(fun (qG : ListType KExpr) (qe : KExpr) (qT : KExpr) (_ : SynTyL qG qe qT) => SynTyC qG qe qT)";
-    let m_var = "(fun (qG : ListType KExpr) (qi : Nat) (qA : KExpr) (qhget : Eq (OptionType KExpr) (ctx_lookup qG qi) (OptionType.some KExpr qA)) => SynTyC.var qG qi qA qhget)";
+    let m_var = "(fun (qG : ListType KExpr) (qi : Nat) (qA : KExpr) (qhget : @Eq (OptionType KExpr) (ctx_lookup qG qi) (@OptionType.some KExpr qA)) => SynTyC.var qG qi qA qhget)";
     let m_sort = "(fun (qG : ListType KExpr) (qn : Level) => SynTyC.sort qG qn)";
-    let m_pi = "(fun (qG : ListType KExpr) (qA : KExpr) (qB : KExpr) (qn : Level) (qm : Level) (_qhA : SynTyL qG qA (KExpr.sort qn)) (_qhB : SynTyL (ListType.cons KExpr qA qG) qB (KExpr.sort qm)) (qihA : SynTyC qG qA (KExpr.sort qn)) (qihB : SynTyC (ListType.cons KExpr qA qG) qB (KExpr.sort qm)) => SynTyC.pi qG qA qB qn qm qihA qihB)";
+    let m_pi = "(fun (qG : ListType KExpr) (qA : KExpr) (qB : KExpr) (qn : Level) (qm : Level) (_qhA : SynTyL qG qA (KExpr.sort qn)) (_qhB : SynTyL (@ListType.cons KExpr qA qG) qB (KExpr.sort qm)) (qihA : SynTyC qG qA (KExpr.sort qn)) (qihB : SynTyC (@ListType.cons KExpr qA qG) qB (KExpr.sort qm)) => SynTyC.pi qG qA qB qn qm qihA qihB)";
     let m_app = "(fun (qG : ListType KExpr) (qA : KExpr) (qB : KExpr) (qf : KExpr) (qa : KExpr) (_qhf : SynTyL qG qf (KExpr.pi qA qB)) (_qha : SynTyL qG qa qA) (qihf : SynTyC qG qf (KExpr.pi qA qB)) (qiha : SynTyC qG qa qA) => SynTyC.app qG qA qB qf qa qihf qiha)";
-    let m_lam = "(fun (qG : ListType KExpr) (qA : KExpr) (qB : KExpr) (qb : KExpr) (qhA : SimpleTy qA) (_qhb : SynTyL (ListType.cons KExpr qA qG) qb qB) (qih : SynTyC (ListType.cons KExpr qA qG) qb qB) => SynTyC.lam qG qA qB qb qhA qih)";
-    let m_let = "(fun (qG : ListType KExpr) (qn : Level) (qm : Level) (qv : KExpr) (qb : KExpr) (_qhv : SynTyL qG qv (KExpr.sort qn)) (_qhb : SynTyL (ListType.cons KExpr (KExpr.sort qn) qG) qb (KExpr.sort qm)) (qihv : SynTyC qG qv (KExpr.sort qn)) (qihb : SynTyC (ListType.cons KExpr (KExpr.sort qn) qG) qb (KExpr.sort qm)) => SynTyC.letTy qG qn qm qv qb qihv qihb)";
+    let m_lam = "(fun (qG : ListType KExpr) (qA : KExpr) (qB : KExpr) (qb : KExpr) (qhA : SimpleTy qA) (_qhb : SynTyL (@ListType.cons KExpr qA qG) qb qB) (qih : SynTyC (@ListType.cons KExpr qA qG) qb qB) => SynTyC.lam qG qA qB qb qhA qih)";
+    let m_let = "(fun (qG : ListType KExpr) (qn : Level) (qm : Level) (qv : KExpr) (qb : KExpr) (_qhv : SynTyL qG qv (KExpr.sort qn)) (_qhb : SynTyL (@ListType.cons KExpr (KExpr.sort qn) qG) qb (KExpr.sort qm)) (qihv : SynTyC qG qv (KExpr.sort qn)) (qihb : SynTyC (@ListType.cons KExpr (KExpr.sort qn) qG) qb (KExpr.sort qm)) => SynTyC.letTy qG qn qm qv qb qihv qihb)";
     format!(
-        "fun (G : ListType KExpr) (e : KExpr) (T : KExpr) (h : SynTyL G e T) => SynTyL.rec {motive} {m_var} {m_sort} {m_pi} {m_app} {m_lam} {m_let} G e T h"
+        "fun (G : ListType KExpr) (e : KExpr) (T : KExpr) (h : SynTyL G e T) => @SynTyL.rec {motive} {m_var} {m_sort} {m_pi} {m_app} {m_lam} {m_let} G e T h"
     )
 }
 
@@ -856,10 +856,10 @@ pub(super) fn val_syntyl_no_const() -> String {
         "(fun (qG : ListType KExpr) (qe : KExpr) (qT : KExpr) (_ : SynTyL qG qe qT) => {d} qe)"
     );
     let ih = |subj: &str| format!("{d} {subj}");
-    let m_var = "(fun (qG : ListType KExpr) (qi : Nat) (qA : KExpr) (_qhget : Eq (OptionType KExpr) (ctx_lookup qG qi) (OptionType.some KExpr qA)) => Nat.zero)".to_string();
+    let m_var = "(fun (qG : ListType KExpr) (qi : Nat) (qA : KExpr) (_qhget : @Eq (OptionType KExpr) (ctx_lookup qG qi) (@OptionType.some KExpr qA)) => Nat.zero)".to_string();
     let m_sort = "(fun (qG : ListType KExpr) (qn : Level) => Nat.zero)".to_string();
     let m_pi = format!(
-        "(fun (qG : ListType KExpr) (qA : KExpr) (qB : KExpr) (qn : Level) (qm : Level) (_qhA : SynTyL qG qA (KExpr.sort qn)) (_qhB : SynTyL (ListType.cons KExpr qA qG) qB (KExpr.sort qm)) (_qihA : {}) (_qihB : {}) => Nat.zero)",
+        "(fun (qG : ListType KExpr) (qA : KExpr) (qB : KExpr) (qn : Level) (qm : Level) (_qhA : SynTyL qG qA (KExpr.sort qn)) (_qhB : SynTyL (@ListType.cons KExpr qA qG) qB (KExpr.sort qm)) (_qihA : {}) (_qihB : {}) => Nat.zero)",
         ih("qA"),
         ih("qB")
     );
@@ -869,16 +869,16 @@ pub(super) fn val_syntyl_no_const() -> String {
         ih("qa")
     );
     let m_lam = format!(
-        "(fun (qG : ListType KExpr) (qA : KExpr) (qB : KExpr) (qb : KExpr) (_qhA : SimpleTy qA) (_qhb : SynTyL (ListType.cons KExpr qA qG) qb qB) (_qih : {}) => Nat.zero)",
+        "(fun (qG : ListType KExpr) (qA : KExpr) (qB : KExpr) (qb : KExpr) (_qhA : SimpleTy qA) (_qhb : SynTyL (@ListType.cons KExpr qA qG) qb qB) (_qih : {}) => Nat.zero)",
         ih("qb")
     );
     let m_let = format!(
-        "(fun (qG : ListType KExpr) (qn : Level) (qm : Level) (qv : KExpr) (qb : KExpr) (_qhv : SynTyL qG qv (KExpr.sort qn)) (_qhb : SynTyL (ListType.cons KExpr (KExpr.sort qn) qG) qb (KExpr.sort qm)) (_qihv : {}) (_qihb : {}) => Nat.zero)",
+        "(fun (qG : ListType KExpr) (qn : Level) (qm : Level) (qv : KExpr) (qb : KExpr) (_qhv : SynTyL qG qv (KExpr.sort qn)) (_qhb : SynTyL (@ListType.cons KExpr (KExpr.sort qn) qG) qb (KExpr.sort qm)) (_qihv : {}) (_qihb : {}) => Nat.zero)",
         ih("qv"),
         ih("qb")
     );
     format!(
-        "fun (G : ListType KExpr) (c : Name) (us : ListType Level) (T : KExpr) (h : SynTyL G (KExpr.const c us) T) => SynTyL.rec {motive} {m_var} {m_sort} {m_pi} {m_app} {m_lam} {m_let} G (KExpr.const c us) T h"
+        "fun (G : ListType KExpr) (c : Name) (us : ListType Level) (T : KExpr) (h : SynTyL G (KExpr.const c us) T) => @SynTyL.rec {motive} {m_var} {m_sort} {m_pi} {m_app} {m_lam} {m_let} G (KExpr.const c us) T h"
     )
 }
 
@@ -892,7 +892,7 @@ pub(super) fn ty_synty_c_id() -> String {
 
 pub(super) fn val_synty_c_id() -> String {
     format!(
-        "fun (G : ListType KExpr) => SynTyC.lam G {S0} {S0} {V0} (SimpleTy.base Level.zero) (SynTyC.var (ListType.cons KExpr {S0} G) Nat.zero {S0} (Eq.refl (OptionType KExpr) (OptionType.some KExpr {S0})))"
+        "fun (G : ListType KExpr) => SynTyC.lam G {S0} {S0} {V0} (SimpleTy.base Level.zero) (SynTyC.var (@ListType.cons KExpr {S0} G) Nat.zero {S0} (@Eq.refl (OptionType KExpr) (@OptionType.some KExpr {S0})))"
     )
 }
 
@@ -911,7 +911,7 @@ pub(super) fn ty_synty_c_konst_dead_witness() -> String {
 }
 
 pub(super) fn val_synty_c_konst_dead_witness() -> String {
-    format!("SynTyC.konstDead {NILCTX} {DEADNAME} {NILUS} Level.zero (Eq.refl (OptionType KExpr) (OptionType.none KExpr))")
+    format!("SynTyC.konstDead {NILCTX} {DEADNAME} {NILUS} Level.zero (@Eq.refl (OptionType KExpr) (@OptionType.none KExpr))")
 }
 
 pub(super) fn ty_synty_c_sn_konst_witness() -> String {
@@ -930,7 +930,7 @@ pub(super) fn ty_r9_rank_decrease_witness() -> String {
 }
 
 pub(super) fn val_r9_rank_decrease_witness() -> String {
-    format!("the_red_env_delta_rank_decrease kcre_witness_delta_head {NILUS} kcre_witness_delta_value {LIVEREF} the_red_env_delta_nonvacuous (Eq.refl Bool Bool.true)")
+    format!("the_red_env_delta_rank_decrease kcre_witness_delta_head {NILUS} kcre_witness_delta_value {LIVEREF} the_red_env_delta_nonvacuous (@Eq.refl Bool Bool.true)")
 }
 
 /// ...and at the OTHER kind of occurrence: a name that is in no `DefEnv` entry
@@ -940,7 +940,7 @@ pub(super) fn ty_r9_rank_decrease_witness_undefined() -> String {
 }
 
 pub(super) fn val_r9_rank_decrease_witness_undefined() -> String {
-    format!("the_red_env_delta_rank_decrease kcre_witness_delta_head {NILUS} kcre_witness_delta_value {DEADNAME} the_red_env_delta_nonvacuous (Eq.refl Bool Bool.true)")
+    format!("the_red_env_delta_rank_decrease kcre_witness_delta_head {NILUS} kcre_witness_delta_value {DEADNAME} the_red_env_delta_nonvacuous (@Eq.refl Bool Bool.true)")
 }
 
 /// NECESSITY of `konstDead`'s premise, half one: at a name that IS defined the
@@ -956,11 +956,11 @@ pub(super) fn val_r9_konstdead_premise_necessary() -> String {
 /// ...half two: that name's lookup is demonstrably NOT `none`, so the witness
 /// above is not reachable by `konstDead` at all.
 pub(super) fn ty_r9_live_const_not_dead() -> String {
-    format!("Eq (OptionType KExpr) (defval_for {DENV} kcre_witness_delta_head) (OptionType.none KExpr) -> Empty")
+    format!("@Eq (OptionType KExpr) (defval_for {DENV} kcre_witness_delta_head) (@OptionType.none KExpr) -> Empty")
 }
 
 pub(super) fn val_r9_live_const_not_dead() -> String {
-    format!("fun (h : Eq (OptionType KExpr) (defval_for {DENV} kcre_witness_delta_head) (OptionType.none KExpr)) => option_none_ne_some_type KExpr kcre_witness_delta_value Empty (Eq.trans (OptionType KExpr) (OptionType.none KExpr) (kdef_value_at {DENV} kcre_witness_delta_head {NILUS}) (OptionType.some KExpr kcre_witness_delta_value) (Eq.symm (OptionType KExpr) (kdef_value_at {DENV} kcre_witness_delta_head {NILUS}) (OptionType.none KExpr) (kdef_value_at_none {DENV} kcre_witness_delta_head {NILUS} h)) (delta_step_defval_inv {DENV} kcre_witness_delta_head {NILUS} kcre_witness_delta_value the_red_env_delta_nonvacuous))")
+    format!("fun (h : @Eq (OptionType KExpr) (defval_for {DENV} kcre_witness_delta_head) (@OptionType.none KExpr)) => option_none_ne_some_type KExpr kcre_witness_delta_value Empty (@Eq.trans (OptionType KExpr) (@OptionType.none KExpr) (kdef_value_at {DENV} kcre_witness_delta_head {NILUS}) (@OptionType.some KExpr kcre_witness_delta_value) (@Eq.symm (OptionType KExpr) (kdef_value_at {DENV} kcre_witness_delta_head {NILUS}) (@OptionType.none KExpr) (kdef_value_at_none {DENV} kcre_witness_delta_head {NILUS} h)) (delta_step_defval_inv {DENV} kcre_witness_delta_head {NILUS} kcre_witness_delta_value the_red_env_delta_nonvacuous))")
 }
 
 pub(super) fn ty_synty_c_not_total() -> String {
@@ -969,7 +969,7 @@ pub(super) fn ty_synty_c_not_total() -> String {
 
 pub(super) fn val_synty_c_not_total() -> String {
     format!(
-        "fun (G : ListType KExpr) (h : SynTyC G r5_omegaLam {PI00}) => candInterp_pi_not_total (Eq.substType KExpr (fun (qw : KExpr) => candInterp {PI00} qw) (psubst idsubst r5_omegaLam) r5_omegaLam (psubst_id r5_omegaLam) (synTyC_fundamental G r5_omegaLam {PI00} h idsubst (substOK_idsubst G)))"
+        "fun (G : ListType KExpr) (h : SynTyC G r5_omegaLam {PI00}) => candInterp_pi_not_total (@Eq.substType KExpr (fun (qw : KExpr) => candInterp {PI00} qw) (psubst idsubst r5_omegaLam) r5_omegaLam (psubst_id r5_omegaLam) (synTyC_fundamental G r5_omegaLam {PI00} h idsubst (substOK_idsubst G)))"
     )
 }
 
@@ -2220,14 +2220,14 @@ mod tests {
         assert_eq!(chunks[0].0, "r9_rank_tbl_32");
         assert_eq!(chunks[1].0, "r9_rank_tbl_16");
         assert_eq!(chunks[2].0, "r9_rank_tbl_0");
-        assert!(chunks[0].1.ends_with("(ListType.nil Nat))"));
+        assert!(chunks[0].1.ends_with("(@ListType.nil Nat))"));
         assert!(chunks[2].1.contains("r9_rank_tbl_16"));
         let empty = src_r9_rank_tbl_chunks(&[]);
         assert_eq!(
             empty,
             vec![(
                 "r9_rank_tbl_0".to_string(),
-                "def r9_rank_tbl_0 : ListType Nat := (ListType.nil Nat)".to_string()
+                "def r9_rank_tbl_0 : ListType Nat := (@ListType.nil Nat)".to_string()
             )]
         );
     }
@@ -2283,7 +2283,7 @@ mod tests {
             "| sort : forall (G : ListType KExpr) (n : Level), SynTyC G (KExpr.sort n) \
              (KExpr.sort (Level.succ n))",
             "SynTyC G f (KExpr.pi A B) -> SynTyC G a A -> SynTyC G (KExpr.app f a) B",
-            "SimpleTy A -> SynTyC (ListType.cons KExpr A G) b B -> SynTyC G (KExpr.lam A b) \
+            "SimpleTy A -> SynTyC (@ListType.cons KExpr A G) b B -> SynTyC G (KExpr.lam A b) \
              (KExpr.pi A B)",
         ] {
             assert!(
@@ -2294,9 +2294,9 @@ mod tests {
 
         // (4) RECURSOR-SHAPE PIN: no fixedIndicesToParams promotion.
         for extended in [
-            "SynTyC (ListType.cons KExpr A G) B (KExpr.sort m)",
-            "SynTyC (ListType.cons KExpr A G) b B",
-            "SynTyC (ListType.cons KExpr (KExpr.sort n) G) b (KExpr.sort m)",
+            "SynTyC (@ListType.cons KExpr A G) B (KExpr.sort m)",
+            "SynTyC (@ListType.cons KExpr A G) b B",
+            "SynTyC (@ListType.cons KExpr (KExpr.sort n) G) b (KExpr.sort m)",
         ] {
             assert!(
                 syntyc.contains(extended),
@@ -2310,14 +2310,14 @@ mod tests {
         let fund = val_syntyc_fundamental();
         assert!(
             fund.contains(
-                "(_qhA : SynTyC qG qA (KExpr.sort qn)) (_qhB : SynTyC (ListType.cons KExpr qA qG) \
+                "(_qhA : SynTyC qG qA (KExpr.sort qn)) (_qhB : SynTyC (@ListType.cons KExpr qA qG) \
                  qB (KExpr.sort qm)) (qihA :"
             ),
             "the pi minor must bind BOTH recursive fields before the first IH"
         );
         assert!(
             fund.contains(
-                "(qhA : SimpleTy qA) (_qhb : SynTyC (ListType.cons KExpr qA qG) qb qB) (qih :"
+                "(qhA : SimpleTy qA) (_qhb : SynTyC (@ListType.cons KExpr qA qG) qb qB) (qih :"
             ),
             "the lam minor must bind the SimpleTy field, then the recursive field, then the IH"
         );

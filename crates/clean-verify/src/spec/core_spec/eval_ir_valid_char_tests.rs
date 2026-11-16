@@ -92,7 +92,7 @@ fn test_reflected_function_is_the_branch_shape() {
     // Bool.rec's minor order is (false, true): the FALSE minor of the outer
     // recursion is the arm that still has to decide the surrogate range.
     assert!(SRC_ENV_IS_VALID_CHAR.contains(
-        "(Bool.rec (fun (_ : Bool) => Bool) Bool.false (ir_vc_c3 n) (ir_vc_c2 n)) Bool.true \
+        "(@Bool.rec (fun (_ : Bool) => Bool) Bool.false (ir_vc_c3 n) (ir_vc_c2 n)) Bool.true \
          (ir_vc_c1 n)"
     ));
 }
@@ -146,11 +146,11 @@ fn test_a4_a5_shape() {
         1,
         "one recursor for the one parameter"
     );
-    assert!(SRC_IR_VC_MACHINE_SOUND.contains(": Eq Bool (env_is_valid_char n) c"));
+    assert!(SRC_IR_VC_MACHINE_SOUND.contains(": @Eq Bool (env_is_valid_char n) c"));
     assert!(SRC_IR_VC_MACHINE_SOUND.contains("ir_outcome_bool"));
     // …and A5 goes further than the reflected function, onto the argument.
     assert!(SRC_IR_VC_MACHINE_SOUND_NOT_SURROGATE
-        .contains(": Eq Bool (Bool.or (ir_vc_c1 n) (ir_vc_c2 n)) Bool.true"));
+        .contains(": @Eq Bool (Bool.or (ir_vc_c1 n) (ir_vc_c2 n)) Bool.true"));
     assert!(SRC_IR_VC_MACHINE_SOUND_NOT_SURROGATE.contains("ir_vc_machine_sound mem fuel na"));
 }
 
@@ -166,7 +166,7 @@ fn test_exact_goes_through_the_two_step_split() {
     assert!(SRC_IR_VC_EXACT.contains("ir_vc_split1 n mem na (ir_vc_c1 n)"));
     assert!(SRC_IR_VC_TWO_STEPS.contains("ir_steps ir_d2 ir_vc_module"));
     assert!(
-        SRC_IR_VC_TWO_STEPS.contains(":= Eq.refl IRConfig"),
+        SRC_IR_VC_TWO_STEPS.contains(":= @Eq.refl IRConfig"),
         "two steps of the machine are decided by computation, not by a case analysis"
     );
     let statement = SRC_IR_VC_EXACT.split(":=").next().unwrap_or("");
@@ -189,7 +189,7 @@ fn test_path_witnesses_and_the_single_concrete_run() {
     // materializes 0x110000 (whose residue measures 439.8 s on its own).
     assert!(SRC_IR_VC_CONCRETE_ASCII.contains("ir_eval ir_d11 ir_vc_module"));
     assert!(SRC_IR_VC_CONCRETE_ASCII.contains("(IRScalar.int_ 65)"));
-    assert!(SRC_IR_VC_CONCRETE_ASCII.contains(":= Eq.refl IROutcome"));
+    assert!(SRC_IR_VC_CONCRETE_ASCII.contains(":= @Eq.refl IROutcome"));
     for src in [
         SRC_IR_VC_PATH_ASCII,
         SRC_IR_VC_PATH_ABOVE_SURROGATE_START,

@@ -9,48 +9,48 @@ pub(super) const DECLARATIONS: &[DeclarationInput] = &[
     DeclarationInput::Proof(
         "projection_post_whnf_deterministic",
         r"forall (R : RedEnv) (e a b : KExpr)
- (ha : Eq (OptionType KExpr) (projection_post_whnf_reduct R e) (OptionType.some KExpr a))
- (hb : Eq (OptionType KExpr) (projection_post_whnf_reduct R e) (OptionType.some KExpr b)), Eq KExpr a b",
+ (ha : @Eq (OptionType KExpr) (projection_post_whnf_reduct R e) (@OptionType.some KExpr a))
+ (hb : @Eq (OptionType KExpr) (projection_post_whnf_reduct R e) (@OptionType.some KExpr b)), @Eq KExpr a b",
         r"fun (R : RedEnv) (e a b : KExpr)
- (ha : Eq (OptionType KExpr) (projection_post_whnf_reduct R e) (OptionType.some KExpr a))
- (hb : Eq (OptionType KExpr) (projection_post_whnf_reduct R e) (OptionType.some KExpr b)) => option_some_inj KExpr a b
-  (Eq.trans (OptionType KExpr) (OptionType.some KExpr a) (projection_post_whnf_reduct R e)
-   (OptionType.some KExpr b)
-   (Eq.symm (OptionType KExpr) (projection_post_whnf_reduct R e) (OptionType.some KExpr a) ha) hb)",
+ (ha : @Eq (OptionType KExpr) (projection_post_whnf_reduct R e) (@OptionType.some KExpr a))
+ (hb : @Eq (OptionType KExpr) (projection_post_whnf_reduct R e) (@OptionType.some KExpr b)) => option_some_inj KExpr a b
+  (Eq.trans (OptionType KExpr) (@OptionType.some KExpr a) (projection_post_whnf_reduct R e)
+   (@OptionType.some KExpr b)
+   (Eq.symm (OptionType KExpr) (projection_post_whnf_reduct R e) (@OptionType.some KExpr a) ha) hb)",
     ),
     DeclarationInput::Proof(
         "par_cdp_projection_beta_beta",
         r"forall (R : RedEnv) (e a b : KExpr)
- (ha : Eq (OptionType KExpr) (projection_post_whnf_reduct R e) (OptionType.some KExpr a))
- (hb : Eq (OptionType KExpr) (projection_post_whnf_reduct R e) (OptionType.some KExpr b))
+ (ha : @Eq (OptionType KExpr) (projection_post_whnf_reduct R e) (@OptionType.some KExpr a))
+ (hb : @Eq (OptionType KExpr) (projection_post_whnf_reduct R e) (@OptionType.some KExpr b))
  (C : Type)
  (next : forall (v : KExpr), par_reduces_cdp R a v -> par_reduces_cdp R b v -> C), C",
         r"fun (R : RedEnv) (e a b : KExpr)
- (ha : Eq (OptionType KExpr) (projection_post_whnf_reduct R e) (OptionType.some KExpr a))
- (hb : Eq (OptionType KExpr) (projection_post_whnf_reduct R e) (OptionType.some KExpr b))
+ (ha : @Eq (OptionType KExpr) (projection_post_whnf_reduct R e) (@OptionType.some KExpr a))
+ (hb : @Eq (OptionType KExpr) (projection_post_whnf_reduct R e) (@OptionType.some KExpr b))
  (C : Type)
- (next : forall (v : KExpr), par_reduces_cdp R a v -> par_reduces_cdp R b v -> C) => next a (par_reduces_cdp.refl R a)
+ (next : forall (v : KExpr), par_reduces_cdp R a v -> par_reduces_cdp R b v -> C) => next a (@par_reduces_cdp.refl R a)
   (Eq.substType KExpr (fun (v : KExpr) => par_reduces_cdp R b v) b a
-   (projection_post_whnf_deterministic R e b a hb ha) (par_reduces_cdp.refl R b))",
+   (projection_post_whnf_deterministic R e b a hb ha) (@par_reduces_cdp.refl R b))",
     ),
     DeclarationInput::Proof(
         "par_cdp_projection_beta_cong",
         r"forall (R : RedEnv) (rigid : CtorMetadataRigid R (red_ind_ctor R))
  (S : Name) (idx : Nat) (subject subject2 : KExpr)
  (step : par_reduces_cdp R subject subject2) (a : KExpr)
- (run : Eq (OptionType KExpr) (projection_post_whnf_reduct R (KExpr.proj S idx subject)) (OptionType.some KExpr a))
+ (run : @Eq (OptionType KExpr) (projection_post_whnf_reduct R (KExpr.proj S idx subject)) (@OptionType.some KExpr a))
  (C : Type)
  (next : forall (b : KExpr), par_reduces_cdp R a b -> par_reduces_cdp R (KExpr.proj S idx subject2) b -> C), C",
         r"fun (R : RedEnv) (rigid : CtorMetadataRigid R (red_ind_ctor R))
  (S : Name) (idx : Nat) (subject subject2 : KExpr)
  (step : par_reduces_cdp R subject subject2) (a : KExpr)
- (run : Eq (OptionType KExpr) (projection_post_whnf_reduct R (KExpr.proj S idx subject)) (OptionType.some KExpr a))
+ (run : @Eq (OptionType KExpr) (projection_post_whnf_reduct R (KExpr.proj S idx subject)) (@OptionType.some KExpr a))
  (C : Type)
  (next : forall (b : KExpr), par_reduces_cdp R a b -> par_reduces_cdp R (KExpr.proj S idx subject2) b -> C) => projection_post_whnf_transport_cdp R rigid S idx subject subject2 step a run C
   (fun (b : KExpr)
-   (run2 : Eq (OptionType KExpr) (projection_post_whnf_reduct R (KExpr.proj S idx subject2)) (OptionType.some KExpr b))
+   (run2 : @Eq (OptionType KExpr) (projection_post_whnf_reduct R (KExpr.proj S idx subject2)) (@OptionType.some KExpr b))
    (selected_step : par_reduces_cdp R a b) =>
-   next b selected_step (par_reduces_cdp.projection_beta R S idx subject2 b run2))",
+   next b selected_step (@par_reduces_cdp.projection_beta R S idx subject2 b run2))",
     ),
     DeclarationInput::Proof(
         "par_cdp_prod_beta_projection_join",

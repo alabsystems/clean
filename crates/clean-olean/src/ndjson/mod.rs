@@ -39,6 +39,8 @@
 //!   declares a name Lean keys a literal rule on and Clean does not admit.
 //! - `reference`: the same reading decided by the fenced reference entry
 //!   instead (`reference_check_export_reader`), with an axiom allow-list.
+//! - `advice` (feature-gated): candidate frames from a tracing-core run beside
+//!   that fenced entry, never a production-checker or replay claim.
 //! - `write`: the other direction. `write_export` writes a cone of kernel
 //!   declarations as an export in this format, and `check_export_round_trip`
 //!   reads one back through this reader (unit Q1 of the self-proof plan;
@@ -50,6 +52,8 @@
 //! (`checkers-export-minting-lane`) that does not exist; no installed
 //! toolchain ships `leanexport`.
 
+#[cfg(feature = "kcheck-trace")]
+pub mod advice;
 mod closure;
 mod decl;
 mod error;
@@ -78,7 +82,9 @@ use source::NdjsonSource;
 
 pub use error::ExitClass;
 pub use natval::MAX_NAT_LITERAL_DIGITS;
-pub use reference::{reference_check_export_reader, ExportReferenceReport, FOUNDATIONAL_AXIOMS};
+pub use reference::{
+    reference_check_export_reader, ExportReferenceReport, LEAN_FOUNDATIONAL_AXIOMS,
+};
 pub use replay::{
     DeclarationRecord, DeclarationVerdict, ExportCheckOptions, ExportReport, FirstRefusal,
     ReaderRefusal,

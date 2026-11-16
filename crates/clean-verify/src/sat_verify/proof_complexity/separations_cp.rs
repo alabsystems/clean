@@ -144,7 +144,7 @@ pub fn cp_proof_of_php(n: usize) -> Vec<SepCpStep> {
 
 /// Build the input axioms for `cp_proof_of_php` verification.
 #[must_use]
-pub fn php_cp_axioms(n: usize) -> Vec<CpInequality> {
+pub(crate) fn php_cp_axioms(n: usize) -> Vec<CpInequality> {
     if n == 0 {
         return vec![CpInequality::new(Vec::new(), 1)];
     }

@@ -46,11 +46,11 @@ fn arbitrary_allocation_lists_have_checked_freshness_rules() {
     });
 }
 
-const NIL: &str = "(IRList.nil IRByteAllocationV1)";
+const NIL: &str = "(@IRList.nil IRByteAllocationV1)";
 
 fn rows(data: &[(u64, u64, u64, bool)]) -> String {
     data.iter().rev().fold(NIL.to_owned(), |tail, (base, size, owner, live)| {
-        format!("(IRList.cons IRByteAllocationV1 (IRByteAllocationV1.mk {base} {size} {owner} Bool.{live}) {tail})")
+        format!("(@IRList.cons IRByteAllocationV1 (IRByteAllocationV1.mk {base} {size} {owner} Bool.{live}) {tail})")
     })
 }
 
@@ -82,7 +82,7 @@ fn typed_frame_allocation_rounds_cursor_and_admits_both_real_slots() {
         let before = high_water(&data, 65);
         let fresh = format!("(ir_byte_fresh_memory_v1 {allocs} bytes 72 16 owner)");
         let ty = "(IRTy.array_ (IRTy.uint_ 8) 16)";
-        let layout = format!("(IRByteLayoutV1.mk {ty} 16 1 (IRList.nil IRTy) (IRList.nil Nat))");
+        let layout = format!("(IRByteLayoutV1.mk {ty} 16 1 (@IRList.nil IRTy) (@IRList.nil Nat))");
         let room = "(Nat.le_add_right 89 18446744073709551527)";
         let args = format!("{allocs} bytes 65 owner (Nat.zero_lt_succ 64) {room} {before}");
         add_checked(
@@ -90,9 +90,9 @@ fn typed_frame_allocation_rounds_cursor_and_admits_both_real_slots() {
             "allocation_array16_context",
             &format!(
                 "def allocation_array16_context : IRByteContextV1 :=\n\
-          IRByteContextV1.mk (IRModule.mk (IRList.nil IRFunc) (IRList.nil IRGlobal))\n\
-            (IRList.cons IRByteLayoutV1 {layout} (IRList.nil IRByteLayoutV1))\n\
-            (IRList.nil IRByteSignatureV1) (IRList.nil IRByteFunctionV1) (IRList.nil IRByteSiteV1)"
+          IRByteContextV1.mk (IRModule.mk (@IRList.nil IRFunc) (@IRList.nil IRGlobal))\n\
+            (@IRList.cons IRByteLayoutV1 {layout} (@IRList.nil IRByteLayoutV1))\n\
+            (@IRList.nil IRByteSignatureV1) (@IRList.nil IRByteFunctionV1) (@IRList.nil IRByteSiteV1)"
             ),
         );
         add_checked(
@@ -100,8 +100,8 @@ fn typed_frame_allocation_rounds_cursor_and_admits_both_real_slots() {
             "allocation_array16_layout",
             &format!(
                 "def allocation_array16_layout :\n\
-          Eq (IROption IRByteLayoutV1) (ir_byte_layout_v1 allocation_array16_context {ty})\n\
-            (IROption.some IRByteLayoutV1 {layout}) := Eq.refl (IROption IRByteLayoutV1) (IROption.some IRByteLayoutV1 {layout})"
+          @Eq (IROption IRByteLayoutV1) (ir_byte_layout_v1 allocation_array16_context {ty})\n\
+            (@IROption.some IRByteLayoutV1 {layout}) := @Eq.refl (IROption IRByteLayoutV1) (@IROption.some IRByteLayoutV1 {layout})"
             ),
         );
         add_checked(
@@ -110,8 +110,8 @@ fn typed_frame_allocation_rounds_cursor_and_admits_both_real_slots() {
             &format!(
                 "def allocation_real_array16\n\
           (ctx : IRByteContextV1) (bytes : Nat -> IROption Nat) (owner : Nat)\n\
-          (layout : Eq (IROption IRByteLayoutV1) (ir_byte_layout_v1 ctx {ty}) (IROption.some IRByteLayoutV1 {layout})) :\n\
-          Eq IRByteMemoryResultV1 (ir_byte_alloc_v1 ctx {ty} 1 8 owner (IRByteMemoryV1.mk {allocs} bytes 65))\n\
+          (layout : @Eq (IROption IRByteLayoutV1) (ir_byte_layout_v1 ctx {ty}) (@IROption.some IRByteLayoutV1 {layout})) :\n\
+          @Eq IRByteMemoryResultV1 (ir_byte_alloc_v1 ctx {ty} 1 8 owner (IRByteMemoryV1.mk {allocs} bytes 65))\n\
             (IRByteMemoryResultV1.value (IRScalar.ptr_ 72) {fresh}) :=\n\
           ir_byte_frame16_typed_allocate_v1 ctx {args} layout"
             ),
@@ -124,7 +124,7 @@ fn typed_frame_allocation_rounds_cursor_and_admits_both_real_slots() {
             &format!(
                 "def allocation_inhabited_array16\n\
           (bytes : Nat -> IROption Nat) (owner : Nat) :\n\
-          Eq IRByteMemoryResultV1\n\
+          @Eq IRByteMemoryResultV1\n\
             (ir_byte_alloc_v1 allocation_array16_context {ty} 1 8 owner (IRByteMemoryV1.mk {allocs} bytes 65))\n\
             (IRByteMemoryResultV1.value (IRScalar.ptr_ 72) {fresh}) :=\n\
           allocation_real_array16 allocation_array16_context bytes owner allocation_array16_layout"
@@ -150,7 +150,7 @@ fn typed_frame_allocation_rounds_cursor_and_admits_both_real_slots() {
                 &access_name,
                 &format!(
                     "def {access_name} (bytes : Nat -> IROption Nat) (owner : Nat) :\n\
-              Eq Bool (ir_byte_accessible_v1 (ir_byte_mem_allocs_v1 {fresh}) {address} 8 8) Bool.true := {access_rule} {args}"
+              @Eq Bool (ir_byte_accessible_v1 (ir_byte_mem_allocs_v1 {fresh}) {address} 8 8) Bool.true := {access_rule} {args}"
                 ),
             );
             let gep_name = format!("allocation_real_gep{offset}");
@@ -159,7 +159,7 @@ fn typed_frame_allocation_rounds_cursor_and_admits_both_real_slots() {
                 &gep_name,
                 &format!(
                     "def {gep_name} (bytes : Nat -> IROption Nat) (owner : Nat) :\n\
-              Eq IRByteMemoryResultV1 (ir_byte_gep_at_v1 72 1 {offset} Bool.true {fresh})\n\
+              @Eq IRByteMemoryResultV1 (ir_byte_gep_at_v1 72 1 {offset} Bool.true {fresh})\n\
                 (IRByteMemoryResultV1.value (IRScalar.ptr_ {address}) {fresh}) := {gep_rule} {args}"
                 ),
             );
@@ -180,8 +180,9 @@ fn adjacent_closed_endpoint_is_not_inbounds_despite_readable_slots() {
     crate::test_utils::run_with_stack(|| {
         let mut spec = spec();
         let old = rows(&[(8, 8, 1, true)]);
-        let mem =
-            format!("(ir_byte_fresh_memory_v1 {old} (fun (_ : Nat) => IROption.none Nat) 16 16 2)");
+        let mem = format!(
+            "(ir_byte_fresh_memory_v1 {old} (fun (_ : Nat) => @IROption.none Nat) 16 16 2)"
+        );
         // The underlying allocator permits adjacency for malformed incoming
         // cursor discipline. Half-open access is fine; inbounds is not.
         add_checked(
@@ -189,17 +190,17 @@ fn adjacent_closed_endpoint_is_not_inbounds_despite_readable_slots() {
             "allocation_adjacent_succeeds",
             &format!(
                 "def allocation_adjacent_succeeds :\n\
-          Eq IRByteMemoryResultV1 (ir_byte_allocate_range_v1 16 8 2 (IRByteMemoryV1.mk {old} (fun (_ : Nat) => IROption.none Nat) 16))\n\
+          @Eq IRByteMemoryResultV1 (ir_byte_allocate_range_v1 16 8 2 (IRByteMemoryV1.mk {old} (fun (_ : Nat) => @IROption.none Nat) 16))\n\
             (IRByteMemoryResultV1.value (IRScalar.ptr_ 16) {mem}) :=\n\
-          Eq.refl IRByteMemoryResultV1 (IRByteMemoryResultV1.value (IRScalar.ptr_ 16) {mem})"
+          @Eq.refl IRByteMemoryResultV1 (IRByteMemoryResultV1.value (IRScalar.ptr_ 16) {mem})"
             ),
         );
         add_checked(
             &mut spec,
             "allocation_adjacent_access",
             &format!(
-                "def allocation_adjacent_access : Eq Bool\n\
-          (ir_byte_accessible_v1 (ir_byte_mem_allocs_v1 {mem}) 16 8 8) Bool.true := Eq.refl Bool Bool.true"
+                "def allocation_adjacent_access : @Eq Bool\n\
+          (ir_byte_accessible_v1 (ir_byte_mem_allocs_v1 {mem}) 16 8 8) Bool.true := @Eq.refl Bool Bool.true"
             ),
         );
         let fault = format!("(IRByteMemoryResultV1.fault (IROutcome.ub IRFault.bad_addr) {mem})");
@@ -208,7 +209,7 @@ fn adjacent_closed_endpoint_is_not_inbounds_despite_readable_slots() {
             "allocation_adjacent_gep_fault",
             &format!(
                 "def allocation_adjacent_gep_fault :\n\
-          Eq IRByteMemoryResultV1 (ir_byte_gep_at_v1 16 1 0 Bool.true {mem}) {fault} := Eq.refl IRByteMemoryResultV1 {fault}"
+          @Eq IRByteMemoryResultV1 (ir_byte_gep_at_v1 16 1 0 Bool.true {mem}) {fault} := @Eq.refl IRByteMemoryResultV1 {fault}"
             ),
         );
         let false_success = format!("(IRByteMemoryResultV1.value (IRScalar.ptr_ 16) {mem})");
@@ -217,8 +218,8 @@ fn adjacent_closed_endpoint_is_not_inbounds_despite_readable_slots() {
             "allocation_bad_adjacent_gep",
             &format!(
                 "def allocation_bad_adjacent_gep :\n\
-          Eq IRByteMemoryResultV1 (ir_byte_gep_at_v1 16 1 0 Bool.true {mem}) {false_success} :=\n\
-          Eq.refl IRByteMemoryResultV1 {false_success}"
+          @Eq IRByteMemoryResultV1 (ir_byte_gep_at_v1 16 1 0 Bool.true {mem}) {false_success} :=\n\
+          @Eq.refl IRByteMemoryResultV1 {false_success}"
             ),
         );
     });
@@ -249,7 +250,7 @@ fn retired_overlap_stale_cursor_and_exclusive_limit_reject_false_success() {
                 18446744073709551600,
             ),
         ] {
-            let bytes = "(fun (_ : Nat) => IROption.none Nat)";
+            let bytes = "(fun (_ : Nat) => @IROption.none Nat)";
             let mem = format!("(IRByteMemoryV1.mk {old} {bytes} {cursor})");
             let actual = format!("(ir_byte_allocate_range_v1 16 8 9 {mem})");
             let fault =
@@ -260,7 +261,7 @@ fn retired_overlap_stale_cursor_and_exclusive_limit_reject_false_success() {
                 &fault_name,
                 &format!(
                     "def {fault_name} :\n\
-              Eq IRByteMemoryResultV1 {actual} {fault} := Eq.refl IRByteMemoryResultV1 {fault}"
+              @Eq IRByteMemoryResultV1 {actual} {fault} := @Eq.refl IRByteMemoryResultV1 {fault}"
                 ),
             );
             let success = format!(
@@ -270,9 +271,9 @@ fn retired_overlap_stale_cursor_and_exclusive_limit_reject_false_success() {
                 &mut spec,
                 name,
                 &format!(
-                    "def {name} : Eq IRByteMemoryResultV1\n\
+                    "def {name} : @Eq IRByteMemoryResultV1\n\
               {actual} {success} :=\n\
-              Eq.refl IRByteMemoryResultV1 {success}"
+              @Eq.refl IRByteMemoryResultV1 {success}"
                 ),
             );
         }

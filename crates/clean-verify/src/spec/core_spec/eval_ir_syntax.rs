@@ -193,7 +193,7 @@ impl Specification {
 | fatdyn_ : Nat → IRTy
 | containerlen_ : IRTy
 | containervtable_ : IRTy",
-            "EvalIR types. Mirrors the 42 trust_ir::Ty variants over the emitted fragment, NOT \
+            "EvalIR types. The source inventory checks the 43 trust_ir::Ty variants; this vocabulary represents only the emitted fragment, NOT \
              one-to-one: scalars by width, the pointer-like family with its pointee \
              (PtrMetadata dispatches thin-vs-fat), and aggregates named by ID. Aggregates are NOT structural — a structural tuple would be \
              a nested inductive, and the cell-addressed semantics never inspects an aggregate's \
@@ -204,7 +204,7 @@ impl Specification {
              admitted by these syntax additions. Storage describes addressable, possibly \
              uninitialized geometry and has no IRTy image; it grants no initialized-value \
              semantics or admitted storage operations. Tensor (trust-ir v67) has no IRTy \
-             image either: no tensor value, instruction or weight blob is admitted.",
+             image either: no tensor value, instruction or weight blob is admitted. FnItem retains nominal function-item identity and has no IRTy image; it is not func_, a structural Func carrier, scalar width, pointer or heap-cell license.",
         )?;
 
         // =========================================================

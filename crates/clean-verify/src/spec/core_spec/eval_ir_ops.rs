@@ -157,7 +157,7 @@ impl Specification {
                 "(Bool.and (ir_scalar_cmpable a) (ir_scalar_cmpable b))",
             ),
             "Decidable equality on the comparable fragment of the value domain; none where the \
-             comparison has no defined answer. Bool.rec minor order is (false, true).",
+             comparison has no defined answer. @Bool.rec minor order is (false, true).",
         )?;
 
         // Argument-shape combinators. Every arithmetic arm below is one
@@ -519,7 +519,7 @@ impl Specification {
              against the signed bound on the result's side of zero: past 2^(w-1)-1 when the \
              sign bits agree (product non-negative), past 2^(w-1) when they differ — a \
              magnitude product of zero clears both, so the sign of zero never misfires. \
-             Bool.rec minor order is (false, true): first minor is the non-negative branch.",
+             @Bool.rec minor order is (false, true): first minor is the non-negative branch.",
         )?;
 
         self.add_recursive_def(
@@ -533,7 +533,7 @@ impl Specification {
              int_/uint_ constructor choice is SEMANTIC for arithmetic (contrast ir_uint2's \
              doc: for wrap/div the opcode selects the interpretation; for the overflow flag \
              the TYPE does, exactly as trust-ir dispatches on InterpretInt.signed, a4e81b6 \
-             interpret.rs:5872-5876). Bool.rec minor order is (false, true), so false is \
+             interpret.rs:5872-5876). @Bool.rec minor order is (false, true), so false is \
              unsigned.",
         )?;
 

@@ -20,8 +20,8 @@ const ROOTS: &[&str] = &[
     "ir_byte_enum_raw_load_refused_v1",
     "ir_byte_enum_raw_store_refused_v1",
 ];
-const MODULE: &str = "(IRModule.mk (IRList.nil IRFunc) (IRList.nil IRGlobal))";
-const TRUE: &str = "(Eq.refl Bool Bool.true)";
+const MODULE: &str = "(IRModule.mk (@IRList.nil IRFunc) (@IRList.nil IRGlobal))";
+const TRUE: &str = "(@Eq.refl Bool Bool.true)";
 
 fn specification() -> Specification {
     crate::eval_ir::build_byte_prelude_spec_v1_with_stack().expect("public ByteV1 vocabulary")
@@ -47,7 +47,7 @@ fn add(spec: &mut Specification, source: &str) {
 fn equality(spec: &mut Specification, name: &str, ty: &str, actual: &str, expected: &str) {
     add(
         spec,
-        &format!("def {name} : Eq ({ty}) ({actual}) ({expected}) := Eq.refl ({ty}) ({expected})"),
+        &format!("def {name} : @Eq ({ty}) ({actual}) ({expected}) := @Eq.refl ({ty}) ({expected})"),
     );
 }
 
@@ -63,8 +63,8 @@ fn list(ty: &str, values: &[&str]) -> String {
     values
         .iter()
         .rev()
-        .fold(format!("(IRList.nil {ty})"), |tail, value| {
-            format!("(IRList.cons {ty} ({value}) {tail})")
+        .fold(format!("(@IRList.nil {ty})"), |tail, value| {
+            format!("(@IRList.cons {ty} ({value}) {tail})")
         })
 }
 
@@ -80,7 +80,7 @@ fn schema(id: usize, ty: &str, variants: &[&str]) -> String {
 }
 
 fn context(enums: &[&str], layouts: &[&str], functions: &[&str]) -> String {
-    format!("(IRByteContextV1.mke {MODULE} {} (IRList.nil IRByteSignatureV1) {} (IRList.nil IRByteSiteV1) {})",
+    format!("(IRByteContextV1.mke {MODULE} {} (@IRList.nil IRByteSignatureV1) {} (@IRList.nil IRByteSiteV1) {})",
         list("IRByteLayoutV1", layouts), list("IRByteFunctionV1", functions), list("IRByteEnumV1", enums))
 }
 
@@ -440,7 +440,7 @@ fn byte_enum_old_context_and_non_enum_semantics_remain_conservative() {
             list("IRTy", &["IRTy.bool_"]),
             list("Nat", &["0"])
         );
-        let old = format!("IRByteContextV1.mk {MODULE} {} (IRList.nil IRByteSignatureV1) (IRList.nil IRByteFunctionV1) (IRList.nil IRByteSiteV1)", list("IRByteLayoutV1", &[&layout]));
+        let old = format!("IRByteContextV1.mk {MODULE} {} (@IRList.nil IRByteSignatureV1) (@IRList.nil IRByteFunctionV1) (@IRList.nil IRByteSiteV1)", list("IRByteLayoutV1", &[&layout]));
         let empty = context(&[], &[&layout], &[]);
         let invalid = schema(7, "IRTy.uint_ 8", &[]);
         let bad_catalog = context(&[&invalid, &invalid], &[&layout], &[]);
@@ -470,8 +470,8 @@ fn byte_enum_old_context_and_non_enum_semantics_remain_conservative() {
                 false,
             );
         }
-        add(&mut spec, &format!("def enum_old_arbitrary (v : IRScalar) : Eq Bool (ir_byte_value_matches_v1 ({old}) (IRTy.enum_ 7) v) Bool.false :=
-ir_byte_enum_empty_context_refused_v1 {MODULE} {} (IRList.nil IRByteSignatureV1) (IRList.nil IRByteFunctionV1) (IRList.nil IRByteSiteV1) 7 v", list("IRByteLayoutV1", &[&layout])));
+        add(&mut spec, &format!("def enum_old_arbitrary (v : IRScalar) : @Eq Bool (ir_byte_value_matches_v1 ({old}) (IRTy.enum_ 7) v) Bool.false :=
+ir_byte_enum_empty_context_refused_v1 {MODULE} {} (@IRList.nil IRByteSignatureV1) (@IRList.nil IRByteFunctionV1) (@IRList.nil IRByteSiteV1) 7 v", list("IRByteLayoutV1", &[&layout])));
     });
 }
 
@@ -489,11 +489,11 @@ fn byte_enum_public_laws_have_empty_closures_and_wrong_conclusions_are_rejected(
         let value = aggregate(&["IRScalar.int_ 19", "IRScalar.bool_ Bool.true"]);
         let inputs = format!(
             "{ctx} 7 {s} {v} 19 {payload} {TRUE}
-  (Eq.refl (IROption IRByteEnumV1) (IROption.some IRByteEnumV1 {s}))
-  (Eq.refl (IROption IRByteEnumVariantV1) (IROption.some IRByteEnumVariantV1 {v}))"
+  (@Eq.refl (IROption IRByteEnumV1) (@IROption.some IRByteEnumV1 {s}))
+  (@Eq.refl (IROption IRByteEnumVariantV1) (@IROption.some IRByteEnumVariantV1 {v}))"
         );
         let proof = format!("ir_byte_enum_ssa_input_v1 {inputs} {TRUE} {TRUE}");
-        add(&mut spec, &format!("def enum_derived_admission : Eq Bool (ir_byte_value_matches_v1 {ctx} (IRTy.enum_ 7) {value}) Bool.true := {proof}"));
+        add(&mut spec, &format!("def enum_derived_admission : @Eq Bool (ir_byte_value_matches_v1 {ctx} (IRTy.enum_ 7) {value}) Bool.true := {proof}"));
         for (i, bad) in [
             aggregate(&["IRScalar.int_ 0", "IRScalar.bool_ Bool.true"]),
             aggregate(&["IRScalar.int_ 19", "IRScalar.int_ 1"]),
@@ -503,7 +503,7 @@ fn byte_enum_public_laws_have_empty_closures_and_wrong_conclusions_are_rejected(
         .enumerate()
         {
             let name = format!("enum_wrong_endpoint_{i}");
-            reject(&mut spec, &name, &format!("def {name} : Eq Bool (ir_byte_value_matches_v1 {ctx} (IRTy.enum_ 7) {bad}) Bool.true := {proof}"));
+            reject(&mut spec, &name, &format!("def {name} : @Eq Bool (ir_byte_value_matches_v1 {ctx} (IRTy.enum_ 7) {bad}) Bool.true := {proof}"));
         }
         // The exact selected type list is nominal, even when scalar carriers
         // happen to be compatible at two different types.
@@ -513,17 +513,17 @@ fn byte_enum_public_laws_have_empty_closures_and_wrong_conclusions_are_rejected(
         let payload = spine(&["IRScalar.fat_ 16 3"]);
         let selected_proof = format!(
             "ir_byte_enum_selected_fields_v1 {ctx} 8 {s} {v} 3 {payload} {TRUE}
-  (Eq.refl (IROption IRByteEnumV1) (IROption.some IRByteEnumV1 {s}))
-  (Eq.refl (IROption IRByteEnumVariantV1) (IROption.some IRByteEnumVariantV1 {v}))"
+  (@Eq.refl (IROption IRByteEnumV1) (@IROption.some IRByteEnumV1 {s}))
+  (@Eq.refl (IROption IRByteEnumVariantV1) (@IROption.some IRByteEnumVariantV1 {v}))"
         );
         for (name, field, positive) in [
             ("enum_selected_nominal", "IRTy.fatstr_", true),
             ("enum_wrong_nominal", "IRTy.containerlen_", false),
         ] {
             let source = format!(
-                "def {name} : Eq (IROption (IRList IRTy))
+                "def {name} : @Eq (IROption (IRList IRTy))
   (ir_byte_enum_spine_types_v1 {ctx} 8 (IRScalar.vcons (IRScalar.int_ 3) {payload}))
-  (IROption.some (IRList IRTy) {}) := {selected_proof}",
+  (@IROption.some (IRList IRTy) {}) := {selected_proof}",
                 list("IRTy", &["IRTy.uint_ 8", field])
             );
             if positive {
@@ -541,12 +541,12 @@ fn byte_enum_valid_ssa_schemas_do_not_admit_raw_aggregate_memory_operations() {
         let mut spec = specification();
         let s = schema(7, "IRTy.uint_ 8", &[&variant("3", &[])]);
         let layouts = [
-            "IRByteLayoutV1.mk (IRTy.enum_ 7) 8 8 (IRList.nil IRTy) (IRList.nil Nat)",
-            "IRByteLayoutV1.mk (IRTy.struct_ 7) 8 8 (IRList.nil IRTy) (IRList.nil Nat)",
+            "IRByteLayoutV1.mk (IRTy.enum_ 7) 8 8 (@IRList.nil IRTy) (@IRList.nil Nat)",
+            "IRByteLayoutV1.mk (IRTy.struct_ 7) 8 8 (@IRList.nil IRTy) (@IRList.nil Nat)",
         ];
         let ctx = context(&[&s], &layouts, &[]);
         // Initialized, aligned, accessible memory does not turn a schema into a decoder.
-        let mem = "IRByteMemoryV1.mk (IRList.cons IRByteAllocationV1 (IRByteAllocationV1.mk 16 8 0 Bool.true) (IRList.nil IRByteAllocationV1)) (fun (_ : Nat) => IROption.some Nat 0) 32";
+        let mem = "IRByteMemoryV1.mk (@IRList.cons IRByteAllocationV1 (IRByteAllocationV1.mk 16 8 0 Bool.true) (@IRList.nil IRByteAllocationV1)) (fun (_ : Nat) => @IROption.some Nat 0) 32";
         let fault = format!(
             "IRByteMemoryResultV1.fault (IROutcome.unmodelled IRFault.width_bounded) ({mem})"
         );
@@ -556,7 +556,7 @@ fn byte_enum_valid_ssa_schemas_do_not_admit_raw_aggregate_memory_operations() {
                 &format!("enum_raw_decode_{i}"),
                 "IROption IRScalar",
                 &format!("ir_byte_decode_word_v1 {ctx} ({ty}) 3"),
-                "IROption.none IRScalar",
+                "@IROption.none IRScalar",
             );
             for (j, volatile) in ["Bool.false", "Bool.true"].iter().enumerate() {
                 equality(
@@ -589,20 +589,20 @@ fn byte_enum_import_is_one_ssa_result_and_preserves_returned_world_on_fault() {
         let mut spec = specification();
         let s = schema(7, "IRTy.uint_ 8", &[&variant("19", &["IRTy.bool_"])]);
         let ctx = context(&[&s], &[], &[]);
-        let current = "(IRFrame.mk 9 7 2 (IRList.nil IRBinding) (IRList.nil Nat))";
+        let current = "(IRFrame.mk 9 7 2 (@IRList.nil IRBinding) (@IRList.nil Nat))";
         let frames = list("IRFrame", &[current]);
-        let machine = format!("(IRMachine.mk {frames} (IRList.nil IRMemSlot) 1)");
+        let machine = format!("(IRMachine.mk {frames} (@IRList.nil IRMemSlot) 1)");
         let owners = list("Nat", &["1"]);
-        let old_memory = "(IRByteMemoryV1.mk (IRList.nil IRByteAllocationV1) (fun (_ : Nat) => IROption.none Nat) 16)";
-        let new_memory = "(IRByteMemoryV1.mk (IRList.nil IRByteAllocationV1) (fun (_ : Nat) => IROption.some Nat 7) 32)";
-        let old_world = format!("(IRByteWorldV1.mk Nat {old_memory} 4 {owners} 2)");
-        let new_world = format!("(IRByteWorldV1.mk Nat {new_memory} 5 {owners} 2)");
+        let old_memory = "(IRByteMemoryV1.mk (@IRList.nil IRByteAllocationV1) (fun (_ : Nat) => @IROption.none Nat) 16)";
+        let new_memory = "(IRByteMemoryV1.mk (@IRList.nil IRByteAllocationV1) (fun (_ : Nat) => @IROption.some Nat 7) 32)";
+        let old_world = format!("(@IRByteWorldV1.mk Nat {old_memory} 4 {owners} 2)");
+        let new_world = format!("(@IRByteWorldV1.mk Nat {new_memory} 5 {owners} 2)");
         let destinations = list("Nat", &["99"]);
         let types = list("IRTy", &["IRTy.enum_ 7"]);
         let value = aggregate(&["IRScalar.int_ 19", "IRScalar.bool_ Bool.true"]);
         let values = list("IRScalar", &[&value]);
         let next = format!(
-            "IRMachine.mk {} (IRList.nil IRMemSlot) 1",
+            "IRMachine.mk {} (@IRList.nil IRMemSlot) 1",
             list(
                 "IRFrame",
                 &[&format!(
@@ -611,14 +611,14 @@ fn byte_enum_import_is_one_ssa_result_and_preserves_returned_world_on_fault() {
             )
         );
         let actual = |vs: &str| {
-            format!("ir_byte_import_result_v1 Nat {ctx} {machine} {old_world} {destinations} {types} (IRByteImportResultV1.mk Nat (IROutcome.ret {vs}) {new_memory} 5)")
+            format!("ir_byte_import_result_v1 Nat {ctx} {machine} {old_world} {destinations} {types} (@IRByteImportResultV1.mk Nat (IROutcome.ret {vs}) {new_memory} 5)")
         };
         equality(
             &mut spec,
             "enum_import_one_result",
             "IRByteConfigV1 Nat",
             &actual(&values),
-            &format!("IRByteConfigV1.running Nat ({next}) {new_world}"),
+            &format!("@IRByteConfigV1.running Nat ({next}) {new_world}"),
         );
         for (i, bad) in [
             list(
@@ -634,17 +634,17 @@ fn byte_enum_import_is_one_ssa_result_and_preserves_returned_world_on_fault() {
         .iter()
         .enumerate()
         {
-            equality(&mut spec, &format!("enum_import_fault_{i}"), "IRByteConfigV1 Nat", &actual(bad), &format!("IRByteConfigV1.halted Nat (IROutcome.type_error IRFault.bad_field) {new_world}"));
+            equality(&mut spec, &format!("enum_import_fault_{i}"), "IRByteConfigV1 Nat", &actual(bad), &format!("@IRByteConfigV1.halted Nat (IROutcome.type_error IRFault.bad_field) {new_world}"));
         }
         // C/Fast admit this helper-level import; unsupported calling convention
         // 2 still fails before the provider runs. No whole-module claim here.
-        let provider = format!("fun (_ : Nat) (_ : IRList IRScalar) (_ : IRByteMemoryV1) (_ : Nat) => IRByteImportResultV1.mk Nat (IROutcome.ret {values}) {new_memory} 5");
+        let provider = format!("fun (_ : Nat) (_ : IRList IRScalar) (_ : IRByteMemoryV1) (_ : Nat) => @IRByteImportResultV1.mk Nat (IROutcome.ret {values}) {new_memory} 5");
         for cc in 0..=2 {
             let binding = format!("IRByteFunctionV1.mk 55 4 4096 {cc} Bool.true");
             let site = format!("IRByteSiteV1.mk 9 7 2 0 {cc} {types}");
-            let signature = format!("IRByteSignatureV1.mk 4 (IRList.nil IRTy) {types} Bool.false");
-            equality(&mut spec, &format!("enum_import_cc_{cc}"), "IRByteConfigV1 Nat", &format!("ir_byte_call_known_v1 Nat {ctx} ({provider}) {machine} {old_world} {destinations} ({site}) ({binding}) ({signature}) (IRList.nil IRScalar)"),
-                &if cc < 2 { format!("IRByteConfigV1.running Nat ({next}) {new_world}") } else { format!("IRByteConfigV1.halted Nat (IROutcome.type_error IRFault.not_fnptr) {old_world}") });
+            let signature = format!("IRByteSignatureV1.mk 4 (@IRList.nil IRTy) {types} Bool.false");
+            equality(&mut spec, &format!("enum_import_cc_{cc}"), "IRByteConfigV1 Nat", &format!("ir_byte_call_known_v1 Nat {ctx} ({provider}) {machine} {old_world} {destinations} ({site}) ({binding}) ({signature}) (@IRList.nil IRScalar)"),
+                &if cc < 2 { format!("@IRByteConfigV1.running Nat ({next}) {new_world}") } else { format!("@IRByteConfigV1.halted Nat (IROutcome.type_error IRFault.not_fnptr) {old_world}") });
         }
     });
 }

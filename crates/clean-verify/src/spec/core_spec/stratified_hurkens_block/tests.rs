@@ -174,13 +174,13 @@ fn test_hurkens_block_sources_paren_balanced() {
 #[test]
 fn test_hurkens_inversion_minor_order() {
     let landmarks = [
-        "(he : Eq KExpr (KExpr.bvar i) (KExpr.pi PA PB))", // var
-        "(he : Eq KExpr (KExpr.sort n) (KExpr.pi PA PB))", // sort
-        "level_imax_ne_zero n m",                          // pi
-        "(he : Eq KExpr (KExpr.lam A b) (KExpr.pi PA PB))", // lam
-        "(he : Eq KExpr (KExpr.app f a) (KExpr.pi PA PB))", // app
-        "(he : Eq KExpr (KExpr.const cn us) (KExpr.pi PA PB))", // const
-        "(he : Eq KExpr (KExpr.let_ lty lv lb) (KExpr.pi PA PB))", // let_
+        "(he : @Eq KExpr (KExpr.bvar i) (KExpr.pi PA PB))", // var
+        "(he : @Eq KExpr (KExpr.sort n) (KExpr.pi PA PB))", // sort
+        "level_imax_ne_zero n m",                           // pi
+        "(he : @Eq KExpr (KExpr.lam A b) (KExpr.pi PA PB))", // lam
+        "(he : @Eq KExpr (KExpr.app f a) (KExpr.pi PA PB))", // app
+        "(he : @Eq KExpr (KExpr.const cn us) (KExpr.pi PA PB))", // const
+        "(he : @Eq KExpr (KExpr.let_ lty lv lb) (KExpr.pi PA PB))", // let_
     ];
     let src = SRC_TYPINGCTX_PI_SMALL_INV;
     let mut cursor = 0usize;

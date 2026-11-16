@@ -30,112 +30,112 @@ use crate::spec::Specification;
 const DECLARATIONS: &[(&str, &str)] = &[
     (r"def rfnzg_succ_case (m : KExpr) : KExpr := KExpr.pi rfnz_nat (KExpr.pi (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.app rfnz_succ (KExpr.bvar (Nat.succ Nat.zero)))))", "Actual-name telescope/spine model data used by the source-derived Nat.zero general caller."),
     (r"def rfnzg_zero_args (m : KExpr) (z : KExpr) (s : KExpr) : ListType KExpr :=
- (ListType.cons KExpr m (ListType.cons KExpr z (ListType.cons KExpr s (ListType.nil KExpr))))", "Actual-name telescope/spine model data used by the source-derived Nat.zero general caller."),
+ (@ListType.cons KExpr m (@ListType.cons KExpr z (@ListType.cons KExpr s (@ListType.nil KExpr))))", "Actual-name telescope/spine model data used by the source-derived Nat.zero general caller."),
     (r"def rfnzg_zero_rule_tail : KExpr :=
  (KExpr.pi (KExpr.app (KExpr.bvar Nat.zero) rfnz_zero) (KExpr.pi rfnz_sarm (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) rfnz_zero)))", "Actual-name telescope/spine model data used by the source-derived Nat.zero general caller."),
     (r"def rfnzg_zero_sarm_after_m (m : KExpr) : KExpr :=
  (KExpr.pi rfnz_nat (KExpr.pi (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.app rfnz_succ (KExpr.bvar (Nat.succ Nat.zero))))))", "Actual-name telescope/spine model data used by the source-derived Nat.zero general caller."),
     (r"def rfnzg_zero_tail_after_m (m : KExpr) : KExpr :=
  (KExpr.pi (KExpr.app m rfnz_zero) (KExpr.pi (rfnzg_zero_sarm_after_m m) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) rfnz_zero)))", "Actual-name telescope/spine model data used by the source-derived Nat.zero general caller."),
-    (r"def rfnzg_zero_after_m_eq (m : KExpr) : Eq KExpr (instantiate rfnzg_zero_rule_tail m) (rfnzg_zero_tail_after_m m) :=
+    (r"def rfnzg_zero_after_m_eq (m : KExpr) : @Eq KExpr (instantiate rfnzg_zero_rule_tail m) (rfnzg_zero_tail_after_m m) :=
  (Eq.cong KExpr KExpr (fun (x : KExpr) => (KExpr.pi (KExpr.app x rfnz_zero) (KExpr.pi (rfnzg_zero_sarm_after_m m) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) rfnz_zero)))) (lift_at m Nat.zero Nat.zero) m (lift_zero_identity m))", "Constructive source-derived Nat.zero general-caller prerequisite or closed caller; no assumption of output typing or general recursor admission."),
-    (r"def rfnzg_zero_sarm_after_z_eq (m : KExpr) (z : KExpr) : Eq KExpr (instantiate (rfnzg_zero_sarm_after_m m) z) (rfnzg_succ_case m) :=
- (Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.pi rfnz_nat x) (KExpr.pi (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) z (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) z (Nat.succ (Nat.succ Nat.zero))) (KExpr.app rfnz_succ (KExpr.bvar (Nat.succ Nat.zero))))) (KExpr.pi (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.app rfnz_succ (KExpr.bvar (Nat.succ Nat.zero))))) (universe_bridge_congr2 KExpr KExpr KExpr (fun (A : KExpr) (B : KExpr) => KExpr.pi A B) (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) z (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) z (Nat.succ (Nat.succ Nat.zero))) (KExpr.app rfnz_succ (KExpr.bvar (Nat.succ Nat.zero)))) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.app rfnz_succ (KExpr.bvar (Nat.succ Nat.zero)))) (Eq.cong KExpr KExpr (fun (x : KExpr) => (KExpr.app x (KExpr.bvar Nat.zero))) (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) z (Nat.succ Nat.zero)) (lift_at m Nat.zero (Nat.succ Nat.zero)) (inst_at1_lift2 m z)) (Eq.cong KExpr KExpr (fun (x : KExpr) => (KExpr.app x (KExpr.app rfnz_succ (KExpr.bvar (Nat.succ Nat.zero))))) (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) z (Nat.succ (Nat.succ Nat.zero))) (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (instantiate_lift_cancel_general m z Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero))) (Nat.succ (Nat.succ Nat.zero)) (Eq.refl Nat (Nat.succ Nat.zero))))))", "Constructive source-derived Nat.zero general-caller prerequisite or closed caller; no assumption of output typing or general recursor admission."),
-    (r"def rfnzg_zero_after_z_eq (m : KExpr) (z : KExpr) : Eq KExpr (instantiate (KExpr.pi (rfnzg_zero_sarm_after_m m) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) rfnz_zero)) z) (KExpr.pi (rfnzg_succ_case m) (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) rfnz_zero)) :=
+    (r"def rfnzg_zero_sarm_after_z_eq (m : KExpr) (z : KExpr) : @Eq KExpr (instantiate (rfnzg_zero_sarm_after_m m) z) (rfnzg_succ_case m) :=
+ (Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.pi rfnz_nat x) (KExpr.pi (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) z (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) z (Nat.succ (Nat.succ Nat.zero))) (KExpr.app rfnz_succ (KExpr.bvar (Nat.succ Nat.zero))))) (KExpr.pi (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.app rfnz_succ (KExpr.bvar (Nat.succ Nat.zero))))) (universe_bridge_congr2 KExpr KExpr KExpr (fun (A : KExpr) (B : KExpr) => KExpr.pi A B) (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) z (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) z (Nat.succ (Nat.succ Nat.zero))) (KExpr.app rfnz_succ (KExpr.bvar (Nat.succ Nat.zero)))) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.app rfnz_succ (KExpr.bvar (Nat.succ Nat.zero)))) (Eq.cong KExpr KExpr (fun (x : KExpr) => (KExpr.app x (KExpr.bvar Nat.zero))) (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) z (Nat.succ Nat.zero)) (lift_at m Nat.zero (Nat.succ Nat.zero)) (inst_at1_lift2 m z)) (Eq.cong KExpr KExpr (fun (x : KExpr) => (KExpr.app x (KExpr.app rfnz_succ (KExpr.bvar (Nat.succ Nat.zero))))) (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) z (Nat.succ (Nat.succ Nat.zero))) (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (instantiate_lift_cancel_general m z Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero))) (Nat.succ (Nat.succ Nat.zero)) (@Eq.refl Nat (Nat.succ Nat.zero))))))", "Constructive source-derived Nat.zero general-caller prerequisite or closed caller; no assumption of output typing or general recursor admission."),
+    (r"def rfnzg_zero_after_z_eq (m : KExpr) (z : KExpr) : @Eq KExpr (instantiate (KExpr.pi (rfnzg_zero_sarm_after_m m) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) rfnz_zero)) z) (KExpr.pi (rfnzg_succ_case m) (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) rfnz_zero)) :=
  (universe_bridge_congr2 KExpr KExpr KExpr (fun (A : KExpr) (B : KExpr) => KExpr.pi A B) (instantiate (rfnzg_zero_sarm_after_m m) z) (rfnzg_succ_case m) (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) z (Nat.succ Nat.zero)) rfnz_zero) (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) rfnz_zero) (rfnzg_zero_sarm_after_z_eq m z) (Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.app x rfnz_zero) (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) z (Nat.succ Nat.zero)) (lift_at m Nat.zero (Nat.succ Nat.zero)) (inst_at1_lift2 m z)))", "Constructive source-derived Nat.zero general-caller prerequisite or closed caller; no assumption of output typing or general recursor admission."),
-    (r"def rfnzg_zero_after_s_eq (m : KExpr) (s : KExpr) : Eq KExpr (instantiate (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) rfnz_zero) s) (KExpr.app m rfnz_zero) :=
+    (r"def rfnzg_zero_after_s_eq (m : KExpr) (s : KExpr) : @Eq KExpr (instantiate (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) rfnz_zero) s) (KExpr.app m rfnz_zero) :=
  (Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.app x rfnz_zero) (instantiate (lift_at m Nat.zero (Nat.succ Nat.zero)) s) m (inst_lift1 m s))", "Constructive source-derived Nat.zero general-caller prerequisite or closed caller; no assumption of output typing or general recursor admission."),
     (r"def rfnzg_zero_typed_spine (R : RedEnv) (tenv : KDeclEnv) (G : ListType KExpr) (u : Level) (m : KExpr) (z : KExpr) (s : KExpr)
  (hm : TypingCtxConvIn R tenv G m (rfnz_motive_type u))
  (hz : TypingCtxConvIn R tenv G z (KExpr.app m rfnz_zero))
  (hs : TypingCtxConvIn R tenv G s (rfnzg_succ_case m)) : TypedRawPiSpine R tenv G (rfnz_rule_type u) (rfnzg_zero_args m z s) (KExpr.app m rfnz_zero) :=
- TypedRawPiSpine.cons R tenv G (rfnz_motive_type u) rfnzg_zero_rule_tail m (ListType.cons KExpr z (ListType.cons KExpr s (ListType.nil KExpr))) (KExpr.app m rfnz_zero) hm (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (ListType.cons KExpr z (ListType.cons KExpr s (ListType.nil KExpr))) (KExpr.app m rfnz_zero)) (rfnzg_zero_tail_after_m m) (instantiate rfnzg_zero_rule_tail m) (Eq.symm KExpr (instantiate rfnzg_zero_rule_tail m) (rfnzg_zero_tail_after_m m) (rfnzg_zero_after_m_eq m)) (TypedRawPiSpine.cons R tenv G (KExpr.app m rfnz_zero) (KExpr.pi (rfnzg_zero_sarm_after_m m) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) rfnz_zero)) z (ListType.cons KExpr s (ListType.nil KExpr)) (KExpr.app m rfnz_zero) hz (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (ListType.cons KExpr s (ListType.nil KExpr)) (KExpr.app m rfnz_zero)) (KExpr.pi (rfnzg_succ_case m) (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) rfnz_zero)) (instantiate (KExpr.pi (rfnzg_zero_sarm_after_m m) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) rfnz_zero)) z) (Eq.symm KExpr (instantiate (KExpr.pi (rfnzg_zero_sarm_after_m m) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) rfnz_zero)) z) (KExpr.pi (rfnzg_succ_case m) (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) rfnz_zero)) (rfnzg_zero_after_z_eq m z)) (TypedRawPiSpine.cons R tenv G (rfnzg_succ_case m) (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) rfnz_zero) s (ListType.nil KExpr) (KExpr.app m rfnz_zero) hs (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (ListType.nil KExpr) (KExpr.app m rfnz_zero)) (KExpr.app m rfnz_zero) (instantiate (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) rfnz_zero) s) (Eq.symm KExpr (instantiate (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) rfnz_zero) s) (KExpr.app m rfnz_zero) (rfnzg_zero_after_s_eq m s)) (TypedRawPiSpine.nil R tenv G (KExpr.app m rfnz_zero)))))))", "Constructive source-derived Nat.zero general-caller prerequisite or closed caller; no assumption of output typing or general recursor admission."),
+ @TypedRawPiSpine.cons R tenv G (rfnz_motive_type u) rfnzg_zero_rule_tail m (@ListType.cons KExpr z (@ListType.cons KExpr s (@ListType.nil KExpr))) (KExpr.app m rfnz_zero) hm (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (@ListType.cons KExpr z (@ListType.cons KExpr s (@ListType.nil KExpr))) (KExpr.app m rfnz_zero)) (rfnzg_zero_tail_after_m m) (instantiate rfnzg_zero_rule_tail m) (Eq.symm KExpr (instantiate rfnzg_zero_rule_tail m) (rfnzg_zero_tail_after_m m) (rfnzg_zero_after_m_eq m)) (@TypedRawPiSpine.cons R tenv G (KExpr.app m rfnz_zero) (KExpr.pi (rfnzg_zero_sarm_after_m m) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) rfnz_zero)) z (@ListType.cons KExpr s (@ListType.nil KExpr)) (KExpr.app m rfnz_zero) hz (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (@ListType.cons KExpr s (@ListType.nil KExpr)) (KExpr.app m rfnz_zero)) (KExpr.pi (rfnzg_succ_case m) (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) rfnz_zero)) (instantiate (KExpr.pi (rfnzg_zero_sarm_after_m m) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) rfnz_zero)) z) (Eq.symm KExpr (instantiate (KExpr.pi (rfnzg_zero_sarm_after_m m) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) rfnz_zero)) z) (KExpr.pi (rfnzg_succ_case m) (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) rfnz_zero)) (rfnzg_zero_after_z_eq m z)) (@TypedRawPiSpine.cons R tenv G (rfnzg_succ_case m) (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) rfnz_zero) s (@ListType.nil KExpr) (KExpr.app m rfnz_zero) hs (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (@ListType.nil KExpr) (KExpr.app m rfnz_zero)) (KExpr.app m rfnz_zero) (instantiate (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) rfnz_zero) s) (Eq.symm KExpr (instantiate (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) rfnz_zero) s) (KExpr.app m rfnz_zero) (rfnzg_zero_after_s_eq m s)) (@TypedRawPiSpine.nil R tenv G (KExpr.app m rfnz_zero)))))))", "Constructive source-derived Nat.zero general-caller prerequisite or closed caller; no assumption of output typing or general recursor admission."),
     (r"def rfnzg_zero_spine_open_motive_control :
- Eq KExpr (instantiate (rfnzg_zero_sarm_after_m (KExpr.bvar Nat.zero))
+ @Eq KExpr (instantiate (rfnzg_zero_sarm_after_m (KExpr.bvar Nat.zero))
    (KExpr.bvar (Nat.succ Nat.zero))) (rfnzg_succ_case (KExpr.bvar Nat.zero)) :=
  rfnzg_zero_sarm_after_z_eq (KExpr.bvar Nat.zero) (KExpr.bvar (Nat.succ Nat.zero))", "Constructive source-derived Nat.zero general-caller prerequisite or closed caller; no assumption of output typing or general recursor admission."),
     (r"def rfnzg_zero_input_args (m : KExpr) (z : KExpr) (s : KExpr) : ListType KExpr :=
- (ListType.cons KExpr m (ListType.cons KExpr z (ListType.cons KExpr s (ListType.cons KExpr rfnz_zero (ListType.nil KExpr)))))", "Actual-name telescope/spine model data used by the source-derived Nat.zero general caller."),
+ (@ListType.cons KExpr m (@ListType.cons KExpr z (@ListType.cons KExpr s (@ListType.cons KExpr rfnz_zero (@ListType.nil KExpr)))))", "Actual-name telescope/spine model data used by the source-derived Nat.zero general caller."),
     (r"def rfnzg_zero_input_tail : KExpr :=
  (KExpr.pi (KExpr.app (KExpr.bvar Nat.zero) rfnz_zero) (KExpr.pi rfnz_sarm (KExpr.pi rfnz_nat (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar Nat.zero)))))", "Actual-name telescope/spine model data used by the source-derived Nat.zero general caller."),
     (r"def rfnzg_zero_input_after_m (m : KExpr) : KExpr :=
  (KExpr.pi (KExpr.app m rfnz_zero) (KExpr.pi (rfnzg_zero_sarm_after_m m) (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar Nat.zero)))))", "Actual-name telescope/spine model data used by the source-derived Nat.zero general caller."),
-    (r"def rfnzg_zero_input_after_m_eq (m : KExpr) : Eq KExpr (instantiate rfnzg_zero_input_tail m) (rfnzg_zero_input_after_m m) :=
+    (r"def rfnzg_zero_input_after_m_eq (m : KExpr) : @Eq KExpr (instantiate rfnzg_zero_input_tail m) (rfnzg_zero_input_after_m m) :=
  (Eq.cong KExpr KExpr (fun (x : KExpr) => (KExpr.pi (KExpr.app x rfnz_zero) (KExpr.pi (rfnzg_zero_sarm_after_m m) (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar Nat.zero)))))) (lift_at m Nat.zero Nat.zero) m (lift_zero_identity m))", "Constructive source-derived Nat.zero general-caller prerequisite or closed caller; no assumption of output typing or general recursor admission."),
-    (r"def rfnzg_zero_input_after_z_eq (m : KExpr) (z : KExpr) : Eq KExpr (instantiate (KExpr.pi (rfnzg_zero_sarm_after_m m) (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar Nat.zero)))) z) (KExpr.pi (rfnzg_succ_case m) (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)))) :=
- (universe_bridge_congr2 KExpr KExpr KExpr (fun (A : KExpr) (B : KExpr) => KExpr.pi A B) (instantiate (rfnzg_zero_sarm_after_m m) z) (rfnzg_succ_case m) (KExpr.pi rfnz_nat (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) z (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))) (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))) (rfnzg_zero_sarm_after_z_eq m z) (Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.pi rfnz_nat x) (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) z (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)) (Eq.cong KExpr KExpr (fun (x : KExpr) => (KExpr.app x (KExpr.bvar Nat.zero))) (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) z (Nat.succ (Nat.succ Nat.zero))) (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (instantiate_lift_cancel_general m z Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero))) (Nat.succ (Nat.succ Nat.zero)) (Eq.refl Nat (Nat.succ Nat.zero))))))", "Constructive source-derived Nat.zero general-caller prerequisite or closed caller; no assumption of output typing or general recursor admission."),
-    (r"def rfnzg_zero_input_after_s_eq (m : KExpr) (s : KExpr) : Eq KExpr (instantiate (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))) s) (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero))) :=
+    (r"def rfnzg_zero_input_after_z_eq (m : KExpr) (z : KExpr) : @Eq KExpr (instantiate (KExpr.pi (rfnzg_zero_sarm_after_m m) (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar Nat.zero)))) z) (KExpr.pi (rfnzg_succ_case m) (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)))) :=
+ (universe_bridge_congr2 KExpr KExpr KExpr (fun (A : KExpr) (B : KExpr) => KExpr.pi A B) (instantiate (rfnzg_zero_sarm_after_m m) z) (rfnzg_succ_case m) (KExpr.pi rfnz_nat (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) z (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))) (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))) (rfnzg_zero_sarm_after_z_eq m z) (Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.pi rfnz_nat x) (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) z (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)) (Eq.cong KExpr KExpr (fun (x : KExpr) => (KExpr.app x (KExpr.bvar Nat.zero))) (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) z (Nat.succ (Nat.succ Nat.zero))) (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (instantiate_lift_cancel_general m z Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero))) (Nat.succ (Nat.succ Nat.zero)) (@Eq.refl Nat (Nat.succ Nat.zero))))))", "Constructive source-derived Nat.zero general-caller prerequisite or closed caller; no assumption of output typing or general recursor admission."),
+    (r"def rfnzg_zero_input_after_s_eq (m : KExpr) (s : KExpr) : @Eq KExpr (instantiate (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))) s) (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero))) :=
  (Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.pi rfnz_nat x) (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) s (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (Eq.cong KExpr KExpr (fun (x : KExpr) => (KExpr.app x (KExpr.bvar Nat.zero))) (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) s (Nat.succ Nat.zero)) (lift_at m Nat.zero (Nat.succ Nat.zero)) (inst_at1_lift2 m s)))", "Constructive source-derived Nat.zero general-caller prerequisite or closed caller; no assumption of output typing or general recursor admission."),
-    (r"def rfnzg_zero_input_after_major_eq (m : KExpr) : Eq KExpr (instantiate (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) rfnz_zero) (KExpr.app m rfnz_zero) :=
+    (r"def rfnzg_zero_input_after_major_eq (m : KExpr) : @Eq KExpr (instantiate (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) rfnz_zero) (KExpr.app m rfnz_zero) :=
  (Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.app x rfnz_zero) (instantiate (lift_at m Nat.zero (Nat.succ Nat.zero)) rfnz_zero) m (inst_lift1 m rfnz_zero))", "Constructive source-derived Nat.zero general-caller prerequisite or closed caller; no assumption of output typing or general recursor admission."),
     (r"def rfnzg_zero_input_typed_spine (R : RedEnv) (tenv : KDeclEnv) (G : ListType KExpr) (u : Level) (m : KExpr) (z : KExpr) (s : KExpr)
  (hm : TypingCtxConvIn R tenv G m (rfnz_motive_type u))
  (hz : TypingCtxConvIn R tenv G z (KExpr.app m rfnz_zero))
  (hs : TypingCtxConvIn R tenv G s (rfnzg_succ_case m))
  (hzero : TypingCtxConvIn R tenv G rfnz_zero rfnz_nat) : TypedRawPiSpine R tenv G (rfnz_rec_type u) (rfnzg_zero_input_args m z s) (KExpr.app m rfnz_zero) :=
- TypedRawPiSpine.cons R tenv G (rfnz_motive_type u) rfnzg_zero_input_tail m (ListType.cons KExpr z (ListType.cons KExpr s (ListType.cons KExpr rfnz_zero (ListType.nil KExpr)))) (KExpr.app m rfnz_zero) hm (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (ListType.cons KExpr z (ListType.cons KExpr s (ListType.cons KExpr rfnz_zero (ListType.nil KExpr)))) (KExpr.app m rfnz_zero)) (rfnzg_zero_input_after_m m) (instantiate rfnzg_zero_input_tail m) (Eq.symm KExpr (instantiate rfnzg_zero_input_tail m) (rfnzg_zero_input_after_m m) (rfnzg_zero_input_after_m_eq m)) (TypedRawPiSpine.cons R tenv G (KExpr.app m rfnz_zero) (KExpr.pi (rfnzg_zero_sarm_after_m m) (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar Nat.zero)))) z (ListType.cons KExpr s (ListType.cons KExpr rfnz_zero (ListType.nil KExpr))) (KExpr.app m rfnz_zero) hz (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (ListType.cons KExpr s (ListType.cons KExpr rfnz_zero (ListType.nil KExpr))) (KExpr.app m rfnz_zero)) (KExpr.pi (rfnzg_succ_case m) (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)))) (instantiate (KExpr.pi (rfnzg_zero_sarm_after_m m) (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar Nat.zero)))) z) (Eq.symm KExpr (instantiate (KExpr.pi (rfnzg_zero_sarm_after_m m) (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar Nat.zero)))) z) (KExpr.pi (rfnzg_succ_case m) (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)))) (rfnzg_zero_input_after_z_eq m z)) (TypedRawPiSpine.cons R tenv G (rfnzg_succ_case m) (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))) s (ListType.cons KExpr rfnz_zero (ListType.nil KExpr)) (KExpr.app m rfnz_zero) hs (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (ListType.cons KExpr rfnz_zero (ListType.nil KExpr)) (KExpr.app m rfnz_zero)) (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero))) (instantiate (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))) s) (Eq.symm KExpr (instantiate (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))) s) (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero))) (rfnzg_zero_input_after_s_eq m s)) (TypedRawPiSpine.cons R tenv G rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) rfnz_zero (ListType.nil KExpr) (KExpr.app m rfnz_zero) hzero (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (ListType.nil KExpr) (KExpr.app m rfnz_zero)) (KExpr.app m rfnz_zero) (instantiate (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) rfnz_zero) (Eq.symm KExpr (instantiate (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) rfnz_zero) (KExpr.app m rfnz_zero) (rfnzg_zero_input_after_major_eq m)) (TypedRawPiSpine.nil R tenv G (KExpr.app m rfnz_zero)))))))))", "Constructive source-derived Nat.zero general-caller prerequisite or closed caller; no assumption of output typing or general recursor admission."),
-    (r"def rfnzg_source_rec_lookup (u : Level) : Eq (OptionType KExpr)
- (kdecl_type_at kcre_nat_tenv fixture_nat_rec_name (ListType.cons Level u (ListType.nil Level)))
- (OptionType.some KExpr (rfnz_rec_type u)) :=
- Eq.subst KDeclEnv (fun (tenv : KDeclEnv) => Eq (OptionType KExpr)
-  (kdecl_type_at tenv fixture_nat_rec_name (ListType.cons Level u (ListType.nil Level))) (OptionType.some KExpr (rfnz_rec_type u)))
+ @TypedRawPiSpine.cons R tenv G (rfnz_motive_type u) rfnzg_zero_input_tail m (@ListType.cons KExpr z (@ListType.cons KExpr s (@ListType.cons KExpr rfnz_zero (@ListType.nil KExpr)))) (KExpr.app m rfnz_zero) hm (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (@ListType.cons KExpr z (@ListType.cons KExpr s (@ListType.cons KExpr rfnz_zero (@ListType.nil KExpr)))) (KExpr.app m rfnz_zero)) (rfnzg_zero_input_after_m m) (instantiate rfnzg_zero_input_tail m) (Eq.symm KExpr (instantiate rfnzg_zero_input_tail m) (rfnzg_zero_input_after_m m) (rfnzg_zero_input_after_m_eq m)) (@TypedRawPiSpine.cons R tenv G (KExpr.app m rfnz_zero) (KExpr.pi (rfnzg_zero_sarm_after_m m) (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar Nat.zero)))) z (@ListType.cons KExpr s (@ListType.cons KExpr rfnz_zero (@ListType.nil KExpr))) (KExpr.app m rfnz_zero) hz (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (@ListType.cons KExpr s (@ListType.cons KExpr rfnz_zero (@ListType.nil KExpr))) (KExpr.app m rfnz_zero)) (KExpr.pi (rfnzg_succ_case m) (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)))) (instantiate (KExpr.pi (rfnzg_zero_sarm_after_m m) (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar Nat.zero)))) z) (Eq.symm KExpr (instantiate (KExpr.pi (rfnzg_zero_sarm_after_m m) (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar Nat.zero)))) z) (KExpr.pi (rfnzg_succ_case m) (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)))) (rfnzg_zero_input_after_z_eq m z)) (@TypedRawPiSpine.cons R tenv G (rfnzg_succ_case m) (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))) s (@ListType.cons KExpr rfnz_zero (@ListType.nil KExpr)) (KExpr.app m rfnz_zero) hs (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (@ListType.cons KExpr rfnz_zero (@ListType.nil KExpr)) (KExpr.app m rfnz_zero)) (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero))) (instantiate (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))) s) (Eq.symm KExpr (instantiate (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))) s) (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero))) (rfnzg_zero_input_after_s_eq m s)) (@TypedRawPiSpine.cons R tenv G rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) rfnz_zero (@ListType.nil KExpr) (KExpr.app m rfnz_zero) hzero (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (@ListType.nil KExpr) (KExpr.app m rfnz_zero)) (KExpr.app m rfnz_zero) (instantiate (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) rfnz_zero) (Eq.symm KExpr (instantiate (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) rfnz_zero) (KExpr.app m rfnz_zero) (rfnzg_zero_input_after_major_eq m)) (@TypedRawPiSpine.nil R tenv G (KExpr.app m rfnz_zero)))))))))", "Constructive source-derived Nat.zero general-caller prerequisite or closed caller; no assumption of output typing or general recursor admission."),
+    (r"def rfnzg_source_rec_lookup (u : Level) : @Eq (OptionType KExpr)
+ (kdecl_type_at kcre_nat_tenv fixture_nat_rec_name (@ListType.cons Level u (@ListType.nil Level)))
+ (@OptionType.some KExpr (rfnz_rec_type u)) :=
+ Eq.subst KDeclEnv (fun (tenv : KDeclEnv) => @Eq (OptionType KExpr)
+  (kdecl_type_at tenv fixture_nat_rec_name (@ListType.cons Level u (@ListType.nil Level))) (@OptionType.some KExpr (rfnz_rec_type u)))
   rfnz_tenv kcre_nat_tenv rfnz_source_tenv_eq (rfnz_rec_lookup u)", "Constructive source-derived Nat.zero general-caller prerequisite or closed caller; no assumption of output typing or general recursor admission."),
-    (r"def rfnzg_source_zero_typed : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) rfnz_zero rfnz_nat :=
- Eq.substType KDeclEnv (fun (tenv : KDeclEnv) => TypingCtxConvIn kernel_core_red_env tenv (ListType.nil KExpr) rfnz_zero rfnz_nat)
+    (r"def rfnzg_source_zero_typed : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) rfnz_zero rfnz_nat :=
+ Eq.substType KDeclEnv (fun (tenv : KDeclEnv) => TypingCtxConvIn kernel_core_red_env tenv (@ListType.nil KExpr) rfnz_zero rfnz_nat)
   rfnz_tenv kcre_nat_tenv rfnz_source_tenv_eq
-  (nz_typing_to_semantic kernel_core_red_env rfnz_tenv (ListType.nil KExpr) rfnz_zero rfnz_nat (rfnz_zero_typed (ListType.nil KExpr)))", "Constructive source-derived Nat.zero general-caller prerequisite or closed caller; no assumption of output typing or general recursor admission."),
+  (nz_typing_to_semantic kernel_core_red_env rfnz_tenv (@ListType.nil KExpr) rfnz_zero rfnz_nat (rfnz_zero_typed (@ListType.nil KExpr)))", "Constructive source-derived Nat.zero general-caller prerequisite or closed caller; no assumption of output typing or general recursor admission."),
     (r"def rfnzg_source_general_raw_result_typed (u : Level) (m : KExpr) (z : KExpr) (s : KExpr)
- (hm : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) m (rfnz_motive_type u))
- (hz : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) z (KExpr.app m rfnz_zero))
- (hs : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) s (rfnzg_succ_case m)) :
- TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) (apply_spine (rfnzg_zero_args m z s) (recursor_rhs_instance kcre_nat_rec_signature kcre_witness_nat_zero_rhs (ListType.cons Level u (ListType.nil Level)))) (KExpr.app m rfnz_zero) :=
- typed_raw_pi_spine_apply kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) (rfnz_rule_type u)
+ (hm : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) m (rfnz_motive_type u))
+ (hz : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) z (KExpr.app m rfnz_zero))
+ (hs : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) s (rfnzg_succ_case m)) :
+ TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) (apply_spine (rfnzg_zero_args m z s) (recursor_rhs_instance kcre_nat_rec_signature kcre_witness_nat_zero_rhs (@ListType.cons Level u (@ListType.nil Level)))) (KExpr.app m rfnz_zero) :=
+ typed_raw_pi_spine_apply kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) (rfnz_rule_type u)
   (rfnzg_zero_args m z s) (KExpr.app m rfnz_zero)
-  (rfnzg_zero_typed_spine kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) u m z s hm hz hs) (recursor_rhs_instance kcre_nat_rec_signature kcre_witness_nat_zero_rhs (ListType.cons Level u (ListType.nil Level)))
-  (nz_typing_to_semantic kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) (recursor_rhs_instance kcre_nat_rec_signature kcre_witness_nat_zero_rhs (ListType.cons Level u (ListType.nil Level))) (rfnz_rule_type u)
+  (rfnzg_zero_typed_spine kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) u m z s hm hz hs) (recursor_rhs_instance kcre_nat_rec_signature kcre_witness_nat_zero_rhs (@ListType.cons Level u (@ListType.nil Level)))
+  (nz_typing_to_semantic kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) (recursor_rhs_instance kcre_nat_rec_signature kcre_witness_nat_zero_rhs (@ListType.cons Level u (@ListType.nil Level))) (rfnz_rule_type u)
    (rfnz_source_actual_instance_typed u))", "Derive actual once-instantiated Nat.zero raw-output typing from the checked source RHS instance and actual argument typings via the forward spine theorem. No output oracle."),
     (r"def rfnzg_source_general_input_typed (u : Level) (m : KExpr) (z : KExpr) (s : KExpr)
- (hm : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) m (rfnz_motive_type u))
- (hz : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) z (KExpr.app m rfnz_zero))
- (hs : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) s (rfnzg_succ_case m)) :
- TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) (rfnz_rec_app u m z s rfnz_zero) (KExpr.app m rfnz_zero) :=
- typed_raw_pi_spine_const_apply kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) fixture_nat_rec_name (ListType.cons Level u (ListType.nil Level))
+ (hm : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) m (rfnz_motive_type u))
+ (hz : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) z (KExpr.app m rfnz_zero))
+ (hs : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) s (rfnzg_succ_case m)) :
+ TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) (rfnz_rec_app u m z s rfnz_zero) (KExpr.app m rfnz_zero) :=
+ typed_raw_pi_spine_const_apply kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) fixture_nat_rec_name (@ListType.cons Level u (@ListType.nil Level))
   (rfnz_rec_type u) (rfnzg_zero_input_args m z s) (KExpr.app m rfnz_zero)
   (rfnzg_source_rec_lookup u)
-  (rfnzg_zero_input_typed_spine kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) u m z s hm hz hs rfnzg_source_zero_typed)", "Derive actual source-environment Nat.zero input typing from guarded recursor lookup and the actual typed argument spine."),
+  (rfnzg_zero_input_typed_spine kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) u m z s hm hz hs rfnzg_source_zero_typed)", "Derive actual source-environment Nat.zero input typing from guarded recursor lookup and the actual typed argument spine."),
     (r"def rfnzg_source_general_guarded_step (u : Level) (m : KExpr) (z : KExpr) (s : KExpr) :
  iota_step (red_rec kernel_core_red_env) (rfnz_rec_app u m z s rfnz_zero)
-  (apply_spine (rfnzg_zero_args m z s) (recursor_rhs_instance kcre_nat_rec_signature kcre_witness_nat_zero_rhs (ListType.cons Level u (ListType.nil Level)))) :=
+  (apply_spine (rfnzg_zero_args m z s) (recursor_rhs_instance kcre_nat_rec_signature kcre_witness_nat_zero_rhs (@ListType.cons Level u (@ListType.nil Level)))) :=
  iota_reduct_full_recon (red_rec kernel_core_red_env) (rfnz_rec_app u m z s rfnz_zero)
-  (apply_spine (rfnzg_zero_args m z s) (recursor_rhs_instance kcre_nat_rec_signature kcre_witness_nat_zero_rhs (ListType.cons Level u (ListType.nil Level))))
+  (apply_spine (rfnzg_zero_args m z s) (recursor_rhs_instance kcre_nat_rec_signature kcre_witness_nat_zero_rhs (@ListType.cons Level u (@ListType.nil Level))))
   fixture_nat_rec_name fixture_nat_rec_meta rfnz_zero fixture_nat_zero_name
   (RecRule.mk fixture_nat_zero_name Nat.zero kcre_witness_nat_zero_rhs)
-  (Eq.refl (OptionType Name) (OptionType.some Name fixture_nat_rec_name))
+  (@Eq.refl (OptionType Name) (@OptionType.some Name fixture_nat_rec_name))
   rfnz_actual_metadata
-  (Eq.refl (OptionType KExpr) (OptionType.some KExpr rfnz_zero))
-  (Eq.refl (OptionType Name) (OptionType.some Name fixture_nat_zero_name))
-  rfnz_actual_zero_rule (Eq.refl Bool Bool.true) (Eq.refl Bool Bool.true)
-  (Eq.refl KExpr (apply_spine (rfnzg_zero_args m z s) (recursor_rhs_instance kcre_nat_rec_signature kcre_witness_nat_zero_rhs (ListType.cons Level u (ListType.nil Level)))))", "The actual reflected guarded zero step for arbitrary raw universe and arguments, preserving both real guards and once-instantiated RHS."),
-    (r"def rfnzg_source_motive_argument_typed : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) rfnz_motive (rfnz_motive_type (Level.succ Level.zero)) :=
- Eq.substType KDeclEnv (fun (tenv : KDeclEnv) => TypingCtxConvIn kernel_core_red_env tenv (ListType.nil KExpr) rfnz_motive (rfnz_motive_type (Level.succ Level.zero)))
+  (@Eq.refl (OptionType KExpr) (@OptionType.some KExpr rfnz_zero))
+  (@Eq.refl (OptionType Name) (@OptionType.some Name fixture_nat_zero_name))
+  rfnz_actual_zero_rule (@Eq.refl Bool Bool.true) (@Eq.refl Bool Bool.true)
+  (@Eq.refl KExpr (apply_spine (rfnzg_zero_args m z s) (recursor_rhs_instance kcre_nat_rec_signature kcre_witness_nat_zero_rhs (@ListType.cons Level u (@ListType.nil Level)))))", "The actual reflected guarded zero step for arbitrary raw universe and arguments, preserving both real guards and once-instantiated RHS."),
+    (r"def rfnzg_source_motive_argument_typed : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) rfnz_motive (rfnz_motive_type (Level.succ Level.zero)) :=
+ Eq.substType KDeclEnv (fun (tenv : KDeclEnv) => TypingCtxConvIn kernel_core_red_env tenv (@ListType.nil KExpr) rfnz_motive (rfnz_motive_type (Level.succ Level.zero)))
   rfnz_tenv kcre_nat_tenv rfnz_source_tenv_eq rfnz_motive_argument_typed", "Constructive source-derived Nat.zero general-caller prerequisite or closed caller; no assumption of output typing or general recursor admission."),
-    (r"def rfnzg_source_zero_argument_typed : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) rfnz_zero (KExpr.app rfnz_motive rfnz_zero) :=
- Eq.substType KDeclEnv (fun (tenv : KDeclEnv) => TypingCtxConvIn kernel_core_red_env tenv (ListType.nil KExpr) rfnz_zero (KExpr.app rfnz_motive rfnz_zero))
+    (r"def rfnzg_source_zero_argument_typed : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) rfnz_zero (KExpr.app rfnz_motive rfnz_zero) :=
+ Eq.substType KDeclEnv (fun (tenv : KDeclEnv) => TypingCtxConvIn kernel_core_red_env tenv (@ListType.nil KExpr) rfnz_zero (KExpr.app rfnz_motive rfnz_zero))
   rfnz_tenv kcre_nat_tenv rfnz_source_tenv_eq rfnz_zero_argument_typed", "Constructive source-derived Nat.zero general-caller prerequisite or closed caller; no assumption of output typing or general recursor admission."),
-    (r"def rfnzg_source_minor_argument_typed : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) rfnz_minor (rfnzg_succ_case rfnz_motive) :=
- Eq.substType KDeclEnv (fun (tenv : KDeclEnv) => TypingCtxConvIn kernel_core_red_env tenv (ListType.nil KExpr) rfnz_minor (rfnzg_succ_case rfnz_motive))
+    (r"def rfnzg_source_minor_argument_typed : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) rfnz_minor (rfnzg_succ_case rfnz_motive) :=
+ Eq.substType KDeclEnv (fun (tenv : KDeclEnv) => TypingCtxConvIn kernel_core_red_env tenv (@ListType.nil KExpr) rfnz_minor (rfnzg_succ_case rfnz_motive))
   rfnz_tenv kcre_nat_tenv rfnz_source_tenv_eq rfnz_minor_argument_typed", "Constructive source-derived Nat.zero general-caller prerequisite or closed caller; no assumption of output typing or general recursor admission."),
-    (r"def rfnzg_source_nonzero_input : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) rfnz_input (KExpr.app rfnz_motive rfnz_zero) :=
+    (r"def rfnzg_source_nonzero_input : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) rfnz_input (KExpr.app rfnz_motive rfnz_zero) :=
  rfnzg_source_general_input_typed (Level.succ Level.zero) rfnz_motive rfnz_zero rfnz_minor
   rfnzg_source_motive_argument_typed rfnzg_source_zero_argument_typed rfnzg_source_minor_argument_typed", "Constructive source-derived Nat.zero general-caller prerequisite or closed caller; no assumption of output typing or general recursor admission."),
-    (r"def rfnzg_source_nonzero_input_nat : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) rfnz_input rfnz_nat :=
- TypingCtxConvIn.conv kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) rfnz_input (KExpr.app rfnz_motive rfnz_zero) rfnz_nat
+    (r"def rfnzg_source_nonzero_input_nat : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) rfnz_input rfnz_nat :=
+ @TypingCtxConvIn.conv kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) rfnz_input (KExpr.app rfnz_motive rfnz_zero) rfnz_nat
   rfnzg_source_nonzero_input (rfnz_motive_beta rfnz_zero)", "Constructive source-derived Nat.zero general-caller prerequisite or closed caller; no assumption of output typing or general recursor admission."),
-    (r"def rfnzg_source_nonzero_raw_result : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) rfnz_raw_result (KExpr.app rfnz_motive rfnz_zero) :=
+    (r"def rfnzg_source_nonzero_raw_result : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) rfnz_raw_result (KExpr.app rfnz_motive rfnz_zero) :=
  rfnzg_source_general_raw_result_typed (Level.succ Level.zero) rfnz_motive rfnz_zero rfnz_minor
   rfnzg_source_motive_argument_typed rfnzg_source_zero_argument_typed rfnzg_source_minor_argument_typed", "Constructive source-derived Nat.zero general-caller prerequisite or closed caller; no assumption of output typing or general recursor admission."),
-    (r"def rfnzg_source_nonzero_raw_result_nat : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) rfnz_raw_result rfnz_nat :=
- TypingCtxConvIn.conv kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) rfnz_raw_result (KExpr.app rfnz_motive rfnz_zero) rfnz_nat
+    (r"def rfnzg_source_nonzero_raw_result_nat : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) rfnz_raw_result rfnz_nat :=
+ @TypingCtxConvIn.conv kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) rfnz_raw_result (KExpr.app rfnz_motive rfnz_zero) rfnz_nat
   rfnzg_source_nonzero_raw_result (rfnz_motive_beta rfnz_zero)", "Constructive source-derived Nat.zero general-caller prerequisite or closed caller; no assumption of output typing or general recursor admission."),
     (r"def rfnzg_source_nonzero_step : iota_step (red_rec kernel_core_red_env) rfnz_input rfnz_raw_result :=
  rfnzg_source_general_guarded_step (Level.succ Level.zero) rfnz_motive rfnz_zero rfnz_minor", "Constructive source-derived Nat.zero general-caller prerequisite or closed caller; no assumption of output typing or general recursor admission."),
@@ -179,7 +179,7 @@ const REGISTRATIONS: &[Registration] = &[
         declaration_index: 5,
         name: "rfnzg_zero_after_m_eq",
         type_src: r"forall (m : KExpr),
- Eq KExpr (instantiate rfnzg_zero_rule_tail m) (rfnzg_zero_tail_after_m m)",
+ @Eq KExpr (instantiate rfnzg_zero_rule_tail m) (rfnzg_zero_tail_after_m m)",
         value_src: r"fun (m : KExpr) =>
  (Eq.cong KExpr KExpr (fun (x : KExpr) => (KExpr.pi (KExpr.app x rfnz_zero) (KExpr.pi (rfnzg_zero_sarm_after_m m) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) rfnz_zero)))) (lift_at m Nat.zero Nat.zero) m (lift_zero_identity m))",
     },
@@ -187,15 +187,15 @@ const REGISTRATIONS: &[Registration] = &[
         declaration_index: 6,
         name: "rfnzg_zero_sarm_after_z_eq",
         type_src: r"forall (m : KExpr) (z : KExpr),
- Eq KExpr (instantiate (rfnzg_zero_sarm_after_m m) z) (rfnzg_succ_case m)",
+ @Eq KExpr (instantiate (rfnzg_zero_sarm_after_m m) z) (rfnzg_succ_case m)",
         value_src: r"fun (m : KExpr) (z : KExpr) =>
- (Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.pi rfnz_nat x) (KExpr.pi (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) z (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) z (Nat.succ (Nat.succ Nat.zero))) (KExpr.app rfnz_succ (KExpr.bvar (Nat.succ Nat.zero))))) (KExpr.pi (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.app rfnz_succ (KExpr.bvar (Nat.succ Nat.zero))))) (universe_bridge_congr2 KExpr KExpr KExpr (fun (A : KExpr) (B : KExpr) => KExpr.pi A B) (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) z (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) z (Nat.succ (Nat.succ Nat.zero))) (KExpr.app rfnz_succ (KExpr.bvar (Nat.succ Nat.zero)))) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.app rfnz_succ (KExpr.bvar (Nat.succ Nat.zero)))) (Eq.cong KExpr KExpr (fun (x : KExpr) => (KExpr.app x (KExpr.bvar Nat.zero))) (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) z (Nat.succ Nat.zero)) (lift_at m Nat.zero (Nat.succ Nat.zero)) (inst_at1_lift2 m z)) (Eq.cong KExpr KExpr (fun (x : KExpr) => (KExpr.app x (KExpr.app rfnz_succ (KExpr.bvar (Nat.succ Nat.zero))))) (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) z (Nat.succ (Nat.succ Nat.zero))) (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (instantiate_lift_cancel_general m z Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero))) (Nat.succ (Nat.succ Nat.zero)) (Eq.refl Nat (Nat.succ Nat.zero))))))",
+ (Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.pi rfnz_nat x) (KExpr.pi (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) z (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) z (Nat.succ (Nat.succ Nat.zero))) (KExpr.app rfnz_succ (KExpr.bvar (Nat.succ Nat.zero))))) (KExpr.pi (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.app rfnz_succ (KExpr.bvar (Nat.succ Nat.zero))))) (universe_bridge_congr2 KExpr KExpr KExpr (fun (A : KExpr) (B : KExpr) => KExpr.pi A B) (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) z (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) z (Nat.succ (Nat.succ Nat.zero))) (KExpr.app rfnz_succ (KExpr.bvar (Nat.succ Nat.zero)))) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.app rfnz_succ (KExpr.bvar (Nat.succ Nat.zero)))) (Eq.cong KExpr KExpr (fun (x : KExpr) => (KExpr.app x (KExpr.bvar Nat.zero))) (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) z (Nat.succ Nat.zero)) (lift_at m Nat.zero (Nat.succ Nat.zero)) (inst_at1_lift2 m z)) (Eq.cong KExpr KExpr (fun (x : KExpr) => (KExpr.app x (KExpr.app rfnz_succ (KExpr.bvar (Nat.succ Nat.zero))))) (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) z (Nat.succ (Nat.succ Nat.zero))) (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (instantiate_lift_cancel_general m z Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero))) (Nat.succ (Nat.succ Nat.zero)) (@Eq.refl Nat (Nat.succ Nat.zero))))))",
     },
     Registration::Proof {
         declaration_index: 7,
         name: "rfnzg_zero_after_z_eq",
         type_src: r"forall (m : KExpr) (z : KExpr),
- Eq KExpr (instantiate (KExpr.pi (rfnzg_zero_sarm_after_m m) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) rfnz_zero)) z) (KExpr.pi (rfnzg_succ_case m) (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) rfnz_zero))",
+ @Eq KExpr (instantiate (KExpr.pi (rfnzg_zero_sarm_after_m m) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) rfnz_zero)) z) (KExpr.pi (rfnzg_succ_case m) (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) rfnz_zero))",
         value_src: r"fun (m : KExpr) (z : KExpr) =>
  (universe_bridge_congr2 KExpr KExpr KExpr (fun (A : KExpr) (B : KExpr) => KExpr.pi A B) (instantiate (rfnzg_zero_sarm_after_m m) z) (rfnzg_succ_case m) (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) z (Nat.succ Nat.zero)) rfnz_zero) (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) rfnz_zero) (rfnzg_zero_sarm_after_z_eq m z) (Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.app x rfnz_zero) (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) z (Nat.succ Nat.zero)) (lift_at m Nat.zero (Nat.succ Nat.zero)) (inst_at1_lift2 m z)))",
     },
@@ -203,7 +203,7 @@ const REGISTRATIONS: &[Registration] = &[
         declaration_index: 8,
         name: "rfnzg_zero_after_s_eq",
         type_src: r"forall (m : KExpr) (s : KExpr),
- Eq KExpr (instantiate (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) rfnz_zero) s) (KExpr.app m rfnz_zero)",
+ @Eq KExpr (instantiate (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) rfnz_zero) s) (KExpr.app m rfnz_zero)",
         value_src: r"fun (m : KExpr) (s : KExpr) =>
  (Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.app x rfnz_zero) (instantiate (lift_at m Nat.zero (Nat.succ Nat.zero)) s) m (inst_lift1 m s))",
     },
@@ -219,12 +219,12 @@ const REGISTRATIONS: &[Registration] = &[
  (hm : TypingCtxConvIn R tenv G m (rfnz_motive_type u))
  (hz : TypingCtxConvIn R tenv G z (KExpr.app m rfnz_zero))
  (hs : TypingCtxConvIn R tenv G s (rfnzg_succ_case m)) =>
- TypedRawPiSpine.cons R tenv G (rfnz_motive_type u) rfnzg_zero_rule_tail m (ListType.cons KExpr z (ListType.cons KExpr s (ListType.nil KExpr))) (KExpr.app m rfnz_zero) hm (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (ListType.cons KExpr z (ListType.cons KExpr s (ListType.nil KExpr))) (KExpr.app m rfnz_zero)) (rfnzg_zero_tail_after_m m) (instantiate rfnzg_zero_rule_tail m) (Eq.symm KExpr (instantiate rfnzg_zero_rule_tail m) (rfnzg_zero_tail_after_m m) (rfnzg_zero_after_m_eq m)) (TypedRawPiSpine.cons R tenv G (KExpr.app m rfnz_zero) (KExpr.pi (rfnzg_zero_sarm_after_m m) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) rfnz_zero)) z (ListType.cons KExpr s (ListType.nil KExpr)) (KExpr.app m rfnz_zero) hz (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (ListType.cons KExpr s (ListType.nil KExpr)) (KExpr.app m rfnz_zero)) (KExpr.pi (rfnzg_succ_case m) (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) rfnz_zero)) (instantiate (KExpr.pi (rfnzg_zero_sarm_after_m m) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) rfnz_zero)) z) (Eq.symm KExpr (instantiate (KExpr.pi (rfnzg_zero_sarm_after_m m) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) rfnz_zero)) z) (KExpr.pi (rfnzg_succ_case m) (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) rfnz_zero)) (rfnzg_zero_after_z_eq m z)) (TypedRawPiSpine.cons R tenv G (rfnzg_succ_case m) (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) rfnz_zero) s (ListType.nil KExpr) (KExpr.app m rfnz_zero) hs (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (ListType.nil KExpr) (KExpr.app m rfnz_zero)) (KExpr.app m rfnz_zero) (instantiate (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) rfnz_zero) s) (Eq.symm KExpr (instantiate (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) rfnz_zero) s) (KExpr.app m rfnz_zero) (rfnzg_zero_after_s_eq m s)) (TypedRawPiSpine.nil R tenv G (KExpr.app m rfnz_zero)))))))",
+ @TypedRawPiSpine.cons R tenv G (rfnz_motive_type u) rfnzg_zero_rule_tail m (@ListType.cons KExpr z (@ListType.cons KExpr s (@ListType.nil KExpr))) (KExpr.app m rfnz_zero) hm (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (@ListType.cons KExpr z (@ListType.cons KExpr s (@ListType.nil KExpr))) (KExpr.app m rfnz_zero)) (rfnzg_zero_tail_after_m m) (instantiate rfnzg_zero_rule_tail m) (Eq.symm KExpr (instantiate rfnzg_zero_rule_tail m) (rfnzg_zero_tail_after_m m) (rfnzg_zero_after_m_eq m)) (@TypedRawPiSpine.cons R tenv G (KExpr.app m rfnz_zero) (KExpr.pi (rfnzg_zero_sarm_after_m m) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) rfnz_zero)) z (@ListType.cons KExpr s (@ListType.nil KExpr)) (KExpr.app m rfnz_zero) hz (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (@ListType.cons KExpr s (@ListType.nil KExpr)) (KExpr.app m rfnz_zero)) (KExpr.pi (rfnzg_succ_case m) (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) rfnz_zero)) (instantiate (KExpr.pi (rfnzg_zero_sarm_after_m m) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) rfnz_zero)) z) (Eq.symm KExpr (instantiate (KExpr.pi (rfnzg_zero_sarm_after_m m) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) rfnz_zero)) z) (KExpr.pi (rfnzg_succ_case m) (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) rfnz_zero)) (rfnzg_zero_after_z_eq m z)) (@TypedRawPiSpine.cons R tenv G (rfnzg_succ_case m) (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) rfnz_zero) s (@ListType.nil KExpr) (KExpr.app m rfnz_zero) hs (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (@ListType.nil KExpr) (KExpr.app m rfnz_zero)) (KExpr.app m rfnz_zero) (instantiate (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) rfnz_zero) s) (Eq.symm KExpr (instantiate (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) rfnz_zero) s) (KExpr.app m rfnz_zero) (rfnzg_zero_after_s_eq m s)) (@TypedRawPiSpine.nil R tenv G (KExpr.app m rfnz_zero)))))))",
     },
     Registration::Proof {
         declaration_index: 10,
         name: "rfnzg_zero_spine_open_motive_control",
-        type_src: r"Eq KExpr (instantiate (rfnzg_zero_sarm_after_m (KExpr.bvar Nat.zero))
+        type_src: r"@Eq KExpr (instantiate (rfnzg_zero_sarm_after_m (KExpr.bvar Nat.zero))
    (KExpr.bvar (Nat.succ Nat.zero))) (rfnzg_succ_case (KExpr.bvar Nat.zero))",
         value_src: r"rfnzg_zero_sarm_after_z_eq (KExpr.bvar Nat.zero) (KExpr.bvar (Nat.succ Nat.zero))",
     },
@@ -244,7 +244,7 @@ const REGISTRATIONS: &[Registration] = &[
         declaration_index: 14,
         name: "rfnzg_zero_input_after_m_eq",
         type_src: r"forall (m : KExpr),
- Eq KExpr (instantiate rfnzg_zero_input_tail m) (rfnzg_zero_input_after_m m)",
+ @Eq KExpr (instantiate rfnzg_zero_input_tail m) (rfnzg_zero_input_after_m m)",
         value_src: r"fun (m : KExpr) =>
  (Eq.cong KExpr KExpr (fun (x : KExpr) => (KExpr.pi (KExpr.app x rfnz_zero) (KExpr.pi (rfnzg_zero_sarm_after_m m) (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar Nat.zero)))))) (lift_at m Nat.zero Nat.zero) m (lift_zero_identity m))",
     },
@@ -252,15 +252,15 @@ const REGISTRATIONS: &[Registration] = &[
         declaration_index: 15,
         name: "rfnzg_zero_input_after_z_eq",
         type_src: r"forall (m : KExpr) (z : KExpr),
- Eq KExpr (instantiate (KExpr.pi (rfnzg_zero_sarm_after_m m) (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar Nat.zero)))) z) (KExpr.pi (rfnzg_succ_case m) (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))))",
+ @Eq KExpr (instantiate (KExpr.pi (rfnzg_zero_sarm_after_m m) (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar Nat.zero)))) z) (KExpr.pi (rfnzg_succ_case m) (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))))",
         value_src: r"fun (m : KExpr) (z : KExpr) =>
- (universe_bridge_congr2 KExpr KExpr KExpr (fun (A : KExpr) (B : KExpr) => KExpr.pi A B) (instantiate (rfnzg_zero_sarm_after_m m) z) (rfnzg_succ_case m) (KExpr.pi rfnz_nat (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) z (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))) (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))) (rfnzg_zero_sarm_after_z_eq m z) (Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.pi rfnz_nat x) (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) z (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)) (Eq.cong KExpr KExpr (fun (x : KExpr) => (KExpr.app x (KExpr.bvar Nat.zero))) (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) z (Nat.succ (Nat.succ Nat.zero))) (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (instantiate_lift_cancel_general m z Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero))) (Nat.succ (Nat.succ Nat.zero)) (Eq.refl Nat (Nat.succ Nat.zero))))))",
+ (universe_bridge_congr2 KExpr KExpr KExpr (fun (A : KExpr) (B : KExpr) => KExpr.pi A B) (instantiate (rfnzg_zero_sarm_after_m m) z) (rfnzg_succ_case m) (KExpr.pi rfnz_nat (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) z (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))) (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))) (rfnzg_zero_sarm_after_z_eq m z) (Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.pi rfnz_nat x) (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) z (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)) (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)) (Eq.cong KExpr KExpr (fun (x : KExpr) => (KExpr.app x (KExpr.bvar Nat.zero))) (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) z (Nat.succ (Nat.succ Nat.zero))) (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (instantiate_lift_cancel_general m z Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero))) (Nat.succ (Nat.succ Nat.zero)) (@Eq.refl Nat (Nat.succ Nat.zero))))))",
     },
     Registration::Proof {
         declaration_index: 16,
         name: "rfnzg_zero_input_after_s_eq",
         type_src: r"forall (m : KExpr) (s : KExpr),
- Eq KExpr (instantiate (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))) s) (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)))",
+ @Eq KExpr (instantiate (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))) s) (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)))",
         value_src: r"fun (m : KExpr) (s : KExpr) =>
  (Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.pi rfnz_nat x) (KExpr.app (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) s (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) (Eq.cong KExpr KExpr (fun (x : KExpr) => (KExpr.app x (KExpr.bvar Nat.zero))) (instantiate_at (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) s (Nat.succ Nat.zero)) (lift_at m Nat.zero (Nat.succ Nat.zero)) (inst_at1_lift2 m s)))",
     },
@@ -268,7 +268,7 @@ const REGISTRATIONS: &[Registration] = &[
         declaration_index: 17,
         name: "rfnzg_zero_input_after_major_eq",
         type_src: r"forall (m : KExpr),
- Eq KExpr (instantiate (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) rfnz_zero) (KExpr.app m rfnz_zero)",
+ @Eq KExpr (instantiate (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) rfnz_zero) (KExpr.app m rfnz_zero)",
         value_src: r"fun (m : KExpr) =>
  (Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.app x rfnz_zero) (instantiate (lift_at m Nat.zero (Nat.succ Nat.zero)) rfnz_zero) m (inst_lift1 m rfnz_zero))",
     },
@@ -286,128 +286,128 @@ const REGISTRATIONS: &[Registration] = &[
  (hz : TypingCtxConvIn R tenv G z (KExpr.app m rfnz_zero))
  (hs : TypingCtxConvIn R tenv G s (rfnzg_succ_case m))
  (hzero : TypingCtxConvIn R tenv G rfnz_zero rfnz_nat) =>
- TypedRawPiSpine.cons R tenv G (rfnz_motive_type u) rfnzg_zero_input_tail m (ListType.cons KExpr z (ListType.cons KExpr s (ListType.cons KExpr rfnz_zero (ListType.nil KExpr)))) (KExpr.app m rfnz_zero) hm (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (ListType.cons KExpr z (ListType.cons KExpr s (ListType.cons KExpr rfnz_zero (ListType.nil KExpr)))) (KExpr.app m rfnz_zero)) (rfnzg_zero_input_after_m m) (instantiate rfnzg_zero_input_tail m) (Eq.symm KExpr (instantiate rfnzg_zero_input_tail m) (rfnzg_zero_input_after_m m) (rfnzg_zero_input_after_m_eq m)) (TypedRawPiSpine.cons R tenv G (KExpr.app m rfnz_zero) (KExpr.pi (rfnzg_zero_sarm_after_m m) (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar Nat.zero)))) z (ListType.cons KExpr s (ListType.cons KExpr rfnz_zero (ListType.nil KExpr))) (KExpr.app m rfnz_zero) hz (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (ListType.cons KExpr s (ListType.cons KExpr rfnz_zero (ListType.nil KExpr))) (KExpr.app m rfnz_zero)) (KExpr.pi (rfnzg_succ_case m) (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)))) (instantiate (KExpr.pi (rfnzg_zero_sarm_after_m m) (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar Nat.zero)))) z) (Eq.symm KExpr (instantiate (KExpr.pi (rfnzg_zero_sarm_after_m m) (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar Nat.zero)))) z) (KExpr.pi (rfnzg_succ_case m) (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)))) (rfnzg_zero_input_after_z_eq m z)) (TypedRawPiSpine.cons R tenv G (rfnzg_succ_case m) (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))) s (ListType.cons KExpr rfnz_zero (ListType.nil KExpr)) (KExpr.app m rfnz_zero) hs (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (ListType.cons KExpr rfnz_zero (ListType.nil KExpr)) (KExpr.app m rfnz_zero)) (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero))) (instantiate (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))) s) (Eq.symm KExpr (instantiate (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))) s) (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero))) (rfnzg_zero_input_after_s_eq m s)) (TypedRawPiSpine.cons R tenv G rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) rfnz_zero (ListType.nil KExpr) (KExpr.app m rfnz_zero) hzero (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (ListType.nil KExpr) (KExpr.app m rfnz_zero)) (KExpr.app m rfnz_zero) (instantiate (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) rfnz_zero) (Eq.symm KExpr (instantiate (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) rfnz_zero) (KExpr.app m rfnz_zero) (rfnzg_zero_input_after_major_eq m)) (TypedRawPiSpine.nil R tenv G (KExpr.app m rfnz_zero)))))))))",
+ @TypedRawPiSpine.cons R tenv G (rfnz_motive_type u) rfnzg_zero_input_tail m (@ListType.cons KExpr z (@ListType.cons KExpr s (@ListType.cons KExpr rfnz_zero (@ListType.nil KExpr)))) (KExpr.app m rfnz_zero) hm (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (@ListType.cons KExpr z (@ListType.cons KExpr s (@ListType.cons KExpr rfnz_zero (@ListType.nil KExpr)))) (KExpr.app m rfnz_zero)) (rfnzg_zero_input_after_m m) (instantiate rfnzg_zero_input_tail m) (Eq.symm KExpr (instantiate rfnzg_zero_input_tail m) (rfnzg_zero_input_after_m m) (rfnzg_zero_input_after_m_eq m)) (@TypedRawPiSpine.cons R tenv G (KExpr.app m rfnz_zero) (KExpr.pi (rfnzg_zero_sarm_after_m m) (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar Nat.zero)))) z (@ListType.cons KExpr s (@ListType.cons KExpr rfnz_zero (@ListType.nil KExpr))) (KExpr.app m rfnz_zero) hz (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (@ListType.cons KExpr s (@ListType.cons KExpr rfnz_zero (@ListType.nil KExpr))) (KExpr.app m rfnz_zero)) (KExpr.pi (rfnzg_succ_case m) (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)))) (instantiate (KExpr.pi (rfnzg_zero_sarm_after_m m) (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar Nat.zero)))) z) (Eq.symm KExpr (instantiate (KExpr.pi (rfnzg_zero_sarm_after_m m) (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.bvar Nat.zero)))) z) (KExpr.pi (rfnzg_succ_case m) (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)))) (rfnzg_zero_input_after_z_eq m z)) (@TypedRawPiSpine.cons R tenv G (rfnzg_succ_case m) (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))) s (@ListType.cons KExpr rfnz_zero (@ListType.nil KExpr)) (KExpr.app m rfnz_zero) hs (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (@ListType.cons KExpr rfnz_zero (@ListType.nil KExpr)) (KExpr.app m rfnz_zero)) (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero))) (instantiate (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))) s) (Eq.symm KExpr (instantiate (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero))) s) (KExpr.pi rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero))) (rfnzg_zero_input_after_s_eq m s)) (@TypedRawPiSpine.cons R tenv G rfnz_nat (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) rfnz_zero (@ListType.nil KExpr) (KExpr.app m rfnz_zero) hzero (Eq.substType KExpr (fun (F : KExpr) => TypedRawPiSpine R tenv G F (@ListType.nil KExpr) (KExpr.app m rfnz_zero)) (KExpr.app m rfnz_zero) (instantiate (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) rfnz_zero) (Eq.symm KExpr (instantiate (KExpr.app (lift_at m Nat.zero (Nat.succ Nat.zero)) (KExpr.bvar Nat.zero)) rfnz_zero) (KExpr.app m rfnz_zero) (rfnzg_zero_input_after_major_eq m)) (@TypedRawPiSpine.nil R tenv G (KExpr.app m rfnz_zero)))))))))",
     },
     Registration::Proof {
         declaration_index: 19,
         name: "rfnzg_source_rec_lookup",
         type_src: r"forall (u : Level),
- Eq (OptionType KExpr)
- (kdecl_type_at kcre_nat_tenv fixture_nat_rec_name (ListType.cons Level u (ListType.nil Level)))
- (OptionType.some KExpr (rfnz_rec_type u))",
+ @Eq (OptionType KExpr)
+ (kdecl_type_at kcre_nat_tenv fixture_nat_rec_name (@ListType.cons Level u (@ListType.nil Level)))
+ (@OptionType.some KExpr (rfnz_rec_type u))",
         value_src: r"fun (u : Level) =>
- Eq.subst KDeclEnv (fun (tenv : KDeclEnv) => Eq (OptionType KExpr)
-  (kdecl_type_at tenv fixture_nat_rec_name (ListType.cons Level u (ListType.nil Level))) (OptionType.some KExpr (rfnz_rec_type u)))
+ Eq.subst KDeclEnv (fun (tenv : KDeclEnv) => @Eq (OptionType KExpr)
+  (kdecl_type_at tenv fixture_nat_rec_name (@ListType.cons Level u (@ListType.nil Level))) (@OptionType.some KExpr (rfnz_rec_type u)))
   rfnz_tenv kcre_nat_tenv rfnz_source_tenv_eq (rfnz_rec_lookup u)",
     },
     Registration::Proof {
         declaration_index: 20,
         name: "rfnzg_source_zero_typed",
-        type_src: r"TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) rfnz_zero rfnz_nat",
-        value_src: r"Eq.substType KDeclEnv (fun (tenv : KDeclEnv) => TypingCtxConvIn kernel_core_red_env tenv (ListType.nil KExpr) rfnz_zero rfnz_nat)
+        type_src: r"TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) rfnz_zero rfnz_nat",
+        value_src: r"Eq.substType KDeclEnv (fun (tenv : KDeclEnv) => TypingCtxConvIn kernel_core_red_env tenv (@ListType.nil KExpr) rfnz_zero rfnz_nat)
   rfnz_tenv kcre_nat_tenv rfnz_source_tenv_eq
-  (nz_typing_to_semantic kernel_core_red_env rfnz_tenv (ListType.nil KExpr) rfnz_zero rfnz_nat (rfnz_zero_typed (ListType.nil KExpr)))",
+  (nz_typing_to_semantic kernel_core_red_env rfnz_tenv (@ListType.nil KExpr) rfnz_zero rfnz_nat (rfnz_zero_typed (@ListType.nil KExpr)))",
     },
     Registration::Proof {
         declaration_index: 21,
         name: "rfnzg_source_general_raw_result_typed",
         type_src: r"forall (u : Level) (m : KExpr) (z : KExpr) (s : KExpr)
- (hm : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) m (rfnz_motive_type u))
- (hz : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) z (KExpr.app m rfnz_zero))
- (hs : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) s (rfnzg_succ_case m)),
- TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) (apply_spine (rfnzg_zero_args m z s) (recursor_rhs_instance kcre_nat_rec_signature kcre_witness_nat_zero_rhs (ListType.cons Level u (ListType.nil Level)))) (KExpr.app m rfnz_zero)",
+ (hm : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) m (rfnz_motive_type u))
+ (hz : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) z (KExpr.app m rfnz_zero))
+ (hs : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) s (rfnzg_succ_case m)),
+ TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) (apply_spine (rfnzg_zero_args m z s) (recursor_rhs_instance kcre_nat_rec_signature kcre_witness_nat_zero_rhs (@ListType.cons Level u (@ListType.nil Level)))) (KExpr.app m rfnz_zero)",
         value_src: r"fun (u : Level) (m : KExpr) (z : KExpr) (s : KExpr)
- (hm : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) m (rfnz_motive_type u))
- (hz : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) z (KExpr.app m rfnz_zero))
- (hs : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) s (rfnzg_succ_case m)) =>
- typed_raw_pi_spine_apply kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) (rfnz_rule_type u)
+ (hm : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) m (rfnz_motive_type u))
+ (hz : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) z (KExpr.app m rfnz_zero))
+ (hs : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) s (rfnzg_succ_case m)) =>
+ typed_raw_pi_spine_apply kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) (rfnz_rule_type u)
   (rfnzg_zero_args m z s) (KExpr.app m rfnz_zero)
-  (rfnzg_zero_typed_spine kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) u m z s hm hz hs) (recursor_rhs_instance kcre_nat_rec_signature kcre_witness_nat_zero_rhs (ListType.cons Level u (ListType.nil Level)))
-  (nz_typing_to_semantic kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) (recursor_rhs_instance kcre_nat_rec_signature kcre_witness_nat_zero_rhs (ListType.cons Level u (ListType.nil Level))) (rfnz_rule_type u)
+  (rfnzg_zero_typed_spine kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) u m z s hm hz hs) (recursor_rhs_instance kcre_nat_rec_signature kcre_witness_nat_zero_rhs (@ListType.cons Level u (@ListType.nil Level)))
+  (nz_typing_to_semantic kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) (recursor_rhs_instance kcre_nat_rec_signature kcre_witness_nat_zero_rhs (@ListType.cons Level u (@ListType.nil Level))) (rfnz_rule_type u)
    (rfnz_source_actual_instance_typed u))",
     },
     Registration::Proof {
         declaration_index: 22,
         name: "rfnzg_source_general_input_typed",
         type_src: r"forall (u : Level) (m : KExpr) (z : KExpr) (s : KExpr)
- (hm : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) m (rfnz_motive_type u))
- (hz : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) z (KExpr.app m rfnz_zero))
- (hs : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) s (rfnzg_succ_case m)),
- TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) (rfnz_rec_app u m z s rfnz_zero) (KExpr.app m rfnz_zero)",
+ (hm : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) m (rfnz_motive_type u))
+ (hz : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) z (KExpr.app m rfnz_zero))
+ (hs : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) s (rfnzg_succ_case m)),
+ TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) (rfnz_rec_app u m z s rfnz_zero) (KExpr.app m rfnz_zero)",
         value_src: r"fun (u : Level) (m : KExpr) (z : KExpr) (s : KExpr)
- (hm : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) m (rfnz_motive_type u))
- (hz : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) z (KExpr.app m rfnz_zero))
- (hs : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) s (rfnzg_succ_case m)) =>
- typed_raw_pi_spine_const_apply kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) fixture_nat_rec_name (ListType.cons Level u (ListType.nil Level))
+ (hm : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) m (rfnz_motive_type u))
+ (hz : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) z (KExpr.app m rfnz_zero))
+ (hs : TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) s (rfnzg_succ_case m)) =>
+ typed_raw_pi_spine_const_apply kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) fixture_nat_rec_name (@ListType.cons Level u (@ListType.nil Level))
   (rfnz_rec_type u) (rfnzg_zero_input_args m z s) (KExpr.app m rfnz_zero)
   (rfnzg_source_rec_lookup u)
-  (rfnzg_zero_input_typed_spine kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) u m z s hm hz hs rfnzg_source_zero_typed)",
+  (rfnzg_zero_input_typed_spine kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) u m z s hm hz hs rfnzg_source_zero_typed)",
     },
     Registration::Proof {
         declaration_index: 23,
         name: "rfnzg_source_general_guarded_step",
         type_src: r"forall (u : Level) (m : KExpr) (z : KExpr) (s : KExpr),
  iota_step (red_rec kernel_core_red_env) (rfnz_rec_app u m z s rfnz_zero)
-  (apply_spine (rfnzg_zero_args m z s) (recursor_rhs_instance kcre_nat_rec_signature kcre_witness_nat_zero_rhs (ListType.cons Level u (ListType.nil Level))))",
+  (apply_spine (rfnzg_zero_args m z s) (recursor_rhs_instance kcre_nat_rec_signature kcre_witness_nat_zero_rhs (@ListType.cons Level u (@ListType.nil Level))))",
         value_src: r"fun (u : Level) (m : KExpr) (z : KExpr) (s : KExpr) =>
  iota_reduct_full_recon (red_rec kernel_core_red_env) (rfnz_rec_app u m z s rfnz_zero)
-  (apply_spine (rfnzg_zero_args m z s) (recursor_rhs_instance kcre_nat_rec_signature kcre_witness_nat_zero_rhs (ListType.cons Level u (ListType.nil Level))))
+  (apply_spine (rfnzg_zero_args m z s) (recursor_rhs_instance kcre_nat_rec_signature kcre_witness_nat_zero_rhs (@ListType.cons Level u (@ListType.nil Level))))
   fixture_nat_rec_name fixture_nat_rec_meta rfnz_zero fixture_nat_zero_name
   (RecRule.mk fixture_nat_zero_name Nat.zero kcre_witness_nat_zero_rhs)
-  (Eq.refl (OptionType Name) (OptionType.some Name fixture_nat_rec_name))
+  (@Eq.refl (OptionType Name) (@OptionType.some Name fixture_nat_rec_name))
   rfnz_actual_metadata
-  (Eq.refl (OptionType KExpr) (OptionType.some KExpr rfnz_zero))
-  (Eq.refl (OptionType Name) (OptionType.some Name fixture_nat_zero_name))
-  rfnz_actual_zero_rule (Eq.refl Bool Bool.true) (Eq.refl Bool Bool.true)
-  (Eq.refl KExpr (apply_spine (rfnzg_zero_args m z s) (recursor_rhs_instance kcre_nat_rec_signature kcre_witness_nat_zero_rhs (ListType.cons Level u (ListType.nil Level)))))",
+  (@Eq.refl (OptionType KExpr) (@OptionType.some KExpr rfnz_zero))
+  (@Eq.refl (OptionType Name) (@OptionType.some Name fixture_nat_zero_name))
+  rfnz_actual_zero_rule (@Eq.refl Bool Bool.true) (@Eq.refl Bool Bool.true)
+  (@Eq.refl KExpr (apply_spine (rfnzg_zero_args m z s) (recursor_rhs_instance kcre_nat_rec_signature kcre_witness_nat_zero_rhs (@ListType.cons Level u (@ListType.nil Level)))))",
     },
     Registration::Proof {
         declaration_index: 24,
         name: "rfnzg_source_motive_argument_typed",
-        type_src: r"TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) rfnz_motive (rfnz_motive_type (Level.succ Level.zero))",
-        value_src: r"Eq.substType KDeclEnv (fun (tenv : KDeclEnv) => TypingCtxConvIn kernel_core_red_env tenv (ListType.nil KExpr) rfnz_motive (rfnz_motive_type (Level.succ Level.zero)))
+        type_src: r"TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) rfnz_motive (rfnz_motive_type (Level.succ Level.zero))",
+        value_src: r"Eq.substType KDeclEnv (fun (tenv : KDeclEnv) => TypingCtxConvIn kernel_core_red_env tenv (@ListType.nil KExpr) rfnz_motive (rfnz_motive_type (Level.succ Level.zero)))
   rfnz_tenv kcre_nat_tenv rfnz_source_tenv_eq rfnz_motive_argument_typed",
     },
     Registration::Proof {
         declaration_index: 25,
         name: "rfnzg_source_zero_argument_typed",
-        type_src: r"TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) rfnz_zero (KExpr.app rfnz_motive rfnz_zero)",
-        value_src: r"Eq.substType KDeclEnv (fun (tenv : KDeclEnv) => TypingCtxConvIn kernel_core_red_env tenv (ListType.nil KExpr) rfnz_zero (KExpr.app rfnz_motive rfnz_zero))
+        type_src: r"TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) rfnz_zero (KExpr.app rfnz_motive rfnz_zero)",
+        value_src: r"Eq.substType KDeclEnv (fun (tenv : KDeclEnv) => TypingCtxConvIn kernel_core_red_env tenv (@ListType.nil KExpr) rfnz_zero (KExpr.app rfnz_motive rfnz_zero))
   rfnz_tenv kcre_nat_tenv rfnz_source_tenv_eq rfnz_zero_argument_typed",
     },
     Registration::Proof {
         declaration_index: 26,
         name: "rfnzg_source_minor_argument_typed",
-        type_src: r"TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) rfnz_minor (rfnzg_succ_case rfnz_motive)",
-        value_src: r"Eq.substType KDeclEnv (fun (tenv : KDeclEnv) => TypingCtxConvIn kernel_core_red_env tenv (ListType.nil KExpr) rfnz_minor (rfnzg_succ_case rfnz_motive))
+        type_src: r"TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) rfnz_minor (rfnzg_succ_case rfnz_motive)",
+        value_src: r"Eq.substType KDeclEnv (fun (tenv : KDeclEnv) => TypingCtxConvIn kernel_core_red_env tenv (@ListType.nil KExpr) rfnz_minor (rfnzg_succ_case rfnz_motive))
   rfnz_tenv kcre_nat_tenv rfnz_source_tenv_eq rfnz_minor_argument_typed",
     },
     Registration::Proof {
         declaration_index: 27,
         name: "rfnzg_source_nonzero_input",
-        type_src: r"TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) rfnz_input (KExpr.app rfnz_motive rfnz_zero)",
+        type_src: r"TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) rfnz_input (KExpr.app rfnz_motive rfnz_zero)",
         value_src: r"rfnzg_source_general_input_typed (Level.succ Level.zero) rfnz_motive rfnz_zero rfnz_minor
   rfnzg_source_motive_argument_typed rfnzg_source_zero_argument_typed rfnzg_source_minor_argument_typed",
     },
     Registration::Proof {
         declaration_index: 28,
         name: "rfnzg_source_nonzero_input_nat",
-        type_src: r"TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) rfnz_input rfnz_nat",
-        value_src: r"TypingCtxConvIn.conv kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) rfnz_input (KExpr.app rfnz_motive rfnz_zero) rfnz_nat
+        type_src: r"TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) rfnz_input rfnz_nat",
+        value_src: r"@TypingCtxConvIn.conv kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) rfnz_input (KExpr.app rfnz_motive rfnz_zero) rfnz_nat
   rfnzg_source_nonzero_input (rfnz_motive_beta rfnz_zero)",
     },
     Registration::Proof {
         declaration_index: 29,
         name: "rfnzg_source_nonzero_raw_result",
-        type_src: r"TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) rfnz_raw_result (KExpr.app rfnz_motive rfnz_zero)",
+        type_src: r"TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) rfnz_raw_result (KExpr.app rfnz_motive rfnz_zero)",
         value_src: r"rfnzg_source_general_raw_result_typed (Level.succ Level.zero) rfnz_motive rfnz_zero rfnz_minor
   rfnzg_source_motive_argument_typed rfnzg_source_zero_argument_typed rfnzg_source_minor_argument_typed",
     },
     Registration::Proof {
         declaration_index: 30,
         name: "rfnzg_source_nonzero_raw_result_nat",
-        type_src: r"TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) rfnz_raw_result rfnz_nat",
-        value_src: r"TypingCtxConvIn.conv kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) rfnz_raw_result (KExpr.app rfnz_motive rfnz_zero) rfnz_nat
+        type_src: r"TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) rfnz_raw_result rfnz_nat",
+        value_src: r"@TypingCtxConvIn.conv kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) rfnz_raw_result (KExpr.app rfnz_motive rfnz_zero) rfnz_nat
   rfnzg_source_nonzero_raw_result (rfnz_motive_beta rfnz_zero)",
     },
     Registration::Proof {
@@ -522,12 +522,12 @@ mod tests {
         Refusal {
             name: "rfnzg_forged_raw_type",
             type_src: r"TypingCtxConvIn kernel_core_red_env kcre_nat_tenv
- (ListType.nil KExpr) rfnz_raw_result (KExpr.sort Level.zero)",
+ (@ListType.nil KExpr) rfnz_raw_result (KExpr.sort Level.zero)",
             value_src: r"rfnzg_source_nonzero_raw_result_nat",
         },
         Refusal {
             name: "rfnzg_forged_minor",
-            type_src: r"TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr)
+            type_src: r"TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr)
  rfnz_raw_result (KExpr.app rfnz_motive rfnz_zero)",
             value_src: r"rfnzg_source_general_raw_result_typed (Level.succ Level.zero) rfnz_motive rfnz_zero rfnz_minor
   rfnzg_source_motive_argument_typed rfnzg_source_zero_argument_typed rfnzg_source_zero_argument_typed",
@@ -536,27 +536,27 @@ mod tests {
             name: "rfnzg_forged_universe",
             type_src: r"iota_step (red_rec kernel_core_red_env) rfnz_input
  (KExpr.app (KExpr.app (KExpr.app
-  (recursor_rhs_instance kcre_nat_rec_signature kcre_witness_nat_zero_rhs (ListType.cons Level Level.zero (ListType.nil Level)))
+  (recursor_rhs_instance kcre_nat_rec_signature kcre_witness_nat_zero_rhs (@ListType.cons Level Level.zero (@ListType.nil Level)))
   rfnz_motive) rfnz_zero) rfnz_minor)",
             value_src: r"rfnzg_source_nonzero_step",
         },
         Refusal {
             name: "rfnzg_forged_open_motive_erasure",
-            type_src: r"Eq KExpr (instantiate (rfnzg_zero_sarm_after_m (KExpr.bvar Nat.zero))
+            type_src: r"@Eq KExpr (instantiate (rfnzg_zero_sarm_after_m (KExpr.bvar Nat.zero))
   (KExpr.bvar (Nat.succ Nat.zero))) (rfnzg_succ_case (KExpr.sort Level.zero))",
             value_src: r"rfnzg_zero_spine_open_motive_control",
         },
         Refusal {
             name: "rfnzg_forged_input_type",
             type_src: r"TypingCtxConvIn kernel_core_red_env kcre_nat_tenv
- (ListType.nil KExpr) rfnz_input (KExpr.sort Level.zero)",
+ (@ListType.nil KExpr) rfnz_input (KExpr.sort Level.zero)",
             value_src: r"rfnzg_source_nonzero_input",
         },
         Refusal {
             name: "rfnzg_forged_input_missing_universe",
-            type_src: r"TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr)
+            type_src: r"TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr)
   (apply_spine (rfnzg_zero_input_args rfnz_motive rfnz_zero rfnz_minor)
-   (KExpr.const fixture_nat_rec_name (ListType.nil Level))) (KExpr.app rfnz_motive rfnz_zero)",
+   (KExpr.const fixture_nat_rec_name (@ListType.nil Level))) (KExpr.app rfnz_motive rfnz_zero)",
             value_src: r"rfnzg_source_nonzero_input",
         },
     ];
@@ -793,13 +793,13 @@ mod tests {
             let spec = build_spec_with_stack();
             for (value_src, type_src) in [
                 ("rfnzg_source_general_input_typed (Level.succ Level.zero) rfnz_motive rfnz_zero rfnz_minor rfnzg_source_motive_argument_typed rfnzg_source_zero_argument_typed rfnzg_source_minor_argument_typed",
-                 "TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) rfnz_input (KExpr.app rfnz_motive rfnz_zero)"),
+                 "TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) rfnz_input (KExpr.app rfnz_motive rfnz_zero)"),
                 ("rfnzg_source_general_raw_result_typed (Level.succ Level.zero) rfnz_motive rfnz_zero rfnz_minor rfnzg_source_motive_argument_typed rfnzg_source_zero_argument_typed rfnzg_source_minor_argument_typed",
-                 "TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) rfnz_raw_result (KExpr.app rfnz_motive rfnz_zero)"),
+                 "TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) rfnz_raw_result (KExpr.app rfnz_motive rfnz_zero)"),
                 ("rfnzg_source_general_guarded_step (Level.succ Level.zero) rfnz_motive rfnz_zero rfnz_minor",
                  "iota_step (red_rec kernel_core_red_env) rfnz_input rfnz_raw_result"),
                 ("rfnzg_source_nonzero_raw_result_nat",
-                 "TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (ListType.nil KExpr) rfnz_raw_result rfnz_nat"),
+                 "TypingCtxConvIn kernel_core_red_env kcre_nat_tenv (@ListType.nil KExpr) rfnz_raw_result rfnz_nat"),
             ] {
                 let value = spec.elaborate_source(value_src, "actual general zero caller").expect("caller elaborates");
                 let expected = spec.elaborate_source(type_src, "actual general zero caller type").expect("caller type elaborates");

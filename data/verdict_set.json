@@ -21,7 +21,7 @@
   "closure_limit": "This is a REFERENCE closure at module granularity, NOT the per-body CALL closure. The call closure needs the trust-host whole-crate dump that data/spine_set.PENDING.md records as not yet produced (the same blocker G-SPINE-SET has). Until that dump exists, lane (a)'s membership is a conservative module-level surface: it can contain bodies no verdict path reaches, and it can MISS a body reached only through a dyn/fn-pointer edge. scripts/verdict_gate.sh refuses on this.",
   "input_pins": {
    "data/env_bypass_census.json": "0bcd921a2d6121c79ab04e0c6a1d195b139109ad1374f1638ab7683800648f57",
-   "data/gate_registry.json": "64fa6854845ed89d49f12bde53c59127ab09c08c827d0f67f5b5f300592c7770"
+   "data/gate_registry.json": "4338904c09c83f8b4dbc32ddb49c54470cba01d0db142cb983be033e238f3560"
   },
   "regenerate": "scripts/verdict_set.py            (--check to verify the committed copy)"
  },
@@ -100,8 +100,8 @@
      "why": [
       "reached by the in-crate reference closure from a root"
      ],
-     "lines": 1684,
-     "sha256": "a680d2a7877b02471e647c55b0bb733a2d409a6a317689fc911a3acbe45b706d",
+     "lines": 1683,
+     "sha256": "c6e974881a50de584d20efd2c4473fb6561ae90da8e5cfd5f544ae15aaf5913a",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -953,8 +953,8 @@
      "why": [
       "R-MINT: 1 KernelVerified mint site(s) at line(s) 180"
      ],
-     "lines": 2045,
-     "sha256": "d4cb5c5b091a75fc2af729d391ff8b1cab62889eb00d7156073cd3457588352a",
+     "lines": 2063,
+     "sha256": "8ce255012413171f964d5bd3797224bd9b015885c3186aa02ff5dbc7071c9c33",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -2221,7 +2221,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 5085,
-     "sha256": "e8e0a88aa7bf3c0dd80647e61390359f1418d11730ebde7f666d0884aa40309d",
+     "sha256": "0dea6e4ae964a2699dce3a9b63bc642cbfcb59324f7eb5d964059a4b2e2046ea",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -2290,7 +2290,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 228,
-     "sha256": "a3f5c48a752ebceb274719e85bec145432197c2cabe6795b6b0e026cd1e652bb",
+     "sha256": "4f1029eb799b6b7caa10084562bf7150ed5bb25e306ff987ce142805659eb128",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -2313,7 +2313,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 186,
-     "sha256": "58e3ff9215bfb5d8fc8d160484b1ee840b84cf5ee96a1289b6d0633629046a22",
+     "sha256": "6e610f5df91e2850f7df0b76379ec0a6e75dd8149e8a8f8a819c87e3dadddd7f",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -2336,7 +2336,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 64,
-     "sha256": "7437da94a5ddc3cc1244d2efc34c9c51486686130873e033847b54ca165a5489",
+     "sha256": "dc13b6fc1bfeeede2688efadda91dde808c8e835561208dcf89e530fbde072bd",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -2382,7 +2382,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 118,
-     "sha256": "b78368b820db04c77fccf55658dde908fbd7010c2d7414e31f1a9bb058dc158c",
+     "sha256": "3a885caa45bac2f606d0fdd84976fbdead9485ca1499073c4dbd33ff7bfd3b13",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -2405,7 +2405,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 239,
-     "sha256": "6971333a5ffc43f264ada87ee5be7054855c972b55341ba6490626a3bde59c66",
+     "sha256": "c9a28deff19563117c712b25283608e0c713d477b1c4097af57bce4b2225d91f",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -2428,7 +2428,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 151,
-     "sha256": "7e6a24c47d645c87bd6fbe12c7f7c5aa480b6707654a94ab2328e179936bc7dd",
+     "sha256": "71c53eea16233e078bc69fbef6aab006334e214efc3bca8099fbde0b709603a4",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -2451,7 +2451,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 426,
-     "sha256": "8d5002f0bdb591812edd3c77c84ed1139bd82372d84209df01be41a6d14b351b",
+     "sha256": "6880d6546bfd4b5bc30d4e02d26f66fedfb0ccc8d93f2c52c41a5b6523189b7b",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -2474,7 +2474,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 184,
-     "sha256": "506cceb971105d549b6f9dd7440d0a9a545ea8f714bb5327d3997f3dab1d680f",
+     "sha256": "c56a8a1aa6f5676bb9213b9131f3cff6f8a0b069e8c4834e9fcc20761b9be7d4",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -2497,7 +2497,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 242,
-     "sha256": "525204d5552df2b12463656fb7c973062a138b07582485366212feb37e28f7da",
+     "sha256": "b055b72dd5c193f36a58b508556929eea2c888177fcb272ca29901ccbe6abd33",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -2520,7 +2520,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 336,
-     "sha256": "2880a84fd1ab48c92dbb455c8103898c777b83a6fa14805e799b4b2a32ad2902",
+     "sha256": "4d3ef6b7aa168996df9d5a827653dd0ea132fabbb383036d360a0fd0ed9c089a",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -2543,7 +2543,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 357,
-     "sha256": "951e0f7738ac6d6a1b45ec254973fdd1194c026940a708f8a58303be1a17a56a",
+     "sha256": "e98c189d9acb0a450d6ae16e5903ba1adae948607e475f23f5b46be8053f371e",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -2565,8 +2565,8 @@
      "why": [
       "reached by the in-crate reference closure from a root"
      ],
-     "lines": 979,
-     "sha256": "a535d656e3c7c2d033e5888027155f79daf9d92df182c083c641be0f4aeb4ea8",
+     "lines": 993,
+     "sha256": "7b923017f009a61df749cc9ce366ff4190a3cfaec6560371fc7bea44ec397e01",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -2588,8 +2588,8 @@
      "why": [
       "reached by the in-crate reference closure from a root"
      ],
-     "lines": 197,
-     "sha256": "06e59112b1fd50ca0242339d627470420a43bb777a0094f868b3d45f338688ec",
+     "lines": 211,
+     "sha256": "2df2485eb60bfaced4df00128265046941dc7b3aec916384d3f6ea7eabe0b6ba",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -2612,7 +2612,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 420,
-     "sha256": "1c79590b78d323c5e4c6fe36f71d906892b7e79b07b1c5528ef18359a6817dcc",
+     "sha256": "a22d2df1e905195cb288a2499b030d9572345dfe661f77a626f886874825a77f",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -2635,7 +2635,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 356,
-     "sha256": "6aef9c98fd0550d901bbd9f8b930950141f21338ec7ff592bad7aaf45b76652e",
+     "sha256": "3fb882bdf9a2a3941622d74a30216dae22e97687e7f01ef8cc09e4604e9dbc7d",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -2658,7 +2658,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 388,
-     "sha256": "f0e130c15e7f480df060ba773ad7c97fb6ba586df09c6bbb21915512277ae14e",
+     "sha256": "df72b87f7f05e11084da0d1cba694c67e1eb8997e2c0329c96e1527c510132e0",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -2681,7 +2681,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 170,
-     "sha256": "dd8c5a016592a73a3b1dc3e63619126edc0ab2be2205093489156f59d6e77f86",
+     "sha256": "6dbd3baec6fab47b73963baf95e97165b9ac01e3329c902cacaf86dfe5ae0a23",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -2704,7 +2704,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 382,
-     "sha256": "ec9c1a53f54be2a22c2991fd6beccf08ee73b67521358178aa805b498d7e7dd6",
+     "sha256": "9bedd102db5b76718588ce8b8bf597e698b44042f43ae7d2b3ca44a3adbfc3d4",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -2727,7 +2727,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 397,
-     "sha256": "08a160dc4039562ca9d7e5df38781c61720b07d4a21c2bd2d84e3b398630341a",
+     "sha256": "8ce501dd386b7f29e4115a934da6da63d51bdc7da55a7aea26aea03987ea2524",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -2750,7 +2750,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 301,
-     "sha256": "1fa739c028d55afd7f80601fc4f187febaec35c4dc4494f40df8a6cfdd9a11f1",
+     "sha256": "170ac74752735e9c7ed751cc4c2fe8998babb70b6e302d5fed426b85409e2830",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -2773,7 +2773,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 354,
-     "sha256": "456781e025c02894b3ccd3604c40700e177bdd6398f30576bb240f44ea5192b5",
+     "sha256": "21e8d7a935b4d51310e5ee37436a04f254ad0ada8f377ca98e6232652f27bd80",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -2796,7 +2796,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 234,
-     "sha256": "5466d2068b412d9958aceb6f2f3ef2114426384234dca32f642ba4499efd75bb",
+     "sha256": "917aec3fb87fecf035b0648a6c7ef00513a2dfb78601fc6596cbd703624b7193",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -2819,7 +2819,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 225,
-     "sha256": "1ff8cfe9f059d5d9fbf0e5862112202cac21e7087becee95a281e56113c6e485",
+     "sha256": "c78f7d760fe93daafab8b5d24d2320f85f6ea48a31d3885ad5d321f1944194db",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -2842,7 +2842,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 275,
-     "sha256": "4010517093f75b0b349bd2a5d3db8437dae960c696dd99136cc70a98af8421dc",
+     "sha256": "f0e83df6b1879cb6058af6d1699d6c679f38aa801af664fa1c2373d22fc0370c",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -2865,7 +2865,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 253,
-     "sha256": "30c859db42dc0d130d6e94648be43e1912bf5579cb6d9333e4ba918d976e36a4",
+     "sha256": "50cdd1ccb5a749186c18bfc014ef7b573916238c85cb6fedec478358410fb798",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -2888,7 +2888,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 364,
-     "sha256": "e60221260f746f3cb3525b4468b1cc212940315fad354672da4514514560ee65",
+     "sha256": "96d23b658d3cf3e85e0b36e738b8c7cddfcb3728cb92151057f91ec827a6420a",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -2911,7 +2911,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 499,
-     "sha256": "c807c6dc364c27168dd0f7cc05c986d5d4fcec7ab43f677c50076e70aec69aa8",
+     "sha256": "10625b5b1d30d862207e3cb6907e5fe21fb79fde6eab01c6e6c808023657d10b",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -2934,7 +2934,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 185,
-     "sha256": "a18c0ad007da1cd9537fb9323426e819a1f791f1f2211e76f587905609be7ad3",
+     "sha256": "ebc3a433b7e0b62e28b8bff2925ce264d1224b0b3a5f2ada2de7187ad27e85c6",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -2957,7 +2957,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 381,
-     "sha256": "19f99c22da47526275ec7b4c7b56b6e8e609156b8c8e5b4d5747fcc85928892c",
+     "sha256": "a331bcfab912f7e81887194bc49c6abd829d07e91634ae7a926856881a7c9be0",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -2980,7 +2980,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 432,
-     "sha256": "5c5251cdf4984972f02e2a09545188e11397a1bf125975402f1b7a73dffd8c54",
+     "sha256": "3b4056e57280b585801599ac57ca100f71088dcc612b193f45e76a3d83d91ec8",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -3003,7 +3003,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 441,
-     "sha256": "11db71a0ac47d06915f87f9563f84c62140a077fcb736fa78532f13d7c27637a",
+     "sha256": "8826c98faea2310c722ca567f6479485984e57d48cb61733b883803555920fe9",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -3026,7 +3026,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 250,
-     "sha256": "005cf0e58364bb8fba4c99155f72f99f64ebf4dd6c961169d1a6c2e9ffec8c42",
+     "sha256": "f1b8232e7f794086826224d3835eaaaebb8fc05c1d8835074dc1e6bba62be577",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -3049,7 +3049,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 338,
-     "sha256": "8e209191b910cb7affca5d26bc92ab6bc294605299cb183a5bf16c3804d10359",
+     "sha256": "383bbacdb0bb07824e2ff01c45915ab236930132389a03705af8c7f6c47c7709",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -3072,7 +3072,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 216,
-     "sha256": "00cd7aea8f02f47af8708928c498ebcbfc6364a2f2f737ab0a8931b46b9b1b12",
+     "sha256": "65a0abdf0c55df48205176f60cc41204eeb5f475bfdeb2bede959968d28887c3",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -3095,7 +3095,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 692,
-     "sha256": "90df7d96d7293e63a200ab0fae5efea3dd7b9ff3b28527ede80a5dc851d6b056",
+     "sha256": "f794de27369e0954d35625dbf8ede26b0e7c3fa99d681fd3b5db82aaf431dfc2",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -3118,7 +3118,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 163,
-     "sha256": "3e353c0b234cd16133bbb755000733e73fad924af76e62dcf9b497a283a300b9",
+     "sha256": "3f29dd57a689804e26380acc8401da5cd8590b133ad99ac0ed0c42053e289116",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -3141,7 +3141,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 806,
-     "sha256": "a9406c675fe6507f93bad157784df2d42c037391d54346454dd4f962db5acf57",
+     "sha256": "dfd50f8cc8d3558ccf1ec7403d16126fdbade1be7de3556c1ccafed4e08de2eb",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -3164,7 +3164,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 289,
-     "sha256": "a5dca67ce8231b35cb61c6d6398ddb7d16f0ebb89ae08eb72fe684ec001e47f8",
+     "sha256": "2b43e04ff9b2378424bf8d70c54251e2583106c3686f1128cfb87efc061fdab3",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -3187,7 +3187,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 56,
-     "sha256": "1c8de4e1b67ffcbfb472c5935b1a283cb7f5dc163966aba60b62d2398450d3d6",
+     "sha256": "b5dc21d9e9a56d27c667b7ee30048cb6aa70fdc7005fbd8b366a708a85586ec3",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -3209,8 +3209,8 @@
      "why": [
       "reached by the in-crate reference closure from a root"
      ],
-     "lines": 102,
-     "sha256": "e132ba4c97834f24a862dfcb30fc4dce450b97b25f84a2fd2cfb0b2c4f1aba7c",
+     "lines": 103,
+     "sha256": "f97e1ec29096d72817cb3523b10a029d4e476909731015ad6f6a681d073613db",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -3233,7 +3233,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 366,
-     "sha256": "9e7ad84da9fd1d017f36b3bd6328b5f58e6d9388b12582f59f6138de45e7ee1b",
+     "sha256": "f4b45ae4302de9b903678086f35000aed241a447a2dee2345dbb7c7671ff2bd1",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -3256,7 +3256,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 477,
-     "sha256": "e9c7e35fb29e8e291e39f8bd15a5db112dd9790d71c7e0935580209c1e916ace",
+     "sha256": "b9ac4f7b97129d3c356cdfc119daecd352e70ba4beadcc175574c73863d5176a",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -3279,7 +3279,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 375,
-     "sha256": "80018c6bcc9a8a5422375533f41b784bf1d5b9634d31daed428b39b5993a5e09",
+     "sha256": "611acf15f8fc1f43034eefca0366ca2bbd532d86b981dcc01e0121a5a312e4fb",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -3302,7 +3302,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 241,
-     "sha256": "161f3fd567502fd0da52789b614b074cb181c2ceeb5f19d8561f549c146ae039",
+     "sha256": "5ae6fe7cd1e4fbce21104fe6e56275212bd44792cffaa71f6f9bf332d3d309ac",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -3325,7 +3325,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 266,
-     "sha256": "b03a1734bba9e9e721f588aeb90059a6353d9f7c4aa1c726101f8060fbb03142",
+     "sha256": "6f791c8cdb8e5b38f8d6b0268240a73088c3e6b00d584c27077df116f1fc3875",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -3348,7 +3348,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 201,
-     "sha256": "852343610bff3512fd69841a5f017cbb73fb572dc79aede448905520d67e7399",
+     "sha256": "19496e8f39637d40a0b6b5e5ba985fa4df8547872b4e4a36e6b3ad6857110e39",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -3371,7 +3371,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 156,
-     "sha256": "d2f1dd81b4f149b36804d7c67da086f66d23598da8cee54b623b01ea3b600bcd",
+     "sha256": "90aeca21c746b28189434c0ff882c3a61b17823ab476cb5823ce7e04a419ebfa",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -3394,7 +3394,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 252,
-     "sha256": "3786437cbe01422b8c59cb43c6245f10a1225b777aa1be03d6baa0fd601ee659",
+     "sha256": "6dc8255a5a9e9d709ba9857c2aafbf7955db72ca788a611ded652ef07b2f3c66",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -3417,7 +3417,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 245,
-     "sha256": "72e4cc5e21a105fe98bcd6c223bf2890e075d754b5c6e710a3295613519d290e",
+     "sha256": "7221fb56f0c18bce7530fa1f5286398191858f36d42e803476316ba88952d583",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -3440,7 +3440,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 488,
-     "sha256": "26ca4d2c99706bd5c10699d6cbac8be0bc7d14168c8ef40d87745363369a7442",
+     "sha256": "63c5170e1ef9f4c6e62007b74e3d1c7548d539b8a1bda00f45305eb85e3501d4",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -3463,7 +3463,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 231,
-     "sha256": "f3c276b589d2dd13bbe820c1c3d392bde28542e27bf16cd27e1853808ec6893f",
+     "sha256": "16fdc1bec6b78c997f5389a5ef44d8cf8b5d1948d3073cb7011488d1ac2053e0",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -3485,8 +3485,8 @@
      "why": [
       "reached by the in-crate reference closure from a root"
      ],
-     "lines": 874,
-     "sha256": "1e9fec08ed656666d353ddc2620f1e4c9f7503507f3cc79e80a53cc315ac7bd3",
+     "lines": 886,
+     "sha256": "d28c01b8af0da0e366f2abeac18381f80cc596269ee898032bc8b44a2dbcd66c",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -3554,8 +3554,8 @@
      "why": [
       "reached by the in-crate reference closure from a root"
      ],
-     "lines": 337,
-     "sha256": "73c3a5afe8ab62ab76107f69f6e5bfbaedcc28bbbf986a51cb857358e98b665f",
+     "lines": 341,
+     "sha256": "33ea0878a58cee59ea34973165974b7e3c5e70493b7cd871d821dd693a9e521f",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -3601,7 +3601,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 411,
-     "sha256": "89a957a10aedfaefa51b2204caa7f41e94c7c89f86f3e86e2382161b4740b7c4",
+     "sha256": "1610c15d37060a371c3d59851bc214e27f5e54355f748dfe85d3c88fe489b926",
      "io_token_count": 0,
      "io_sites": [],
      "io_sites_truncated": 0,
@@ -4537,7 +4537,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 1557,
-     "sha256": "7e29ab090941d2244804086d697c95f76cb70a6fb82732bdff050db2614c5967",
+     "sha256": "a9f0b7ff18b43684ea294aec150d91f7d8e0140de356cf7ae0c1650670122e0a",
      "io_token_count": 5,
      "io_sites": [
       {
@@ -5095,8 +5095,8 @@
      "why": [
       "reached by the in-crate reference closure from a root"
      ],
-     "lines": 4605,
-     "sha256": "025e3a982b93c8be551094a0d45aeb52f4ab473a2c285c2edf916af5e3313e57",
+     "lines": 4603,
+     "sha256": "9b9a5bcd650c950561fd3511e3150e24db3257ff8b68842a82ff4c136a38bec9",
      "io_token_count": 7,
      "io_sites": [
       {
@@ -5417,7 +5417,7 @@
       "reached by the in-crate reference closure from a root"
      ],
      "lines": 981,
-     "sha256": "de9cff08c276df38e45a7b3303facf5bcd3f6bcff19b30a4a7e8ee53cceaf53c",
+     "sha256": "7f52200c897d399c1bc562b4130f1a9333696875ea4705df5339a0fb140f66f2",
      "io_token_count": 2,
      "io_sites": [
       {
@@ -5657,40 +5657,40 @@
      "why": [
       "reached by the in-crate reference closure from a root"
      ],
-     "lines": 593,
-     "sha256": "5a7fc29fb9fb10c1ba6692155e22740da174576d6334fc3f1ab21a1a12cfcf35",
+     "lines": 632,
+     "sha256": "f2a193849f23b2fd1b8873350034579aed683cea8da47e203ee415ab599eb3ad",
      "io_token_count": 16,
      "io_sites": [
       {
-       "line": 330,
+       "line": 369,
        "token": "std::fs"
       },
       {
-       "line": 330,
+       "line": 369,
        "token": "fs::*"
       },
       {
-       "line": 330,
+       "line": 369,
        "token": "read_to_string"
       },
       {
-       "line": 446,
+       "line": 485,
        "token": "std::io"
       },
       {
-       "line": 446,
+       "line": 485,
        "token": "io::*"
       },
       {
-       "line": 448,
+       "line": 487,
        "token": "std::fs"
       },
       {
-       "line": 448,
+       "line": 487,
        "token": "fs::*"
       },
       {
-       "line": 448,
+       "line": 487,
        "token": "File::open/create"
       }
      ],
@@ -5876,18 +5876,18 @@
   },
   "c_script_surface": {
    "obligation": "each member either rewritten in Rust (entering lane (a)) or declared TCB with a committed digest + line-count ratchet; and a claim-owning gate that has never been SEEN to refuse is an unearned claim (registry: demonstrated or waived)",
-   "member_count": 147,
+   "member_count": 150,
    "rewritten_to_rust_count": 0,
-   "tcb_declared_count": 147,
-   "demonstrated_count": 111,
+   "tcb_declared_count": 150,
+   "demonstrated_count": 113,
    "waived_count": 1,
-   "undemonstrated_unwaived_count": 35,
+   "undemonstrated_unwaived_count": 36,
    "undemonstrated_with_self_test_count": 7,
    "line_ratchet": {
     "what": "total committed lines of the TCB script surface; may fall freely, may rise only through scripts/verdict_set.py --rebase-up '<reason>' (recorded below)",
     "direction": "down",
-    "baseline_total_lines": 129826,
-    "measured_total_lines": 129826,
+    "baseline_total_lines": 131587,
+    "measured_total_lines": 131587,
     "minted_utc": "2026-11-14T21:29:51Z",
     "rebases": [
      {
@@ -7545,6 +7545,84 @@
       "from": 129151,
       "to": 129826,
       "reason": "Q6 owned genesis fixture lifecycle: unreaped leader identity, original-group cleanup, bounded byte diagnostics and sticky nested scratch retention after actual census-error/SIGINT; real before/after controls, exact historical scripts unchanged. Measured lane-c 129151->129826 (+675), 145->147 members: own genesis checker243->553 (+310); already-merged lint coverage2087->2126 (+39), newly enumerated existing Isabelle shard_falsity_census151 and shard_triviality_census175. Exact attribution in reports/q6-genesis-lifecycle-2026-11-15/ratchet-attribution.json and ratchet-membership.json. This derives current metadata and preserves prior histories; it does not qualify incoming compiler/native source or change its proof status. No native/DDC/proof claim"
+     },
+     {
+      "date": "2026-11-16",
+      "from": 129826,
+      "to": 129828,
+      "reason": "Q6 capture-boundary qualification: wire and pin four actual UTF-8/65536/65537-byte public CLI controls with accepted adjacent positives and caught private enforcement omissions. Checker policy, historical scripts/manifest and five-second deadline unchanged. Lane-c 129826->129828 (+2), same147 members: only registered genesis checker553->555 for the maintained test constant, invocation and declared input. Test file is outside the declared partition. Preserve all prior histories; no native/DDC/production-image/compiled-genesis/full-diagnostic/proof or authority credit"
+     },
+     {
+      "date": "2026-11-16",
+      "from": 129828,
+      "to": 129829,
+      "reason": "Q6 diagnostic follow-through: wire and pin an actual lost-wait/ECHILD control with genuine root status, unknown product status, retained scratch and a caught private lost-identity guard omission through a nonforwarding signal tripwire. Checker policy, historical scripts/manifest and five-second deadline unchanged. Lane-c 129828->129829 (+1), same147 members: only registered genesis checker555->556 for the maintained test constant, invocation and declared input. Test file is outside the declared partition. Freshen already-merged Rust source digests after retaining the actual old-verdict IO drift refusal; this does not qualify incoming native behavior. Preserve all prior histories; no native/DDC/production-image/compiled-genesis/full-diagnostic/proof or authority credit"
+     },
+     {
+      "date": "2026-11-16",
+      "from": 129829,
+      "to": 129840,
+      "reason": "Waves 6-12 CIC_L extended judgment and block admission closure merged with origin/main"
+     },
+     {
+      "date": "2026-11-16",
+      "from": 129840,
+      "to": 129865,
+      "reason": "Register cic_l_nat_literals and kcheck_nat_acceptance in verify_runner"
+     },
+     {
+      "date": "2026-11-16",
+      "from": 129865,
+      "to": 129896,
+      "reason": "2026-11-16: wire incoming cic_l_level_order, cic_l_level_scope, and cic_l_universe_translation extra-path inputs in verify_runner.py"
+     },
+     {
+      "date": "2026-11-16",
+      "from": 129896,
+      "to": 130027,
+      "reason": "2026-11-16 Q6 complete-JSON evidence boundary: +51 measured lines over e0680a679d (1462 to1513) for duplicate/nonfinite refusal, mixed-prose preservation and a rehashed snapshot control. Inherited published gen_it_sctr828 to908 accounts for the other80. Exact147-member surface129896 to130027 (+131); preserve every history/member. Source accounting only, no R7/native/proof credit."
+     },
+     {
+      "date": "2026-11-16",
+      "from": 130027,
+      "to": 130218,
+      "reason": "2026-11-16 post-merge D1 framed-run intake e809c25e5c: exact unchanged147-member source surface grows 191 lines solely in verify_runner.py. Preserve282 prior histories; source accounting and Python fixture checks only, no native D1 or proof credit."
+     },
+     {
+      "date": "2026-11-16",
+      "from": 130218,
+      "to": 130276,
+      "reason": "2026-11-16 hook-green lane: +58 scripts/check_lint_coverage.py lines (net) holding the gate's -Zthreads=1 front-end width on the typed-scan line as well as the lint line: the typed stub's CARGO_ENCODED_RUSTFLAGS and inferred width, arms 13f, 39b and the non-runner arm 45 with its ten refused spellings, and the line-allowlist reason checks; re-pinned over a 72-arm replay"
+     },
+     {
+      "date": "2026-11-16",
+      "from": 130276,
+      "to": 130387,
+      "reason": "2026-11-16 hook-green lane: +111 lines across scripts/gen_lzb_activation.py, gen_lzd_activation.py, gen_lzd_sctr.py and gen_slot_lemmas.py, which now print the explicit-prefix spelling their committed EvalIR consts carry since 1b6b65dc83 (EXPLICIT_HEADS, KEPT_BARE, the print step and its self-test arms), so their --check legs hold the committed source again; every pinned digest of a kernel-accepted term is unchanged"
+     },
+     {
+      "date": "2026-11-16",
+      "from": 130369,
+      "to": 131490,
+      "reason": "2026-11-16: the interim thread's K3 coverage minter, its refusal-guided advice search, the K5 flip control and the scoreboard self-test land; each is a checked script the self-proof board reads"
+     },
+     {
+      "date": "2026-11-16",
+      "from": 130387,
+      "to": 130487,
+      "reason": "2026-11-16 helper-source custody: exact existing-member growth [{'path': 'scripts/gen_lzb_activation.py', 'before': 518, 'after': 544, 'delta': 26}, {'path': 'scripts/gen_lzd_activation.py', 'before': 1091, 'after': 1116, 'delta': 25}, {'path': 'scripts/gen_lzd_sctr.py', 'before': 785, 'after': 808, 'delta': 23}, {'path': 'scripts/gen_slot_lemmas.py', 'before': 702, 'after': 728, 'delta': 26}]; source compilation, declared helper/witness inputs and real cache controls only. Preserve membership/history and transitive-counting policy; no emitted term, accepted-term pin or native/proof credit."
+     },
+     {
+      "date": "2026-11-16",
+      "from": 131490,
+      "to": 131590,
+      "reason": "2026-11-16 Q6 lossless c931249 intake: requalify the combined registered-root total 131590 through the maintained producer from the incoming 131490 baseline. Both branch histories remain literal, including incoming +1121 and the already qualified +100 helper-source custody growth. This +100 is the unchanged four generator source delta relative to incoming, not additional code or a counting change; incoming alone owns the three added members. No native, proof or full-Q6 claim."
+     },
+     {
+      "date": "2026-11-16",
+      "from": 131590,
+      "to": 131618,
+      "reason": "2026-11-16 lossless c40b6e0 intake: preserve the incoming conservative compiler reservation and frontend floor exactly, adding28measured lines in scripts/local_gate.sh. The qualified helper source and all150registered members remain unchanged; preserve288prior histories and reconcile131590to131618 through this maintained producer. Incoming native lint replay is unavailable and remains explicitly red; no proof claim."
      }
     ]
    },
@@ -7770,15 +7848,17 @@
      "kind": "gate",
      "claims": "evidence",
      "disposition": "tcb-declared",
-     "lines": 553,
-     "sha256": "47c4049310a9098103c805fb26a1f139767518ec84ad8407a9b26dcc3547320a",
+     "lines": 556,
+     "sha256": "808886adf724805ad3cd8cd5aa2edea76df055e62911547898a370f5a816e298",
      "demonstrated": true,
      "waived": false,
      "self_test_entry_point": true,
      "wired_by": [
       "Justfile",
       "scripts/test_ck0_genesis_lifecycle.py",
-      "scripts/test_ck0_genesis_retention.py"
+      "scripts/test_ck0_genesis_retention.py",
+      "scripts/test_ck0_genesis_capture.py",
+      "scripts/test_ck0_genesis_ownership.py"
      ]
     },
     {
@@ -7787,8 +7867,8 @@
      "kind": "gate",
      "claims": "evidence",
      "disposition": "tcb-declared",
-     "lines": 1462,
-     "sha256": "53e44908bc72d2aced84e4251cedc2046428207267990e3f11fbcddcd4e0e471",
+     "lines": 1513,
+     "sha256": "8394d23014f66c2cf371a10e094b354dfc46e793d8c79ea497d0055960ace06a",
      "demonstrated": true,
      "waived": false,
      "self_test_entry_point": true,
@@ -8001,8 +8081,8 @@
      "kind": "gate",
      "claims": "evidence",
      "disposition": "tcb-declared",
-     "lines": 432,
-     "sha256": "690e7c372c34338cf9340679aac204e88a746f72713bc86845c17b5de4330c39",
+     "lines": 433,
+     "sha256": "cba36dd41126734a5701094f1df5752859b3e5c3602d081701568f6ae5934726",
      "demonstrated": true,
      "waived": false,
      "self_test_entry_point": true,
@@ -8016,8 +8096,8 @@
      "kind": "gate",
      "claims": "hygiene",
      "disposition": "tcb-declared",
-     "lines": 2126,
-     "sha256": "31be447543415ac7e279f4f2e002f05e954ce271904f02dc1d61bd54c15ac189",
+     "lines": 2184,
+     "sha256": "d94da6e5a38b1193fd4e24a2ff46acfa235e33889f9d811e16e3efe124889901",
      "demonstrated": true,
      "waived": false,
      "self_test_entry_point": true,
@@ -8395,7 +8475,7 @@
      "claims": "soundness",
      "disposition": "tcb-declared",
      "lines": 1315,
-     "sha256": "34a0c6941f6547a658c0d49fb0fed9f30d665e91bb8a33837f339c45c394915d",
+     "sha256": "a607786c715b4a85be6c0f06d94cc5dda6ea00d65ee0ef84c2aa6bca23e5d065",
      "demonstrated": true,
      "waived": false,
      "self_test_entry_point": false,
@@ -8624,7 +8704,7 @@
      "claims": "evidence",
      "disposition": "tcb-declared",
      "lines": 589,
-     "sha256": "9bdd3ee5342e7814c42e2cac4d8b467d67aaa05752d1cbca22d5f8ad2b4a209b",
+     "sha256": "9d7bb3aefcd9f603f0706bf2f86c7725245ef10606fdf4d43c678a821470ea1e",
      "demonstrated": true,
      "waived": false,
      "self_test_entry_point": false,
@@ -8733,8 +8813,8 @@
      "kind": "gate",
      "claims": "soundness",
      "disposition": "tcb-declared",
-     "lines": 828,
-     "sha256": "b27634585bbef14ed04772ed92e0e1b054192ea147c4373d5f7a9550df90dd44",
+     "lines": 908,
+     "sha256": "f00e090f9e2f2317e38da0c033c25f8418a6fb5de971f66523347974b5bd34d7",
      "demonstrated": true,
      "waived": false,
      "self_test_entry_point": true,
@@ -8749,8 +8829,8 @@
      "kind": "gate",
      "claims": "soundness",
      "disposition": "tcb-declared",
-     "lines": 495,
-     "sha256": "b931c4f37656ee35870a2e6dd3dc63d5585f388beb0d6d90cc6512a9a0a62464",
+     "lines": 544,
+     "sha256": "35ea4d9688dde70a3ca8389801175da7313be08d84a1783d3e573a8489f36384",
      "demonstrated": true,
      "waived": false,
      "self_test_entry_point": true,
@@ -8766,16 +8846,17 @@
      "kind": "gate",
      "claims": "soundness",
      "disposition": "tcb-declared",
-     "lines": 1053,
-     "sha256": "83b20824fac279763412fc3b4a19d1fd9c8f8e9de4ad6dcfd3891f102e243d89",
+     "lines": 1116,
+     "sha256": "486ec3b4e18b11dd74759302ba9d16fa21dcc0463093d4086adab3164a0dffe3",
      "demonstrated": true,
      "waived": false,
      "self_test_entry_point": true,
      "wired_by": [
-      "scripts/local_gate.sh",
-      "scripts/githooks/pre-push",
       "scripts/check_lzd_layout_facts.py",
-      "scripts/gen_lzd_sctr.py"
+      "scripts/gen_lzd_sctr.py",
+      "scripts/githooks/pre-push",
+      "scripts/local_gate.sh",
+      "scripts/test_generator_source_helpers.py"
      ]
     },
     {
@@ -8784,8 +8865,8 @@
      "kind": "gate",
      "claims": "soundness",
      "disposition": "tcb-declared",
-     "lines": 756,
-     "sha256": "ae22759ba71caf93a1cff7564f55a29dfc7efaf1fa1910042bcb7237a2355cde",
+     "lines": 808,
+     "sha256": "9596a659048e5efa0b9d4fc74fad9a46a4b99e2df64dbf45a4a625dd19c147d7",
      "demonstrated": true,
      "waived": false,
      "self_test_entry_point": true,
@@ -8800,8 +8881,8 @@
      "kind": "gate",
      "claims": "soundness",
      "disposition": "tcb-declared",
-     "lines": 681,
-     "sha256": "9b099d7745f4d9af4c98545a4347b8277f491c32f2e8f3bf3ac58ad1e51887aa",
+     "lines": 728,
+     "sha256": "62f605cb15f3298e43d74272813cd843c74fc3510de7391e330f21e0566a3382",
      "demonstrated": true,
      "waived": false,
      "self_test_entry_point": true,
@@ -8817,7 +8898,7 @@
      "claims": "soundness",
      "disposition": "tcb-declared",
      "lines": 1555,
-     "sha256": "adca5024496db0f1cca4277490663ed08b9e7d97e8e542ae7dd7c48d7df4437e",
+     "sha256": "d88d53aac6204ff29ee680069533feba6f119156757205fc76fb0bbedd3f9d4d",
      "demonstrated": true,
      "waived": false,
      "self_test_entry_point": true,
@@ -8833,7 +8914,7 @@
      "claims": "soundness",
      "disposition": "tcb-declared",
      "lines": 2782,
-     "sha256": "d9840a33603b990a0866da0551a83415a93d01a081aba2b6d0a327eb870ba4ce",
+     "sha256": "2d917dfcbab24fc10758fbb927e14497d3fac57a94da47867f8aa1299e02aff9",
      "demonstrated": true,
      "waived": false,
      "self_test_entry_point": true,
@@ -8931,6 +9012,37 @@
      "waived": false,
      "self_test_entry_point": false,
      "wired_by": []
+    },
+    {
+     "path": "scripts/kcheck_coverage.py",
+     "registry_id": "kcheck_coverage",
+     "kind": "gate",
+     "claims": "evidence",
+     "disposition": "tcb-declared",
+     "lines": 421,
+     "sha256": "232babb7c432fb2d660e4b984c341b346b00169414aeed243aa71b1189d19ffd",
+     "demonstrated": true,
+     "waived": false,
+     "self_test_entry_point": true,
+     "wired_by": [
+      "scripts/local_gate.sh",
+      "scripts/self_proof_scoreboard.py"
+     ]
+    },
+    {
+     "path": "scripts/kcheck_fragment_census.py",
+     "registry_id": "kcheck_fragment_census",
+     "kind": "tool",
+     "claims": "evidence",
+     "disposition": "tcb-declared",
+     "lines": 236,
+     "sha256": "4c07b91b96ef51c611b6021cf97ed1b757d62a2a2bf5b398b67ee25fb4bc158e",
+     "demonstrated": false,
+     "waived": false,
+     "self_test_entry_point": false,
+     "wired_by": [
+      "scripts/kcheck_coverage.py"
+     ]
     },
     {
      "path": "scripts/kernel_lint_ratchet.sh",
@@ -9127,8 +9239,8 @@
      "kind": "gate",
      "claims": "hygiene",
      "disposition": "tcb-declared",
-     "lines": 2530,
-     "sha256": "4307609f37d0042d8af60346461ca1bc867dff8da6dc8a3d380d62820ca0bac1",
+     "lines": 2592,
+     "sha256": "d055ac65a6d26459a8582a8da6c6a51d788f9102ecc75bdf0aea951224f5277f",
      "demonstrated": false,
      "waived": false,
      "self_test_entry_point": true,
@@ -9150,7 +9262,7 @@
      "claims": "soundness",
      "disposition": "tcb-declared",
      "lines": 853,
-     "sha256": "cd0f2a70bada20eddf18a332dc03b9c550b42b8cb312fe0f823a4d0b2c18d5a9",
+     "sha256": "c151a574bdeac2e140e4f7175eddb7ac53241353c5049f025e2ba959f1be6b3c",
      "demonstrated": true,
      "waived": false,
      "self_test_entry_point": true,
@@ -9424,6 +9536,21 @@
      "self_test_entry_point": true,
      "wired_by": [
       "scripts/verify_runner.py"
+     ]
+    },
+    {
+     "path": "scripts/self_proof_scoreboard.py",
+     "registry_id": "self_proof_scoreboard",
+     "kind": "gate",
+     "claims": "evidence",
+     "disposition": "tcb-declared",
+     "lines": 430,
+     "sha256": "587bf69ac95f759ff58166ab54a36b54f35571f064e48a15fdad00df6384d717",
+     "demonstrated": true,
+     "waived": false,
+     "self_test_entry_point": true,
+     "wired_by": [
+      "scripts/local_gate.sh"
      ]
     },
     {
@@ -9847,8 +9974,8 @@
      "kind": "tool",
      "claims": "evidence",
      "disposition": "tcb-declared",
-     "lines": 7261,
-     "sha256": "d837b42db3fb63472517d0b46b89a61edad5813cf1ea7d4b25722ab5c95f7b73",
+     "lines": 7469,
+     "sha256": "25192aa29fedc494fb243e7bc66d82b0835e7f0fc468ff77e8b6876cc013108f",
      "demonstrated": false,
      "waived": false,
      "self_test_entry_point": false,
@@ -10076,6 +10203,16 @@
      "reason": "not a script under scripts/"
     },
     {
+     "path": "scripts/replacement_performance_inventory.py",
+     "id": "replacement_performance_inventory",
+     "reason": "registry row claims nothing \u2014 not claim-owning"
+    },
+    {
+     "path": "scripts/test_generator_source_helpers.py",
+     "id": "generator_source_helper_controls",
+     "reason": "registry row claims nothing \u2014 not claim-owning"
+    },
+    {
      "path": "scripts/spine_gate.sh",
      "id": null,
      "reason": "Ring R2 gate named by program \u00a75 but ABSENT from the tree \u2014 planned, recorded, not assumed"
@@ -10280,11 +10417,10 @@
    {
     "id": "R-MINT-scope-gap",
     "date": "2026-08-25",
-    "statement": "Ring R2 lane (a) scopes the KernelVerified-minting lane to clean-mathverse. Measured: 4 production module(s) in OTHER crates mint TrustLevel::KernelVerified in a value position. Same posture as the olean scope gap: the lane widens or a dated decision says why not.",
+    "statement": "Ring R2 lane (a) scopes the KernelVerified-minting lane to clean-mathverse. Measured: 3 production module(s) in OTHER crates mint TrustLevel::KernelVerified in a value position. Same posture as the olean scope gap: the lane widens or a dated decision says why not.",
     "sites": [
      "crates/clean-cli/src/cmd_attempts.rs",
      "crates/clean-cli/src/cmd_audit.rs",
-     "crates/clean-elab/src/tactic/mathverse_use.rs",
      "crates/clean-kernel/src/cert/bundle.rs"
     ],
     "owed": "a scope decision (widen lane (a), or record why these are out of scope)"
@@ -10517,16 +10653,6 @@
     "note": "Ring R2 lane (a) scopes the KernelVerified-minting lane to clean-mathverse; this site mints the same verdict OUTSIDE that scope. Recorded so the scoping is a measured decision, not a silence (R10: silence must mean no)."
    },
    {
-    "file": "crates/clean-elab/src/tactic/mathverse_use.rs",
-    "mint_sites": [
-     {
-      "line": 1030,
-      "form": "trust_level: clean_mathverse::types::TrustLevel::KernelVerified,"
-     }
-    ],
-    "note": "Ring R2 lane (a) scopes the KernelVerified-minting lane to clean-mathverse; this site mints the same verdict OUTSIDE that scope. Recorded so the scoping is a measured decision, not a silence (R10: silence must mean no)."
-   },
-   {
     "file": "crates/clean-kernel/src/cert/bundle.rs",
     "mint_sites": [
      {
@@ -10547,7 +10673,8 @@
     "OleanError::Region",
     "lean_toolchain::direct_elan_roots",
     "parse_header",
-    "pinned_lean_lib_path"
+    "pinned_lean_lib_path",
+    "require_pinned_lean_lib_path"
    ],
    "clean-verify": [
     "Specification"

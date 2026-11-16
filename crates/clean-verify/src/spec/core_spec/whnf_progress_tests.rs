@@ -47,17 +47,17 @@ fn test_guarded_iota_closedness_uses_schematic_instance_lemmas() {
         spec.verify_definition(name).expect("actual proof rechecks");
     }
 
-    let signature = "(KConstSig.mk (ListType.cons Name Name.anonymous (ListType.nil Name)) (KExpr.sort Level.zero))";
+    let signature = "(KConstSig.mk (@ListType.cons Name Name.anonymous (@ListType.nil Name)) (KExpr.sort Level.zero))";
     let rhs = "(KExpr.lam (KExpr.sort (Level.param Name.anonymous)) (KExpr.bvar Nat.zero))";
-    let levels = "(ListType.cons Level (Level.succ Level.zero) (ListType.nil Level))";
+    let levels = "(@ListType.cons Level (Level.succ Level.zero) (@ListType.nil Level))";
     let instance = format!("(recursor_rhs_instance {signature} {rhs} {levels})");
     let expected = "(KExpr.lam (KExpr.sort (Level.succ Level.zero)) (KExpr.bvar Nat.zero))";
     spec.add_recursive_def(
-        &format!("def whnf_iota_instance_changes_level : Eq KExpr {instance} {expected} := Eq.refl KExpr {expected}"),
+        &format!("def whnf_iota_instance_changes_level : @Eq KExpr {instance} {expected} := @Eq.refl KExpr {expected}"),
         "Nonzero instantiation changes the actual binder annotation.",
     ).expect("actual schematic RHS is instantiated");
     spec.add_recursive_def(
-        &format!("def whnf_iota_instance_remains_closed : red_closed_at {instance} Nat.zero := whnf_red_closed_instL (paramSubstN (kconst_params {signature}) {levels}) {rhs} Nat.zero (AndType.intro (red_closed_at (KExpr.sort (Level.param Name.anonymous)) Nat.zero) (red_closed_at (KExpr.bvar Nat.zero) (Nat.succ Nat.zero)) ConstFreeUnit.triv (LiftP.up (Le (Nat.succ Nat.zero) (Nat.succ Nat.zero)) (Le.refl (Nat.succ Nat.zero))))"),
+        &format!("def whnf_iota_instance_remains_closed : red_closed_at {instance} Nat.zero := whnf_red_closed_instL (paramSubstN (kconst_params {signature}) {levels}) {rhs} Nat.zero (@AndType.intro (red_closed_at (KExpr.sort (Level.param Name.anonymous)) Nat.zero) (red_closed_at (KExpr.bvar Nat.zero) (Nat.succ Nat.zero)) ConstFreeUnit.triv (@LiftP.up (Le (Nat.succ Nat.zero) (Nat.succ Nat.zero)) (Le.refl (Nat.succ Nat.zero))))"),
         "The actual instance inherits term closedness from the schematic binder.",
     ).expect("structural universe preservation proves the changed RHS closed");
     for name in [
@@ -67,7 +67,7 @@ fn test_guarded_iota_closedness_uses_schematic_instance_lemmas() {
         assert!(computed_axiom_closure(&spec, name).is_empty(), "{name}");
     }
     assert!(spec.add_recursive_def(
-        &format!("def whnf_iota_instance_is_not_raw : Eq KExpr {instance} {rhs} := Eq.refl KExpr {rhs}"),
+        &format!("def whnf_iota_instance_is_not_raw : @Eq KExpr {instance} {rhs} := @Eq.refl KExpr {rhs}"),
         "Deliberately false raw-RHS substitution shortcut must be refused.",
     ).is_err());
 }
@@ -325,22 +325,22 @@ fn test_whnf_progress_inductives_registered() {
         (
             "projection/app recursion",
             "reduce_once DefEnv.empty (KExpr.app (KExpr.proj Name.anonymous Nat.zero (KExpr.let_ (KExpr.sort Level.zero) (KExpr.sort Level.zero) (KExpr.bvar Nat.zero))) (KExpr.lit Nat.zero))",
-            "OptionType.some KExpr (KExpr.app (KExpr.proj Name.anonymous Nat.zero (KExpr.sort Level.zero)) (KExpr.lit Nat.zero))",
+            "@OptionType.some KExpr (KExpr.app (KExpr.proj Name.anonymous Nat.zero (KExpr.sort Level.zero)) (KExpr.lit Nat.zero))",
         ),
         (
             "projection over literal fixpoint",
             "reduce_once DefEnv.empty (KExpr.proj Name.anonymous Nat.zero (KExpr.lit Nat.zero))",
-            "OptionType.none KExpr",
+            "@OptionType.none KExpr",
         ),
         (
             "literal fixpoint",
             "reduce_once DefEnv.empty (KExpr.lit Nat.zero)",
-            "OptionType.none KExpr",
+            "@OptionType.none KExpr",
         ),
         (
             "literal-head artificial reduct lift",
-            "reduce_app_head (KExpr.sort Level.zero) (KExpr.lit Nat.zero) (OptionType.some KExpr (KExpr.bvar Nat.zero))",
-            "OptionType.some KExpr (KExpr.app (KExpr.bvar Nat.zero) (KExpr.sort Level.zero))",
+            "reduce_app_head (KExpr.sort Level.zero) (KExpr.lit Nat.zero) (@OptionType.some KExpr (KExpr.bvar Nat.zero))",
+            "@OptionType.some KExpr (KExpr.app (KExpr.bvar Nat.zero) (KExpr.sort Level.zero))",
         ),
     ];
     let tc = TypeChecker::with_mode(spec.env(), spec.env().mode());
@@ -361,7 +361,7 @@ fn test_whnf_progress_inductives_registered() {
     // return exactly the projection congruence step, closing the semantic lane.
     let projection_sound = spec
         .elaborate_source(
-            "reduce_once_sound DefEnv.empty (KExpr.proj Name.anonymous Nat.zero (KExpr.let_ (KExpr.sort Level.zero) (KExpr.sort Level.zero) (KExpr.bvar Nat.zero))) (KExpr.proj Name.anonymous Nat.zero (KExpr.sort Level.zero)) (Eq.refl (OptionType KExpr) (OptionType.some KExpr (KExpr.proj Name.anonymous Nat.zero (KExpr.sort Level.zero))))",
+            "reduce_once_sound DefEnv.empty (KExpr.proj Name.anonymous Nat.zero (KExpr.let_ (KExpr.sort Level.zero) (KExpr.sort Level.zero) (KExpr.bvar Nat.zero))) (KExpr.proj Name.anonymous Nat.zero (KExpr.sort Level.zero)) (@Eq.refl (OptionType KExpr) (@OptionType.some KExpr (KExpr.proj Name.anonymous Nat.zero (KExpr.sort Level.zero))))",
             "reduce_once_sound projection computation",
         )
         .expect("reduce_once_sound should accept the computed projection reduct");
@@ -607,7 +607,7 @@ fn test_whnf_progress_bd_targets_exact_fragment_and_relation() {
         .expect("whnf_progress_bd should be registered");
     assert_eq!(
         thm.type_src,
-        "forall (e : KExpr), Eq Nat (bvar_ceiling e) Nat.zero -> const_free e -> \
+        "forall (e : KExpr), @Eq Nat (bvar_ceiling e) Nat.zero -> const_free e -> \
          whnf_progress_result e",
         "the statement must be exactly const-free + bvar-free (ceiling zero) progress"
     );
@@ -768,7 +768,7 @@ fn test_x16_capstones_and_mir_deep_pins() {
             "whnf_fuel_classifies",
             &[
                 "def_env_good env",
-                "(whnf_fuel env fuel e) (OptionType.some KExpr r)",
+                "(whnf_fuel env fuel e) (@OptionType.some KExpr r)",
                 "whnf_noredex_class r",
                 "Eq Nat (bvar_ceiling e) Nat.zero",
                 "consts_defined env e",
@@ -786,7 +786,7 @@ fn test_x16_capstones_and_mir_deep_pins() {
         (
             "whnf_fuel_red_join",
             &[
-                "(whnf_fuel_red renv fuel e) (OptionType.some KExpr r)",
+                "(whnf_fuel_red renv fuel e) (@OptionType.some KExpr r)",
                 "whnf_red_step_star renv e e2",
                 "par_strips_witness_cd_star renv r e2",
             ],
@@ -818,7 +818,7 @@ fn test_x16_capstones_and_mir_deep_pins() {
             "whnf_fuel_red_classifies_gen",
             &[
                 "red_env_good renv",
-                "(whnf_fuel_red renv fuel e) (OptionType.some KExpr r)",
+                "(whnf_fuel_red renv fuel e) (@OptionType.some KExpr r)",
                 "whnf_noredex_class_red renv r",
                 "red_closed_at e Nat.zero",
                 "consts_defined_red renv e",
@@ -827,7 +827,7 @@ fn test_x16_capstones_and_mir_deep_pins() {
         (
             "reduce_once_red_none_classifies_gen",
             &[
-                "(reduce_once_red renv e) (OptionType.none KExpr)",
+                "(reduce_once_red renv e) (@OptionType.none KExpr)",
                 "whnf_noredex_class_red renv e",
                 "consts_defined_red renv e",
             ],
@@ -839,7 +839,7 @@ fn test_x16_capstones_and_mir_deep_pins() {
             "whnf_fuel_red_classifies",
             &[
                 "red_env_good the_red_env",
-                "(whnf_fuel_red the_red_env fuel e) (OptionType.some KExpr r)",
+                "(whnf_fuel_red the_red_env fuel e) (@OptionType.some KExpr r)",
                 "whnf_noredex_class r",
                 "red_closed_at e Nat.zero",
                 "consts_defined_red the_red_env e",
@@ -848,7 +848,7 @@ fn test_x16_capstones_and_mir_deep_pins() {
         (
             "reduce_once_red_none_classifies",
             &[
-                "(reduce_once_red the_red_env e) (OptionType.none KExpr)",
+                "(reduce_once_red the_red_env e) (@OptionType.none KExpr)",
                 "red_closed_at e Nat.zero",
                 "consts_defined_red the_red_env e",
                 "whnf_noredex_class e",
@@ -857,14 +857,14 @@ fn test_x16_capstones_and_mir_deep_pins() {
         (
             "reduce_once_red_sound",
             &[
-                "(reduce_once_red renv e) (OptionType.some KExpr e2)",
+                "(reduce_once_red renv e) (@OptionType.some KExpr e2)",
                 "whnf_red_step renv e e2",
             ],
         ),
         (
             "reduce_once_sound",
             &[
-                "(reduce_once env e) (OptionType.some KExpr e2)",
+                "(reduce_once env e) (@OptionType.some KExpr e2)",
                 "whnf_env_step env e e2",
             ],
         ),
@@ -875,7 +875,7 @@ fn test_x16_capstones_and_mir_deep_pins() {
         (
             "reduce_once_none_classifies",
             &[
-                "(reduce_once env e) (OptionType.none KExpr)",
+                "(reduce_once env e) (@OptionType.none KExpr)",
                 "consts_defined env e",
                 "whnf_noredex_class e",
             ],

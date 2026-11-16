@@ -417,10 +417,17 @@ macro_rules! typed_components {
 
         /// Apply the typed components [`typed_fits`] accepted.
         fn apply_typed(env: &mut Environment, delta: &EnvFactDelta) {
-            if !delta.persistent_extensions.changed.is_empty() {
-                env.matcher_info.take();
-            }
             $(apply_map(&mut env.$map, &delta.$map, identity);)*
+            // The matcher index is a function of its storage entries: a delta
+            // that replaced them re-derives it.
+            if delta
+                .persistent_extensions
+                .changed
+                .iter()
+                .any(|(extension, _, _)| super::matcher::is_matcher_storage(extension))
+            {
+                env.rebuild_matcher_index();
+            }
             $(apply_set(&mut env.$set, &delta.$set);)*
             $(if let Some((_, value)) = &delta.$whole {
                 env.$whole = value.clone();

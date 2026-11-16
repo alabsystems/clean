@@ -99,9 +99,9 @@ impl Specification {
             out.push((
                 format!(
                     "def {c} (renv : RedEnv) {binders} : \
-                     Eq (OptionType KExpr) (reduce_once_red renv {form}) \
-                     (OptionType.some KExpr {reduct}) := \
-                     Eq.refl (OptionType KExpr) (reduce_once_red renv {form})",
+                     @Eq (OptionType KExpr) (reduce_once_red renv {form}) \
+                     (@OptionType.some KExpr {reduct}) := \
+                     @Eq.refl (OptionType KExpr) (reduce_once_red renv {form})",
                     c = r.computation,
                     binders = r.binders,
                     form = r.form,
@@ -126,14 +126,14 @@ impl Specification {
                 out.push((
                     format!(
                         "def no_redex_not_{label}_{suffix} (C : {univ}) {binders} \
-                         (h : Eq (OptionType KExpr) (reduce_once_red the_red_env {form}) \
-                         (OptionType.none KExpr)) : C := \
+                         (h : @Eq (OptionType KExpr) (reduce_once_red the_red_env {form}) \
+                         (@OptionType.none KExpr)) : C := \
                          {elim} KExpr {reduct} C \
-                         (Eq.trans (OptionType KExpr) (OptionType.none KExpr) \
+                         (Eq.trans (OptionType KExpr) (@OptionType.none KExpr) \
                          (reduce_once_red the_red_env {form}) \
-                         (OptionType.some KExpr {reduct}) \
+                         (@OptionType.some KExpr {reduct}) \
                          (Eq.symm (OptionType KExpr) (reduce_once_red the_red_env {form}) \
-                         (OptionType.none KExpr) h) ({c} the_red_env {args}))",
+                         (@OptionType.none KExpr) h) ({c} the_red_env {args}))",
                         label = r.label,
                         binders = r.binders,
                         form = r.form,
@@ -158,8 +158,8 @@ impl Specification {
             out.push((
                 format!(
                     "def whnf_result_not_{label}_t (C : Type) (n : Nat) (e : KExpr) {binders} \
-                     (h : Eq (OptionType KExpr) (whnf_fuel_red the_red_env n e) \
-                     (OptionType.some KExpr {form})) : C := \
+                     (h : @Eq (OptionType KExpr) (whnf_fuel_red the_red_env n e) \
+                     (@OptionType.some KExpr {form})) : C := \
                      no_redex_not_{label}_t C {args} \
                      (whnf_fuel_red_no_redex the_red_env n e {form} h)",
                     label = r.label,

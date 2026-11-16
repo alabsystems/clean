@@ -59,7 +59,7 @@ impl Specification {
             type_src: concat!(
                 "forall (hf : RedEnvFaithful the_red_env) (n : Level) (m : Level), ",
                 "DefEq (KExpr.sort n) (KExpr.sort m) -> ",
-                "Eq KExpr (KExpr.sort n) (KExpr.sort m)"
+                "@Eq KExpr (KExpr.sort n) (KExpr.sort m)"
             )
             .to_string(),
             value_src: Some(

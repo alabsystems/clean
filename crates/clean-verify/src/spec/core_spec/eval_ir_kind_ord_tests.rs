@@ -174,7 +174,7 @@ fn test_a4_shape() {
 #[test]
 fn test_a5_is_present_and_reaches_level_eval() {
     assert!(SRC_IR_KO_MACHINE_SOUND.contains("ir_eval fuel ir_ko_module"));
-    assert!(SRC_IR_KO_MACHINE_SOUND.contains(": Eq Nat (level_kind_ord l) n"));
+    assert!(SRC_IR_KO_MACHINE_SOUND.contains(": @Eq Nat (level_kind_ord l) n"));
     assert!(SRC_IR_KO_MACHINE_SOUND.contains("ir_ko_correct mem fuel na r l henc hle"));
     assert!(SRC_IR_KO_MACHINE_SOUND.contains("ir_outcome_nat"));
     // …and the denotational step, which ir_h2_machine_sound has no
@@ -182,7 +182,7 @@ fn test_a5_is_present_and_reaches_level_eval() {
     assert!(SRC_IR_KO_MACHINE_SOUND_DENOT.contains("level_is_zero_sound"));
     assert!(SRC_IR_KO_MACHINE_SOUND_DENOT.contains("level_kind_zero_is_zero"));
     assert!(SRC_IR_KO_MACHINE_SOUND_DENOT
-        .contains("forall (rho : Name -> Nat), Eq Nat (level_eval rho l) Nat.zero"));
+        .contains("forall (rho : Name -> Nat), @Eq Nat (level_eval rho l) Nat.zero"));
     assert!(SRC_IR_KO_NEVER_FAULTS.contains("ir_outcome_is_ret"));
 }
 

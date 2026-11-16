@@ -84,8 +84,8 @@ impl Specification {
         let right = "(KExpr.const cn2 cus2)";
         let hb2 = format!(
             "(Eq.substType KExpr \
-             (fun (z : KExpr) => Eq (OptionType KExpr) \
-             (whnf_fuel_red the_red_env n bb) (OptionType.some KExpr z)) \
+             (fun (z : KExpr) => @Eq (OptionType KExpr) \
+             (whnf_fuel_red the_red_env n bb) (@OptionType.some KExpr z)) \
              nb {right} hshape hb)"
         );
         let same = format!(
@@ -99,10 +99,10 @@ impl Specification {
         format!(
             "def def_eq_round_const {HNF}(n : Nat) (x : KExpr) (bb : KExpr) (nb : KExpr) \
              (cn1 : Name) (cus1 : ListType Level) \
-             (hx : Eq (OptionType KExpr) (whnf_fuel_red the_red_env n x) \
-             (OptionType.some KExpr {left})) \
-             (hb : Eq (OptionType KExpr) (whnf_fuel_red the_red_env n bb) \
-             (OptionType.some KExpr nb)) \
+             (hx : @Eq (OptionType KExpr) (whnf_fuel_red the_red_env n x) \
+             (@OptionType.some KExpr {left})) \
+             (hb : @Eq (OptionType KExpr) (whnf_fuel_red the_red_env n bb) \
+             (@OptionType.some KExpr nb)) \
              (hj : par_strips_witness_cd_star the_red_env {left} nb) : \
              DefEqFuelAccepts x bb := \
              @par_strips_witness_cd_star.rec the_red_env {left} nb \
@@ -111,12 +111,12 @@ impl Specification {
              (fun (w : KExpr) \
              (hlw : par_reduces_cd_star the_red_env {left} w) \
              (hrw : par_reduces_cd_star the_red_env nb w) => \
-             ConstShape.rec nb (fun (_s : ConstShape nb) => DefEqFuelAccepts x bb) \
-             (fun (cn2 : Name) (cus2 : ListType Level) (hshape : Eq KExpr nb {right}) => \
-             (fun (hb2 : Eq (OptionType KExpr) (whnf_fuel_red the_red_env n bb) \
-             (OptionType.some KExpr {right})) \
+             @ConstShape.rec nb (fun (_s : ConstShape nb) => DefEqFuelAccepts x bb) \
+             (fun (cn2 : Name) (cus2 : ListType Level) (hshape : @Eq KExpr nb {right}) => \
+             (fun (hb2 : @Eq (OptionType KExpr) (whnf_fuel_red the_red_env n bb) \
+             (@OptionType.some KExpr {right})) \
              (hrw2 : par_reduces_cd_star the_red_env {right} w) => \
-             (fun (hsame : Eq KExpr {left} {right}) => \
+             (fun (hsame : @Eq KExpr {left} {right}) => \
              def_eq_complete_leaf_const n x bb cn1 cus1 cn2 cus2 hx hb2 \
              (kexpr_const_inj_name cn1 cus1 cn2 cus2 hsame) \
              (kexpr_const_inj_ulist cn1 cus1 cn2 cus2 hsame)) {same}) \
@@ -148,31 +148,31 @@ impl Specification {
         let right = "(KExpr.proj s2 i2 u2)";
         let hb2 = format!(
             "(Eq.substType KExpr \
-             (fun (z : KExpr) => Eq (OptionType KExpr) \
-             (whnf_fuel_red the_red_env n bb) (OptionType.some KExpr z)) \
+             (fun (z : KExpr) => @Eq (OptionType KExpr) \
+             (whnf_fuel_red the_red_env n bb) (@OptionType.some KExpr z)) \
              nb {right} hshape hb)"
         );
         // Move the second leg onto the FIRST side's name and index, which is
         // what the step demands.
         let hb3 = format!(
             "(Eq.substType Name \
-             (fun (z : Name) => Eq (OptionType KExpr) \
+             (fun (z : Name) => @Eq (OptionType KExpr) \
              (whnf_fuel_red the_red_env n bb) \
-             (OptionType.some KExpr (KExpr.proj z i1 u2))) \
+             (@OptionType.some KExpr (KExpr.proj z i1 u2))) \
              s2 s1 (Eq.symm Name s1 s2 hnm) \
              (Eq.substType Nat \
-             (fun (z : Nat) => Eq (OptionType KExpr) \
+             (fun (z : Nat) => @Eq (OptionType KExpr) \
              (whnf_fuel_red the_red_env n bb) \
-             (OptionType.some KExpr (KExpr.proj s2 z u2))) \
+             (@OptionType.some KExpr (KExpr.proj s2 z u2))) \
              i2 i1 (Eq.symm Nat i1 i2 hix) {hb2}))"
         );
         format!(
             "def def_eq_round_proj {HNF}(n : Nat) (x : KExpr) (bb : KExpr) (nb : KExpr) \
              (s1 : Name) (i1 : Nat) (u1 : KExpr) \
-             (hx : Eq (OptionType KExpr) (whnf_fuel_red the_red_env n x) \
-             (OptionType.some KExpr {left})) \
-             (hb : Eq (OptionType KExpr) (whnf_fuel_red the_red_env n bb) \
-             (OptionType.some KExpr nb)) \
+             (hx : @Eq (OptionType KExpr) (whnf_fuel_red the_red_env n x) \
+             (@OptionType.some KExpr {left})) \
+             (hb : @Eq (OptionType KExpr) (whnf_fuel_red the_red_env n bb) \
+             (@OptionType.some KExpr nb)) \
              (hj : par_strips_witness_cd_star the_red_env {left} nb) \
              (accb : rbelow_plus_acc bb) {RECUR}: DefEqFuelAccepts x bb := \
              @par_strips_witness_cd_star.rec the_red_env {left} nb \
@@ -181,11 +181,11 @@ impl Specification {
              (fun (w : KExpr) \
              (hlw : par_reduces_cd_star the_red_env {left} w) \
              (hrw : par_reduces_cd_star the_red_env nb w) => \
-             ProjShape.rec nb (fun (_s : ProjShape nb) => DefEqFuelAccepts x bb) \
-             (fun (s2 : Name) (i2 : Nat) (u2 : KExpr) (hshape : Eq KExpr nb {right}) => \
-             ProjJoinComponents.rec s1 i1 u1 s2 i2 u2 \
+             @ProjShape.rec nb (fun (_s : ProjShape nb) => DefEqFuelAccepts x bb) \
+             (fun (s2 : Name) (i2 : Nat) (u2 : KExpr) (hshape : @Eq KExpr nb {right}) => \
+             @ProjJoinComponents.rec s1 i1 u1 s2 i2 u2 \
              (fun (_c : ProjJoinComponents s1 i1 u1 s2 i2 u2) => DefEqFuelAccepts x bb) \
-             (fun (hnm : Eq Name s1 s2) (hix : Eq Nat i1 i2) \
+             (fun (hnm : @Eq Name s1 s2) (hix : @Eq Nat i1 i2) \
              (jsub : par_strips_witness_cd_star the_red_env u1 u2) => \
              def_eq_complete_step_proj n x bb s1 i1 u1 u2 hx {hb3} \
              (recur u1 u2 \

@@ -129,7 +129,7 @@ impl Specification {
         self.add_inductive(
             "inductive WhnfFuelReaches (e : KExpr) : Type\n\
              | mk : forall (n : Nat) (r : KExpr), \
-             Eq (OptionType KExpr) (whnf_fuel_red the_red_env n e) (OptionType.some KExpr r) -> \
+             @Eq (OptionType KExpr) (whnf_fuel_red the_red_env n e) (@OptionType.some KExpr r) -> \
              WhnfFuelReaches e",
             "WhnfFuelReaches e packages a fuel n and a result r with a proof that the executable \
              whnf loop run on e at fuel n returns r. The spec has no Exists and no Sigma, so \
@@ -148,10 +148,10 @@ impl Specification {
         // differ by eta, and the explicit form makes this hold by beta alone.
         self.add_recursive_def(
             "def whnf_fuel_red_succ_dispatch (renv : RedEnv) (k : Nat) (e : KExpr) : \
-             Eq (OptionType KExpr) (whnf_fuel_red renv (Nat.succ k) e) \
+             @Eq (OptionType KExpr) (whnf_fuel_red renv (Nat.succ k) e) \
              (loop_dispatch (reduce_once_red renv e) e \
              (fun (z : KExpr) => whnf_fuel_red renv k z)) := \
-             Eq.refl (OptionType KExpr) (whnf_fuel_red renv (Nat.succ k) e)",
+             @Eq.refl (OptionType KExpr) (whnf_fuel_red renv (Nat.succ k) e)",
             "whnf_fuel_red_succ_dispatch: one layer of the executable whnf loop — at fuel k+1 \
              the loop takes one executable step and continues at fuel k (Eq.refl, definitional). \
              The continuation is written as an explicit lambda rather than the partial \
@@ -164,19 +164,19 @@ impl Specification {
         // the term itself.
         self.add_recursive_def(
             "def whnf_fuel_red_one_of_stuck (e : KExpr) \
-             (hn : Eq (OptionType KExpr) (reduce_once_red the_red_env e) (OptionType.none KExpr)) : \
-             Eq (OptionType KExpr) (whnf_fuel_red the_red_env (Nat.succ Nat.zero) e) \
-             (OptionType.some KExpr e) := \
+             (hn : @Eq (OptionType KExpr) (reduce_once_red the_red_env e) (@OptionType.none KExpr)) : \
+             @Eq (OptionType KExpr) (whnf_fuel_red the_red_env (Nat.succ Nat.zero) e) \
+             (@OptionType.some KExpr e) := \
              Eq.trans (OptionType KExpr) \
              (whnf_fuel_red the_red_env (Nat.succ Nat.zero) e) \
              (loop_dispatch (reduce_once_red the_red_env e) e \
              (fun (z : KExpr) => whnf_fuel_red the_red_env Nat.zero z)) \
-             (OptionType.some KExpr e) \
+             (@OptionType.some KExpr e) \
              (whnf_fuel_red_succ_dispatch the_red_env Nat.zero e) \
              (Eq.cong (OptionType KExpr) (OptionType KExpr) \
              (fun (o : OptionType KExpr) => loop_dispatch o e \
              (fun (z : KExpr) => whnf_fuel_red the_red_env Nat.zero z)) \
-             (reduce_once_red the_red_env e) (OptionType.none KExpr) hn)",
+             (reduce_once_red the_red_env e) (@OptionType.none KExpr) hn)",
             "whnf_fuel_red_one_of_stuck: if the executable step has nothing to do on e then ONE \
              unit of fuel suffices and the loop returns e itself. This is the base case of fuel \
              adequacy, and it is a computation rather than an argument because loop_dispatch \
@@ -186,28 +186,28 @@ impl Specification {
         // Fuel n+1 on a term that steps: whatever fuel worked for the reduct.
         self.add_recursive_def(
             "def whnf_fuel_red_succ_of_step (e : KExpr) (e2 : KExpr) (n : Nat) (r : KExpr) \
-             (hs : Eq (OptionType KExpr) (reduce_once_red the_red_env e) \
-             (OptionType.some KExpr e2)) \
-             (hr : Eq (OptionType KExpr) (whnf_fuel_red the_red_env n e2) \
-             (OptionType.some KExpr r)) : \
-             Eq (OptionType KExpr) (whnf_fuel_red the_red_env (Nat.succ n) e) \
-             (OptionType.some KExpr r) := \
+             (hs : @Eq (OptionType KExpr) (reduce_once_red the_red_env e) \
+             (@OptionType.some KExpr e2)) \
+             (hr : @Eq (OptionType KExpr) (whnf_fuel_red the_red_env n e2) \
+             (@OptionType.some KExpr r)) : \
+             @Eq (OptionType KExpr) (whnf_fuel_red the_red_env (Nat.succ n) e) \
+             (@OptionType.some KExpr r) := \
              Eq.trans (OptionType KExpr) \
              (whnf_fuel_red the_red_env (Nat.succ n) e) \
              (loop_dispatch (reduce_once_red the_red_env e) e \
              (fun (z : KExpr) => whnf_fuel_red the_red_env n z)) \
-             (OptionType.some KExpr r) \
+             (@OptionType.some KExpr r) \
              (whnf_fuel_red_succ_dispatch the_red_env n e) \
              (Eq.trans (OptionType KExpr) \
              (loop_dispatch (reduce_once_red the_red_env e) e \
              (fun (z : KExpr) => whnf_fuel_red the_red_env n z)) \
-             (loop_dispatch (OptionType.some KExpr e2) e \
+             (loop_dispatch (@OptionType.some KExpr e2) e \
              (fun (z : KExpr) => whnf_fuel_red the_red_env n z)) \
-             (OptionType.some KExpr r) \
+             (@OptionType.some KExpr r) \
              (Eq.cong (OptionType KExpr) (OptionType KExpr) \
              (fun (o : OptionType KExpr) => loop_dispatch o e \
              (fun (z : KExpr) => whnf_fuel_red the_red_env n z)) \
-             (reduce_once_red the_red_env e) (OptionType.some KExpr e2) hs) hr)",
+             (reduce_once_red the_red_env e) (@OptionType.some KExpr e2) hs) hr)",
             "whnf_fuel_red_succ_of_step: if e takes one executable step to e2 and fuel n suffices \
              for e2, then fuel n+1 suffices for e and returns the same result. The inductive \
              step of fuel adequacy. Rewriting the loop's scrutinee to `some e2` makes \
@@ -220,32 +220,32 @@ impl Specification {
         // `reduce_once_red the_red_env x` is not a constructor application.
         self.add_recursive_def(
             "def whnf_fuel_from_acc (e : KExpr) (acc : rbelow_plus_acc e) : WhnfFuelReaches e := \
-             rbelow_plus_acc.rec \
+             @rbelow_plus_acc.rec \
              (fun (x0 : KExpr) (_h : rbelow_plus_acc x0) => WhnfFuelReaches x0) \
              (fun (x0 : KExpr) \
              (_hf : forall (y : KExpr), rbelow_plus y x0 -> rbelow_plus_acc y) \
              (ih : forall (y : KExpr), rbelow_plus y x0 -> WhnfFuelReaches y) => \
-             OptionType.rec KExpr \
+             @OptionType.rec KExpr \
              (fun (o : OptionType KExpr) => \
-             Eq (OptionType KExpr) (reduce_once_red the_red_env x0) o -> WhnfFuelReaches x0) \
-             (fun (hn : Eq (OptionType KExpr) (reduce_once_red the_red_env x0) \
-             (OptionType.none KExpr)) => \
-             WhnfFuelReaches.mk x0 (Nat.succ Nat.zero) x0 \
+             @Eq (OptionType KExpr) (reduce_once_red the_red_env x0) o -> WhnfFuelReaches x0) \
+             (fun (hn : @Eq (OptionType KExpr) (reduce_once_red the_red_env x0) \
+             (@OptionType.none KExpr)) => \
+             @WhnfFuelReaches.mk x0 (Nat.succ Nat.zero) x0 \
              (whnf_fuel_red_one_of_stuck x0 hn)) \
              (fun (x2 : KExpr) \
-             (hs : Eq (OptionType KExpr) (reduce_once_red the_red_env x0) \
-             (OptionType.some KExpr x2)) => \
-             WhnfFuelReaches.rec x2 \
+             (hs : @Eq (OptionType KExpr) (reduce_once_red the_red_env x0) \
+             (@OptionType.some KExpr x2)) => \
+             @WhnfFuelReaches.rec x2 \
              (fun (_w : WhnfFuelReaches x2) => WhnfFuelReaches x0) \
              (fun (n : Nat) (r : KExpr) \
-             (hr : Eq (OptionType KExpr) (whnf_fuel_red the_red_env n x2) \
-             (OptionType.some KExpr r)) => \
-             WhnfFuelReaches.mk x0 (Nat.succ n) r \
+             (hr : @Eq (OptionType KExpr) (whnf_fuel_red the_red_env n x2) \
+             (@OptionType.some KExpr r)) => \
+             @WhnfFuelReaches.mk x0 (Nat.succ n) r \
              (whnf_fuel_red_succ_of_step x0 x2 n r hs hr)) \
              (ih x2 (rbelow_plus.base x2 x0 (rbelow.red x2 x0 \
              (reduce_once_red_sound the_red_env x0 x2 hs))))) \
              (reduce_once_red the_red_env x0) \
-             (Eq.refl (OptionType KExpr) (reduce_once_red the_red_env x0))) \
+             (@Eq.refl (OptionType KExpr) (reduce_once_red the_red_env x0))) \
              e acc",
             "whnf_fuel_from_acc: FUEL ADEQUACY — from a well-foundedness witness for e in the \
              algorithm's own order, produce a fuel at which the executable whnf loop returns. \

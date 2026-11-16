@@ -8,7 +8,7 @@ use super::{
     specification, ROOTS, TRUE,
 };
 
-const NO_PROVIDER: &str = "def field_no_provider : IRByteProvidersV1 Nat := fun (_ : Nat) (_ : IRList IRScalar) (memory : IRByteMemoryV1) (host : Nat) => IRByteImportResultV1.mk Nat (IROutcome.stuck IRFault.no_func) memory host";
+const NO_PROVIDER: &str = "def field_no_provider : IRByteProvidersV1 Nat := fun (_ : Nat) (_ : IRList IRScalar) (memory : IRByteMemoryV1) (host : Nat) => @IRByteImportResultV1.mk Nat (IROutcome.stuck IRFault.no_func) memory host";
 
 fn program(
     params: &[&str],
@@ -29,7 +29,7 @@ fn program(
     );
     let function = format!("IRFunc.mk 41 ({ids}) 0 ({})", list("IRBlock", &[&block]));
     let module = format!(
-        "IRModule.mk ({}) (IRList.nil IRGlobal)",
+        "IRModule.mk ({}) (@IRList.nil IRGlobal)",
         list("IRFunc", &[&function])
     );
     let ctx = format!(
@@ -65,7 +65,7 @@ fn node(instruction: &str, id: u64) -> String {
 
 fn ret(id: u64) -> String {
     format!(
-        "IRNode.mk (IRInst.ret ({})) (IRList.nil Nat)",
+        "IRNode.mk (IRInst.ret ({})) (@IRList.nil Nat)",
         list("Nat", &[&id.to_string()])
     )
 }
@@ -130,15 +130,15 @@ fn byte_field_fetched_seed_updates_return_complete_nested_values_and_retire_owne
             "ir_byte_init_v1 Nat field_construct_ctx 41 ({}) (ir_byte_memory_empty_v1 64) 73",
             list("IRScalar", &[&value_enum, "IRScalar.int_ 11"])
         );
-        let final_world = "IRByteWorldV1.mk Nat (ir_byte_retire_v1 1 (ir_byte_memory_empty_v1 64)) 73 (IRList.nil Nat) 2";
+        let final_world = "@IRByteWorldV1.mk Nat (ir_byte_retire_v1 1 (ir_byte_memory_empty_v1 64)) 73 (@IRList.nil Nat) 2";
         let endpoint = format!(
-            "IRByteConfigV1.halted Nat (IROutcome.ret ({})) ({final_world})",
+            "@IRByteConfigV1.halted Nat (IROutcome.ret ({})) ({final_world})",
             list("IRScalar", &[&expected])
         );
-        let positive = format!("def field_derived_fetched_constructor : Eq (IRByteConfigV1 Nat)\n  (ir_byte_run_v1 Nat field_construct_ctx field_no_provider 4 ({initial}))\n  ({endpoint}) := Eq.refl (IRByteConfigV1 Nat) ({endpoint})");
+        let positive = format!("def field_derived_fetched_constructor : @Eq (IRByteConfigV1 Nat)\n  (ir_byte_run_v1 Nat field_construct_ctx field_no_provider 4 ({initial}))\n  ({endpoint}) := @Eq.refl (IRByteConfigV1 Nat) ({endpoint})");
         add(&mut spec, &positive);
         let wrong = positive.replacen("field_derived_fetched_constructor", "field_wrong_return_owner", 1)
-            .replacen(&format!("({endpoint}) :="), &format!("(IRByteConfigV1.halted Nat (IROutcome.ret ({})) (IRByteWorldV1.mk Nat (ir_byte_memory_empty_v1 64) 73 ({}) 2)) :=", list("IRScalar", &[&expected]), list("Nat", &["1"])), 1);
+            .replacen(&format!("({endpoint}) :="), &format!("(@IRByteConfigV1.halted Nat (IROutcome.ret ({})) (@IRByteWorldV1.mk Nat (ir_byte_memory_empty_v1 64) 73 ({}) 2)) :=", list("IRScalar", &[&expected]), list("Nat", &["1"])), 1);
         assert_eq!(
             positive.split_once(":=").unwrap().1,
             wrong.split_once(":=").unwrap().1
@@ -155,7 +155,7 @@ fn byte_field_fetched_seed_updates_return_complete_nested_values_and_retire_owne
             &format!("ir_byte_world_owners_v1 Nat (ir_byte_final_world_v1 Nat ({before}))"),
             &list("Nat", &["1"]),
         );
-        equality(&mut spec, "field_construct_return_owners", "IRList Nat", &format!("ir_byte_world_owners_v1 Nat (ir_byte_final_world_v1 Nat (ir_byte_run_v1 Nat field_construct_ctx field_no_provider 4 ({initial})))"), "IRList.nil Nat");
+        equality(&mut spec, "field_construct_return_owners", "IRList Nat", &format!("ir_byte_world_owners_v1 Nat (ir_byte_final_world_v1 Nat (ir_byte_run_v1 Nat field_construct_ctx field_no_provider 4 ({initial})))"), "@IRList.nil Nat");
     });
 }
 
@@ -216,7 +216,7 @@ fn byte_field_fetched_enum_seed_payload_updates_use_tag_at_zero() {
             &format!("def field_enum_construct_ctx : IRByteContextV1 := {ctx}"),
         );
         let actual = format!("ir_byte_run_v1 Nat field_enum_construct_ctx field_no_provider 4 (ir_byte_init_v1 Nat field_enum_construct_ctx 41 ({}) (ir_byte_memory_empty_v1 64) 73)", list("IRScalar", &[&prefix, &text_value]));
-        let endpoint = format!("IRByteConfigV1.halted Nat (IROutcome.ret ({})) (IRByteWorldV1.mk Nat (ir_byte_retire_v1 1 (ir_byte_memory_empty_v1 64)) 73 (IRList.nil Nat) 2)", list("IRScalar", &[&expected]));
+        let endpoint = format!("@IRByteConfigV1.halted Nat (IROutcome.ret ({})) (@IRByteWorldV1.mk Nat (ir_byte_retire_v1 1 (ir_byte_memory_empty_v1 64)) 73 (@IRList.nil Nat) 2)", list("IRScalar", &[&expected]));
         equality(
             &mut spec,
             "field_enum_construct_complete_return",
@@ -270,13 +270,13 @@ fn byte_field_fetched_step_rules_world_and_faults_have_constructed_applications(
                     "IRBinding.mk 1 (IRScalar.fat_ 32 7)",
                 ],
             );
-            let current = format!("IRFrame.mk 41 0 0 ({locals}) (IRList.nil Nat)");
+            let current = format!("IRFrame.mk 41 0 0 ({locals}) (@IRList.nil Nat)");
             let state = format!(
-                "IRMachine.mk ({}) (IRList.nil IRMemSlot) 0",
+                "IRMachine.mk ({}) (@IRList.nil IRMemSlot) 0",
                 list("IRFrame", &[&current])
             );
             let world = format!(
-                "IRByteWorldV1.mk Nat (ir_byte_memory_empty_v1 64) 73 ({}) 2",
+                "@IRByteWorldV1.mk Nat (ir_byte_memory_empty_v1 64) 73 ({}) 2",
                 list("Nat", &["1"])
             );
             let r = if *name == "extract" {
@@ -289,8 +289,8 @@ fn byte_field_fetched_step_rules_world_and_faults_have_constructed_applications(
                 list("Nat", &["99"]),
                 list("IRTy", &[result_ty])
             );
-            add(&mut spec, &format!("def field_derived_step_{case} : Eq (IRByteConfigV1 Nat) (ir_byte_step_v1 Nat ({ctx}) field_no_provider (IRByteConfigV1.running Nat ({state}) ({world}))) ({expected}) := ir_byte_step_field_{name}_v1 Nat ({ctx}) field_no_provider ({current}) (IRList.nil IRFrame) (IRList.nil IRMemSlot) 0 ({world}) ({function}) ({block}) ({typed}) ({result_ty}) 0 0 ({}) {TRUE}\n  (Eq.refl (IROption IRFunc) (IROption.some IRFunc ({function})))\n  (Eq.refl (IROption IRBlock) (IROption.some IRBlock ({block})))\n  (Eq.refl (IROption IRByteSiteV1) (IROption.some IRByteSiteV1 ({typed}))) {TRUE} {extra}\n  (Eq.refl (IROption IRNode) (IROption.some IRNode ({})))", list("Nat", &["99"]), nodes[0]));
-            add(&mut spec, &format!("def field_derived_scalar_world_{case} : Eq (IRByteWorldV1 Nat) (ir_byte_final_world_v1 Nat ({expected})) ({world}) := ir_byte_field_scalar_world_v1 Nat ({ctx}) ({state}) ({world}) ({}) ({}) ({r})", list("Nat", &["99"]), list("IRTy", &[result_ty])));
+            add(&mut spec, &format!("def field_derived_step_{case} : @Eq (IRByteConfigV1 Nat) (ir_byte_step_v1 Nat ({ctx}) field_no_provider (@IRByteConfigV1.running Nat ({state}) ({world}))) ({expected}) := ir_byte_step_field_{name}_v1 Nat ({ctx}) field_no_provider ({current}) (@IRList.nil IRFrame) (@IRList.nil IRMemSlot) 0 ({world}) ({function}) ({block}) ({typed}) ({result_ty}) 0 0 ({}) {TRUE}\n  (@Eq.refl (IROption IRFunc) (@IROption.some IRFunc ({function})))\n  (@Eq.refl (IROption IRBlock) (@IROption.some IRBlock ({block})))\n  (@Eq.refl (IROption IRByteSiteV1) (@IROption.some IRByteSiteV1 ({typed}))) {TRUE} {extra}\n  (@Eq.refl (IROption IRNode) (@IROption.some IRNode ({})))", list("Nat", &["99"]), nodes[0]));
+            add(&mut spec, &format!("def field_derived_scalar_world_{case} : @Eq (IRByteWorldV1 Nat) (ir_byte_final_world_v1 Nat ({expected})) ({world}) := ir_byte_field_scalar_world_v1 Nat ({ctx}) ({state}) ({world}) ({}) ({}) ({r})", list("Nat", &["99"]), list("IRTy", &[result_ty])));
             let bad_site = old_site(0, &[result_ty]);
             let (bad_ctx, _, _) = program(
                 &["IRTy.struct_ 9", "IRTy.fatstr_"],
@@ -300,7 +300,7 @@ fn byte_field_fetched_step_rules_world_and_faults_have_constructed_applications(
                 &[&structure],
                 &[],
             );
-            equality(&mut spec, &format!("field_fetched_old_site_{case}"), "IRByteConfigV1 Nat", &format!("ir_byte_step_v1 Nat ({bad_ctx}) field_no_provider (IRByteConfigV1.running Nat ({state}) ({world}))"), &format!("IRByteConfigV1.halted Nat (IROutcome.unmodelled IRFault.width_bounded) ({world})"));
+            equality(&mut spec, &format!("field_fetched_old_site_{case}"), "IRByteConfigV1 Nat", &format!("ir_byte_step_v1 Nat ({bad_ctx}) field_no_provider (@IRByteConfigV1.running Nat ({state}) ({world}))"), &format!("@IRByteConfigV1.halted Nat (IROutcome.unmodelled IRFault.width_bounded) ({world})"));
         }
         for root in ROOTS {
             checked(&spec, root);
@@ -335,7 +335,7 @@ fn byte_field_fetched_step_rules_world_and_faults_have_constructed_applications(
                 &[&enumeration],
             );
             let actual = format!("ir_byte_run_v1 Nat ({ctx}) field_no_provider 1 (ir_byte_init_v1 Nat ({ctx}) 41 ({}) (ir_byte_memory_empty_v1 64) 73)", list("IRScalar", &[&active, "IRScalar.bool_ Bool.true"]));
-            equality(&mut spec, &format!("field_fetched_active_variant_ub_{case}"), "IRByteConfigV1 Nat", &actual, &format!("IRByteConfigV1.halted Nat (IROutcome.ub IRFault.bad_field) (IRByteWorldV1.mk Nat (ir_byte_memory_empty_v1 64) 73 ({}) 2)", list("Nat", &["1"])));
+            equality(&mut spec, &format!("field_fetched_active_variant_ub_{case}"), "IRByteConfigV1 Nat", &actual, &format!("@IRByteConfigV1.halted Nat (IROutcome.ub IRFault.bad_field) (@IRByteWorldV1.mk Nat (ir_byte_memory_empty_v1 64) 73 ({}) 2)", list("Nat", &["1"])));
         }
     });
 }
@@ -416,13 +416,13 @@ fn byte_field_fetched_const_rejects_same_shape_nominal_results_before_binding() 
                     &format!("ir_byte_const_context_eval_v1 {ctx_name} ({source_ty}) ({constant})"),
                     &format!("IRStepResult.value ({value})"),
                 );
-                let initial = format!("ir_byte_init_v1 Nat {ctx_name} 41 (IRList.nil IRScalar) (ir_byte_memory_empty_v1 64) 73");
+                let initial = format!("ir_byte_init_v1 Nat {ctx_name} 41 (@IRList.nil IRScalar) (ir_byte_memory_empty_v1 64) 73");
                 let actual =
                     format!("ir_byte_run_v1 Nat {ctx_name} field_no_provider 1 ({initial})");
                 if control == "wrong" {
-                    equality(&mut spec, &format!("field_const_nominal_refusal_{case}"), "IRByteConfigV1 Nat", &actual, &format!("IRByteConfigV1.halted Nat (IROutcome.type_error IRFault.bad_field) (IRByteWorldV1.mk Nat (ir_byte_memory_empty_v1 64) 73 ({}) 2)", list("Nat", &["1"])));
+                    equality(&mut spec, &format!("field_const_nominal_refusal_{case}"), "IRByteConfigV1 Nat", &actual, &format!("@IRByteConfigV1.halted Nat (IROutcome.type_error IRFault.bad_field) (@IRByteWorldV1.mk Nat (ir_byte_memory_empty_v1 64) 73 ({}) 2)", list("Nat", &["1"])));
                 } else {
-                    equality(&mut spec, &format!("field_const_valid_carrier_{case}"), "IRScalar", &format!("IRByteConfigV1.rec Nat (fun (_ : IRByteConfigV1 Nat) => IRScalar) (fun (state : IRMachine) (_ : IRByteWorldV1 Nat) => ir_getd state 99) (fun (_ : IROutcome) (_ : IRByteWorldV1 Nat) => IRScalar.undef_) ({actual})"), value);
+                    equality(&mut spec, &format!("field_const_valid_carrier_{case}"), "IRScalar", &format!("@IRByteConfigV1.rec Nat (fun (_ : IRByteConfigV1 Nat) => IRScalar) (fun (state : IRMachine) (_ : IRByteWorldV1 Nat) => ir_getd state 99) (fun (_ : IROutcome) (_ : IRByteWorldV1 Nat) => IRScalar.undef_) ({actual})"), value);
                 }
             }
         }
@@ -437,7 +437,7 @@ fn byte_field_fetched_admission_faults_preserve_exact_world_and_result_arity() {
         let structure = layout(9, &["IRTy.fatstr_"]);
         let aggregate = aggregate("IRScalar", &["IRScalar.fat_ 16 3"]);
         let world = format!(
-            "IRByteWorldV1.mk Nat (ir_byte_memory_empty_v1 64) 73 ({}) 2",
+            "@IRByteWorldV1.mk Nat (ir_byte_memory_empty_v1 64) 73 ({}) 2",
             list("Nat", &["1"])
         );
         let locals = list(
@@ -447,9 +447,9 @@ fn byte_field_fetched_admission_faults_preserve_exact_world_and_result_arity() {
                 "IRBinding.mk 1 (IRScalar.fat_ 32 7)",
             ],
         );
-        let frame = format!("IRFrame.mk 41 0 0 ({locals}) (IRList.nil Nat)");
+        let frame = format!("IRFrame.mk 41 0 0 ({locals}) (@IRList.nil Nat)");
         let state = format!(
-            "IRMachine.mk ({}) (IRList.nil IRMemSlot) 0",
+            "IRMachine.mk ({}) (@IRList.nil IRMemSlot) 0",
             list("IRFrame", &[&frame])
         );
         let good = site(
@@ -511,18 +511,18 @@ fn byte_field_fetched_admission_faults_preserve_exact_world_and_result_arity() {
                 &[&structure],
                 &[],
             );
-            let actual = format!("ir_byte_step_v1 Nat ({ctx}) field_no_provider (IRByteConfigV1.running Nat ({state}) ({world}))");
+            let actual = format!("ir_byte_step_v1 Nat ({ctx}) field_no_provider (@IRByteConfigV1.running Nat ({state}) ({world}))");
             equality(
                 &mut spec,
                 &format!("field_fetched_admission_refusal_{case}"),
                 "IRByteConfigV1 Nat",
                 &actual,
                 &format!(
-                    "IRByteConfigV1.halted Nat (IROutcome.type_error IRFault.bad_field) ({world})"
+                    "@IRByteConfigV1.halted Nat (IROutcome.type_error IRFault.bad_field) ({world})"
                 ),
             );
         }
         let ctx = context(&[&structure], &[], &[]);
-        add(&mut spec, &format!("def field_derived_fault_world : Eq (IRByteConfigV1 Nat)\n  (ir_byte_scalar_result_v1 Nat {ctx} ({state}) ({world}) ({}) ({}) (IRStepResult.fault (IROutcome.ub IRFault.bad_field)))\n  (IRByteConfigV1.halted Nat (IROutcome.ub IRFault.bad_field) ({world})) := ir_byte_field_fault_world_v1 Nat {ctx} ({state}) ({world}) ({}) ({}) (IROutcome.ub IRFault.bad_field)", list("Nat", &["99"]), list("IRTy", &["IRTy.struct_ 9"]), list("Nat", &["99"]), list("IRTy", &["IRTy.struct_ 9"])));
+        add(&mut spec, &format!("def field_derived_fault_world : @Eq (IRByteConfigV1 Nat)\n  (ir_byte_scalar_result_v1 Nat {ctx} ({state}) ({world}) ({}) ({}) (IRStepResult.fault (IROutcome.ub IRFault.bad_field)))\n  (@IRByteConfigV1.halted Nat (IROutcome.ub IRFault.bad_field) ({world})) := ir_byte_field_fault_world_v1 Nat {ctx} ({state}) ({world}) ({}) ({}) (IROutcome.ub IRFault.bad_field)", list("Nat", &["99"]), list("IRTy", &["IRTy.struct_ 9"]), list("Nat", &["99"]), list("IRTy", &["IRTy.struct_ 9"])));
     });
 }

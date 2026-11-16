@@ -146,7 +146,7 @@ const LTB_OF_LT: &str = r"def ir_byte_ltb_of_lt_v1 (a : Nat) (b : Nat) (h : Nat.
         (fun (z : Nat)
           (_ : Nat.lt (Nat.succ x) z -> @Eq Bool (ir_nat_ltb_walk (Nat.succ x) z) Bool.true) =>
           fun (less : Nat.lt (Nat.succ x) (Nat.succ z)) =>
-            ih z (Nat.le_of_succ_le_succ (Nat.succ x) z less)) y)
+            ih z (@Nat.le_of_succ_le_succ (Nat.succ x) z less)) y)
     a b h)";
 
 const LEB_OF_LE: &str = r"def ir_byte_leb_of_le_v1 (a : Nat) (b : Nat) (h : Nat.le a b) :
@@ -169,7 +169,7 @@ const LEB_OF_LE: &str = r"def ir_byte_leb_of_le_v1 (a : Nat) (b : Nat) (h : Nat.
         (fun (z : Nat)
           (_ : Nat.le (Nat.succ x) z -> @Eq Bool (ir_nat_leb_walk (Nat.succ x) z) Bool.true) =>
           fun (less : Nat.le (Nat.succ x) (Nat.succ z)) =>
-            ih z (Nat.le_of_succ_le_succ x z less)) y)
+            ih z (@Nat.le_of_succ_le_succ x z less)) y)
     a b h)";
 
 const RANGE_OFFSET: &str = r"def ir_byte_range_offset_v1 (base : Nat) (size : Nat) (offset : Nat)
@@ -184,7 +184,7 @@ const RANGE_OFFSET: &str = r"def ir_byte_range_offset_v1 (base : Nat) (size : Na
     (ir_nat_leb base (Nat.add base offset)) Bool.true
     (ir_byte_leb_of_le_v1 base (Nat.add base offset) (Nat.le_add_right base offset)))
   (ir_byte_ltb_of_lt_v1 (Nat.add base offset) (Nat.add base size)
-    (Nat.add_lt_add_left offset size bounded base))";
+    (@Nat.add_lt_add_left offset size bounded base))";
 
 const WRITE_DIGIT: &str = r"def ir_byte_write_digit_v1
   (bytes : Nat -> IROption Nat) (base : Nat) (size : Nat) (word : Nat) (offset : Nat)

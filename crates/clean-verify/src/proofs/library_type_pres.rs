@@ -62,7 +62,7 @@ impl ProofLibrary {
                     "(wr : RecEnvWellformed (red_rec the_red_env)) ",
                     "(hA : Typing A (KExpr.sort u)) (hb : Typing b B) ",
                     "(ha : Typing a A) => ",
-                    "Typing.rec ",
+                    "@Typing.rec ",
                     "(fun (e0 : KExpr) (T0 : KExpr) (_ : Typing e0 T0) => ",
                     "forall (d0 : Nat), ",
                     "Typing (instantiate_at e0 a d0) (instantiate_at T0 a d0)) ",

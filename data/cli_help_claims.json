@@ -226,9 +226,9 @@
       "H/minimal"
     ],
     "statement": "eval_expr builds Environment::new() \u2014 the minimal env registering native ops plus the three Sort-u axioms \u2014 so names beyond it (Nat.succ included) are unknown; the caption now says so.",
-    "evidence": "crates/clean-cli/src/cmd_core.rs:2936",
+    "evidence": "crates/clean-cli/src/cmd_core.rs:2937",
     "anchor": "let env = Environment::new();",
-    "verified": "2026-11-14"
+    "verified": "2026-11-15"
   },
   {
     "id": "descriptor verify tla (description)",

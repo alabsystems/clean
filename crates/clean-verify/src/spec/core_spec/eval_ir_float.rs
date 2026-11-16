@@ -189,7 +189,7 @@ impl Specification {
             "def ir_f64_is_neg (n : Nat) : Bool := Bool.not (ir_nat_ltb n ir_f64_sign_bit)",
             "The sign bit, decided as `NOT (n < 2^63)`. Through ir_nat_ltb rather than \
              ir_nat_ltb, and that is the whole reason this module is affordable: the paired unary \
-             walk would peel 9.2e18 Nat.rec layers to decide the sign of an infinity, while the \
+             walk would peel 9.2e18 @Nat.rec layers to decide the sign of an infinity, while the \
              subtraction test is one native BigNat subtract and one iota step. \
              ir_nat_ltb_walk_eq proves the two are the same predicate. DerivedProved, zero \
              axiom_deps.",
@@ -295,7 +295,7 @@ impl Specification {
             "def ir_f64_qzero (a : Nat) (b : Nat) : Nat := ir_f64_pack (ir_f64_xsign a b) Nat.zero",
             "The zero a multiplicative operation on a and b produces, at the XOR sign. It is a \
              SIGNED zero and the sign is observable: -0.0 and +0.0 are different bit patterns, \
-             different values of Eq Float (Clean's own Float.decEq is structural on the bit \
+             different values of @Eq Float (Clean's own Float.decEq is structural on the bit \
              pattern for exactly this reason), and 1.0/(+0.0) and 1.0/(-0.0) are different \
              infinities. DerivedProved, zero axiom_deps.",
         )?;
@@ -326,7 +326,7 @@ impl Specification {
                 "ca cb",
             ),
             "*** IEEE 754 binary64 DIVISION on the classified fragment. *** Two nested \
-             IRF64Class.rec — the multi-scrutinee dispatch idiom, since this surface syntax has \
+             @IRF64Class.rec — the multi-scrutinee dispatch idiom, since this surface syntax has \
              single-scrutinee match only — over the full 4x4 class product, in constructor order \
              (nan_, inf_, zero_, fin_). \n\nAnswered: inf/0 and inf/fin and fin/0 are an infinity \
              at the XOR sign; 0/inf and 0/fin and fin/inf are a zero at the XOR sign. Refused: \
@@ -344,7 +344,7 @@ impl Specification {
              declarations on purpose, and it is not cosmetic: a theorem that knows the class of an \
              operand — `ir_fd_machine_sound_divzero`, which is the eighth chain's A5 reaching past \
              the machine's answer onto its ARGUMENTS — rewrites `ir_f64_class b` to \
-             `IRF64Class.zero_` with Eq.cong and then the table COMPUTES. With the two fused into \
+             `IRF64Class.zero_` with @Eq.cong and then the table COMPUTES. With the two fused into \
              one definition there is no subterm to rewrite, and the only way to reach the same \
              conclusion is a four-by-four case analysis on classes that are already known. \
              DerivedProved, zero axiom_deps.",

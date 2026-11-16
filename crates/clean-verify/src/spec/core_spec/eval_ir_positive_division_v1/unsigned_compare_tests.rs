@@ -71,7 +71,7 @@ fn unsigned_compare_universal_actual_nominal_operations_and_boolean_result_fit()
                 let law = format!("ir_byte_icmp_{kind}_{op}_canonical_v1");
                 let authored_type = elaborate(&spec, &format!(
                     "forall (width a b : Nat) (aBound : Nat.lt a (ir_nat_pow2 width)) \
-                     (bBound : Nat.lt b (ir_nat_pow2 width)), Eq IRStepResult ({operation}) ({result})"
+                     (bBound : Nat.lt b (ir_nat_pow2 width)), @Eq IRStepResult ({operation}) ({result})"
                 ));
                 assert_eq!(
                     spec.env()
@@ -85,11 +85,11 @@ fn unsigned_compare_universal_actual_nominal_operations_and_boolean_result_fit()
                 add_checked(&mut spec, &name, &format!(
                     "def {name} (ctx : IRByteContextV1) (width a b : Nat) \
                      (aBound : Nat.lt a (ir_nat_pow2 width)) (bBound : Nat.lt b (ir_nat_pow2 width)) : \
-                     And (Eq IRStepResult ({operation}) ({result})) \
-                       (Eq Bool (ir_byte_value_matches_v1 ctx IRTy.bool_ (IRScalar.bool_ ({observer}))) Bool.true) := \
-                     @And.intro (Eq IRStepResult ({operation}) ({result})) \
-                       (Eq Bool (ir_byte_value_matches_v1 ctx IRTy.bool_ (IRScalar.bool_ ({observer}))) Bool.true) \
-                       ({law} width a b aBound bBound) (Eq.refl Bool Bool.true)"
+                     And (@Eq IRStepResult ({operation}) ({result})) \
+                       (@Eq Bool (ir_byte_value_matches_v1 ctx IRTy.bool_ (IRScalar.bool_ ({observer}))) Bool.true) := \
+                     @And.intro (@Eq IRStepResult ({operation}) ({result})) \
+                       (@Eq Bool (ir_byte_value_matches_v1 ctx IRTy.bool_ (IRScalar.bool_ ({observer}))) Bool.true) \
+                       ({law} width a b aBound bBound) (@Eq.refl Bool Bool.true)"
                 ));
             }
         }
@@ -139,15 +139,15 @@ fn unsigned_compare_full64_negative_encodings_and_zero_width_match_independent_o
                     &mut spec,
                     &observed,
                     &format!(
-                    "def {observed} : Eq Bool ({observer}) Bool.{flag} := Eq.refl Bool Bool.{flag}"
+                    "def {observed} : @Eq Bool ({observer}) Bool.{flag} := @Eq.refl Bool Bool.{flag}"
                 ),
                 );
                 for (carrier, kind) in [("uint_", "uint"), ("int_", "int")] {
                     let operation = actual(carrier, &width, &a_text, &b_text, op);
                     let name = format!("full_width_comparison_{kind}_{op}_{width}_{a}_{b}");
                     add_checked(&mut spec, &name, &format!(
-                        "def {name} : Eq IRStepResult ({operation}) (IRStepResult.value (IRScalar.bool_ Bool.{flag})) := \
-                         Eq.trans IRStepResult ({operation}) (IRStepResult.value (IRScalar.bool_ ({observer}))) \
+                        "def {name} : @Eq IRStepResult ({operation}) (IRStepResult.value (IRScalar.bool_ Bool.{flag})) := \
+                         @Eq.trans IRStepResult ({operation}) (IRStepResult.value (IRScalar.bool_ ({observer}))) \
                            (IRStepResult.value (IRScalar.bool_ Bool.{flag})) \
                            (ir_byte_icmp_{kind}_{op}_canonical_v1 {width} {a} {b} ({}) ({})) \
                            (ir_eq_cong Bool IRStepResult (fun (answer : Bool) => IRStepResult.value (IRScalar.bool_ answer)) \
@@ -167,10 +167,10 @@ fn unsigned_compare_actual_false_uge_controls_reject_operands_opcode_width_and_a
         for (carrier, kind) in [("uint_", "uint"), ("int_", "int")] {
             let original = actual(carrier, "4", "8", "8", "uge");
             let proof = elaborate(spec, &format!(
-                "Eq.trans IRStepResult ({original}) (IRStepResult.value (IRScalar.bool_ (ir_nat_leb 8 8))) \
+                "@Eq.trans IRStepResult ({original}) (IRStepResult.value (IRScalar.bool_ (ir_nat_leb 8 8))) \
                   (IRStepResult.value (IRScalar.bool_ Bool.true)) \
                   (ir_byte_icmp_{kind}_uge_canonical_v1 4 8 8 ({0}) ({0})) \
-                  (Eq.refl IRStepResult (IRStepResult.value (IRScalar.bool_ Bool.true)))", bound("4", "8")
+                  (@Eq.refl IRStepResult (IRStepResult.value (IRScalar.bool_ Bool.true)))", bound("4", "8")
             ));
             for (operation, expected, false_answer) in [
                 (actual(carrier, "4", "7", "8", "uge"), "false", "true"),
@@ -178,39 +178,39 @@ fn unsigned_compare_actual_false_uge_controls_reject_operands_opcode_width_and_a
                 (actual(carrier, "4", "8", "8", "ugt"), "false", "true"),
                 (original, "true", "false"),
             ] {
-                let truth = elaborate(spec, &format!("Eq IRStepResult ({operation}) (IRStepResult.value (IRScalar.bool_ Bool.{expected}))"));
-                let normal = elaborate(spec, &format!("Eq.refl IRStepResult (IRStepResult.value (IRScalar.bool_ Bool.{expected}))"));
+                let truth = elaborate(spec, &format!("@Eq IRStepResult ({operation}) (IRStepResult.value (IRScalar.bool_ Bool.{expected}))"));
+                let normal = elaborate(spec, &format!("@Eq.refl IRStepResult (IRStepResult.value (IRScalar.bool_ Bool.{expected}))"));
                 let tc = checker(spec);
                 tc.check_type(&normal, &truth)
                     .expect("independent actual small normal form");
                 unspent(&tc);
-                let false_goal = elaborate(spec, &format!("Eq IRStepResult ({operation}) (IRStepResult.value (IRScalar.bool_ Bool.{false_answer}))"));
+                let false_goal = elaborate(spec, &format!("@Eq IRStepResult ({operation}) (IRStepResult.value (IRScalar.bool_ Bool.{false_answer}))"));
                 rejects_false(spec, &proof, &false_goal);
             }
             let original = actual(carrier, "4", "8", "3", "uge");
             let proof = elaborate(spec, &format!(
-                "Eq.trans IRStepResult ({original}) (IRStepResult.value (IRScalar.bool_ (ir_nat_leb 3 8))) \
+                "@Eq.trans IRStepResult ({original}) (IRStepResult.value (IRScalar.bool_ (ir_nat_leb 3 8))) \
                   (IRStepResult.value (IRScalar.bool_ Bool.true)) \
                   (ir_byte_icmp_{kind}_uge_canonical_v1 4 8 3 ({}) ({})) \
-                  (Eq.refl IRStepResult (IRStepResult.value (IRScalar.bool_ Bool.true)))", bound("4", "8"), bound("4", "3")
+                  (@Eq.refl IRStepResult (IRStepResult.value (IRScalar.bool_ Bool.true)))", bound("4", "8"), bound("4", "3")
             ));
             // A real changed-width operation: width3 wraps eight to zero.
             for operation in [
                 actual(carrier, "3", "8", "3", "uge"),
                 actual(carrier, "4", "3", "8", "uge"),
             ] {
-                let truth = elaborate(spec, &format!("Eq IRStepResult ({operation}) (IRStepResult.value (IRScalar.bool_ Bool.false))"));
+                let truth = elaborate(spec, &format!("@Eq IRStepResult ({operation}) (IRStepResult.value (IRScalar.bool_ Bool.false))"));
                 let tc = checker(spec);
                 tc.check_type(
                     &elaborate(
                         spec,
-                        "Eq.refl IRStepResult (IRStepResult.value (IRScalar.bool_ Bool.false))",
+                        "@Eq.refl IRStepResult (IRStepResult.value (IRScalar.bool_ Bool.false))",
                     ),
                     &truth,
                 )
                 .expect("independently normalizing the changed width/swapped operands");
                 unspent(&tc);
-                let false_goal = elaborate(spec, &format!("Eq IRStepResult ({operation}) (IRStepResult.value (IRScalar.bool_ Bool.true))"));
+                let false_goal = elaborate(spec, &format!("@Eq IRStepResult ({operation}) (IRStepResult.value (IRScalar.bool_ Bool.true))"));
                 rejects_false(spec, &proof, &false_goal);
             }
             let ill_typed = Expr::apps(
@@ -225,8 +225,8 @@ fn unsigned_compare_actual_false_uge_controls_reject_operands_opcode_width_and_a
             );
             let tc = checker(spec);
             tc.check_type(
-                &elaborate(spec, "Eq.refl Bool Bool.false"),
-                &elaborate(spec, "Eq Bool (ir_nat_ltb 16 (ir_nat_pow2 4)) Bool.false"),
+                &elaborate(spec, "@Eq.refl Bool Bool.false"),
+                &elaborate(spec, "@Eq Bool (ir_nat_ltb 16 (ir_nat_pow2 4)) Bool.false"),
             )
             .expect("independently, sixteen is not canonical at width4");
             // Full check mode validates every application argument. The
@@ -283,7 +283,7 @@ fn unsigned_compare_atomic_collisions_and_actual_last_false_row_refuse_without_a
 
         let mut spec = byte().clone();
         let before = spec.clone();
-        const FALSE_LAST: &str = "def ir_byte_icmp_int_uge_canonical_v1 : Eq Bool Bool.true Bool.false := Eq.refl Bool Bool.false";
+        const FALSE_LAST: &str = "def ir_byte_icmp_int_uge_canonical_v1 : @Eq Bool Bool.true Bool.false := @Eq.refl Bool Bool.false";
         let rows = unsigned_compare::LAWS
             .iter()
             .copied()

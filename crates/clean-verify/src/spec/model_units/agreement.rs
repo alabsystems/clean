@@ -55,7 +55,7 @@ pub(crate) const AGREEMENT_UNIT_LABEL: &str = "foundation_agreement.clean";
 /// Reviewed statement, deliberately independent of the loaded witness text.
 /// This pins only fa_nat_add_succ; it is not full model/prelude equivalence.
 const NAT_ADD_SUCC_STATEMENT: &str =
-    "forall (n : Nat) (m : Nat), Eq Nat (Nat.add n (Nat.succ m)) (Nat.succ (Nat.add n m))";
+    "forall (n : Nat) (m : Nat), @Eq Nat (Nat.add n (Nat.succ m)) (Nat.succ (Nat.add n m))";
 
 fn check_statement_contract(spec: &Specification, name: &str) -> Result<(), SpecError> {
     // The target is explicit so a uniquely named, well-typed weakening control
@@ -173,17 +173,17 @@ mod tests {
     const NEGATIVE_CONTROLS: &[(&str, &str, &str)] = &[
         (
             "add_recurses_left",
-            "/-- control -/\ndef bad_add (n : Nat) : Eq Nat (Nat.add Nat.zero n) n := Eq.refl Nat n",
+            "/-- control -/\ndef bad_add (n : Nat) : @Eq Nat (Nat.add Nat.zero n) n := @Eq.refl Nat n",
             "Nat.add must recurse on its RIGHT argument",
         ),
         (
             "pred_zero_wrong",
-            "/-- control -/\ndef bad_pred : Eq Nat (Nat.pred Nat.zero) (Nat.succ Nat.zero) := Eq.refl Nat (Nat.succ Nat.zero)",
+            "/-- control -/\ndef bad_pred : @Eq Nat (Nat.pred Nat.zero) (Nat.succ Nat.zero) := @Eq.refl Nat (Nat.succ Nat.zero)",
             "Nat.pred Nat.zero must be Nat.zero",
         ),
         (
             "sub_drops_pred",
-            "/-- control -/\ndef bad_sub (a : Nat) (b : Nat) : Eq Nat (Nat.sub a (Nat.succ b)) (Nat.sub a b) := Eq.refl Nat (Nat.sub a b)",
+            "/-- control -/\ndef bad_sub (a : Nat) (b : Nat) : @Eq Nat (Nat.sub a (Nat.succ b)) (Nat.sub a b) := @Eq.refl Nat (Nat.sub a b)",
             "Nat.sub must peel the right operand THROUGH pred",
         ),
         (
@@ -193,12 +193,12 @@ mod tests {
         ),
         (
             "nat_rec_three_minors",
-            "/-- control -/\ndef bad_nat_rec (C : Nat -> Type) (z : C Nat.zero) (s : (n : Nat) -> C n -> C (Nat.succ n)) (x : C Nat.zero) (n : Nat) : C n := Nat.rec C z s x n",
+            "/-- control -/\ndef bad_nat_rec (C : Nat -> Type) (z : C Nat.zero) (s : (n : Nat) -> C n -> C (Nat.succ n)) (x : C Nat.zero) (n : Nat) : C n := @Nat.rec C z s x n",
             "Nat.rec takes one minor premise per constructor",
         ),
         (
             "bool_rec_three_minors",
-            "/-- control -/\ndef bad_bool_rec (C : Bool -> Type) (f : C Bool.false) (t : C Bool.true) (x : C Bool.false) (b : Bool) : C b := Bool.rec C f t x b",
+            "/-- control -/\ndef bad_bool_rec (C : Bool -> Type) (f : C Bool.false) (t : C Bool.true) (x : C Bool.false) (b : Bool) : C b := @Bool.rec C f t x b",
             "Bool.rec takes one minor premise per constructor",
         ),
         (
@@ -316,7 +316,7 @@ mod tests {
             (
                 "vacuous_proposition",
                 "agreement_control_add_succ_reflexive",
-                "/-- statement-weakening control -/\ndef agreement_control_add_succ_reflexive (n : Nat) (m : Nat) : Eq Nat n n := Eq.refl Nat n",
+                "/-- statement-weakening control -/\ndef agreement_control_add_succ_reflexive (n : Nat) (m : Nat) : @Eq Nat n n := @Eq.refl Nat n",
             ),
         ];
         let mut accepted = Vec::new();

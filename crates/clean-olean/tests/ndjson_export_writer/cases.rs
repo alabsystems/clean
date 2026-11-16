@@ -20,7 +20,7 @@ fn test_export_writer_cic_l_round_trips_and_is_the_same_in_another_process() {
     );
     for axiom in &minted.summary.axioms {
         assert!(
-            FOUNDATIONAL_AXIOMS.contains(&axiom.as_str()),
+            LEAN_FOUNDATIONAL_AXIOMS.contains(&axiom.as_str()),
             "the closure declares the axiom {axiom}"
         );
     }

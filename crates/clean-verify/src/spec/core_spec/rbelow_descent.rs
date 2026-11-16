@@ -83,7 +83,7 @@ impl Specification {
         self.add_recursive_def(
             "def rbelow_rtc_snoc (x : KExpr) (y : KExpr) (hxy : rbelow_rtc x y) : \
              forall (z : KExpr), rbelow y z -> rbelow_rtc x z := \
-             rbelow_rtc.rec \
+             @rbelow_rtc.rec \
              (fun (p : KExpr) (q : KExpr) (_h : rbelow_rtc p q) => \
              forall (z : KExpr), rbelow q z -> rbelow_rtc p z) \
              (fun (p : KExpr) (z : KExpr) (hz : rbelow p z) => \
@@ -105,7 +105,7 @@ impl Specification {
         self.add_recursive_def(
             "def rbelow_plus_of_step_rtc (x : KExpr) (y : KExpr) (z : KExpr) (hxy : rbelow x y) \
              (hyz : rbelow_rtc y z) : rbelow_plus x z := \
-             rbelow_rtc.rec \
+             @rbelow_rtc.rec \
              (fun (p : KExpr) (q : KExpr) (_h : rbelow_rtc p q) => \
              forall (w : KExpr), rbelow w p -> rbelow_plus w q) \
              (fun (p : KExpr) (w : KExpr) (hw : rbelow w p) => rbelow_plus.base w p hw) \
@@ -126,7 +126,7 @@ impl Specification {
         self.add_recursive_def(
             "def whnf_red_step_star_to_rbelow_rtc (a : KExpr) (r : KExpr) \
              (h : whnf_red_step_star the_red_env a r) : rbelow_rtc r a := \
-             whnf_red_step_star.rec the_red_env \
+             @whnf_red_step_star.rec the_red_env \
              (fun (p : KExpr) (q : KExpr) (_h : whnf_red_step_star the_red_env p q) => \
              rbelow_rtc q p) \
              (fun (p : KExpr) => rbelow_rtc.refl p) \
@@ -146,8 +146,8 @@ impl Specification {
         // The executable loop's leg, via the existing soundness chain.
         self.add_recursive_def(
             "def whnf_fuel_red_rbelow_rtc (n : Nat) (a : KExpr) (r : KExpr) \
-             (h : Eq (OptionType KExpr) (whnf_fuel_red the_red_env n a) \
-             (OptionType.some KExpr r)) : rbelow_rtc r a := \
+             (h : @Eq (OptionType KExpr) (whnf_fuel_red the_red_env n a) \
+             (@OptionType.some KExpr r)) : rbelow_rtc r a := \
              whnf_red_step_star_to_rbelow_rtc a r \
              (red_step_star_to_whnf_red_step_star the_red_env a r \
              (whnf_fuel_red_reaches_sound the_red_env n a r h))",
@@ -162,7 +162,7 @@ impl Specification {
         self.add_recursive_def(
             "def rbelow_plus_acc_inv (e : KExpr) (h : rbelow_plus_acc e) : \
              forall (e2 : KExpr), rbelow_plus e2 e -> rbelow_plus_acc e2 := \
-             rbelow_plus_acc.rec \
+             @rbelow_plus_acc.rec \
              (fun (x : KExpr) (_h : rbelow_plus_acc x) => \
              forall (e2 : KExpr), rbelow_plus e2 x -> rbelow_plus_acc e2) \
              (fun (x : KExpr) \
@@ -178,8 +178,8 @@ impl Specification {
         // THE DESCENT LEMMA the capstone's recursion consumes.
         self.add_recursive_def(
             "def whnf_component_acc (n : Nat) (a : KExpr) (r : KExpr) (c : KExpr) \
-             (hr : Eq (OptionType KExpr) (whnf_fuel_red the_red_env n a) \
-             (OptionType.some KExpr r)) \
+             (hr : @Eq (OptionType KExpr) (whnf_fuel_red the_red_env n a) \
+             (@OptionType.some KExpr r)) \
              (hc : subexpr_step c r) (hacc : rbelow_plus_acc a) : rbelow_plus_acc c := \
              rbelow_plus_acc_inv a hacc c \
              (rbelow_plus_of_step_rtc c r a (rbelow.sub c r hc) \

@@ -28,7 +28,7 @@ use super::candmodel_construct_r17_src::{
 pub(super) fn src_wkc_lift_var() -> String {
     let shape_cast = "r17_wkcCastS (skins c t D) (KExpr.bvar (r14_wkpos i c)) (skins c t D (r14_wkpos i c)) (D i) (r14_skins_idx c i t D) (WKC.var (skins c t D) (r14_wkpos i c))";
     format!(
-        "def r17_wkc_lift_var (c : Nat) (i : Nat) (t : Sk) (D : Nat -> Sk) : WKC (skins c t D) (lift_at (KExpr.bvar i) c {ONE}) (D i) := r17_wkcCastT (skins c t D) (KExpr.bvar (r14_wkpos i c)) (lift_at (KExpr.bvar i) c {ONE}) (D i) (Eq.symm KExpr (lift_at (KExpr.bvar i) c {ONE}) (KExpr.bvar (r14_wkpos i c)) (r14_lift_at_bvar_wkpos i c)) ({shape_cast})"
+        "def r17_wkc_lift_var (c : Nat) (i : Nat) (t : Sk) (D : Nat -> Sk) : WKC (skins c t D) (lift_at (KExpr.bvar i) c {ONE}) (D i) := r17_wkcCastT (skins c t D) (KExpr.bvar (r14_wkpos i c)) (lift_at (KExpr.bvar i) c {ONE}) (D i) (@Eq.symm KExpr (lift_at (KExpr.bvar i) c {ONE}) (KExpr.bvar (r14_wkpos i c)) (r14_lift_at_bvar_wkpos i c)) ({shape_cast})"
     )
 }
 
@@ -63,7 +63,7 @@ pub(super) fn src_wkc_lift() -> String {
         "(fun (qD : Nat -> Sk) (qt : KExpr) (qv : KExpr) (qb : KExpr) (qst : Sk) (qsv : Sk) (qc : Sk) (qht : WKC qD qt qst) (qhv : WKC qD qv qsv) (qhb : WKC (skcons qsv qD) qb qc) {ih_t} {ih_v} {ih_b} (qk : Nat) (qins : Sk) => WKC.let_ (skins qk qins qD) (lift_at qt qk {ONE}) (lift_at qv qk {ONE}) (lift_at qb (Nat.succ qk) {ONE}) qst qsv qc (qiht qk qins) (qihv qk qins) (qihb (Nat.succ qk) qins))"
     );
     format!(
-        "def wkc_lift (D : Nat -> Sk) (e : KExpr) (s : Sk) (h : WKC D e s) (k : Nat) (t : Sk) : WKC (skins k t D) (lift_at e k {ONE}) s := WKC.rec {motive} {m_var} {m_sort} {m_pi} {m_lam} {m_app} {m_konst} {m_let} D e s h k t"
+        "def wkc_lift (D : Nat -> Sk) (e : KExpr) (s : Sk) (h : WKC D e s) (k : Nat) (t : Sk) : WKC (skins k t D) (lift_at e k {ONE}) s := @WKC.rec {motive} {m_var} {m_sort} {m_pi} {m_lam} {m_app} {m_konst} {m_let} D e s h k t"
     )
 }
 
@@ -73,7 +73,7 @@ pub(super) fn src_wkc_lift0() -> String {
     )
 }
 
-pub(super) const SRC_WKC_UP: &str = "def wkc_up (D : Nat -> Sk) (Dp : Nat -> Sk) (sg : Nat -> KExpr) (d : Sk) (hsg : forall (qi : Nat), WKC D (sg qi) (Dp qi)) (i : Nat) : WKC (skcons d D) (up sg i) (skcons d Dp i) := Nat.rec (fun (qi : Nat) => WKC (skcons d D) (up sg qi) (skcons d Dp qi)) (WKC.var (skcons d D) Nat.zero) (fun (qn : Nat) (qih : WKC (skcons d D) (up sg qn) (skcons d Dp qn)) => wkc_lift0 D (sg qn) (Dp qn) (hsg qn) d) i";
+pub(super) const SRC_WKC_UP: &str = "def wkc_up (D : Nat -> Sk) (Dp : Nat -> Sk) (sg : Nat -> KExpr) (d : Sk) (hsg : forall (qi : Nat), WKC D (sg qi) (Dp qi)) (i : Nat) : WKC (skcons d D) (up sg i) (skcons d Dp i) := @Nat.rec (fun (qi : Nat) => WKC (skcons d D) (up sg qi) (skcons d Dp qi)) (WKC.var (skcons d D) Nat.zero) (fun (qn : Nat) (qih : WKC (skcons d D) (up sg qn) (skcons d Dp qn)) => wkc_lift0 D (sg qn) (Dp qn) (hsg qn) d) i";
 
 pub(super) fn src_wkc_psub() -> String {
     let motive = "(fun (qDp : Nat -> Sk) (qe : KExpr) (qs : Sk) (qh : WKC qDp qe qs) => forall (qsg : Nat -> KExpr) (qD : Nat -> Sk), (forall (qi : Nat), WKC qD (qsg qi) (qDp qi)) -> WKC qD (psubst qsg qe) qs)";
@@ -105,13 +105,13 @@ pub(super) fn src_wkc_psub() -> String {
         "(fun (qDp : Nat -> Sk) (qt : KExpr) (qv : KExpr) (qb : KExpr) (qst : Sk) (qsv : Sk) (qc : Sk) (qht : WKC qDp qt qst) (qhv : WKC qDp qv qsv) (qhb : WKC (skcons qsv qDp) qb qc) {ih_t} {ih_v} {ih_b} (qsg : Nat -> KExpr) (qD : Nat -> Sk) (qhsg : forall (qi : Nat), WKC qD (qsg qi) (qDp qi)) => WKC.let_ qD (psubst qsg qt) (psubst qsg qv) (psubst (up qsg) qb) qst qsv qc (qiht qsg qD qhsg) (qihv qsg qD qhsg) (qihb (up qsg) (skcons qsv qD) (wkc_up qD qDp qsg qsv qhsg)))"
     );
     format!(
-        "def wkc_psub (Dp : Nat -> Sk) (e : KExpr) (s : Sk) (h : WKC Dp e s) (sg : Nat -> KExpr) (D : Nat -> Sk) (hsg : forall (qi : Nat), WKC D (sg qi) (Dp qi)) : WKC D (psubst sg e) s := WKC.rec {motive} {m_var} {m_sort} {m_pi} {m_lam} {m_app} {m_konst} {m_let} Dp e s h sg D hsg"
+        "def wkc_psub (Dp : Nat -> Sk) (e : KExpr) (s : Sk) (h : WKC Dp e s) (sg : Nat -> KExpr) (D : Nat -> Sk) (hsg : forall (qi : Nat), WKC D (sg qi) (Dp qi)) : WKC D (psubst sg e) s := @WKC.rec {motive} {m_var} {m_sort} {m_pi} {m_lam} {m_app} {m_konst} {m_let} Dp e s h sg D hsg"
     )
 }
 
-pub(super) const SRC_SCONS_TYPED: &str = "def r17_scons_typed (D : Nat -> Sk) (a : KExpr) (d : Sk) (ha : WKC D a d) (i : Nat) : WKC D (scons a idsubst i) (skcons d D i) := Nat.rec (fun (qi : Nat) => WKC D (scons a idsubst qi) (skcons d D qi)) ha (fun (qn : Nat) (qih : WKC D (scons a idsubst qn) (skcons d D qn)) => WKC.var D qn) i";
+pub(super) const SRC_SCONS_TYPED: &str = "def r17_scons_typed (D : Nat -> Sk) (a : KExpr) (d : Sk) (ha : WKC D a d) (i : Nat) : WKC D (scons a idsubst i) (skcons d D i) := @Nat.rec (fun (qi : Nat) => WKC D (scons a idsubst qi) (skcons d D qi)) ha (fun (qn : Nat) (qih : WKC D (scons a idsubst qn) (skcons d D qn)) => WKC.var D qn) i";
 
-pub(super) const SRC_WKC_INST: &str = "def wkc_inst (D : Nat -> Sk) (b : KExpr) (a : KExpr) (d : Sk) (c : Sk) (hb : WKC (skcons d D) b c) (ha : WKC D a d) : WKC D (instantiate b a) c := r17_wkcCastT D (psubst (scons a idsubst) b) (instantiate b a) c (Eq.symm KExpr (instantiate b a) (psubst (scons a idsubst) b) (instantiate_eq_psubst b a)) (wkc_psub (skcons d D) b c hb (scons a idsubst) D (r17_scons_typed D a d ha))";
+pub(super) const SRC_WKC_INST: &str = "def wkc_inst (D : Nat -> Sk) (b : KExpr) (a : KExpr) (d : Sk) (c : Sk) (hb : WKC (skcons d D) b c) (ha : WKC D a d) : WKC D (instantiate b a) c := r17_wkcCastT D (psubst (scons a idsubst) b) (instantiate b a) c (@Eq.symm KExpr (instantiate b a) (psubst (scons a idsubst) b) (instantiate_eq_psubst b a)) (wkc_psub (skcons d D) b c hb (scons a idsubst) D (r17_scons_typed D a d ha))";
 
 // ================================================================
 // Group G — SUBJECT REDUCTION at seven constructors.
@@ -130,43 +130,43 @@ pub(super) const SRC_WKC_INST: &str = "def wkc_inst (D : Nat -> Sk) (b : KExpr) 
 /// `HeadFree`'s `def`), the `app` arm is `headFree_app` at its own IH, and the
 /// `konst` arm dies by COMPUTATION: its shape is `Sk.ty`, the hypothesis says
 /// that is an `Sk.arr`, and `r17_notArrT` reads that off.
-pub(super) const TY_HEADFREE_WKC_ARR: &str = "forall (D : Nat -> Sk) (e : KExpr) (s : Sk), WKC D e s -> forall (d : Sk) (c : Sk), Eq Sk s (Sk.arr d c) -> HeadFree e";
+pub(super) const TY_HEADFREE_WKC_ARR: &str = "forall (D : Nat -> Sk) (e : KExpr) (s : Sk), WKC D e s -> forall (d : Sk) (c : Sk), @Eq Sk s (Sk.arr d c) -> HeadFree e";
 
 pub(super) fn val_headfree_wkc_arr() -> String {
-    let mot = "(fun (qD : Nat -> Sk) (qe : KExpr) (qs : Sk) (qh : WKC qD qe qs) => forall (qd : Sk) (qc : Sk), Eq Sk qs (Sk.arr qd qc) -> HeadFree qe)";
-    let m_var = format!("(fun (qD : Nat -> Sk) (qi : Nat) (qd : Sk) (qc : Sk) (qeq : Eq Sk (qD qi) (Sk.arr qd qc)) => {HF_REFL})");
-    let m_sort = format!("(fun (qD : Nat -> Sk) (qn : Level) (qd : Sk) (qc : Sk) (qeq : Eq Sk (Sk.kd Sk.ty) (Sk.arr qd qc)) => {HF_REFL})");
+    let mot = "(fun (qD : Nat -> Sk) (qe : KExpr) (qs : Sk) (qh : WKC qD qe qs) => forall (qd : Sk) (qc : Sk), @Eq Sk qs (Sk.arr qd qc) -> HeadFree qe)";
+    let m_var = format!("(fun (qD : Nat -> Sk) (qi : Nat) (qd : Sk) (qc : Sk) (qeq : @Eq Sk (qD qi) (Sk.arr qd qc)) => {HF_REFL})");
+    let m_sort = format!("(fun (qD : Nat -> Sk) (qn : Level) (qd : Sk) (qc : Sk) (qeq : @Eq Sk (Sk.kd Sk.ty) (Sk.arr qd qc)) => {HF_REFL})");
     let ih = |sub: &str, sh: &str| {
-        format!("(forall (qd : Sk) (qc : Sk), Eq Sk {sh} (Sk.arr qd qc) -> HeadFree {sub})")
+        format!("(forall (qd : Sk) (qc : Sk), @Eq Sk {sh} (Sk.arr qd qc) -> HeadFree {sub})")
     };
     let m_pi = format!(
-        "(fun (qD : Nat -> Sk) (qA : KExpr) (qB : KExpr) (qsA : Sk) (qsB : Sk) (qhA : WKC qD qA qsA) (qhB : WKC (skcons (domSk qsA) qD) qB qsB) (qihA : {}) (qihB : {}) (qd : Sk) (qc : Sk) (qeq : Eq Sk (piShape qsA qsB) (Sk.arr qd qc)) => {HF_REFL})",
+        "(fun (qD : Nat -> Sk) (qA : KExpr) (qB : KExpr) (qsA : Sk) (qsB : Sk) (qhA : WKC qD qA qsA) (qhB : WKC (skcons (domSk qsA) qD) qB qsB) (qihA : {}) (qihB : {}) (qd : Sk) (qc : Sk) (qeq : @Eq Sk (piShape qsA qsB) (Sk.arr qd qc)) => {HF_REFL})",
         ih("qA", "qsA"),
         ih("qB", "qsB")
     );
     let m_lam = format!(
-        "(fun (qD : Nat -> Sk) (qA : KExpr) (qb : KExpr) (qsA : Sk) (qcl : Sk) (qhA : WKC qD qA qsA) (qhb : WKC (skcons (domSk qsA) qD) qb qcl) (qihA : {}) (qihb : {}) (qd : Sk) (qc : Sk) (qeq : Eq Sk (Sk.arr (domSk qsA) qcl) (Sk.arr qd qc)) => {HF_REFL})",
+        "(fun (qD : Nat -> Sk) (qA : KExpr) (qb : KExpr) (qsA : Sk) (qcl : Sk) (qhA : WKC qD qA qsA) (qhb : WKC (skcons (domSk qsA) qD) qb qcl) (qihA : {}) (qihb : {}) (qd : Sk) (qc : Sk) (qeq : @Eq Sk (Sk.arr (domSk qsA) qcl) (Sk.arr qd qc)) => {HF_REFL})",
         ih("qA", "qsA"),
         ih("qb", "qcl")
     );
     let m_app = format!(
-        "(fun (qD : Nat -> Sk) (qf : KExpr) (qa : KExpr) (qd0 : Sk) (qcc : Sk) (qhf : WKC qD qf (Sk.arr qd0 qcc)) (qha : WKC qD qa qd0) (qihf : {}) (qiha : {}) (qd : Sk) (qc : Sk) (qeq : Eq Sk qcc (Sk.arr qd qc)) => headFree_app qf qa (qihf qd0 qcc (Eq.refl Sk (Sk.arr qd0 qcc))))",
+        "(fun (qD : Nat -> Sk) (qf : KExpr) (qa : KExpr) (qd0 : Sk) (qcc : Sk) (qhf : WKC qD qf (Sk.arr qd0 qcc)) (qha : WKC qD qa qd0) (qihf : {}) (qiha : {}) (qd : Sk) (qc : Sk) (qeq : @Eq Sk qcc (Sk.arr qd qc)) => headFree_app qf qa (qihf qd0 qcc (@Eq.refl Sk (Sk.arr qd0 qcc))))",
         ih("qf", "(Sk.arr qd0 qcc)"),
         ih("qa", "qd0")
     );
     let m_konst = format!(
-        "(fun (qD : Nat -> Sk) (qn : Name) (qus : ListType Level) (qhd : {}) (qhr : {}) (qd : Sk) (qc : Sk) (qeq : Eq Sk Sk.ty (Sk.arr qd qc)) => Empty.rec (fun (qz : Empty) => HeadFree (KExpr.const qn qus)) (Eq.substType Sk r17_notArrT Sk.ty (Sk.arr qd qc) qeq ConstFreeUnit.triv))",
+        "(fun (qD : Nat -> Sk) (qn : Name) (qus : ListType Level) (qhd : {}) (qhr : {}) (qd : Sk) (qc : Sk) (qeq : @Eq Sk Sk.ty (Sk.arr qd qc)) => @Empty.rec (fun (qz : Empty) => HeadFree (KExpr.const qn qus)) (@Eq.substType Sk r17_notArrT Sk.ty (Sk.arr qd qc) qeq ConstFreeUnit.triv))",
         defval_none("qn"),
         recmeta_none("qn")
     );
     let m_let = format!(
-        "(fun (qD : Nat -> Sk) (qt : KExpr) (qv : KExpr) (qb : KExpr) (qst : Sk) (qsv : Sk) (qcl : Sk) (qht : WKC qD qt qst) (qhv : WKC qD qv qsv) (qhb : WKC (skcons qsv qD) qb qcl) (qiht : {}) (qihv : {}) (qihb : {}) (qd : Sk) (qc : Sk) (qeq : Eq Sk qcl (Sk.arr qd qc)) => {HF_REFL})",
+        "(fun (qD : Nat -> Sk) (qt : KExpr) (qv : KExpr) (qb : KExpr) (qst : Sk) (qsv : Sk) (qcl : Sk) (qht : WKC qD qt qst) (qhv : WKC qD qv qsv) (qhb : WKC (skcons qsv qD) qb qcl) (qiht : {}) (qihv : {}) (qihb : {}) (qd : Sk) (qc : Sk) (qeq : @Eq Sk qcl (Sk.arr qd qc)) => {HF_REFL})",
         ih("qt", "qst"),
         ih("qv", "qsv"),
         ih("qb", "qcl")
     );
     format!(
-        "fun (D : Nat -> Sk) (e : KExpr) (s : Sk) (h : WKC D e s) => WKC.rec {mot} {m_var} {m_sort} {m_pi} {m_lam} {m_app} {m_konst} {m_let} D e s h"
+        "fun (D : Nat -> Sk) (e : KExpr) (s : Sk) (h : WKC D e s) => @WKC.rec {mot} {m_var} {m_sort} {m_pi} {m_lam} {m_app} {m_konst} {m_let} D e s h"
     )
 }
 
@@ -193,7 +193,7 @@ pub(super) fn val_headinert_wkc() -> String {
     );
     let m_let = format!("(fun (qD : Nat -> Sk) (qt : KExpr) (qv : KExpr) (qb : KExpr) (qst : Sk) (qsv : Sk) (qc : Sk) (qht : WKC qD qt qst) (qhv : WKC qD qv qsv) (qhb : WKC (skcons qsv qD) qb qc) (qiht : HeadInert qt) (qihv : HeadInert qv) (qihb : HeadInert qb) => HeadInert.free (KExpr.let_ qt qv qb) {HF_REFL})");
     format!(
-        "fun (D : Nat -> Sk) (e : KExpr) (s : Sk) (h : WKC D e s) => WKC.rec {mot} {m_var} {m_sort} {m_pi} {m_lam} {m_app} {m_konst} {m_let} D e s h"
+        "fun (D : Nat -> Sk) (e : KExpr) (s : Sk) (h : WKC D e s) => @WKC.rec {mot} {m_var} {m_sort} {m_pi} {m_lam} {m_app} {m_konst} {m_let} D e s h"
     )
 }
 
@@ -206,8 +206,8 @@ pub(super) fn val_headinert_wkc() -> String {
 pub(super) fn src_const_no_step() -> String {
     let cn = "(KExpr.const n us)";
     let denv = "(red_def the_red_env)";
-    let none_eq = format!("(Eq.symm (OptionType KExpr) (delta_reduct {denv} {cn}) (OptionType.none KExpr) (delta_reduct_eq_none_of_defval_none {denv} {cn} n (Eq.refl (OptionType Name) (OptionType.some Name n)) hd))");
-    let clash = format!("(Eq.trans (OptionType KExpr) (OptionType.none KExpr) (delta_reduct {denv} {cn}) (OptionType.some KExpr g2) {none_eq} zds)");
+    let none_eq = format!("(@Eq.symm (OptionType KExpr) (delta_reduct {denv} {cn}) (@OptionType.none KExpr) (delta_reduct_eq_none_of_defval_none {denv} {cn} n (@Eq.refl (OptionType Name) (@OptionType.some Name n)) hd))");
+    let clash = format!("(@Eq.trans (OptionType KExpr) (@OptionType.none KExpr) (delta_reduct {denv} {cn}) (@OptionType.some KExpr g2) {none_eq} zds)");
     format!(
         "def r17_const_no_step (n : Name) (us : ListType Level) (g2 : KExpr) (C : Type) (hd : {}) (hs : whnf_step {cn} g2) : C := constRedex_whnf_inv n us g2 C hs (fun (zds : delta_step {denv} {cn} g2) => option_none_ne_some_type KExpr g2 C {clash})",
         defval_none("n")
@@ -217,7 +217,7 @@ pub(super) fn src_const_no_step() -> String {
 /// R15's `r15_wkLamT` at `WKC`: a `KExpr.rec` on the term nested with a
 /// `Sk.rec` on the shape, every pair but (`lam`, `arr`) `ConstFreeUnit`. Two
 /// more dead arms than R15's (nine heads, not five), all still one token.
-pub(super) const SRC_WKC_LAM_T: &str = "def r17_wkcLamT (D : Nat -> Sk) (C : Type) (e : KExpr) (s : Sk) : Type := KExpr.rec (fun (qe : KExpr) => Sk -> Type) (fun (qn : Level) (qs : Sk) => ConstFreeUnit) (fun (qi : Nat) (qs : Sk) => ConstFreeUnit) (fun (qf : KExpr) (qa : KExpr) (qihf : Sk -> Type) (qiha : Sk -> Type) (qs : Sk) => ConstFreeUnit) (fun (qA : KExpr) (qb : KExpr) (qihA : Sk -> Type) (qihb : Sk -> Type) => Sk.rec (fun (qz : Sk) => Type) ConstFreeUnit (fun (qs1 : Sk) (qih : Type) => ConstFreeUnit) (fun (qd : Sk) (qc : Sk) (qihd : Type) (qihc : Type) => (WKC (skcons qd D) qb qc -> C) -> C)) (fun (qA : KExpr) (qB : KExpr) (qihA : Sk -> Type) (qihB : Sk -> Type) (qs : Sk) => ConstFreeUnit) (fun (qn : Name) (qus : ListType Level) (qs : Sk) => ConstFreeUnit) (fun (qt : KExpr) (qv : KExpr) (qb : KExpr) (qiht : Sk -> Type) (qihv : Sk -> Type) (qihb : Sk -> Type) (qs : Sk) => ConstFreeUnit) (fun (qsn : Name) (qpi : Nat) (qsub : KExpr) (qihs : Sk -> Type) (qs : Sk) => ConstFreeUnit) (fun (qv : Nat) (qs : Sk) => ConstFreeUnit) e s";
+pub(super) const SRC_WKC_LAM_T: &str = "def r17_wkcLamT (D : Nat -> Sk) (C : Type) (e : KExpr) (s : Sk) : Type := @KExpr.rec (fun (qe : KExpr) => Sk -> Type) (fun (qn : Level) (qs : Sk) => ConstFreeUnit) (fun (qi : Nat) (qs : Sk) => ConstFreeUnit) (fun (qf : KExpr) (qa : KExpr) (qihf : Sk -> Type) (qiha : Sk -> Type) (qs : Sk) => ConstFreeUnit) (fun (qA : KExpr) (qb : KExpr) (qihA : Sk -> Type) (qihb : Sk -> Type) => @Sk.rec (fun (qz : Sk) => Type) ConstFreeUnit (fun (qs1 : Sk) (qih : Type) => ConstFreeUnit) (fun (qd : Sk) (qc : Sk) (qihd : Type) (qihc : Type) => (WKC (skcons qd D) qb qc -> C) -> C)) (fun (qA : KExpr) (qB : KExpr) (qihA : Sk -> Type) (qihB : Sk -> Type) (qs : Sk) => ConstFreeUnit) (fun (qn : Name) (qus : ListType Level) (qs : Sk) => ConstFreeUnit) (fun (qt : KExpr) (qv : KExpr) (qb : KExpr) (qiht : Sk -> Type) (qihv : Sk -> Type) (qihb : Sk -> Type) (qs : Sk) => ConstFreeUnit) (fun (qsn : Name) (qpi : Nat) (qsub : KExpr) (qihs : Sk -> Type) (qs : Sk) => ConstFreeUnit) (fun (qv : Nat) (qs : Sk) => ConstFreeUnit) e s";
 
 pub(super) fn src_wkc_lam_inv() -> String {
     let motive = "(fun (qD : Nat -> Sk) (qe : KExpr) (qs : Sk) (qh : WKC qD qe qs) => r17_wkcLamT qD C qe qs)";
@@ -233,7 +233,7 @@ pub(super) fn src_wkc_lam_inv() -> String {
     );
     let m_let = "(fun (qD : Nat -> Sk) (qt : KExpr) (qv : KExpr) (qb : KExpr) (qst : Sk) (qsv : Sk) (qc : Sk) (qht : WKC qD qt qst) (qhv : WKC qD qv qsv) (qhb : WKC (skcons qsv qD) qb qc) (qiht : r17_wkcLamT qD C qt qst) (qihv : r17_wkcLamT qD C qv qsv) (qihb : r17_wkcLamT (skcons qsv qD) C qb qc) => ConstFreeUnit.triv)";
     format!(
-        "def r17_wkc_lam_inv (D : Nat -> Sk) (C : Type) (e : KExpr) (s : Sk) (h : WKC D e s) : r17_wkcLamT D C e s := WKC.rec {motive} {m_var} {m_sort} {m_pi} {m_lam} {m_app} {m_konst} {m_let} D e s h"
+        "def r17_wkc_lam_inv (D : Nat -> Sk) (C : Type) (e : KExpr) (s : Sk) (h : WKC D e s) : r17_wkcLamT D C e s := @WKC.rec {motive} {m_var} {m_sort} {m_pi} {m_lam} {m_app} {m_konst} {m_let} D e s h"
     )
 }
 
@@ -262,8 +262,8 @@ pub(super) fn src_wkc_step() -> String {
     let ihp_a = "(qihA : forall (qz : KExpr), whnf_step qA qz -> WKC qD qz qsA)";
     let ihp_b =
         "(qihB : forall (qz : KExpr), whnf_step qB qz -> WKC (skcons (domSk qsA) qD) qz qsB)";
-    let p1 = "(fun (zy : KExpr) (zst : beta_reduces qA zy) (zeq : Eq KExpr qe2 (KExpr.pi zy qB)) => r17_wkcCastT qD (KExpr.pi zy qB) qe2 (piShape qsA qsB) (Eq.symm KExpr qe2 (KExpr.pi zy qB) zeq) (WKC.pi qD zy qB qsA qsB (qihA zy (whnf_step.beta qA zy zst)) qhB))";
-    let p2 = "(fun (zy : KExpr) (zst : beta_reduces qB zy) (zeq : Eq KExpr qe2 (KExpr.pi qA zy)) => r17_wkcCastT qD (KExpr.pi qA zy) qe2 (piShape qsA qsB) (Eq.symm KExpr qe2 (KExpr.pi qA zy) zeq) (WKC.pi qD qA zy qsA qsB qhA (qihB zy (whnf_step.beta qB zy zst))))";
+    let p1 = "(fun (zy : KExpr) (zst : beta_reduces qA zy) (zeq : @Eq KExpr qe2 (KExpr.pi zy qB)) => r17_wkcCastT qD (KExpr.pi zy qB) qe2 (piShape qsA qsB) (@Eq.symm KExpr qe2 (KExpr.pi zy qB) zeq) (WKC.pi qD zy qB qsA qsB (qihA zy (whnf_step.beta qA zy zst)) qhB))";
+    let p2 = "(fun (zy : KExpr) (zst : beta_reduces qB zy) (zeq : @Eq KExpr qe2 (KExpr.pi qA zy)) => r17_wkcCastT qD (KExpr.pi qA zy) qe2 (piShape qsA qsB) (@Eq.symm KExpr qe2 (KExpr.pi qA zy) zeq) (WKC.pi qD qA zy qsA qsB qhA (qihB zy (whnf_step.beta qB zy zst))))";
     let m_pi = format!(
         "(fun (qD : Nat -> Sk) (qA : KExpr) (qB : KExpr) (qsA : Sk) (qsB : Sk) (qhA : WKC qD qA qsA) (qhB : WKC (skcons (domSk qsA) qD) qB qsB) {ihp_a} {ihp_b} (qe2 : KExpr) (qst : whnf_step (KExpr.pi qA qB) qe2) => r15_whnf_stepT_inv (WKC qD qe2 (piShape qsA qsB)) (KExpr.pi qA qB) qe2 {HF_REFL} qst {p1} {p2})"
     );
@@ -271,18 +271,18 @@ pub(super) fn src_wkc_step() -> String {
     let ihl_a = "(qihA : forall (qz : KExpr), whnf_step qA qz -> WKC qD qz qsA)";
     let ihl_b =
         "(qihb : forall (qz : KExpr), whnf_step qb qz -> WKC (skcons (domSk qsA) qD) qz qc)";
-    let l1 = "(fun (zy : KExpr) (zst : beta_reduces qA zy) (zeq : Eq KExpr qe2 (KExpr.lam zy qb)) => r17_wkcCastT qD (KExpr.lam zy qb) qe2 (Sk.arr (domSk qsA) qc) (Eq.symm KExpr qe2 (KExpr.lam zy qb) zeq) (WKC.lam qD zy qb qsA qc (qihA zy (whnf_step.beta qA zy zst)) qhb))";
-    let l2 = "(fun (zy : KExpr) (zst : beta_reduces qb zy) (zeq : Eq KExpr qe2 (KExpr.lam qA zy)) => r17_wkcCastT qD (KExpr.lam qA zy) qe2 (Sk.arr (domSk qsA) qc) (Eq.symm KExpr qe2 (KExpr.lam qA zy) zeq) (WKC.lam qD qA zy qsA qc qhA (qihb zy (whnf_step.beta qb zy zst))))";
+    let l1 = "(fun (zy : KExpr) (zst : beta_reduces qA zy) (zeq : @Eq KExpr qe2 (KExpr.lam zy qb)) => r17_wkcCastT qD (KExpr.lam zy qb) qe2 (Sk.arr (domSk qsA) qc) (@Eq.symm KExpr qe2 (KExpr.lam zy qb) zeq) (WKC.lam qD zy qb qsA qc (qihA zy (whnf_step.beta qA zy zst)) qhb))";
+    let l2 = "(fun (zy : KExpr) (zst : beta_reduces qb zy) (zeq : @Eq KExpr qe2 (KExpr.lam qA zy)) => r17_wkcCastT qD (KExpr.lam qA zy) qe2 (Sk.arr (domSk qsA) qc) (@Eq.symm KExpr qe2 (KExpr.lam qA zy) zeq) (WKC.lam qD qA zy qsA qc qhA (qihb zy (whnf_step.beta qb zy zst))))";
     let m_lam = format!(
         "(fun (qD : Nat -> Sk) (qA : KExpr) (qb : KExpr) (qsA : Sk) (qc : Sk) (qhA : WKC qD qA qsA) (qhb : WKC (skcons (domSk qsA) qD) qb qc) {ihl_a} {ihl_b} (qe2 : KExpr) (qst : whnf_step (KExpr.lam qA qb) qe2) => r15_whnf_stepT_inv (WKC qD qe2 (Sk.arr (domSk qsA) qc)) (KExpr.lam qA qb) qe2 {HF_REFL} qst {l1} {l2})"
     );
 
     let iha_f = "(qihf : forall (qz : KExpr), whnf_step qf qz -> WKC qD qz (Sk.arr qd qcc))";
     let iha_a = "(qiha : forall (qz : KExpr), whnf_step qa qz -> WKC qD qz qd)";
-    let hf = "(headFree_app qf qa (r17_headFree_wkc_arr qD qf (Sk.arr qd qcc) qhf qd qcc (Eq.refl Sk (Sk.arr qd qcc))))";
-    let a1 = "(fun (zA : KExpr) (zb : KExpr) (zlam : Eq KExpr qf (KExpr.lam zA zb)) (zcon : Eq KExpr qe2 (instantiate zb qa)) => r17_wkc_lam_inv qD (WKC qD qe2 qcc) (KExpr.lam zA zb) (Sk.arr qd qcc) (r17_wkcCastT qD qf (KExpr.lam zA zb) (Sk.arr qd qcc) zlam qhf) (fun (zhb : WKC (skcons qd qD) zb qcc) => r17_wkcCastT qD (instantiate zb qa) qe2 qcc (Eq.symm KExpr qe2 (instantiate zb qa) zcon) (wkc_inst qD zb qa qd qcc zhb qha)))";
-    let a2 = "(fun (zy : KExpr) (zst : beta_reduces qf zy) (zeq : Eq KExpr qe2 (KExpr.app zy qa)) => r17_wkcCastT qD (KExpr.app zy qa) qe2 qcc (Eq.symm KExpr qe2 (KExpr.app zy qa) zeq) (WKC.app qD zy qa qd qcc (qihf zy (whnf_step.beta qf zy zst)) qha))";
-    let a3 = "(fun (zy : KExpr) (zst : beta_reduces qa zy) (zeq : Eq KExpr qe2 (KExpr.app qf zy)) => r17_wkcCastT qD (KExpr.app qf zy) qe2 qcc (Eq.symm KExpr qe2 (KExpr.app qf zy) zeq) (WKC.app qD qf zy qd qcc qhf (qiha zy (whnf_step.beta qa zy zst))))";
+    let hf = "(headFree_app qf qa (r17_headFree_wkc_arr qD qf (Sk.arr qd qcc) qhf qd qcc (@Eq.refl Sk (Sk.arr qd qcc))))";
+    let a1 = "(fun (zA : KExpr) (zb : KExpr) (zlam : @Eq KExpr qf (KExpr.lam zA zb)) (zcon : @Eq KExpr qe2 (instantiate zb qa)) => r17_wkc_lam_inv qD (WKC qD qe2 qcc) (KExpr.lam zA zb) (Sk.arr qd qcc) (r17_wkcCastT qD qf (KExpr.lam zA zb) (Sk.arr qd qcc) zlam qhf) (fun (zhb : WKC (skcons qd qD) zb qcc) => r17_wkcCastT qD (instantiate zb qa) qe2 qcc (@Eq.symm KExpr qe2 (instantiate zb qa) zcon) (wkc_inst qD zb qa qd qcc zhb qha)))";
+    let a2 = "(fun (zy : KExpr) (zst : beta_reduces qf zy) (zeq : @Eq KExpr qe2 (KExpr.app zy qa)) => r17_wkcCastT qD (KExpr.app zy qa) qe2 qcc (@Eq.symm KExpr qe2 (KExpr.app zy qa) zeq) (WKC.app qD zy qa qd qcc (qihf zy (whnf_step.beta qf zy zst)) qha))";
+    let a3 = "(fun (zy : KExpr) (zst : beta_reduces qa zy) (zeq : @Eq KExpr qe2 (KExpr.app qf zy)) => r17_wkcCastT qD (KExpr.app qf zy) qe2 qcc (@Eq.symm KExpr qe2 (KExpr.app qf zy) zeq) (WKC.app qD qf zy qd qcc qhf (qiha zy (whnf_step.beta qa zy zst))))";
     let m_app = format!(
         "(fun (qD : Nat -> Sk) (qf : KExpr) (qa : KExpr) (qd : Sk) (qcc : Sk) (qhf : WKC qD qf (Sk.arr qd qcc)) (qha : WKC qD qa qd) {iha_f} {iha_a} (qe2 : KExpr) (qst : whnf_step (KExpr.app qf qa) qe2) => r15_whnf_stepT_inv (WKC qD qe2 qcc) (KExpr.app qf qa) qe2 {hf} qst {a1} {a2} {a3})"
     );
@@ -296,16 +296,16 @@ pub(super) fn src_wkc_step() -> String {
     let iht = "(qiht : forall (qz : KExpr), whnf_step qt qz -> WKC qD qz qst)";
     let ihv = "(qihv : forall (qz : KExpr), whnf_step qv qz -> WKC qD qz qsv)";
     let ihb = "(qihb : forall (qz : KExpr), whnf_step qb qz -> WKC (skcons qsv qD) qz qc)";
-    let z0 = "(fun (zeq : Eq KExpr qe2 (instantiate qb qv)) => r17_wkcCastT qD (instantiate qb qv) qe2 qc (Eq.symm KExpr qe2 (instantiate qb qv) zeq) (wkc_inst qD qb qv qsv qc qhb qhv))";
-    let z1 = "(fun (zy : KExpr) (zst : beta_reduces qt zy) (zeq : Eq KExpr qe2 (KExpr.let_ zy qv qb)) => r17_wkcCastT qD (KExpr.let_ zy qv qb) qe2 qc (Eq.symm KExpr qe2 (KExpr.let_ zy qv qb) zeq) (WKC.let_ qD zy qv qb qst qsv qc (qiht zy (whnf_step.beta qt zy zst)) qhv qhb))";
-    let z2 = "(fun (zy : KExpr) (zst : beta_reduces qv zy) (zeq : Eq KExpr qe2 (KExpr.let_ qt zy qb)) => r17_wkcCastT qD (KExpr.let_ qt zy qb) qe2 qc (Eq.symm KExpr qe2 (KExpr.let_ qt zy qb) zeq) (WKC.let_ qD qt zy qb qst qsv qc qht (qihv zy (whnf_step.beta qv zy zst)) qhb))";
-    let z3 = "(fun (zy : KExpr) (zst : beta_reduces qb zy) (zeq : Eq KExpr qe2 (KExpr.let_ qt qv zy)) => r17_wkcCastT qD (KExpr.let_ qt qv zy) qe2 qc (Eq.symm KExpr qe2 (KExpr.let_ qt qv zy) zeq) (WKC.let_ qD qt qv zy qst qsv qc qht qhv (qihb zy (whnf_step.beta qb zy zst))))";
+    let z0 = "(fun (zeq : @Eq KExpr qe2 (instantiate qb qv)) => r17_wkcCastT qD (instantiate qb qv) qe2 qc (@Eq.symm KExpr qe2 (instantiate qb qv) zeq) (wkc_inst qD qb qv qsv qc qhb qhv))";
+    let z1 = "(fun (zy : KExpr) (zst : beta_reduces qt zy) (zeq : @Eq KExpr qe2 (KExpr.let_ zy qv qb)) => r17_wkcCastT qD (KExpr.let_ zy qv qb) qe2 qc (@Eq.symm KExpr qe2 (KExpr.let_ zy qv qb) zeq) (WKC.let_ qD zy qv qb qst qsv qc (qiht zy (whnf_step.beta qt zy zst)) qhv qhb))";
+    let z2 = "(fun (zy : KExpr) (zst : beta_reduces qv zy) (zeq : @Eq KExpr qe2 (KExpr.let_ qt zy qb)) => r17_wkcCastT qD (KExpr.let_ qt zy qb) qe2 qc (@Eq.symm KExpr qe2 (KExpr.let_ qt zy qb) zeq) (WKC.let_ qD qt zy qb qst qsv qc qht (qihv zy (whnf_step.beta qv zy zst)) qhb))";
+    let z3 = "(fun (zy : KExpr) (zst : beta_reduces qb zy) (zeq : @Eq KExpr qe2 (KExpr.let_ qt qv zy)) => r17_wkcCastT qD (KExpr.let_ qt qv zy) qe2 qc (@Eq.symm KExpr qe2 (KExpr.let_ qt qv zy) zeq) (WKC.let_ qD qt qv zy qst qsv qc qht qhv (qihb zy (whnf_step.beta qb zy zst))))";
     let m_let = format!(
         "(fun (qD : Nat -> Sk) (qt : KExpr) (qv : KExpr) (qb : KExpr) (qst : Sk) (qsv : Sk) (qc : Sk) (qht : WKC qD qt qst) (qhv : WKC qD qv qsv) (qhb : WKC (skcons qsv qD) qb qc) {iht} {ihv} {ihb} (qe2 : KExpr) (qst2 : whnf_step (KExpr.let_ qt qv qb) qe2) => letRedex_whnf_inv qt qv qb qe2 (WKC qD qe2 qc) qst2 {z0} {z1} {z2} {z3})"
     );
 
     format!(
-        "def wkc_step (D : Nat -> Sk) (e : KExpr) (s : Sk) (h : WKC D e s) (e2 : KExpr) (st : whnf_step e e2) : WKC D e2 s := WKC.rec {mot} {m_var} {m_sort} {m_pi} {m_lam} {m_app} {m_konst} {m_let} D e s h e2 st"
+        "def wkc_step (D : Nat -> Sk) (e : KExpr) (s : Sk) (h : WKC D e s) (e2 : KExpr) (st : whnf_step e e2) : WKC D e2 s := @WKC.rec {mot} {m_var} {m_sort} {m_pi} {m_lam} {m_app} {m_konst} {m_let} D e s h e2 st"
     )
 }
 
@@ -326,7 +326,7 @@ pub(super) fn src_wkc_step() -> String {
 pub(super) const SRC_WKV: &str = "inductive WKV : (Nat -> Sk) -> KExpr -> Sk -> Type
 | var : forall (D : Nat -> Sk) (i : Nat), WKV D (KExpr.bvar i) (D i)
 | sort : forall (D : Nat -> Sk) (n : Level), WKV D (KExpr.sort n) (Sk.kd Sk.ty)
-| conv : forall (D : Nat -> Sk) (e : KExpr) (s1 : Sk) (s2 : Sk), WKV D e s1 -> Eq Sk s1 s2 -> WKV D e s2";
+| conv : forall (D : Nat -> Sk) (e : KExpr) (s1 : Sk) (s2 : Sk), WKV D e s1 -> @Eq Sk s1 s2 -> WKV D e s2";
 
 /// **`WKV.rec` IS PARAMETER-PROMOTED, and `WKC.rec` is not.** `WKV.conv`'s
 /// recursive premise is at the SAME shape environment as its conclusion, so `D`
@@ -337,27 +337,27 @@ pub(super) const SRC_WKV: &str = "inductive WKV : (Nat -> Sk) -> KExpr -> Sk -> 
 /// (`expected (n : Nat) -> motive (KExpr.bvar n) (D n) (WKV.var D n)`), and
 /// pinned by `test_candmodel_r17_wkv_recursor_is_parameter_promoted`.
 pub(super) const TY_WKV_SHAPE_CORRECT: &str =
-    "forall (D : Nat -> Sk) (e : KExpr) (s : Sk) (h : WKV D e s), Eq Sk s (r17_shapeOf D e)";
-pub(super) const VAL_WKV_SHAPE_CORRECT: &str = "fun (D : Nat -> Sk) (e : KExpr) (s : Sk) (h : WKV D e s) => WKV.rec D (fun (qe : KExpr) (qs : Sk) (qh : WKV D qe qs) => Eq Sk qs (r17_shapeOf D qe)) (fun (qi : Nat) => Eq.refl Sk (D qi)) (fun (qn : Level) => Eq.refl Sk (Sk.kd Sk.ty)) (fun (qe : KExpr) (qs1 : Sk) (qs2 : Sk) (qh : WKV D qe qs1) (qp : Eq Sk qs1 qs2) (qih : Eq Sk qs1 (r17_shapeOf D qe)) => Eq.trans Sk qs2 qs1 (r17_shapeOf D qe) (Eq.symm Sk qs1 qs2 qp) qih) e s h";
+    "forall (D : Nat -> Sk) (e : KExpr) (s : Sk) (h : WKV D e s), @Eq Sk s (r17_shapeOf D e)";
+pub(super) const VAL_WKV_SHAPE_CORRECT: &str = "fun (D : Nat -> Sk) (e : KExpr) (s : Sk) (h : WKV D e s) => @WKV.rec D (fun (qe : KExpr) (qs : Sk) (qh : WKV D qe qs) => @Eq Sk qs (r17_shapeOf D qe)) (fun (qi : Nat) => @Eq.refl Sk (D qi)) (fun (qn : Level) => @Eq.refl Sk (Sk.kd Sk.ty)) (fun (qe : KExpr) (qs1 : Sk) (qs2 : Sk) (qh : WKV D qe qs1) (qp : @Eq Sk qs1 qs2) (qih : @Eq Sk qs1 (r17_shapeOf D qe)) => @Eq.trans Sk qs2 qs1 (r17_shapeOf D qe) (@Eq.symm Sk qs1 qs2 qp) qih) e s h";
 
 /// **SHAPE ASSIGNMENT SURVIVES A CONVERSION RULE.** The `conv` arm is one
 /// `Eq.trans`: the rule can only move a shape to one it is already EQUAL to, so
 /// the computed shape still pins it. The answer the task asked for, proved.
-pub(super) const TY_CONV_SHAPE_UNIQUE: &str = "forall (D : Nat -> Sk) (e : KExpr) (s1 : Sk) (h1 : WKV D e s1) (s2 : Sk) (h2 : WKV D e s2), Eq Sk s1 s2";
-pub(super) const VAL_CONV_SHAPE_UNIQUE: &str = "fun (D : Nat -> Sk) (e : KExpr) (s1 : Sk) (h1 : WKV D e s1) (s2 : Sk) (h2 : WKV D e s2) => Eq.trans Sk s1 (r17_shapeOf D e) s2 (r17_wkv_shape_correct D e s1 h1) (Eq.symm Sk s2 (r17_shapeOf D e) (r17_wkv_shape_correct D e s2 h2))";
+pub(super) const TY_CONV_SHAPE_UNIQUE: &str = "forall (D : Nat -> Sk) (e : KExpr) (s1 : Sk) (h1 : WKV D e s1) (s2 : Sk) (h2 : WKV D e s2), @Eq Sk s1 s2";
+pub(super) const VAL_CONV_SHAPE_UNIQUE: &str = "fun (D : Nat -> Sk) (e : KExpr) (s1 : Sk) (h1 : WKV D e s1) (s2 : Sk) (h2 : WKV D e s2) => @Eq.trans Sk s1 (r17_shapeOf D e) s2 (r17_wkv_shape_correct D e s1 h1) (@Eq.symm Sk s2 (r17_shapeOf D e) (r17_wkv_shape_correct D e s2 h2))";
 
 /// The constructor tag of a `WKV` derivation — the only thing needed to tell
 /// two derivations apart, and a REDUCIBLE `def` so the discrimination computes.
-pub(super) const SRC_WKV_TAG: &str = "def r17_wkv_tag (D : Nat -> Sk) (e : KExpr) (s : Sk) (h : WKV D e s) : Nat := WKV.rec D (fun (qe : KExpr) (qs : Sk) (qh : WKV D qe qs) => Nat) (fun (qi : Nat) => Nat.zero) (fun (qn : Level) => Nat.succ Nat.zero) (fun (qe : KExpr) (qs1 : Sk) (qs2 : Sk) (qh : WKV D qe qs1) (qp : Eq Sk qs1 qs2) (qih : Nat) => Nat.succ (Nat.succ Nat.zero)) e s h";
+pub(super) const SRC_WKV_TAG: &str = "def r17_wkv_tag (D : Nat -> Sk) (e : KExpr) (s : Sk) (h : WKV D e s) : Nat := @WKV.rec D (fun (qe : KExpr) (qs : Sk) (qh : WKV D qe qs) => Nat) (fun (qi : Nat) => Nat.zero) (fun (qn : Level) => Nat.succ Nat.zero) (fun (qe : KExpr) (qs1 : Sk) (qs2 : Sk) (qh : WKV D qe qs1) (qp : @Eq Sk qs1 qs2) (qih : Nat) => Nat.succ (Nat.succ Nat.zero)) e s h";
 
 /// `ConstFreeUnit` at zero, `Empty` at every successor. The `Nat` discriminator,
 /// computed — R16's discipline, one type down.
-pub(super) const SRC_ZERO_T: &str = "def r17_zeroT (n : Nat) : Type := Nat.rec (fun (qn : Nat) => Type) ConstFreeUnit (fun (qn : Nat) (qih : Type) => Empty) n";
+pub(super) const SRC_ZERO_T: &str = "def r17_zeroT (n : Nat) : Type := @Nat.rec (fun (qn : Nat) => Type) ConstFreeUnit (fun (qn : Nat) (qih : Type) => Empty) n";
 
 /// The SECOND derivation of a judgment that already has one: the identity
 /// conversion applied to `WKV.var`. It proves nothing new and it is not equal to
 /// what it was built from.
-pub(super) const SRC_CONV_DERIV: &str = "def r17_convDeriv (D : Nat -> Sk) (i : Nat) : WKV D (KExpr.bvar i) (D i) := WKV.conv D (KExpr.bvar i) (D i) (D i) (WKV.var D i) (Eq.refl Sk (D i))";
+pub(super) const SRC_CONV_DERIV: &str = "def r17_convDeriv (D : Nat -> Sk) (i : Nat) : WKV D (KExpr.bvar i) (D i) := WKV.conv D (KExpr.bvar i) (D i) (D i) (WKV.var D i) (@Eq.refl Sk (D i))";
 
 /// **A CONVERSION RULE BREAKS THE SUBSINGLETON — PROVED, not conjectured.**
 /// `WKV.var D i` and `r17_convDeriv D i` derive the SAME judgment and are
@@ -365,15 +365,15 @@ pub(super) const SRC_CONV_DERIV: &str = "def r17_convDeriv (D : Nat -> Sk) (i : 
 /// system with a conversion rule. Note where the refutation lands: the relation
 /// here is `Eq Sk`, the FINEST possible, so this is not an artefact of a coarse
 /// conversion — no weakening of the relation rescues uniqueness.
-pub(super) const TY_CONV_BREAKS_SUBSINGLETON: &str = "forall (D : Nat -> Sk) (i : Nat), Eq (WKV D (KExpr.bvar i) (D i)) (WKV.var D i) (r17_convDeriv D i) -> Empty";
-pub(super) const VAL_CONV_BREAKS_SUBSINGLETON: &str = "fun (D : Nat -> Sk) (i : Nat) (h : Eq (WKV D (KExpr.bvar i) (D i)) (WKV.var D i) (r17_convDeriv D i)) => Eq.substType Nat r17_zeroT (r17_wkv_tag D (KExpr.bvar i) (D i) (WKV.var D i)) (r17_wkv_tag D (KExpr.bvar i) (D i) (r17_convDeriv D i)) (Eq.cong (WKV D (KExpr.bvar i) (D i)) Nat (fun (zx : WKV D (KExpr.bvar i) (D i)) => r17_wkv_tag D (KExpr.bvar i) (D i) zx) (WKV.var D i) (r17_convDeriv D i) h) ConstFreeUnit.triv";
+pub(super) const TY_CONV_BREAKS_SUBSINGLETON: &str = "forall (D : Nat -> Sk) (i : Nat), @Eq (WKV D (KExpr.bvar i) (D i)) (WKV.var D i) (r17_convDeriv D i) -> Empty";
+pub(super) const VAL_CONV_BREAKS_SUBSINGLETON: &str = "fun (D : Nat -> Sk) (i : Nat) (h : @Eq (WKV D (KExpr.bvar i) (D i)) (WKV.var D i) (r17_convDeriv D i)) => @Eq.substType Nat r17_zeroT (r17_wkv_tag D (KExpr.bvar i) (D i) (WKV.var D i)) (r17_wkv_tag D (KExpr.bvar i) (D i) (r17_convDeriv D i)) (@Eq.cong (WKV D (KExpr.bvar i) (D i)) Nat (fun (zx : WKV D (KExpr.bvar i) (D i)) => r17_wkv_tag D (KExpr.bvar i) (D i) zx) (WKV.var D i) (r17_convDeriv D i) h) ConstFreeUnit.triv";
 
 /// The two halves in ONE kernel-checked constant, the ladder's contrast idiom:
 /// under a conversion rule the SHAPE is still unique and the DERIVATION is not.
 /// `PropBox` is the non-cumulativity bridge — the first half is a `forall` into
 /// `Eq`, hence a Prop, and `AndType` takes `Type`s.
-pub(super) const TY_CONV_VERDICT: &str = "AndType (PropBox (forall (D : Nat -> Sk) (e : KExpr) (s1 : Sk) (h1 : WKV D e s1) (s2 : Sk) (h2 : WKV D e s2), Eq Sk s1 s2)) (forall (D : Nat -> Sk) (i : Nat), Eq (WKV D (KExpr.bvar i) (D i)) (WKV.var D i) (r17_convDeriv D i) -> Empty)";
-pub(super) const VAL_CONV_VERDICT: &str = "AndType.intro (PropBox (forall (D : Nat -> Sk) (e : KExpr) (s1 : Sk) (h1 : WKV D e s1) (s2 : Sk) (h2 : WKV D e s2), Eq Sk s1 s2)) (forall (D : Nat -> Sk) (i : Nat), Eq (WKV D (KExpr.bvar i) (D i)) (WKV.var D i) (r17_convDeriv D i) -> Empty) (r16_propBox_intro (forall (D : Nat -> Sk) (e : KExpr) (s1 : Sk) (h1 : WKV D e s1) (s2 : Sk) (h2 : WKV D e s2), Eq Sk s1 s2) r17_conv_shape_unique) r17_conv_breaks_subsingleton";
+pub(super) const TY_CONV_VERDICT: &str = "AndType (PropBox (forall (D : Nat -> Sk) (e : KExpr) (s1 : Sk) (h1 : WKV D e s1) (s2 : Sk) (h2 : WKV D e s2), @Eq Sk s1 s2)) (forall (D : Nat -> Sk) (i : Nat), @Eq (WKV D (KExpr.bvar i) (D i)) (WKV.var D i) (r17_convDeriv D i) -> Empty)";
+pub(super) const VAL_CONV_VERDICT: &str = "@AndType.intro (PropBox (forall (D : Nat -> Sk) (e : KExpr) (s1 : Sk) (h1 : WKV D e s1) (s2 : Sk) (h2 : WKV D e s2), @Eq Sk s1 s2)) (forall (D : Nat -> Sk) (i : Nat), @Eq (WKV D (KExpr.bvar i) (D i)) (WKV.var D i) (r17_convDeriv D i) -> Empty) (r16_propBox_intro (forall (D : Nat -> Sk) (e : KExpr) (s1 : Sk) (h1 : WKV D e s1) (s2 : Sk) (h2 : WKV D e s2), @Eq Sk s1 s2) r17_conv_shape_unique) r17_conv_breaks_subsingleton";
 
 // ================================================================
 // Group I — WITNESSES, at REAL reflected constants and REAL terms.
@@ -384,13 +384,13 @@ pub(super) const VAL_CONV_VERDICT: &str = "AndType.intro (PropBox (forall (D : N
 /// `synTyC_konst_dead_witness` and R11's `r11_interp_const_pi_witness` are the
 /// precedent; this is the same constant, now shape-typed.
 pub(super) fn src_konst_witness() -> String {
-    format!("def r17_konst_witness : WKC r12_piEnv {DEADCONST} Sk.ty := WKC.konst r12_piEnv fixture_def_env_name (ListType.nil Level) (Eq.refl (OptionType KExpr) (OptionType.none KExpr)) (Eq.refl (OptionType RecMeta) (OptionType.none RecMeta))")
+    format!("def r17_konst_witness : WKC r12_piEnv {DEADCONST} Sk.ty := WKC.konst r12_piEnv fixture_def_env_name (@ListType.nil Level) (@Eq.refl (OptionType KExpr) (@OptionType.none KExpr)) (@Eq.refl (OptionType RecMeta) (@OptionType.none RecMeta))")
 }
 
 /// That constant is `whnf_acc` — through `r17_const_no_step`, so the `konst`
 /// clause's TOP-candidate interpretation actually CONTAINS its own subject.
 pub(super) fn src_dead_const_acc() -> String {
-    format!("def r17_deadConst_acc : whnf_acc {DEADCONST} := whnf_acc.intro {DEADCONST} (fun (qe2 : KExpr) (qhs : whnf_step {DEADCONST} qe2) => r17_const_no_step fixture_def_env_name (ListType.nil Level) qe2 (whnf_acc qe2) (Eq.refl (OptionType KExpr) (OptionType.none KExpr)) qhs)")
+    format!("def r17_deadConst_acc : whnf_acc {DEADCONST} := whnf_acc.intro {DEADCONST} (fun (qe2 : KExpr) (qhs : whnf_step {DEADCONST} qe2) => r17_const_no_step fixture_def_env_name (@ListType.nil Level) qe2 (whnf_acc qe2) (@Eq.refl (OptionType KExpr) (@OptionType.none KExpr)) qhs)")
 }
 
 /// NON-DEGENERACY of the `konst` interpretation clause: the constant is a MEMBER
@@ -417,8 +417,8 @@ pub(super) fn src_let_witness() -> String {
 /// exact analogue of R12's `r12_sval_beta`, and the reason R1's refutation of
 /// the generic per-set ζ engine does NOT transfer: R1 is about candidate SETS
 /// closing under expansion, this is an INTERPRETATION reading a valuation.
-pub(super) const TY_XVAL_ZETA: &str = "forall (D : Nat -> Sk) (t : KExpr) (v : KExpr) (b : KExpr) (st : Sk) (sv : Sk) (c : Sk) (ht : WKC D t st) (hv : WKC D v sv) (hb : WKC (skcons sv D) b c) (r : VEnvD D), Eq (VD c) (xval D (KExpr.let_ t v b) c (WKC.let_ D t v b st sv c ht hv hb) r) (xval (skcons sv D) b c hb (vconsD sv D (xval D v sv hv r) r))";
-pub(super) const VAL_XVAL_ZETA: &str = "fun (D : Nat -> Sk) (t : KExpr) (v : KExpr) (b : KExpr) (st : Sk) (sv : Sk) (c : Sk) (ht : WKC D t st) (hv : WKC D v sv) (hb : WKC (skcons sv D) b c) (r : VEnvD D) => Eq.refl (VD c) (xval (skcons sv D) b c hb (vconsD sv D (xval D v sv hv r) r))";
+pub(super) const TY_XVAL_ZETA: &str = "forall (D : Nat -> Sk) (t : KExpr) (v : KExpr) (b : KExpr) (st : Sk) (sv : Sk) (c : Sk) (ht : WKC D t st) (hv : WKC D v sv) (hb : WKC (skcons sv D) b c) (r : VEnvD D), @Eq (VD c) (xval D (KExpr.let_ t v b) c (WKC.let_ D t v b st sv c ht hv hb) r) (xval (skcons sv D) b c hb (vconsD sv D (xval D v sv hv r) r))";
+pub(super) const VAL_XVAL_ZETA: &str = "fun (D : Nat -> Sk) (t : KExpr) (v : KExpr) (b : KExpr) (st : Sk) (sv : Sk) (c : Sk) (ht : WKC D t st) (hv : WKC D v sv) (hb : WKC (skcons sv D) b c) (r : VEnvD D) => @Eq.refl (VD c) (xval (skcons sv D) b c hb (vconsD sv D (xval D v sv hv r) r))";
 
 /// The POSITIVE half of the `let_` clause's non-degeneracy, at a term whose
 /// value is a VARIABLE: the interpretation of `let x : Sort 0 := bvar 0; x` IS
@@ -430,11 +430,11 @@ pub(super) fn ty_zeta_reads_value() -> String {
     let env2 = format!("(skcons {kk} r12_betaEnv)");
     let hb = format!("(WKC.var {env2} Nat.zero)");
     let hlet = format!("(WKC.let_ r12_betaEnv {S0} {V0} {V0} {KDTY} {kk} {kk} (WKC.sort r12_betaEnv Level.zero) (WKC.var r12_betaEnv Nat.zero) {hb})");
-    format!("forall (r : VEnvD r12_betaEnv), Eq (VD {kk}) (xval r12_betaEnv (KExpr.let_ {S0} {V0} {V0}) {kk} {hlet} r) (r Nat.zero)")
+    format!("forall (r : VEnvD r12_betaEnv), @Eq (VD {kk}) (xval r12_betaEnv (KExpr.let_ {S0} {V0} {V0}) {kk} {hlet} r) (r Nat.zero)")
 }
 pub(super) fn val_zeta_reads_value() -> String {
     let kk = "(Sk.kd (Sk.kd Sk.ty))";
-    format!("fun (r : VEnvD r12_betaEnv) => Eq.refl (VD {kk}) (r Nat.zero)")
+    format!("fun (r : VEnvD r12_betaEnv) => @Eq.refl (VD {kk}) (r Nat.zero)")
 }
 
 /// `wkc_step` run on the ζ redex, through the whole `letRedex_whnf_inv` and out
@@ -454,7 +454,7 @@ pub(super) fn src_wkc_lift_konst_witness() -> String {
 /// rung's own `wkc_step` run on the ζ redex.
 pub(super) fn ty_deriv_unique_witness() -> String {
     let g = format!("(WKC r12_betaEnv (instantiate {V0} {S0}) {KDTY})");
-    format!("Eq {g} (r17_wk_wkc r12_betaEnv (instantiate {V0} {S0}) {KDTY} r15_instDeriv) r17_wkc_step_let_witness")
+    format!("@Eq {g} (r17_wk_wkc r12_betaEnv (instantiate {V0} {S0}) {KDTY} r15_instDeriv) r17_wkc_step_let_witness")
 }
 pub(super) fn val_deriv_unique_witness() -> String {
     format!("r17_wkc_deriv_unique r12_betaEnv (instantiate {V0} {S0}) {KDTY} (r17_wk_wkc r12_betaEnv (instantiate {V0} {S0}) {KDTY} r15_instDeriv) r17_wkc_step_let_witness")
@@ -463,7 +463,7 @@ pub(super) fn val_deriv_unique_witness() -> String {
 /// Irrelevance at the same pair — and the paired refusal test measures that the
 /// equation is not `Eq.refl` in disguise.
 pub(super) fn ty_irrel_witness() -> String {
-    format!("Eq (VD {KDTY}) (xval r12_betaEnv (instantiate {V0} {S0}) {KDTY} (r17_wk_wkc r12_betaEnv (instantiate {V0} {S0}) {KDTY} r15_instDeriv) r12_betaJunkEnv) (xval r12_betaEnv (instantiate {V0} {S0}) {KDTY} r17_wkc_step_let_witness r12_betaJunkEnv)")
+    format!("@Eq (VD {KDTY}) (xval r12_betaEnv (instantiate {V0} {S0}) {KDTY} (r17_wk_wkc r12_betaEnv (instantiate {V0} {S0}) {KDTY} r15_instDeriv) r12_betaJunkEnv) (xval r12_betaEnv (instantiate {V0} {S0}) {KDTY} r17_wkc_step_let_witness r12_betaJunkEnv)")
 }
 pub(super) fn val_irrel_witness() -> String {
     format!("r17_xval_irrel r12_betaEnv (instantiate {V0} {S0}) {KDTY} (r17_wk_wkc r12_betaEnv (instantiate {V0} {S0}) {KDTY} r15_instDeriv) r17_wkc_step_let_witness r12_betaJunkEnv")
@@ -478,14 +478,14 @@ pub(super) fn val_irrel_witness() -> String {
 /// δ-ACTIVE constant would need `WKC D (lam A b) Sk.ty` for the reduct, and that
 /// is refuted. The inertness premise is forced, not chosen.
 pub(super) fn ty_unrestricted_konst_refuted() -> String {
-    let step = "(PropBox (delta_step (red_def the_red_env) (KExpr.const kcre_witness_delta_head (ListType.nil Level)) kcre_witness_delta_value))";
+    let step = "(PropBox (delta_step (red_def the_red_env) (KExpr.const kcre_witness_delta_head (@ListType.nil Level)) kcre_witness_delta_value))";
     format!("AndType {step} (WKC r12_piEnv kcre_witness_delta_value Sk.ty -> Empty)")
 }
 pub(super) fn val_unrestricted_konst_refuted() -> String {
-    let stepty = "(delta_step (red_def the_red_env) (KExpr.const kcre_witness_delta_head (ListType.nil Level)) kcre_witness_delta_value)";
+    let stepty = "(delta_step (red_def the_red_env) (KExpr.const kcre_witness_delta_head (@ListType.nil Level)) kcre_witness_delta_value)";
     let step = format!("(PropBox {stepty})");
     let neg = "(WKC r12_piEnv kcre_witness_delta_value Sk.ty -> Empty)";
-    format!("AndType.intro {step} {neg} (r16_propBox_intro {stepty} the_red_env_delta_nonvacuous) (fun (zh : WKC r12_piEnv kcre_witness_delta_value Sk.ty) => Eq.substType Sk r17_notArrT Sk.ty (r17_shapeOf r12_piEnv kcre_witness_delta_value) (r17_shape_correct r12_piEnv kcre_witness_delta_value Sk.ty zh) ConstFreeUnit.triv)")
+    format!("@AndType.intro {step} {neg} (r16_propBox_intro {stepty} the_red_env_delta_nonvacuous) (fun (zh : WKC r12_piEnv kcre_witness_delta_value Sk.ty) => @Eq.substType Sk r17_notArrT Sk.ty (r17_shapeOf r12_piEnv kcre_witness_delta_value) (r17_shape_correct r12_piEnv kcre_witness_delta_value Sk.ty zh) ConstFreeUnit.triv)")
 }
 
 /// THE RUNG'S HEADLINE CONTRAST, in one constant: both new constructors,
@@ -495,7 +495,7 @@ pub(super) fn ty_constructor_gap_closed() -> String {
     format!("AndType (WKC r12_piEnv {DEADCONST} Sk.ty) (WKC r12_betaEnv r17_letTerm {KDTY})")
 }
 pub(super) fn val_constructor_gap_closed() -> String {
-    format!("AndType.intro (WKC r12_piEnv {DEADCONST} Sk.ty) (WKC r12_betaEnv r17_letTerm {KDTY}) r17_konst_witness r17_let_witness")
+    format!("@AndType.intro (WKC r12_piEnv {DEADCONST} Sk.ty) (WKC r12_betaEnv r17_letTerm {KDTY}) r17_konst_witness r17_let_witness")
 }
 
 // ================================================================
@@ -506,7 +506,7 @@ pub(super) fn val_constructor_gap_closed() -> String {
 /// `Eq.refl`. The kernel must refuse, or the witness is definitional.
 #[cfg(test)]
 pub(super) fn probe_irrel_refl() -> String {
-    format!("def r17_irrel_refl_probe : {} := Eq.refl (VD {KDTY}) (xval r12_betaEnv (instantiate {V0} {S0}) {KDTY} (r17_wk_wkc r12_betaEnv (instantiate {V0} {S0}) {KDTY} r15_instDeriv) r12_betaJunkEnv)", ty_irrel_witness())
+    format!("def r17_irrel_refl_probe : {} := @Eq.refl (VD {KDTY}) (xval r12_betaEnv (instantiate {V0} {S0}) {KDTY} (r17_wk_wkc r12_betaEnv (instantiate {V0} {S0}) {KDTY} r15_instDeriv) r12_betaJunkEnv)", ty_irrel_witness())
 }
 
 /// NON-DEGENERACY of the `let_` interpretation clause: `xval` at a `let_` reads
@@ -534,14 +534,14 @@ pub(super) fn probe_zeta_junk() -> String {
     let hlet = format!("(WKC.let_ r12_betaEnv {S0} {V0} {V0} {KDTY} {kk} {kk} (WKC.sort r12_betaEnv Level.zero) (WKC.var r12_betaEnv Nat.zero) {hb})");
     let lhs = format!("(xval r12_betaEnv (KExpr.let_ {S0} {V0} {V0}) {kk} {hlet} r)");
     let rhs = format!("(xval {env2} {V0} {kk} {hb} (vconsD {kk} r12_betaEnv (junkD {kk}) r))");
-    format!("def r17_zeta_junk_probe : forall (r : VEnvD r12_betaEnv), Eq (VD {kk}) {lhs} {rhs} := fun (r : VEnvD r12_betaEnv) => Eq.refl (VD {kk}) {lhs}")
+    format!("def r17_zeta_junk_probe : forall (r : VEnvD r12_betaEnv), @Eq (VD {kk}) {lhs} {rhs} := fun (r : VEnvD r12_betaEnv) => @Eq.refl (VD {kk}) {lhs}")
 }
 
 /// A `konst` derivation at a shape it does not have. The rule concludes at
 /// `Sk.ty` and at no other shape; the kernel must refuse.
 #[cfg(test)]
 pub(super) fn probe_konst_wrong_shape() -> String {
-    format!("def r17_konst_wrong_shape_probe : WKC r12_piEnv {DEADCONST} {KDTY} := WKC.konst r12_piEnv fixture_def_env_name (ListType.nil Level) (Eq.refl (OptionType KExpr) (OptionType.none KExpr)) (Eq.refl (OptionType RecMeta) (OptionType.none RecMeta))")
+    format!("def r17_konst_wrong_shape_probe : WKC r12_piEnv {DEADCONST} {KDTY} := WKC.konst r12_piEnv fixture_def_env_name (@ListType.nil Level) (@Eq.refl (OptionType KExpr) (@OptionType.none KExpr)) (@Eq.refl (OptionType RecMeta) (@OptionType.none RecMeta))")
 }
 
 /// The `konst` rule at a constant that is NOT inert. `kcre_witness_delta_head`
@@ -549,7 +549,7 @@ pub(super) fn probe_konst_wrong_shape() -> String {
 /// kernel must refuse, which is what makes the inertness premise real.
 #[cfg(test)]
 pub(super) fn probe_konst_delta_active() -> String {
-    "def r17_konst_delta_active_probe : WKC r12_piEnv (KExpr.const kcre_witness_delta_head (ListType.nil Level)) Sk.ty := WKC.konst r12_piEnv kcre_witness_delta_head (ListType.nil Level) (Eq.refl (OptionType KExpr) (OptionType.none KExpr)) (Eq.refl (OptionType RecMeta) (OptionType.none RecMeta))".to_string()
+    "def r17_konst_delta_active_probe : WKC r12_piEnv (KExpr.const kcre_witness_delta_head (@ListType.nil Level)) Sk.ty := WKC.konst r12_piEnv kcre_witness_delta_head (@ListType.nil Level) (@Eq.refl (OptionType KExpr) (@OptionType.none KExpr)) (@Eq.refl (OptionType RecMeta) (@OptionType.none RecMeta))".to_string()
 }
 
 // ================================================================

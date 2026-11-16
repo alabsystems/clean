@@ -13,6 +13,21 @@
 //! checker refuses. What it does not show: semantic soundness (unit C3). The
 //! lemmas relate the checker to the declarative judgment of `theories/cic_l`
 //! under the typing premises `theories/kcheck/README.md` lists.
+//!
+//! A statement pin is the meaning digest (`support/meaning_digest.rs`) of a
+//! proposition definition in `KCheck.Contracts`: the definition and every
+//! definition, inductive and compiler auxiliary of the package it reaches,
+//! down to Init, so a pin moves when the checker or the judgment a statement
+//! names is redefined. The package is the theories the fixture family
+//! `kcheck_core` compiles, `cic_l` and `kcheck`. Re-pin with
+//! `CLEAN_REPIN_STATEMENT_PINS=1 scripts/heavy_gate.sh run 16 kcheck-core-repin --
+//! "$(rustup run trust rustc --print sysroot)/bin/targo" --unverified test -p
+//! clean-olean --locked --test kcheck_core`: the run rewrites
+//! `theories/kcheck/statement_pins.json` and still fails, and the next run
+//! without the variable confirms it.
+
+#[path = "support/meaning_digest.rs"]
+mod meaning_digest;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::process::Command;
@@ -25,7 +40,7 @@ use clean_olean::{
     load_module_with_deps, read_artifact, reference_base_closed, require_pinned_lean_lib_path,
     ArtifactDepth,
 };
-use sha2::{Digest, Sha256};
+use meaning_digest::{MeaningDigests, Package};
 
 /// The module that imports every other module of the package.
 const ROOT: &str = "KCheck.Contracts";
@@ -93,15 +108,6 @@ fn order_stems() -> Vec<&'static str> {
         .collect()
 }
 
-fn digest(statement: &Expr) -> String {
-    let bytes = bincode::serde::encode_to_vec(statement, bincode::config::standard())
-        .expect("serialize a statement");
-    Sha256::digest(&bytes)
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect()
-}
-
 fn is_type_mismatch<T>(result: &Result<T, ReferenceRefusal>) -> bool {
     matches!(
         result,
@@ -145,6 +151,7 @@ fn kcheck_core_rechecks_through_two_kernels_with_forged_controls() {
     let mut loaded = Environment::for_lean_replay();
     let summaries = load_module_with_deps(&mut loaded, ROOT, &[compiled.clone(), lib])
         .expect("load the compiled checker");
+    let package = Package::of_fixture(&compiled, "kcheck_core", &["cic_l", "kcheck"]);
 
     // The subjects are the constants the package's own modules declare, read
     // from each artifact's name table: no name prefix decides membership, so
@@ -370,21 +377,34 @@ fn kcheck_core_rechecks_through_two_kernels_with_forged_controls() {
             .unwrap_or_else(|| panic!("{pin} is not a proposition definition"))
     };
     let mut observed_pins: BTreeMap<String, String> = BTreeMap::new();
-    for pin in CONTRACTS
-        .iter()
-        .chain(FORGED_STATEMENTS)
-        .chain(FORGED_RUNS)
-        .map(|(_, pin)| *pin)
     {
-        assert!(
-            observed_pins
-                .insert(pin.to_owned(), digest(&statement(pin)))
-                .is_none(),
-            "{pin} is listed twice"
+        let digests = MeaningDigests::new(kernel.environment(), &package);
+        let mut roots = Vec::new();
+        for pin in CONTRACTS
+            .iter()
+            .chain(FORGED_STATEMENTS)
+            .chain(FORGED_RUNS)
+            .map(|(_, pin)| *pin)
+        {
+            let root = name(&format!("KCheck.Contracts.{pin}"));
+            let digest = digests
+                .digest(&root)
+                .unwrap_or_else(|error| panic!("{error}"));
+            assert!(
+                observed_pins.insert(pin.to_owned(), digest).is_none(),
+                "{pin} is listed twice"
+            );
+            roots.push(root);
+        }
+        for (pin, value) in &observed_pins {
+            eprintln!("statement-pin {pin} {value}");
+        }
+        eprintln!(
+            "{}",
+            digests
+                .describe(&package, &roots)
+                .unwrap_or_else(|error| panic!("{error}"))
         );
-    }
-    for (pin, value) in &observed_pins {
-        eprintln!("statement-pin {pin} {value}");
     }
     assert_eq!(
         observed_pins.len(),
@@ -395,10 +415,13 @@ fn kcheck_core_rechecks_through_two_kernels_with_forged_controls() {
         observed_closures, committed_closures,
         "observed axiom closures differ from theories/kcheck/axiom_closures.json"
     );
-    assert_eq!(
-        observed_pins, committed_pins,
-        "observed statements differ from theories/kcheck/statement_pins.json"
-    );
+    if let Err(failure) = meaning_digest::check_pins(
+        &observed_pins,
+        &committed_pins,
+        "theories/kcheck/statement_pins.json",
+    ) {
+        panic!("{failure}");
+    }
 
     // Each lemma's own proof is admitted at the statement pinned for it, and
     // refused at `False`.

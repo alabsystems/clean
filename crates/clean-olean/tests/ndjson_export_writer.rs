@@ -40,7 +40,7 @@ use clean_kernel::Name;
 use clean_olean::ndjson::{
     check_export_reader, check_export_round_trip, reference_check_export_reader, write_export,
     ExportCheckOptions, ExportReferenceReport, ExportWriteError, ExportWriteMeta,
-    ExportWriteSummary, EXPORTER_NAME, FOUNDATIONAL_AXIOMS,
+    ExportWriteSummary, EXPORTER_NAME, LEAN_FOUNDATIONAL_AXIOMS,
 };
 use clean_olean::test_support::compiled_fixture_dir;
 use clean_olean::{load_module_with_deps_shared, require_pinned_lean_lib_path};
@@ -179,7 +179,7 @@ fn minted() -> &'static Minted {
 }
 
 fn reference(bytes: Vec<u8>) -> ExportReferenceReport {
-    reference_permitted(bytes, &FOUNDATIONAL_AXIOMS)
+    reference_permitted(bytes, &LEAN_FOUNDATIONAL_AXIOMS)
 }
 
 fn reference_permitted(bytes: Vec<u8>, permitted: &[&str]) -> ExportReferenceReport {
@@ -213,7 +213,7 @@ fn reference_permitted(bytes: Vec<u8>, permitted: &[&str]) -> ExportReferenceRep
 fn lean_replay(export: &Path) -> Output {
     let mut command = Command::new(repo_root().join("scripts/lean_export_replay.sh"));
     command.arg(export);
-    for axiom in FOUNDATIONAL_AXIOMS {
+    for axiom in LEAN_FOUNDATIONAL_AXIOMS {
         command.args(["--permit", axiom]);
     }
     command.output().expect("run scripts/lean_export_replay.sh")
@@ -224,7 +224,7 @@ fn lean_replay(export: &Path) -> Output {
 fn lean_replay_upstream(export: &Path) -> Output {
     let mut command = Command::new(repo_root().join("scripts/lean_export_replay.sh"));
     command.args(["--reader", "upstream"]).arg(export);
-    for axiom in FOUNDATIONAL_AXIOMS {
+    for axiom in LEAN_FOUNDATIONAL_AXIOMS {
         command.args(["--permit", axiom]);
     }
     let out = command

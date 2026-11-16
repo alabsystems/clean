@@ -323,7 +323,7 @@ impl Specification {
                     "(hctx : KernelStateLocalCtxWellFormed st) ",
                     "(hadm : KernelInputAdmissible st e) ",
                     "(hinfer : KernelInferAccepts st e T) => ",
-                    "KExpr.rec InferSoundAt ",
+                    "@KExpr.rec InferSoundAt ",
                     "infer_sound_at_sort infer_sound_at_bvar ",
                     "infer_sound_at_app infer_sound_at_lam infer_sound_at_pi infer_sound_at_const ",
                     "infer_sound_at_let infer_sound_at_proj infer_sound_at_lit ",

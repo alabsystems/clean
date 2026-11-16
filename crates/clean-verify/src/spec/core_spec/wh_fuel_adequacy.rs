@@ -126,10 +126,10 @@ impl Specification {
     /// is supplied. Callers need only the two environment side conditions.
     fn add_mono_stuck_unconditional(&mut self) -> Result<(), SpecError> {
         let mot = format!(
-            "forall (e : KExpr) (r : KExpr), Eq (OptionType KExpr) \
-             (whnf_fuel_red_wh the_red_env n e) (OptionType.some KExpr r) -> {stuck} -> \
-             Eq (OptionType KExpr) (whnf_fuel_red_wh the_red_env (Nat.succ n) e) \
-             (OptionType.some KExpr r)",
+            "forall (e : KExpr) (r : KExpr), @Eq (OptionType KExpr) \
+             (whnf_fuel_red_wh the_red_env n e) (@OptionType.some KExpr r) -> {stuck} -> \
+             @Eq (OptionType KExpr) (whnf_fuel_red_wh the_red_env (Nat.succ n) e) \
+             (@OptionType.some KExpr r)",
             stuck = Self::stuck_at("r"),
         );
         let src = format!(
@@ -180,7 +180,7 @@ impl Specification {
         let at = |k: &str| Self::hsm_at(k);
         let unwrap = |k: &str, w: &str| {
             format!(
-                "(LiftP.rec {p} (fun (_l : LiftP {p}) => {p}) (fun (q : {p}) => q) {w})",
+                "(@LiftP.rec {p} (fun (_l : LiftP {p}) => {p}) (fun (q : {p}) => q) {w})",
                 p = at(k),
             )
         };
@@ -190,16 +190,16 @@ impl Specification {
             unwrap("jj", "(ihs jj hj)"),
         );
         let transport = format!(
-            "(fun (t : KExpr) (r : KExpr) (h1 : Eq ({o}) ({whk_k} t) (OptionType.some KExpr r)) \
-             (h2 : forall (w : KExpr -> OptionType KExpr), Eq ({o}) \
-             (reduce_once_red_wh the_red_env w r) (OptionType.none KExpr)) => \
+            "(fun (t : KExpr) (r : KExpr) (h1 : @Eq ({o}) ({whk_k} t) (@OptionType.some KExpr r)) \
+             (h2 : forall (w : KExpr -> OptionType KExpr), @Eq ({o}) \
+             (reduce_once_red_wh the_red_env w r) (@OptionType.none KExpr)) => \
              whnf_fuel_red_wh_mono_stuck_b k {bh} t r h1 (fun (jj : Nat) => h2 {whk_jj}))",
             whk_k = whk("k"),
             whk_jj = whk("jj"),
         );
         let stepf = format!(
             "(fun (k : Nat) (ihs : forall (jj : Nat), Lt jj k -> LiftP {atjj}) => \
-             LiftP.up {atk} (wh_step_mono_all {w1} {w2} i2 i8 {transport}))",
+             @LiftP.up {atk} (wh_step_mono_all {w1} {w2} i2 i8 {transport}))",
             atjj = at("jj"),
             atk = at("k"),
             w1 = whk("k"),
@@ -252,9 +252,9 @@ impl Specification {
     fn add_hsm_at_def(&mut self) -> Result<(), SpecError> {
         let src = format!(
             "def WhHsmAt (k : Nat) : Prop := \
-             forall (e0 : KExpr) (x0 : KExpr), Eq (OptionType KExpr) \
-             {at_k} (OptionType.some KExpr x0) -> Eq (OptionType KExpr) \
-             {at_s} (OptionType.some KExpr x0)",
+             forall (e0 : KExpr) (x0 : KExpr), @Eq (OptionType KExpr) \
+             {at_k} (@OptionType.some KExpr x0) -> @Eq (OptionType KExpr) \
+             {at_s} (@OptionType.some KExpr x0)",
             at_k = step("k", "e0"),
             at_s = step("(Nat.succ k)", "e0"),
         );
@@ -331,10 +331,10 @@ impl Specification {
         };
         let mot = |m: &str| {
             format!(
-                "forall (e : KExpr) (r : KExpr), Eq (OptionType KExpr) \
-                 (whnf_fuel_red_wh the_red_env {m} e) (OptionType.some KExpr r) -> {stuck} -> \
-                 Eq (OptionType KExpr) (whnf_fuel_red_wh the_red_env (Nat.succ {m}) e) \
-                 (OptionType.some KExpr r)",
+                "forall (e : KExpr) (r : KExpr), @Eq (OptionType KExpr) \
+                 (whnf_fuel_red_wh the_red_env {m} e) (@OptionType.some KExpr r) -> {stuck} -> \
+                 @Eq (OptionType KExpr) (whnf_fuel_red_wh the_red_env (Nat.succ {m}) e) \
+                 (@OptionType.some KExpr r)",
                 stuck = Self::stuck_at("r"),
             )
         };
@@ -353,11 +353,11 @@ impl Specification {
         // option_none_ne_some and NOT the _type variant: the goal is an Eq, which
         // lives in Sort 0, and the _type helpers demand Sort 1.
         let zero = format!(
-            "(fun {zbind}(e : KExpr) (r : KExpr) (h : Eq (OptionType KExpr) \
-             (whnf_fuel_red_wh the_red_env Nat.zero e) (OptionType.some KExpr r)) \
+            "(fun {zbind}(e : KExpr) (r : KExpr) (h : @Eq (OptionType KExpr) \
+             (whnf_fuel_red_wh the_red_env Nat.zero e) (@OptionType.some KExpr r)) \
              (_hst : {stuck}) => option_none_ne_some KExpr r \
-             (Eq (OptionType KExpr) (whnf_fuel_red_wh the_red_env (Nat.succ Nat.zero) e) \
-             (OptionType.some KExpr r)) h)",
+             (@Eq (OptionType KExpr) (whnf_fuel_red_wh the_red_env (Nat.succ Nat.zero) e) \
+             (@OptionType.some KExpr r)) h)",
             stuck = Self::stuck_at("r"),
             zbind = zbind,
         );
@@ -366,23 +366,23 @@ impl Specification {
         // Genuine stuckness is what says the bigger budget finds nothing either —
         // this is the one place the faithful loop needs an argument where
         // whnf_fuel_red_monotone simply reuses its hypothesis.
-        let motive_p = "(fun (X : KExpr) => Eq (OptionType KExpr) \
-             (whnf_fuel_red_wh the_red_env (Nat.succ (Nat.succ k)) X) (OptionType.some KExpr r))";
+        let motive_p = "(fun (X : KExpr) => @Eq (OptionType KExpr) \
+             (whnf_fuel_red_wh the_red_env (Nat.succ (Nat.succ k)) X) (@OptionType.some KExpr r))";
         let at_r = format!(
             "(Eq.trans (OptionType KExpr) \
              (whnf_fuel_red_wh the_red_env (Nat.succ (Nat.succ k)) r) \
-             (loop_dispatch (OptionType.none KExpr) r {whk1}) (OptionType.some KExpr r) \
+             (loop_dispatch (@OptionType.none KExpr) r {whk1}) (@OptionType.some KExpr r) \
              (Eq.cong (OptionType KExpr) (OptionType KExpr) \
              (fun (o : OptionType KExpr) => loop_dispatch o r {whk1}) \
-             {step1} (OptionType.none KExpr) (hst (Nat.succ k))) \
-             (Eq.refl (OptionType KExpr) (OptionType.some KExpr r)))",
+             {step1} (@OptionType.none KExpr) (hst (Nat.succ k))) \
+             (@Eq.refl (OptionType KExpr) (@OptionType.some KExpr r)))",
             whk1 = whk("(Nat.succ k)"),
             step1 = step("(Nat.succ k)", "r"),
         );
         let none_arm = format!(
-            "(fun (_hq : Eq (OptionType KExpr) {stepk} (OptionType.none KExpr)) \
-             (h2 : Eq (OptionType KExpr) (loop_dispatch (OptionType.none KExpr) e {whk0}) \
-             (OptionType.some KExpr r)) => Eq.subst KExpr {motive_p} r e \
+            "(fun (_hq : @Eq (OptionType KExpr) {stepk} (@OptionType.none KExpr)) \
+             (h2 : @Eq (OptionType KExpr) (loop_dispatch (@OptionType.none KExpr) e {whk0}) \
+             (@OptionType.some KExpr r)) => Eq.subst KExpr {motive_p} r e \
              (Eq.symm KExpr e r (option_some_inj KExpr e r h2)) {at_r})",
             stepk = step("k", "e"),
             whk0 = whk("k"),
@@ -391,14 +391,14 @@ impl Specification {
         // A real step fired: step monotonicity carries it to the bigger budget,
         // and the induction hypothesis carries the tail.
         let some_arm = format!(
-            "(fun (x2 : KExpr) (hq : Eq (OptionType KExpr) {stepk} (OptionType.some KExpr x2)) \
-             (h2 : Eq (OptionType KExpr) (loop_dispatch (OptionType.some KExpr x2) e {whk0}) \
-             (OptionType.some KExpr r)) => Eq.trans (OptionType KExpr) \
+            "(fun (x2 : KExpr) (hq : @Eq (OptionType KExpr) {stepk} (@OptionType.some KExpr x2)) \
+             (h2 : @Eq (OptionType KExpr) (loop_dispatch (@OptionType.some KExpr x2) e {whk0}) \
+             (@OptionType.some KExpr r)) => Eq.trans (OptionType KExpr) \
              (whnf_fuel_red_wh the_red_env (Nat.succ (Nat.succ k)) e) \
-             (loop_dispatch (OptionType.some KExpr x2) e {whk1}) (OptionType.some KExpr r) \
+             (loop_dispatch (@OptionType.some KExpr x2) e {whk1}) (@OptionType.some KExpr r) \
              (Eq.cong (OptionType KExpr) (OptionType KExpr) \
              (fun (o : OptionType KExpr) => loop_dispatch o e {whk1}) \
-             {step1} (OptionType.some KExpr x2) ({hsmk} e x2 hq)) ({ihapp} x2 r h2 hst))",
+             {step1} (@OptionType.some KExpr x2) ({hsmk} e x2 hq)) ({ihapp} x2 r h2 hst))",
             stepk = step("k", "e"),
             whk0 = whk("k"),
             whk1 = whk("(Nat.succ k)"),
@@ -408,18 +408,18 @@ impl Specification {
         );
 
         let mot2 = format!(
-            "(fun (o : OptionType KExpr) => Eq (OptionType KExpr) {stepk} o -> \
-             Eq (OptionType KExpr) (loop_dispatch o e {whk0}) (OptionType.some KExpr r) -> \
-             Eq (OptionType KExpr) (whnf_fuel_red_wh the_red_env (Nat.succ (Nat.succ k)) e) \
-             (OptionType.some KExpr r))",
+            "(fun (o : OptionType KExpr) => @Eq (OptionType KExpr) {stepk} o -> \
+             @Eq (OptionType KExpr) (loop_dispatch o e {whk0}) (@OptionType.some KExpr r) -> \
+             @Eq (OptionType KExpr) (whnf_fuel_red_wh the_red_env (Nat.succ (Nat.succ k)) e) \
+             (@OptionType.some KExpr r))",
             stepk = step("k", "e"),
             whk0 = whk("k"),
         );
         let succ = format!(
             "(fun (k : Nat) (ih : {ihty}) {bhbind}(e : KExpr) (r : KExpr) \
-             (h : Eq (OptionType KExpr) (whnf_fuel_red_wh the_red_env (Nat.succ k) e) \
-             (OptionType.some KExpr r)) (hst : {stuck}) => OptionType.rec KExpr {mot2} \
-             {none_arm} {some_arm} {stepk} (Eq.refl (OptionType KExpr) {stepk}) h)",
+             (h : @Eq (OptionType KExpr) (whnf_fuel_red_wh the_red_env (Nat.succ k) e) \
+             (@OptionType.some KExpr r)) (hst : {stuck}) => @OptionType.rec KExpr {mot2} \
+             {none_arm} {some_arm} {stepk} (@Eq.refl (OptionType KExpr) {stepk}) h)",
             ihty = ihty,
             bhbind = bhbind,
             stuck = Self::stuck_at("r"),
@@ -428,7 +428,7 @@ impl Specification {
 
         let src = format!(
             "def whnf_fuel_red_wh_mono_stuck{suffix} {sigbind}(n : Nat) : {conc} := \
-             Nat.rec (fun (m : Nat) => {motive}) {zero} {succ} n",
+             @Nat.rec (fun (m : Nat) => {motive}) {zero} {succ} n",
             suffix = suffix,
             sigbind = sigbind,
             conc = conc,
@@ -469,21 +469,21 @@ impl Specification {
     fn add_wh_le_forms(&mut self) -> Result<(), SpecError> {
         let mot = |j: &str| {
             format!(
-                "forall (e : KExpr) (r : KExpr), Eq (OptionType KExpr) \
-                 (whnf_fuel_red_wh the_red_env k e) (OptionType.some KExpr r) -> {stuck} -> \
-                 Eq (OptionType KExpr) (whnf_fuel_red_wh the_red_env {j} e) \
-                 (OptionType.some KExpr r)",
+                "forall (e : KExpr) (r : KExpr), @Eq (OptionType KExpr) \
+                 (whnf_fuel_red_wh the_red_env k e) (@OptionType.some KExpr r) -> {stuck} -> \
+                 @Eq (OptionType KExpr) (whnf_fuel_red_wh the_red_env {j} e) \
+                 (@OptionType.some KExpr r)",
                 stuck = Self::stuck_at("r"),
             )
         };
         let src = format!(
             "def whnf_fuel_red_wh_le {SC}(k : Nat) (m : Nat) (hle : Le k m) : {motm} := \
-             Le.rec k (fun (j : Nat) (_hj : Le k j) => {motj}) \
-             (fun (e : KExpr) (r : KExpr) (h : Eq (OptionType KExpr) \
-             (whnf_fuel_red_wh the_red_env k e) (OptionType.some KExpr r)) (_hst : {stuck}) => h) \
+             @Le.rec k (fun (j : Nat) (_hj : Le k j) => {motj}) \
+             (fun (e : KExpr) (r : KExpr) (h : @Eq (OptionType KExpr) \
+             (whnf_fuel_red_wh the_red_env k e) (@OptionType.some KExpr r)) (_hst : {stuck}) => h) \
              (fun (j : Nat) (_hj : Le k j) (ihj : {motj}) (e : KExpr) (r : KExpr) \
-             (h : Eq (OptionType KExpr) (whnf_fuel_red_wh the_red_env k e) \
-             (OptionType.some KExpr r)) (hst : {stuck}) => \
+             (h : @Eq (OptionType KExpr) (whnf_fuel_red_wh the_red_env k e) \
+             (@OptionType.some KExpr r)) (hst : {stuck}) => \
              whnf_fuel_red_wh_mono_stuck i2 i8 j e r (ihj e r h hst) hst) m hle",
             motm = mot("m"),
             motj = mot("j"),
@@ -502,20 +502,20 @@ impl Specification {
 
         let mots = |j: &str| {
             format!(
-                "forall (e : KExpr) (x2 : KExpr), Eq (OptionType KExpr) {stepk} \
-                 (OptionType.some KExpr x2) -> Eq (OptionType KExpr) {stepj} \
-                 (OptionType.some KExpr x2)",
+                "forall (e : KExpr) (x2 : KExpr), @Eq (OptionType KExpr) {stepk} \
+                 (@OptionType.some KExpr x2) -> @Eq (OptionType KExpr) {stepj} \
+                 (@OptionType.some KExpr x2)",
                 stepk = step("k", "e"),
                 stepj = step(j, "e"),
             )
         };
         let src = format!(
             "def wh_step_mono_le {SC}(k : Nat) (m : Nat) (hle : Le k m) : {motm} := \
-             Le.rec k (fun (j : Nat) (_hj : Le k j) => {motj}) \
-             (fun (e : KExpr) (x2 : KExpr) (h : Eq (OptionType KExpr) {stepk} \
-             (OptionType.some KExpr x2)) => h) \
+             @Le.rec k (fun (j : Nat) (_hj : Le k j) => {motj}) \
+             (fun (e : KExpr) (x2 : KExpr) (h : @Eq (OptionType KExpr) {stepk} \
+             (@OptionType.some KExpr x2)) => h) \
              (fun (j : Nat) (_hj : Le k j) (ihj : {motj}) (e : KExpr) (x2 : KExpr) \
-             (h : Eq (OptionType KExpr) {stepk} (OptionType.some KExpr x2)) => \
+             (h : @Eq (OptionType KExpr) {stepk} (@OptionType.some KExpr x2)) => \
              wh_hsm_all i2 i8 j e x2 (ihj e x2 h)) m hle",
             motm = mots("m"),
             motj = mots("j"),
@@ -542,8 +542,8 @@ impl Specification {
             &format!(
                 "inductive WhNormalizes (r : KExpr) : KExpr -> Type\n\
                  | stuck : ({stuck}) -> WhNormalizes r r\n\
-                 | step : forall (e : KExpr) (x2 : KExpr) (k : Nat), Eq (OptionType KExpr) \
-                 {stepk} (OptionType.some KExpr x2) -> WhNormalizes r x2 -> WhNormalizes r e",
+                 | step : forall (e : KExpr) (x2 : KExpr) (k : Nat), @Eq (OptionType KExpr) \
+                 {stepk} (@OptionType.some KExpr x2) -> WhNormalizes r x2 -> WhNormalizes r e",
                 stuck = Self::stuck_at("r"),
                 stepk = step("k", "e"),
             ),
@@ -564,8 +564,8 @@ impl Specification {
         self.add_inductive(
             &format!(
                 "inductive WhnfFuelReachesWh : KExpr -> Type\n\
-                 | mk : forall (e : KExpr) (n : Nat) (r : KExpr), Eq (OptionType KExpr) \
-                 (whnf_fuel_red_wh the_red_env n e) (OptionType.some KExpr r) -> ({stuck}) -> \
+                 | mk : forall (e : KExpr) (n : Nat) (r : KExpr), @Eq (OptionType KExpr) \
+                 (whnf_fuel_red_wh the_red_env n e) (@OptionType.some KExpr r) -> ({stuck}) -> \
                  WhnfFuelReachesWh e",
                 stuck = Self::stuck_at("r"),
             ),
@@ -585,11 +585,11 @@ impl Specification {
         let one = format!(
             "(Eq.trans (OptionType KExpr) \
              (whnf_fuel_red_wh the_red_env (Nat.succ Nat.zero) r) \
-             (loop_dispatch (OptionType.none KExpr) r {whk0}) (OptionType.some KExpr r) \
+             (loop_dispatch (@OptionType.none KExpr) r {whk0}) (@OptionType.some KExpr r) \
              (Eq.cong (OptionType KExpr) (OptionType KExpr) \
              (fun (o : OptionType KExpr) => loop_dispatch o r {whk0}) \
-             {step0} (OptionType.none KExpr) (hst Nat.zero)) \
-             (Eq.refl (OptionType KExpr) (OptionType.some KExpr r)))",
+             {step0} (@OptionType.none KExpr) (hst Nat.zero)) \
+             (@Eq.refl (OptionType KExpr) (@OptionType.some KExpr r)))",
             whk0 = whk("Nat.zero"),
             step0 = step("Nat.zero", "r"),
         );
@@ -600,10 +600,10 @@ impl Specification {
             "WhnfFuelReachesWh.mk e0 (Nat.succ (Nat.add k n)) rr \
              (Eq.trans (OptionType KExpr) \
              (whnf_fuel_red_wh the_red_env (Nat.succ (Nat.add k n)) e0) \
-             (loop_dispatch (OptionType.some KExpr x2) e0 {whkn}) (OptionType.some KExpr rr) \
+             (loop_dispatch (@OptionType.some KExpr x2) e0 {whkn}) (@OptionType.some KExpr rr) \
              (Eq.cong (OptionType KExpr) (OptionType KExpr) \
              (fun (o : OptionType KExpr) => loop_dispatch o e0 {whkn}) \
-             {stepn} (OptionType.some KExpr x2) \
+             {stepn} (@OptionType.some KExpr x2) \
              (wh_step_mono_le i2 i8 k (Nat.add k n) (le_add_self_left k n) e0 x2 hs)) \
              (whnf_fuel_red_wh_le i2 i8 n (Nat.add k n) (le_add_self_right k n) x2 rr heq hstk)) \
              hstk",
@@ -611,11 +611,11 @@ impl Specification {
             stepn = step("(Nat.add k n)", "e0"),
         );
         let step_arm = format!(
-            "(fun (e0 : KExpr) (x2 : KExpr) (k : Nat) (hs : Eq (OptionType KExpr) {stepk} \
-             (OptionType.some KExpr x2)) (_w : WhNormalizes r x2) (ih : WhnfFuelReachesWh x2) => \
-             WhnfFuelReachesWh.rec x2 (fun (_z : WhnfFuelReachesWh x2) => WhnfFuelReachesWh e0) \
-             (fun (n : Nat) (rr : KExpr) (heq : Eq (OptionType KExpr) \
-             (whnf_fuel_red_wh the_red_env n x2) (OptionType.some KExpr rr)) (hstk : {stuckrr}) => \
+            "(fun (e0 : KExpr) (x2 : KExpr) (k : Nat) (hs : @Eq (OptionType KExpr) {stepk} \
+             (@OptionType.some KExpr x2)) (_w : WhNormalizes r x2) (ih : WhnfFuelReachesWh x2) => \
+             @WhnfFuelReachesWh.rec x2 (fun (_z : WhnfFuelReachesWh x2) => WhnfFuelReachesWh e0) \
+             (fun (n : Nat) (rr : KExpr) (heq : @Eq (OptionType KExpr) \
+             (whnf_fuel_red_wh the_red_env n x2) (@OptionType.some KExpr rr)) (hstk : {stuckrr}) => \
              {body}) ih)",
             stepk = step("k", "e0"),
             stuckrr = Self::stuck_at("rr"),
@@ -624,7 +624,7 @@ impl Specification {
         let src = format!(
             "def wh_fuel_from_normalizes {SC}(r : KExpr) (e : KExpr) \
              (hn : WhNormalizes r e) : WhnfFuelReachesWh e := \
-             WhNormalizes.rec r (fun (x : KExpr) (_h : WhNormalizes r x) => WhnfFuelReachesWh x) \
+             @WhNormalizes.rec r (fun (x : KExpr) (_h : WhNormalizes r x) => WhnfFuelReachesWh x) \
              (fun (hst : {stuck}) => WhnfFuelReachesWh.mk r (Nat.succ Nat.zero) r {one} hst) \
              {step_arm} e hn",
             stuck = Self::stuck_at("r"),

@@ -11,10 +11,10 @@ use crate::test_utils::run_with_stack;
 use clean_kernel::{ConstantKind, ExprKind, Level, Name, TypeChecker};
 
 const ROOT: &str = "ir_steps_shared_driver_agreement";
-const EXPECTED_TYPE: &str = "forall (m : IRModule) (fuel : Nat) (c : IRConfig), Eq IRConfig (ir_steps fuel m c) (ir_drive_v1 IRConfig (fun (c0 : IRConfig) => IRConfig.rec (fun (_ : IRConfig) => Bool) (fun (_ : IRMachine) => Bool.false) (fun (_ : IROutcome) => Bool.true) c0) (fun (c0 : IRConfig) => IRConfig.rec (fun (_ : IRConfig) => IRConfig) (fun (s : IRMachine) => ir_step m s) (fun (o : IROutcome) => IRConfig.halted o) c0) fuel c)";
+const EXPECTED_TYPE: &str = "forall (m : IRModule) (fuel : Nat) (c : IRConfig), @Eq IRConfig (ir_steps fuel m c) (ir_drive_v1 IRConfig (fun (c0 : IRConfig) => @IRConfig.rec (fun (_ : IRConfig) => Bool) (fun (_ : IRMachine) => Bool.false) (fun (_ : IROutcome) => Bool.true) c0) (fun (c0 : IRConfig) => @IRConfig.rec (fun (_ : IRConfig) => IRConfig) (fun (s : IRMachine) => ir_step m s) (fun (o : IROutcome) => IRConfig.halted o) c0) fuel c)";
 
 // Pin the unchanged generic driver independently of the new specialization.
-const SHARED_DRIVER: &str = "def ir_drive_v1 (C : Type) (halted : C -> Bool) (step : C -> C) (fuel : Nat) (c : C) : C := Nat.rec (fun (_ : Nat) => C -> C) (fun (c0 : C) => c0) (fun (_ : Nat) (ih : C -> C) => fun (c0 : C) => Bool.rec (fun (_ : Bool) => C) (ih (step c0)) c0 (halted c0)) fuel c";
+const SHARED_DRIVER: &str = "def ir_drive_v1 (C : Type) (halted : C -> Bool) (step : C -> C) (fuel : Nat) (c : C) : C := @Nat.rec (fun (_ : Nat) => C -> C) (fun (c0 : C) => c0) (fun (_ : Nat) (ih : C -> C) => fun (c0 : C) => @Bool.rec (fun (_ : Bool) => C) (ih (step c0)) c0 (halted c0)) fuel c";
 
 const NEGATIVES: &[(&str, &str, &str)] = &[
     (
@@ -25,7 +25,7 @@ const NEGATIVES: &[(&str, &str, &str)] = &[
     (
         "ir_steps_false_no_step",
         "forall (m : IRModule) (s : IRMachine), Eq IRConfig (ir_steps (Nat.succ Nat.zero) m (IRConfig.running s)) (IRConfig.running s)",
-        "fun (m : IRModule) (s : IRMachine) => Eq.refl IRConfig (IRConfig.running s)",
+        "fun (m : IRModule) (s : IRMachine) => @Eq.refl IRConfig (IRConfig.running s)",
     ),
 ];
 

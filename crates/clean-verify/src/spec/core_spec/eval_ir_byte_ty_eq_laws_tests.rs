@@ -13,18 +13,18 @@ const ROOTS: &[&str] = &[
 ];
 
 const NESTED_REFLECTION: &str = r"def byte_ty_eq_closed_nested_reflection_v1 :
-  Eq IRTy
+  @Eq IRTy
     (IRTy.array_ (IRTy.ref_ (IRTy.fatslice_ (IRTy.struct_ 9))) 3)
     (IRTy.array_ (IRTy.ref_ (IRTy.fatslice_ (IRTy.struct_ 9))) 3) :=
   ir_byte_type_equality_sound_v1
     (IRTy.array_ (IRTy.ref_ (IRTy.fatslice_ (IRTy.struct_ 9))) 3)
     (IRTy.array_ (IRTy.ref_ (IRTy.fatslice_ (IRTy.struct_ 9))) 3)
-    (Eq.refl Bool Bool.true)";
+    (@Eq.refl Bool Bool.true)";
 
 const NOMINAL_REFLECTION: &str = r"def byte_ty_eq_closed_nominal_reflection_v1 :
-  Eq IRTy (IRTy.enum_ 10) (IRTy.enum_ 10) :=
+  @Eq IRTy (IRTy.enum_ 10) (IRTy.enum_ 10) :=
   ir_byte_type_equality_sound_v1
-    (IRTy.enum_ 10) (IRTy.enum_ 10) (Eq.refl Bool Bool.true)";
+    (IRTy.enum_ 10) (IRTy.enum_ 10) (@Eq.refl Bool Bool.true)";
 
 fn specification() -> Specification {
     crate::eval_ir::build_byte_prelude_spec_v1_with_stack()

@@ -1,0 +1,285 @@
+{
+  "advice": {
+    "origin": "python3 -I reports/self-proof-interim-thread-2026-11-15/advice_search/advice_search.py <kcheck-run-interim> <unzipped prelude_roots export> <out>: a term-blind search guided only by the checker's refusals (docs/DECISIONS.md 2026-11-15, the first coverage mint)",
+    "path": "data/kcheck_coverage/prelude_roots.advice.bin",
+    "sha256": "f4b4fec4d6d6f88c064b482932fe30c9d78c6773926f0965d8ae7a108883272d"
+  },
+  "export": {
+    "path": "crates/clean-olean/tests/fixtures/lean/v4.30.0-rc2/lean4export_minted/prelude_roots.ndjson.gz",
+    "sha256_decompressed": "d5b0062a92a82c626d0ba96108440ff6ba928e03ef74cd8709e648d71256cadf",
+    "sha256_file": "2d9df75b139848176c634f32d908a055032ccd9cc0bf7c73e932656189fcf110"
+  },
+  "figures": {
+    "accepted": 22,
+    "accepted_declarations": [
+      {
+        "advice_frame_sha256": "5f07fee97a405a7287c53ef27dad59238c3d0fa37e70f5c63a88cd06f4ba8eaf",
+        "detail": "bound=2;0+1 iota=0 k=0 lparams=1",
+        "kind": "def",
+        "level_params": 1,
+        "line": 222,
+        "name": "[s3:Nat s7:casesOn]",
+        "statement_sha256": "d92f27d6c5170c63869d8a251eefac4d8e04e24d6faa820e01c38c1168e2c136"
+      },
+      {
+        "advice_frame_sha256": "23f82e502fbf4c1bc19c940cbac9aace451193fd12c6739736e65062065a5440",
+        "detail": "bound=2;0+1 iota=0 k=0 lparams=1",
+        "kind": "def",
+        "level_params": 1,
+        "line": 289,
+        "name": "[s3:Nat s3:add s7:match_1]",
+        "statement_sha256": "0153fafcf28655f0efe535dac05f975c2121f26815eea4eefdd908a44e62e991"
+      },
+      {
+        "advice_frame_sha256": "c58d0b3e435a720619fc9aa9de223dc9f92e7fb76ce0e49929c10d5d6d517fd6",
+        "detail": "bound=2 iota=0 k=0 lparams=0",
+        "kind": "def",
+        "level_params": 0,
+        "line": 509,
+        "name": "[s4:Unit]",
+        "statement_sha256": "e67f7efb2d98a2f575f26f98534d4e9f743ade30583798bcc6c6e7c72005a7f8"
+      },
+      {
+        "advice_frame_sha256": "bee7c2af3d2b7acca93a26c6c6fa78c4e47fec86d494caf342a9ef18180e1103",
+        "detail": "bound=2 iota=0 k=0 lparams=0",
+        "kind": "def",
+        "level_params": 0,
+        "line": 543,
+        "name": "[s4:Unit s4:unit]",
+        "statement_sha256": "edafb68606fa6570111974827e5314ce1fe32eaf9c9326a297befc183e45bdad"
+      },
+      {
+        "advice_frame_sha256": "15e1be2bc0572f568de446d8b281fdc8445c83d190a95796a4d1195b3a503a2e",
+        "detail": "bound=1;0+1 iota=0 k=0 lparams=1",
+        "kind": "def",
+        "level_params": 1,
+        "line": 903,
+        "name": "[s8:outParam]",
+        "statement_sha256": "1aa498b783133fb33f9035764d69f2679114bf6e8df98694fc7a100db8b0f1ed"
+      },
+      {
+        "advice_frame_sha256": "98b23fe86c6343fb8e865acb34f18c3c522c5c5eefb532cdbf804f2eac9731b3",
+        "detail": "bound=2;0+1 iota=0 k=0 lparams=1",
+        "kind": "def",
+        "level_params": 1,
+        "line": 2578,
+        "name": "[s3:Nat s3:ble s7:match_1]",
+        "statement_sha256": "6ad58f7054a30fc4fed998ea7b2bf20a3259519c4a04f42e832c308e776e76ea"
+      },
+      {
+        "advice_frame_sha256": "6ff4d50bc15bb1986b2f3ede0d8d4cee258dabd81f89762984493d83da5613e7",
+        "detail": "bound=1;0+1 iota=0 k=0 lparams=1",
+        "kind": "def",
+        "level_params": 1,
+        "line": 2736,
+        "name": "[s3:rfl]",
+        "statement_sha256": "06e66283bc2c24a1ee06a0570699f0b58603166850fb44a09a5b5c8bd9406551"
+      },
+      {
+        "advice_frame_sha256": "94af124da755955c253d13d3848881f14abe27e90d9eef123cbcb908438756d6",
+        "detail": "bound=1;0+1;1+1 iota=0 k=0 lparams=2",
+        "kind": "def",
+        "level_params": 2,
+        "line": 2803,
+        "name": "[s2:Eq s5:ndrec]",
+        "statement_sha256": "bc9f0f74c2d9332015d5a883bb5562c81b7aaa36a9488f0a5a4b50151776ad34"
+      },
+      {
+        "advice_frame_sha256": "c3a0d05214f9946e0d7679b262413abd414c54fbc5a6117d5cbc5a476dc6b429",
+        "detail": "bound=1;0+1;1+1 iota=0 k=0 lparams=2",
+        "kind": "def",
+        "level_params": 2,
+        "line": 2938,
+        "name": "[s2:Eq s7:casesOn]",
+        "statement_sha256": "9689e01d408a6d0b5851176b9dff4cfab5aab947e25ec9ffd746572655c05de8"
+      },
+      {
+        "advice_frame_sha256": "e544f086407166a647c983a216c4e1e244725b9d79a9fea7a39af9154efa0478",
+        "detail": "bound=2;0+1 iota=0 k=0 lparams=1",
+        "kind": "def",
+        "level_params": 1,
+        "line": 3069,
+        "name": "[s3:Nat s3:beq s7:match_1]",
+        "statement_sha256": "a54269485a5fa8a5bcd4940af4ed1869bd2f81bf61a4e2157bcf29c110a91e08"
+      },
+      {
+        "advice_frame_sha256": "4fccbb87529b546a5af4141e6df28d46be91016c8502a33d1c5f2c5f08cbd26e",
+        "detail": "bound=2 iota=0 k=0 lparams=0",
+        "kind": "def",
+        "level_params": 0,
+        "line": 3126,
+        "name": "[s8:_private s4:Init s7:Prelude n0 s18:noConfusion_of_Nat s3:aux s9:match_1_1]",
+        "statement_sha256": "6a33f387f605f37bb66329dfb63746c775e0b090c87fd697b7c23a65d9114aa8"
+      },
+      {
+        "advice_frame_sha256": "6b70cd0f20a31c39ed0e8c4de4f5cce9a10533fb9aa2d251abeda709dd2d3cd2",
+        "detail": "bound=1;0+1;1+1 iota=0 k=0 lparams=2",
+        "kind": "thm",
+        "level_params": 2,
+        "line": 3226,
+        "name": "[s8:congrArg]",
+        "statement_sha256": "770e4aedccd9599b1cec168c57c45e0ebc4fb84a11eb92e54517bb7c4ffb20e5"
+      },
+      {
+        "advice_frame_sha256": "4fccbb87529b546a5af4141e6df28d46be91016c8502a33d1c5f2c5f08cbd26e",
+        "detail": "bound=2 iota=0 k=0 lparams=0",
+        "kind": "def",
+        "level_params": 0,
+        "line": 3478,
+        "name": "[s8:_private s4:Init s7:Prelude n0 s3:Nat s7:zero_le s9:match_1_1]",
+        "statement_sha256": "6a33f387f605f37bb66329dfb63746c775e0b090c87fd697b7c23a65d9114aa8"
+      },
+      {
+        "advice_frame_sha256": "320030681013ec6851c2d0dfac3f163b09b81aa67580bef1aa426efdc250eb53",
+        "detail": "bound=1;0+1 iota=0 k=0 lparams=1",
+        "kind": "thm",
+        "level_params": 1,
+        "line": 3808,
+        "name": "[s2:Eq s4:symm]",
+        "statement_sha256": "2fccbe06bfb8e9d0d46ddf0f84fd9fef185afc9999fa4427409d444a4daa0ad8"
+      },
+      {
+        "advice_frame_sha256": "36efd2a19ad08d75435d48b1ae750504066f86348f6ca78668ef42607c36cb62",
+        "detail": "bound=2;0+2 iota=0 k=0 lparams=1",
+        "kind": "def",
+        "level_params": 1,
+        "line": 3837,
+        "name": "[s4:cast]",
+        "statement_sha256": "a7b64c2cc27c93dcba378bdc7f06febf39f04d70e828e0ee268b41f19bc7f7e3"
+      },
+      {
+        "advice_frame_sha256": "8242a2590edfa38c59e7fc280da43a3af02946a60a390336d210c1a5a1edb116",
+        "detail": "bound=1;0+1 iota=0 k=0 lparams=1",
+        "kind": "def",
+        "level_params": 1,
+        "line": 5515,
+        "name": "[s12:namedPattern]",
+        "statement_sha256": "48ddaf076a4245e6338988132af1db512b39210fc28bc29db4670393b8ff5ed3"
+      },
+      {
+        "advice_frame_sha256": "9005c31c12f9d8474f9627a4ae4c8b4120e6d813c3455991ead8e2c4037053bc",
+        "detail": "bound=2;0+2 iota=0 k=0 lparams=1",
+        "kind": "def",
+        "level_params": 1,
+        "line": 6821,
+        "name": "[s3:Nat s15:noConfusionType]",
+        "statement_sha256": "827683584d95d87cb081294d3e6f6307488046e2574c4773e433a1adc1f56f06"
+      },
+      {
+        "advice_frame_sha256": "66e26d548a2f4d4435cabec45c59b5223966e83422d46fcd8cca5aab74a49dc2",
+        "detail": "bound=2;0+2 iota=1 k=0 lparams=1",
+        "kind": "def",
+        "level_params": 1,
+        "line": 6860,
+        "name": "[s3:Nat s11:noConfusion]",
+        "statement_sha256": "5b244fe91e8e3c3c030f8bdcbb79964b7cfdadefbf6104e5d2a8725e6f4ac7e6"
+      },
+      {
+        "advice_frame_sha256": "4fccbb87529b546a5af4141e6df28d46be91016c8502a33d1c5f2c5f08cbd26e",
+        "detail": "bound=2 iota=0 k=0 lparams=0",
+        "kind": "def",
+        "level_params": 0,
+        "line": 7315,
+        "name": "[s8:_private s4:Init s7:Prelude n0 s3:Nat s7:pred_le s9:match_1_1]",
+        "statement_sha256": "6a33f387f605f37bb66329dfb63746c775e0b090c87fd697b7c23a65d9114aa8"
+      },
+      {
+        "advice_frame_sha256": "968a30aef9ffff66f59fb24eba5c92aa20c7c902e3ec792b76f30937e243bbf0",
+        "detail": "bound=1;0+1 iota=0 k=0 lparams=1",
+        "kind": "def",
+        "level_params": 1,
+        "line": 8155,
+        "name": "[s2:id]",
+        "statement_sha256": "5ad16c24b03d203e7b9a36d1aa3767bb13f940520694b17bad46513ed9107f0c"
+      },
+      {
+        "advice_frame_sha256": "4fccbb87529b546a5af4141e6df28d46be91016c8502a33d1c5f2c5f08cbd26e",
+        "detail": "bound=2 iota=0 k=0 lparams=0",
+        "kind": "def",
+        "level_params": 0,
+        "line": 8203,
+        "name": "[s8:_private s4:Init s7:Prelude n0 s3:Nat s8:lt_or_ge s9:match_1_5]",
+        "statement_sha256": "6a33f387f605f37bb66329dfb63746c775e0b090c87fd697b7c23a65d9114aa8"
+      },
+      {
+        "advice_frame_sha256": "968a30aef9ffff66f59fb24eba5c92aa20c7c902e3ec792b76f30937e243bbf0",
+        "detail": "bound=1;0+1 iota=0 k=0 lparams=1",
+        "kind": "def",
+        "level_params": 1,
+        "line": 10218,
+        "name": "[s8:optParam]",
+        "statement_sha256": "d47bc11ebcfe1589eb62ae2bc3178dfe6cedba3ffb4a5bf515b11d9204fa8427"
+      }
+    ],
+    "declaration_records": 310,
+    "inside_fragment": 22,
+    "ordinary_declarations": 256,
+    "outside_fragment": 285,
+    "recognised_families": 3,
+    "refused_inside": 0
+  },
+  "labels": {
+    "checker": "kcheck_labelled, KCheck.kcheckBytes (by definition KCheck.checker's kcheck from Advice.start of the frame); this run claims NO soundness: whether a theorem of KCheckSpec.C3Owes KCheck.checker is in source is the scoreboard's checker-soundness line, and nothing shown ties the executable upstream Lean compiled to the term that theorem is about",
+    "compiled_by": "upstream Lean (lake build under the pinned toolchain); not Clean, not Trust",
+    "loader": "interim, unproved; an inductive record's recursor and rules are compared with the base family by the loader, never checked by kcheck",
+    "site": "none: no acceptance of clean or Trust consults this run"
+  },
+  "real_declarations_decided": 0,
+  "real_declarations_decided_reason": "no site consults the run; steps K4b and K5 of the interim thread owe the first one",
+  "run": {
+    "command": "kcheck-run-interim <export> <advice>, built by `lake build` in a scratch copy of theories/",
+    "executable_sha256": "45d8af95c8fa13d1f36dd926b43f387cc449ee05d29bb3a0929bdd65042fb463",
+    "lean_toolchain": "leanprover/lean4:v4.30.0-rc2",
+    "lean_version": "Lean (version 4.30.0-rc2, arm64-apple-darwin24.6.0, commit 3dc1a088b6d2d8eafe25a7cd7ec7b58d731bd7cc, Release)"
+  },
+  "schema": "clean.kcheck_coverage.v1",
+  "sources": {
+    "theories/cic_l/CICL/ConstructorUniverse.lean": "3d8c8f59903458a90a76d83d0bd27e67ba005da9d2afd08d39462f20e32bb59a",
+    "theories/cic_l/CICL/CoreTyping.lean": "cfe57d4475d61abbce8c271a1882ea6f1a844beb5fccf536027f3b7fa6fed514",
+    "theories/cic_l/CICL/Declaration.lean": "c0fdf5cc2e60dc2293ca52ba06798b845186505b91998ac55fe8f57ed90ba7fc",
+    "theories/cic_l/CICL/Expr.lean": "28c21c7df17cdc3dfab9111947eab3232db5a4c802106ce260c2eb734a758e7f",
+    "theories/cic_l/CICL/Level.lean": "9f21b52d871cb6b3c57f65cc6b02c6f552c32f1521d6c01cfc0743ccc1be330f",
+    "theories/cic_l/CICL/LevelDecide.lean": "688750966c7e4810ace641d154cfdcffa9a729fa6082e0828078ee92da56be1d",
+    "theories/cic_l/CICL/ListSupport.lean": "fb3151b45225883675e8eeea62d466cc903eaf8415f73bb2fd6bff508870819e",
+    "theories/cic_l/CICL/Substitution.lean": "ba10657e9f1b57f8f03d3a8bdf29d46c196d5e1f6c50a68b0b4c45f9190793ab",
+    "theories/cic_l/lake-manifest.json": "9b7320c4a61bfc137c1cf702534fa5fca42ad68e9652e05f7181a84e195151ba",
+    "theories/cic_l/lakefile.toml": "5d8090b233a03fdbbcebbcbf89a04be838e9c1dbdfca49823e2560fd829a0537",
+    "theories/cic_l/lean-toolchain": "ce4c4e3d87434b9663f46de25ce34b48a0cf0d392e0a320a0787b4674a2d7b61",
+    "theories/cic_l_model/lake-manifest.json": "b9d60056ef28202e805a43166bcd09b8eecddc938cfe6bd55c9b8249995bbb5e",
+    "theories/cic_l_model/lakefile.toml": "18bd3995cfe399ec593b99f5a0f0ebebccc41ff204d37a332c90c883eeff1b5e",
+    "theories/cic_l_model/lean-toolchain": "ce4c4e3d87434b9663f46de25ce34b48a0cf0d392e0a320a0787b4674a2d7b61",
+    "theories/kcheck_labelled/KCheck/Declaration.lean": "abb0c64771318500ecd0e0a2f228f19b2a4c139842ed107cfd9f99672c426abe",
+    "theories/kcheck_labelled/KCheck/Env.lean": "e042d299279b317e29de5869c18422ffee036380e1697227d359f34acfcc60ad",
+    "theories/kcheck_labelled/KCheck/Kernel.lean": "830c70a93a8f602a66e855360887f5633e50f5e117d989a5b156038e0c102dc2",
+    "theories/kcheck_labelled/KCheck/LevelBound.lean": "fcf4c952ec88c3f39de2ddf5418d1d911cfa69c648ca52c84028c6e828246e1b",
+    "theories/kcheck_labelled/KCheck/Refusal.lean": "1b4a48b8bf2db89a31f04bb340993aebbbebd18d89e17866292cb550c9371817",
+    "theories/kcheck_labelled/KCheck/Term.lean": "7071f439466f2b36e88a078c34819361b18ed6c9b5e6ae1644447caca30285c7",
+    "theories/kcheck_labelled/KCheck/Token.lean": "333231c5abf820c20288ed7128495eedc8ee9271623eeb6089bfb7d842a7f41e",
+    "theories/kcheck_labelled/lake-manifest.json": "5d32dff1b2494e39615d014b99c7b6543cfbdedbaff9424bce8b43c63282fa7a",
+    "theories/kcheck_labelled/lakefile.toml": "a037fd3055ca6d7db5a82d8503c34fca92336c6e6dd778657ad0c994a5eb99a6",
+    "theories/kcheck_labelled/lean-toolchain": "ce4c4e3d87434b9663f46de25ce34b48a0cf0d392e0a320a0787b4674a2d7b61",
+    "theories/kcheck_run/KCheckRun.lean": "305f2dce97935e579d36c5af5cd7482b4c7a97dcc51e1cabdda91ec2c0795e85",
+    "theories/kcheck_run/KCheckRun/Class.lean": "c95963dec2df519fd7603103cf8416184a8a242a66c86e2d80fd3d5e618e6d80",
+    "theories/kcheck_run/KCheckRun/Json.lean": "3e389d7d6905acb0454fa2478d4646eb397c4d25a36fdb794e9ab7bc80ad0547",
+    "theories/kcheck_run/KCheckRun/Loader.lean": "54ef1ade1be355738212b389936e61af6c3769459af551536055a241327b0afe",
+    "theories/kcheck_run/KCheckRun/NameSet.lean": "fda0a25d7a7cf7403b4db7c6f7033e57c34e4a4fde6b380b5251f6368ebcd280",
+    "theories/kcheck_run/KCheckRun/Recognise.lean": "85629b3eb6410abc7cec17828fb6a2f73e52a2c5f4f5746e562ae2ffaee05de7",
+    "theories/kcheck_run/KCheckRun/Run.lean": "f0e7253d54fd8fa5ac9f186fe3383957466dfc75c174b09f1ac161dd83f39127",
+    "theories/kcheck_run/KCheckRun/Tables.lean": "4a018983590cacf54643487b0a683515bb2f68cdc9aabb8f6c5e9863201c28d3",
+    "theories/kcheck_run/KCheckRunMain.lean": "ef2e6d75b06d576420323812a35ecff93cadcbdc13d5031349fd52dd9ebad0ee",
+    "theories/kcheck_run/lake-manifest.json": "8edb3392baa6aa9245389f68c7d2fe10e273c369e316e39272d2ed62a30ed9d5",
+    "theories/kcheck_run/lakefile.toml": "dbaf49a40e32988b7785d5864fc246e146c040f15f41f958288e0548d69fc646",
+    "theories/kcheck_run/lean-toolchain": "ce4c4e3d87434b9663f46de25ce34b48a0cf0d392e0a320a0787b4674a2d7b61",
+    "theories/kcheck_spec/KCheckSpec/Base/Env.lean": "6729499d74d2e0b742e7cc3d30a398a727020e237085403345a95a468f4b12ec",
+    "theories/kcheck_spec/KCheckSpec/Env.lean": "ce97b84e8fc55084d153b098ef1ffb75f87848fc898167202996907378ef7763",
+    "theories/kcheck_spec/KCheckSpec/Term.lean": "7ea01d0321f06b119321da4404e326677bbde3f3d8ef33697efb9fa8c60f1197",
+    "theories/kcheck_spec/lake-manifest.json": "745b0bda9790c7efed700dc1e6a2d4a53ebefb1cc8a5f8c65f5d47fcde5ed7e8",
+    "theories/kcheck_spec/lakefile.toml": "7da7bc6e3f9676f530268147953e86ae03d9263ee27b3e303e925122b40c3372",
+    "theories/kcheck_spec/lean-toolchain": "ce4c4e3d87434b9663f46de25ce34b48a0cf0d392e0a320a0787b4674a2d7b61"
+  },
+  "transcript": {
+    "path": "data/kcheck_coverage/prelude_roots.transcript.txt",
+    "sha256": "75c38eafc22e6fd23ff41ddce5615c1f99f95b09969fee821b35060e4bedc64e"
+  },
+  "what_this_is": "Step K3 of the interim thread of docs/plans/SELF_PROOF_EXECUTION_PLAN_2026-11-12.md: the real declarations the adopted checker accepts in one run of theories/kcheck_run, re-derived by scripts/kcheck_coverage.py. An accepted declaration is not a proved one and decides no site."
+}

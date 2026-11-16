@@ -21,7 +21,7 @@ impl ProofLibrary {
             ProofTerm::new(
                 "gf01_clause_poly_soundness",
                 "fun (nv : Nat) (enc : ClausePolyEncoding nv) => \
-                 ClausePolyEncoding.rec nv \
+                 @ClausePolyEncoding.rec nv \
                    (fun (e : ClausePolyEncoding nv) => ClausePolySoundness nv e) \
                    (fun (var : Nat) => ClausePolySoundness.single_pos nv var) \
                    (fun (var : Nat) => ClausePolySoundness.single_neg nv var) \
@@ -45,7 +45,7 @@ impl ProofLibrary {
             ProofTerm::new(
                 "gf02_tseitin_separation",
                 "fun (nv : Nat) => \
-                 Nat.rec \
+                 @Nat.rec \
                    (fun (k : Nat) => TseitinSeparation k) \
                    (TseitinSeparation.single_vertex 0) \
                    (fun (m : Nat) (ih : TseitinSeparation m) => \
@@ -64,7 +64,7 @@ impl ProofLibrary {
             ProofTerm::new(
                 "gf03_boolean_groebner_termination",
                 "fun (mp : Nat) (step : GroebnerStep mp) => \
-                 GroebnerStep.rec mp \
+                 @GroebnerStep.rec mp \
                    (fun (s : GroebnerStep mp) => GroebnerTerminates mp s) \
                    (GroebnerTerminates.initial mp) \
                    (fun (i : Nat) (j : Nat) \

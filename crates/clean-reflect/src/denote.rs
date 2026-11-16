@@ -397,6 +397,7 @@ fn width_of_ty(ty: &Ty) -> Option<u32> {
         | Ty::Tuple(_)
         | Ty::Enum(_)
         | Ty::Func(_)
+        | Ty::FnItem(_)
         | Ty::Ref(_)
         | Ty::RefMut(_)
         | Ty::PtrConst(_)
@@ -1049,6 +1050,7 @@ fn alloc_cells(module: &Module, ty: &Ty, width: u32, base: u64) -> Result<Vec<u6
         | Ty::Tuple(_)
         | Ty::Enum(_)
         | Ty::Func(_)
+        | Ty::FnItem(_)
         | Ty::Ref(_)
         | Ty::RefMut(_)
         | Ty::PtrConst(_)
@@ -1254,6 +1256,7 @@ fn eval_heap_node(
             PtrData,
             PtrMetadata,
             PtrFromParts,
+            BoxDeref,
             AtomicLoad,
             AtomicStore,
             AtomicRMW,
@@ -1644,6 +1647,7 @@ fn denote_closed_zeroary(
                 PtrData,
                 PtrMetadata,
                 PtrFromParts,
+                BoxDeref,
                 AtomicLoad,
                 AtomicStore,
                 AtomicRMW,
@@ -1954,6 +1958,7 @@ fn f5_ownership_balance(module: &Module, func: &Function, depth: u32) -> Result<
                 PtrData,
                 PtrMetadata,
                 PtrFromParts,
+                BoxDeref,
                 AtomicLoad,
                 AtomicStore,
                 AtomicRMW,
@@ -2229,6 +2234,7 @@ pub fn denote_function(module: &Module, func: &Function) -> Result<TvDenotation,
             PtrData,
             PtrMetadata,
             PtrFromParts,
+            BoxDeref,
             AtomicLoad,
             AtomicStore,
             AtomicRMW,
@@ -2454,6 +2460,7 @@ fn eval_value_node(
             PtrData,
             PtrMetadata,
             PtrFromParts,
+            BoxDeref,
             AtomicLoad,
             AtomicStore,
             AtomicRMW,
@@ -2607,6 +2614,11 @@ fn fragment2_inst_label(inst: &Inst) -> String {
         // No current fragment has either, even for an unused constructor.
         Inst::MakeClosure { .. } => {
             "MakeClosure (runtime captures, trust-ir v63: no fragment models closures)"
+        }
+        // A source-owned Box validity fact is not an ordinary heap-load or
+        // pointer-copy license. No current denotation fragment models it.
+        Inst::BoxDeref { .. } => {
+            "BoxDeref (nominal source validity and pointee semantics are outside every fragment)"
         }
         // trust-ir v67-v69 tensor instructions compute whole tensor values
         // (contractions, element maps, reductions, views, gathers, scatters).
@@ -3554,3 +3566,7 @@ mod runtime_closure_tests;
 #[cfg(test)]
 #[path = "tensor_fragment_refusal_tests.rs"]
 mod tensor_fragment_refusal_tests;
+
+#[cfg(test)]
+#[path = "nominal_fragment_refusal_tests.rs"]
+mod nominal_fragment_refusal_tests;

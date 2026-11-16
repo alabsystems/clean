@@ -70,24 +70,24 @@ impl Specification {
     fn add_defval_none_inversion(&mut self) -> Result<(), SpecError> {
         let spine = "(apply_spine (kapp_args (KExpr.const n us)) v)";
         let cont = "(fun (o : OptionType KExpr) => opt_bind KExpr KExpr o \
-             (fun (val : KExpr) => OptionType.some KExpr \
+             (fun (val : KExpr) => @OptionType.some KExpr \
              (apply_spine (kapp_args (KExpr.const n us)) val)))";
         let src = format!(
             "def defval_none_of_delta_reduct_none (n : Name) (us : ListType Level) \
-             (hd : Eq (OptionType KExpr) {DR} (OptionType.none KExpr)) : \
-             Eq (OptionType KExpr) {DV} (OptionType.none KExpr) := \
-             OptionType.rec KExpr (fun (o : OptionType KExpr) => \
-             Eq (OptionType KExpr) {DV} o -> Eq (OptionType KExpr) {DV} (OptionType.none KExpr)) \
-             (fun (h : Eq (OptionType KExpr) {DV} (OptionType.none KExpr)) => h) \
-             (fun (v : KExpr) (h : Eq (OptionType KExpr) {DV} (OptionType.some KExpr v)) => \
+             (hd : @Eq (OptionType KExpr) {DR} (@OptionType.none KExpr)) : \
+             @Eq (OptionType KExpr) {DV} (@OptionType.none KExpr) := \
+             @OptionType.rec KExpr (fun (o : OptionType KExpr) => \
+             @Eq (OptionType KExpr) {DV} o -> @Eq (OptionType KExpr) {DV} (@OptionType.none KExpr)) \
+             (fun (h : @Eq (OptionType KExpr) {DV} (@OptionType.none KExpr)) => h) \
+             (fun (v : KExpr) (h : @Eq (OptionType KExpr) {DV} (@OptionType.some KExpr v)) => \
              option_none_ne_some KExpr {spine} \
-             (Eq (OptionType KExpr) {DV} (OptionType.none KExpr)) \
-             (Eq.trans (OptionType KExpr) (OptionType.none KExpr) {DR} \
-             (OptionType.some KExpr {spine}) \
-             (Eq.symm (OptionType KExpr) {DR} (OptionType.none KExpr) hd) \
+             (@Eq (OptionType KExpr) {DV} (@OptionType.none KExpr)) \
+             (Eq.trans (OptionType KExpr) (@OptionType.none KExpr) {DR} \
+             (@OptionType.some KExpr {spine}) \
+             (Eq.symm (OptionType KExpr) {DR} (@OptionType.none KExpr) hd) \
              (Eq.cong (OptionType KExpr) (OptionType KExpr) {cont} {DV} \
-             (OptionType.some KExpr v) h))) \
-             {DV} (Eq.refl (OptionType KExpr) {DV})",
+             (@OptionType.some KExpr v) h))) \
+             {DV} (@Eq.refl (OptionType KExpr) {DV})",
         );
         debug_assert!(Self::balanced(&src), "defval none inversion parens");
         self.add_recursive_def(
@@ -119,7 +119,7 @@ impl Specification {
     fn add_neutral_of_dead_head(&mut self) -> Result<(), SpecError> {
         let head = |x: &str| {
             format!(
-                "Eq (OptionType Name) (kexpr_const_name (kapp_fn {x})) (OptionType.some Name nm)"
+                "@Eq (OptionType Name) (kexpr_const_name (kapp_fn {x})) (@OptionType.some Name nm)"
             )
         };
         let mot = |x: &str| format!("({} -> is_neutral_red the_red_env {x})", head(x));
@@ -138,7 +138,7 @@ impl Specification {
             // already in the induction hypothesis's form — no transport.
             format!(
                 "(fun (f : KExpr) (a : KExpr) (ihf : {motf}) (_iha : {mota}) (h : {happ}) => \
-                 is_neutral_red.app the_red_env f a (ihf h))",
+                 @is_neutral_red.app the_red_env f a (ihf h))",
                 motf = mot("f"),
                 mota = mot("a"),
                 happ = head("(KExpr.app f a)"),
@@ -163,7 +163,7 @@ impl Specification {
             // takes the head equation directly.
             format!(
                 "(fun (n : Name) (us : ListType Level) (h : {hc}) => \
-                 is_neutral_red.const the_red_env n us \
+                 @is_neutral_red.const the_red_env n us \
                  (delta_reduct_eq_none_of_defval_none (red_def the_red_env) \
                  (KExpr.const n us) nm h hdef))",
                 hc = head("(KExpr.const n us)"),
@@ -184,9 +184,9 @@ impl Specification {
             dead("(KExpr.lit v)", "(v : Nat)"),
         ];
         let src = format!(
-            "def is_neutral_red_of_dead_head (nm : Name) (hdef : Eq (OptionType KExpr) \
-             (defval_for (red_def the_red_env) nm) (OptionType.none KExpr)) (e : KExpr) : \
-             {mote} := KExpr.rec (fun (x : KExpr) => {motx}) {arms} e",
+            "def is_neutral_red_of_dead_head (nm : Name) (hdef : @Eq (OptionType KExpr) \
+             (defval_for (red_def the_red_env) nm) (@OptionType.none KExpr)) (e : KExpr) : \
+             {mote} := @KExpr.rec (fun (x : KExpr) => {motx}) {arms} e",
             mote = mot("e"),
             motx = mot("x"),
             arms = arms.join(" "),
@@ -212,21 +212,21 @@ impl Specification {
     fn add_neutral_head_is_ilift(&mut self) -> Result<(), SpecError> {
         let goal = |x: &str| {
             format!(
-                "Eq (OptionType KExpr) (reduce_app_head_red_wh the_red_env wh a {x} cf) \
+                "@Eq (OptionType KExpr) (reduce_app_head_red_wh the_red_env wh a {x} cf) \
                  (opt_app_ilift_wh the_red_env wh {x} a cf)"
             )
         };
         let src = format!(
             "def reduce_app_head_neutral_is_ilift (wh : KExpr -> OptionType KExpr) (a : KExpr) \
              (cf : OptionType KExpr) (f : KExpr) (hn : is_neutral_red the_red_env f) : {goalf} := \
-             is_neutral_red.rec the_red_env \
+             @is_neutral_red.rec the_red_env \
              (fun (x : KExpr) (_h : is_neutral_red the_red_env x) => {goalx}) \
              (fun (n : Name) (us : ListType Level) \
-             (_hd : Eq (OptionType KExpr) {DR} (OptionType.none KExpr)) => \
-             Eq.refl (OptionType KExpr) \
+             (_hd : @Eq (OptionType KExpr) {DR} (@OptionType.none KExpr)) => \
+             @Eq.refl (OptionType KExpr) \
              (opt_app_ilift_wh the_red_env wh (KExpr.const n us) a cf)) \
              (fun (g : KExpr) (b : KExpr) (_hg : is_neutral_red the_red_env g) \
-             (_ih : {goalg}) => Eq.refl (OptionType KExpr) \
+             (_ih : {goalg}) => @Eq.refl (OptionType KExpr) \
              (opt_app_ilift_wh the_red_env wh (KExpr.app g b) a cf)) f hn",
             goalf = goal("f"),
             goalx = goal("x"),
@@ -252,8 +252,8 @@ impl Specification {
     fn add_neutral_step_none(&mut self) -> Result<(), SpecError> {
         let no_step = |x: &str| {
             format!(
-                "Eq (OptionType KExpr) (reduce_once_red_wh the_red_env wh {x}) \
-                 (OptionType.none KExpr)"
+                "@Eq (OptionType KExpr) (reduce_once_red_wh the_red_env wh {x}) \
+                 (@OptionType.none KExpr)"
             )
         };
         let motive = format!(
@@ -268,15 +268,15 @@ impl Specification {
             "(fun (f : KExpr) (a : KExpr) (hnf : is_neutral_red the_red_env f) \
              (ih : {headf} -> {nonef}) (hh : {headapp}) => \
              Eq.trans (OptionType KExpr) (reduce_once_red_wh the_red_env wh (KExpr.app f a)) \
-             (opt_app_ilift_wh the_red_env wh f a (OptionType.none KExpr)) \
-             (OptionType.none KExpr) \
+             (opt_app_ilift_wh the_red_env wh f a (@OptionType.none KExpr)) \
+             (@OptionType.none KExpr) \
              (Eq.trans (OptionType KExpr) (reduce_once_red_wh the_red_env wh (KExpr.app f a)) \
-             (reduce_app_head_red_wh the_red_env wh a f (OptionType.none KExpr)) \
-             (opt_app_ilift_wh the_red_env wh f a (OptionType.none KExpr)) \
+             (reduce_app_head_red_wh the_red_env wh a f (@OptionType.none KExpr)) \
+             (opt_app_ilift_wh the_red_env wh f a (@OptionType.none KExpr)) \
              (Eq.cong (OptionType KExpr) (OptionType KExpr) \
              (fun (o : OptionType KExpr) => reduce_app_head_red_wh the_red_env wh a f o) \
-             (reduce_once_red_wh the_red_env wh f) (OptionType.none KExpr) (ih hh)) \
-             (reduce_app_head_neutral_is_ilift wh a (OptionType.none KExpr) f hnf)) \
+             (reduce_once_red_wh the_red_env wh f) (@OptionType.none KExpr) (ih hh)) \
+             (reduce_app_head_neutral_is_ilift wh a (@OptionType.none KExpr) f hnf)) \
              (iota_reduct_whc_none_of_no_recmeta (red_rec the_red_env) wh (KExpr.app f a) nm \
              hh hrm))",
             headf = Self::head_is("f"),
@@ -285,12 +285,12 @@ impl Specification {
         );
         let src = format!(
             "def wh_step_none_of_neutral (wh : KExpr -> OptionType KExpr) (nm : Name) \
-             (hrm : Eq (OptionType RecMeta) (recmeta_for (red_rec the_red_env) nm) \
-             (OptionType.none RecMeta)) (e : KExpr) (hn : is_neutral_red the_red_env e) : \
+             (hrm : @Eq (OptionType RecMeta) (recmeta_for (red_rec the_red_env) nm) \
+             (@OptionType.none RecMeta)) (e : KExpr) (hn : is_neutral_red the_red_env e) : \
              {heade} -> {nonee} := \
-             is_neutral_red.rec the_red_env {motive} \
+             @is_neutral_red.rec the_red_env {motive} \
              (fun (n : Name) (us : ListType Level) \
-             (hd : Eq (OptionType KExpr) {DR} (OptionType.none KExpr)) \
+             (hd : @Eq (OptionType KExpr) {DR} (@OptionType.none KExpr)) \
              (_hh : {headconst}) => defval_none_of_delta_reduct_none n us hd) \
              {app_arm} e hn",
             heade = Self::head_is("e"),

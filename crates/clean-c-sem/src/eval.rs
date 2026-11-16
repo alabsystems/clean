@@ -241,7 +241,7 @@ impl State {
     /// function name when it decays to a function pointer (e.g. `fp = add;`),
     /// and an indirect call recovers the callee by mapping the block back to
     /// the function name. Returns `None` if `name` is not a known function.
-    pub fn function_pointer(&mut self, name: &str) -> UBResult<Option<Pointer>> {
+    pub(crate) fn function_pointer(&mut self, name: &str) -> UBResult<Option<Pointer>> {
         if !self.functions.contains_key(name) {
             return Ok(None);
         }
@@ -360,7 +360,7 @@ impl State {
     }
 
     /// Load a value from a memory location
-    pub fn load_value(&self, ptr: Pointer, ty: &CType) -> UBResult<CValue> {
+    pub(crate) fn load_value(&self, ptr: Pointer, ty: &CType) -> UBResult<CValue> {
         match ty.unqualified() {
             CType::Int(IntKind::Bool, _) => {
                 let b = self.memory.load_u8(ptr)?;
@@ -497,7 +497,12 @@ impl State {
     /// Read a bit-field at `ptr` (the storage unit), extracting `bit_width`
     /// bits starting at `bit_offset` (counted from the least-significant bit).
     /// The result is sign-extended for signed declared types (C11 6.7.2.1).
-    pub fn load_bitfield(&self, ptr: Pointer, ty: &CType, bits: BitFieldRef) -> UBResult<CValue> {
+    pub(crate) fn load_bitfield(
+        &self,
+        ptr: Pointer,
+        ty: &CType,
+        bits: BitFieldRef,
+    ) -> UBResult<CValue> {
         if bits.bit_width == 0 || bits.bit_width > bits.unit_bytes * 8 {
             return Err(UBKind::Other(format!(
                 "invalid bit-field width: {}",
@@ -535,7 +540,7 @@ impl State {
     /// Write a bit-field at `ptr` (the storage unit): the low `bit_width` bits
     /// of `value` replace bits `bit_offset..bit_offset+bit_width`; the rest of
     /// the storage unit is preserved. The value wraps to the field width.
-    pub fn store_bitfield(
+    pub(crate) fn store_bitfield(
         &mut self,
         ptr: Pointer,
         bits: BitFieldRef,
@@ -2088,7 +2093,10 @@ impl State {
 ///
 /// This never accepts a false static assertion: a controlling expression that
 /// folds to zero is always rejected.
-pub fn check_static_assert(cond: &CExpr, message: Option<&str>) -> Result<(), StaticAssertError> {
+pub(crate) fn check_static_assert(
+    cond: &CExpr,
+    message: Option<&str>,
+) -> Result<(), StaticAssertError> {
     let mut state = State::new();
     let value = state
         .eval_expr_to_value(cond)

@@ -206,7 +206,8 @@ pub(crate) fn install_library_with_rows(rows: &[(&str, SourceSystem, ImportConfi
 // ---------------------------------------------------------------------------
 
 fn elab(env: &mut Environment, src: &str) -> Result<ElabResult, ElabError> {
-    let decl = clean_parser::parse_decl(src).expect("fixture source parses");
+    let decl = clean_parser::parse_decl_exact(src)
+        .expect("fixture source parses as one complete declaration");
     crate::elaborate_decl_and_register(env, &decl)
 }
 
@@ -353,17 +354,50 @@ fn test_mathverse_import_isabelle_constant_usable_as_a_term() {
     clear_mathverse_library();
 }
 
-/// One `import` line, both systems, then a proof that cites each.
+/// Both systems imported into one session, then a proof that cites each.
+///
+/// One module per `import`, as Lean's grammar has it: the comma-separated list
+/// this test once used left the parser in `5018d30761`, and the lenient
+/// `parse_decl` then dropped the `, …` tail without a word, so the Isabelle name
+/// was never imported. The exact parser refuses that spelling outright.
 #[test]
 fn test_mathverse_import_serves_mathlib_and_isabelle_in_one_session() {
     install_probe_library();
     let mut env = Environment::with_prelude();
 
-    elab(
-        &mut env,
+    // A single-declaration fixture must consume all its input. The old comma
+    // form silently imported only the first target through parse_decl's
+    // intentionally prefix-only API; neither tail is a second import here.
+    for source in [
         "import Mathverse.Mathlib.probe_id_thm, Mathverse.Isabelle.probe_isa_id_thm",
-    )
-    .expect("one import declaration may name constants from both corpora");
+        "import Mathverse.Mathlib.probe_id_thm import Mathverse.Isabelle.probe_isa_id_thm",
+    ] {
+        match clean_parser::parse_decl_exact(source) {
+            Err(clean_parser::ParseError::UnexpectedToken { message, .. }) => assert!(
+                message.starts_with("trailing input after declaration"),
+                "the single-declaration guard must name the unused tail: {message}"
+            ),
+            other => panic!("an import tail must not be silently accepted: {other:?}"),
+        }
+    }
+
+    elab(&mut env, "import Mathverse.Mathlib.probe_id_thm")
+        .expect("the first valid import must pass the Strict gate");
+    assert!(env.get_const(&Name::from_string("probe_id_thm")).is_some());
+    assert!(
+        env.get_const(&Name::from_string("probe_isa_id_thm"))
+            .is_none(),
+        "the first import must not load an unrequested constant from another corpus"
+    );
+    elab(&mut env, "import Mathverse.Isabelle.probe_isa_id_thm")
+        .expect("the second valid import must pass the same Strict gate");
+    assert!(
+        env.get_const(&Name::from_string("probe_id_thm")).is_some()
+            && env
+                .get_const(&Name::from_string("probe_isa_id_thm"))
+                .is_some(),
+        "both imports must leave their genuine declarations in the same environment"
+    );
 
     elab(
         &mut env,

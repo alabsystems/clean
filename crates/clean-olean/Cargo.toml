@@ -111,6 +111,12 @@ clean-olean = { path = ".", features = ["test-support"] }
 name = "kcheck_trace_experiment"
 required-features = ["kcheck-trace"]
 
+[[bin]]
+# Candidate advice from the feature-gated tracing core beside the fenced
+# reference entry; kcheck, not this producer, decides whether frames replay.
+name = "kcheck_advice_emit"
+required-features = ["kcheck-trace"]
+
 [[test]]
 name = "kcheck_advice_producer"
 required-features = ["kcheck-trace"]

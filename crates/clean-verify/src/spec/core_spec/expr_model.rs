@@ -28,9 +28,9 @@ impl Specification {
         // instantiate_at_bvar: unfolding lemma for bvar case
         self.add_definition(SpecDefinition {
             name: "instantiate_at_bvar".to_string(),
-            type_src: "forall (i : Nat) (val : KExpr) (depth : Nat), Eq KExpr (instantiate_at (KExpr.bvar i) val depth) (instantiate_bvar_at i depth val)".to_string(),
+            type_src: "forall (i : Nat) (val : KExpr) (depth : Nat), @Eq KExpr (instantiate_at (KExpr.bvar i) val depth) (instantiate_bvar_at i depth val)".to_string(),
             value_src: Some(
-                "fun (i : Nat) (val : KExpr) (depth : Nat) => Eq.refl KExpr (instantiate_bvar_at i depth val)".to_string()
+                "fun (i : Nat) (val : KExpr) (depth : Nat) => @Eq.refl KExpr (instantiate_bvar_at i depth val)".to_string()
             ),
             is_axiom: false,
             description: "Unfolding: instantiate_at (bvar i) val depth = instantiate_bvar_at i depth val.".to_string(),
@@ -51,12 +51,12 @@ impl Specification {
         // Part of #464.
         self.add_definition_structural(SpecDefinition {
             name: "instantiate_bvar_at_below".to_string(),
-            type_src: "forall (idx : Nat) (depth : Nat) (val : KExpr), Eq Nat (Nat.sub depth idx) (Nat.succ (Nat.sub (Nat.sub depth idx) (Nat.succ Nat.zero))) -> Eq KExpr (instantiate_bvar_at idx depth val) (KExpr.bvar idx)".to_string(),
+            type_src: "forall (idx : Nat) (depth : Nat) (val : KExpr), @Eq Nat (Nat.sub depth idx) (Nat.succ (Nat.sub (Nat.sub depth idx) (Nat.succ Nat.zero))) -> @Eq KExpr (instantiate_bvar_at idx depth val) (KExpr.bvar idx)".to_string(),
             value_src: Some(concat!(
                 "fun (idx : Nat) (depth : Nat) (val : KExpr) ",
-                "(h : Eq Nat (Nat.sub depth idx) (Nat.succ (Nat.sub (Nat.sub depth idx) (Nat.succ Nat.zero)))) => ",
-                "Eq.cong Nat KExpr ",
-                "(fun (n : Nat) => Nat.rec (fun (_ : Nat) => KExpr) ",
+                "(h : @Eq Nat (Nat.sub depth idx) (Nat.succ (Nat.sub (Nat.sub depth idx) (Nat.succ Nat.zero)))) => ",
+                "@Eq.cong Nat KExpr ",
+                "(fun (n : Nat) => @Nat.rec (fun (_ : Nat) => KExpr) ",
                 "(instantiate_bvar_geq idx depth val) ",
                 "(fun (_ : Nat) (_ : KExpr) => KExpr.bvar idx) n) ",
                 "(Nat.sub depth idx) ",
@@ -84,12 +84,12 @@ impl Specification {
         // Part of #464.
         self.add_definition_structural(SpecDefinition {
             name: "instantiate_bvar_at_eq".to_string(),
-            type_src: "forall (idx : Nat) (val : KExpr), Eq KExpr (instantiate_bvar_at idx idx val) (lift_at val Nat.zero idx)".to_string(),
+            type_src: "forall (idx : Nat) (val : KExpr), @Eq KExpr (instantiate_bvar_at idx idx val) (lift_at val Nat.zero idx)".to_string(),
             value_src: Some(concat!(
                 "fun (idx : Nat) (val : KExpr) => ",
-                "Eq.cong Nat KExpr ",
-                "(fun (n : Nat) => Nat.rec (fun (_ : Nat) => KExpr) ",
-                "(Nat.rec (fun (_ : Nat) => KExpr) ",
+                "@Eq.cong Nat KExpr ",
+                "(fun (n : Nat) => @Nat.rec (fun (_ : Nat) => KExpr) ",
+                "(@Nat.rec (fun (_ : Nat) => KExpr) ",
                 "(lift_at val Nat.zero idx) ",
                 "(fun (_ : Nat) (_ : KExpr) => KExpr.bvar (Nat.sub idx (Nat.succ Nat.zero))) n) ",
                 "(fun (_ : Nat) (_ : KExpr) => KExpr.bvar idx) n) ",
@@ -121,28 +121,28 @@ impl Specification {
             name: "instantiate_bvar_at_eq_from_zero_witnesses".to_string(),
             type_src: concat!(
                 "forall (idx : Nat) (depth : Nat) (val : KExpr), ",
-                "Eq Nat (Nat.sub depth idx) Nat.zero -> ",
-                "Eq Nat (Nat.sub idx depth) Nat.zero -> ",
-                "Eq KExpr (instantiate_bvar_at idx depth val) (lift_at val Nat.zero depth)",
+                "@Eq Nat (Nat.sub depth idx) Nat.zero -> ",
+                "@Eq Nat (Nat.sub idx depth) Nat.zero -> ",
+                "@Eq KExpr (instantiate_bvar_at idx depth val) (lift_at val Nat.zero depth)",
             )
             .to_string(),
             value_src: Some(concat!(
                 "fun (idx : Nat) (depth : Nat) (val : KExpr) ",
-                "(h_outer : Eq Nat (Nat.sub depth idx) Nat.zero) ",
-                "(h_inner : Eq Nat (Nat.sub idx depth) Nat.zero) => ",
-                "Eq.trans KExpr ",
+                "(h_outer : @Eq Nat (Nat.sub depth idx) Nat.zero) ",
+                "(h_inner : @Eq Nat (Nat.sub idx depth) Nat.zero) => ",
+                "@Eq.trans KExpr ",
                 "(instantiate_bvar_at idx depth val) ",
                 "(instantiate_bvar_geq idx depth val) ",
                 "(lift_at val Nat.zero depth) ",
-                "(Eq.cong Nat KExpr ",
-                "(fun (n : Nat) => Nat.rec (fun (_ : Nat) => KExpr) ",
+                "(@Eq.cong Nat KExpr ",
+                "(fun (n : Nat) => @Nat.rec (fun (_ : Nat) => KExpr) ",
                 "(instantiate_bvar_geq idx depth val) ",
                 "(fun (_ : Nat) (_ : KExpr) => KExpr.bvar idx) n) ",
                 "(Nat.sub depth idx) ",
                 "Nat.zero ",
                 "h_outer) ",
-                "(Eq.cong Nat KExpr ",
-                "(fun (n : Nat) => Nat.rec (fun (_ : Nat) => KExpr) ",
+                "(@Eq.cong Nat KExpr ",
+                "(fun (n : Nat) => @Nat.rec (fun (_ : Nat) => KExpr) ",
                 "(lift_at val Nat.zero depth) ",
                 "(fun (_ : Nat) (_ : KExpr) => KExpr.bvar (Nat.sub idx (Nat.succ Nat.zero))) n) ",
                 "(Nat.sub idx depth) ",
@@ -166,16 +166,16 @@ impl Specification {
             name: "instantiate_at_bvar_eq_from_zero_witnesses".to_string(),
             type_src: concat!(
                 "forall (idx : Nat) (depth : Nat) (val : KExpr), ",
-                "Eq Nat (Nat.sub depth idx) Nat.zero -> ",
-                "Eq Nat (Nat.sub idx depth) Nat.zero -> ",
-                "Eq KExpr (instantiate_at (KExpr.bvar idx) val depth) (lift_at val Nat.zero depth)",
+                "@Eq Nat (Nat.sub depth idx) Nat.zero -> ",
+                "@Eq Nat (Nat.sub idx depth) Nat.zero -> ",
+                "@Eq KExpr (instantiate_at (KExpr.bvar idx) val depth) (lift_at val Nat.zero depth)",
             )
             .to_string(),
             value_src: Some(concat!(
                 "fun (idx : Nat) (depth : Nat) (val : KExpr) ",
-                "(h_outer : Eq Nat (Nat.sub depth idx) Nat.zero) ",
-                "(h_inner : Eq Nat (Nat.sub idx depth) Nat.zero) => ",
-                "Eq.trans KExpr ",
+                "(h_outer : @Eq Nat (Nat.sub depth idx) Nat.zero) ",
+                "(h_inner : @Eq Nat (Nat.sub idx depth) Nat.zero) => ",
+                "@Eq.trans KExpr ",
                 "(instantiate_at (KExpr.bvar idx) val depth) ",
                 "(instantiate_bvar_at idx depth val) ",
                 "(lift_at val Nat.zero depth) ",
@@ -211,27 +211,27 @@ impl Specification {
             name: "instantiate_bvar_at_above".to_string(),
             type_src: concat!(
                 "forall (idx : Nat) (depth : Nat) (val : KExpr), ",
-                "Eq Nat (Nat.sub depth idx) Nat.zero -> ",
-                "Eq Nat (Nat.sub idx depth) (Nat.succ (Nat.sub (Nat.sub idx depth) (Nat.succ Nat.zero))) -> ",
-                "Eq KExpr (instantiate_bvar_at idx depth val) (KExpr.bvar (Nat.sub idx (Nat.succ Nat.zero)))",
+                "@Eq Nat (Nat.sub depth idx) Nat.zero -> ",
+                "@Eq Nat (Nat.sub idx depth) (Nat.succ (Nat.sub (Nat.sub idx depth) (Nat.succ Nat.zero))) -> ",
+                "@Eq KExpr (instantiate_bvar_at idx depth val) (KExpr.bvar (Nat.sub idx (Nat.succ Nat.zero)))",
             ).to_string(),
             value_src: Some(concat!(
                 "fun (idx : Nat) (depth : Nat) (val : KExpr) ",
-                "(h1 : Eq Nat (Nat.sub depth idx) Nat.zero) ",
-                "(h2 : Eq Nat (Nat.sub idx depth) (Nat.succ (Nat.sub (Nat.sub idx depth) (Nat.succ Nat.zero)))) => ",
-                "Eq.trans KExpr ",
-                "(Nat.rec (fun (_ : Nat) => KExpr) ",
+                "(h1 : @Eq Nat (Nat.sub depth idx) Nat.zero) ",
+                "(h2 : @Eq Nat (Nat.sub idx depth) (Nat.succ (Nat.sub (Nat.sub idx depth) (Nat.succ Nat.zero)))) => ",
+                "@Eq.trans KExpr ",
+                "(@Nat.rec (fun (_ : Nat) => KExpr) ",
                 "(instantiate_bvar_geq idx depth val) ",
                 "(fun (_ : Nat) (_ : KExpr) => KExpr.bvar idx) (Nat.sub depth idx)) ",
                 "(instantiate_bvar_geq idx depth val) ",
                 "(KExpr.bvar (Nat.sub idx (Nat.succ Nat.zero))) ",
-                "(Eq.cong Nat KExpr ",
-                "(fun (n : Nat) => Nat.rec (fun (_ : Nat) => KExpr) ",
+                "(@Eq.cong Nat KExpr ",
+                "(fun (n : Nat) => @Nat.rec (fun (_ : Nat) => KExpr) ",
                 "(instantiate_bvar_geq idx depth val) ",
                 "(fun (_ : Nat) (_ : KExpr) => KExpr.bvar idx) n) ",
                 "(Nat.sub depth idx) Nat.zero h1) ",
-                "(Eq.cong Nat KExpr ",
-                "(fun (n : Nat) => Nat.rec (fun (_ : Nat) => KExpr) ",
+                "(@Eq.cong Nat KExpr ",
+                "(fun (n : Nat) => @Nat.rec (fun (_ : Nat) => KExpr) ",
                 "(lift_at val Nat.zero depth) ",
                 "(fun (_ : Nat) (_ : KExpr) => KExpr.bvar (Nat.sub idx (Nat.succ Nat.zero))) n) ",
                 "(Nat.sub idx depth) ",
@@ -269,9 +269,11 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "kapp_fn_app".to_string(),
             type_src:
-                "forall (f : KExpr) (a : KExpr), Eq KExpr (kapp_fn (KExpr.app f a)) (kapp_fn f)"
+                "forall (f : KExpr) (a : KExpr), @Eq KExpr (kapp_fn (KExpr.app f a)) (kapp_fn f)"
                     .to_string(),
-            value_src: Some("fun (f : KExpr) (a : KExpr) => Eq.refl KExpr (kapp_fn f)".to_string()),
+            value_src: Some(
+                "fun (f : KExpr) (a : KExpr) => @Eq.refl KExpr (kapp_fn f)".to_string(),
+            ),
             is_axiom: false,
             description:
                 "Unfolding: kapp_fn (app f a) = kapp_fn f (the app arm returns the head of f). \
@@ -290,11 +292,11 @@ impl Specification {
             name: "kapp_fn_const".to_string(),
             type_src: concat!(
                 "forall (n : Name) (us : ListType Level), ",
-                "Eq KExpr (kapp_fn (KExpr.const n us)) (KExpr.const n us)"
+                "@Eq KExpr (kapp_fn (KExpr.const n us)) (KExpr.const n us)"
             )
             .to_string(),
             value_src: Some(
-                "fun (n : Name) (us : ListType Level) => Eq.refl KExpr (KExpr.const n us)"
+                "fun (n : Name) (us : ListType Level) => @Eq.refl KExpr (KExpr.const n us)"
                     .to_string(),
             ),
             is_axiom: false,
@@ -316,11 +318,11 @@ impl Specification {
             name: "kapp_arg_count_app".to_string(),
             type_src: concat!(
                 "forall (f : KExpr) (a : KExpr), ",
-                "Eq Nat (kapp_arg_count (KExpr.app f a)) (Nat.succ (kapp_arg_count f))"
+                "@Eq Nat (kapp_arg_count (KExpr.app f a)) (Nat.succ (kapp_arg_count f))"
             )
             .to_string(),
             value_src: Some(
-                "fun (f : KExpr) (a : KExpr) => Eq.refl Nat (Nat.succ (kapp_arg_count f))"
+                "fun (f : KExpr) (a : KExpr) => @Eq.refl Nat (Nat.succ (kapp_arg_count f))"
                     .to_string(),
             ),
             is_axiom: false,

@@ -26,7 +26,7 @@ pub(super) const TFN: &str = "(forall (x : A), B x)";
 pub(super) const TFNY: &str = "(forall (y : A), B y)";
 
 /// The pointwise-equality hypothesis, unparenthesised (binder position).
-pub(super) const HPW: &str = "forall (x : A), Eq (B x) (f x) (g x)";
+pub(super) const HPW: &str = "forall (x : A), @Eq (B x) (f x) (g x)";
 
 /// The universe-polymorphic binder prefix shared by every R13 constant.
 pub(super) const AB: &str = "(A : Sort u) (B : A -> Sort v)";
@@ -127,13 +127,13 @@ pub(super) fn val_fneq_elim() -> String {
 /// `spec_axiom_closure::EXPLICIT_FOUNDATIONAL_BASE`. ZERO new axioms, zero
 /// residual DerivedProved debt.
 pub(super) fn ty_funext() -> String {
-    format!("forall {AB} (f : {TFN}) (g : {TFN}), ({HPW}) -> Eq {TFN} f g")
+    format!("forall {AB} (f : {TFN}) (g : {TFN}), ({HPW}) -> @Eq {TFN} f g")
 }
 
 pub(super) fn val_funext() -> String {
     format!(
         "fun {AB} (f : {TFN}) (g : {TFN}) (h : {HPW}) => \
-         Eq.cong (@Quot {TFN} (spec_fneq A B)) {TFN} (spec_fnapp A B) \
+         @Eq.cong (@Quot {TFN} (spec_fneq A B)) {TFN} (spec_fnapp A B) \
          (@Quot.mk {TFN} (spec_fneq A B) f) \
          (@Quot.mk {TFN} (spec_fneq A B) g) \
          (@Quot.sound {TFN} (spec_fneq A B) f g h)"
@@ -145,10 +145,10 @@ pub(super) fn val_funext() -> String {
 /// function space, so this is the form part B actually applies.
 pub(super) const TY_FUNEXT_ND: &str =
     "forall (A : Sort u) (C : Sort v) (f : A -> C) (g : A -> C), \
-     (forall (x : A), Eq C (f x) (g x)) -> Eq (A -> C) f g";
+     (forall (x : A), @Eq C (f x) (g x)) -> @Eq (A -> C) f g";
 
 pub(super) const VAL_FUNEXT_ND: &str = "fun (A : Sort u) (C : Sort v) (f : A -> C) (g : A -> C) \
-     (h : forall (x : A), Eq C (f x) (g x)) => \
+     (h : forall (x : A), @Eq C (f x) (g x)) => \
      spec_funext A (fun (qx : A) => C) f g h";
 
 /// `spec_funext_witness` — NON-VACUITY, at two functions the kernel does NOT
@@ -163,7 +163,7 @@ pub(super) const VAL_FUNEXT_ND: &str = "fun (A : Sort u) (C : Sort v) (f : A -> 
 /// other half — `Eq.refl` at that very statement is REJECTED by the kernel — so
 /// this constant records work that funext genuinely did.
 pub(super) const TY_FUNEXT_WITNESS: &str =
-    "Eq (Nat -> Nat) (fun (n : Nat) => Nat.add Nat.zero n) (fun (n : Nat) => n)";
+    "@Eq (Nat -> Nat) (fun (n : Nat) => Nat.add Nat.zero n) (fun (n : Nat) => n)";
 
 pub(super) const VAL_FUNEXT_WITNESS: &str =
     "spec_funext_nd Nat Nat (fun (n : Nat) => Nat.add Nat.zero n) (fun (n : Nat) => n) \
@@ -173,7 +173,7 @@ pub(super) const VAL_FUNEXT_WITNESS: &str =
 /// negative control the refusal test feeds to `add_definition`.
 #[cfg(test)]
 pub(super) const VAL_FUNEXT_WITNESS_REFL_PROBE: &str =
-    "Eq.refl (Nat -> Nat) (fun (n : Nat) => Nat.add Nat.zero n)";
+    "@Eq.refl (Nat -> Nat) (fun (n : Nat) => Nat.add Nat.zero n)";
 
 // ================================================================
 // Group 3 — PART B: the R12 wall.
@@ -191,11 +191,11 @@ pub(super) const VAL_FUNEXT_WITNESS_REFL_PROBE: &str =
 /// `spec_funext_nd` read through R12's large elimination.
 pub(super) const TY_VD_ARR_FUNEXT: &str =
     "forall (d : Sk) (c : Sk) (F : VD (Sk.arr d c)) (G : VD (Sk.arr d c)), \
-     (forall (a : VD d), Eq (VD c) (F a) (G a)) -> Eq (VD (Sk.arr d c)) F G";
+     (forall (a : VD d), @Eq (VD c) (F a) (G a)) -> @Eq (VD (Sk.arr d c)) F G";
 
 pub(super) const VAL_VD_ARR_FUNEXT: &str =
     "fun (d : Sk) (c : Sk) (F : VD (Sk.arr d c)) (G : VD (Sk.arr d c)) \
-     (h : forall (a : VD d), Eq (VD c) (F a) (G a)) => \
+     (h : forall (a : VD d), @Eq (VD c) (F a) (G a)) => \
      spec_funext_nd (VD d) (VD c) F G h";
 
 /// `r13_venvD_funext` — extensionality for a VALUATION. `VEnvD D` is the
@@ -203,10 +203,10 @@ pub(super) const VAL_VD_ARR_FUNEXT: &str =
 /// divergence from the corpus), so this one needs the dependent `spec_funext`
 /// and not the corollary.
 pub(super) const TY_VENVD_FUNEXT: &str = "forall (D : Nat -> Sk) (r : VEnvD D) (r2 : VEnvD D), \
-     (forall (i : Nat), Eq (VD (D i)) (r i) (r2 i)) -> Eq (VEnvD D) r r2";
+     (forall (i : Nat), @Eq (VD (D i)) (r i) (r2 i)) -> @Eq (VEnvD D) r r2";
 
 pub(super) const VAL_VENVD_FUNEXT: &str = "fun (D : Nat -> Sk) (r : VEnvD D) (r2 : VEnvD D) \
-     (h : forall (i : Nat), Eq (VD (D i)) (r i) (r2 i)) => \
+     (h : forall (i : Nat), @Eq (VD (D i)) (r i) (r2 i)) => \
      spec_funext Nat (fun (qi : Nat) => VD (D qi)) r r2 h";
 
 /// **`r13_sval_env_congr`** — the interpretation respects pointwise-equal
@@ -219,13 +219,13 @@ pub(super) const VAL_VENVD_FUNEXT: &str = "fun (D : Nat -> Sk) (r : VEnvD D) (r2
 /// run on.
 pub(super) const TY_SVAL_ENV_CONGR: &str =
     "forall (D : Nat -> Sk) (e : KExpr) (s : Sk) (hw : WK D e s) (r : VEnvD D) (r2 : VEnvD D), \
-     (forall (i : Nat), Eq (VD (D i)) (r i) (r2 i)) -> \
-     Eq (VD s) (sval D e s hw r) (sval D e s hw r2)";
+     (forall (i : Nat), @Eq (VD (D i)) (r i) (r2 i)) -> \
+     @Eq (VD s) (sval D e s hw r) (sval D e s hw r2)";
 
 pub(super) const VAL_SVAL_ENV_CONGR: &str =
     "fun (D : Nat -> Sk) (e : KExpr) (s : Sk) (hw : WK D e s) (r : VEnvD D) (r2 : VEnvD D) \
-     (h : forall (i : Nat), Eq (VD (D i)) (r i) (r2 i)) => \
-     Eq.cong (VEnvD D) (VD s) (fun (qr : VEnvD D) => sval D e s hw qr) r r2 \
+     (h : forall (i : Nat), @Eq (VD (D i)) (r i) (r2 i)) => \
+     @Eq.cong (VEnvD D) (VD s) (fun (qr : VEnvD D) => sval D e s hw qr) r r2 \
      (r13_venvD_funext D r r2 h)";
 
 /// `r13_vconsD_env_congr` — the valuation-extension respects equal valuations,
@@ -234,13 +234,13 @@ pub(super) const VAL_SVAL_ENV_CONGR: &str =
 /// `Eq.cong` carry the equality across the extension.
 pub(super) const TY_VCONSD_ENV_CONGR: &str =
     "forall (s : Sk) (D : Nat -> Sk) (v : VD s) (r : VEnvD D) (r2 : VEnvD D), \
-     Eq (VEnvD D) r r2 -> \
-     Eq (VEnvD (skcons s D)) (vconsD s D v r) (vconsD s D v r2)";
+     @Eq (VEnvD D) r r2 -> \
+     @Eq (VEnvD (skcons s D)) (vconsD s D v r) (vconsD s D v r2)";
 
 pub(super) const VAL_VCONSD_ENV_CONGR: &str =
     "fun (s : Sk) (D : Nat -> Sk) (v : VD s) (r : VEnvD D) (r2 : VEnvD D) \
-     (heq : Eq (VEnvD D) r r2) => \
-     Eq.cong (VEnvD D) (VEnvD (skcons s D)) (fun (qr : VEnvD D) => vconsD s D v qr) r r2 heq";
+     (heq : @Eq (VEnvD D) r r2) => \
+     @Eq.cong (VEnvD D) (VEnvD (skcons s D)) (fun (qr : VEnvD D) => vconsD s D v qr) r r2 heq";
 
 /// **`r13_piCandDep_fn_congr`** — the `piB` congruence case, at R12's dependent
 /// Pi candidate.
@@ -254,14 +254,14 @@ pub(super) const VAL_VCONSD_ENV_CONGR: &str =
 pub(super) const TY_PICANDDEP_FN_CONGR: &str =
     "forall (D : Nat -> Sk) (d : Sk) (sB : Sk) (CA : KExpr -> Type) \
      (GB : VD d -> VD sB) (GB2 : VD d -> VD sB) (r : VEnvD D), \
-     (forall (a : VD d), Eq (VD sB) (GB a) (GB2 a)) -> \
-     Eq (KExpr -> Type) (piCandDep D d sB CA GB r) (piCandDep D d sB CA GB2 r)";
+     (forall (a : VD d), @Eq (VD sB) (GB a) (GB2 a)) -> \
+     @Eq (KExpr -> Type) (piCandDep D d sB CA GB r) (piCandDep D d sB CA GB2 r)";
 
 pub(super) const VAL_PICANDDEP_FN_CONGR: &str =
     "fun (D : Nat -> Sk) (d : Sk) (sB : Sk) (CA : KExpr -> Type) \
      (GB : VD d -> VD sB) (GB2 : VD d -> VD sB) (r : VEnvD D) \
-     (h : forall (a : VD d), Eq (VD sB) (GB a) (GB2 a)) => \
-     Eq.cong (VD d -> VD sB) (KExpr -> Type) \
+     (h : forall (a : VD d), @Eq (VD sB) (GB a) (GB2 a)) => \
+     @Eq.cong (VD d -> VD sB) (KExpr -> Type) \
      (fun (qG : VD d -> VD sB) => piCandDep D d sB CA qG r) GB GB2 \
      (spec_funext_nd (VD d) (VD sB) GB GB2 h)";
 
@@ -273,14 +273,14 @@ pub(super) const VAL_PICANDDEP_FN_CONGR: &str =
 pub(super) const TY_WKPIDEP_ENV_CONGR: &str =
     "forall (D : Nat -> Sk) (A : KExpr) (Bd : KExpr) (sA : Sk) (sB : Sk) \
      (hA : WK D A sA) (hB : WK (skcons (domSk sA) D) Bd sB) (r : VEnvD D) (r2 : VEnvD D), \
-     (forall (i : Nat), Eq (VD (D i)) (r i) (r2 i)) -> \
-     Eq (KExpr -> Type) (wkPiDep D A Bd sA sB hA hB r) (wkPiDep D A Bd sA sB hA hB r2)";
+     (forall (i : Nat), @Eq (VD (D i)) (r i) (r2 i)) -> \
+     @Eq (KExpr -> Type) (wkPiDep D A Bd sA sB hA hB r) (wkPiDep D A Bd sA sB hA hB r2)";
 
 pub(super) const VAL_WKPIDEP_ENV_CONGR: &str =
     "fun (D : Nat -> Sk) (A : KExpr) (Bd : KExpr) (sA : Sk) (sB : Sk) \
      (hA : WK D A sA) (hB : WK (skcons (domSk sA) D) Bd sB) (r : VEnvD D) (r2 : VEnvD D) \
-     (h : forall (i : Nat), Eq (VD (D i)) (r i) (r2 i)) => \
-     Eq.cong (VEnvD D) (KExpr -> Type) \
+     (h : forall (i : Nat), @Eq (VD (D i)) (r i) (r2 i)) => \
+     @Eq.cong (VEnvD D) (KExpr -> Type) \
      (fun (qr : VEnvD D) => wkPiDep D A Bd sA sB hA hB qr) r r2 \
      (r13_venvD_funext D r r2 h)";
 
@@ -289,7 +289,7 @@ pub(super) const VAL_WKPIDEP_ENV_CONGR: &str =
 /// inhabited. `r12_wk_sort_witness` is R12's own sort derivation and
 /// `r12_junkEnv` its own valuation; `Eq.refl` at every index supplies the
 /// pointwise premise.
-pub(super) const TY_SVAL_ENV_CONGR_WITNESS: &str = "Eq (VD (Sk.kd Sk.ty)) \
+pub(super) const TY_SVAL_ENV_CONGR_WITNESS: &str = "@Eq (VD (Sk.kd Sk.ty)) \
      (sval r12_piEnv (KExpr.sort Level.zero) (Sk.kd Sk.ty) \
       (r12_wk_sort_witness r12_piEnv Level.zero) (r12_junkEnv r12_piEnv)) \
      (sval r12_piEnv (KExpr.sort Level.zero) (Sk.kd Sk.ty) \
@@ -299,26 +299,26 @@ pub(super) const VAL_SVAL_ENV_CONGR_WITNESS: &str =
     "r13_sval_env_congr r12_piEnv (KExpr.sort Level.zero) (Sk.kd Sk.ty) \
      (r12_wk_sort_witness r12_piEnv Level.zero) (r12_junkEnv r12_piEnv) \
      (r12_junkEnv r12_piEnv) \
-     (fun (i : Nat) => Eq.refl (VD (r12_piEnv i)) (r12_junkEnv r12_piEnv i))";
+     (fun (i : Nat) => @Eq.refl (VD (r12_piEnv i)) (r12_junkEnv r12_piEnv i))";
 
 /// `r13_vd_arr_funext_witness` — the arrow-shape extensionality at a concrete
 /// shape, through `junkD`. `VD (Sk.arr Sk.ty Sk.ty)` is a real semantic
 /// function space and `junkD` inhabits it, so the lemma is applied, not merely
 /// stated.
 pub(super) const TY_VD_ARR_FUNEXT_WITNESS: &str =
-    "Eq (VD (Sk.arr Sk.ty Sk.ty)) (junkD (Sk.arr Sk.ty Sk.ty)) (junkD (Sk.arr Sk.ty Sk.ty))";
+    "@Eq (VD (Sk.arr Sk.ty Sk.ty)) (junkD (Sk.arr Sk.ty Sk.ty)) (junkD (Sk.arr Sk.ty Sk.ty))";
 
 pub(super) const VAL_VD_ARR_FUNEXT_WITNESS: &str =
     "r13_vd_arr_funext Sk.ty Sk.ty (junkD (Sk.arr Sk.ty Sk.ty)) (junkD (Sk.arr Sk.ty Sk.ty)) \
-     (fun (a : VD Sk.ty) => Eq.refl (VD Sk.ty) (junkD (Sk.arr Sk.ty Sk.ty) a))";
+     (fun (a : VD Sk.ty) => @Eq.refl (VD Sk.ty) (junkD (Sk.arr Sk.ty Sk.ty) a))";
 
 /// The R12-blocked statement with a REFLEXIVITY proof, the negative control for
 /// `test_candmodel_r13_pointwise_does_not_substitute`. NOT registered.
 #[cfg(test)]
 pub(super) fn probe_pointwise_refl() -> String {
     format!(
-        "def r13_pointwise_refl_probe {AB} (f : {TFN}) (g : {TFN}) (h : {HPW}) : Eq {TFN} f g := \
-         Eq.refl {TFN} f"
+        "def r13_pointwise_refl_probe {AB} (f : {TFN}) (g : {TFN}) (h : {HPW}) : @Eq {TFN} f g := \
+         @Eq.refl {TFN} f"
     )
 }
 

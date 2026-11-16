@@ -68,7 +68,7 @@ impl Specification {
         let l = "ListType KExpr";
         let goal = |k: &str, xs: &str| {
             format!(
-                "Eq ({l}) (list_drop {k} (list_append {xs} ys)) \
+                "@Eq ({l}) (list_drop {k} (list_append {xs} ys)) \
                  (list_append (list_drop {k} {xs}) ys)"
             )
         };
@@ -81,26 +81,26 @@ impl Specification {
             g = goal("(Nat.succ m)", "l"),
         );
         let nil_arm = format!(
-            "(fun (h0 : Le (Nat.succ (Nat.succ m)) (list_length (ListType.nil KExpr))) => \
-             Empty.rec (fun (_ : Empty) => {g}) (le_succ_zero_empty (Nat.succ m) h0))",
-            g = goal("(Nat.succ m)", "(ListType.nil KExpr)"),
+            "(fun (h0 : Le (Nat.succ (Nat.succ m)) (list_length (@ListType.nil KExpr))) => \
+             @Empty.rec (fun (_ : Empty) => {g}) (le_succ_zero_empty (Nat.succ m) h0))",
+            g = goal("(Nat.succ m)", "(@ListType.nil KExpr)"),
         );
         let cons_arm = format!(
             "(fun (x : KExpr) (rest : {l}) \
              (_ihr : Le (Nat.succ (Nat.succ m)) (list_length rest) -> {g}) \
-             (h1 : Le (Nat.succ (Nat.succ m)) (list_length (ListType.cons KExpr x rest))) => \
+             (h1 : Le (Nat.succ (Nat.succ m)) (list_length (@ListType.cons KExpr x rest))) => \
              ih rest ys (le_pred_pred (Nat.succ m) (list_length rest) h1))",
             g = goal("(Nat.succ m)", "rest"),
         );
         let src = format!(
             "def list_drop_append_lt (k : Nat) : forall (xs : {l}) (ys : {l}), \
              Le (Nat.succ k) (list_length xs) -> {gk} := \
-             Nat.rec (fun (m : Nat) => {mot}) \
+             @Nat.rec (fun (m : Nat) => {mot}) \
              (fun (xs : {l}) (ys : {l}) (_h : Le (Nat.succ Nat.zero) (list_length xs)) => \
-             Eq.refl ({l}) (list_append xs ys)) \
+             @Eq.refl ({l}) (list_append xs ys)) \
              (fun (m : Nat) (ih : {mot}) (xs : {l}) (ys : {l}) \
              (h : Le (Nat.succ (Nat.succ m)) (list_length xs)) => \
-             ListType.rec KExpr {inner} {nil_arm} {cons_arm} xs h) k",
+             @ListType.rec KExpr {inner} {nil_arm} {cons_arm} xs h) k",
             gk = goal("k", "xs"),
         );
         debug_assert!(Self::balanced(&src), "drop append lt parens");
@@ -127,15 +127,15 @@ impl Specification {
     /// under-application bound descend from `app f a` to `f` (via
     /// `le_succ_weaken`), which is how the spine recursion keeps its hypothesis.
     fn add_spine_length_app(&mut self) -> Result<(), SpecError> {
-        let snoc = "(list_append (kapp_args f) (ListType.cons KExpr a (ListType.nil KExpr)))";
+        let snoc = "(list_append (kapp_args f) (@ListType.cons KExpr a (@ListType.nil KExpr)))";
         let src = format!(
-            "def kapp_args_length_app (f : KExpr) (a : KExpr) : Eq Nat \
+            "def kapp_args_length_app (f : KExpr) (a : KExpr) : @Eq Nat \
              (list_length (kapp_args (KExpr.app f a))) (Nat.succ (list_length (kapp_args f))) := \
              Eq.trans Nat (list_length (kapp_args (KExpr.app f a))) (list_length {snoc}) \
              (Nat.succ (list_length (kapp_args f))) \
              (Eq.cong (ListType KExpr) Nat (fun (l : ListType KExpr) => list_length l) \
              (kapp_args (KExpr.app f a)) {snoc} (kapp_args_app f a)) \
-             (list_append_length (kapp_args f) (ListType.cons KExpr a (ListType.nil KExpr)))"
+             (list_append_length (kapp_args f) (@ListType.cons KExpr a (@ListType.nil KExpr)))"
         );
         debug_assert!(Self::balanced(&src), "spine length app parens");
         self.add_recursive_def(
@@ -159,12 +159,12 @@ impl Specification {
         let o = "OptionType KExpr";
         let head = |x: &str| {
             format!(
-                "Eq (OptionType Name) (kexpr_const_name (kapp_fn {x})) (OptionType.some Name nm)"
+                "@Eq (OptionType Name) (kexpr_const_name (kapp_fn {x})) (@OptionType.some Name nm)"
             )
         };
         let goal = |x: &str| {
             format!(
-                "Eq ({o}) (reduce_app_head_red_wh the_red_env wh a {x} cf) \
+                "@Eq ({o}) (reduce_app_head_red_wh the_red_env wh a {x} cf) \
                  (opt_app_ilift_wh the_red_env wh {x} a cf)"
             )
         };
@@ -185,7 +185,7 @@ impl Specification {
             dead("(KExpr.bvar i)", "(i : Nat)"),
             format!(
                 "(fun (g : KExpr) (b : KExpr) (_c1 : {mg}) (_c2 : {mb}) (_h : {hab}) => \
-                 Eq.refl ({o}) (opt_app_ilift_wh the_red_env wh (KExpr.app g b) a cf))",
+                 @Eq.refl ({o}) (opt_app_ilift_wh the_red_env wh (KExpr.app g b) a cf))",
                 mg = mot("g"),
                 mb = mot("b"),
                 hab = head("(KExpr.app g b)"),
@@ -208,7 +208,7 @@ impl Specification {
             ),
             format!(
                 "(fun (cn : Name) (us : ListType Level) (_h : {hc}) => \
-                 Eq.refl ({o}) (opt_app_ilift_wh the_red_env wh (KExpr.const cn us) a cf))",
+                 @Eq.refl ({o}) (opt_app_ilift_wh the_red_env wh (KExpr.const cn us) a cf))",
                 hc = head("(KExpr.const cn us)"),
             ),
             dead(
@@ -229,7 +229,7 @@ impl Specification {
         let src = format!(
             "def reduce_app_head_const_is_ilift (wh : KExpr -> OptionType KExpr) (a : KExpr) \
              (cf : {o}) (nm : Name) (f : KExpr) : {motf} := \
-             KExpr.rec (fun (x : KExpr) => {motx}) {arms} f",
+             @KExpr.rec (fun (x : KExpr) => {motx}) {arms} f",
             motf = mot("f"),
             motx = mot("x"),
             arms = arms.join(" "),
@@ -250,18 +250,18 @@ impl Specification {
         // every non-lam arm takes the congruence branch and lam is beta.
         let gsome = |x: &str| {
             format!(
-                "Eq ({o}) (reduce_app_head_red_wh the_red_env wh1 a {x} (OptionType.some KExpr f2)) \
-                 (reduce_app_head_red_wh the_red_env wh2 a {x} (OptionType.some KExpr f2))"
+                "@Eq ({o}) (reduce_app_head_red_wh the_red_env wh1 a {x} (@OptionType.some KExpr f2)) \
+                 (reduce_app_head_red_wh the_red_env wh2 a {x} (@OptionType.some KExpr f2))"
             )
         };
-        let cong = format!("Eq.refl ({o}) (OptionType.some KExpr (KExpr.app f2 a))");
+        let cong = format!("@Eq.refl ({o}) (@OptionType.some KExpr (KExpr.app f2 a))");
         let arms2 = [
             format!("(fun (n : Level) => {cong})"),
             format!("(fun (i : Nat) => {cong})"),
             format!("(fun (g : KExpr) (b : KExpr) (_c1 : {}) (_c2 : {}) => {cong})", gsome("g"), gsome("b")),
             format!(
                 "(fun (ty : KExpr) (b : KExpr) (_c1 : {}) (_c2 : {}) => \
-                 Eq.refl ({o}) (OptionType.some KExpr (instantiate b a)))",
+                 @Eq.refl ({o}) (@OptionType.some KExpr (instantiate b a)))",
                 gsome("ty"), gsome("b"),
             ),
             format!("(fun (ty : KExpr) (b : KExpr) (_c1 : {}) (_c2 : {}) => {cong})", gsome("ty"), gsome("b")),
@@ -276,7 +276,7 @@ impl Specification {
         let src = format!(
             "def reduce_app_head_some_cf_wh_indep (wh1 : KExpr -> OptionType KExpr) \
              (wh2 : KExpr -> OptionType KExpr) (a : KExpr) (f2 : KExpr) (f : KExpr) : {gf} := \
-             KExpr.rec (fun (x : KExpr) => {gx}) {arms} f",
+             @KExpr.rec (fun (x : KExpr) => {gx}) {arms} f",
             gf = gsome("f"),
             gx = gsome("x"),
             arms = arms2.join(" "),
@@ -305,17 +305,17 @@ impl Specification {
     /// bound gives `Le (succ k) k`.
     fn add_head_drop_none_of_le(&mut self) -> Result<(), SpecError> {
         let o = "OptionType KExpr";
-        let goal = format!("Eq ({o}) {HD} (OptionType.none KExpr)");
+        let goal = format!("@Eq ({o}) {HD} (@OptionType.none KExpr)");
         let src = format!(
             "def list_head_drop_none_of_le (k : Nat) (xs : ListType KExpr) \
              (hle : Le (list_length xs) k) : {goal} := \
-             OptionType.rec KExpr (fun (o : {o}) => Eq ({o}) {HD} o -> {goal}) \
-             (fun (h : Eq ({o}) {HD} (OptionType.none KExpr)) => h) \
-             (fun (y : KExpr) (h : Eq ({o}) {HD} (OptionType.some KExpr y)) => \
-             Empty.rec (fun (_ : Empty) => {goal}) \
+             @OptionType.rec KExpr (fun (o : {o}) => @Eq ({o}) {HD} o -> {goal}) \
+             (fun (h : @Eq ({o}) {HD} (@OptionType.none KExpr)) => h) \
+             (fun (y : KExpr) (h : @Eq ({o}) {HD} (@OptionType.some KExpr y)) => \
+             @Empty.rec (fun (_ : Empty) => {goal}) \
              (le_succ_self_empty k (le_trans (Nat.succ k) (list_length xs) k \
              (list_head_drop_some_le_succ k xs y h) hle))) \
-             {HD} (Eq.refl ({o}) {HD})"
+             {HD} (@Eq.refl ({o}) {HD})"
         );
         debug_assert!(Self::balanced(&src), "head drop none parens");
         self.add_recursive_def(

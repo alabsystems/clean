@@ -44,18 +44,18 @@ use crate::spec::Specification;
 const SRC_IR_FRS_B0: &str = "def ir_frs_b0 : IRBlock := IRBlock.mk ir_d0 ir_nl0 (ir_bd3 (ir_nd1 (IRInst.unop IRUnOp.fneg (IRTy.float_ 64) ir_d0) ir_d1) (ir_nd1 (IRInst.unop IRUnOp.fabs (IRTy.float_ 64) ir_d0) ir_d2) (ir_nd (IRInst.ret (ir_nl2 ir_d1 ir_d2))))";
 const SRC_IR_FRS_FUNC: &str =
     "def ir_frs_func : IRFunc := IRFunc.mk ir_d0 (ir_nl1 ir_d0) ir_d0 (ir_blk ir_frs_b0 ir_blk0)";
-const SRC_IR_FRS_MODULE: &str = "def ir_frs_module : IRModule := IRModule.mk (IRList.cons IRFunc ir_frs_func (IRList.nil IRFunc)) (IRList.nil IRGlobal)";
+const SRC_IR_FRS_MODULE: &str = "def ir_frs_module : IRModule := IRModule.mk (@IRList.cons IRFunc ir_frs_func (@IRList.nil IRFunc)) (@IRList.nil IRGlobal)";
 
 // ── fround: f64 → (ffloor, fceil, ftrunc) ──────────────────────────────────
-const SRC_IR_FRR_B0: &str = "def ir_frr_b0 : IRBlock := IRBlock.mk ir_d0 ir_nl0 (IRList.cons IRNode (ir_nd1 (IRInst.unop IRUnOp.ffloor (IRTy.float_ 64) ir_d0) ir_d1) (ir_bd3 (ir_nd1 (IRInst.unop IRUnOp.fceil (IRTy.float_ 64) ir_d0) ir_d2) (ir_nd1 (IRInst.unop IRUnOp.ftrunc (IRTy.float_ 64) ir_d0) ir_d3) (ir_nd (IRInst.ret (IRList.cons Nat ir_d1 (ir_nl2 ir_d2 ir_d3))))))";
+const SRC_IR_FRR_B0: &str = "def ir_frr_b0 : IRBlock := IRBlock.mk ir_d0 ir_nl0 (@IRList.cons IRNode (ir_nd1 (IRInst.unop IRUnOp.ffloor (IRTy.float_ 64) ir_d0) ir_d1) (ir_bd3 (ir_nd1 (IRInst.unop IRUnOp.fceil (IRTy.float_ 64) ir_d0) ir_d2) (ir_nd1 (IRInst.unop IRUnOp.ftrunc (IRTy.float_ 64) ir_d0) ir_d3) (ir_nd (IRInst.ret (@IRList.cons Nat ir_d1 (ir_nl2 ir_d2 ir_d3))))))";
 const SRC_IR_FRR_FUNC: &str =
     "def ir_frr_func : IRFunc := IRFunc.mk ir_d0 (ir_nl1 ir_d0) ir_d0 (ir_blk ir_frr_b0 ir_blk0)";
-const SRC_IR_FRR_MODULE: &str = "def ir_frr_module : IRModule := IRModule.mk (IRList.cons IRFunc ir_frr_func (IRList.nil IRFunc)) (IRList.nil IRGlobal)";
+const SRC_IR_FRR_MODULE: &str = "def ir_frr_module : IRModule := IRModule.mk (@IRList.cons IRFunc ir_frr_func (@IRList.nil IRFunc)) (@IRList.nil IRGlobal)";
 
 // ── fminmax: f64 × f64 → (fmin, fmax) ──────────────────────────────────────
 const SRC_IR_FRM_B0: &str = "def ir_frm_b0 : IRBlock := IRBlock.mk ir_d0 ir_nl0 (ir_bd3 (ir_nd1 (IRInst.binop IRBinOp.fmin (IRTy.float_ 64) ir_d0 ir_d1) ir_d2) (ir_nd1 (IRInst.binop IRBinOp.fmax (IRTy.float_ 64) ir_d0 ir_d1) ir_d3) (ir_nd (IRInst.ret (ir_nl2 ir_d2 ir_d3))))";
 const SRC_IR_FRM_FUNC: &str = "def ir_frm_func : IRFunc := IRFunc.mk ir_d0 (ir_nl2 ir_d0 ir_d1) ir_d0 (ir_blk ir_frm_b0 ir_blk0)";
-const SRC_IR_FRM_MODULE: &str = "def ir_frm_module : IRModule := IRModule.mk (IRList.cons IRFunc ir_frm_func (IRList.nil IRFunc)) (IRList.nil IRGlobal)";
+const SRC_IR_FRM_MODULE: &str = "def ir_frm_module : IRModule := IRModule.mk (@IRList.cons IRFunc ir_frm_func (@IRList.nil IRFunc)) (@IRList.nil IRGlobal)";
 
 /// The fsign micro-module's definitions, in registration order.
 #[must_use]
@@ -76,11 +76,11 @@ pub fn ir_frm_module_defs() -> &'static [&'static str] {
 }
 
 // ── whole-program witnesses (fuels sufficient, not least) ──────────────────
-const SRC_IR_FRS_ON_NAN: &str = "def ir_frs_on_nan : Eq IROutcome (ir_eval ir_d4 ir_frs_module ir_d0 (ir_vl1 (IRScalar.float_ 9221120237041090560)) ir_mem0 ir_d0) (IROutcome.ret (IRList.cons IRScalar (IRScalar.float_ 18444492273895866368) (ir_vl1 (IRScalar.float_ 9221120237041090560)))) := Eq.refl IROutcome (IROutcome.ret (IRList.cons IRScalar (IRScalar.float_ 18444492273895866368) (ir_vl1 (IRScalar.float_ 9221120237041090560))))";
-const SRC_IR_FRS_ON_MZERO: &str = "def ir_frs_on_mzero : Eq IROutcome (ir_eval ir_d4 ir_frs_module ir_d0 (ir_vl1 (IRScalar.float_ 9223372036854775808)) ir_mem0 ir_d0) (IROutcome.ret (IRList.cons IRScalar (IRScalar.float_ 0) (ir_vl1 (IRScalar.float_ 0)))) := Eq.refl IROutcome (IROutcome.ret (IRList.cons IRScalar (IRScalar.float_ 0) (ir_vl1 (IRScalar.float_ 0))))";
-const SRC_IR_FRR_ON_NEG: &str = "def ir_frr_on_neg : Eq IROutcome (ir_eval ir_d5 ir_frr_module ir_d0 (ir_vl1 (IRScalar.float_ 13832806255468478464)) ir_mem0 ir_d0) (IROutcome.ret (IRList.cons IRScalar (IRScalar.float_ 13835058055282163712) (IRList.cons IRScalar (IRScalar.float_ 13830554455654793216) (ir_vl1 (IRScalar.float_ 13830554455654793216))))) := Eq.refl IROutcome (IROutcome.ret (IRList.cons IRScalar (IRScalar.float_ 13835058055282163712) (IRList.cons IRScalar (IRScalar.float_ 13830554455654793216) (ir_vl1 (IRScalar.float_ 13830554455654793216)))))";
-const SRC_IR_FRM_ON_NAN_LEFT: &str = "def ir_frm_on_nan_left : Eq IROutcome (ir_eval ir_d4 ir_frm_module ir_d0 (IRList.cons IRScalar (IRScalar.float_ 9221120237041090560) (ir_vl1 (IRScalar.float_ 4611686018427387904))) ir_mem0 ir_d0) (IROutcome.ret (IRList.cons IRScalar (IRScalar.float_ 4611686018427387904) (ir_vl1 (IRScalar.float_ 4611686018427387904)))) := Eq.refl IROutcome (IROutcome.ret (IRList.cons IRScalar (IRScalar.float_ 4611686018427387904) (ir_vl1 (IRScalar.float_ 4611686018427387904))))";
-const SRC_IR_FRS_NOT_FLOAT: &str = "def ir_frs_not_float (n : Nat) : Eq IROutcome (ir_eval ir_d4 ir_frs_module ir_d0 (ir_vl1 (IRScalar.int_ n)) ir_mem0 ir_d0) (IROutcome.type_error IRFault.not_float) := Eq.refl IROutcome (IROutcome.type_error IRFault.not_float)";
+const SRC_IR_FRS_ON_NAN: &str = "def ir_frs_on_nan : @Eq IROutcome (ir_eval ir_d4 ir_frs_module ir_d0 (ir_vl1 (IRScalar.float_ 9221120237041090560)) ir_mem0 ir_d0) (IROutcome.ret (@IRList.cons IRScalar (IRScalar.float_ 18444492273895866368) (ir_vl1 (IRScalar.float_ 9221120237041090560)))) := @Eq.refl IROutcome (IROutcome.ret (@IRList.cons IRScalar (IRScalar.float_ 18444492273895866368) (ir_vl1 (IRScalar.float_ 9221120237041090560))))";
+const SRC_IR_FRS_ON_MZERO: &str = "def ir_frs_on_mzero : @Eq IROutcome (ir_eval ir_d4 ir_frs_module ir_d0 (ir_vl1 (IRScalar.float_ 9223372036854775808)) ir_mem0 ir_d0) (IROutcome.ret (@IRList.cons IRScalar (IRScalar.float_ 0) (ir_vl1 (IRScalar.float_ 0)))) := @Eq.refl IROutcome (IROutcome.ret (@IRList.cons IRScalar (IRScalar.float_ 0) (ir_vl1 (IRScalar.float_ 0))))";
+const SRC_IR_FRR_ON_NEG: &str = "def ir_frr_on_neg : @Eq IROutcome (ir_eval ir_d5 ir_frr_module ir_d0 (ir_vl1 (IRScalar.float_ 13832806255468478464)) ir_mem0 ir_d0) (IROutcome.ret (@IRList.cons IRScalar (IRScalar.float_ 13835058055282163712) (@IRList.cons IRScalar (IRScalar.float_ 13830554455654793216) (ir_vl1 (IRScalar.float_ 13830554455654793216))))) := @Eq.refl IROutcome (IROutcome.ret (@IRList.cons IRScalar (IRScalar.float_ 13835058055282163712) (@IRList.cons IRScalar (IRScalar.float_ 13830554455654793216) (ir_vl1 (IRScalar.float_ 13830554455654793216)))))";
+const SRC_IR_FRM_ON_NAN_LEFT: &str = "def ir_frm_on_nan_left : @Eq IROutcome (ir_eval ir_d4 ir_frm_module ir_d0 (@IRList.cons IRScalar (IRScalar.float_ 9221120237041090560) (ir_vl1 (IRScalar.float_ 4611686018427387904))) ir_mem0 ir_d0) (IROutcome.ret (@IRList.cons IRScalar (IRScalar.float_ 4611686018427387904) (ir_vl1 (IRScalar.float_ 4611686018427387904)))) := @Eq.refl IROutcome (IROutcome.ret (@IRList.cons IRScalar (IRScalar.float_ 4611686018427387904) (ir_vl1 (IRScalar.float_ 4611686018427387904))))";
+const SRC_IR_FRS_NOT_FLOAT: &str = "def ir_frs_not_float (n : Nat) : @Eq IROutcome (ir_eval ir_d4 ir_frs_module ir_d0 (ir_vl1 (IRScalar.int_ n)) ir_mem0 ir_d0) (IROutcome.type_error IRFault.not_float) := @Eq.refl IROutcome (IROutcome.type_error IRFault.not_float)";
 
 impl Specification {
     /// The float-residue micro-modules and their kernel-executed witnesses.
@@ -131,7 +131,7 @@ mod tests {
     fn float_spine(bits: &[u64]) -> String {
         let mut s = format!("(ir_vl1 (IRScalar.float_ {}))", bits[bits.len() - 1]);
         for b in bits[..bits.len() - 1].iter().rev() {
-            s = format!("(IRList.cons IRScalar (IRScalar.float_ {b}) {s})");
+            s = format!("(@IRList.cons IRScalar (IRScalar.float_ {b}) {s})");
         }
         s
     }
@@ -195,11 +195,11 @@ mod tests {
         );
         assert_eq!(SRC_IR_FRS_B0, sign);
         let round = format!(
-            "def ir_frr_b0 : IRBlock := IRBlock.mk ir_d0 ir_nl0 (IRList.cons IRNode {} (ir_bd3 {} {} {}))",
+            "def ir_frr_b0 : IRBlock := IRBlock.mk ir_d0 ir_nl0 (@IRList.cons IRNode {} (ir_bd3 {} {} {}))",
             "(ir_nd1 (IRInst.unop IRUnOp.ffloor (IRTy.float_ 64) ir_d0) ir_d1)",
             "(ir_nd1 (IRInst.unop IRUnOp.fceil (IRTy.float_ 64) ir_d0) ir_d2)",
             "(ir_nd1 (IRInst.unop IRUnOp.ftrunc (IRTy.float_ 64) ir_d0) ir_d3)",
-            "(ir_nd (IRInst.ret (IRList.cons Nat ir_d1 (ir_nl2 ir_d2 ir_d3))))"
+            "(ir_nd (IRInst.ret (@IRList.cons Nat ir_d1 (ir_nl2 ir_d2 ir_d3))))"
         );
         assert_eq!(SRC_IR_FRR_B0, round);
         let minmax = format!(

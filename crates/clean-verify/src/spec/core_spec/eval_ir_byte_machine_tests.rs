@@ -16,8 +16,8 @@ fn list(ty: &str, values: impl IntoIterator<Item = impl AsRef<str>>) -> String {
     values
         .iter()
         .rev()
-        .fold(format!("IRList.nil {ty}"), |tail, value| {
-            format!("IRList.cons {ty} ({}) ({tail})", value.as_ref())
+        .fold(format!("@IRList.nil {ty}"), |tail, value| {
+            format!("@IRList.cons {ty} ({}) ({tail})", value.as_ref())
         })
 }
 
@@ -194,7 +194,7 @@ fn register(spec: &mut Specification, source: &str) {
 fn check(spec: &mut Specification, name: &str, ty: &str, actual: &str, expected: &str) {
     register(
         spec,
-        &format!("def {name} : Eq ({ty}) ({actual}) ({expected}) := Eq.refl ({ty}) ({expected})"),
+        &format!("def {name} : @Eq ({ty}) ({actual}) ({expected}) := @Eq.refl ({ty}) ({expected})"),
     );
     spec.verify_definition(name)
         .expect("kernel replay of actual machine execution");
@@ -240,7 +240,7 @@ fn context(spec: &mut Specification, name: &str, functions: &[Function]) {
             ids(&[])
         ));
     }
-    register(spec, &format!("def {name} : IRByteContextV1 := IRByteContextV1.mk (IRModule.mk ({}) (IRList.nil IRGlobal)) ({}) ({}) ({}) ({})",
+    register(spec, &format!("def {name} : IRByteContextV1 := IRByteContextV1.mk (IRModule.mk ({}) (@IRList.nil IRGlobal)) ({}) ({}) ({}) ({})",
         list("IRFunc", functions.iter().map(Function::ir)),
         list("IRByteLayoutV1", layouts),
         list("IRByteSignatureV1", functions.iter().map(Function::signature)),
@@ -251,10 +251,10 @@ fn context(spec: &mut Specification, name: &str, functions: &[Function]) {
 fn machine_spec() -> Specification {
     let mut spec = crate::eval_ir::build_byte_prelude_spec_v1_with_stack()
         .expect("production checked byte-profile constructor");
-    register(&mut spec, "def byte_machine_no_import : IRByteProvidersV1 Nat := fun (_ : Nat) (_ : IRList IRScalar) (mem : IRByteMemoryV1) (host : Nat) => IRByteImportResultV1.mk Nat (IROutcome.stuck IRFault.no_func) mem host");
-    register(&mut spec, "def byte_machine_external_mem : IRByteMemoryV1 := IRByteMemoryV1.mk (IRList.cons IRByteAllocationV1 (IRByteAllocationV1.mk 16 16 0 Bool.true) (IRList.nil IRByteAllocationV1)) (fun (_ : Nat) => IROption.none Nat) 64");
+    register(&mut spec, "def byte_machine_no_import : IRByteProvidersV1 Nat := fun (_ : Nat) (_ : IRList IRScalar) (mem : IRByteMemoryV1) (host : Nat) => @IRByteImportResultV1.mk Nat (IROutcome.stuck IRFault.no_func) mem host");
+    register(&mut spec, "def byte_machine_external_mem : IRByteMemoryV1 := IRByteMemoryV1.mk (@IRList.cons IRByteAllocationV1 (IRByteAllocationV1.mk 16 16 0 Bool.true) (@IRList.nil IRByteAllocationV1)) (fun (_ : Nat) => @IROption.none Nat) 64");
     register(&mut spec, "def byte_machine_after_memory (r : IRByteMemoryResultV1) : IRByteMemoryV1 := match r with\n| IRByteMemoryResultV1.value v mem => mem\n| IRByteMemoryResultV1.fault outcome mem => mem");
-    register(&mut spec, "def byte_machine_memory_outcome (r : IRByteMemoryResultV1) : IROutcome := match r with\n| IRByteMemoryResultV1.value v mem => IROutcome.ret (IRList.cons IRScalar v (IRList.nil IRScalar))\n| IRByteMemoryResultV1.fault outcome mem => outcome");
+    register(&mut spec, "def byte_machine_memory_outcome (r : IRByteMemoryResultV1) : IROutcome := match r with\n| IRByteMemoryResultV1.value v mem => IROutcome.ret (@IRList.cons IRScalar v (@IRList.nil IRScalar))\n| IRByteMemoryResultV1.fault outcome mem => outcome");
     spec
 }
 
@@ -425,7 +425,7 @@ fn provider_fixture(spec: &mut Specification) {
             returned(&["IRScalar.int_ 0", "IRScalar.int_ 18446744073709551615"]),
         ),
     ] {
-        register(spec, &format!("def {name} : IRByteProvidersV1 Nat := fun (fid : Nat) (_ : IRList IRScalar) (mem : IRByteMemoryV1) (host : Nat) => Bool.rec (fun (_ : Bool) => IRByteImportResultV1 Nat) (IRByteImportResultV1.mk Nat (IROutcome.stuck IRFault.no_func) mem host) (IRByteImportResultV1.mk Nat ({result}) (byte_machine_after_memory (ir_byte_store_v1 byte_machine_provider_ctx (IRTy.uint_ 8) (IRScalar.ptr_ 16) (IRScalar.int_ (Nat.succ host)) 0 Bool.false mem)) (Nat.succ host)) (ir_nat_eqb fid 31)"));
+        register(spec, &format!("def {name} : IRByteProvidersV1 Nat := fun (fid : Nat) (_ : IRList IRScalar) (mem : IRByteMemoryV1) (host : Nat) => @Bool.rec (fun (_ : Bool) => IRByteImportResultV1 Nat) (@IRByteImportResultV1.mk Nat (IROutcome.stuck IRFault.no_func) mem host) (@IRByteImportResultV1.mk Nat ({result}) (byte_machine_after_memory (ir_byte_store_v1 byte_machine_provider_ctx (IRTy.uint_ 8) (IRScalar.ptr_ 16) (IRScalar.int_ (Nat.succ host)) 0 Bool.false mem)) (Nat.succ host)) (ir_nat_eqb fid 31)"));
     }
 }
 
@@ -476,7 +476,7 @@ fn c_import_is_one_ssa_struct_and_keeps_updated_world_on_success_and_failure() {
                     "ir_byte_mem_bytes_v1 (ir_byte_world_memory_v1 Nat ({})) 16",
                     world(&executed)
                 ),
-                "IROption.some Nat 8",
+                "@IROption.some Nat 8",
             );
         }
     });
@@ -487,7 +487,7 @@ fn fuel_exhaustion_retains_running_world_and_resumes_through_the_shared_driver()
     crate::test_utils::run_with_stack(|| {
         let mut spec = machine_spec();
         provider_fixture(&mut spec);
-        let initial = "ir_byte_init_v1 Nat byte_machine_provider_ctx 30 (IRList.nil IRScalar) byte_machine_external_mem 7";
+        let initial = "ir_byte_init_v1 Nat byte_machine_provider_ctx 30 (@IRList.nil IRScalar) byte_machine_external_mem 7";
         check(&mut spec, "byte_machine_zero_fuel", "IRByteConfigV1 Nat",
             &format!("ir_byte_run_v1 Nat byte_machine_provider_ctx byte_machine_provider_ok 0 ({initial})"), initial);
         let partial = run(
@@ -521,7 +521,7 @@ fn fuel_exhaustion_retains_running_world_and_resumes_through_the_shared_driver()
                 "ir_byte_mem_bytes_v1 (ir_byte_world_memory_v1 Nat ({})) 16",
                 world(&partial)
             ),
-            "IROption.some Nat 8",
+            "@IROption.some Nat 8",
         );
         let resumed = format!(
             "ir_byte_run_v1 Nat byte_machine_provider_ctx byte_machine_provider_ok 32 ({partial})"
@@ -557,7 +557,7 @@ fn byte_array_capture_survives_nested_callees_and_retires_with_its_owner() {
     crate::test_utils::run_with_stack(|| {
         let mut spec = machine_spec();
         let mut allocation = Node::new(
-            "IRInst.alloca (IRTy.array_ (IRTy.int_ 8) 16) (IROption.none Nat)",
+            "IRInst.alloca (IRTy.array_ (IRTy.int_ 8) 16) (@IROption.none Nat)",
             &[0],
             &["IRTy.ptr_"],
         );
@@ -658,7 +658,7 @@ fn byte_array_capture_survives_nested_callees_and_retires_with_its_owner() {
             "byte_machine_capture_final_bytes",
             "IROption Nat",
             &format!("ir_byte_mem_bytes_v1 ({memory}) 64"),
-            "IROption.some Nat 99",
+            "@IROption.some Nat 99",
         );
         check(&mut spec, "byte_machine_capture_owner_retired", "IROutcome",
             &format!("byte_machine_memory_outcome (ir_byte_load_v1 byte_machine_capture_ctx (IRTy.int_ 64) (IRScalar.ptr_ 64) 0 Bool.false ({memory}))"),
@@ -678,7 +678,7 @@ fn returning_a_local_byte_pointer_does_not_extend_its_activation_lifetime() {
     crate::test_utils::run_with_stack(|| {
         let mut spec = machine_spec();
         let mut allocation = Node::new(
-            "IRInst.alloca (IRTy.array_ (IRTy.int_ 8) 16) (IROption.none Nat)",
+            "IRInst.alloca (IRTy.array_ (IRTy.int_ 8) 16) (@IROption.none Nat)",
             &[0],
             &["IRTy.ptr_"],
         );
@@ -737,7 +737,7 @@ fn returning_a_local_byte_pointer_does_not_extend_its_activation_lifetime() {
                 "ir_byte_mem_bytes_v1 (ir_byte_world_memory_v1 Nat ({})) 64",
                 world(&executed)
             ),
-            "IROption.some Nat 77",
+            "@IROption.some Nat 77",
         );
     });
 }
@@ -851,9 +851,9 @@ fn fresh_root_owner_does_not_reuse_historical_allocations() {
             ],
         );
         context(&mut spec, "byte_machine_owner_ctx", &[root]);
-        let retired = "IRByteMemoryV1.mk (IRList.cons IRByteAllocationV1 (IRByteAllocationV1.mk 16 8 7 Bool.false) (IRList.nil IRByteAllocationV1)) (fun (_ : Nat) => IROption.none Nat) 64";
+        let retired = "IRByteMemoryV1.mk (@IRList.cons IRByteAllocationV1 (IRByteAllocationV1.mk 16 8 7 Bool.false) (@IRList.nil IRByteAllocationV1)) (fun (_ : Nat) => @IROption.none Nat) 64";
         let initial = format!(
-            "ir_byte_init_v1 Nat byte_machine_owner_ctx 60 (IRList.nil IRScalar) ({retired}) 0"
+            "ir_byte_init_v1 Nat byte_machine_owner_ctx 60 (@IRList.nil IRScalar) ({retired}) 0"
         );
         check(
             &mut spec,
@@ -885,7 +885,7 @@ fn fresh_root_owner_does_not_reuse_historical_allocations() {
             &outcome(&executed),
             &returned(&["IRScalar.int_ 1"]),
         );
-        let live = "IRByteMemoryV1.mk (IRList.cons IRByteAllocationV1 (IRByteAllocationV1.mk 16 8 7 Bool.true) (IRList.nil IRByteAllocationV1)) (fun (_ : Nat) => IROption.none Nat) 64";
+        let live = "IRByteMemoryV1.mk (@IRList.cons IRByteAllocationV1 (IRByteAllocationV1.mk 16 8 7 Bool.true) (@IRList.nil IRByteAllocationV1)) (fun (_ : Nat) => @IROption.none Nat) 64";
         let rejected = run(
             "byte_machine_owner_ctx",
             "byte_machine_no_import",

@@ -11,8 +11,8 @@ fn list(ty: &str, values: &[String]) -> String {
     values
         .iter()
         .rev()
-        .fold(format!("IRList.nil {ty}"), |tail, value| {
-            format!("IRList.cons {ty} ({value}) ({tail})")
+        .fold(format!("@IRList.nil {ty}"), |tail, value| {
+            format!("@IRList.cons {ty} ({value}) ({tail})")
         })
 }
 
@@ -45,9 +45,9 @@ fn layout(ty: &str, size: u64, align: u64, fields: &[&str], offsets: &[u64]) -> 
 
 fn context(rows: &[String]) -> String {
     format!(
-        "IRByteContextV1.mk (IRModule.mk (IRList.nil IRFunc) (IRList.nil IRGlobal))
- ({}) (IRList.nil IRByteSignatureV1) (IRList.nil IRByteFunctionV1)
- (IRList.nil IRByteSiteV1)",
+        "IRByteContextV1.mk (IRModule.mk (@IRList.nil IRFunc) (@IRList.nil IRGlobal))
+ ({}) (@IRList.nil IRByteSignatureV1) (@IRList.nil IRByteFunctionV1)
+ (@IRList.nil IRByteSiteV1)",
         list("IRByteLayoutV1", rows)
     )
 }
@@ -95,7 +95,7 @@ fn byte_fat_nested_struct_fields_keep_exact_layout_identity_and_check_every_carr
                 &format!("byte_fat_nested_row_{index}"),
                 "IROption IRByteLayoutV1",
                 &format!("ir_byte_layout_v1 byte_fat_nested_context (IRTy.struct_ {id})"),
-                &format!("IROption.some IRByteLayoutV1 ({})", rows[index]),
+                &format!("@IROption.some IRByteLayoutV1 ({})", rows[index]),
             );
         }
         for (index, (a, b)) in [
@@ -120,10 +120,10 @@ fn byte_fat_nested_struct_fields_keep_exact_layout_identity_and_check_every_carr
             &mut spec,
             "byte_fat_nested_not_str_row",
             &format!(
-                "def byte_fat_nested_not_str_row : Eq (IRList IRTy)
+                "def byte_fat_nested_not_str_row : @Eq (IRList IRTy)
  (ir_byte_layout_fields_v1 ({}))
- (IRList.cons IRTy IRTy.fatstr_ (IRList.nil IRTy)) :=
- Eq.refl (IRList IRTy) (IRList.cons IRTy IRTy.fatstr_ (IRList.nil IRTy))",
+ (@IRList.cons IRTy IRTy.fatstr_ (@IRList.nil IRTy)) :=
+ @Eq.refl (IRList IRTy) (@IRList.cons IRTy IRTy.fatstr_ (@IRList.nil IRTy))",
                 rows[1]
             ),
         );

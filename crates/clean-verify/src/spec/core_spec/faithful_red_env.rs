@@ -134,11 +134,11 @@ impl Specification {
     pub(super) fn add_decidable_name_eq(&mut self) -> Result<(), SpecError> {
         self.add_definition(Self::fre_eq_lemma(
             "bool_false_ne_true",
-            "forall (C : Prop), Eq Bool Bool.false Bool.true -> C",
-            "fun (C : Prop) (h : Eq Bool Bool.false Bool.true) => \
-             Empty.rec (fun (_ : Empty) => C) \
-             (Eq.substType Bool \
-             (fun (z : Bool) => Bool.rec (fun (_ : Bool) => Type) Nat Empty z) \
+            "forall (C : Prop), @Eq Bool Bool.false Bool.true -> C",
+            "fun (C : Prop) (h : @Eq Bool Bool.false Bool.true) => \
+             @Empty.rec (fun (_ : Empty) => C) \
+             (@Eq.substType Bool \
+             (fun (z : Bool) => @Bool.rec (fun (_ : Bool) => Type) Nat Empty z) \
              Bool.false Bool.true h Nat.zero)",
             "Bool no-confusion: Eq false true is absurd (CPS into any Prop). DerivedProved, zero axiom_deps.",
             &["Bool.rec", "Empty", "Empty.rec", "Eq.substType"],
@@ -146,11 +146,11 @@ impl Specification {
 
         self.add_definition(Self::fre_eq_lemma(
             "nat_zero_ne_succ_beq",
-            "forall (a : Nat) (C : Prop), Eq Nat Nat.zero (Nat.succ a) -> C",
-            "fun (a : Nat) (C : Prop) (h : Eq Nat Nat.zero (Nat.succ a)) => \
-             Empty.rec (fun (_ : Empty) => C) \
-             (Eq.substType Nat \
-             (fun (z : Nat) => Nat.rec (fun (_ : Nat) => Type) Nat (fun (_ : Nat) (_ : Type) => Empty) z) \
+            "forall (a : Nat) (C : Prop), @Eq Nat Nat.zero (Nat.succ a) -> C",
+            "fun (a : Nat) (C : Prop) (h : @Eq Nat Nat.zero (Nat.succ a)) => \
+             @Empty.rec (fun (_ : Empty) => C) \
+             (@Eq.substType Nat \
+             (fun (z : Nat) => @Nat.rec (fun (_ : Nat) => Type) Nat (fun (_ : Nat) (_ : Type) => Empty) z) \
              Nat.zero (Nat.succ a) h Nat.zero)",
             "Nat no-confusion: Eq 0 (succ a) is absurd (CPS into any Prop). DerivedProved, zero axiom_deps.",
             &["Nat.rec", "Empty", "Empty.rec", "Eq.substType"],
@@ -158,13 +158,13 @@ impl Specification {
 
         self.add_definition(Self::fre_eq_lemma(
             "nat_is_zero_eq",
-            "forall (n : Nat), Eq Bool (nat_is_zero n) Bool.true -> Eq Nat n Nat.zero",
-            "fun (n : Nat) => Nat.rec \
-             (fun (z : Nat) => Eq Bool (nat_is_zero z) Bool.true -> Eq Nat z Nat.zero) \
-             (fun (_ : Eq Bool (nat_is_zero Nat.zero) Bool.true) => Eq.refl Nat Nat.zero) \
-             (fun (k : Nat) (_ih : Eq Bool (nat_is_zero k) Bool.true -> Eq Nat k Nat.zero) => \
-             fun (h : Eq Bool (nat_is_zero (Nat.succ k)) Bool.true) => \
-             bool_false_ne_true (Eq Nat (Nat.succ k) Nat.zero) h) \
+            "forall (n : Nat), @Eq Bool (nat_is_zero n) Bool.true -> @Eq Nat n Nat.zero",
+            "fun (n : Nat) => @Nat.rec \
+             (fun (z : Nat) => @Eq Bool (nat_is_zero z) Bool.true -> @Eq Nat z Nat.zero) \
+             (fun (_ : @Eq Bool (nat_is_zero Nat.zero) Bool.true) => @Eq.refl Nat Nat.zero) \
+             (fun (k : Nat) (_ih : @Eq Bool (nat_is_zero k) Bool.true -> @Eq Nat k Nat.zero) => \
+             fun (h : @Eq Bool (nat_is_zero (Nat.succ k)) Bool.true) => \
+             bool_false_ne_true (@Eq Nat (Nat.succ k) Nat.zero) h) \
              n",
             "nat_is_zero inversion: nat_is_zero n = true -> n = 0. DerivedProved, zero axiom_deps.",
             &["Nat.rec", "Eq.refl", "bool_false_ne_true", "nat_is_zero"],
@@ -172,12 +172,12 @@ impl Specification {
 
         self.add_definition(Self::fre_eq_lemma(
             "band_eq_true_left",
-            "forall (p : Bool) (q : Bool), Eq Bool (Bool.and p q) Bool.true -> Eq Bool p Bool.true",
-            "fun (p : Bool) (q : Bool) => Bool.rec \
-             (fun (zp : Bool) => Eq Bool (Bool.and zp q) Bool.true -> Eq Bool zp Bool.true) \
-             (fun (h : Eq Bool (Bool.and Bool.false q) Bool.true) => \
-             bool_false_ne_true (Eq Bool Bool.false Bool.true) h) \
-             (fun (_ : Eq Bool (Bool.and Bool.true q) Bool.true) => Eq.refl Bool Bool.true) \
+            "forall (p : Bool) (q : Bool), @Eq Bool (Bool.and p q) Bool.true -> @Eq Bool p Bool.true",
+            "fun (p : Bool) (q : Bool) => @Bool.rec \
+             (fun (zp : Bool) => @Eq Bool (Bool.and zp q) Bool.true -> @Eq Bool zp Bool.true) \
+             (fun (h : @Eq Bool (Bool.and Bool.false q) Bool.true) => \
+             bool_false_ne_true (@Eq Bool Bool.false Bool.true) h) \
+             (fun (_ : @Eq Bool (Bool.and Bool.true q) Bool.true) => @Eq.refl Bool Bool.true) \
              p",
             "Bool.and inversion (left): Bool.and p q = true -> p = true. DerivedProved, zero axiom_deps.",
             &["Bool.rec", "Eq.refl", "bool_false_ne_true", "Bool.and"],
@@ -185,12 +185,12 @@ impl Specification {
 
         self.add_definition(Self::fre_eq_lemma(
             "band_eq_true_right",
-            "forall (p : Bool) (q : Bool), Eq Bool (Bool.and p q) Bool.true -> Eq Bool q Bool.true",
-            "fun (p : Bool) (q : Bool) => Bool.rec \
-             (fun (zp : Bool) => Eq Bool (Bool.and zp q) Bool.true -> Eq Bool q Bool.true) \
-             (fun (h : Eq Bool (Bool.and Bool.false q) Bool.true) => \
-             bool_false_ne_true (Eq Bool q Bool.true) h) \
-             (fun (h : Eq Bool (Bool.and Bool.true q) Bool.true) => h) \
+            "forall (p : Bool) (q : Bool), @Eq Bool (Bool.and p q) Bool.true -> @Eq Bool q Bool.true",
+            "fun (p : Bool) (q : Bool) => @Bool.rec \
+             (fun (zp : Bool) => @Eq Bool (Bool.and zp q) Bool.true -> @Eq Bool q Bool.true) \
+             (fun (h : @Eq Bool (Bool.and Bool.false q) Bool.true) => \
+             bool_false_ne_true (@Eq Bool q Bool.true) h) \
+             (fun (h : @Eq Bool (Bool.and Bool.true q) Bool.true) => h) \
              p",
             "Bool.and inversion (right): Bool.and p q = true -> q = true. DerivedProved, zero axiom_deps.",
             &["Bool.rec", "bool_false_ne_true", "Bool.and"],
@@ -198,14 +198,14 @@ impl Specification {
 
         self.add_definition(Self::fre_eq_lemma(
             "nat_add_eq_zero_right",
-            "forall (x : Nat) (y : Nat), Eq Nat (Nat.add x y) Nat.zero -> Eq Nat y Nat.zero",
-            "fun (x : Nat) (y : Nat) => Nat.rec \
-             (fun (z : Nat) => Eq Nat (Nat.add x z) Nat.zero -> Eq Nat z Nat.zero) \
-             (fun (_ : Eq Nat (Nat.add x Nat.zero) Nat.zero) => Eq.refl Nat Nat.zero) \
-             (fun (yp : Nat) (_ih : Eq Nat (Nat.add x yp) Nat.zero -> Eq Nat yp Nat.zero) => \
-             fun (h : Eq Nat (Nat.add x (Nat.succ yp)) Nat.zero) => \
-             nat_zero_ne_succ_beq (Nat.add x yp) (Eq Nat (Nat.succ yp) Nat.zero) \
-             (Eq.symm Nat (Nat.add x (Nat.succ yp)) Nat.zero h)) \
+            "forall (x : Nat) (y : Nat), @Eq Nat (Nat.add x y) Nat.zero -> @Eq Nat y Nat.zero",
+            "fun (x : Nat) (y : Nat) => @Nat.rec \
+             (fun (z : Nat) => @Eq Nat (Nat.add x z) Nat.zero -> @Eq Nat z Nat.zero) \
+             (fun (_ : @Eq Nat (Nat.add x Nat.zero) Nat.zero) => @Eq.refl Nat Nat.zero) \
+             (fun (yp : Nat) (_ih : @Eq Nat (Nat.add x yp) Nat.zero -> @Eq Nat yp Nat.zero) => \
+             fun (h : @Eq Nat (Nat.add x (Nat.succ yp)) Nat.zero) => \
+             nat_zero_ne_succ_beq (Nat.add x yp) (@Eq Nat (Nat.succ yp) Nat.zero) \
+             (@Eq.symm Nat (Nat.add x (Nat.succ yp)) Nat.zero h)) \
              y",
             "Nat.add = 0 inversion (right): x + y = 0 -> y = 0. DerivedProved, zero axiom_deps.",
             &[
@@ -219,10 +219,10 @@ impl Specification {
 
         self.add_definition(Self::fre_eq_lemma(
             "nat_add_eq_zero_left",
-            "forall (x : Nat) (y : Nat), Eq Nat (Nat.add x y) Nat.zero -> Eq Nat x Nat.zero",
-            "fun (x : Nat) (y : Nat) (h : Eq Nat (Nat.add x y) Nat.zero) => \
-             Eq.substType Nat \
-             (fun (z : Nat) => Eq Nat (Nat.add x z) Nat.zero) \
+            "forall (x : Nat) (y : Nat), @Eq Nat (Nat.add x y) Nat.zero -> @Eq Nat x Nat.zero",
+            "fun (x : Nat) (y : Nat) (h : @Eq Nat (Nat.add x y) Nat.zero) => \
+             @Eq.substType Nat \
+             (fun (z : Nat) => @Eq Nat (Nat.add x z) Nat.zero) \
              y Nat.zero (nat_add_eq_zero_right x y h) h",
             "Nat.add = 0 inversion (left): x + y = 0 -> x = 0. DerivedProved, zero axiom_deps.",
             &["Eq.substType", "nat_add_eq_zero_right", "Nat.add"],
@@ -231,32 +231,32 @@ impl Specification {
         self.add_definition(Self::fre_eq_lemma(
             "nat_sub_eq_zero_antisymm",
             "forall (a : Nat) (b : Nat), \
-             Eq Nat (Nat.sub a b) Nat.zero -> Eq Nat (Nat.sub b a) Nat.zero -> Eq Nat a b",
-            "fun (a : Nat) => Nat.rec \
+             @Eq Nat (Nat.sub a b) Nat.zero -> @Eq Nat (Nat.sub b a) Nat.zero -> @Eq Nat a b",
+            "fun (a : Nat) => @Nat.rec \
              (fun (za : Nat) => forall (b : Nat), \
-             Eq Nat (Nat.sub za b) Nat.zero -> Eq Nat (Nat.sub b za) Nat.zero -> Eq Nat za b) \
-             (fun (b : Nat) => Nat.rec \
-             (fun (zb : Nat) => Eq Nat (Nat.sub Nat.zero zb) Nat.zero -> Eq Nat (Nat.sub zb Nat.zero) Nat.zero -> Eq Nat Nat.zero zb) \
-             (fun (_ : Eq Nat (Nat.sub Nat.zero Nat.zero) Nat.zero) (_ : Eq Nat (Nat.sub Nat.zero Nat.zero) Nat.zero) => Eq.refl Nat Nat.zero) \
-             (fun (bp : Nat) (_ihb : Eq Nat (Nat.sub Nat.zero bp) Nat.zero -> Eq Nat (Nat.sub bp Nat.zero) Nat.zero -> Eq Nat Nat.zero bp) => \
-             fun (_h1 : Eq Nat (Nat.sub Nat.zero (Nat.succ bp)) Nat.zero) \
-             (h2 : Eq Nat (Nat.sub (Nat.succ bp) Nat.zero) Nat.zero) => \
-             nat_zero_ne_succ_beq bp (Eq Nat Nat.zero (Nat.succ bp)) (Eq.symm Nat (Nat.sub (Nat.succ bp) Nat.zero) Nat.zero h2)) \
+             @Eq Nat (Nat.sub za b) Nat.zero -> @Eq Nat (Nat.sub b za) Nat.zero -> @Eq Nat za b) \
+             (fun (b : Nat) => @Nat.rec \
+             (fun (zb : Nat) => @Eq Nat (Nat.sub Nat.zero zb) Nat.zero -> @Eq Nat (Nat.sub zb Nat.zero) Nat.zero -> @Eq Nat Nat.zero zb) \
+             (fun (_ : @Eq Nat (Nat.sub Nat.zero Nat.zero) Nat.zero) (_ : @Eq Nat (Nat.sub Nat.zero Nat.zero) Nat.zero) => @Eq.refl Nat Nat.zero) \
+             (fun (bp : Nat) (_ihb : @Eq Nat (Nat.sub Nat.zero bp) Nat.zero -> @Eq Nat (Nat.sub bp Nat.zero) Nat.zero -> @Eq Nat Nat.zero bp) => \
+             fun (_h1 : @Eq Nat (Nat.sub Nat.zero (Nat.succ bp)) Nat.zero) \
+             (h2 : @Eq Nat (Nat.sub (Nat.succ bp) Nat.zero) Nat.zero) => \
+             nat_zero_ne_succ_beq bp (@Eq Nat Nat.zero (Nat.succ bp)) (@Eq.symm Nat (Nat.sub (Nat.succ bp) Nat.zero) Nat.zero h2)) \
              b) \
-             (fun (ap : Nat) (ih : forall (b : Nat), Eq Nat (Nat.sub ap b) Nat.zero -> Eq Nat (Nat.sub b ap) Nat.zero -> Eq Nat ap b) => \
-             fun (b : Nat) => Nat.rec \
-             (fun (zb : Nat) => Eq Nat (Nat.sub (Nat.succ ap) zb) Nat.zero -> Eq Nat (Nat.sub zb (Nat.succ ap)) Nat.zero -> Eq Nat (Nat.succ ap) zb) \
-             (fun (h1 : Eq Nat (Nat.sub (Nat.succ ap) Nat.zero) Nat.zero) (_h2 : Eq Nat (Nat.sub Nat.zero (Nat.succ ap)) Nat.zero) => \
-             nat_zero_ne_succ_beq ap (Eq Nat (Nat.succ ap) Nat.zero) (Eq.symm Nat (Nat.sub (Nat.succ ap) Nat.zero) Nat.zero h1)) \
-             (fun (bp : Nat) (_ihb : Eq Nat (Nat.sub (Nat.succ ap) bp) Nat.zero -> Eq Nat (Nat.sub bp (Nat.succ ap)) Nat.zero -> Eq Nat (Nat.succ ap) bp) => \
-             fun (h1 : Eq Nat (Nat.sub (Nat.succ ap) (Nat.succ bp)) Nat.zero) \
-             (h2 : Eq Nat (Nat.sub (Nat.succ bp) (Nat.succ ap)) Nat.zero) => \
-             Eq.cong Nat Nat Nat.succ ap bp \
+             (fun (ap : Nat) (ih : forall (b : Nat), @Eq Nat (Nat.sub ap b) Nat.zero -> @Eq Nat (Nat.sub b ap) Nat.zero -> @Eq Nat ap b) => \
+             fun (b : Nat) => @Nat.rec \
+             (fun (zb : Nat) => @Eq Nat (Nat.sub (Nat.succ ap) zb) Nat.zero -> @Eq Nat (Nat.sub zb (Nat.succ ap)) Nat.zero -> @Eq Nat (Nat.succ ap) zb) \
+             (fun (h1 : @Eq Nat (Nat.sub (Nat.succ ap) Nat.zero) Nat.zero) (_h2 : @Eq Nat (Nat.sub Nat.zero (Nat.succ ap)) Nat.zero) => \
+             nat_zero_ne_succ_beq ap (@Eq Nat (Nat.succ ap) Nat.zero) (@Eq.symm Nat (Nat.sub (Nat.succ ap) Nat.zero) Nat.zero h1)) \
+             (fun (bp : Nat) (_ihb : @Eq Nat (Nat.sub (Nat.succ ap) bp) Nat.zero -> @Eq Nat (Nat.sub bp (Nat.succ ap)) Nat.zero -> @Eq Nat (Nat.succ ap) bp) => \
+             fun (h1 : @Eq Nat (Nat.sub (Nat.succ ap) (Nat.succ bp)) Nat.zero) \
+             (h2 : @Eq Nat (Nat.sub (Nat.succ bp) (Nat.succ ap)) Nat.zero) => \
+             @Eq.cong Nat Nat Nat.succ ap bp \
              (ih bp \
-             (Eq.trans Nat (Nat.sub ap bp) (Nat.sub (Nat.succ ap) (Nat.succ bp)) Nat.zero \
-             (Eq.symm Nat (Nat.sub (Nat.succ ap) (Nat.succ bp)) (Nat.sub ap bp) (nat_sub_succ_succ ap bp)) h1) \
-             (Eq.trans Nat (Nat.sub bp ap) (Nat.sub (Nat.succ bp) (Nat.succ ap)) Nat.zero \
-             (Eq.symm Nat (Nat.sub (Nat.succ bp) (Nat.succ ap)) (Nat.sub bp ap) (nat_sub_succ_succ bp ap)) h2))) \
+             (@Eq.trans Nat (Nat.sub ap bp) (Nat.sub (Nat.succ ap) (Nat.succ bp)) Nat.zero \
+             (@Eq.symm Nat (Nat.sub (Nat.succ ap) (Nat.succ bp)) (Nat.sub ap bp) (nat_sub_succ_succ ap bp)) h1) \
+             (@Eq.trans Nat (Nat.sub bp ap) (Nat.sub (Nat.succ bp) (Nat.succ ap)) Nat.zero \
+             (@Eq.symm Nat (Nat.sub (Nat.succ bp) (Nat.succ ap)) (Nat.sub bp ap) (nat_sub_succ_succ bp ap)) h2))) \
              b) \
              a",
             "<=-antisymmetry of truncated subtraction: a-b=0 -> b-a=0 -> a=b. DerivedProved, zero axiom_deps.",
@@ -274,8 +274,8 @@ impl Specification {
 
         self.add_definition(Self::fre_eq_lemma(
             "nat_eqb_eq",
-            "forall (a : Nat) (b : Nat), Eq Bool (nat_eqb a b) Bool.true -> Eq Nat a b",
-            "fun (a : Nat) (b : Nat) (h : Eq Bool (nat_eqb a b) Bool.true) => \
+            "forall (a : Nat) (b : Nat), @Eq Bool (nat_eqb a b) Bool.true -> @Eq Nat a b",
+            "fun (a : Nat) (b : Nat) (h : @Eq Bool (nat_eqb a b) Bool.true) => \
              nat_sub_eq_zero_antisymm a b \
              (nat_add_eq_zero_left (Nat.sub a b) (Nat.sub b a) \
              (nat_is_zero_eq (Nat.add (Nat.sub a b) (Nat.sub b a)) h)) \
@@ -294,45 +294,45 @@ impl Specification {
         self.add_definition(Self::fre_eq_lemma(
             "name_eqb_str_str",
             "forall (p : Name) (q : Name) (m : Nat) (n : Nat), \
-             Eq Bool (name_eqb (Name.str p m) (Name.str q n)) \
+             @Eq Bool (name_eqb (Name.str p m) (Name.str q n)) \
              (Bool.and (name_eqb p q) (nat_eqb m n))",
             "fun (p : Name) (q : Name) (m : Nat) (n : Nat) => \
-             Eq.refl Bool (name_eqb (Name.str p m) (Name.str q n))",
+             @Eq.refl Bool (name_eqb (Name.str p m) (Name.str q n))",
             "name_eqb str/str computation (definitional, presents Bool.and form). DerivedProved, zero axiom_deps.",
             &["Eq.refl", "name_eqb"],
         ))?;
 
         self.add_definition(Self::fre_eq_lemma(
             "name_eqb_eq",
-            "forall (a : Name) (b : Name), Eq Bool (name_eqb a b) Bool.true -> Eq Name a b",
-            "fun (a : Name) => Name.rec \
-             (fun (za : Name) => forall (b : Name), Eq Bool (name_eqb za b) Bool.true -> Eq Name za b) \
-             (fun (b : Name) => Name.rec \
-             (fun (zb : Name) => Eq Bool (name_eqb Name.anonymous zb) Bool.true -> Eq Name Name.anonymous zb) \
-             (fun (_ : Eq Bool (name_eqb Name.anonymous Name.anonymous) Bool.true) => Eq.refl Name Name.anonymous) \
-             (fun (q : Name) (n : Nat) (_ihb : Eq Bool (name_eqb Name.anonymous q) Bool.true -> Eq Name Name.anonymous q) => \
-             fun (h : Eq Bool (name_eqb Name.anonymous (Name.str q n)) Bool.true) => \
-             bool_false_ne_true (Eq Name Name.anonymous (Name.str q n)) h) \
+            "forall (a : Name) (b : Name), @Eq Bool (name_eqb a b) Bool.true -> @Eq Name a b",
+            "fun (a : Name) => @Name.rec \
+             (fun (za : Name) => forall (b : Name), @Eq Bool (name_eqb za b) Bool.true -> @Eq Name za b) \
+             (fun (b : Name) => @Name.rec \
+             (fun (zb : Name) => @Eq Bool (name_eqb Name.anonymous zb) Bool.true -> @Eq Name Name.anonymous zb) \
+             (fun (_ : @Eq Bool (name_eqb Name.anonymous Name.anonymous) Bool.true) => @Eq.refl Name Name.anonymous) \
+             (fun (q : Name) (n : Nat) (_ihb : @Eq Bool (name_eqb Name.anonymous q) Bool.true -> @Eq Name Name.anonymous q) => \
+             fun (h : @Eq Bool (name_eqb Name.anonymous (Name.str q n)) Bool.true) => \
+             bool_false_ne_true (@Eq Name Name.anonymous (Name.str q n)) h) \
              b) \
-             (fun (p : Name) (m : Nat) (ih : forall (b : Name), Eq Bool (name_eqb p b) Bool.true -> Eq Name p b) => \
-             fun (b : Name) => Name.rec \
-             (fun (zb : Name) => Eq Bool (name_eqb (Name.str p m) zb) Bool.true -> Eq Name (Name.str p m) zb) \
-             (fun (h : Eq Bool (name_eqb (Name.str p m) Name.anonymous) Bool.true) => \
-             bool_false_ne_true (Eq Name (Name.str p m) Name.anonymous) h) \
-             (fun (q : Name) (n : Nat) (_ihb : Eq Bool (name_eqb (Name.str p m) q) Bool.true -> Eq Name (Name.str p m) q) => \
-             fun (h : Eq Bool (name_eqb (Name.str p m) (Name.str q n)) Bool.true) => \
-             (fun (hx : Eq Bool (name_eqb p q) Bool.true) (hy : Eq Bool (nat_eqb m n) Bool.true) => \
-             (fun (hpq : Eq Name p q) (hmn : Eq Nat m n) => \
-             Eq.trans Name (Name.str p m) (Name.str q m) (Name.str q n) \
-             (Eq.cong Name Name (fun (w : Name) => Name.str w m) p q hpq) \
-             (Eq.cong Nat Name (fun (j : Nat) => Name.str q j) m n hmn)) \
+             (fun (p : Name) (m : Nat) (ih : forall (b : Name), @Eq Bool (name_eqb p b) Bool.true -> @Eq Name p b) => \
+             fun (b : Name) => @Name.rec \
+             (fun (zb : Name) => @Eq Bool (name_eqb (Name.str p m) zb) Bool.true -> @Eq Name (Name.str p m) zb) \
+             (fun (h : @Eq Bool (name_eqb (Name.str p m) Name.anonymous) Bool.true) => \
+             bool_false_ne_true (@Eq Name (Name.str p m) Name.anonymous) h) \
+             (fun (q : Name) (n : Nat) (_ihb : @Eq Bool (name_eqb (Name.str p m) q) Bool.true -> @Eq Name (Name.str p m) q) => \
+             fun (h : @Eq Bool (name_eqb (Name.str p m) (Name.str q n)) Bool.true) => \
+             (fun (hx : @Eq Bool (name_eqb p q) Bool.true) (hy : @Eq Bool (nat_eqb m n) Bool.true) => \
+             (fun (hpq : @Eq Name p q) (hmn : @Eq Nat m n) => \
+             @Eq.trans Name (Name.str p m) (Name.str q m) (Name.str q n) \
+             (@Eq.cong Name Name (fun (w : Name) => Name.str w m) p q hpq) \
+             (@Eq.cong Nat Name (fun (j : Nat) => Name.str q j) m n hmn)) \
              (ih q hx) (nat_eqb_eq m n hy)) \
              (band_eq_true_left (name_eqb p q) (nat_eqb m n) \
-             (Eq.substType Bool (fun (x : Bool) => Eq Bool x Bool.true) \
+             (@Eq.substType Bool (fun (x : Bool) => @Eq Bool x Bool.true) \
              (name_eqb (Name.str p m) (Name.str q n)) (Bool.and (name_eqb p q) (nat_eqb m n)) \
              (name_eqb_str_str p q m n) h)) \
              (band_eq_true_right (name_eqb p q) (nat_eqb m n) \
-             (Eq.substType Bool (fun (x : Bool) => Eq Bool x Bool.true) \
+             (@Eq.substType Bool (fun (x : Bool) => @Eq Bool x Bool.true) \
              (name_eqb (Name.str p m) (Name.str q n)) (Bool.and (name_eqb p q) (nat_eqb m n)) \
              (name_eqb_str_str p q m n) h))) \
              b) \
@@ -365,31 +365,31 @@ impl Specification {
             name: "opt_pick_some_inv".to_string(),
             type_src: concat!(
                 "forall (alpha : Type) (b : Bool) (x : alpha) (cont : OptionType alpha) (y : alpha) (C : Prop), ",
-                "Eq (OptionType alpha) (opt_pick alpha b x cont) (OptionType.some alpha y) -> ",
-                "(Eq Bool b Bool.true -> Eq alpha x y -> C) -> ",
-                "(Eq Bool b Bool.false -> Eq (OptionType alpha) cont (OptionType.some alpha y) -> C) -> ",
+                "@Eq (OptionType alpha) (opt_pick alpha b x cont) (@OptionType.some alpha y) -> ",
+                "(@Eq Bool b Bool.true -> @Eq alpha x y -> C) -> ",
+                "(@Eq Bool b Bool.false -> @Eq (OptionType alpha) cont (@OptionType.some alpha y) -> C) -> ",
                 "C"
             )
             .to_string(),
             value_src: Some(
                 concat!(
                     "fun (alpha : Type) (b : Bool) (x : alpha) (cont : OptionType alpha) (y : alpha) (C : Prop) ",
-                    "(h : Eq (OptionType alpha) (opt_pick alpha b x cont) (OptionType.some alpha y)) ",
-                    "(kt : Eq Bool b Bool.true -> Eq alpha x y -> C) ",
-                    "(kf : Eq Bool b Bool.false -> Eq (OptionType alpha) cont (OptionType.some alpha y) -> C) => ",
-                    "Bool.rec ",
+                    "(h : @Eq (OptionType alpha) (opt_pick alpha b x cont) (@OptionType.some alpha y)) ",
+                    "(kt : @Eq Bool b Bool.true -> @Eq alpha x y -> C) ",
+                    "(kf : @Eq Bool b Bool.false -> @Eq (OptionType alpha) cont (@OptionType.some alpha y) -> C) => ",
+                    "@Bool.rec ",
                     "(fun (z : Bool) => ",
-                    "Eq (OptionType alpha) (opt_pick alpha z x cont) (OptionType.some alpha y) -> ",
-                    "(Eq Bool z Bool.true -> Eq alpha x y -> C) -> ",
-                    "(Eq Bool z Bool.false -> Eq (OptionType alpha) cont (OptionType.some alpha y) -> C) -> C) ",
-                    "(fun (h0 : Eq (OptionType alpha) (opt_pick alpha Bool.false x cont) (OptionType.some alpha y)) ",
-                    "(_kt0 : Eq Bool Bool.false Bool.true -> Eq alpha x y -> C) ",
-                    "(kf0 : Eq Bool Bool.false Bool.false -> Eq (OptionType alpha) cont (OptionType.some alpha y) -> C) => ",
-                    "kf0 (Eq.refl Bool Bool.false) h0) ",
-                    "(fun (h0 : Eq (OptionType alpha) (opt_pick alpha Bool.true x cont) (OptionType.some alpha y)) ",
-                    "(kt0 : Eq Bool Bool.true Bool.true -> Eq alpha x y -> C) ",
-                    "(_kf0 : Eq Bool Bool.true Bool.false -> Eq (OptionType alpha) cont (OptionType.some alpha y) -> C) => ",
-                    "kt0 (Eq.refl Bool Bool.true) (option_some_inj alpha x y h0)) ",
+                    "@Eq (OptionType alpha) (opt_pick alpha z x cont) (@OptionType.some alpha y) -> ",
+                    "(@Eq Bool z Bool.true -> @Eq alpha x y -> C) -> ",
+                    "(@Eq Bool z Bool.false -> @Eq (OptionType alpha) cont (@OptionType.some alpha y) -> C) -> C) ",
+                    "(fun (h0 : @Eq (OptionType alpha) (opt_pick alpha Bool.false x cont) (@OptionType.some alpha y)) ",
+                    "(_kt0 : @Eq Bool Bool.false Bool.true -> @Eq alpha x y -> C) ",
+                    "(kf0 : @Eq Bool Bool.false Bool.false -> @Eq (OptionType alpha) cont (@OptionType.some alpha y) -> C) => ",
+                    "kf0 (@Eq.refl Bool Bool.false) h0) ",
+                    "(fun (h0 : @Eq (OptionType alpha) (opt_pick alpha Bool.true x cont) (@OptionType.some alpha y)) ",
+                    "(kt0 : @Eq Bool Bool.true Bool.true -> @Eq alpha x y -> C) ",
+                    "(_kf0 : @Eq Bool Bool.true Bool.false -> @Eq (OptionType alpha) cont (@OptionType.some alpha y) -> C) => ",
+                    "kt0 (@Eq.refl Bool Bool.true) (option_some_inj alpha x y h0)) ",
                     "b h kt kf"
                 )
                 .to_string(),
@@ -428,7 +428,7 @@ impl Specification {
             &format!(
                 "def faithful_rec_env : RecEnv := RecEnv.addRec RecEnv.empty ({REC}) \
                  (RecMeta.mk Nat.zero (Nat.succ Nat.zero) (Nat.succ Nat.zero) Nat.zero Bool.true \
-                   (KConstSig.mk (ListType.nil Name) (KExpr.sort Level.zero)) Nat.zero) \
+                   (KConstSig.mk (@ListType.nil Name) (KExpr.sort Level.zero)) Nat.zero) \
                  ({RULES})"
             ),
             "Faithful recursor environment (real-env discharge R0): one recursor REC modelling a \
@@ -440,7 +440,7 @@ impl Specification {
         self.add_recursive_def(
             &format!(
                 "def faithful_def_env : DefEnv := DefEnv.addDef DefEnv.empty ({DEFN}) \
-                 (KDefSig.mk (KConstSig.mk (ListType.nil Name) \
+                 (KDefSig.mk (KConstSig.mk (@ListType.nil Name) \
                    (KExpr.pi (KExpr.sort Level.zero) (KExpr.sort (Level.succ Level.zero)))) \
                    (KExpr.lam (KExpr.sort Level.zero) (KExpr.sort Level.zero)))"
             ),
@@ -463,11 +463,11 @@ impl Specification {
             name: "faithful_red_env_iota_nonvacuous".to_string(),
             type_src: format!(
                 "iota_step (red_rec faithful_red_env) \
-                 (KExpr.app (KExpr.app (KExpr.app (KExpr.const ({REC}) (ListType.nil Level)) (KExpr.sort Level.zero)) (KExpr.sort Level.zero)) (KExpr.const ({CTOR}) (ListType.nil Level))) \
+                 (KExpr.app (KExpr.app (KExpr.app (KExpr.const ({REC}) (@ListType.nil Level)) (KExpr.sort Level.zero)) (KExpr.sort Level.zero)) (KExpr.const ({CTOR}) (@ListType.nil Level))) \
                  (KExpr.app (KExpr.app (KExpr.lam (KExpr.sort Level.zero) (KExpr.sort Level.zero)) (KExpr.sort Level.zero)) (KExpr.sort Level.zero))"
             ),
             value_src: Some(
-                "Eq.refl (OptionType KExpr) (OptionType.some KExpr (KExpr.app (KExpr.app (KExpr.lam (KExpr.sort Level.zero) (KExpr.sort Level.zero)) (KExpr.sort Level.zero)) (KExpr.sort Level.zero)))".to_string(),
+                "@Eq.refl (OptionType KExpr) (@OptionType.some KExpr (KExpr.app (KExpr.app (KExpr.lam (KExpr.sort Level.zero) (KExpr.sort Level.zero)) (KExpr.sort Level.zero)) (KExpr.sort Level.zero)))".to_string(),
             ),
             is_axiom: false,
             description: "Non-vacuity witness (R0): faithful_red_env admits a real iota step — the recursor REC \
@@ -492,11 +492,11 @@ impl Specification {
             name: "faithful_red_env_delta_nonvacuous".to_string(),
             type_src: format!(
                 "delta_step (red_def faithful_red_env) \
-                 (KExpr.const ({DEFN}) (ListType.nil Level)) \
+                 (KExpr.const ({DEFN}) (@ListType.nil Level)) \
                  (KExpr.lam (KExpr.sort Level.zero) (KExpr.sort Level.zero))"
             ),
             value_src: Some(
-                "Eq.refl (OptionType KExpr) (OptionType.some KExpr (KExpr.lam (KExpr.sort Level.zero) (KExpr.sort Level.zero)))".to_string(),
+                "@Eq.refl (OptionType KExpr) (@OptionType.some KExpr (KExpr.lam (KExpr.sort Level.zero) (KExpr.sort Level.zero)))".to_string(),
             ),
             is_axiom: false,
             description: "Non-vacuity witness (R0): faithful_red_env admits a real delta step — the definition \
@@ -529,29 +529,29 @@ impl Specification {
         // (recrule_in_rules over the singleton list), and name_eqb_eq concludes.
         let value = format!(
             "fun (recname : Name) (cname : Name) (rule : RecRule) \
-             (h : Eq (OptionType RecRule) (recrule_for (red_rec faithful_red_env) recname cname) (OptionType.some RecRule rule)) => \
+             (h : @Eq (OptionType RecRule) (recrule_for (red_rec faithful_red_env) recname cname) (@OptionType.some RecRule rule)) => \
              opt_bind_some_inv RecRules RecRule (recrules_for (red_rec faithful_red_env) recname) \
-             (fun (rules : RecRules) => recrule_in_rules rules cname) rule (Eq Name ({CTOR}) cname) h \
+             (fun (rules : RecRules) => recrule_in_rules rules cname) rule (@Eq Name ({CTOR}) cname) h \
              (fun (w : RecRules) \
-             (hw : Eq (OptionType RecRules) (recrules_for (red_rec faithful_red_env) recname) (OptionType.some RecRules w)) \
-             (hfw : Eq (OptionType RecRule) (recrule_in_rules w cname) (OptionType.some RecRule rule)) => \
-             opt_pick_some_inv RecRules (name_eqb ({REC}) recname) ({RULES}) (OptionType.none RecRules) w (Eq Name ({CTOR}) cname) hw \
-             (fun (_ht : Eq Bool (name_eqb ({REC}) recname) Bool.true) (hval : Eq RecRules ({RULES}) w) => \
-             opt_pick_some_inv RecRule (name_eqb ({CTOR}) cname) ({RULE}) (OptionType.none RecRule) rule (Eq Name ({CTOR}) cname) \
-             (Eq.substType RecRules (fun (ww : RecRules) => Eq (OptionType RecRule) (recrule_in_rules ww cname) (OptionType.some RecRule rule)) \
-             w ({RULES}) (Eq.symm RecRules ({RULES}) w hval) hfw) \
-             (fun (htc : Eq Bool (name_eqb ({CTOR}) cname) Bool.true) (_hr : Eq RecRule ({RULE}) rule) => name_eqb_eq ({CTOR}) cname htc) \
-             (fun (_hfc : Eq Bool (name_eqb ({CTOR}) cname) Bool.false) (hn : Eq (OptionType RecRule) (OptionType.none RecRule) (OptionType.some RecRule rule)) => \
-             option_none_ne_some RecRule rule (Eq Name ({CTOR}) cname) hn)) \
-             (fun (_hf : Eq Bool (name_eqb ({REC}) recname) Bool.false) (hn : Eq (OptionType RecRules) (OptionType.none RecRules) (OptionType.some RecRules w)) => \
-             option_none_ne_some RecRules w (Eq Name ({CTOR}) cname) hn))"
+             (hw : @Eq (OptionType RecRules) (recrules_for (red_rec faithful_red_env) recname) (@OptionType.some RecRules w)) \
+             (hfw : @Eq (OptionType RecRule) (recrule_in_rules w cname) (@OptionType.some RecRule rule)) => \
+             opt_pick_some_inv RecRules (name_eqb ({REC}) recname) ({RULES}) (@OptionType.none RecRules) w (@Eq Name ({CTOR}) cname) hw \
+             (fun (_ht : @Eq Bool (name_eqb ({REC}) recname) Bool.true) (hval : @Eq RecRules ({RULES}) w) => \
+             opt_pick_some_inv RecRule (name_eqb ({CTOR}) cname) ({RULE}) (@OptionType.none RecRule) rule (@Eq Name ({CTOR}) cname) \
+             (@Eq.substType RecRules (fun (ww : RecRules) => @Eq (OptionType RecRule) (recrule_in_rules ww cname) (@OptionType.some RecRule rule)) \
+             w ({RULES}) (@Eq.symm RecRules ({RULES}) w hval) hfw) \
+             (fun (htc : @Eq Bool (name_eqb ({CTOR}) cname) Bool.true) (_hr : @Eq RecRule ({RULE}) rule) => name_eqb_eq ({CTOR}) cname htc) \
+             (fun (_hfc : @Eq Bool (name_eqb ({CTOR}) cname) Bool.false) (hn : @Eq (OptionType RecRule) (@OptionType.none RecRule) (@OptionType.some RecRule rule)) => \
+             option_none_ne_some RecRule rule (@Eq Name ({CTOR}) cname) hn)) \
+             (fun (_hf : @Eq Bool (name_eqb ({REC}) recname) Bool.false) (hn : @Eq (OptionType RecRules) (@OptionType.none RecRules) (@OptionType.some RecRules w)) => \
+             option_none_ne_some RecRules w (@Eq Name ({CTOR}) cname) hn))"
         );
         self.add_definition(SpecDefinition {
             name: "fre_cname_eq_ctor".to_string(),
             type_src: format!(
                 "forall (recname : Name) (cname : Name) (rule : RecRule), \
-                 Eq (OptionType RecRule) (recrule_for (red_rec faithful_red_env) recname cname) (OptionType.some RecRule rule) -> \
-                 Eq Name ({CTOR}) cname"
+                 @Eq (OptionType RecRule) (recrule_for (red_rec faithful_red_env) recname cname) (@OptionType.some RecRule rule) -> \
+                 @Eq Name ({CTOR}) cname"
             ),
             value_src: Some(value),
             is_axiom: false,
@@ -593,14 +593,14 @@ impl Specification {
             name: "faithful_rec_env_ctor_no_recmeta".to_string(),
             type_src: "RecEnvCtorNoRecMeta (red_rec faithful_red_env)".to_string(),
             value_src: Some(format!(
-                "RecEnvCtorNoRecMeta.mk (red_rec faithful_red_env) \
+                "@RecEnvCtorNoRecMeta.mk (red_rec faithful_red_env) \
                  (fun (recname : Name) (cname : Name) (rule : RecRule) (major : KExpr) \
-                 (_hhead : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname)) \
-                 (hrule : Eq (OptionType RecRule) (recrule_for (red_rec faithful_red_env) recname cname) (OptionType.some RecRule rule)) => \
-                 Eq.substType Name \
-                 (fun (n : Name) => Eq (OptionType RecMeta) (recmeta_for (red_rec faithful_red_env) n) (OptionType.none RecMeta)) \
+                 (_hhead : @Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (@OptionType.some Name cname)) \
+                 (hrule : @Eq (OptionType RecRule) (recrule_for (red_rec faithful_red_env) recname cname) (@OptionType.some RecRule rule)) => \
+                 @Eq.substType Name \
+                 (fun (n : Name) => @Eq (OptionType RecMeta) (recmeta_for (red_rec faithful_red_env) n) (@OptionType.none RecMeta)) \
                  ({CTOR}) cname (fre_cname_eq_ctor recname cname rule hrule) \
-                 (Eq.refl (OptionType RecMeta) (OptionType.none RecMeta)))"
+                 (@Eq.refl (OptionType RecMeta) (@OptionType.none RecMeta)))"
             )),
             is_axiom: false,
             description: "Real-env discharge i2 (RecEnvCtorNoRecMeta over faithful_red_env): a constructor name \
@@ -636,19 +636,19 @@ impl Specification {
             name: "faithful_red_env_defenv_disjoint".to_string(),
             type_src: "RecEnvDefEnvDisjoint faithful_red_env".to_string(),
             value_src: Some(format!(
-                "RecEnvDefEnvDisjoint.mk faithful_red_env \
+                "@RecEnvDefEnvDisjoint.mk faithful_red_env \
                  (fun (dname : Name) (val : KExpr) \
-                 (h : Eq (OptionType KExpr) (defval_for (red_def faithful_red_env) dname) (OptionType.some KExpr val)) => \
+                 (h : @Eq (OptionType KExpr) (defval_for (red_def faithful_red_env) dname) (@OptionType.some KExpr val)) => \
                  opt_pick_some_inv KExpr (name_eqb ({DEFN}) dname) \
-                 (KExpr.lam (KExpr.sort Level.zero) (KExpr.sort Level.zero)) (OptionType.none KExpr) val \
-                 (Eq (OptionType RecMeta) (recmeta_for (red_rec faithful_red_env) dname) (OptionType.none RecMeta)) h \
-                 (fun (htrue : Eq Bool (name_eqb ({DEFN}) dname) Bool.true) (_hv : Eq KExpr (KExpr.lam (KExpr.sort Level.zero) (KExpr.sort Level.zero)) val) => \
-                 Eq.substType Name \
-                 (fun (n : Name) => Eq (OptionType RecMeta) (recmeta_for (red_rec faithful_red_env) n) (OptionType.none RecMeta)) \
+                 (KExpr.lam (KExpr.sort Level.zero) (KExpr.sort Level.zero)) (@OptionType.none KExpr) val \
+                 (@Eq (OptionType RecMeta) (recmeta_for (red_rec faithful_red_env) dname) (@OptionType.none RecMeta)) h \
+                 (fun (htrue : @Eq Bool (name_eqb ({DEFN}) dname) Bool.true) (_hv : @Eq KExpr (KExpr.lam (KExpr.sort Level.zero) (KExpr.sort Level.zero)) val) => \
+                 @Eq.substType Name \
+                 (fun (n : Name) => @Eq (OptionType RecMeta) (recmeta_for (red_rec faithful_red_env) n) (@OptionType.none RecMeta)) \
                  ({DEFN}) dname (name_eqb_eq ({DEFN}) dname htrue) \
-                 (Eq.refl (OptionType RecMeta) (OptionType.none RecMeta))) \
-                 (fun (_hfalse : Eq Bool (name_eqb ({DEFN}) dname) Bool.false) (hn : Eq (OptionType KExpr) (OptionType.none KExpr) (OptionType.some KExpr val)) => \
-                 option_none_ne_some KExpr val (Eq (OptionType RecMeta) (recmeta_for (red_rec faithful_red_env) dname) (OptionType.none RecMeta)) hn))"
+                 (@Eq.refl (OptionType RecMeta) (@OptionType.none RecMeta))) \
+                 (fun (_hfalse : @Eq Bool (name_eqb ({DEFN}) dname) Bool.false) (hn : @Eq (OptionType KExpr) (@OptionType.none KExpr) (@OptionType.some KExpr val)) => \
+                 option_none_ne_some KExpr val (@Eq (OptionType RecMeta) (recmeta_for (red_rec faithful_red_env) dname) (@OptionType.none RecMeta)) hn))"
             )),
             is_axiom: false,
             description: "Real-env discharge i7 (RecEnvDefEnvDisjoint over faithful_red_env): a definition name \
@@ -686,14 +686,14 @@ impl Specification {
             name: "faithful_red_env_ctor_no_defval".to_string(),
             type_src: "RecEnvCtorNoDefVal faithful_red_env".to_string(),
             value_src: Some(format!(
-                "RecEnvCtorNoDefVal.mk faithful_red_env \
+                "@RecEnvCtorNoDefVal.mk faithful_red_env \
                  (fun (recname : Name) (cname : Name) (rule : RecRule) (major : KExpr) \
-                 (_hhead : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname)) \
-                 (hrule : Eq (OptionType RecRule) (recrule_for (red_rec faithful_red_env) recname cname) (OptionType.some RecRule rule)) => \
-                 Eq.substType Name \
-                 (fun (n : Name) => Eq (OptionType KExpr) (defval_for (red_def faithful_red_env) n) (OptionType.none KExpr)) \
+                 (_hhead : @Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (@OptionType.some Name cname)) \
+                 (hrule : @Eq (OptionType RecRule) (recrule_for (red_rec faithful_red_env) recname cname) (@OptionType.some RecRule rule)) => \
+                 @Eq.substType Name \
+                 (fun (n : Name) => @Eq (OptionType KExpr) (defval_for (red_def faithful_red_env) n) (@OptionType.none KExpr)) \
                  ({CTOR}) cname (fre_cname_eq_ctor recname cname rule hrule) \
-                 (Eq.refl (OptionType KExpr) (OptionType.none KExpr)))"
+                 (@Eq.refl (OptionType KExpr) (@OptionType.none KExpr)))"
             )),
             is_axiom: false,
             description: "Real-env discharge i8 (RecEnvCtorNoDefVal over faithful_red_env): a constructor name of \
@@ -776,29 +776,29 @@ impl Specification {
     fn add_faithful_red_env_rule_inv(&mut self) -> Result<(), SpecError> {
         let value = format!(
             "fun (recname : Name) (cname : Name) (rule : RecRule) \
-             (h : Eq (OptionType RecRule) (recrule_for (red_rec faithful_red_env) recname cname) (OptionType.some RecRule rule)) => \
+             (h : @Eq (OptionType RecRule) (recrule_for (red_rec faithful_red_env) recname cname) (@OptionType.some RecRule rule)) => \
              opt_bind_some_inv RecRules RecRule (recrules_for (red_rec faithful_red_env) recname) \
-             (fun (rules : RecRules) => recrule_in_rules rules cname) rule (Eq RecRule ({RULE}) rule) h \
+             (fun (rules : RecRules) => recrule_in_rules rules cname) rule (@Eq RecRule ({RULE}) rule) h \
              (fun (w : RecRules) \
-             (hw : Eq (OptionType RecRules) (recrules_for (red_rec faithful_red_env) recname) (OptionType.some RecRules w)) \
-             (hfw : Eq (OptionType RecRule) (recrule_in_rules w cname) (OptionType.some RecRule rule)) => \
-             opt_pick_some_inv RecRules (name_eqb ({REC}) recname) ({RULES}) (OptionType.none RecRules) w (Eq RecRule ({RULE}) rule) hw \
-             (fun (_ht : Eq Bool (name_eqb ({REC}) recname) Bool.true) (hval : Eq RecRules ({RULES}) w) => \
-             opt_pick_some_inv RecRule (name_eqb ({CTOR}) cname) ({RULE}) (OptionType.none RecRule) rule (Eq RecRule ({RULE}) rule) \
-             (Eq.substType RecRules (fun (ww : RecRules) => Eq (OptionType RecRule) (recrule_in_rules ww cname) (OptionType.some RecRule rule)) \
-             w ({RULES}) (Eq.symm RecRules ({RULES}) w hval) hfw) \
-             (fun (_htc : Eq Bool (name_eqb ({CTOR}) cname) Bool.true) (hr : Eq RecRule ({RULE}) rule) => hr) \
-             (fun (_hfc : Eq Bool (name_eqb ({CTOR}) cname) Bool.false) (hn : Eq (OptionType RecRule) (OptionType.none RecRule) (OptionType.some RecRule rule)) => \
-             option_none_ne_some RecRule rule (Eq RecRule ({RULE}) rule) hn)) \
-             (fun (_hf : Eq Bool (name_eqb ({REC}) recname) Bool.false) (hn : Eq (OptionType RecRules) (OptionType.none RecRules) (OptionType.some RecRules w)) => \
-             option_none_ne_some RecRules w (Eq RecRule ({RULE}) rule) hn))"
+             (hw : @Eq (OptionType RecRules) (recrules_for (red_rec faithful_red_env) recname) (@OptionType.some RecRules w)) \
+             (hfw : @Eq (OptionType RecRule) (recrule_in_rules w cname) (@OptionType.some RecRule rule)) => \
+             opt_pick_some_inv RecRules (name_eqb ({REC}) recname) ({RULES}) (@OptionType.none RecRules) w (@Eq RecRule ({RULE}) rule) hw \
+             (fun (_ht : @Eq Bool (name_eqb ({REC}) recname) Bool.true) (hval : @Eq RecRules ({RULES}) w) => \
+             opt_pick_some_inv RecRule (name_eqb ({CTOR}) cname) ({RULE}) (@OptionType.none RecRule) rule (@Eq RecRule ({RULE}) rule) \
+             (@Eq.substType RecRules (fun (ww : RecRules) => @Eq (OptionType RecRule) (recrule_in_rules ww cname) (@OptionType.some RecRule rule)) \
+             w ({RULES}) (@Eq.symm RecRules ({RULES}) w hval) hfw) \
+             (fun (_htc : @Eq Bool (name_eqb ({CTOR}) cname) Bool.true) (hr : @Eq RecRule ({RULE}) rule) => hr) \
+             (fun (_hfc : @Eq Bool (name_eqb ({CTOR}) cname) Bool.false) (hn : @Eq (OptionType RecRule) (@OptionType.none RecRule) (@OptionType.some RecRule rule)) => \
+             option_none_ne_some RecRule rule (@Eq RecRule ({RULE}) rule) hn)) \
+             (fun (_hf : @Eq Bool (name_eqb ({REC}) recname) Bool.false) (hn : @Eq (OptionType RecRules) (@OptionType.none RecRules) (@OptionType.some RecRules w)) => \
+             option_none_ne_some RecRules w (@Eq RecRule ({RULE}) rule) hn))"
         );
         self.add_definition(Self::fre_eq_lemma(
             "fre_rule_eq_rule",
             &format!(
                 "forall (recname : Name) (cname : Name) (rule : RecRule), \
-                 Eq (OptionType RecRule) (recrule_for (red_rec faithful_red_env) recname cname) (OptionType.some RecRule rule) -> \
-                 Eq RecRule ({RULE}) rule"
+                 @Eq (OptionType RecRule) (recrule_for (red_rec faithful_red_env) recname cname) (@OptionType.some RecRule rule) -> \
+                 @Eq RecRule ({RULE}) rule"
             ),
             &value,
             "Real-env discharge (R2): a successful recrule_for lookup over faithful_red_env forces the \
@@ -829,11 +829,11 @@ impl Specification {
         self.add_definition(Self::fre_eq_lemma(
             "faithful_rec_env_closed",
             "RecEnvClosed (red_rec faithful_red_env)",
-            r"RecEnvClosed.mk (red_rec faithful_red_env)
+            r"@RecEnvClosed.mk (red_rec faithful_red_env)
   (fun (rname : Name) (cname : Name) (rule : RecRule)
-    (hlk : Eq (OptionType RecRule) (recrule_for (red_rec faithful_red_env) rname cname)
-      (OptionType.some RecRule rule)) =>
-    Eq.substType RecRule (fun (rr : RecRule) => is_closed_at (recrule_rhs rr) Nat.zero)
+    (hlk : @Eq (OptionType RecRule) (recrule_for (red_rec faithful_red_env) rname cname)
+      (@OptionType.some RecRule rule)) =>
+    @Eq.substType RecRule (fun (rr : RecRule) => is_closed_at (recrule_rhs rr) Nat.zero)
      (RecRule.mk (Name.str Name.anonymous (Nat.succ Nat.zero)) Nat.zero
        (KExpr.lam (KExpr.sort Level.zero) (KExpr.sort Level.zero)))
      rule (fre_rule_eq_rule rname cname rule hlk)
@@ -857,16 +857,16 @@ impl Specification {
         // or universally-instantiated closure assumption is inserted.
         self.add_recursive_def(
             &format!(r"def faithful_defval_closed (dname : Name) (defval : KExpr)
-(h : Eq (OptionType KExpr) (defval_for (red_def faithful_red_env) dname) (OptionType.some KExpr defval)) :
+(h : @Eq (OptionType KExpr) (defval_for (red_def faithful_red_env) dname) (@OptionType.some KExpr defval)) :
 is_closed_at defval Nat.zero :=
-Eq.substType (OptionType KExpr)
-  (fun (found : OptionType KExpr) => OptionType.rec KExpr (fun (_ : OptionType KExpr) => Type)
+@Eq.substType (OptionType KExpr)
+  (fun (found : OptionType KExpr) => @OptionType.rec KExpr (fun (_ : OptionType KExpr) => Type)
     Nat (fun (body : KExpr) => is_closed_at body Nat.zero) found)
-  (defval_for (red_def faithful_red_env) dname) (OptionType.some KExpr defval) h
-  (Bool.rec
-    (fun (guard : Bool) => OptionType.rec KExpr (fun (_ : OptionType KExpr) => Type)
+  (defval_for (red_def faithful_red_env) dname) (@OptionType.some KExpr defval) h
+  (@Bool.rec
+    (fun (guard : Bool) => @OptionType.rec KExpr (fun (_ : OptionType KExpr) => Type)
       Nat (fun (body : KExpr) => is_closed_at body Nat.zero)
-      (opt_pick KExpr guard {LAM} (OptionType.none KExpr)))
+      (opt_pick KExpr guard {LAM} (@OptionType.none KExpr)))
     Nat.zero
     (is_closed_at.lam (KExpr.sort Level.zero) (KExpr.sort Level.zero) Nat.zero
       (is_closed_at.sort Level.zero Nat.zero)
@@ -881,7 +881,7 @@ Eq.substType (OptionType KExpr)
             self.add_definition(Self::fre_eq_lemma(
                 name,
                 &format!("{iface} (red_def faithful_red_env)"),
-                &format!("{iface}.mk (red_def faithful_red_env) faithful_defval_closed"),
+                &format!("@{iface}.mk (red_def faithful_red_env) faithful_defval_closed"),
                 "Discharge the operational closure interface using structural closedness of the stored schematic body. Instantiated substitution/lift invariance is derived by the delta bridge.",
                 &["faithful_defval_closed", "faithful_red_env"],
             ))?;
@@ -899,13 +899,13 @@ Eq.substType (OptionType KExpr)
         // through (app h x) then collapses via kapp_fn_app.
         self.add_definition(Self::fre_eq_lemma(
             "kapp_fn_apply_spine",
-            "forall (args : ListType KExpr) (h : KExpr), Eq KExpr (kapp_fn (apply_spine args h)) (kapp_fn h)",
+            "forall (args : ListType KExpr) (h : KExpr), @Eq KExpr (kapp_fn (apply_spine args h)) (kapp_fn h)",
             "fun (args : ListType KExpr) => \
-             ListType.rec KExpr \
-             (fun (l : ListType KExpr) => forall (h : KExpr), Eq KExpr (kapp_fn (apply_spine l h)) (kapp_fn h)) \
-             (fun (h : KExpr) => Eq.refl KExpr (kapp_fn h)) \
-             (fun (x : KExpr) (rest : ListType KExpr) (ih : forall (h : KExpr), Eq KExpr (kapp_fn (apply_spine rest h)) (kapp_fn h)) => \
-             fun (h : KExpr) => Eq.trans KExpr \
+             @ListType.rec KExpr \
+             (fun (l : ListType KExpr) => forall (h : KExpr), @Eq KExpr (kapp_fn (apply_spine l h)) (kapp_fn h)) \
+             (fun (h : KExpr) => @Eq.refl KExpr (kapp_fn h)) \
+             (fun (x : KExpr) (rest : ListType KExpr) (ih : forall (h : KExpr), @Eq KExpr (kapp_fn (apply_spine rest h)) (kapp_fn h)) => \
+             fun (h : KExpr) => @Eq.trans KExpr \
              (kapp_fn (apply_spine rest (KExpr.app h x))) (kapp_fn (KExpr.app h x)) (kapp_fn h) \
              (ih (KExpr.app h x)) (kapp_fn_app h x)) \
              args",
@@ -939,14 +939,14 @@ Eq.substType (OptionType KExpr)
         self.add_definition(Self::fre_eq_lemma(
             "iota_reduct_head_none",
             "forall (env : RecEnv) (x : KExpr), \
-             Eq (OptionType Name) (kexpr_const_name (kapp_fn x)) (OptionType.none Name) -> \
-             Eq (OptionType KExpr) (iota_reduct env x) (OptionType.none KExpr)",
+             @Eq (OptionType Name) (kexpr_const_name (kapp_fn x)) (@OptionType.none Name) -> \
+             @Eq (OptionType KExpr) (iota_reduct env x) (@OptionType.none KExpr)",
             &format!(
                 "fun (env : RecEnv) (x : KExpr) \
-                 (hn : Eq (OptionType Name) (kexpr_const_name (kapp_fn x)) (OptionType.none Name)) => \
-                 Eq.cong (OptionType Name) (OptionType KExpr) \
+                 (hn : @Eq (OptionType Name) (kexpr_const_name (kapp_fn x)) (@OptionType.none Name)) => \
+                 @Eq.cong (OptionType Name) (OptionType KExpr) \
                  (fun (o : OptionType Name) => opt_bind Name KExpr o {cont_x}) \
-                 (kexpr_const_name (kapp_fn x)) (OptionType.none Name) hn"
+                 (kexpr_const_name (kapp_fn x)) (@OptionType.none Name) hn"
             ),
             "If the spine head of x carries no const name (kexpr_const_name (kapp_fn x) = none), then \
              iota_reduct env x = none: its outermost opt_bind short-circuits on the none head lookup. \
@@ -978,43 +978,43 @@ Eq.substType (OptionType KExpr)
         let reduct_e = format!("(apply_spine {extras_e} {inner2})");
         // Strip the three apply_spine layers down to the actual instantiated RHS.
         let kfreduct_eq = format!(
-            "(Eq.trans KExpr (kapp_fn {reduct_e}) (kapp_fn {inner2}) (kapp_fn {rhs_e}) \
+            "(@Eq.trans KExpr (kapp_fn {reduct_e}) (kapp_fn {inner2}) (kapp_fn {rhs_e}) \
              (kapp_fn_apply_spine {extras_e} {inner2}) \
-             (Eq.trans KExpr (kapp_fn {inner2}) (kapp_fn {inner3}) (kapp_fn {rhs_e}) \
+             (@Eq.trans KExpr (kapp_fn {inner2}) (kapp_fn {inner3}) (kapp_fn {rhs_e}) \
              (kapp_fn_apply_spine {fields_e} {inner3}) \
              (kapp_fn_apply_spine {prefix_e} {rhs_e})))"
         );
         // The instance has no constant head, via rule = RULE; no output-step premise.
         let head_for_rhs = format!(
-            "(Eq.substType RecRule \
-             (fun (rr : RecRule) => Eq (OptionType Name) (kexpr_const_name (kapp_fn \
-             (recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rr) (kexpr_const_levels (kapp_fn e))))) (OptionType.none Name)) \
+            "(@Eq.substType RecRule \
+             (fun (rr : RecRule) => @Eq (OptionType Name) (kexpr_const_name (kapp_fn \
+             (recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rr) (kexpr_const_levels (kapp_fn e))))) (@OptionType.none Name)) \
              ({RULE}) rule (fre_rule_eq_rule recname cname rule h5) \
-             (Eq.refl (OptionType Name) (OptionType.none Name)))"
+             (@Eq.refl (OptionType Name) (@OptionType.none Name)))"
         );
         // kexpr_const_name (kapp_fn REDUCT) = none.
         let head_none = format!(
-            "(Eq.trans (OptionType Name) (kexpr_const_name (kapp_fn {reduct_e})) \
-             (kexpr_const_name (kapp_fn {rhs_e})) (OptionType.none Name) \
-             (Eq.cong KExpr (OptionType Name) kexpr_const_name (kapp_fn {reduct_e}) (kapp_fn {rhs_e}) {kfreduct_eq}) \
+            "(@Eq.trans (OptionType Name) (kexpr_const_name (kapp_fn {reduct_e})) \
+             (kexpr_const_name (kapp_fn {rhs_e})) (@OptionType.none Name) \
+             (@Eq.cong KExpr (OptionType Name) kexpr_const_name (kapp_fn {reduct_e}) (kapp_fn {rhs_e}) {kfreduct_eq}) \
              {head_for_rhs})"
         );
         let proof_for_reduct =
             format!("(iota_reduct_head_none (red_rec faithful_red_env) {reduct_e} {head_none})");
         let i1_value = format!(
-            "RecEnvReductNotRedex.mk (red_rec faithful_red_env) \
-             (fun (e : KExpr) (r : KExpr) (hyp : Eq (OptionType KExpr) (iota_reduct (red_rec faithful_red_env) e) (OptionType.some KExpr r)) => \
+            "@RecEnvReductNotRedex.mk (red_rec faithful_red_env) \
+             (fun (e : KExpr) (r : KExpr) (hyp : @Eq (OptionType KExpr) (iota_reduct (red_rec faithful_red_env) e) (@OptionType.some KExpr r)) => \
              iota_reduct_some_inv (red_rec faithful_red_env) e r \
-             (Eq (OptionType KExpr) (iota_reduct (red_rec faithful_red_env) r) (OptionType.none KExpr)) hyp \
+             (@Eq (OptionType KExpr) (iota_reduct (red_rec faithful_red_env) r) (@OptionType.none KExpr)) hyp \
              (fun (recname : Name) (meta : RecMeta) (major : KExpr) (cname : Name) (rule : RecRule) \
-             (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name recname)) \
-             (h2 : Eq (OptionType RecMeta) (recmeta_for (red_rec faithful_red_env) recname) (OptionType.some RecMeta meta)) \
-             (h3 : Eq (OptionType KExpr) (list_head (list_drop {major_idx} (kapp_args e))) (OptionType.some KExpr major)) \
-             (h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname)) \
-             (h5 : Eq (OptionType RecRule) (recrule_for (red_rec faithful_red_env) recname cname) (OptionType.some RecRule rule)) \
-             (h5r : Eq (OptionType KExpr) (OptionType.some KExpr {reduct_e}) (OptionType.some KExpr r)) => \
-             Eq.substType KExpr \
-             (fun (x : KExpr) => Eq (OptionType KExpr) (iota_reduct (red_rec faithful_red_env) x) (OptionType.none KExpr)) \
+             (h1 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (@OptionType.some Name recname)) \
+             (h2 : @Eq (OptionType RecMeta) (recmeta_for (red_rec faithful_red_env) recname) (@OptionType.some RecMeta meta)) \
+             (h3 : @Eq (OptionType KExpr) (list_head (list_drop {major_idx} (kapp_args e))) (@OptionType.some KExpr major)) \
+             (h4 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (@OptionType.some Name cname)) \
+             (h5 : @Eq (OptionType RecRule) (recrule_for (red_rec faithful_red_env) recname cname) (@OptionType.some RecRule rule)) \
+             (h5r : @Eq (OptionType KExpr) (@OptionType.some KExpr {reduct_e}) (@OptionType.some KExpr r)) => \
+             @Eq.substType KExpr \
+             (fun (x : KExpr) => @Eq (OptionType KExpr) (iota_reduct (red_rec faithful_red_env) x) (@OptionType.none KExpr)) \
              {reduct_e} r (option_some_inj KExpr {reduct_e} r h5r) \
              {proof_for_reduct}))"
         );
@@ -1060,7 +1060,7 @@ Eq.substType (OptionType KExpr)
         self.add_definition(Self::fre_eq_lemma(
             "faithful_red_env_faithful",
             "RedEnvFaithful faithful_red_env",
-            "RedEnvFaithful.mk faithful_red_env \
+            "@RedEnvFaithful.mk faithful_red_env \
              faithful_red_env_reduct_not_redex \
              faithful_rec_env_ctor_no_recmeta \
              faithful_rec_env_closed \

@@ -4,6 +4,25 @@
 //! The set model (plan units M1 to M5 and E6): groundwork, one semantic lemma per
 //! core rule, interpreted primitives, quotation and negative controls, each
 //! re-entered at a pinned contract.
+//!
+//! Statement pins: `theories/cic_l_model/model_statement_pins.json` holds, per
+//! independent contract and per unproved mutation of
+//! `contract_replays.json` and `mutant_replays.json`, the meaning digest
+//! (`support/meaning_digest.rs`) of its proposition definition in
+//! `CICL.Model.Contracts`: the definition and every definition, inductive and
+//! compiler auxiliary of the package it reaches, down to Init, so a pin moves
+//! when a relation or function the statement names is redefined. The package
+//! is the theories the fixture family `cic_l_model` compiles, `cic_l` and
+//! `cic_l_model`. Re-pin with
+//! `CLEAN_REPIN_STATEMENT_PINS=1 scripts/heavy_gate.sh run 16 cic-l-model-repin --
+//! "$(rustup run trust rustc --print sysroot)/bin/targo" --unverified test -p
+//! clean-olean --locked --test cic_l_model model_contracts_recheck`: the run
+//! rewrites the pin file and still fails, and the next run without the
+//! variable confirms it.
+#[path = "support/meaning_digest.rs"]
+mod meaning_digest;
+
+use meaning_digest::{MeaningDigests, Package};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 use std::io::Write;
@@ -674,6 +693,7 @@ fn model_contracts_recheck_with_named_axiom_exceptions() {
         String::from_utf8_lossy(&independent.stderr)
     );
     let mut loaded = Environment::for_lean_replay();
+    let package = Package::of_fixture(&compiled, "cic_l_model", &["cic_l", "cic_l_model"]);
     let summaries =
         load_module_with_deps(&mut loaded, "CICLModel.Contracts", &[compiled.clone(), lib])
             .expect("load compiled model");
@@ -835,30 +855,31 @@ fn model_contracts_recheck_with_named_axiom_exceptions() {
         "../../../theories/cic_l_model/mutant_replays.json"
     ))
     .expect("reviewed model replay catalog");
-    // Print all observed schema identities before expensive dependency replay.
-    // These are diagnostics: the independent comparisons below remain required.
-    let mut observed_pins = std::collections::BTreeMap::new();
-    for [_, contract] in contract_replays.iter().chain(&mutant_replays) {
-        let declaration = loaded
-            .get_const(&Name::from_string(&format!(
-                "CICL.Model.Contracts.{contract}"
-            )))
-            .expect("compiled independent contract");
-        let statement = declaration
-            .value
-            .as_ref()
-            .expect("contract proposition definition");
-        let bytes = bincode::serde::encode_to_vec(statement, bincode::config::standard())
-            .expect("serialize observed contract");
-        let digest: String = Sha256::digest(&bytes)
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect();
-        assert!(
-            observed_pins.insert(contract.clone(), digest).is_none(),
-            "duplicate observed contract: {contract}"
-        );
-    }
+    // Print all observed meaning digests, over the loaded environment, before
+    // the expensive dependency replay. These are diagnostics: the pins are
+    // compared below over what the reference kernel admitted.
+    let contract_name = |pin: &str| Name::from_string(&format!("CICL.Model.Contracts.{pin}"));
+    let pin_digests = |env: &Environment| {
+        let digests = MeaningDigests::new(env, &package);
+        let mut measured = std::collections::BTreeMap::new();
+        let mut roots = Vec::new();
+        for [_, contract] in contract_replays.iter().chain(&mutant_replays) {
+            let root = contract_name(contract);
+            let digest = digests
+                .digest(&root)
+                .unwrap_or_else(|error| panic!("{error}"));
+            assert!(
+                measured.insert(contract.clone(), digest).is_none(),
+                "duplicate observed contract: {contract}"
+            );
+            roots.push(root);
+        }
+        let described = digests
+            .describe(&package, &roots)
+            .unwrap_or_else(|error| panic!("{error}"));
+        (measured, described)
+    };
+    let (observed_pins, _) = pin_digests(&loaded);
     eprintln!(
         "model-observed-statement-pins {}",
         serde_json::to_string(&observed_pins).expect("observed statement pins JSON")
@@ -922,7 +943,21 @@ fn model_contracts_recheck_with_named_axiom_exceptions() {
         "../../../theories/cic_l_model/model_statement_pins.json"
     ))
     .expect("committed model statement pins");
-    assert_eq!(pins.len(), 600, "exact contract denominator");
+    assert_eq!(pins.len(), 691, "exact contract denominator");
+    // Every pin's meaning digest over what the kernel admitted, printed before
+    // any is compared, so one run of a changed set shows all of them.
+    let (measured_pins, described) = pin_digests(kernel.environment());
+    for (pin, digest) in &measured_pins {
+        eprintln!("statement-pin {pin} {digest}");
+    }
+    eprintln!("{described}");
+    if let Err(failure) = meaning_digest::check_pins(
+        &measured_pins,
+        &pins,
+        "theories/cic_l_model/model_statement_pins.json",
+    ) {
+        panic!("{failure}");
+    }
     // Every constructor of the core judgment has exactly one semantic lemma
     // in the paired table below; a missing lemma fails at its lookup.
     let constructors: BTreeSet<Name> = kernel
@@ -1092,18 +1127,6 @@ fn model_contracts_recheck_with_named_axiom_exceptions() {
             .value
             .clone()
             .expect("contract is a proposition definition");
-        let bytes = bincode::serde::encode_to_vec(&contract_type, bincode::config::standard())
-            .expect("serialize independent statement");
-        let digest = Sha256::digest(&bytes)
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect::<String>();
-        assert_eq!(
-            pins.get(contract),
-            Some(&digest),
-            "statement changed: {contract}"
-        );
-        eprintln!("statement-pin {contract} {digest}");
         let value = c.value.clone().expect("real proof");
         kernel
             .add_checked(Declaration::Theorem {
@@ -1154,18 +1177,6 @@ fn model_contracts_recheck_with_named_axiom_exceptions() {
             .value
             .clone()
             .expect("mutation proposition");
-        let bytes = bincode::serde::encode_to_vec(&wrong, bincode::config::standard())
-            .expect("mutation bytes");
-        let digest: String = Sha256::digest(&bytes)
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect();
-        assert_eq!(
-            pins.get(mutation),
-            Some(&digest),
-            "mutation changed: {mutation}"
-        );
-        eprintln!("statement-pin {mutation} {digest}");
         let bad = kernel.add_checked(Declaration::Theorem {
             name: Name::from_string(&format!("CICL.Model.Controls.{mutation}_forged")),
             level_params: source.level_params.clone(),

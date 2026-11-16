@@ -47,23 +47,23 @@ impl Specification {
             "closed_weaken_empty_of_weaken1",
             r"forall (J : ListType KExpr -> KExpr -> KExpr -> Type)
     (wk : forall (G : ListType KExpr) (e : KExpr) (T : KExpr), J G e T ->
-      forall (C : KExpr), J (ListType.cons KExpr C G)
+      forall (C : KExpr), J (@ListType.cons KExpr C G)
         (lift_at e Nat.zero (Nat.succ Nat.zero)) (lift_at T Nat.zero (Nat.succ Nat.zero)))
     (e : KExpr) (T : KExpr) (he : is_closed_at e Nat.zero) (hT : is_closed_at T Nat.zero)
-    (hnil : J (ListType.nil KExpr) e T), forall (G : ListType KExpr), J G e T",
+    (hnil : J (@ListType.nil KExpr) e T), forall (G : ListType KExpr), J G e T",
             r"fun (J : ListType KExpr -> KExpr -> KExpr -> Type)
     (wk : forall (G : ListType KExpr) (e : KExpr) (T : KExpr), J G e T ->
-      forall (C : KExpr), J (ListType.cons KExpr C G)
+      forall (C : KExpr), J (@ListType.cons KExpr C G)
         (lift_at e Nat.zero (Nat.succ Nat.zero)) (lift_at T Nat.zero (Nat.succ Nat.zero)))
     (e : KExpr) (T : KExpr) (he : is_closed_at e Nat.zero) (hT : is_closed_at T Nat.zero)
-    (hnil : J (ListType.nil KExpr) e T) (G : ListType KExpr) =>
-  ListType.rec KExpr (fun (ctx : ListType KExpr) => J ctx e T) hnil
+    (hnil : J (@ListType.nil KExpr) e T) (G : ListType KExpr) =>
+  @ListType.rec KExpr (fun (ctx : ListType KExpr) => J ctx e T) hnil
     (fun (C : KExpr) (ctx : ListType KExpr) (ih : J ctx e T) =>
-      Eq.substType KExpr (fun (term : KExpr) => J (ListType.cons KExpr C ctx) term T)
+      @Eq.substType KExpr (fun (term : KExpr) => J (@ListType.cons KExpr C ctx) term T)
         (lift_at e Nat.zero (Nat.succ Nat.zero)) e
         (lift_closed_at_id e Nat.zero he Nat.zero (Nat.succ Nat.zero) (le_zero_n Nat.zero))
-        (Eq.substType KExpr
-          (fun (type_ : KExpr) => J (ListType.cons KExpr C ctx)
+        (@Eq.substType KExpr
+          (fun (type_ : KExpr) => J (@ListType.cons KExpr C ctx)
             (lift_at e Nat.zero (Nat.succ Nat.zero)) type_)
           (lift_at T Nat.zero (Nat.succ Nat.zero)) T
           (lift_closed_at_id T Nat.zero hT Nat.zero (Nat.succ Nat.zero) (le_zero_n Nat.zero))
@@ -76,11 +76,11 @@ impl Specification {
             "typingctxconv_closed_weaken_empty",
             r"forall (tenv : KDeclEnv) (hf : RedEnvFaithful the_red_env) (W : TypingEnvCoherent tenv)
     (e : KExpr) (T : KExpr) (he : is_closed_at e Nat.zero) (hT : is_closed_at T Nat.zero)
-    (hnil : TypingCtxConv tenv (ListType.nil KExpr) e T),
+    (hnil : TypingCtxConv tenv (@ListType.nil KExpr) e T),
     forall (G : ListType KExpr), TypingCtxConv tenv G e T",
             r"fun (tenv : KDeclEnv) (hf : RedEnvFaithful the_red_env) (W : TypingEnvCoherent tenv)
     (e : KExpr) (T : KExpr) (he : is_closed_at e Nat.zero) (hT : is_closed_at T Nat.zero)
-    (hnil : TypingCtxConv tenv (ListType.nil KExpr) e T) (G : ListType KExpr) =>
+    (hnil : TypingCtxConv tenv (@ListType.nil KExpr) e T) (G : ListType KExpr) =>
   closed_weaken_empty_of_weaken1 (TypingCtxConv tenv) (weaken1 tenv hf W) e T he hT hnil G",
             "Closed empty-context TypingCtxConv derivations weaken to every context by the existing checked weaken1 rule. Carries only the original RedEnvFaithful/TypingEnvCoherent hypotheses; no assumed per-context typing.",
         )?;
@@ -110,7 +110,7 @@ mod tests {
     (KExpr.sort Level.zero) (KExpr.sort (Level.succ Level.zero))
     (is_closed_at.sort Level.zero Nat.zero)
     (is_closed_at.sort (Level.succ Level.zero) Nat.zero)
-    (TypingCtxConv.sort tenv (ListType.nil KExpr) Level.zero) G",
+    (@TypingCtxConv.sort tenv (@ListType.nil KExpr) Level.zero) G",
                 "Apply actual weakening to a real empty-context sort derivation with distinct term/type universe levels.",
             )
             .expect("live judgment weakening control");
@@ -120,14 +120,14 @@ mod tests {
                 r"forall (tenv : KDeclEnv) (hf : RedEnvFaithful the_red_env)
     (W : TypingEnvCoherent tenv),
     TypingCtxConv tenv
-      (ListType.cons KExpr (KExpr.bvar Nat.zero)
-        (ListType.cons KExpr (KExpr.sort Level.zero) (ListType.nil KExpr)))
+      (@ListType.cons KExpr (KExpr.bvar Nat.zero)
+        (@ListType.cons KExpr (KExpr.sort Level.zero) (@ListType.nil KExpr)))
       (KExpr.sort Level.zero) (KExpr.sort (Level.succ Level.zero))",
                 r"fun (tenv : KDeclEnv) (hf : RedEnvFaithful the_red_env)
     (W : TypingEnvCoherent tenv) =>
   closed_weaken_live_sort_control tenv hf W
-    (ListType.cons KExpr (KExpr.bvar Nat.zero)
-      (ListType.cons KExpr (KExpr.sort Level.zero) (ListType.nil KExpr)))",
+    (@ListType.cons KExpr (KExpr.bvar Nat.zero)
+      (@ListType.cons KExpr (KExpr.sort Level.zero) (@ListType.nil KExpr)))",
                 "Two nonempty context steps instantiate the generic induction; no context-wide typing premise is supplied.",
             )
             .expect("two-entry context weakening");

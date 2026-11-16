@@ -227,7 +227,7 @@ fn witness(
     out: &str,
 ) -> String {
     format!(
-        "def {name} {binder}: Eq IROutcome {} {out} := @Eq.refl IROutcome {out}",
+        "def {name} {binder}: @Eq IROutcome {} {out} := @Eq.refl IROutcome {out}",
         run(fid, args, heap, na)
     )
 }
@@ -236,7 +236,7 @@ fn witness(
 fn halts(name: &str, binder: &str, heap: &str, na: &str, steps: u32, ans: &str) -> String {
     let tgt = format!("(IRConfig.halted (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.{ans}))))");
     format!(
-        "def {name} {binder}: Eq IRConfig (ir_steps ir_d{steps} ir_lzb_module {}) {tgt} := @Eq.refl IRConfig {tgt}",
+        "def {name} {binder}: @Eq IRConfig (ir_steps ir_d{steps} ir_lzb_module {}) {tgt} := @Eq.refl IRConfig {tgt}",
         init(heap, na)
     )
 }
@@ -263,7 +263,7 @@ It is a THIRD module and not an edit of ir_lz_module because FOUR gates refuse a
         ] {
             let tgt = format!("(@IROption.some IRFunc {f})");
             self.add_recursive_def(
-                &format!("def {name} : Eq (IROption IRFunc) (ir_func_find (ir_mod_funcs ir_lzb_module) {idx}) {tgt} := @Eq.refl (IROption IRFunc) {tgt}"),
+                &format!("def {name} : @Eq (IROption IRFunc) (ir_func_find (ir_mod_funcs ir_lzb_module) {idx}) {tgt} := @Eq.refl (IROption IRFunc) {tgt}"),
                 if idx == "ir_d0" {
                     "ir_lzb_func0_is_minted: *** THE DERIVED HALF CANNOT DRIFT INTO THE ASSUMED HALF. *** ir_func_find resolves id 0 of this module to ir_lz_func itself -- the term replayed line for line from generated/ir_lz.defs.txt and checked by three independent readers. Eq.refl, so the kernel walks the function list and compares the whole body. Anything that edited the emitted half while adding the assumed half would fail here. DerivedProved, zero axiom_deps."
                 } else {

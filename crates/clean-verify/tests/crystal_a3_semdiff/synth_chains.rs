@@ -215,7 +215,7 @@ fn undef_probe() -> SynthChain {
         shipped_absent: SYNTHETIC_NO_E3,
         inputs: vec![SynthInput {
             label: "the undef instruction executes",
-            clean_tail: "(IRList.nil IRScalar) ir_mem0 ir_d0".to_owned(),
+            clean_tail: "(@IRList.nil IRScalar) ir_mem0 ir_d0".to_owned(),
             trust_args: vec![],
             expect: SynthExpect::DeclaredDelta {
                 clean: SynthOutcome::RetUndef,

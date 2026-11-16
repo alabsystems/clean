@@ -113,7 +113,7 @@ impl ProofLibrary {
             "micro_verify_soundness".to_string(),
             ProofTerm::new(
                 "micro_verify_sound",
-                "fun (cert : MicroCert) (e : MicroExpr) (T : MicroExpr) (h : Eq MicroExpr (micro_verify cert e) T) => micro_verify_sound cert e T h",
+                "fun (cert : MicroCert) (e : MicroExpr) (T : MicroExpr) (h : @Eq MicroExpr (micro_verify cert e) T) => micro_verify_sound cert e T h",
                 "If micro_verify succeeds, the typing is correct",
             ),
         );
@@ -163,7 +163,7 @@ impl ProofLibrary {
             "micro_type_pres".to_string(),
             ProofTerm::new(
                 "micro_type_preservation",
-                "fun (e : MicroExpr) (T : MicroExpr) (e' : MicroExpr) (ht : micro_has_type e T) (heq : Eq Bool (micro_def_eq e e') Bool.true) => micro_type_preservation e T e' ht heq",
+                "fun (e : MicroExpr) (T : MicroExpr) (e' : MicroExpr) (ht : micro_has_type e T) (heq : @Eq Bool (micro_def_eq e e') Bool.true) => micro_type_preservation e T e' ht heq",
                 "Type preservation (micro-checker)",
             ),
         );

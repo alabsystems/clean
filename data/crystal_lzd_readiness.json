@@ -192,7 +192,7 @@
       },
       {
         "path": "scripts/gen_lzb_activation.py",
-        "sha256": "b931c4f37656ee35870a2e6dd3dc63d5585f388beb0d6d90cc6512a9a0a62464"
+        "sha256": "35ea4d9688dde70a3ca8389801175da7313be08d84a1783d3e573a8489f36384"
       },
       {
         "path": "crates/clean-verify/tests/eval_ir/census.rs",
@@ -200,7 +200,7 @@
       },
       {
         "path": "crates/clean-verify/src/spec/core_spec/eval_ir_syntax.rs",
-        "sha256": "96353ec20713bd6267e3a81205b7d3ca81b7d17fcc0cb651d26319ed010e9e63"
+        "sha256": "35ffd85d5c6d9f6eb8d242a14bfbef5bb17e04999f747ac45501fcd804375bb2"
       }
     ],
     "denominator_sources": {

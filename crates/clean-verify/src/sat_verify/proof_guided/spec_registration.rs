@@ -117,7 +117,7 @@ impl Specification {
                     .to_string(),
             value_src: Some(
                 "fun (n : Nat) (w : Nat) (bound : WidthBound n w) => \
-                 WidthBound.rec n w \
+                 @WidthBound.rec n w \
                    (fun (b : WidthBound n w) => WidthSizeLower n w b) \
                    (WidthSizeLower.empty n w) \
                    (fun (cw : Nat) (prev : WidthBound n w) (ih : WidthSizeLower n w prev) => \
@@ -150,7 +150,7 @@ impl Specification {
             type_src: "forall (n : Nat) (seq : RestartSeq n), RestartOptimal n seq".to_string(),
             value_src: Some(
                 "fun (n : Nat) (seq : RestartSeq n) => \
-                 RestartSeq.rec n \
+                 @RestartSeq.rec n \
                    (fun (s : RestartSeq n) => RestartOptimal n s) \
                    (RestartOptimal.done n) \
                    (fun (cw : Nat) (prev : RestartSeq n) (ih : RestartOptimal n prev) => \
@@ -183,7 +183,7 @@ impl Specification {
             type_src: "forall (n : Nat) (sw : SpaceWidth n), SpaceWidthValid n sw".to_string(),
             value_src: Some(
                 "fun (n : Nat) (sw : SpaceWidth n) => \
-                 SpaceWidth.rec n \
+                 @SpaceWidth.rec n \
                    (fun (s : SpaceWidth n) => SpaceWidthValid n s) \
                    (SpaceWidthValid.init n) \
                    (fun (cw : Nat) (prev : SpaceWidth n) (ih : SpaceWidthValid n prev) => \
@@ -251,7 +251,7 @@ impl Specification {
                 .to_string(),
             value_src: Some(
                 "fun (n : Nat) (seq : RestartSeq n) => \
-                 RestartSeq.rec n \
+                 @RestartSeq.rec n \
                    (fun (s : RestartSeq n) => RestartSatPreserving n s) \
                    (RestartSatPreserving.done n) \
                    (fun (cw : Nat) (prev : RestartSeq n) (ih : RestartSatPreserving n prev) => \

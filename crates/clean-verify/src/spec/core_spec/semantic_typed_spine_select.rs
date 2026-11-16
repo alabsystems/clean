@@ -30,79 +30,79 @@ const PROOFS: &[(&str, &str, &str)] = &[
         r"forall (R : RedEnv) (tenv : KDeclEnv)
  (G : ListType KExpr) (F : KExpr) (args : ListType KExpr) (U : KExpr)
  (trace : TypedRawPiSpine R tenv G F args U) (C : Type), forall (k : Nat) (a : KExpr),
- Eq (OptionType KExpr) (list_head (list_drop k args)) (OptionType.some KExpr a) ->
+ @Eq (OptionType KExpr) (list_head (list_drop k args)) (@OptionType.some KExpr a) ->
  (forall (A B : KExpr),
-  Eq (OptionType KExpr) (raw_pi_spine (list_take k args) F)
-   (OptionType.some KExpr (KExpr.pi A B)) ->
+  @Eq (OptionType KExpr) (raw_pi_spine (list_take k args) F)
+   (@OptionType.some KExpr (KExpr.pi A B)) ->
   TypingCtxConvIn R tenv G a A -> C) -> C",
         r"fun (R : RedEnv) (tenv : KDeclEnv)
  (G : ListType KExpr) (F : KExpr) (args : ListType KExpr) (U : KExpr)
- (trace : TypedRawPiSpine R tenv G F args U) (C : Type) => TypedRawPiSpine.rec R tenv G
+ (trace : TypedRawPiSpine R tenv G F args U) (C : Type) => @TypedRawPiSpine.rec R tenv G
   (fun (F0 : KExpr) (xs : ListType KExpr) (V : KExpr)
    (_tr : TypedRawPiSpine R tenv G F0 xs V) =>
    forall (k : Nat) (a : KExpr),
-   Eq (OptionType KExpr) (list_head (list_drop k xs)) (OptionType.some KExpr a) ->
+   @Eq (OptionType KExpr) (list_head (list_drop k xs)) (@OptionType.some KExpr a) ->
    (forall (A B : KExpr),
-    Eq (OptionType KExpr) (raw_pi_spine (list_take k xs) F0)
-     (OptionType.some KExpr (KExpr.pi A B)) ->
+    @Eq (OptionType KExpr) (raw_pi_spine (list_take k xs) F0)
+     (@OptionType.some KExpr (KExpr.pi A B)) ->
     TypingCtxConvIn R tenv G a A -> C) -> C)
   (fun (F0 : KExpr) (k : Nat) (a : KExpr)
-   (selected : Eq (OptionType KExpr)
-    (list_head (list_drop k (ListType.nil KExpr))) (OptionType.some KExpr a))
+   (selected : @Eq (OptionType KExpr)
+    (list_head (list_drop k (@ListType.nil KExpr))) (@OptionType.some KExpr a))
    (_consume : forall (A B : KExpr),
-    Eq (OptionType KExpr) (raw_pi_spine (list_take k (ListType.nil KExpr)) F0)
-     (OptionType.some KExpr (KExpr.pi A B)) ->
+    @Eq (OptionType KExpr) (raw_pi_spine (list_take k (@ListType.nil KExpr)) F0)
+     (@OptionType.some KExpr (KExpr.pi A B)) ->
     TypingCtxConvIn R tenv G a A -> C) =>
    option_none_ne_some_type KExpr a C
-    (Eq.trans (OptionType KExpr) (OptionType.none KExpr)
-     (list_head (list_drop k (ListType.nil KExpr))) (OptionType.some KExpr a)
+    (Eq.trans (OptionType KExpr) (@OptionType.none KExpr)
+     (list_head (list_drop k (@ListType.nil KExpr))) (@OptionType.some KExpr a)
      (Eq.symm (OptionType KExpr)
-      (list_head (list_drop k (ListType.nil KExpr))) (OptionType.none KExpr)
+      (list_head (list_drop k (@ListType.nil KExpr))) (@OptionType.none KExpr)
       (Eq.cong (ListType KExpr) (OptionType KExpr)
        (fun (xs : ListType KExpr) => list_head xs)
-       (list_drop k (ListType.nil KExpr)) (ListType.nil KExpr) (list_drop_nil k)))
+       (list_drop k (@ListType.nil KExpr)) (@ListType.nil KExpr) (list_drop_nil k)))
      selected))
   (fun (A B x : KExpr) (xs : ListType KExpr) (V : KExpr)
    (hx : TypingCtxConvIn R tenv G x A)
    (_tail : TypedRawPiSpine R tenv G (instantiate B x) xs V)
    (ih : forall (k : Nat) (a : KExpr),
-    Eq (OptionType KExpr) (list_head (list_drop k xs)) (OptionType.some KExpr a) ->
+    @Eq (OptionType KExpr) (list_head (list_drop k xs)) (@OptionType.some KExpr a) ->
     (forall (A1 B1 : KExpr),
-     Eq (OptionType KExpr) (raw_pi_spine (list_take k xs) (instantiate B x))
-      (OptionType.some KExpr (KExpr.pi A1 B1)) ->
+     @Eq (OptionType KExpr) (raw_pi_spine (list_take k xs) (instantiate B x))
+      (@OptionType.some KExpr (KExpr.pi A1 B1)) ->
      TypingCtxConvIn R tenv G a A1 -> C) -> C) =>
-   Nat.rec
+   @Nat.rec
     (fun (k : Nat) => forall (a : KExpr),
-     Eq (OptionType KExpr) (list_head (list_drop k (ListType.cons KExpr x xs)))
-      (OptionType.some KExpr a) ->
+     @Eq (OptionType KExpr) (list_head (list_drop k (@ListType.cons KExpr x xs)))
+      (@OptionType.some KExpr a) ->
      (forall (A1 B1 : KExpr),
-      Eq (OptionType KExpr)
-       (raw_pi_spine (list_take k (ListType.cons KExpr x xs)) (KExpr.pi A B))
-       (OptionType.some KExpr (KExpr.pi A1 B1)) ->
+      @Eq (OptionType KExpr)
+       (raw_pi_spine (list_take k (@ListType.cons KExpr x xs)) (KExpr.pi A B))
+       (@OptionType.some KExpr (KExpr.pi A1 B1)) ->
       TypingCtxConvIn R tenv G a A1 -> C) -> C)
     (fun (a : KExpr)
-     (selected : Eq (OptionType KExpr) (OptionType.some KExpr x) (OptionType.some KExpr a))
+     (selected : @Eq (OptionType KExpr) (@OptionType.some KExpr x) (@OptionType.some KExpr a))
      (consume : forall (A1 B1 : KExpr),
-      Eq (OptionType KExpr) (OptionType.some KExpr (KExpr.pi A B))
-       (OptionType.some KExpr (KExpr.pi A1 B1)) ->
+      @Eq (OptionType KExpr) (@OptionType.some KExpr (KExpr.pi A B))
+       (@OptionType.some KExpr (KExpr.pi A1 B1)) ->
       TypingCtxConvIn R tenv G a A1 -> C) =>
-     consume A B (Eq.refl (OptionType KExpr) (OptionType.some KExpr (KExpr.pi A B)))
+     consume A B (@Eq.refl (OptionType KExpr) (@OptionType.some KExpr (KExpr.pi A B)))
       (Eq.substType KExpr (fun (z : KExpr) => TypingCtxConvIn R tenv G z A)
        x a (option_some_inj KExpr x a selected) hx))
     (fun (k : Nat) (_index_ih : forall (a : KExpr),
-     Eq (OptionType KExpr) (list_head (list_drop k (ListType.cons KExpr x xs)))
-      (OptionType.some KExpr a) ->
+     @Eq (OptionType KExpr) (list_head (list_drop k (@ListType.cons KExpr x xs)))
+      (@OptionType.some KExpr a) ->
      (forall (A1 B1 : KExpr),
-      Eq (OptionType KExpr)
-       (raw_pi_spine (list_take k (ListType.cons KExpr x xs)) (KExpr.pi A B))
-       (OptionType.some KExpr (KExpr.pi A1 B1)) ->
+      @Eq (OptionType KExpr)
+       (raw_pi_spine (list_take k (@ListType.cons KExpr x xs)) (KExpr.pi A B))
+       (@OptionType.some KExpr (KExpr.pi A1 B1)) ->
       TypingCtxConvIn R tenv G a A1 -> C) -> C)
      (a : KExpr)
-     (selected : Eq (OptionType KExpr) (list_head (list_drop k xs))
-      (OptionType.some KExpr a))
+     (selected : @Eq (OptionType KExpr) (list_head (list_drop k xs))
+      (@OptionType.some KExpr a))
      (consume : forall (A1 B1 : KExpr),
-      Eq (OptionType KExpr) (raw_pi_spine (list_take k xs) (instantiate B x))
-       (OptionType.some KExpr (KExpr.pi A1 B1)) ->
+      @Eq (OptionType KExpr) (raw_pi_spine (list_take k xs) (instantiate B x))
+       (@OptionType.some KExpr (KExpr.pi A1 B1)) ->
       TypingCtxConvIn R tenv G a A1 -> C) => ih k a selected consume))
   F args U trace",
     ),
@@ -111,41 +111,41 @@ const PROOFS: &[(&str, &str, &str)] = &[
         r"forall (R : RedEnv) (tenv : KDeclEnv)
  (G : ListType KExpr) (F : KExpr) (args : ListType KExpr) (U : KExpr)
  (trace : TypedRawPiSpine R tenv G F args U) (k : Nat) (a A B : KExpr)
- (selected : Eq (OptionType KExpr) (list_head (list_drop k args)) (OptionType.some KExpr a))
- (prefix_run : Eq (OptionType KExpr) (raw_pi_spine (list_take k args) F)
-  (OptionType.some KExpr (KExpr.pi A B))), TypingCtxConvIn R tenv G a A",
+ (selected : @Eq (OptionType KExpr) (list_head (list_drop k args)) (@OptionType.some KExpr a))
+ (prefix_run : @Eq (OptionType KExpr) (raw_pi_spine (list_take k args) F)
+  (@OptionType.some KExpr (KExpr.pi A B))), TypingCtxConvIn R tenv G a A",
         r"fun (R : RedEnv) (tenv : KDeclEnv)
  (G : ListType KExpr) (F : KExpr) (args : ListType KExpr) (U : KExpr)
  (trace : TypedRawPiSpine R tenv G F args U) (k : Nat) (a A B : KExpr)
- (selected : Eq (OptionType KExpr) (list_head (list_drop k args)) (OptionType.some KExpr a))
- (prefix_run : Eq (OptionType KExpr) (raw_pi_spine (list_take k args) F)
-  (OptionType.some KExpr (KExpr.pi A B))) => typed_raw_pi_spine_select R tenv G F args U trace (TypingCtxConvIn R tenv G a A) k a selected
+ (selected : @Eq (OptionType KExpr) (list_head (list_drop k args)) (@OptionType.some KExpr a))
+ (prefix_run : @Eq (OptionType KExpr) (raw_pi_spine (list_take k args) F)
+  (@OptionType.some KExpr (KExpr.pi A B))) => typed_raw_pi_spine_select R tenv G F args U trace (TypingCtxConvIn R tenv G a A) k a selected
   (fun (A1 B1 : KExpr)
-   (actual : Eq (OptionType KExpr) (raw_pi_spine (list_take k args) F)
-    (OptionType.some KExpr (KExpr.pi A1 B1)))
+   (actual : @Eq (OptionType KExpr) (raw_pi_spine (list_take k args) F)
+    (@OptionType.some KExpr (KExpr.pi A1 B1)))
    (typed : TypingCtxConvIn R tenv G a A1) =>
    Eq.substType KExpr (fun (D : KExpr) => TypingCtxConvIn R tenv G a D) A1 A
     (kexpr_pi_inj_fst A1 B1 A B
      (option_some_inj KExpr (KExpr.pi A1 B1) (KExpr.pi A B)
-      (Eq.trans (OptionType KExpr) (OptionType.some KExpr (KExpr.pi A1 B1))
-       (raw_pi_spine (list_take k args) F) (OptionType.some KExpr (KExpr.pi A B))
+      (Eq.trans (OptionType KExpr) (@OptionType.some KExpr (KExpr.pi A1 B1))
+       (raw_pi_spine (list_take k args) F) (@OptionType.some KExpr (KExpr.pi A B))
        (Eq.symm (OptionType KExpr) (raw_pi_spine (list_take k args) F)
-        (OptionType.some KExpr (KExpr.pi A1 B1)) actual) prefix_run))) typed)",
+        (@OptionType.some KExpr (KExpr.pi A1 B1)) actual) prefix_run))) typed)",
     ),
     (
         "semantic_typed_spine_select_at",
         r"forall (R : RedEnv) (tenv : KDeclEnv)
  (G : ListType KExpr) (h F : KExpr) (args : ListType KExpr) (U T : KExpr)
  (package : SemanticTypedSpineReturn R tenv G h F args U T) (k : Nat) (a A B : KExpr)
- (selected : Eq (OptionType KExpr) (list_head (list_drop k args)) (OptionType.some KExpr a))
- (prefix_run : Eq (OptionType KExpr) (raw_pi_spine (list_take k args) F)
-  (OptionType.some KExpr (KExpr.pi A B))), TypingCtxConvIn R tenv G a A",
+ (selected : @Eq (OptionType KExpr) (list_head (list_drop k args)) (@OptionType.some KExpr a))
+ (prefix_run : @Eq (OptionType KExpr) (raw_pi_spine (list_take k args) F)
+  (@OptionType.some KExpr (KExpr.pi A B))), TypingCtxConvIn R tenv G a A",
         r"fun (R : RedEnv) (tenv : KDeclEnv)
  (G : ListType KExpr) (h F : KExpr) (args : ListType KExpr) (U T : KExpr)
  (package : SemanticTypedSpineReturn R tenv G h F args U T) (k : Nat) (a A B : KExpr)
- (selected : Eq (OptionType KExpr) (list_head (list_drop k args)) (OptionType.some KExpr a))
- (prefix_run : Eq (OptionType KExpr) (raw_pi_spine (list_take k args) F)
-  (OptionType.some KExpr (KExpr.pi A B))) => SemanticTypedSpineReturn.rec R tenv G h F args U T
+ (selected : @Eq (OptionType KExpr) (list_head (list_drop k args)) (@OptionType.some KExpr a))
+ (prefix_run : @Eq (OptionType KExpr) (raw_pi_spine (list_take k args) F)
+  (@OptionType.some KExpr (KExpr.pi A B))) => @SemanticTypedSpineReturn.rec R tenv G h F args U T
   (fun (_p : SemanticTypedSpineReturn R tenv G h F args U T) => TypingCtxConvIn R tenv G a A)
   (fun (_head : TypingCtxConvIn R tenv G h F)
    (trace : TypedRawPiSpine R tenv G F args U) (_convert : DefEqIn R U T) =>
@@ -156,23 +156,23 @@ const PROOFS: &[(&str, &str, &str)] = &[
         r"forall (R : RedEnv) (faithful : RedEnvFaithful R)
  (tenv : KDeclEnv) (G : ListType KExpr) (n : Name) (us : ListType Level) (F : KExpr)
  (args : ListType KExpr) (U T : KExpr)
- (lookup : Eq (OptionType KExpr) (kdecl_type_at tenv n us) (OptionType.some KExpr F))
- (run : Eq (OptionType KExpr) (raw_pi_spine args F) (OptionType.some KExpr U))
+ (lookup : @Eq (OptionType KExpr) (kdecl_type_at tenv n us) (@OptionType.some KExpr F))
+ (run : @Eq (OptionType KExpr) (raw_pi_spine args F) (@OptionType.some KExpr U))
  (typed : TypingCtxConvIn R tenv G (apply_spine args (KExpr.const n us)) T)
  (k : Nat) (a A B : KExpr)
- (selected : Eq (OptionType KExpr) (list_head (list_drop k args)) (OptionType.some KExpr a))
- (prefix_run : Eq (OptionType KExpr) (raw_pi_spine (list_take k args) F)
-  (OptionType.some KExpr (KExpr.pi A B))), TypingCtxConvIn R tenv G a A",
+ (selected : @Eq (OptionType KExpr) (list_head (list_drop k args)) (@OptionType.some KExpr a))
+ (prefix_run : @Eq (OptionType KExpr) (raw_pi_spine (list_take k args) F)
+  (@OptionType.some KExpr (KExpr.pi A B))), TypingCtxConvIn R tenv G a A",
         r"fun (R : RedEnv) (faithful : RedEnvFaithful R)
  (tenv : KDeclEnv) (G : ListType KExpr) (n : Name) (us : ListType Level) (F : KExpr)
  (args : ListType KExpr) (U T : KExpr)
- (lookup : Eq (OptionType KExpr) (kdecl_type_at tenv n us) (OptionType.some KExpr F))
- (run : Eq (OptionType KExpr) (raw_pi_spine args F) (OptionType.some KExpr U))
+ (lookup : @Eq (OptionType KExpr) (kdecl_type_at tenv n us) (@OptionType.some KExpr F))
+ (run : @Eq (OptionType KExpr) (raw_pi_spine args F) (@OptionType.some KExpr U))
  (typed : TypingCtxConvIn R tenv G (apply_spine args (KExpr.const n us)) T)
  (k : Nat) (a A B : KExpr)
- (selected : Eq (OptionType KExpr) (list_head (list_drop k args)) (OptionType.some KExpr a))
- (prefix_run : Eq (OptionType KExpr) (raw_pi_spine (list_take k args) F)
-  (OptionType.some KExpr (KExpr.pi A B))) => semantic_typed_spine_select_at R tenv G (KExpr.const n us) F args U T
+ (selected : @Eq (OptionType KExpr) (list_head (list_drop k args)) (@OptionType.some KExpr a))
+ (prefix_run : @Eq (OptionType KExpr) (raw_pi_spine (list_take k args) F)
+  (@OptionType.some KExpr (KExpr.pi A B))) => semantic_typed_spine_select_at R tenv G (KExpr.const n us) F args U T
   (typingctxconv_in_const_spine R faithful tenv G n us F args U T lookup run typed)
   k a A B selected prefix_run",
     ),
@@ -183,34 +183,34 @@ const PROOFS: &[(&str, &str, &str)] = &[
  (KExpr.sort Level.zero) (KExpr.sort (Level.succ Level.zero))",
         r"fun (R : RedEnv) (faithful : RedEnvFaithful R)
  (G : ListType KExpr) => typingctxconv_in_const_spine_select_at R faithful typed_spine_identity_tenv G
-  Name.anonymous (ListType.nil Level) (typed_spine_identity_type (Level.succ (Level.succ Level.zero)))
+  Name.anonymous (@ListType.nil Level) (typed_spine_identity_type (Level.succ (Level.succ Level.zero)))
   typed_spine_identity_args (KExpr.sort (Level.succ Level.zero)) (KExpr.sort (Level.succ Level.zero))
   typed_spine_identity_lookup typed_spine_identity_run (typed_raw_pi_spine_identity_const_apply R G)
   (Nat.succ Nat.zero) (KExpr.sort Level.zero) (KExpr.sort (Level.succ Level.zero))
   (KExpr.sort (Level.succ Level.zero))
-  (Eq.refl (OptionType KExpr) (OptionType.some KExpr (KExpr.sort Level.zero)))
-  (Eq.refl (OptionType KExpr) (OptionType.some KExpr
+  (@Eq.refl (OptionType KExpr) (@OptionType.some KExpr (KExpr.sort Level.zero)))
+  (@Eq.refl (OptionType KExpr) (@OptionType.some KExpr
    (KExpr.pi (KExpr.sort (Level.succ Level.zero)) (KExpr.sort (Level.succ Level.zero)))))",
     ),
     (
         "projection_prod_selected_zero_argument",
-        r"TypingCtxConvIn the_red_env kcre_ind_ctor_tenv (ListType.nil KExpr) rfnz_zero rfnz_nat",
-        r"semantic_typed_spine_select_at the_red_env kcre_ind_ctor_tenv (ListType.nil KExpr)
+        r"TypingCtxConvIn the_red_env kcre_ind_ctor_tenv (@ListType.nil KExpr) rfnz_zero rfnz_nat",
+        r"semantic_typed_spine_select_at the_red_env kcre_ind_ctor_tenv (@ListType.nil KExpr)
   projection_prod_ctor (projection_meta_ctor_type projection_prod_result) projection_prod_args
   kcre_witness_prod_type kcre_witness_prod_type projection_prod_typed_constructor_spine
   (Nat.succ (Nat.succ Nat.zero)) rfnz_zero rfnz_nat (KExpr.pi rfnz_nat kcre_witness_prod_type)
-  (Eq.refl (OptionType KExpr) (OptionType.some KExpr rfnz_zero))
-  (Eq.refl (OptionType KExpr) (OptionType.some KExpr projection_prod_field_telescope))",
+  (@Eq.refl (OptionType KExpr) (@OptionType.some KExpr rfnz_zero))
+  (@Eq.refl (OptionType KExpr) (@OptionType.some KExpr projection_prod_field_telescope))",
     ),
     (
         "projection_prod_selected_succ_argument",
-        r"TypingCtxConvIn the_red_env kcre_ind_ctor_tenv (ListType.nil KExpr) (KExpr.app rfnz_succ rfnz_zero) rfnz_nat",
-        r"semantic_typed_spine_select_at the_red_env kcre_ind_ctor_tenv (ListType.nil KExpr)
+        r"TypingCtxConvIn the_red_env kcre_ind_ctor_tenv (@ListType.nil KExpr) (KExpr.app rfnz_succ rfnz_zero) rfnz_nat",
+        r"semantic_typed_spine_select_at the_red_env kcre_ind_ctor_tenv (@ListType.nil KExpr)
   projection_prod_ctor (projection_meta_ctor_type projection_prod_result) projection_prod_args
   kcre_witness_prod_type kcre_witness_prod_type projection_prod_typed_constructor_spine
   (Nat.succ (Nat.succ (Nat.succ Nat.zero))) (KExpr.app rfnz_succ rfnz_zero) rfnz_nat kcre_witness_prod_type
-  (Eq.refl (OptionType KExpr) (OptionType.some KExpr (KExpr.app rfnz_succ rfnz_zero)))
-  (Eq.refl (OptionType KExpr) (OptionType.some KExpr (KExpr.pi rfnz_nat kcre_witness_prod_type)))",
+  (@Eq.refl (OptionType KExpr) (@OptionType.some KExpr (KExpr.app rfnz_succ rfnz_zero)))
+  (@Eq.refl (OptionType KExpr) (@OptionType.some KExpr (KExpr.pi rfnz_nat kcre_witness_prod_type)))",
     ),
 ];
 
@@ -255,104 +255,104 @@ mod tests {
  (G : ListType KExpr) (F : KExpr) (args : ListType KExpr) (U : KExpr)
  (trace : TypedRawPiSpine R tenv G F args U) (C : Type) :
  forall (k : Nat) (a : KExpr),
- Eq (OptionType KExpr) (list_head (list_drop k args)) (OptionType.some KExpr a) ->
+ @Eq (OptionType KExpr) (list_head (list_drop k args)) (@OptionType.some KExpr a) ->
  (forall (A B : KExpr),
-  Eq (OptionType KExpr) (raw_pi_spine (list_take k args) F)
-   (OptionType.some KExpr (KExpr.pi A B)) ->
+  @Eq (OptionType KExpr) (raw_pi_spine (list_take k args) F)
+   (@OptionType.some KExpr (KExpr.pi A B)) ->
   TypingCtxConvIn R tenv G a A -> C) -> C :=
- TypedRawPiSpine.rec R tenv G
+ @TypedRawPiSpine.rec R tenv G
   (fun (F0 : KExpr) (xs : ListType KExpr) (V : KExpr)
    (_tr : TypedRawPiSpine R tenv G F0 xs V) =>
    forall (k : Nat) (a : KExpr),
-   Eq (OptionType KExpr) (list_head (list_drop k xs)) (OptionType.some KExpr a) ->
+   @Eq (OptionType KExpr) (list_head (list_drop k xs)) (@OptionType.some KExpr a) ->
    (forall (A B : KExpr),
-    Eq (OptionType KExpr) (raw_pi_spine (list_take k xs) F0)
-     (OptionType.some KExpr (KExpr.pi A B)) ->
+    @Eq (OptionType KExpr) (raw_pi_spine (list_take k xs) F0)
+     (@OptionType.some KExpr (KExpr.pi A B)) ->
     TypingCtxConvIn R tenv G a A -> C) -> C)
   (fun (F0 : KExpr) (k : Nat) (a : KExpr)
-   (selected : Eq (OptionType KExpr)
-    (list_head (list_drop k (ListType.nil KExpr))) (OptionType.some KExpr a))
+   (selected : @Eq (OptionType KExpr)
+    (list_head (list_drop k (@ListType.nil KExpr))) (@OptionType.some KExpr a))
    (_consume : forall (A B : KExpr),
-    Eq (OptionType KExpr) (raw_pi_spine (list_take k (ListType.nil KExpr)) F0)
-     (OptionType.some KExpr (KExpr.pi A B)) ->
+    @Eq (OptionType KExpr) (raw_pi_spine (list_take k (@ListType.nil KExpr)) F0)
+     (@OptionType.some KExpr (KExpr.pi A B)) ->
     TypingCtxConvIn R tenv G a A -> C) =>
    option_none_ne_some_type KExpr a C
-    (Eq.trans (OptionType KExpr) (OptionType.none KExpr)
-     (list_head (list_drop k (ListType.nil KExpr))) (OptionType.some KExpr a)
+    (Eq.trans (OptionType KExpr) (@OptionType.none KExpr)
+     (list_head (list_drop k (@ListType.nil KExpr))) (@OptionType.some KExpr a)
      (Eq.symm (OptionType KExpr)
-      (list_head (list_drop k (ListType.nil KExpr))) (OptionType.none KExpr)
+      (list_head (list_drop k (@ListType.nil KExpr))) (@OptionType.none KExpr)
       (Eq.cong (ListType KExpr) (OptionType KExpr)
        (fun (xs : ListType KExpr) => list_head xs)
-       (list_drop k (ListType.nil KExpr)) (ListType.nil KExpr) (list_drop_nil k)))
+       (list_drop k (@ListType.nil KExpr)) (@ListType.nil KExpr) (list_drop_nil k)))
      selected))
   (fun (A B x : KExpr) (xs : ListType KExpr) (V : KExpr)
    (hx : TypingCtxConvIn R tenv G x A)
    (_tail : TypedRawPiSpine R tenv G (instantiate B x) xs V)
    (ih : forall (k : Nat) (a : KExpr),
-    Eq (OptionType KExpr) (list_head (list_drop k xs)) (OptionType.some KExpr a) ->
+    @Eq (OptionType KExpr) (list_head (list_drop k xs)) (@OptionType.some KExpr a) ->
     (forall (A1 B1 : KExpr),
-     Eq (OptionType KExpr) (raw_pi_spine (list_take k xs) (instantiate B x))
-      (OptionType.some KExpr (KExpr.pi A1 B1)) ->
+     @Eq (OptionType KExpr) (raw_pi_spine (list_take k xs) (instantiate B x))
+      (@OptionType.some KExpr (KExpr.pi A1 B1)) ->
      TypingCtxConvIn R tenv G a A1 -> C) -> C) =>
-   Nat.rec
+   @Nat.rec
     (fun (k : Nat) => forall (a : KExpr),
-     Eq (OptionType KExpr) (list_head (list_drop k (ListType.cons KExpr x xs)))
-      (OptionType.some KExpr a) ->
+     @Eq (OptionType KExpr) (list_head (list_drop k (@ListType.cons KExpr x xs)))
+      (@OptionType.some KExpr a) ->
      (forall (A1 B1 : KExpr),
-      Eq (OptionType KExpr)
-       (raw_pi_spine (list_take k (ListType.cons KExpr x xs)) (KExpr.pi A B))
-       (OptionType.some KExpr (KExpr.pi A1 B1)) ->
+      @Eq (OptionType KExpr)
+       (raw_pi_spine (list_take k (@ListType.cons KExpr x xs)) (KExpr.pi A B))
+       (@OptionType.some KExpr (KExpr.pi A1 B1)) ->
       TypingCtxConvIn R tenv G a A1 -> C) -> C)
     (fun (a : KExpr)
-     (selected : Eq (OptionType KExpr) (OptionType.some KExpr x) (OptionType.some KExpr a))
+     (selected : @Eq (OptionType KExpr) (@OptionType.some KExpr x) (@OptionType.some KExpr a))
      (consume : forall (A1 B1 : KExpr),
-      Eq (OptionType KExpr) (OptionType.some KExpr (KExpr.pi A B))
-       (OptionType.some KExpr (KExpr.pi A1 B1)) ->
+      @Eq (OptionType KExpr) (@OptionType.some KExpr (KExpr.pi A B))
+       (@OptionType.some KExpr (KExpr.pi A1 B1)) ->
       TypingCtxConvIn R tenv G a A1 -> C) =>
-     consume A B (Eq.refl (OptionType KExpr) (OptionType.some KExpr (KExpr.pi A B)))
+     consume A B (@Eq.refl (OptionType KExpr) (@OptionType.some KExpr (KExpr.pi A B)))
       (Eq.substType KExpr (fun (z : KExpr) => TypingCtxConvIn R tenv G z A)
        x a (option_some_inj KExpr x a selected) hx))
     (fun (k : Nat) (_index_ih : forall (a : KExpr),
-     Eq (OptionType KExpr) (list_head (list_drop k (ListType.cons KExpr x xs)))
-      (OptionType.some KExpr a) ->
+     @Eq (OptionType KExpr) (list_head (list_drop k (@ListType.cons KExpr x xs)))
+      (@OptionType.some KExpr a) ->
      (forall (A1 B1 : KExpr),
-      Eq (OptionType KExpr)
-       (raw_pi_spine (list_take k (ListType.cons KExpr x xs)) (KExpr.pi A B))
-       (OptionType.some KExpr (KExpr.pi A1 B1)) ->
+      @Eq (OptionType KExpr)
+       (raw_pi_spine (list_take k (@ListType.cons KExpr x xs)) (KExpr.pi A B))
+       (@OptionType.some KExpr (KExpr.pi A1 B1)) ->
       TypingCtxConvIn R tenv G a A1 -> C) -> C)
      (a : KExpr)
-     (selected : Eq (OptionType KExpr) (list_head (list_drop k xs))
-      (OptionType.some KExpr a))
+     (selected : @Eq (OptionType KExpr) (list_head (list_drop k xs))
+      (@OptionType.some KExpr a))
      (consume : forall (A1 B1 : KExpr),
-      Eq (OptionType KExpr) (raw_pi_spine (list_take k xs) (instantiate B x))
-       (OptionType.some KExpr (KExpr.pi A1 B1)) ->
+      @Eq (OptionType KExpr) (raw_pi_spine (list_take k xs) (instantiate B x))
+       (@OptionType.some KExpr (KExpr.pi A1 B1)) ->
       TypingCtxConvIn R tenv G a A1 -> C) => ih k a selected consume))
   F args U trace",
         r"def typed_raw_pi_spine_select_at (R : RedEnv) (tenv : KDeclEnv)
  (G : ListType KExpr) (F : KExpr) (args : ListType KExpr) (U : KExpr)
  (trace : TypedRawPiSpine R tenv G F args U) (k : Nat) (a A B : KExpr)
- (selected : Eq (OptionType KExpr) (list_head (list_drop k args)) (OptionType.some KExpr a))
- (prefix_run : Eq (OptionType KExpr) (raw_pi_spine (list_take k args) F)
-  (OptionType.some KExpr (KExpr.pi A B))) : TypingCtxConvIn R tenv G a A :=
+ (selected : @Eq (OptionType KExpr) (list_head (list_drop k args)) (@OptionType.some KExpr a))
+ (prefix_run : @Eq (OptionType KExpr) (raw_pi_spine (list_take k args) F)
+  (@OptionType.some KExpr (KExpr.pi A B))) : TypingCtxConvIn R tenv G a A :=
  typed_raw_pi_spine_select R tenv G F args U trace (TypingCtxConvIn R tenv G a A) k a selected
   (fun (A1 B1 : KExpr)
-   (actual : Eq (OptionType KExpr) (raw_pi_spine (list_take k args) F)
-    (OptionType.some KExpr (KExpr.pi A1 B1)))
+   (actual : @Eq (OptionType KExpr) (raw_pi_spine (list_take k args) F)
+    (@OptionType.some KExpr (KExpr.pi A1 B1)))
    (typed : TypingCtxConvIn R tenv G a A1) =>
    Eq.substType KExpr (fun (D : KExpr) => TypingCtxConvIn R tenv G a D) A1 A
     (kexpr_pi_inj_fst A1 B1 A B
      (option_some_inj KExpr (KExpr.pi A1 B1) (KExpr.pi A B)
-      (Eq.trans (OptionType KExpr) (OptionType.some KExpr (KExpr.pi A1 B1))
-       (raw_pi_spine (list_take k args) F) (OptionType.some KExpr (KExpr.pi A B))
+      (Eq.trans (OptionType KExpr) (@OptionType.some KExpr (KExpr.pi A1 B1))
+       (raw_pi_spine (list_take k args) F) (@OptionType.some KExpr (KExpr.pi A B))
        (Eq.symm (OptionType KExpr) (raw_pi_spine (list_take k args) F)
-        (OptionType.some KExpr (KExpr.pi A1 B1)) actual) prefix_run))) typed)",
+        (@OptionType.some KExpr (KExpr.pi A1 B1)) actual) prefix_run))) typed)",
         r"def semantic_typed_spine_select_at (R : RedEnv) (tenv : KDeclEnv)
  (G : ListType KExpr) (h F : KExpr) (args : ListType KExpr) (U T : KExpr)
  (package : SemanticTypedSpineReturn R tenv G h F args U T) (k : Nat) (a A B : KExpr)
- (selected : Eq (OptionType KExpr) (list_head (list_drop k args)) (OptionType.some KExpr a))
- (prefix_run : Eq (OptionType KExpr) (raw_pi_spine (list_take k args) F)
-  (OptionType.some KExpr (KExpr.pi A B))) : TypingCtxConvIn R tenv G a A :=
- SemanticTypedSpineReturn.rec R tenv G h F args U T
+ (selected : @Eq (OptionType KExpr) (list_head (list_drop k args)) (@OptionType.some KExpr a))
+ (prefix_run : @Eq (OptionType KExpr) (raw_pi_spine (list_take k args) F)
+  (@OptionType.some KExpr (KExpr.pi A B))) : TypingCtxConvIn R tenv G a A :=
+ @SemanticTypedSpineReturn.rec R tenv G h F args U T
   (fun (_p : SemanticTypedSpineReturn R tenv G h F args U T) => TypingCtxConvIn R tenv G a A)
   (fun (_head : TypingCtxConvIn R tenv G h F)
    (trace : TypedRawPiSpine R tenv G F args U) (_convert : DefEqIn R U T) =>
@@ -360,13 +360,13 @@ mod tests {
         r"def typingctxconv_in_const_spine_select_at (R : RedEnv) (faithful : RedEnvFaithful R)
  (tenv : KDeclEnv) (G : ListType KExpr) (n : Name) (us : ListType Level) (F : KExpr)
  (args : ListType KExpr) (U T : KExpr)
- (lookup : Eq (OptionType KExpr) (kdecl_type_at tenv n us) (OptionType.some KExpr F))
- (run : Eq (OptionType KExpr) (raw_pi_spine args F) (OptionType.some KExpr U))
+ (lookup : @Eq (OptionType KExpr) (kdecl_type_at tenv n us) (@OptionType.some KExpr F))
+ (run : @Eq (OptionType KExpr) (raw_pi_spine args F) (@OptionType.some KExpr U))
  (typed : TypingCtxConvIn R tenv G (apply_spine args (KExpr.const n us)) T)
  (k : Nat) (a A B : KExpr)
- (selected : Eq (OptionType KExpr) (list_head (list_drop k args)) (OptionType.some KExpr a))
- (prefix_run : Eq (OptionType KExpr) (raw_pi_spine (list_take k args) F)
-  (OptionType.some KExpr (KExpr.pi A B))) : TypingCtxConvIn R tenv G a A :=
+ (selected : @Eq (OptionType KExpr) (list_head (list_drop k args)) (@OptionType.some KExpr a))
+ (prefix_run : @Eq (OptionType KExpr) (raw_pi_spine (list_take k args) F)
+  (@OptionType.some KExpr (KExpr.pi A B))) : TypingCtxConvIn R tenv G a A :=
  semantic_typed_spine_select_at R tenv G (KExpr.const n us) F args U T
   (typingctxconv_in_const_spine R faithful tenv G n us F args U T lookup run typed)
   k a A B selected prefix_run",
@@ -374,30 +374,30 @@ mod tests {
  (G : ListType KExpr) : TypingCtxConvIn R typed_spine_identity_tenv G
  (KExpr.sort Level.zero) (KExpr.sort (Level.succ Level.zero)) :=
  typingctxconv_in_const_spine_select_at R faithful typed_spine_identity_tenv G
-  Name.anonymous (ListType.nil Level) (typed_spine_identity_type (Level.succ (Level.succ Level.zero)))
+  Name.anonymous (@ListType.nil Level) (typed_spine_identity_type (Level.succ (Level.succ Level.zero)))
   typed_spine_identity_args (KExpr.sort (Level.succ Level.zero)) (KExpr.sort (Level.succ Level.zero))
   typed_spine_identity_lookup typed_spine_identity_run (typed_raw_pi_spine_identity_const_apply R G)
   (Nat.succ Nat.zero) (KExpr.sort Level.zero) (KExpr.sort (Level.succ Level.zero))
   (KExpr.sort (Level.succ Level.zero))
-  (Eq.refl (OptionType KExpr) (OptionType.some KExpr (KExpr.sort Level.zero)))
-  (Eq.refl (OptionType KExpr) (OptionType.some KExpr
+  (@Eq.refl (OptionType KExpr) (@OptionType.some KExpr (KExpr.sort Level.zero)))
+  (@Eq.refl (OptionType KExpr) (@OptionType.some KExpr
    (KExpr.pi (KExpr.sort (Level.succ Level.zero)) (KExpr.sort (Level.succ Level.zero)))))",
         r"def projection_prod_selected_zero_argument :
- TypingCtxConvIn the_red_env kcre_ind_ctor_tenv (ListType.nil KExpr) rfnz_zero rfnz_nat :=
- semantic_typed_spine_select_at the_red_env kcre_ind_ctor_tenv (ListType.nil KExpr)
+ TypingCtxConvIn the_red_env kcre_ind_ctor_tenv (@ListType.nil KExpr) rfnz_zero rfnz_nat :=
+ semantic_typed_spine_select_at the_red_env kcre_ind_ctor_tenv (@ListType.nil KExpr)
   projection_prod_ctor (projection_meta_ctor_type projection_prod_result) projection_prod_args
   kcre_witness_prod_type kcre_witness_prod_type projection_prod_typed_constructor_spine
   (Nat.succ (Nat.succ Nat.zero)) rfnz_zero rfnz_nat (KExpr.pi rfnz_nat kcre_witness_prod_type)
-  (Eq.refl (OptionType KExpr) (OptionType.some KExpr rfnz_zero))
-  (Eq.refl (OptionType KExpr) (OptionType.some KExpr projection_prod_field_telescope))",
+  (@Eq.refl (OptionType KExpr) (@OptionType.some KExpr rfnz_zero))
+  (@Eq.refl (OptionType KExpr) (@OptionType.some KExpr projection_prod_field_telescope))",
         r"def projection_prod_selected_succ_argument :
- TypingCtxConvIn the_red_env kcre_ind_ctor_tenv (ListType.nil KExpr) (KExpr.app rfnz_succ rfnz_zero) rfnz_nat :=
- semantic_typed_spine_select_at the_red_env kcre_ind_ctor_tenv (ListType.nil KExpr)
+ TypingCtxConvIn the_red_env kcre_ind_ctor_tenv (@ListType.nil KExpr) (KExpr.app rfnz_succ rfnz_zero) rfnz_nat :=
+ semantic_typed_spine_select_at the_red_env kcre_ind_ctor_tenv (@ListType.nil KExpr)
   projection_prod_ctor (projection_meta_ctor_type projection_prod_result) projection_prod_args
   kcre_witness_prod_type kcre_witness_prod_type projection_prod_typed_constructor_spine
   (Nat.succ (Nat.succ (Nat.succ Nat.zero))) (KExpr.app rfnz_succ rfnz_zero) rfnz_nat kcre_witness_prod_type
-  (Eq.refl (OptionType KExpr) (OptionType.some KExpr (KExpr.app rfnz_succ rfnz_zero)))
-  (Eq.refl (OptionType KExpr) (OptionType.some KExpr (KExpr.pi rfnz_nat kcre_witness_prod_type)))",
+  (@Eq.refl (OptionType KExpr) (@OptionType.some KExpr (KExpr.app rfnz_succ rfnz_zero)))
+  (@Eq.refl (OptionType KExpr) (@OptionType.some KExpr (KExpr.pi rfnz_nat kcre_witness_prod_type)))",
     ];
 
     // Exact binder-desugared forms of the three independently rejected controls.
@@ -412,19 +412,19 @@ mod tests {
         ),
         (
             "forged_dependent_prefix_domain",
-            r"Eq (OptionType KExpr)
+            r"@Eq (OptionType KExpr)
  (raw_pi_spine (list_take (Nat.succ Nat.zero) typed_spine_identity_args)
   (typed_spine_identity_type (Level.succ (Level.succ Level.zero))))
- (OptionType.some KExpr (KExpr.pi (KExpr.sort Level.zero) (KExpr.sort (Level.succ Level.zero))))",
-            r"Eq.refl (OptionType KExpr) (OptionType.some KExpr
+ (@OptionType.some KExpr (KExpr.pi (KExpr.sort Level.zero) (KExpr.sort (Level.succ Level.zero))))",
+            r"@Eq.refl (OptionType KExpr) (@OptionType.some KExpr
   (KExpr.pi (KExpr.sort Level.zero) (KExpr.sort (Level.succ Level.zero))))",
         ),
         (
             "forged_out_of_range_argument",
-            r"Eq (OptionType KExpr)
+            r"@Eq (OptionType KExpr)
  (list_head (list_drop (Nat.succ (Nat.succ Nat.zero)) typed_spine_identity_args))
- (OptionType.some KExpr (KExpr.sort Level.zero))",
-            r"Eq.refl (OptionType KExpr) (OptionType.some KExpr (KExpr.sort Level.zero))",
+ (@OptionType.some KExpr (KExpr.sort Level.zero))",
+            r"@Eq.refl (OptionType KExpr) (@OptionType.some KExpr (KExpr.sort Level.zero))",
         ),
     ];
 
@@ -582,16 +582,16 @@ mod tests {
             let spec = build_spec_with_stack();
             for (value_src, type_src) in [
                 (
-                    "typed_spine_identity_selected_argument the_red_env the_red_env_faithful (ListType.nil KExpr)",
-                    "TypingCtxConvIn the_red_env typed_spine_identity_tenv (ListType.nil KExpr) (KExpr.sort Level.zero) (KExpr.sort (Level.succ Level.zero))",
+                    "typed_spine_identity_selected_argument the_red_env the_red_env_faithful (@ListType.nil KExpr)",
+                    "TypingCtxConvIn the_red_env typed_spine_identity_tenv (@ListType.nil KExpr) (KExpr.sort Level.zero) (KExpr.sort (Level.succ Level.zero))",
                 ),
                 (
                     "projection_prod_selected_zero_argument",
-                    "TypingCtxConvIn the_red_env kcre_ind_ctor_tenv (ListType.nil KExpr) rfnz_zero rfnz_nat",
+                    "TypingCtxConvIn the_red_env kcre_ind_ctor_tenv (@ListType.nil KExpr) rfnz_zero rfnz_nat",
                 ),
                 (
                     "projection_prod_selected_succ_argument",
-                    "TypingCtxConvIn the_red_env kcre_ind_ctor_tenv (ListType.nil KExpr) (KExpr.app rfnz_succ rfnz_zero) rfnz_nat",
+                    "TypingCtxConvIn the_red_env kcre_ind_ctor_tenv (@ListType.nil KExpr) (KExpr.app rfnz_succ rfnz_zero) rfnz_nat",
                 ),
             ] {
                 let value = spec.elaborate_source(value_src, "actual selected argument caller").expect("caller elaborates");

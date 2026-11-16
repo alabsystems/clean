@@ -108,8 +108,8 @@ impl Specification {
                  kcre_witness_nat_zero_reduct"
                 .to_string(),
             value_src: Some(
-                "Eq.refl (OptionType KExpr) \
-                 (OptionType.some KExpr kcre_witness_nat_zero_reduct)"
+                "@Eq.refl (OptionType KExpr) \
+                 (@OptionType.some KExpr kcre_witness_nat_zero_reduct)"
                     .to_string(),
             ),
             is_axiom: false,
@@ -139,12 +139,12 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "the_red_env_delta_nonvacuous".to_string(),
             type_src: "delta_step (red_def the_red_env) \
-                 (KExpr.const kcre_witness_delta_head (ListType.nil Level)) \
+                 (KExpr.const kcre_witness_delta_head (@ListType.nil Level)) \
                  kcre_witness_delta_value"
                 .to_string(),
             value_src: Some(
-                "Eq.refl (OptionType KExpr) \
-                 (OptionType.some KExpr kcre_witness_delta_value)"
+                "@Eq.refl (OptionType KExpr) \
+                 (@OptionType.some KExpr kcre_witness_delta_value)"
                     .to_string(),
             ),
             is_axiom: false,

@@ -228,7 +228,7 @@ impl Specification {
         self.add_recursive_def(
             "def opt_step_bind (A : Type) (o : OptionType A) (d : WhStepR) \
              (f : A -> WhStepR) : WhStepR := \
-             OptionType.rec A (fun (_o : OptionType A) => WhStepR) d f o",
+             @OptionType.rec A (fun (_o : OptionType A) => WhStepR) d f o",
             "opt_step_bind: opt_bind, but the failure branch is CHOSEN rather than fixed. Every \
              level of the iota chain supplies wstuck except the pre-pass level, which supplies \
              wstarved — and that one choice is the whole difference between a loop that lies about \
@@ -269,7 +269,7 @@ impl Specification {
         ] {
             let src = format!(
                 "def {name} (o : WhStepR) : Type := \
-                 WhStepR.rec (fun (_o : WhStepR) => Type) {stuck} {starved} \
+                 @WhStepR.rec (fun (_o : WhStepR) => Type) {stuck} {starved} \
                  (fun (_e : KExpr) => {step}) o"
             );
             debug_assert!(Self::balanced(&src), "{name} parens");
@@ -313,8 +313,8 @@ impl Specification {
             for (suffix, univ) in [("_type", "Type"), ("", "Prop")] {
                 let name = format!("wh_{lo}_ne_{hi}{suffix}");
                 let src = format!(
-                    "def {name} {binder}(C : {univ}) (h : Eq WhStepR {l} {r}) : C := \
-                     Empty.rec (fun (_ : Empty) => C) \
+                    "def {name} {binder}(C : {univ}) (h : @Eq WhStepR {l} {r}) : C := \
+                     @Empty.rec (fun (_ : Empty) => C) \
                      (Eq.substType WhStepR {disc} {l} {r} h Nat.zero)"
                 );
                 debug_assert!(Self::balanced(&src), "{name} parens");
@@ -373,8 +373,8 @@ impl Specification {
             ),
         ] {
             let src = format!(
-                "def {name} : Eq ({o}) (whnf_fuel_red_wh3 the_red_env {fuel} {term}) \
-                 (OptionType.none KExpr) := Eq.refl ({o}) (OptionType.none KExpr)"
+                "def {name} : @Eq ({o}) (whnf_fuel_red_wh3 the_red_env {fuel} {term}) \
+                 (@OptionType.none KExpr) := @Eq.refl ({o}) (@OptionType.none KExpr)"
             );
             debug_assert!(Self::balanced(&src), "{name} parens");
             self.add_recursive_def(
@@ -401,8 +401,8 @@ impl Specification {
         self.add_recursive_def(
             &format!(
                 "def wh_dispatch3 (o : WhStepR) (e0 : KExpr) (ih : KExpr -> {o}) : {o} := \
-                 WhStepR.rec (fun (_o : WhStepR) => {o}) (OptionType.some KExpr e0) \
-                 (OptionType.none KExpr) (fun (e2 : KExpr) => ih e2) o"
+                 @WhStepR.rec (fun (_o : WhStepR) => {o}) (@OptionType.some KExpr e0) \
+                 (@OptionType.none KExpr) (fun (e2 : KExpr) => ih e2) o"
             ),
             "wh_dispatch3: the loop's dispatch on a three-way step. wstuck yields the term, which \
              is now an honest claim of normality; wstarved yields none, honest exhaustion; wstep \
@@ -415,7 +415,7 @@ impl Specification {
             &format!(
                 "def opt_app_ilift3 (renv : RedEnv) (wh : KExpr -> {o}) (f : KExpr) (a : KExpr) \
                  (cf : WhStepR) : WhStepR := \
-                 WhStepR.rec (fun (_o : WhStepR) => WhStepR) \
+                 @WhStepR.rec (fun (_o : WhStepR) => WhStepR) \
                  (iota_reduct_whc3 (red_rec renv) wh (KExpr.app f a)) \
                  WhStepR.wstarved \
                  (fun (f2 : KExpr) => WhStepR.wstep (KExpr.app f2 a)) cf"
@@ -446,7 +446,7 @@ impl Specification {
             &format!(
                 "def reduce_app_head_red_wh3 (renv : RedEnv) (wh : KExpr -> {o}) (a : KExpr) \
                  (f : KExpr) (cf : WhStepR) : WhStepR := \
-                 KExpr.rec (fun (_e : KExpr) => WhStepR) {arms} f",
+                 @KExpr.rec (fun (_e : KExpr) => WhStepR) {arms} f",
                 arms = arms.join(" "),
             ),
             "reduce_app_head_red_wh3: beta at a lambda head, ilift everywhere else — the same \
@@ -467,14 +467,14 @@ impl Specification {
                  => WhStepR.wstep (instantiate b v))",
             // proj carries starvation up from its subterm rather than losing it
             "(fun (s : Name) (i : Nat) (sub : KExpr) (csub : WhStepR) => \
-                 WhStepR.rec (fun (_o : WhStepR) => WhStepR) WhStepR.wstuck WhStepR.wstarved \
+                 @WhStepR.rec (fun (_o : WhStepR) => WhStepR) WhStepR.wstuck WhStepR.wstarved \
                  (fun (sub2 : KExpr) => WhStepR.wstep (KExpr.proj s i sub2)) csub)",
             "(fun (v : Nat) => WhStepR.wstuck)",
         ];
         self.add_recursive_def(
             &format!(
                 "def reduce_once_red_wh3 (renv : RedEnv) (wh : KExpr -> {o}) (e : KExpr) : WhStepR := \
-                 KExpr.rec (fun (_e : KExpr) => WhStepR) {arms} e",
+                 @KExpr.rec (fun (_e : KExpr) => WhStepR) {arms} e",
                 arms = step_arms.join(" "),
             ),
             "reduce_once_red_wh3: one executable step, reporting WHY it stopped. Five shapes are \
@@ -487,8 +487,8 @@ impl Specification {
         self.add_recursive_def(
             &format!(
                 "def whnf_fuel_red_wh3 (renv : RedEnv) (fuel : Nat) (e : KExpr) : {o} := \
-                 Nat.rec (fun (_n : Nat) => KExpr -> {o}) (fun (_e0 : KExpr) => \
-                 OptionType.none KExpr) (fun (k : Nat) (ih : KExpr -> {o}) (e0 : KExpr) => \
+                 @Nat.rec (fun (_n : Nat) => KExpr -> {o}) (fun (_e0 : KExpr) => \
+                 @OptionType.none KExpr) (fun (k : Nat) (ih : KExpr -> {o}) (e0 : KExpr) => \
                  wh_dispatch3 (reduce_once_red_wh3 renv ih e0) e0 ih) fuel e"
             ),
             "whnf_fuel_red_wh3: the faithful loop, on the three-way step. Same shape as \
@@ -617,25 +617,25 @@ impl Specification {
             (
                 "wh_redex_false_stuck",
                 "(Nat.succ Nat.zero)",
-                format!("(OptionType.some KExpr {d})"),
+                format!("(@OptionType.some KExpr {d})"),
                 "at budget 1 the pre-pass is starved, so iota declines and the loop announces the                  redex as its own normal form",
             ),
             (
                 "wh_redex_collapses",
                 "(Nat.succ (Nat.succ Nat.zero))",
-                "(OptionType.none KExpr)".to_string(),
+                "(@OptionType.none KExpr)".to_string(),
                 "at budget 2 the pre-pass succeeds and iota FIRES, leaving too little fuel to                  normalise the reduct — so the loop returns none, having returned some at the                  smaller budget",
             ),
             (
                 "wh_cx_stuck_collapses",
                 "(Nat.succ (Nat.succ (Nat.succ Nat.zero)))",
-                "(OptionType.none KExpr)".to_string(),
+                "(@OptionType.none KExpr)".to_string(),
                 "the same collapse one wrapper further out, on the counterexample cx_stuck that                  already refutes hnf",
             ),
         ] {
             let term = if name == "wh_cx_stuck_collapses" { "cx_stuck" } else { d };
             let src = format!(
-                "def {name} : Eq ({o}) (whnf_fuel_red_wh the_red_env {fuel} {term}) {rhs} :=                  Eq.refl ({o}) {rhs}"
+                "def {name} : @Eq ({o}) (whnf_fuel_red_wh the_red_env {fuel} {term}) {rhs} :=                  @Eq.refl ({o}) {rhs}"
             );
             debug_assert!(Self::balanced(&src), "{name} parens");
             self.add_recursive_def(
@@ -648,19 +648,19 @@ impl Specification {
 
         // The refutation proper: assume the lemma the port would need, derive Empty.
         let mono = format!(
-            "forall (fuel : Nat) (e : KExpr) (r : KExpr), Eq ({o}) \
-             (whnf_fuel_red_wh the_red_env fuel e) (OptionType.some KExpr r) -> Eq ({o}) \
-             (whnf_fuel_red_wh the_red_env (Nat.succ fuel) e) (OptionType.some KExpr r)"
+            "forall (fuel : Nat) (e : KExpr) (r : KExpr), @Eq ({o}) \
+             (whnf_fuel_red_wh the_red_env fuel e) (@OptionType.some KExpr r) -> @Eq ({o}) \
+             (whnf_fuel_red_wh the_red_env (Nat.succ fuel) e) (@OptionType.some KExpr r)"
         );
         let src = format!(
             "def whnf_fuel_red_wh_monotone_is_false (mono : {mono}) : Empty := \
              option_none_ne_some_type KExpr {d} Empty \
-             (Eq.trans ({o}) (OptionType.none KExpr) \
+             (Eq.trans ({o}) (@OptionType.none KExpr) \
              (whnf_fuel_red_wh the_red_env (Nat.succ (Nat.succ Nat.zero)) {d}) \
-             (OptionType.some KExpr {d}) \
+             (@OptionType.some KExpr {d}) \
              (Eq.symm ({o}) \
              (whnf_fuel_red_wh the_red_env (Nat.succ (Nat.succ Nat.zero)) {d}) \
-             (OptionType.none KExpr) wh_redex_collapses) \
+             (@OptionType.none KExpr) wh_redex_collapses) \
              (mono (Nat.succ Nat.zero) {d} {d} wh_redex_false_stuck))"
         );
         debug_assert!(Self::balanced(&src), "monotonicity refutation parens");
@@ -673,10 +673,10 @@ impl Specification {
 
     fn add_starvation_witness(&mut self) -> Result<(), SpecError> {
         self.add_recursive_def(
-            "def whnf_fuel_red_wh_starves : Eq (OptionType KExpr) \
+            "def whnf_fuel_red_wh_starves : @Eq (OptionType KExpr) \
              (whnf_fuel_red_wh the_red_env (Nat.succ Nat.zero) cx_stuck) \
-             (OptionType.some KExpr cx_stuck) := \
-             Eq.refl (OptionType KExpr) (OptionType.some KExpr cx_stuck)",
+             (@OptionType.some KExpr cx_stuck) := \
+             @Eq.refl (OptionType KExpr) (@OptionType.some KExpr cx_stuck)",
             "whnf_fuel_red_wh_starves: THE FUEL ARTIFACT, and it is bad news for hnf. \
              \
              At fuel 1 the faithful loop returns cx_stuck UNCHANGED — the same term that \
@@ -747,8 +747,8 @@ impl Specification {
     fn add_faithful_hnf_refutation(&mut self) -> Result<(), SpecError> {
         self.add_recursive_def(
             "def hnf_wh_is_false (hnfw : forall (m : Nat) (e : KExpr) (r : KExpr), \
-             Eq (OptionType KExpr) (whnf_fuel_red_wh the_red_env m e) \
-             (OptionType.some KExpr r) -> nf_head r) : Empty := \
+             @Eq (OptionType KExpr) (whnf_fuel_red_wh the_red_env m e) \
+             (@OptionType.some KExpr r) -> nf_head r) : Empty := \
              cx_not_nf_head (hnfw (Nat.succ Nat.zero) cx_stuck cx_stuck \
              whnf_fuel_red_wh_starves)",
             "hnf_wh_is_false: THE SECOND REFUTATION, and the one that shows the first was not \
@@ -812,7 +812,7 @@ impl Specification {
     fn wh_no_redex_src() -> String {
         let no_redex_at = |j: &str, term: &str| {
             format!(
-                "Eq (OptionType KExpr) (reduce_once_red_wh renv {} {term}) (OptionType.none KExpr)",
+                "@Eq (OptionType KExpr) (reduce_once_red_wh renv {} {term}) (@OptionType.none KExpr)",
                 Self::wh_at(j)
             )
         };
@@ -828,42 +828,42 @@ impl Specification {
         let stuck = |t: &str| format!("(forall (j : Nat), {} -> C) -> C", no_redex_at("j", t));
         let motive = format!(
             "(fun (n : Nat) => forall (e : KExpr) (r : KExpr), \
-             Eq (OptionType KExpr) (whnf_fuel_red_wh renv n e) (OptionType.some KExpr r) -> {})",
+             @Eq (OptionType KExpr) (whnf_fuel_red_wh renv n e) (@OptionType.some KExpr r) -> {})",
             stuck("r")
         );
         let src = format!(
             "def whnf_fuel_red_wh_no_redex (renv : RedEnv) (fuel : Nat) (C : Type) : \
              forall (e : KExpr) (r : KExpr), \
-             Eq (OptionType KExpr) (whnf_fuel_red_wh renv fuel e) (OptionType.some KExpr r) -> {goal} := \
-             Nat.rec {motive} \
+             @Eq (OptionType KExpr) (whnf_fuel_red_wh renv fuel e) (@OptionType.some KExpr r) -> {goal} := \
+             @Nat.rec {motive} \
              (fun (e : KExpr) (r : KExpr) \
-             (h : Eq (OptionType KExpr) (whnf_fuel_red_wh renv Nat.zero e) \
-             (OptionType.some KExpr r)) => \
+             (h : @Eq (OptionType KExpr) (whnf_fuel_red_wh renv Nat.zero e) \
+             (@OptionType.some KExpr r)) => \
              opt_none_ne_some_t KExpr r ({goal_r}) h) \
              (fun (k : Nat) (ih : forall (e0 : KExpr) (r0 : KExpr), \
-             Eq (OptionType KExpr) (whnf_fuel_red_wh renv k e0) (OptionType.some KExpr r0) -> {goal_r0}) \
+             @Eq (OptionType KExpr) (whnf_fuel_red_wh renv k e0) (@OptionType.some KExpr r0) -> {goal_r0}) \
              (e : KExpr) (r : KExpr) \
-             (h : Eq (OptionType KExpr) (whnf_fuel_red_wh renv (Nat.succ k) e) \
-             (OptionType.some KExpr r)) => \
-             OptionType.rec KExpr \
+             (h : @Eq (OptionType KExpr) (whnf_fuel_red_wh renv (Nat.succ k) e) \
+             (@OptionType.some KExpr r)) => \
+             @OptionType.rec KExpr \
              (fun (o : OptionType KExpr) => \
-             Eq (OptionType KExpr) (reduce_once_red_wh renv {whk} e) o -> \
-             Eq (OptionType KExpr) (loop_dispatch o e {whk}) (OptionType.some KExpr r) -> {goal_r}) \
+             @Eq (OptionType KExpr) (reduce_once_red_wh renv {whk} e) o -> \
+             @Eq (OptionType KExpr) (loop_dispatch o e {whk}) (@OptionType.some KExpr r) -> {goal_r}) \
              (fun (heq : {heq_ty}) \
-             (h2 : Eq (OptionType KExpr) \
-             (loop_dispatch (OptionType.none KExpr) e {whk}) (OptionType.some KExpr r)) \
+             (h2 : @Eq (OptionType KExpr) \
+             (loop_dispatch (@OptionType.none KExpr) e {whk}) (@OptionType.some KExpr r)) \
              (kk : forall (j : Nat), {no_redex_j_r} -> C) => \
-             kk k (Eq.rec KExpr e \
-             (fun (x : KExpr) (_hx : Eq KExpr e x) => {no_redex_k_x}) \
+             kk k (@Eq.rec KExpr e \
+             (fun (x : KExpr) (_hx : @Eq KExpr e x) => {no_redex_k_x}) \
              heq r (option_some_inj KExpr e r h2))) \
              (fun (e2 : KExpr) \
-             (_heq : Eq (OptionType KExpr) (reduce_once_red_wh renv {whk} e) \
-             (OptionType.some KExpr e2)) \
-             (h2 : Eq (OptionType KExpr) \
-             (loop_dispatch (OptionType.some KExpr e2) e {whk3}) (OptionType.some KExpr r)) => \
+             (_heq : @Eq (OptionType KExpr) (reduce_once_red_wh renv {whk} e) \
+             (@OptionType.some KExpr e2)) \
+             (h2 : @Eq (OptionType KExpr) \
+             (loop_dispatch (@OptionType.some KExpr e2) e {whk3}) (@OptionType.some KExpr r)) => \
              ih e2 r h2) \
              (reduce_once_red_wh renv {whk} e) \
-             (Eq.refl (OptionType KExpr) (reduce_once_red_wh renv {whk} e)) h) \
+             (@Eq.refl (OptionType KExpr) (reduce_once_red_wh renv {whk} e)) h) \
              fuel",
             goal = stuck("r"),
             goal_r = stuck("r"),
@@ -921,13 +921,13 @@ impl Specification {
         self.add_recursive_def(
             &format!(
                 "def minimal_major_is_last (meta : RecMeta) (f : KExpr) (wmajor : KExpr) \
-                 (hlen : Eq Nat (list_length (kapp_args f)) {mi}) : \
-                 Eq (OptionType KExpr) \
+                 (hlen : @Eq Nat (list_length (kapp_args f)) {mi}) : \
+                 @Eq (OptionType KExpr) \
                  (list_head (list_drop {mi} (kapp_args (KExpr.app f wmajor)))) \
-                 (OptionType.some KExpr wmajor) := \
-                 Eq.substType Nat (fun (z : Nat) => Eq (OptionType KExpr) \
+                 (@OptionType.some KExpr wmajor) := \
+                 Eq.substType Nat (fun (z : Nat) => @Eq (OptionType KExpr) \
                  (list_head (list_drop z (kapp_args (KExpr.app f wmajor)))) \
-                 (OptionType.some KExpr wmajor)) \
+                 (@OptionType.some KExpr wmajor)) \
                  (list_length (kapp_args f)) {mi} hlen \
                  (list_head_drop_len_append (kapp_args f) wmajor)"
             ),
@@ -939,11 +939,11 @@ impl Specification {
         self.add_recursive_def(
             &format!(
                 "def minimal_suffix_nil (meta : RecMeta) (f : KExpr) (x : KExpr) \
-                 (hlen : Eq Nat (list_length (kapp_args f)) {mi}) : \
-                 Eq (ListType KExpr) \
-                 (list_drop (Nat.succ {mi}) (kapp_args (KExpr.app f x))) (ListType.nil KExpr) := \
-                 Eq.substType Nat (fun (z : Nat) => Eq (ListType KExpr) \
-                 (list_drop (Nat.succ z) (kapp_args (KExpr.app f x))) (ListType.nil KExpr)) \
+                 (hlen : @Eq Nat (list_length (kapp_args f)) {mi}) : \
+                 @Eq (ListType KExpr) \
+                 (list_drop (Nat.succ {mi}) (kapp_args (KExpr.app f x))) (@ListType.nil KExpr) := \
+                 Eq.substType Nat (fun (z : Nat) => @Eq (ListType KExpr) \
+                 (list_drop (Nat.succ z) (kapp_args (KExpr.app f x))) (@ListType.nil KExpr)) \
                  (list_length (kapp_args f)) {mi} hlen \
                  (list_drop_succ_len_append x (kapp_args f))"
             ),
@@ -955,10 +955,10 @@ impl Specification {
         self.add_recursive_def(
             &format!(
                 "def minimal_prefix_is_args (meta : RecMeta) (f : KExpr) (x : KExpr) \
-                 (hlen : Eq Nat (list_length (kapp_args f)) {pre}) : \
-                 Eq (ListType KExpr) \
+                 (hlen : @Eq Nat (list_length (kapp_args f)) {pre}) : \
+                 @Eq (ListType KExpr) \
                  (list_take {pre} (kapp_args (KExpr.app f x))) (kapp_args f) := \
-                 Eq.substType Nat (fun (z : Nat) => Eq (ListType KExpr) \
+                 Eq.substType Nat (fun (z : Nat) => @Eq (ListType KExpr) \
                  (list_take z (kapp_args (KExpr.app f x))) (kapp_args f)) \
                  (list_length (kapp_args f)) {pre} hlen \
                  (list_take_len_append x (kapp_args f))"
@@ -999,20 +999,20 @@ impl Specification {
 
         self.add_recursive_def(
             "def defeq_of_const_delta (n : Name) (us : ListType Level) (v : KExpr) \
-             (h : Eq (OptionType KExpr) (kdef_value_at (red_def the_red_env) n us) \
-             (OptionType.some KExpr v)) : DefEq (KExpr.const n us) v := \
+             (h : @Eq (OptionType KExpr) (kdef_value_at (red_def the_red_env) n us) \
+             (@OptionType.some KExpr v)) : DefEq (KExpr.const n us) v := \
              DefEq.delta (KExpr.const n us) v (delta_reduces.mk (KExpr.const n us) v \
              (opt_bind_some_intro Name KExpr \
              (kexpr_const_name (kapp_fn (KExpr.const n us))) \
              (fun (dname : Name) => opt_bind KExpr KExpr \
              (kdef_value_at (red_def the_red_env) dname us) \
-             (fun (val : KExpr) => OptionType.some KExpr \
+             (fun (val : KExpr) => @OptionType.some KExpr \
              (apply_spine (kapp_args (KExpr.const n us)) val))) \
-             n v (Eq.refl (OptionType Name) (OptionType.some Name n)) \
+             n v (@Eq.refl (OptionType Name) (@OptionType.some Name n)) \
              (opt_bind_some_intro KExpr KExpr (kdef_value_at (red_def the_red_env) n us) \
-             (fun (val : KExpr) => OptionType.some KExpr \
+             (fun (val : KExpr) => @OptionType.some KExpr \
              (apply_spine (kapp_args (KExpr.const n us)) val)) \
-             v v h (Eq.refl (OptionType KExpr) (OptionType.some KExpr v)))))",
+             v v h (@Eq.refl (OptionType KExpr) (@OptionType.some KExpr v)))))",
             "defeq_of_const_delta: the loop's const step is DefEq, by delta. Two \
              opt_bind_some_intro levels rebuild delta_reduct's chain — the head name is Eq.refl \
              because kexpr_const_name (kapp_fn (const n us)) computes, and the inner equation is \
@@ -1022,8 +1022,8 @@ impl Specification {
 
         self.add_recursive_def(
             "def whnf_fuel_red_wh_zero_none (renv : RedEnv) (e : KExpr) : \
-             Eq (OptionType KExpr) (whnf_fuel_red_wh renv Nat.zero e) (OptionType.none KExpr) := \
-             Eq.refl (OptionType KExpr) (OptionType.none KExpr)",
+             @Eq (OptionType KExpr) (whnf_fuel_red_wh renv Nat.zero e) (@OptionType.none KExpr) := \
+             @Eq.refl (OptionType KExpr) (@OptionType.none KExpr)",
             "whnf_fuel_red_wh_zero_none: the faithful loop returns nothing at fuel 0 — the base \
              case of every induction over it, and the reason those base cases are absurd rather \
              than arguments. DerivedProved, zero axiom_deps.",
@@ -1033,18 +1033,18 @@ impl Specification {
             &format!(
                 "def whc_fires_plain_minimal (f : KExpr) (wmajor : KExpr) (recname : Name) \
                  (cname : Name) (meta : RecMeta) (rule : RecRule) (e2 : KExpr) \
-                 (hlenmi : Eq Nat (list_length (kapp_args f)) {mi}) \
-                 (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn f)) \
-                 (OptionType.some Name recname)) \
-                 (h2 : Eq (OptionType RecMeta) (recmeta_for (red_rec the_red_env) recname) \
-                 (OptionType.some RecMeta meta)) \
-                 (h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn wmajor)) \
-                 (OptionType.some Name cname)) \
-                 (h5 : Eq (OptionType RecRule) \
+                 (hlenmi : @Eq Nat (list_length (kapp_args f)) {mi}) \
+                 (h1 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn f)) \
+                 (@OptionType.some Name recname)) \
+                 (h2 : @Eq (OptionType RecMeta) (recmeta_for (red_rec the_red_env) recname) \
+                 (@OptionType.some RecMeta meta)) \
+                 (h4 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn wmajor)) \
+                 (@OptionType.some Name cname)) \
+                 (h5 : @Eq (OptionType RecRule) \
                  (recrule_for (red_rec the_red_env) recname cname) \
-                 (OptionType.some RecRule rule)) \
-                 (hred : Eq (OptionType KExpr) ({r_meta_wmajor_rule}) \
-                 (OptionType.some KExpr e2)) : \
+                 (@OptionType.some RecRule rule)) \
+                 (hred : @Eq (OptionType KExpr) ({r_meta_wmajor_rule}) \
+                 (@OptionType.some KExpr e2)) : \
                  iota_step (red_rec the_red_env) {sp} e2 := \
                  opt_bind_some_intro Name KExpr (kexpr_const_name (kapp_fn {sp})) \
                  (fun (rn : Name) => opt_bind RecMeta KExpr \
@@ -1162,21 +1162,21 @@ impl Specification {
     /// definitionally: `list_drop (succ n)` is `list_drop n ∘ list_tail`, and
     /// `list_take (succ n) (cons x l)` is `cons x (list_take n l)`.
     fn add_boundary_list_facts(&mut self) -> Result<(), SpecError> {
-        let single = "(ListType.cons KExpr a (ListType.nil KExpr))";
+        let single = "(@ListType.cons KExpr a (@ListType.nil KExpr))";
         self.add_recursive_def(
             &format!(
                 "def list_take_len_append (a : KExpr) (xs : ListType KExpr) : \
-                 Eq (ListType KExpr) \
+                 @Eq (ListType KExpr) \
                  (list_take (list_length xs) (list_append xs {single})) xs := \
-                 ListType.rec KExpr \
-                 (fun (l : ListType KExpr) => Eq (ListType KExpr) \
+                 @ListType.rec KExpr \
+                 (fun (l : ListType KExpr) => @Eq (ListType KExpr) \
                  (list_take (list_length l) (list_append l {single})) l) \
-                 (Eq.refl (ListType KExpr) (ListType.nil KExpr)) \
+                 (@Eq.refl (ListType KExpr) (@ListType.nil KExpr)) \
                  (fun (x : KExpr) (rest : ListType KExpr) \
-                 (ih : Eq (ListType KExpr) \
+                 (ih : @Eq (ListType KExpr) \
                  (list_take (list_length rest) (list_append rest {single})) rest) => \
                  Eq.cong (ListType KExpr) (ListType KExpr) \
-                 (fun (t : ListType KExpr) => ListType.cons KExpr x t) \
+                 (fun (t : ListType KExpr) => @ListType.cons KExpr x t) \
                  (list_take (list_length rest) (list_append rest {single})) rest ih) \
                  xs"
             ),
@@ -1192,18 +1192,18 @@ impl Specification {
         self.add_recursive_def(
             &format!(
                 "def list_drop_succ_len_append (a : KExpr) (xs : ListType KExpr) : \
-                 Eq (ListType KExpr) \
+                 @Eq (ListType KExpr) \
                  (list_drop (Nat.succ (list_length xs)) (list_append xs {single})) \
-                 (ListType.nil KExpr) := \
-                 ListType.rec KExpr \
-                 (fun (l : ListType KExpr) => Eq (ListType KExpr) \
+                 (@ListType.nil KExpr) := \
+                 @ListType.rec KExpr \
+                 (fun (l : ListType KExpr) => @Eq (ListType KExpr) \
                  (list_drop (Nat.succ (list_length l)) (list_append l {single})) \
-                 (ListType.nil KExpr)) \
-                 (Eq.refl (ListType KExpr) (ListType.nil KExpr)) \
+                 (@ListType.nil KExpr)) \
+                 (@Eq.refl (ListType KExpr) (@ListType.nil KExpr)) \
                  (fun (x : KExpr) (rest : ListType KExpr) \
-                 (ih : Eq (ListType KExpr) \
+                 (ih : @Eq (ListType KExpr) \
                  (list_drop (Nat.succ (list_length rest)) (list_append rest {single})) \
-                 (ListType.nil KExpr)) => ih) \
+                 (@ListType.nil KExpr)) => ih) \
                  xs"
             ),
             "list_drop_succ_len_append: dropping one MORE than (length xs) from xs ++ [a] leaves \
@@ -1287,12 +1287,12 @@ impl Specification {
         let src = format!(
             "def iota_reduct_whc_none_of_no_head (env : RecEnv) \
              (wh : KExpr -> OptionType KExpr) (e : KExpr) \
-             (hh : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) \
-             (OptionType.none Name)) : \
-             Eq ({o}) (iota_reduct_whc env wh e) (OptionType.none KExpr) := \
+             (hh : @Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) \
+             (@OptionType.none Name)) : \
+             @Eq ({o}) (iota_reduct_whc env wh e) (@OptionType.none KExpr) := \
              Eq.cong (OptionType Name) ({o}) \
              (fun (on : OptionType Name) => opt_bind Name KExpr on {l2}) \
-             (kexpr_const_name (kapp_fn e)) (OptionType.none Name) hh"
+             (kexpr_const_name (kapp_fn e)) (@OptionType.none Name) hh"
         );
         debug_assert!(Self::balanced(&src), "whc no-head parens");
         self.add_recursive_def(
@@ -1328,32 +1328,32 @@ impl Specification {
         let [_, l3, l4, _, _, _] = Self::whc_layers("nm");
         let b2 = format!("(opt_bind RecMeta KExpr (recmeta_for env nm) {l3})");
         let b3 = format!("(opt_bind KExpr KExpr (list_head (list_drop {mi} (kapp_args e))) {l4})");
-        let goal = "(OptionType.none KExpr)";
+        let goal = "(@OptionType.none KExpr)";
         let c1 = format!(
             "(Eq.cong (OptionType Name) ({o}) \
              (fun (on : OptionType Name) => opt_bind Name KExpr on {l2}) \
-             (kexpr_const_name (kapp_fn e)) (OptionType.some Name nm) hh)"
+             (kexpr_const_name (kapp_fn e)) (@OptionType.some Name nm) hh)"
         );
         let c2 = format!(
             "(Eq.cong (OptionType RecMeta) ({o}) \
              (fun (om : OptionType RecMeta) => opt_bind RecMeta KExpr om {l3}) \
-             (recmeta_for env nm) (OptionType.some RecMeta meta) hrm)"
+             (recmeta_for env nm) (@OptionType.some RecMeta meta) hrm)"
         );
         let c3 = format!(
             "(Eq.cong ({o}) ({o}) \
              (fun (oj : {o}) => opt_bind KExpr KExpr oj {l4}) \
-             (list_head (list_drop {mi} (kapp_args e))) (OptionType.none KExpr) hno)"
+             (list_head (list_drop {mi} (kapp_args e))) (@OptionType.none KExpr) hno)"
         );
         let src = format!(
             "def iota_reduct_whc_none_of_no_major (env : RecEnv) \
              (wh : KExpr -> OptionType KExpr) (e : KExpr) (nm : Name) (meta : RecMeta) \
-             (hh : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) \
-             (OptionType.some Name nm)) \
-             (hrm : Eq (OptionType RecMeta) (recmeta_for env nm) \
-             (OptionType.some RecMeta meta)) \
-             (hno : Eq ({o}) (list_head (list_drop {mi} (kapp_args e))) \
-             (OptionType.none KExpr)) : \
-             Eq ({o}) (iota_reduct_whc env wh e) {goal} := \
+             (hh : @Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) \
+             (@OptionType.some Name nm)) \
+             (hrm : @Eq (OptionType RecMeta) (recmeta_for env nm) \
+             (@OptionType.some RecMeta meta)) \
+             (hno : @Eq ({o}) (list_head (list_drop {mi} (kapp_args e))) \
+             (@OptionType.none KExpr)) : \
+             @Eq ({o}) (iota_reduct_whc env wh e) {goal} := \
              Eq.trans ({o}) (iota_reduct_whc env wh e) {b2} {goal} {c1} \
              (Eq.trans ({o}) {b2} {b3} {goal} {c2} {c3})"
         );
@@ -1411,7 +1411,7 @@ impl Specification {
         let tail = Self::whc_tail();
         let ([l2, l3, l4, l5, l6, l7], [b2, b3, b4, b5, b6, b7]) = Self::whc_chain("recname");
         let o = "OptionType KExpr";
-        let none = "(OptionType.none KExpr)";
+        let none = "(@OptionType.none KExpr)";
         let cong = |ty: &str, var: &str, layer: &str, from: &str, to: &str, h: &str| {
             format!(
                 "(Eq.cong (OptionType {ty}) ({o}) \
@@ -1425,7 +1425,7 @@ impl Specification {
             "on",
             &l2,
             "(kexpr_const_name (kapp_fn e))",
-            "(OptionType.some Name recname)",
+            "(@OptionType.some Name recname)",
             "h1",
         );
         let c2 = cong(
@@ -1433,7 +1433,7 @@ impl Specification {
             "om",
             &l3,
             "(recmeta_for env recname)",
-            "(OptionType.some RecMeta meta)",
+            "(@OptionType.some RecMeta meta)",
             "h2",
         );
         let c3 = cong(
@@ -1441,7 +1441,7 @@ impl Specification {
             "oj",
             &l4,
             &format!("(list_head (list_drop {mi} (kapp_args e)))"),
-            "(OptionType.some KExpr major)",
+            "(@OptionType.some KExpr major)",
             "h3",
         );
         let c4 = cong(
@@ -1449,7 +1449,7 @@ impl Specification {
             "ow",
             &l5,
             "(wh major)",
-            "(OptionType.some KExpr wmajor)",
+            "(@OptionType.some KExpr wmajor)",
             "hw",
         );
         let c5 = cong(
@@ -1457,7 +1457,7 @@ impl Specification {
             "oc",
             &l6,
             "(kexpr_const_name (kapp_fn wmajor))",
-            "(OptionType.some Name cname)",
+            "(@OptionType.some Name cname)",
             "h4",
         );
 
@@ -1466,17 +1466,17 @@ impl Specification {
         let bind_head = format!(
             "(env : RecEnv) (wh : KExpr -> OptionType KExpr) (e : KExpr) (recname : Name) \
              (meta : RecMeta) (major : KExpr) (wmajor : KExpr) \
-             (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) \
-             (OptionType.some Name recname)) \
-             (h2 : Eq (OptionType RecMeta) (recmeta_for env recname) \
-             (OptionType.some RecMeta meta)) \
-             (h3 : Eq ({o}) (list_head (list_drop {mi} (kapp_args e))) \
-             (OptionType.some KExpr major)) \
-             (hw : Eq ({o}) (wh major) (OptionType.some KExpr wmajor))"
+             (h1 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) \
+             (@OptionType.some Name recname)) \
+             (h2 : @Eq (OptionType RecMeta) (recmeta_for env recname) \
+             (@OptionType.some RecMeta meta)) \
+             (h3 : @Eq ({o}) (list_head (list_drop {mi} (kapp_args e))) \
+             (@OptionType.some KExpr major)) \
+             (hw : @Eq ({o}) (wh major) (@OptionType.some KExpr wmajor))"
         );
         let bind_cname = "(cname : Name) \
-             (h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn wmajor)) \
-             (OptionType.some Name cname))"
+             (h4 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn wmajor)) \
+             (@OptionType.some Name cname))"
             .to_string();
 
         // Fold a list of (from, to, cong) into a right-nested Eq.trans ending at
@@ -1500,14 +1500,14 @@ impl Specification {
             // result type, not this transport's. Getting that wrong is the one
             // mistake the paren and parse guards cannot see, because the string
             // is well formed and only the kernel types it.
-            "(OptionType.none Name)",
+            "(@OptionType.none Name)",
             "hnc",
         );
         let src_a = format!(
             "def iota_reduct_whc_none_of_no_wmajor_head {bind_head} \
-             (hnc : Eq (OptionType Name) (kexpr_const_name (kapp_fn wmajor)) \
-             (OptionType.none Name)) : \
-             Eq ({o}) (iota_reduct_whc env wh e) {none} := {proof}",
+             (hnc : @Eq (OptionType Name) (kexpr_const_name (kapp_fn wmajor)) \
+             (@OptionType.none Name)) : \
+             @Eq ({o}) (iota_reduct_whc env wh e) {none} := {proof}",
             proof = chain(
                 vec![
                     (
@@ -1529,14 +1529,14 @@ impl Specification {
             "orr",
             &l7,
             "(recrule_for env recname cname)",
-            "(OptionType.none RecRule)",
+            "(@OptionType.none RecRule)",
             "hnr",
         );
         let src_b = format!(
             "def iota_reduct_whc_none_of_no_rule {bind_head} {bind_cname} \
-             (hnr : Eq (OptionType RecRule) (recrule_for env recname cname) \
-             (OptionType.none RecRule)) : \
-             Eq ({o}) (iota_reduct_whc env wh e) {none} := {proof}",
+             (hnr : @Eq (OptionType RecRule) (recrule_for env recname cname) \
+             (@OptionType.none RecRule)) : \
+             @Eq ({o}) (iota_reduct_whc env wh e) {none} := {proof}",
             proof = chain(
                 vec![
                     (
@@ -1560,16 +1560,16 @@ impl Specification {
             "orr",
             &l7,
             "(recrule_for env recname cname)",
-            "(OptionType.some RecRule rule)",
+            "(@OptionType.some RecRule rule)",
             "h5",
         );
         let src_c = format!(
             "def iota_reduct_whc_none_of_tail_none {bind_head} {bind_cname} \
              (rule : RecRule) \
-             (h5 : Eq (OptionType RecRule) (recrule_for env recname cname) \
-             (OptionType.some RecRule rule)) \
-             (htail : Eq ({o}) {tail} {none}) : \
-             Eq ({o}) (iota_reduct_whc env wh e) {none} := {proof}",
+             (h5 : @Eq (OptionType RecRule) (recrule_for env recname cname) \
+             (@OptionType.some RecRule rule)) \
+             (htail : @Eq ({o}) {tail} {none}) : \
+             @Eq ({o}) (iota_reduct_whc env wh e) {none} := {proof}",
             proof = chain(
                 vec![
                     (
@@ -1657,7 +1657,7 @@ impl Specification {
             "on",
             &l2,
             "(kexpr_const_name (kapp_fn e))",
-            "(OptionType.some Name recname)",
+            "(@OptionType.some Name recname)",
             "h1",
         );
         let c2 = cong(
@@ -1665,7 +1665,7 @@ impl Specification {
             "om",
             &l3,
             "(recmeta_for env recname)",
-            "(OptionType.some RecMeta meta)",
+            "(@OptionType.some RecMeta meta)",
             "h2",
         );
         let c3 = cong(
@@ -1673,7 +1673,7 @@ impl Specification {
             "oj",
             &l4,
             &format!("(list_head (list_drop {mi} (kapp_args e)))"),
-            "(OptionType.some KExpr major)",
+            "(@OptionType.some KExpr major)",
             "h3",
         );
         let c4 = cong(
@@ -1681,7 +1681,7 @@ impl Specification {
             "ow",
             &l5,
             "(wh major)",
-            "(OptionType.some KExpr wmajor)",
+            "(@OptionType.some KExpr wmajor)",
             "hw",
         );
         let c5 = cong(
@@ -1689,7 +1689,7 @@ impl Specification {
             "oc",
             &l6,
             "(kexpr_const_name (kapp_fn wmajor))",
-            "(OptionType.some Name cname)",
+            "(@OptionType.some Name cname)",
             "h4",
         );
         let c6 = cong(
@@ -1697,10 +1697,10 @@ impl Specification {
             "orr",
             &l7,
             "(recrule_for env recname cname)",
-            "(OptionType.some RecRule rule)",
+            "(@OptionType.some RecRule rule)",
             "h5",
         );
-        let goal = "(OptionType.some KExpr result)";
+        let goal = "(@OptionType.some KExpr result)";
         // Six lookup transports reach the tail; its actual success reaches result.
         let mut proof = format!("(Eq.trans ({o}) ({b6}) ({b7}) {goal} {c6} htail)");
         for (from, to, c) in [
@@ -1720,19 +1720,19 @@ impl Specification {
             "def iota_reduct_whc_some_of_facts (env : RecEnv) \
              (wh : KExpr -> OptionType KExpr) (e : KExpr) (recname : Name) (meta : RecMeta) \
              (major : KExpr) (wmajor : KExpr) (cname : Name) (rule : RecRule) (result : KExpr) \
-             (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) \
-             (OptionType.some Name recname)) \
-             (h2 : Eq (OptionType RecMeta) (recmeta_for env recname) \
-             (OptionType.some RecMeta meta)) \
-             (h3 : Eq ({o}) (list_head (list_drop {mi} (kapp_args e))) \
-             (OptionType.some KExpr major)) \
-             (hw : Eq ({o}) (wh major) (OptionType.some KExpr wmajor)) \
-             (h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn wmajor)) \
-             (OptionType.some Name cname)) \
-             (h5 : Eq (OptionType RecRule) (recrule_for env recname cname) \
-             (OptionType.some RecRule rule)) \
-             (htail : Eq ({o}) {tail} {goal}) : \
-             Eq ({o}) (iota_reduct_whc env wh e) {goal} := {proof}"
+             (h1 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) \
+             (@OptionType.some Name recname)) \
+             (h2 : @Eq (OptionType RecMeta) (recmeta_for env recname) \
+             (@OptionType.some RecMeta meta)) \
+             (h3 : @Eq ({o}) (list_head (list_drop {mi} (kapp_args e))) \
+             (@OptionType.some KExpr major)) \
+             (hw : @Eq ({o}) (wh major) (@OptionType.some KExpr wmajor)) \
+             (h4 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn wmajor)) \
+             (@OptionType.some Name cname)) \
+             (h5 : @Eq (OptionType RecRule) (recrule_for env recname cname) \
+             (@OptionType.some RecRule rule)) \
+             (htail : @Eq ({o}) {tail} {goal}) : \
+             @Eq ({o}) (iota_reduct_whc env wh e) {goal} := {proof}"
         );
         debug_assert!(Self::balanced(&src), "whc reassembly parens");
         self.add_recursive_def(
@@ -1771,18 +1771,18 @@ impl Specification {
         let src = format!(
             "def iota_reduct_whc_none_of_no_recmeta (env : RecEnv) \
              (wh : KExpr -> OptionType KExpr) (e : KExpr) (nm : Name) \
-             (hh : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) \
-             (OptionType.some Name nm)) \
-             (hrm : Eq (OptionType RecMeta) (recmeta_for env nm) (OptionType.none RecMeta)) : \
-             Eq (OptionType KExpr) (iota_reduct_whc env wh e) (OptionType.none KExpr) := \
+             (hh : @Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) \
+             (@OptionType.some Name nm)) \
+             (hrm : @Eq (OptionType RecMeta) (recmeta_for env nm) (@OptionType.none RecMeta)) : \
+             @Eq (OptionType KExpr) (iota_reduct_whc env wh e) (@OptionType.none KExpr) := \
              Eq.trans (OptionType KExpr) (iota_reduct_whc env wh e) {mid} \
-             (OptionType.none KExpr) \
+             (@OptionType.none KExpr) \
              (Eq.cong (OptionType Name) (OptionType KExpr) \
              (fun (on : OptionType Name) => opt_bind Name KExpr on {l2}) \
-             (kexpr_const_name (kapp_fn e)) (OptionType.some Name nm) hh) \
+             (kexpr_const_name (kapp_fn e)) (@OptionType.some Name nm) hh) \
              (Eq.cong (OptionType RecMeta) (OptionType KExpr) \
              (fun (om : OptionType RecMeta) => opt_bind RecMeta KExpr om {l3_nm}) \
-             (recmeta_for env nm) (OptionType.none RecMeta) hrm)"
+             (recmeta_for env nm) (@OptionType.none RecMeta) hrm)"
         );
         debug_assert!(Self::balanced(&src), "whc recmeta-none parens");
         self.add_recursive_def(
@@ -1839,55 +1839,55 @@ impl Specification {
         let kont = format!(
             "(forall (recname : Name) (meta : RecMeta) (major : KExpr) (wmajor : KExpr) \
              (cname : Name) (rule : RecRule), \
-             Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) \
-             (OptionType.some Name recname) -> \
-             Eq (OptionType RecMeta) (recmeta_for env recname) (OptionType.some RecMeta meta) -> \
-             Eq (OptionType KExpr) (list_head (list_drop {mi} (kapp_args e))) \
-             (OptionType.some KExpr major) -> \
-             Eq (OptionType KExpr) (wh major) (OptionType.some KExpr wmajor) -> \
-             Eq (OptionType Name) (kexpr_const_name (kapp_fn wmajor)) \
-             (OptionType.some Name cname) -> \
-             Eq (OptionType RecRule) (recrule_for env recname cname) \
-             (OptionType.some RecRule rule) -> \
-             Eq (OptionType KExpr) {tail} (OptionType.some KExpr e') -> \
+             @Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) \
+             (@OptionType.some Name recname) -> \
+             @Eq (OptionType RecMeta) (recmeta_for env recname) (@OptionType.some RecMeta meta) -> \
+             @Eq (OptionType KExpr) (list_head (list_drop {mi} (kapp_args e))) \
+             (@OptionType.some KExpr major) -> \
+             @Eq (OptionType KExpr) (wh major) (@OptionType.some KExpr wmajor) -> \
+             @Eq (OptionType Name) (kexpr_const_name (kapp_fn wmajor)) \
+             (@OptionType.some Name cname) -> \
+             @Eq (OptionType RecRule) (recrule_for env recname cname) \
+             (@OptionType.some RecRule rule) -> \
+             @Eq (OptionType KExpr) {tail} (@OptionType.some KExpr e') -> \
              C)"
         );
         let src = format!(
             "def iota_reduct_whc_some_inv{suffix} (env : RecEnv) \
              (wh : KExpr -> OptionType KExpr) \
              (e : KExpr) (e' : KExpr) (C : {univ}) \
-             (h : Eq (OptionType KExpr) (iota_reduct_whc env wh e) (OptionType.some KExpr e')) \
+             (h : @Eq (OptionType KExpr) (iota_reduct_whc env wh e) (@OptionType.some KExpr e')) \
              (k : {kont}) : C := \
              {binder_inv} Name KExpr (kexpr_const_name (kapp_fn e)) {l2} e' C h \
              (fun (recname : Name) \
-             (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) \
-             (OptionType.some Name recname)) \
-             (h1r : Eq (OptionType KExpr) ({l2} recname) (OptionType.some KExpr e')) => \
+             (h1 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) \
+             (@OptionType.some Name recname)) \
+             (h1r : @Eq (OptionType KExpr) ({l2} recname) (@OptionType.some KExpr e')) => \
              {binder_inv} RecMeta KExpr (recmeta_for env recname) {l3} e' C h1r \
              (fun (meta : RecMeta) \
-             (h2 : Eq (OptionType RecMeta) (recmeta_for env recname) \
-             (OptionType.some RecMeta meta)) \
-             (h2r : Eq (OptionType KExpr) ({l3} meta) (OptionType.some KExpr e')) => \
+             (h2 : @Eq (OptionType RecMeta) (recmeta_for env recname) \
+             (@OptionType.some RecMeta meta)) \
+             (h2r : @Eq (OptionType KExpr) ({l3} meta) (@OptionType.some KExpr e')) => \
              {binder_inv} KExpr KExpr \
              (list_head (list_drop {mi} (kapp_args e))) {l4} e' C h2r \
              (fun (major : KExpr) \
-             (h3 : Eq (OptionType KExpr) (list_head (list_drop {mi} (kapp_args e))) \
-             (OptionType.some KExpr major)) \
-             (h3r : Eq (OptionType KExpr) ({l4} major) (OptionType.some KExpr e')) => \
+             (h3 : @Eq (OptionType KExpr) (list_head (list_drop {mi} (kapp_args e))) \
+             (@OptionType.some KExpr major)) \
+             (h3r : @Eq (OptionType KExpr) ({l4} major) (@OptionType.some KExpr e')) => \
              {binder_inv} KExpr KExpr (wh major) {l5} e' C h3r \
              (fun (wmajor : KExpr) \
-             (hw : Eq (OptionType KExpr) (wh major) (OptionType.some KExpr wmajor)) \
-             (h4r : Eq (OptionType KExpr) ({l5} wmajor) (OptionType.some KExpr e')) => \
+             (hw : @Eq (OptionType KExpr) (wh major) (@OptionType.some KExpr wmajor)) \
+             (h4r : @Eq (OptionType KExpr) ({l5} wmajor) (@OptionType.some KExpr e')) => \
              {binder_inv} Name KExpr (kexpr_const_name (kapp_fn wmajor)) {l6} e' C h4r \
              (fun (cname : Name) \
-             (h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn wmajor)) \
-             (OptionType.some Name cname)) \
-             (h5r : Eq (OptionType KExpr) ({l6} cname) (OptionType.some KExpr e')) => \
+             (h4 : @Eq (OptionType Name) (kexpr_const_name (kapp_fn wmajor)) \
+             (@OptionType.some Name cname)) \
+             (h5r : @Eq (OptionType KExpr) ({l6} cname) (@OptionType.some KExpr e')) => \
              {binder_inv} RecRule KExpr (recrule_for env recname cname) {l7} e' C h5r \
              (fun (rule : RecRule) \
-             (h5 : Eq (OptionType RecRule) (recrule_for env recname cname) \
-             (OptionType.some RecRule rule)) \
-             (h6r : Eq (OptionType KExpr) ({l7} rule) (OptionType.some KExpr e')) => \
+             (h5 : @Eq (OptionType RecRule) (recrule_for env recname cname) \
+             (@OptionType.some RecRule rule)) \
+             (h6r : @Eq (OptionType KExpr) ({l7} rule) (@OptionType.some KExpr e')) => \
              k recname meta major wmajor cname rule h1 h2 h3 hw h4 h5 h6r))))))"
         );
         debug_assert!(Self::balanced(&src), "whc inverter parens");
@@ -2142,9 +2142,9 @@ impl Specification {
         // continuation, which returns none. Fuel 2 fires beta, then observes that
         // the constructor has no further step and lands.
         self.add_recursive_def(
-            "def iota_reduct_stuck_here : Eq (OptionType KExpr) \
-             (iota_reduct (red_rec the_red_env) cx_stuck) (OptionType.none KExpr) := \
-             Eq.refl (OptionType KExpr) (OptionType.none KExpr)",
+            "def iota_reduct_stuck_here : @Eq (OptionType KExpr) \
+             (iota_reduct (red_rec the_red_env) cx_stuck) (@OptionType.none KExpr) := \
+             @Eq.refl (OptionType KExpr) (@OptionType.none KExpr)",
             "iota_reduct_stuck_here: the REFLECTED iota_reduct finds no redex in cx_stuck. Proof \
              by refl — the kernel evaluates the five-level opt_bind chain over the real reflected \
              environment and reaches none at level four, because cx_stuck's major premise is a \
@@ -2155,11 +2155,11 @@ impl Specification {
         )?;
 
         self.add_recursive_def(
-            "def iota_reduct_wh_fires : Eq (OptionType KExpr) \
+            "def iota_reduct_wh_fires : @Eq (OptionType KExpr) \
              (iota_reduct_wh the_red_env (Nat.succ (Nat.succ Nat.zero)) cx_stuck) \
-             (OptionType.some KExpr kcre_witness_nat_zero_reduct) := \
-             Eq.refl (OptionType KExpr) \
-             (OptionType.some KExpr kcre_witness_nat_zero_reduct)",
+             (@OptionType.some KExpr kcre_witness_nat_zero_reduct) := \
+             @Eq.refl (OptionType KExpr) \
+             (@OptionType.some KExpr kcre_witness_nat_zero_reduct)",
             "iota_reduct_wh_fires: THE DIVERGENCE, executable. On the SAME closed term the \
              pre-pass version fires, and lands on exactly the reduct the Guard-4 witness records \
              for the whnf'd redex (kcre_witness_nat_zero_reduct). Proof by refl — the kernel \
@@ -2186,9 +2186,9 @@ impl Specification {
         // RESULTS, and a term is a whnf result exactly when the step function
         // returns none on it.
         self.add_recursive_def(
-            "def reduce_once_red_stuck_here : Eq (OptionType KExpr) \
-             (reduce_once_red the_red_env cx_stuck) (OptionType.none KExpr) := \
-             Eq.refl (OptionType KExpr) (OptionType.none KExpr)",
+            "def reduce_once_red_stuck_here : @Eq (OptionType KExpr) \
+             (reduce_once_red the_red_env cx_stuck) (@OptionType.none KExpr) := \
+             @Eq.refl (OptionType KExpr) (@OptionType.none KExpr)",
             "reduce_once_red_stuck_here: the CURRENT loop's step function finds nothing to do on \
              cx_stuck — which is precisely why whnf returns it unchanged (cx_whnf_stuck) and why \
              hnf is false, since cx_stuck has no normal-form head. Proof by refl. DerivedProved, \
@@ -2196,12 +2196,12 @@ impl Specification {
         )?;
 
         self.add_recursive_def(
-            "def reduce_once_red_wh_fires : Eq (OptionType KExpr) \
+            "def reduce_once_red_wh_fires : @Eq (OptionType KExpr) \
              (reduce_once_red_wh the_red_env \
              (whnf_fuel_red_wh the_red_env (Nat.succ (Nat.succ Nat.zero))) cx_stuck) \
-             (OptionType.some KExpr kcre_witness_nat_zero_reduct) := \
-             Eq.refl (OptionType KExpr) \
-             (OptionType.some KExpr kcre_witness_nat_zero_reduct)",
+             (@OptionType.some KExpr kcre_witness_nat_zero_reduct) := \
+             @Eq.refl (OptionType KExpr) \
+             (@OptionType.some KExpr kcre_witness_nat_zero_reduct)",
             "reduce_once_red_wh_fires: THE PAYOFF — the pre-pass loop's step function FIRES on \
              the very term the current one is stuck on, and lands on the Guard-4 witness's reduct. \
              Proof by refl, so the kernel evaluates the whole nine-arm dispatch, the application \

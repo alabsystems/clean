@@ -191,7 +191,7 @@ fn par_delta_commute_one_of_sc_proof() -> String {
     let refl_arm = concat!(
         "(fun (s : KExpr) => ",
         "fun (a : KExpr) (hpar : par_reduces_c (red_rec env) s a) => ",
-        "par_delta_commute_witness.intro env a s a (delta_cong_star.refl env a) ",
+        "@par_delta_commute_witness.intro env a s a (@delta_cong_star.refl env a) ",
         "(par_subsumes_par_c_star (red_rec env) s a hpar))"
     );
     // step arm: x ⇒ x1 (δ-step h1), x1 ⇒* y (tail), ih. Given a, hpar : β+ι x => a.
@@ -208,7 +208,7 @@ fn par_delta_commute_one_of_sc_proof() -> String {
         "@par_delta_commute_witness.rec env d y ",
         "(fun (_w : par_delta_commute_witness env d y) => par_delta_commute_witness env a y) ",
         "(fun (c : KExpr) (hc1 : delta_cong_star env d c) (hc2 : par_reduces_c_star (red_rec env) y c) => ",
-        "par_delta_commute_witness.intro env a y c ",
+        "@par_delta_commute_witness.intro env a y c ",
         "(delta_cong_star_trans env a d c hd1 hc1) hc2) ",
         "(ih d hd2)) ",
         "(SC x a x1 hpar h1))"
@@ -217,7 +217,7 @@ fn par_delta_commute_one_of_sc_proof() -> String {
         concat!(
             "fun (env : RedEnv) (SC : {sc}) (e : KExpr) (a : KExpr) (b : KExpr) ",
             "(hpar : par_reduces_c (red_rec env) e a) (hb : delta_cong_star env e b) => ",
-            "delta_cong_star.rec env {motive} {refl_arm} {step_arm} e b hb a hpar"
+            "@delta_cong_star.rec env {motive} {refl_arm} {step_arm} e b hb a hpar"
         ),
         sc = SC_TYPE,
         motive = motive,
@@ -238,7 +238,7 @@ fn par_delta_commute_of_sc_proof() -> String {
     let refl_arm = concat!(
         "(fun (s : KExpr) => ",
         "fun (b : KExpr) (hb : delta_cong_star env s b) => ",
-        "par_delta_commute_witness.intro env s b b hb (par_reduces_c_star.refl (red_rec env) b))"
+        "@par_delta_commute_witness.intro env s b b hb (@par_reduces_c_star.refl (red_rec env) b))"
     );
     // step arm: x ⇒ x1 (β+ι step hstep), x1 ⇒* y (tail), ih. Given b, hb : δ* x b.
     // commute_one hstep hb : par_delta_commute_witness env x1 b = ∃d1, δ* x1 d1 ∧ β+ι* b d1.
@@ -254,7 +254,7 @@ fn par_delta_commute_of_sc_proof() -> String {
         "@par_delta_commute_witness.rec env y d1 ",
         "(fun (_w : par_delta_commute_witness env y d1) => par_delta_commute_witness env y b) ",
         "(fun (c : KExpr) (hac : delta_cong_star env y c) (hd1c : par_reduces_c_star (red_rec env) d1 c) => ",
-        "par_delta_commute_witness.intro env y b c hac ",
+        "@par_delta_commute_witness.intro env y b c hac ",
         "(par_reduces_c_star_trans (red_rec env) b d1 c hbd1 hd1c)) ",
         "(ih d1 he1d1)) ",
         "(par_delta_commute_one_of_sc env SC x x1 b hstep hb))"
@@ -263,7 +263,7 @@ fn par_delta_commute_of_sc_proof() -> String {
         concat!(
             "fun (env : RedEnv) (SC : {sc}) (e : KExpr) (a : KExpr) (b : KExpr) ",
             "(hpar : par_reduces_c_star (red_rec env) e a) (hb : delta_cong_star env e b) => ",
-            "par_reduces_c_star.rec (red_rec env) {motive} {refl_arm} {step_arm} e a hpar b hb"
+            "@par_reduces_c_star.rec (red_rec env) {motive} {refl_arm} {step_arm} e a hpar b hb"
         ),
         sc = SC_TYPE,
         motive = motive,

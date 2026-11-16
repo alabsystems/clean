@@ -161,37 +161,37 @@ const NEGATIVE_CONTROLS: &[(&str, &str, &str)] = &[
     ),
     (
         "forged_projection_post_whnf_missing_argument",
-        r"Eq (OptionType KExpr)
+        r"@Eq (OptionType KExpr)
  (projection_post_whnf_reduct the_red_env
-  (KExpr.proj kcre_prod_type_name (Nat.succ (Nat.succ Nat.zero)) kcre_witness_prod_value)) (OptionType.some KExpr rfnz_zero)",
-        r"Eq.refl (OptionType KExpr) (OptionType.some KExpr rfnz_zero)",
+  (KExpr.proj kcre_prod_type_name (Nat.succ (Nat.succ Nat.zero)) kcre_witness_prod_value)) (@OptionType.some KExpr rfnz_zero)",
+        r"@Eq.refl (OptionType KExpr) (@OptionType.some KExpr rfnz_zero)",
     ),
     (
         "forged_projection_post_whnf_outer_shape",
-        r"Eq (OptionType KExpr)
- (projection_post_whnf_reduct the_red_env kcre_witness_prod_value) (OptionType.some KExpr rfnz_zero)",
-        r"Eq.refl (OptionType KExpr) (OptionType.some KExpr rfnz_zero)",
+        r"@Eq (OptionType KExpr)
+ (projection_post_whnf_reduct the_red_env kcre_witness_prod_value) (@OptionType.some KExpr rfnz_zero)",
+        r"@Eq.refl (OptionType KExpr) (@OptionType.some KExpr rfnz_zero)",
     ),
     (
         "forged_projection_binding_capture",
-        r"Eq (OptionType KExpr)
+        r"@Eq (OptionType KExpr)
  (projection_post_whnf_reduct the_red_env
   (instantiate_at (KExpr.proj kcre_prod_type_name Nat.zero projection_binding_subject)
    (KExpr.bvar (Nat.succ Nat.zero)) Nat.zero))
- (OptionType.some KExpr (KExpr.lam rfnz_nat (KExpr.bvar Nat.zero)))",
+ (@OptionType.some KExpr (KExpr.lam rfnz_nat (KExpr.bvar Nat.zero)))",
         r"projection_binding_substitution_caller",
     ),
     (
         "forged_projection_binding_unshifted",
-        r"Eq (OptionType KExpr)
+        r"@Eq (OptionType KExpr)
  (projection_post_whnf_reduct the_red_env
   (lift_at (KExpr.proj kcre_prod_type_name Nat.zero projection_binding_subject) Nat.zero (Nat.succ (Nat.succ Nat.zero))))
- (OptionType.some KExpr projection_binding_field)",
+ (@OptionType.some KExpr projection_binding_field)",
         r"projection_binding_lifting_caller",
     ),
     (
         "forged_projection_universe_wrong_head",
-        r"KExprUniverseEq projection_prod_ctor (KExpr.const kcre_prod_type_name (ListType.nil Level))",
+        r"KExprUniverseEq projection_prod_ctor (KExpr.const kcre_prod_type_name (@ListType.nil Level))",
         r"kexprUniverseEq_refl projection_prod_ctor",
     ),
     (
@@ -206,7 +206,7 @@ const NEGATIVE_CONTROLS: &[(&str, &str, &str)] = &[
     ),
     (
         "forged_projection_deterministic_field",
-        r"Eq KExpr rfnz_zero (KExpr.app rfnz_succ rfnz_zero)",
+        r"@Eq KExpr rfnz_zero (KExpr.app rfnz_succ rfnz_zero)",
         r"projection_post_whnf_deterministic the_red_env
   (KExpr.proj kcre_prod_type_name Nat.zero kcre_witness_prod_value) rfnz_zero rfnz_zero
   projection_post_whnf_prod_after_zero projection_post_whnf_prod_after_zero",

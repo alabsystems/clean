@@ -183,7 +183,7 @@ impl Specification {
         self.add_recursive_def(
             &format!(
                 "def kexpr_tag (e : KExpr) : Nat := \
-                 KExpr.rec (fun (_ : KExpr) => Nat) {arms}e"
+                 @KExpr.rec (fun (_ : KExpr) => Nat) {arms}e"
             ),
             "kexpr_tag e: the index of e's head constructor, 0..8 in recursor order. Exists so \
              that constructor discrimination is ONE lemma instead of 72: the hand-written \
@@ -205,15 +205,15 @@ impl Specification {
                  (Eq.trans Bool Bool.false (nat_eqb (kexpr_tag x) (kexpr_tag y)) Bool.true \
                  (Eq.symm Bool (nat_eqb (kexpr_tag x) (kexpr_tag y)) Bool.false hne) \
                  (Eq.substType KExpr \
-                 (fun (z : KExpr) => Eq Bool (nat_eqb (kexpr_tag x) (kexpr_tag z)) Bool.true) \
+                 (fun (z : KExpr) => @Eq Bool (nat_eqb (kexpr_tag x) (kexpr_tag z)) Bool.true) \
                  x y h (nat_eqb_refl (kexpr_tag x))))"
             )
         };
 
         self.add_recursive_def(
             &format!(
-                "def kexpr_discr_t (C : Type) (x : KExpr) (y : KExpr) (h : Eq KExpr x y) \
-                 (hne : Eq Bool (nat_eqb (kexpr_tag x) (kexpr_tag y)) Bool.false) : C := \
+                "def kexpr_discr_t (C : Type) (x : KExpr) (y : KExpr) (h : @Eq KExpr x y) \
+                 (hne : @Eq Bool (nat_eqb (kexpr_tag x) (kexpr_tag y)) Bool.false) : C := \
                  {}",
                 body("bool_false_ne_true_t")
             ),
@@ -226,8 +226,8 @@ impl Specification {
 
         self.add_recursive_def(
             &format!(
-                "def kexpr_discr_p (C : Prop) (x : KExpr) (y : KExpr) (h : Eq KExpr x y) \
-                 (hne : Eq Bool (nat_eqb (kexpr_tag x) (kexpr_tag y)) Bool.false) : C := \
+                "def kexpr_discr_p (C : Prop) (x : KExpr) (y : KExpr) (h : @Eq KExpr x y) \
+                 (hne : @Eq Bool (nat_eqb (kexpr_tag x) (kexpr_tag y)) Bool.false) : C := \
                  {}",
                 body("bool_false_ne_true")
             ),
@@ -250,7 +250,7 @@ impl Specification {
     /// rejected by the kernel 1277 seconds into a build.
     fn rigid_inv_arms(binder: &str, form: &str) -> String {
         // refl: the source equation IS the goal.
-        let refl_arm = format!("(fun (e0 : KExpr) {binder} (heq : Eq KExpr e0 {form}) => heq) ");
+        let refl_arm = format!("(fun (e0 : KExpr) {binder} (heq : @Eq KExpr e0 {form}) => heq) ");
 
         let structural = |idx: usize| {
             let (payload_binders, rec_pairs, src, tgt) = CD_STRUCTURAL_ARMS[idx];
@@ -259,14 +259,14 @@ impl Specification {
             for (from, to) in rec_pairs {
                 proofs.push_str(&format!("(_ : par_reduces_cd env {from} {to}) "));
                 ihs.push_str(&format!(
-                    "(_ : forall {binder}, Eq KExpr {from} {form} -> Eq KExpr {to} {form}) "
+                    "(_ : forall {binder}, @Eq KExpr {from} {form} -> @Eq KExpr {to} {form}) "
                 ));
             }
             format!(
                 "(fun {payload_binders} {proofs}{ihs}{binder} \
-                 (heq : Eq KExpr {src} {form}) => \
-                 kexpr_discr_p (Eq KExpr {tgt} {form}) {src} {form} heq \
-                 (Eq.refl Bool Bool.false)) "
+                 (heq : @Eq KExpr {src} {form}) => \
+                 kexpr_discr_p (@Eq KExpr {tgt} {form}) {src} {form} heq \
+                 (@Eq.refl Bool Bool.false)) "
             )
         };
 
@@ -275,17 +275,17 @@ impl Specification {
         // induction hypothesis.
         let iota_arm = format!(
             "(fun (ie : KExpr) (ie2 : KExpr) (hst : iota_step (red_rec env) ie ie2) \
-             {binder} (heq : Eq KExpr ie {form}) => \
+             {binder} (heq : @Eq KExpr ie {form}) => \
              iota_step_head_none_absurd (red_rec env) {form} ie2 \
-             (Eq KExpr ie2 {form}) (Eq.refl (OptionType Name) (OptionType.none Name)) \
+             (@Eq KExpr ie2 {form}) (@Eq.refl (OptionType Name) (@OptionType.none Name)) \
              (Eq.substType KExpr (fun (z : KExpr) => iota_step (red_rec env) z ie2) \
              ie {form} heq hst)) "
         );
         let delta_arm = format!(
             "(fun (de : KExpr) (de2 : KExpr) (hst : delta_step (red_def env) de de2) \
-             {binder} (heq : Eq KExpr de {form}) => \
+             {binder} (heq : @Eq KExpr de {form}) => \
              delta_step_head_none_absurd (red_def env) {form} de2 \
-             (Eq KExpr de2 {form}) (Eq.refl (OptionType Name) (OptionType.none Name)) \
+             (@Eq KExpr de2 {form}) (@Eq.refl (OptionType Name) (@OptionType.none Name)) \
              (Eq.substType KExpr (fun (z : KExpr) => delta_step (red_def env) z de2) \
              de {form} heq hst)) "
         );
@@ -321,7 +321,7 @@ impl Specification {
             let _ = payload;
             let motive = format!(
                 "fun (p : KExpr) (q : KExpr) (_h : par_reduces_cd env p q) => \
-                 forall {binder}, Eq KExpr p {form} -> Eq KExpr q {form}"
+                 forall {binder}, @Eq KExpr p {form} -> @Eq KExpr q {form}"
             );
 
             let arms = Self::rigid_inv_arms(binder, form);
@@ -330,8 +330,8 @@ impl Specification {
                 &format!(
                     "def par_reduces_cd_{label}_inv_eq (env : RedEnv) (p : KExpr) (q : KExpr) \
                      (h : par_reduces_cd env p q) : \
-                     forall {binder}, Eq KExpr p {form} -> Eq KExpr q {form} := \
-                     par_reduces_cd.rec env ({motive}) {arms}p q h"
+                     forall {binder}, @Eq KExpr p {form} -> @Eq KExpr q {form} := \
+                     @par_reduces_cd.rec env ({motive}) {arms}p q h"
                 ),
                 &format!(
                     "par_reduces_cd_{label}_inv_eq: {label} is a RIGID NORMAL FORM for parallel \
@@ -348,18 +348,18 @@ impl Specification {
             self.add_recursive_def(
                 &format!(
                     "def par_reduces_cd_star_{label}_inv_eq (env : RedEnv) {binder} (t : KExpr) \
-                     (h : par_reduces_cd_star env {form} t) : Eq KExpr t {form} := \
-                     par_reduces_cd_star.rec env \
+                     (h : par_reduces_cd_star env {form} t) : @Eq KExpr t {form} := \
+                     @par_reduces_cd_star.rec env \
                      (fun (p : KExpr) (q : KExpr) (_h : par_reduces_cd_star env p q) => \
-                     forall {binder}, Eq KExpr p {form} -> Eq KExpr q {form}) \
-                     (fun (e0 : KExpr) {binder} (heq : Eq KExpr e0 {form}) => heq) \
+                     forall {binder}, @Eq KExpr p {form} -> @Eq KExpr q {form}) \
+                     (fun (e0 : KExpr) {binder} (heq : @Eq KExpr e0 {form}) => heq) \
                      (fun (e0 : KExpr) (e1 : KExpr) (e2 : KExpr) \
                      (hstep : par_reduces_cd env e0 e1) \
                      (_hstar : par_reduces_cd_star env e1 e2) \
-                     (ih : forall {binder}, Eq KExpr e1 {form} -> Eq KExpr e2 {form}) \
-                     {binder} (heq : Eq KExpr e0 {form}) => \
+                     (ih : forall {binder}, @Eq KExpr e1 {form} -> @Eq KExpr e2 {form}) \
+                     {binder} (heq : @Eq KExpr e0 {form}) => \
                      ih {payload} (par_reduces_cd_{label}_inv_eq env e0 e1 hstep {payload} heq)) \
-                     {form} t h {payload} (Eq.refl KExpr {form})"
+                     {form} t h {payload} (@Eq.refl KExpr {form})"
                 ),
                 &format!(
                     "par_reduces_cd_star_{label}_inv_eq: MULTI-STEP rigidity — anything reachable \
@@ -412,7 +412,7 @@ mod tests {
 
         let arms = Specification::rigid_inv_arms("(lw : Nat)", "(KExpr.lit lw)");
         let proofs = arms.matches("(_ : par_reduces_cd env ").count();
-        let ihs = arms.matches("(_ : forall (lw : Nat), Eq KExpr ").count();
+        let ihs = arms.matches("(_ : forall (lw : Nat), @Eq KExpr ").count();
         assert_eq!(proofs, total, "one proof binder per recursive premise");
         assert_eq!(
             ihs, total,
@@ -511,12 +511,12 @@ mod tests {
                 "an arm whose source and target coincide would hide this error"
             );
             assert!(
-                arms.contains(&format!("kexpr_discr_p (Eq KExpr {tgt} {form})")),
+                arms.contains(&format!("kexpr_discr_p (@Eq KExpr {tgt} {form})")),
                 "arm with target {tgt} must discriminate INTO its target equation, not its \
                  source equation"
             );
             assert!(
-                !arms.contains(&format!("kexpr_discr_p (Eq KExpr {src} {form})")),
+                !arms.contains(&format!("kexpr_discr_p (@Eq KExpr {src} {form})")),
                 "arm with source {src} must not use the source equation as the goal"
             );
         }

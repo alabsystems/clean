@@ -145,7 +145,7 @@ impl Specification {
             )
             .to_string(),
             value_src: Some(
-                "fun (env : RecEnv) (e : KExpr) => par_reduces_pL.refl env e".to_string(),
+                "fun (env : RecEnv) (e : KExpr) => @par_reduces_pL.refl env e".to_string(),
             ),
             is_axiom: false,
             description: concat!(
@@ -515,7 +515,7 @@ impl Specification {
                 // MINIMAL/boundary app case is now discharged INTERNALLY via the landed
                 // par_reduces_p_app_reduct_cong_minimal).
                 "(forall (f : KExpr) (f' : KExpr) (g : KExpr) (g' : KExpr) (f1 : KExpr) (r0 : KExpr) (rm0 : KExpr), ",
-                "Eq (OptionType KExpr) (iota_reduct env f) (OptionType.some KExpr f1) -> ",
+                "@Eq (OptionType KExpr) (iota_reduct env f) (@OptionType.some KExpr f1) -> ",
                 "par_reduces_p env f f' -> par_reduces_p env g g' -> ",
                 "iota_step env (KExpr.app f g) r0 -> iota_step env (KExpr.app f' g') rm0 -> ",
                 "par_reduces_p_star env r0 rm0) -> ",
@@ -719,47 +719,47 @@ fn par_reduces_p_marked_erase_proof() -> String {
         // motive: forget the fuel index, land in par_reduces_p env a b
         "(fun (_n : Nat) (a : KExpr) (b : KExpr) (_ : par_reduces_pL env _n a b) => par_reduces_p env a b) ",
         // refl
-        "(fun (x : KExpr) => par_reduces_p.refl env x) ",
+        "(fun (x : KExpr) => @par_reduces_p.refl env x) ",
         // beta
         "(fun (nA : Nat) (nb : Nat) (na : Nat) (A : KExpr) (A' : KExpr) (body : KExpr) (body' : KExpr) (arg : KExpr) (arg' : KExpr) ",
         "(_hA : par_reduces_pL env nA A A') (_hb : par_reduces_pL env nb body body') (_ha : par_reduces_pL env na arg arg') ",
         "(ihA : par_reduces_p env A A') (ihb : par_reduces_p env body body') (iha : par_reduces_p env arg arg') => ",
-        "par_reduces_p.beta env A A' body body' arg arg' ihA ihb iha) ",
+        "@par_reduces_p.beta env A A' body body' arg arg' ihA ihb iha) ",
         // app
         "(fun (nf : Nat) (na : Nat) (f : KExpr) (f' : KExpr) (a : KExpr) (a' : KExpr) ",
         "(_hf : par_reduces_pL env nf f f') (_ha : par_reduces_pL env na a a') ",
         "(ihf : par_reduces_p env f f') (iha : par_reduces_p env a a') => ",
-        "par_reduces_p.app env f f' a a' ihf iha) ",
+        "@par_reduces_p.app env f f' a a' ihf iha) ",
         // lam
         "(fun (nt : Nat) (nb : Nat) (ty : KExpr) (ty' : KExpr) (body : KExpr) (body' : KExpr) ",
         "(_ht : par_reduces_pL env nt ty ty') (_hb : par_reduces_pL env nb body body') ",
         "(iht : par_reduces_p env ty ty') (ihb : par_reduces_p env body body') => ",
-        "par_reduces_p.lam env ty ty' body body' iht ihb) ",
+        "@par_reduces_p.lam env ty ty' body body' iht ihb) ",
         // pi
         "(fun (nt : Nat) (nb : Nat) (dom : KExpr) (dom' : KExpr) (body : KExpr) (body' : KExpr) ",
         "(_ht : par_reduces_pL env nt dom dom') (_hb : par_reduces_pL env nb body body') ",
         "(iht : par_reduces_p env dom dom') (ihb : par_reduces_p env body body') => ",
-        "par_reduces_p.pi env dom dom' body body' iht ihb) ",
+        "@par_reduces_p.pi env dom dom' body body' iht ihb) ",
         // forall_
         "(fun (nt : Nat) (nb : Nat) (dom : KExpr) (dom' : KExpr) (body : KExpr) (body' : KExpr) ",
         "(_ht : par_reduces_pL env nt dom dom') (_hb : par_reduces_pL env nb body body') ",
         "(iht : par_reduces_p env dom dom') (ihb : par_reduces_p env body body') => ",
-        "par_reduces_p.forall_ env dom dom' body body' iht ihb) ",
+        "@par_reduces_p.forall_ env dom dom' body body' iht ihb) ",
         // let_
         "(fun (nt : Nat) (nv : Nat) (nb : Nat) (ty : KExpr) (ty' : KExpr) (val : KExpr) (val' : KExpr) (body : KExpr) (body' : KExpr) ",
         "(_ht : par_reduces_pL env nt ty ty') (_hv : par_reduces_pL env nv val val') (_hb : par_reduces_pL env nb body body') ",
         "(iht : par_reduces_p env ty ty') (ihv : par_reduces_p env val val') (ihb : par_reduces_p env body body') => ",
-        "par_reduces_p.let_ env ty ty' val val' body body' iht ihv ihb) ",
+        "@par_reduces_p.let_ env ty ty' val val' body body' iht ihv ihb) ",
         // iota_p
         "(fun (ne : Nat) (x : KExpr) (e2 : KExpr) (r : KExpr) ",
         "(_he : par_reduces_pL env ne x e2) (hi : iota_step env e2 r) ",
         "(ihe : par_reduces_p env x e2) => ",
-        "par_reduces_p.iota_p env x e2 r ihe hi) ",
+        "@par_reduces_p.iota_p env x e2 r ihe hi) ",
         // let_cong (trailing congruence ctor -> par_reduces_p.let_cong)
         "(fun (nt : Nat) (nv : Nat) (nb : Nat) (ty : KExpr) (ty' : KExpr) (val : KExpr) (val' : KExpr) (body : KExpr) (body' : KExpr) ",
         "(_ht : par_reduces_pL env nt ty ty') (_hv : par_reduces_pL env nv val val') (_hb : par_reduces_pL env nb body body') ",
         "(iht : par_reduces_p env ty ty') (ihv : par_reduces_p env val val') (ihb : par_reduces_p env body body') => ",
-        "par_reduces_p.let_cong env ty ty' val val' body body' iht ihv ihb) ",
+        "@par_reduces_p.let_cong env ty ty' val val' body body' iht ihv ihb) ",
         // indices + scrutinee
         "n e e' h"
     )
@@ -790,7 +790,7 @@ fn par_reduces_p_marked_reduct_cong_proof() -> String {
     // the two fires over the recursion. a = source, b = target.
     let inner_motive = concat!(
         "(fun (k0 : Nat) (a : KExpr) (b : KExpr) (_d : par_reduces_pL env k0 a b) => ",
-        "Eq Nat k0 k -> forall (r0 : KExpr) (rm0 : KExpr), ",
+        "@Eq Nat k0 k -> forall (r0 : KExpr) (rm0 : KExpr), ",
         "iota_step env a r0 -> iota_step env b rm0 -> par_reduces_p_star env r0 rm0)"
     );
 
@@ -799,29 +799,29 @@ fn par_reduces_p_marked_reduct_cong_proof() -> String {
     let head_none_arm = |binders: &str, shape: &str| -> String {
         format!(
             "(fun {binders} \
-             (_g : Eq Nat _k0 k) (r0 : KExpr) (rm0 : KExpr) \
+             (_g : @Eq Nat _k0 k) (r0 : KExpr) (rm0 : KExpr) \
              (hr0 : iota_step env ({shape}) r0) (_hrm0 : iota_step env _b rm0) => \
              iota_step_head_none_absurd_type env ({shape}) r0 (par_reduces_p_star env r0 rm0) \
-             (Eq.refl (OptionType Name) (OptionType.none Name)) hr0)"
+             (@Eq.refl (OptionType Name) (@OptionType.none Name)) hr0)"
         )
     };
 
     // refl arm: a = b = s; both fires on s; r0 = rm0 (determinism); refl transported.
     let refl_arm = concat!(
-        "(fun (s : KExpr) (_g : Eq Nat Nat.zero k) (r0 : KExpr) (rm0 : KExpr) ",
+        "(fun (s : KExpr) (_g : @Eq Nat Nat.zero k) (r0 : KExpr) (rm0 : KExpr) ",
         "(hr0 : iota_step env s r0) (hrm0 : iota_step env s rm0) => ",
-        "Eq.substType KExpr (fun (z : KExpr) => par_reduces_p_star env r0 z) r0 rm0 ",
+        "@Eq.substType KExpr (fun (z : KExpr) => par_reduces_p_star env r0 z) r0 rm0 ",
         "(iota_step_deterministic env s r0 rm0 hr0 hrm0) ",
-        "(par_reduces_p_star.refl env r0))"
+        "(@par_reduces_p_star.refl env r0))"
     );
 
     // beta arm: a = app (lam A body) arg ; discharge.
     let beta_arm = head_none_arm(
         "(nA : Nat) (nb : Nat) (na : Nat) (A : KExpr) (A' : KExpr) (body : KExpr) (body' : KExpr) (arg : KExpr) (arg' : KExpr) \
          (_hA : par_reduces_pL env nA A A') (_hb : par_reduces_pL env nb body body') (_ha : par_reduces_pL env na arg arg') \
-         (_ihA : Eq Nat nA k -> forall (r1 : KExpr) (rm1 : KExpr), iota_step env A r1 -> iota_step env A' rm1 -> par_reduces_p_star env r1 rm1) \
-         (_ihb : Eq Nat nb k -> forall (r1 : KExpr) (rm1 : KExpr), iota_step env body r1 -> iota_step env body' rm1 -> par_reduces_p_star env r1 rm1) \
-         (_iha : Eq Nat na k -> forall (r1 : KExpr) (rm1 : KExpr), iota_step env arg r1 -> iota_step env arg' rm1 -> par_reduces_p_star env r1 rm1)",
+         (_ihA : @Eq Nat nA k -> forall (r1 : KExpr) (rm1 : KExpr), iota_step env A r1 -> iota_step env A' rm1 -> par_reduces_p_star env r1 rm1) \
+         (_ihb : @Eq Nat nb k -> forall (r1 : KExpr) (rm1 : KExpr), iota_step env body r1 -> iota_step env body' rm1 -> par_reduces_p_star env r1 rm1) \
+         (_iha : @Eq Nat na k -> forall (r1 : KExpr) (rm1 : KExpr), iota_step env arg r1 -> iota_step env arg' rm1 -> par_reduces_p_star env r1 rm1)",
         "KExpr.app (KExpr.lam A body) arg",
     )
     .replace("_k0", "(Nat.succ (Nat.add (Nat.add nA nb) na))")
@@ -839,30 +839,30 @@ fn par_reduces_p_marked_reduct_cong_proof() -> String {
     let app_arm = concat!(
         "(fun (nf : Nat) (ng : Nat) (f : KExpr) (f' : KExpr) (g : KExpr) (g' : KExpr) ",
         "(hf : par_reduces_pL env nf f f') (hg : par_reduces_pL env ng g g') ",
-        "(_ihf : Eq Nat nf k -> forall (r1 : KExpr) (rm1 : KExpr), iota_step env f r1 -> iota_step env f' rm1 -> par_reduces_p_star env r1 rm1) ",
-        "(_ihg : Eq Nat ng k -> forall (r1 : KExpr) (rm1 : KExpr), iota_step env g r1 -> iota_step env g' rm1 -> par_reduces_p_star env r1 rm1) ",
-        "(_g : Eq Nat (Nat.add nf ng) k) (r0 : KExpr) (rm0 : KExpr) ",
+        "(_ihf : @Eq Nat nf k -> forall (r1 : KExpr) (rm1 : KExpr), iota_step env f r1 -> iota_step env f' rm1 -> par_reduces_p_star env r1 rm1) ",
+        "(_ihg : @Eq Nat ng k -> forall (r1 : KExpr) (rm1 : KExpr), iota_step env g r1 -> iota_step env g' rm1 -> par_reduces_p_star env r1 rm1) ",
+        "(_g : @Eq Nat (Nat.add nf ng) k) (r0 : KExpr) (rm0 : KExpr) ",
         "(hr0 : iota_step env (KExpr.app f g) r0) (hrm0 : iota_step env (KExpr.app f' g') rm0) => ",
         "@OptionType.rec KExpr ",
         // motive M o := Eq (iota_reduct env f) o -> par_reduces_p_star env r0 rm0
-        "(fun (o : OptionType KExpr) => Eq (OptionType KExpr) (iota_reduct env f) o -> par_reduces_p_star env r0 rm0) ",
+        "(fun (o : OptionType KExpr) => @Eq (OptionType KExpr) (iota_reduct env f) o -> par_reduces_p_star env r0 rm0) ",
         // none arm: the MINIMAL case.
-        "(fun (hfn0 : Eq (OptionType KExpr) (iota_reduct env f) (OptionType.none KExpr)) => ",
+        "(fun (hfn0 : @Eq (OptionType KExpr) (iota_reduct env f) (@OptionType.none KExpr)) => ",
         "par_reduces_p_app_reduct_cong_minimal env f f' g g' r0 rm0 disjoint hfn0 ",
         "(par_reduces_pL_erase env nf f f' hf) (par_reduces_pL_erase env ng g g' hg) hr0 hrm0) ",
         // some f1 arm: the OVER-APPLICATION residual.
-        "(fun (f1 : KExpr) (hfs0 : Eq (OptionType KExpr) (iota_reduct env f) (OptionType.some KExpr f1)) => ",
+        "(fun (f1 : KExpr) (hfs0 : @Eq (OptionType KExpr) (iota_reduct env f) (@OptionType.some KExpr f1)) => ",
         "happ_over f f' g g' f1 r0 rm0 hfs0 ",
         "(par_reduces_pL_erase env nf f f' hf) (par_reduces_pL_erase env ng g g' hg) hr0 hrm0) ",
-        "(iota_reduct env f) (Eq.refl (OptionType KExpr) (iota_reduct env f)))"
+        "(iota_reduct env f) (@Eq.refl (OptionType KExpr) (iota_reduct env f)))"
     );
 
     // lam arm.
     let lam_arm = head_none_arm(
         "(nt : Nat) (nb : Nat) (ty : KExpr) (ty' : KExpr) (body : KExpr) (body' : KExpr) \
          (_ht : par_reduces_pL env nt ty ty') (_hb : par_reduces_pL env nb body body') \
-         (_iht : Eq Nat nt k -> forall (r1 : KExpr) (rm1 : KExpr), iota_step env ty r1 -> iota_step env ty' rm1 -> par_reduces_p_star env r1 rm1) \
-         (_ihb : Eq Nat nb k -> forall (r1 : KExpr) (rm1 : KExpr), iota_step env body r1 -> iota_step env body' rm1 -> par_reduces_p_star env r1 rm1)",
+         (_iht : @Eq Nat nt k -> forall (r1 : KExpr) (rm1 : KExpr), iota_step env ty r1 -> iota_step env ty' rm1 -> par_reduces_p_star env r1 rm1) \
+         (_ihb : @Eq Nat nb k -> forall (r1 : KExpr) (rm1 : KExpr), iota_step env body r1 -> iota_step env body' rm1 -> par_reduces_p_star env r1 rm1)",
         "KExpr.lam ty body",
     )
     .replace("_k0", "(Nat.add nt nb)")
@@ -872,8 +872,8 @@ fn par_reduces_p_marked_reduct_cong_proof() -> String {
     let pi_arm = head_none_arm(
         "(nt : Nat) (nb : Nat) (dom : KExpr) (dom' : KExpr) (body : KExpr) (body' : KExpr) \
          (_ht : par_reduces_pL env nt dom dom') (_hb : par_reduces_pL env nb body body') \
-         (_iht : Eq Nat nt k -> forall (r1 : KExpr) (rm1 : KExpr), iota_step env dom r1 -> iota_step env dom' rm1 -> par_reduces_p_star env r1 rm1) \
-         (_ihb : Eq Nat nb k -> forall (r1 : KExpr) (rm1 : KExpr), iota_step env body r1 -> iota_step env body' rm1 -> par_reduces_p_star env r1 rm1)",
+         (_iht : @Eq Nat nt k -> forall (r1 : KExpr) (rm1 : KExpr), iota_step env dom r1 -> iota_step env dom' rm1 -> par_reduces_p_star env r1 rm1) \
+         (_ihb : @Eq Nat nb k -> forall (r1 : KExpr) (rm1 : KExpr), iota_step env body r1 -> iota_step env body' rm1 -> par_reduces_p_star env r1 rm1)",
         "KExpr.pi dom body",
     )
     .replace("_k0", "(Nat.add nt nb)")
@@ -883,8 +883,8 @@ fn par_reduces_p_marked_reduct_cong_proof() -> String {
     let forall_arm = head_none_arm(
         "(nt : Nat) (nb : Nat) (dom : KExpr) (dom' : KExpr) (body : KExpr) (body' : KExpr) \
          (_ht : par_reduces_pL env nt dom dom') (_hb : par_reduces_pL env nb body body') \
-         (_iht : Eq Nat nt k -> forall (r1 : KExpr) (rm1 : KExpr), iota_step env dom r1 -> iota_step env dom' rm1 -> par_reduces_p_star env r1 rm1) \
-         (_ihb : Eq Nat nb k -> forall (r1 : KExpr) (rm1 : KExpr), iota_step env body r1 -> iota_step env body' rm1 -> par_reduces_p_star env r1 rm1)",
+         (_iht : @Eq Nat nt k -> forall (r1 : KExpr) (rm1 : KExpr), iota_step env dom r1 -> iota_step env dom' rm1 -> par_reduces_p_star env r1 rm1) \
+         (_ihb : @Eq Nat nb k -> forall (r1 : KExpr) (rm1 : KExpr), iota_step env body r1 -> iota_step env body' rm1 -> par_reduces_p_star env r1 rm1)",
         "KExpr.forall_ dom body",
     )
     .replace("_k0", "(Nat.add nt nb)")
@@ -896,9 +896,9 @@ fn par_reduces_p_marked_reduct_cong_proof() -> String {
     let let_arm = head_none_arm(
         "(nt : Nat) (nv : Nat) (nb : Nat) (ty : KExpr) (ty' : KExpr) (val : KExpr) (val' : KExpr) (body : KExpr) (body' : KExpr) \
          (_ht : par_reduces_pL env nt ty ty') (_hv : par_reduces_pL env nv val val') (_hb : par_reduces_pL env nb body body') \
-         (_iht : Eq Nat nt k -> forall (r1 : KExpr) (rm1 : KExpr), iota_step env ty r1 -> iota_step env ty' rm1 -> par_reduces_p_star env r1 rm1) \
-         (_ihv : Eq Nat nv k -> forall (r1 : KExpr) (rm1 : KExpr), iota_step env val r1 -> iota_step env val' rm1 -> par_reduces_p_star env r1 rm1) \
-         (_ihb : Eq Nat nb k -> forall (r1 : KExpr) (rm1 : KExpr), iota_step env body r1 -> iota_step env body' rm1 -> par_reduces_p_star env r1 rm1)",
+         (_iht : @Eq Nat nt k -> forall (r1 : KExpr) (rm1 : KExpr), iota_step env ty r1 -> iota_step env ty' rm1 -> par_reduces_p_star env r1 rm1) \
+         (_ihv : @Eq Nat nv k -> forall (r1 : KExpr) (rm1 : KExpr), iota_step env val r1 -> iota_step env val' rm1 -> par_reduces_p_star env r1 rm1) \
+         (_ihb : @Eq Nat nb k -> forall (r1 : KExpr) (rm1 : KExpr), iota_step env body r1 -> iota_step env body' rm1 -> par_reduces_p_star env r1 rm1)",
         "KExpr.let_ ty val body",
     )
     .replace("_k0", "(Nat.succ (Nat.add (Nat.add nt nv) nb))")
@@ -910,9 +910,9 @@ fn par_reduces_p_marked_reduct_cong_proof() -> String {
     let let_cong_arm = head_none_arm(
         "(nt : Nat) (nv : Nat) (nb : Nat) (ty : KExpr) (ty' : KExpr) (val : KExpr) (val' : KExpr) (body : KExpr) (body' : KExpr) \
          (_ht : par_reduces_pL env nt ty ty') (_hv : par_reduces_pL env nv val val') (_hb : par_reduces_pL env nb body body') \
-         (_iht : Eq Nat nt k -> forall (r1 : KExpr) (rm1 : KExpr), iota_step env ty r1 -> iota_step env ty' rm1 -> par_reduces_p_star env r1 rm1) \
-         (_ihv : Eq Nat nv k -> forall (r1 : KExpr) (rm1 : KExpr), iota_step env val r1 -> iota_step env val' rm1 -> par_reduces_p_star env r1 rm1) \
-         (_ihb : Eq Nat nb k -> forall (r1 : KExpr) (rm1 : KExpr), iota_step env body r1 -> iota_step env body' rm1 -> par_reduces_p_star env r1 rm1)",
+         (_iht : @Eq Nat nt k -> forall (r1 : KExpr) (rm1 : KExpr), iota_step env ty r1 -> iota_step env ty' rm1 -> par_reduces_p_star env r1 rm1) \
+         (_ihv : @Eq Nat nv k -> forall (r1 : KExpr) (rm1 : KExpr), iota_step env val r1 -> iota_step env val' rm1 -> par_reduces_p_star env r1 rm1) \
+         (_ihb : @Eq Nat nb k -> forall (r1 : KExpr) (rm1 : KExpr), iota_step env body r1 -> iota_step env body' rm1 -> par_reduces_p_star env r1 rm1)",
         "KExpr.let_ ty val body",
     )
     .replace("_k0", "(Nat.add (Nat.add nt nv) nb)")
@@ -927,14 +927,14 @@ fn par_reduces_p_marked_reduct_cong_proof() -> String {
     let iota_arm = concat!(
         "(fun (ne : Nat) (x : KExpr) (e2 : KExpr) (rfire : KExpr) ",
         "(he : par_reduces_pL env ne x e2) (hi : iota_step env e2 rfire) ",
-        "(_ihe : Eq Nat ne k -> forall (r1 : KExpr) (rm1 : KExpr), iota_step env x r1 -> iota_step env e2 rm1 -> par_reduces_p_star env r1 rm1) ",
-        "(g : Eq Nat (Nat.succ ne) k) (r0 : KExpr) (rm0 : KExpr) ",
+        "(_ihe : @Eq Nat ne k -> forall (r1 : KExpr) (rm1 : KExpr), iota_step env x r1 -> iota_step env e2 rm1 -> par_reduces_p_star env r1 rm1) ",
+        "(g : @Eq Nat (Nat.succ ne) k) (r0 : KExpr) (rm0 : KExpr) ",
         "(hr0 : iota_step env x r0) (hrm0 : iota_step env rfire rm0) => ",
         // r0 ⇒*_p rfire via the outer IH at fuel ne.
         "par_reduces_p_star_trans env r0 rfire rm0 ",
         "(IH ne ",
         // Lt ne k : transport lt_succ_self ne : Lt ne (succ ne) along g : Eq (succ ne) k.
-        "(Eq.substType Nat (fun (z : Nat) => Lt ne z) (Nat.succ ne) k g (lt_succ_self ne)) ",
+        "(@Eq.substType Nat (fun (z : Nat) => Lt ne z) (Nat.succ ne) k g (lt_succ_self ne)) ",
         // Q ne applied: x e2 r0 rfire, with he, hr0, hi.
         "x e2 r0 rfire he hr0 hi) ",
         // rfire ⇒*_p rm0 : embed the single iota_redex_to_reduct step.
@@ -950,7 +950,7 @@ fn par_reduces_p_marked_reduct_cong_proof() -> String {
          (h : par_reduces_pL env k e0 m0) (hr : iota_step env e0 r) (hrm : iota_step env m0 rm) => \
          @par_reduces_pL.rec env {inner_motive} \
          {refl_arm} {beta_arm} {app_arm} {lam_arm} {pi_arm} {forall_arm} {let_arm} {iota_arm} {let_cong_arm} \
-         k e0 m0 h (Eq.refl Nat k) r rm hr hrm)",
+         k e0 m0 h (@Eq.refl Nat k) r rm hr hrm)",
         q_motive_applied = concat!(
             "forall (e0 : KExpr) (m0 : KExpr) (r0 : KExpr) (rm0 : KExpr), ",
             "par_reduces_pL env j e0 m0 -> iota_step env e0 r0 -> iota_step env m0 rm0 -> ",
@@ -962,7 +962,7 @@ fn par_reduces_p_marked_reduct_cong_proof() -> String {
         "fun (env : RecEnv) \
          (disjoint : RecEnvCtorNoRecMeta env) \
          (happ_over : forall (f : KExpr) (f' : KExpr) (g : KExpr) (g' : KExpr) (f1 : KExpr) (r0 : KExpr) (rm0 : KExpr), \
-         Eq (OptionType KExpr) (iota_reduct env f) (OptionType.some KExpr f1) -> \
+         @Eq (OptionType KExpr) (iota_reduct env f) (@OptionType.some KExpr f1) -> \
          par_reduces_p env f f' -> par_reduces_p env g g' -> \
          iota_step env (KExpr.app f g) r0 -> iota_step env (KExpr.app f' g') rm0 -> \
          par_reduces_p_star env r0 rm0) \
@@ -1011,18 +1011,18 @@ fn par_reduces_p_marked_triangle_scaffold_proof() -> String {
         "(fun (nt : Nat) (nb : Nat) (ty : KExpr) (ty' : KExpr) (body : KExpr) (body' : KExpr) ",
         "(_ht : par_reduces_pL env nt ty ty') (_hb : par_reduces_pL env nb body body') ",
         "(iht : par_reduces_p env ty' (cd env ty)) (ihb : par_reduces_p env body' (cd env body)) => ",
-        "par_reduces_p.lam env ty' (cd env ty) body' (cd env body) iht ihb) ",
+        "@par_reduces_p.lam env ty' (cd env ty) body' (cd env body) iht ihb) ",
         // pi: same shape via par_reduces_p.pi.
         "(fun (nt : Nat) (nb : Nat) (dom : KExpr) (dom' : KExpr) (body : KExpr) (body' : KExpr) ",
         "(_ht : par_reduces_pL env nt dom dom') (_hb : par_reduces_pL env nb body body') ",
         "(iht : par_reduces_p env dom' (cd env dom)) (ihb : par_reduces_p env body' (cd env body)) => ",
-        "par_reduces_p.pi env dom' (cd env dom) body' (cd env body) iht ihb) ",
+        "@par_reduces_p.pi env dom' (cd env dom) body' (cd env body) iht ihb) ",
         // forall_: source forall_ dom body ≡ pi dom body; cd (forall_ dom body) ≡ pi (cd dom)(cd body)
         // ≡ forall_ (cd dom)(cd body). par_reduces_p.forall_ lands forall_ dom' body' ⇒_p forall_ (cd dom)(cd body).
         "(fun (nt : Nat) (nb : Nat) (dom : KExpr) (dom' : KExpr) (body : KExpr) (body' : KExpr) ",
         "(_ht : par_reduces_pL env nt dom dom') (_hb : par_reduces_pL env nb body body') ",
         "(iht : par_reduces_p env dom' (cd env dom)) (ihb : par_reduces_p env body' (cd env body)) => ",
-        "par_reduces_p.forall_ env dom' (cd env dom) body' (cd env body) iht ihb) ",
+        "@par_reduces_p.forall_ env dom' (cd env dom) body' (cd env body) iht ihb) ",
         // let_ (ZETA ctor): source let_ ty val body, reduct instantiate body' val'. Genuine
         // let reasoning (the OLD let_ ≡ app(lam) alias is gone): cd (let_ ty val body) =
         // instantiate (cd body)(cd val) (cd_let, the cd analogue of cd_app_lam). par_subst_p
@@ -1031,9 +1031,9 @@ fn par_reduces_p_marked_triangle_scaffold_proof() -> String {
         "(fun (nt : Nat) (nv : Nat) (nb : Nat) (ty : KExpr) (ty' : KExpr) (val : KExpr) (val' : KExpr) (body : KExpr) (body' : KExpr) ",
         "(_ht : par_reduces_pL env nt ty ty') (_hv : par_reduces_pL env nv val val') (_hb : par_reduces_pL env nb body body') ",
         "(_iht : par_reduces_p env ty' (cd env ty)) (ihval : par_reduces_p env val' (cd env val)) (ihbody : par_reduces_p env body' (cd env body)) => ",
-        "Eq.substType KExpr (fun (Z : KExpr) => par_reduces_p env (instantiate body' val') Z) ",
+        "@Eq.substType KExpr (fun (Z : KExpr) => par_reduces_p env (instantiate body' val') Z) ",
         "(instantiate (cd env body) (cd env val)) (cd env (KExpr.let_ ty val body)) ",
-        "(Eq.symm KExpr (cd env (KExpr.let_ ty val body)) (instantiate (cd env body) (cd env val)) ",
+        "(@Eq.symm KExpr (cd env (KExpr.let_ ty val body)) (instantiate (cd env body) (cd env val)) ",
         "(cd_let env ty val body)) ",
         "(par_subst_p env body' (cd env body) val' (cd env val) Nat.zero ihbody ihval closed liftclosed)) ",
         // iota_p: THE WALL. source x, reduct r; he : x ⇒L_ne e2, hi : iota_step e2 r.
@@ -1049,11 +1049,11 @@ fn par_reduces_p_marked_triangle_scaffold_proof() -> String {
         "(fun (nt : Nat) (nv : Nat) (nb : Nat) (ty : KExpr) (ty' : KExpr) (val : KExpr) (val' : KExpr) (body : KExpr) (body' : KExpr) ",
         "(_ht : par_reduces_pL env nt ty ty') (_hv : par_reduces_pL env nv val val') (_hb : par_reduces_pL env nb body body') ",
         "(iht : par_reduces_p env ty' (cd env ty)) (ihval : par_reduces_p env val' (cd env val)) (ihbody : par_reduces_p env body' (cd env body)) => ",
-        "Eq.substType KExpr (fun (Z : KExpr) => par_reduces_p env (KExpr.let_ ty' val' body') Z) ",
+        "@Eq.substType KExpr (fun (Z : KExpr) => par_reduces_p env (KExpr.let_ ty' val' body') Z) ",
         "(instantiate (cd env body) (cd env val)) (cd env (KExpr.let_ ty val body)) ",
-        "(Eq.symm KExpr (cd env (KExpr.let_ ty val body)) (instantiate (cd env body) (cd env val)) ",
+        "(@Eq.symm KExpr (cd env (KExpr.let_ ty val body)) (instantiate (cd env body) (cd env val)) ",
         "(cd_let env ty val body)) ",
-        "(par_reduces_p.let_ env ty' (cd env ty) val' (cd env val) body' (cd env body) iht ihval ihbody)) ",
+        "(@par_reduces_p.let_ env ty' (cd env ty) val' (cd env val) body' (cd env body) iht ihval ihbody)) ",
         // indices + scrutinee
         "n e e' h"
     )
@@ -1090,9 +1090,9 @@ fn par_reduces_p_marked_triangle_star_proof() -> String {
         "(fun (nA : Nat) (nb : Nat) (na : Nat) (A : KExpr) (A' : KExpr) (body : KExpr) (body' : KExpr) (arg : KExpr) (arg' : KExpr) ",
         "(_hA : par_reduces_pL env nA A A') (_hb : par_reduces_pL env nb body body') (_ha : par_reduces_pL env na arg arg') ",
         "(_ihA : par_reduces_p_star env A' (cd env A)) (ihbody : par_reduces_p_star env body' (cd env body)) (iharg : par_reduces_p_star env arg' (cd env arg)) => ",
-        "Eq.substType KExpr (fun (Z : KExpr) => par_reduces_p_star env (instantiate body' arg') Z) ",
+        "@Eq.substType KExpr (fun (Z : KExpr) => par_reduces_p_star env (instantiate body' arg') Z) ",
         "(instantiate (cd env body) (cd env arg)) (cd env (KExpr.app (KExpr.lam A body) arg)) ",
-        "(Eq.symm KExpr (cd env (KExpr.app (KExpr.lam A body) arg)) (instantiate (cd env body) (cd env arg)) ",
+        "(@Eq.symm KExpr (cd env (KExpr.app (KExpr.lam A body) arg)) (instantiate (cd env body) (cd env arg)) ",
         "(cd_app_lam env A body arg)) ",
         "(par_subst_p_star env body' (cd env body) arg' (cd env arg) ihbody iharg closed liftclosed)) ",
         // app: source app f a, reduct app f' a'. ihf : f' ⇒*_p cd f, iha : a' ⇒*_p cd a.
@@ -1109,7 +1109,7 @@ fn par_reduces_p_marked_triangle_star_proof() -> String {
         "(par_subsumes_par_p_star env (KExpr.app (cd env f) (cd env a)) (cd env (KExpr.app f a)) ",
         "(par_reduces_p_app_dev env f (cd env f) a (cd env a) ",
         "(cd_refl env f) (cd_refl env a) ",
-        "(par_reduces_p.refl env (cd env f)) (par_reduces_p.refl env (cd env a))))) ",
+        "(@par_reduces_p.refl env (cd env f)) (@par_reduces_p.refl env (cd env a))))) ",
         // lam: source lam ty body, reduct lam ty' body'. iht : ty' ⇒*_p cd ty, ihb : body' ⇒*_p cd body.
         // par_reduces_p_star_lam : lam ty' body' ⇒*_p lam (cd ty)(cd body) ≡ cd (lam ty body) (defeq).
         "(fun (nt : Nat) (nb : Nat) (ty : KExpr) (ty' : KExpr) (body : KExpr) (body' : KExpr) ",
@@ -1135,9 +1135,9 @@ fn par_reduces_p_marked_triangle_star_proof() -> String {
         "(fun (nt : Nat) (nv : Nat) (nb : Nat) (ty : KExpr) (ty' : KExpr) (val : KExpr) (val' : KExpr) (body : KExpr) (body' : KExpr) ",
         "(_ht : par_reduces_pL env nt ty ty') (_hv : par_reduces_pL env nv val val') (_hb : par_reduces_pL env nb body body') ",
         "(_iht : par_reduces_p_star env ty' (cd env ty)) (ihval : par_reduces_p_star env val' (cd env val)) (ihbody : par_reduces_p_star env body' (cd env body)) => ",
-        "Eq.substType KExpr (fun (Z : KExpr) => par_reduces_p_star env (instantiate body' val') Z) ",
+        "@Eq.substType KExpr (fun (Z : KExpr) => par_reduces_p_star env (instantiate body' val') Z) ",
         "(instantiate (cd env body) (cd env val)) (cd env (KExpr.let_ ty val body)) ",
-        "(Eq.symm KExpr (cd env (KExpr.let_ ty val body)) (instantiate (cd env body) (cd env val)) ",
+        "(@Eq.symm KExpr (cd env (KExpr.let_ ty val body)) (instantiate (cd env body) (cd env val)) ",
         "(cd_let env ty val body)) ",
         "(par_subst_p_star env body' (cd env body) val' (cd env val) ihbody ihval closed liftclosed)) ",
         // iota_p: THE WALL (star). source x, reduct r; he : x ⇒L_ne e2, hi : iota_step e2 r.
@@ -1155,13 +1155,13 @@ fn par_reduces_p_marked_triangle_star_proof() -> String {
         "(fun (nt : Nat) (nv : Nat) (nb : Nat) (ty : KExpr) (ty' : KExpr) (val : KExpr) (val' : KExpr) (body : KExpr) (body' : KExpr) ",
         "(_ht : par_reduces_pL env nt ty ty') (_hv : par_reduces_pL env nv val val') (_hb : par_reduces_pL env nb body body') ",
         "(_iht : par_reduces_p_star env ty' (cd env ty)) (ihval : par_reduces_p_star env val' (cd env val)) (ihbody : par_reduces_p_star env body' (cd env body)) => ",
-        "Eq.substType KExpr (fun (Z : KExpr) => par_reduces_p_star env (KExpr.let_ ty' val' body') Z) ",
+        "@Eq.substType KExpr (fun (Z : KExpr) => par_reduces_p_star env (KExpr.let_ ty' val' body') Z) ",
         "(instantiate (cd env body) (cd env val)) (cd env (KExpr.let_ ty val body)) ",
-        "(Eq.symm KExpr (cd env (KExpr.let_ ty val body)) (instantiate (cd env body) (cd env val)) ",
+        "(@Eq.symm KExpr (cd env (KExpr.let_ ty val body)) (instantiate (cd env body) (cd env val)) ",
         "(cd_let env ty val body)) ",
         "(par_reduces_p_star_trans env (KExpr.let_ ty' val' body') (instantiate body' val') (instantiate (cd env body) (cd env val)) ",
         "(par_subsumes_par_p_star env (KExpr.let_ ty' val' body') (instantiate body' val') ",
-        "(par_reduces_p.let_ env ty' ty' val' val' body' body' (par_reduces_p.refl env ty') (par_reduces_p.refl env val') (par_reduces_p.refl env body'))) ",
+        "(@par_reduces_p.let_ env ty' ty' val' val' body' body' (@par_reduces_p.refl env ty') (@par_reduces_p.refl env val') (@par_reduces_p.refl env body'))) ",
         "(par_subst_p_star env body' (cd env body) val' (cd env val) ihbody ihval closed liftclosed))) ",
         // indices + scrutinee
         "n e e' h"

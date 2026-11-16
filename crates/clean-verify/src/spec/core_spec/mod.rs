@@ -345,6 +345,8 @@ pub use eval_ir_it_sctr::IT_SCTR_NAMES;
 mod eval_ir_it_pc;
 pub use eval_ir_it_pc::IT_PC_NAMES;
 mod declaration_input_admission;
+#[cfg(test)]
+mod eval_ir_congruence_tests;
 mod eval_ir_state;
 mod eval_ir_steps;
 mod eval_ir_strict_monads;
@@ -871,4 +873,14 @@ impl Specification {
         bundles::run_bundle(&mut spec, bundles::CoreSpecBundle::ModelUnits)?;
         Ok(spec)
     }
+}
+
+#[cfg(test)]
+pub(super) fn test_bmem_source_rows() -> Vec<(&'static str, &'static str, &'static str)> {
+    assert_eq!(BMEM_TRIE_NAMES.len(), 21);
+    assert_eq!(BMEM_CORE_NAMES.len(), 153);
+    eval_ir_bmem_trie::test_source_rows()
+        .into_iter()
+        .chain(eval_ir_bmem_core::test_source_rows())
+        .collect()
 }

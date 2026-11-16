@@ -26,16 +26,16 @@ impl Specification {
     pub(super) fn add_semantic_spine_compat(&mut self) -> Result<(), SpecError> {
         self.add_inductive(
             r"inductive KExprListUniverseEq : ListType KExpr -> ListType KExpr -> Type
-| nil : KExprListUniverseEq (ListType.nil KExpr) (ListType.nil KExpr)
+| nil : KExprListUniverseEq (@ListType.nil KExpr) (@ListType.nil KExpr)
 | cons : forall (x : KExpr) (x2 : KExpr) (xs : ListType KExpr) (xs2 : ListType KExpr),
     KExprUniverseEq x x2 -> KExprListUniverseEq xs xs2 ->
-    KExprListUniverseEq (ListType.cons KExpr x xs) (ListType.cons KExpr x2 xs2)",
+    KExprListUniverseEq (@ListType.cons KExpr x xs) (@ListType.cons KExpr x2 xs2)",
             "KExprListUniverseEq: exact list shape and order, with pointwise KExprUniverseEq elements.",
         )?;
 
         self.add_recursive_def(
             r"def kexprListUniverseEq_refl (xs : ListType KExpr) : KExprListUniverseEq xs xs :=
- ListType.rec KExpr (fun (ys : ListType KExpr) => KExprListUniverseEq ys ys)
+ @ListType.rec KExpr (fun (ys : ListType KExpr) => KExprListUniverseEq ys ys)
    KExprListUniverseEq.nil
    (fun (x : KExpr) (ys : ListType KExpr) (ih : KExprListUniverseEq ys ys) =>
      KExprListUniverseEq.cons x x ys ys (kexprUniverseEq_refl x) ih) xs",
@@ -44,14 +44,14 @@ impl Specification {
 
         self.add_recursive_def(
             r"def kexprListUniverseEq_length (xs : ListType KExpr) (xs2 : ListType KExpr)
- (h : KExprListUniverseEq xs xs2) : Eq Nat (list_length xs) (list_length xs2) :=
- KExprListUniverseEq.rec
+ (h : KExprListUniverseEq xs xs2) : @Eq Nat (list_length xs) (list_length xs2) :=
+ @KExprListUniverseEq.rec
    (fun (ys : ListType KExpr) (ys2 : ListType KExpr) (_ : KExprListUniverseEq ys ys2) =>
-     Eq Nat (list_length ys) (list_length ys2))
-   (Eq.refl Nat Nat.zero)
+     @Eq Nat (list_length ys) (list_length ys2))
+   (@Eq.refl Nat Nat.zero)
    (fun (x : KExpr) (x2 : KExpr) (ys : ListType KExpr) (ys2 : ListType KExpr)
      (_hx : KExprUniverseEq x x2) (_hy : KExprListUniverseEq ys ys2)
-     (ih : Eq Nat (list_length ys) (list_length ys2)) =>
+     (ih : @Eq Nat (list_length ys) (list_length ys2)) =>
      Eq.cong Nat Nat Nat.succ (list_length ys) (list_length ys2) ih) xs xs2 h",
             "Pointwise semantic relation preserves the actual list_length, without a separate arity assumption.",
         )?;
@@ -61,7 +61,7 @@ impl Specification {
  (hxs : KExprListUniverseEq xs xs2) (ys : ListType KExpr) (ys2 : ListType KExpr)
  (hys : KExprListUniverseEq ys ys2) :
  KExprListUniverseEq (list_append xs ys) (list_append xs2 ys2) :=
- KExprListUniverseEq.rec
+ @KExprListUniverseEq.rec
    (fun (zs : ListType KExpr) (zs2 : ListType KExpr) (_ : KExprListUniverseEq zs zs2) =>
      KExprListUniverseEq (list_append zs ys) (list_append zs2 ys2))
    hys
@@ -76,7 +76,7 @@ impl Specification {
             r"def kexprListUniverseEq_tail (xs : ListType KExpr) (xs2 : ListType KExpr)
  (h : KExprListUniverseEq xs xs2) :
  KExprListUniverseEq (list_tail xs) (list_tail xs2) :=
- KExprListUniverseEq.rec
+ @KExprListUniverseEq.rec
    (fun (ys : ListType KExpr) (ys2 : ListType KExpr) (_ : KExprListUniverseEq ys ys2) =>
      KExprListUniverseEq (list_tail ys) (list_tail ys2))
    KExprListUniverseEq.nil
@@ -90,7 +90,7 @@ impl Specification {
             r"def kexprListUniverseEq_drop (n : Nat) :
  forall (xs : ListType KExpr) (xs2 : ListType KExpr), KExprListUniverseEq xs xs2 ->
  KExprListUniverseEq (list_drop n xs) (list_drop n xs2) :=
- Nat.rec
+ @Nat.rec
    (fun (m : Nat) => forall (xs : ListType KExpr) (xs2 : ListType KExpr),
      KExprListUniverseEq xs xs2 -> KExprListUniverseEq (list_drop m xs) (list_drop m xs2))
    (fun (xs : ListType KExpr) (xs2 : ListType KExpr) (h : KExprListUniverseEq xs xs2) => h)
@@ -106,7 +106,7 @@ impl Specification {
             r"def kexprListUniverseEq_take (n : Nat) :
  forall (xs : ListType KExpr) (xs2 : ListType KExpr), KExprListUniverseEq xs xs2 ->
  KExprListUniverseEq (list_take n xs) (list_take n xs2) :=
- Nat.rec
+ @Nat.rec
    (fun (m : Nat) => forall (xs : ListType KExpr) (xs2 : ListType KExpr),
      KExprListUniverseEq xs xs2 -> KExprListUniverseEq (list_take m xs) (list_take m xs2))
    (fun (xs : ListType KExpr) (xs2 : ListType KExpr) (_h : KExprListUniverseEq xs xs2) =>
@@ -115,7 +115,7 @@ impl Specification {
      (ih : forall (xs : ListType KExpr) (xs2 : ListType KExpr), KExprListUniverseEq xs xs2 ->
        KExprListUniverseEq (list_take m xs) (list_take m xs2))
      (xs : ListType KExpr) (xs2 : ListType KExpr) (h : KExprListUniverseEq xs xs2) =>
-     KExprListUniverseEq.rec
+     @KExprListUniverseEq.rec
        (fun (ys : ListType KExpr) (ys2 : ListType KExpr) (_ : KExprListUniverseEq ys ys2) =>
          KExprListUniverseEq (list_take (Nat.succ m) ys) (list_take (Nat.succ m) ys2))
        KExprListUniverseEq.nil
@@ -131,7 +131,7 @@ impl Specification {
  (hargs : KExprListUniverseEq args args2) :
  forall (head : KExpr) (head2 : KExpr), KExprUniverseEq head head2 ->
  KExprUniverseEq (apply_spine args head) (apply_spine args2 head2) :=
- KExprListUniverseEq.rec
+ @KExprListUniverseEq.rec
    (fun (xs : ListType KExpr) (xs2 : ListType KExpr) (_ : KExprListUniverseEq xs xs2) =>
      forall (head : KExpr) (head2 : KExpr), KExprUniverseEq head head2 ->
        KExprUniverseEq (apply_spine xs head) (apply_spine xs2 head2))
@@ -149,7 +149,7 @@ impl Specification {
         self.add_recursive_def(
             r"def kexprUniverseEq_kapp_fn (e : KExpr) (e2 : KExpr) (h : KExprUniverseEq e e2) :
  KExprUniverseEq (kapp_fn e) (kapp_fn e2) :=
- KExprUniverseEq.rec
+ @KExprUniverseEq.rec
  (fun (a : KExpr) (b : KExpr) (_ : KExprUniverseEq a b) =>
    KExprUniverseEq (kapp_fn a) (kapp_fn b))
  (fun (u : Level) (v : Level) (h : levelEqSem u v) => KExprUniverseEq.sort u v h)
@@ -167,14 +167,14 @@ impl Specification {
         self.add_recursive_def(
             r"def kexprUniverseEq_kapp_args (e : KExpr) (e2 : KExpr) (h : KExprUniverseEq e e2) :
  KExprListUniverseEq (kapp_args e) (kapp_args e2) :=
- KExprUniverseEq.rec
+ @KExprUniverseEq.rec
  (fun (a : KExpr) (b : KExpr) (_ : KExprUniverseEq a b) =>
    KExprListUniverseEq (kapp_args a) (kapp_args b))
  (fun (u : Level) (v : Level) (h : levelEqSem u v) => KExprListUniverseEq.nil)
  (fun (i : Nat) => KExprListUniverseEq.nil)
  (fun (f : KExpr) (f2 : KExpr) (a : KExpr) (a2 : KExpr) (hf : KExprUniverseEq f f2) (ha : KExprUniverseEq a a2) (ihf : KExprListUniverseEq (kapp_args f) (kapp_args f2)) (iha : KExprListUniverseEq (kapp_args a) (kapp_args a2)) => kexprListUniverseEq_append (kapp_args f) (kapp_args f2) ihf
-   (ListType.cons KExpr a (ListType.nil KExpr)) (ListType.cons KExpr a2 (ListType.nil KExpr))
-   (KExprListUniverseEq.cons a a2 (ListType.nil KExpr) (ListType.nil KExpr) ha KExprListUniverseEq.nil))
+   (@ListType.cons KExpr a (@ListType.nil KExpr)) (@ListType.cons KExpr a2 (@ListType.nil KExpr))
+   (KExprListUniverseEq.cons a a2 (@ListType.nil KExpr) (@ListType.nil KExpr) ha KExprListUniverseEq.nil))
  (fun (A : KExpr) (A2 : KExpr) (b : KExpr) (b2 : KExpr) (hA : KExprUniverseEq A A2) (hb : KExprUniverseEq b b2) (ihA : KExprListUniverseEq (kapp_args A) (kapp_args A2)) (ihb : KExprListUniverseEq (kapp_args b) (kapp_args b2)) => KExprListUniverseEq.nil)
  (fun (A : KExpr) (A2 : KExpr) (b : KExpr) (b2 : KExpr) (hA : KExprUniverseEq A A2) (hb : KExprUniverseEq b b2) (ihA : KExprListUniverseEq (kapp_args A) (kapp_args A2)) (ihb : KExprListUniverseEq (kapp_args b) (kapp_args b2)) => KExprListUniverseEq.nil)
  (fun (n : Name) (us : ListType Level) (vs : ListType Level) (h : LevelListEqSem us vs) => KExprListUniverseEq.nil)
@@ -253,9 +253,9 @@ mod tests {
         run_with_stack(|| {
             let mut spec = build_spec_with_stack();
             for source in [
-                "def semantic_spine_forged_length : KExprListUniverseEq (ListType.nil KExpr) (ListType.cons KExpr (KExpr.lit Nat.zero) (ListType.nil KExpr)) := KExprListUniverseEq.nil",
-                "def semantic_spine_forged_payload : KExprListUniverseEq (ListType.cons KExpr (KExpr.lit Nat.zero) (ListType.nil KExpr)) (ListType.cons KExpr (KExpr.lit (Nat.succ Nat.zero)) (ListType.nil KExpr)) := KExprListUniverseEq.cons (KExpr.lit Nat.zero) (KExpr.lit (Nat.succ Nat.zero)) (ListType.nil KExpr) (ListType.nil KExpr) (KExprUniverseEq.lit Nat.zero) KExprListUniverseEq.nil",
-                "def semantic_spine_forged_drop : KExprListUniverseEq (list_drop (Nat.succ Nat.zero) (ListType.cons KExpr (KExpr.lit Nat.zero) (ListType.nil KExpr))) (ListType.cons KExpr (KExpr.lit Nat.zero) (ListType.nil KExpr)) := kexprListUniverseEq_refl (ListType.cons KExpr (KExpr.lit Nat.zero) (ListType.nil KExpr))",
+                "def semantic_spine_forged_length : KExprListUniverseEq (@ListType.nil KExpr) (@ListType.cons KExpr (KExpr.lit Nat.zero) (@ListType.nil KExpr)) := KExprListUniverseEq.nil",
+                "def semantic_spine_forged_payload : KExprListUniverseEq (@ListType.cons KExpr (KExpr.lit Nat.zero) (@ListType.nil KExpr)) (@ListType.cons KExpr (KExpr.lit (Nat.succ Nat.zero)) (@ListType.nil KExpr)) := KExprListUniverseEq.cons (KExpr.lit Nat.zero) (KExpr.lit (Nat.succ Nat.zero)) (@ListType.nil KExpr) (@ListType.nil KExpr) (KExprUniverseEq.lit Nat.zero) KExprListUniverseEq.nil",
+                "def semantic_spine_forged_drop : KExprListUniverseEq (list_drop (Nat.succ Nat.zero) (@ListType.cons KExpr (KExpr.lit Nat.zero) (@ListType.nil KExpr))) (@ListType.cons KExpr (KExpr.lit Nat.zero) (@ListType.nil KExpr)) := kexprListUniverseEq_refl (@ListType.cons KExpr (KExpr.lit Nat.zero) (@ListType.nil KExpr))",
             ] {
                 assert!(spec.add_recursive_def(source, "Negative semantic spine control.").is_err(),
                     "pointwise universe equivalence preserves actual list shape and literal payloads");

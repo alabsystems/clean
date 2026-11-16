@@ -147,7 +147,7 @@ fn test_a5_and_the_boundary_are_stated_at_the_image() {
         assert!(src.contains("(o : IROption Nat)"));
     }
     assert!(SRC_IR_FA_SOUND_GEN.contains("ir_fa_answer_res"));
-    assert!(SRC_IR_FA_SOUND_GEN.contains(": Eq (IROption Nat) o (IROption.some Nat k)"));
+    assert!(SRC_IR_FA_SOUND_GEN.contains(": @Eq (IROption Nat) o (@IROption.some Nat k)"));
     assert!(SRC_IR_FA_RES_IS_RET.contains("ir_option_is_some o"));
     assert!(SRC_IR_FA_RES_NEVER_TRAPS.contains("ir_outcome_is_trap"));
 }
@@ -158,7 +158,7 @@ fn test_a5_and_the_boundary_are_stated_at_the_image() {
 fn test_the_signed_zero_rule_is_the_and_of_the_sign_bits() {
     assert!(SRC_IR_F64_ADD_ZERO_ZERO.contains("(ir_f64_class b) IRF64Class.zero_"));
     assert!(SRC_IR_F64_ADD_ZERO_ZERO.contains(
-        ": Eq (IROption Nat) (ir_f64_add a b) (IROption.some Nat (ir_f64_pack (Bool.and \
+        ": @Eq (IROption Nat) (ir_f64_add a b) (@IROption.some Nat (ir_f64_pack (Bool.and \
          (ir_f64_is_neg a) (ir_f64_is_neg b)) Nat.zero))"
     ));
     // The XOR is MULTIPLICATION's rule: it agrees with addition's on three

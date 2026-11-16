@@ -189,7 +189,7 @@ impl CValue {
     }
 
     /// Convert to f64 (for floating-point operations)
-    pub fn to_double(&self) -> UBResult<f64> {
+    pub(crate) fn to_double(&self) -> UBResult<f64> {
         match self {
             CValue::Undef => Err(UBKind::UninitializedRead),
             CValue::Bool(b) => Ok(if *b { 1.0 } else { 0.0 }),
@@ -202,7 +202,7 @@ impl CValue {
     }
 
     /// Convert to pointer
-    pub fn to_ptr(&self) -> UBResult<Pointer> {
+    pub(crate) fn to_ptr(&self) -> UBResult<Pointer> {
         match self {
             CValue::Undef => Err(UBKind::UninitializedRead),
             CValue::Pointer(p) => Ok(*p),
@@ -517,7 +517,7 @@ impl CValue {
     }
 
     /// Bitwise AND
-    pub fn bit_and(&self, other: &CValue, ty: &CType) -> UBResult<CValue> {
+    pub(crate) fn bit_and(&self, other: &CValue, ty: &CType) -> UBResult<CValue> {
         match (self, other) {
             (CValue::Int(a), CValue::Int(b)) => Ok(truncate_to_type(a & b, ty)),
             (CValue::UInt(a), CValue::UInt(b)) => Ok(truncate_to_type_unsigned(a & b, ty)),
@@ -529,7 +529,7 @@ impl CValue {
     }
 
     /// Bitwise OR
-    pub fn bit_or(&self, other: &CValue, ty: &CType) -> UBResult<CValue> {
+    pub(crate) fn bit_or(&self, other: &CValue, ty: &CType) -> UBResult<CValue> {
         match (self, other) {
             (CValue::Int(a), CValue::Int(b)) => Ok(truncate_to_type(a | b, ty)),
             (CValue::UInt(a), CValue::UInt(b)) => Ok(truncate_to_type_unsigned(a | b, ty)),
@@ -539,7 +539,7 @@ impl CValue {
     }
 
     /// Bitwise XOR
-    pub fn bit_xor(&self, other: &CValue, ty: &CType) -> UBResult<CValue> {
+    pub(crate) fn bit_xor(&self, other: &CValue, ty: &CType) -> UBResult<CValue> {
         match (self, other) {
             (CValue::Int(a), CValue::Int(b)) => Ok(truncate_to_type(a ^ b, ty)),
             (CValue::UInt(a), CValue::UInt(b)) => Ok(truncate_to_type_unsigned(a ^ b, ty)),
@@ -652,7 +652,7 @@ impl CValue {
     }
 
     /// Bitwise NOT
-    pub fn bit_not(&self, ty: &CType) -> UBResult<CValue> {
+    pub(crate) fn bit_not(&self, ty: &CType) -> UBResult<CValue> {
         match self {
             CValue::Int(a) => Ok(truncate_to_type(!a, ty)),
             CValue::UInt(a) => Ok(truncate_to_type_unsigned(!a, ty)),
@@ -662,7 +662,7 @@ impl CValue {
     }
 
     /// Logical NOT
-    pub fn log_not(&self) -> UBResult<CValue> {
+    pub(crate) fn log_not(&self) -> UBResult<CValue> {
         Ok(CValue::Int(if self.to_bool()? { 0 } else { 1 }))
     }
 

@@ -81,7 +81,7 @@ pub(super) fn join_sources() -> (String, String, String) {
          par_strips_witness_cd_star the_red_env na nb) \
          (fun (w : KExpr) (hp1w : par_reduces_cd_star the_red_env p1 w) \
          (hp2w : par_reduces_cd_star the_red_env p2 w) => \
-         par_strips_witness_cd_star.intro the_red_env na nb w \
+         @par_strips_witness_cd_star.intro the_red_env na nb w \
          (par_reduces_cd_star_trans the_red_env na p1 w hnap1 hp1w) \
          (par_reduces_cd_star_trans the_red_env nb p2 w hnbp2 hp2w)) \
          (par_reduces_cd_star_diamond the_red_env i1 i2 i3 i4 i5 i6 i7 i8 m p1 p2 \
@@ -95,10 +95,10 @@ pub(super) fn join_sources() -> (String, String, String) {
     let join_src = format!(
         "def def_eq_whnf_join {I_BINDERS}(n : Nat) (a : KExpr) (b : KExpr) \
              (na : KExpr) (nb : KExpr) (hde : DefEq a b) \
-             (ha : Eq (OptionType KExpr) (whnf_fuel_red the_red_env n a) \
-             (OptionType.some KExpr na)) \
-             (hb : Eq (OptionType KExpr) (whnf_fuel_red the_red_env n b) \
-             (OptionType.some KExpr nb)) : \
+             (ha : @Eq (OptionType KExpr) (whnf_fuel_red the_red_env n a) \
+             (@OptionType.some KExpr na)) \
+             (hb : @Eq (OptionType KExpr) (whnf_fuel_red the_red_env n b) \
+             (@OptionType.some KExpr nb)) : \
          par_strips_witness_cd_star the_red_env na nb := {body}"
     );
     // The FAITHFUL-loop variant, DERIVED from the same source by exactly two
@@ -111,9 +111,9 @@ pub(super) fn join_sources() -> (String, String, String) {
     // The count assertion means a change to the original fails loudly here
     // rather than silently deriving from a stale shape.
     let hiotap = "forall (w2 : KExpr -> OptionType KExpr) (g : KExpr) (x : KExpr) \
-         (r : KExpr), Eq (OptionType KExpr) \
+         (r : KExpr), @Eq (OptionType KExpr) \
          (iota_reduct_whc (red_rec the_red_env) w2 (KExpr.app g x)) \
-         (OptionType.some KExpr r) -> par_reduces_cd_star the_red_env (KExpr.app g x) r";
+         (@OptionType.some KExpr r) -> par_reduces_cd_star the_red_env (KExpr.app g x) r";
     let wh_src = join_src
         .replace(
             "def def_eq_whnf_join ",
@@ -134,7 +134,7 @@ pub(super) fn join_sources() -> (String, String, String) {
     // Its residual is over `iota_reduct_whc3` and so is stated at `WhStepR`,
     // matching `hiota3` in `wh3_soundness.rs`. Everything else is the original.
     let hiotap3 = "forall (w2 : KExpr -> OptionType KExpr) (g : KExpr) (x : KExpr) \
-         (r : KExpr), Eq WhStepR \
+         (r : KExpr), @Eq WhStepR \
          (iota_reduct_whc3 (red_rec the_red_env) w2 (KExpr.app g x)) \
          (WhStepR.wstep r) -> par_reduces_cd_star the_red_env (KExpr.app g x) r";
     let wh3_src = join_src
@@ -168,8 +168,8 @@ impl Specification {
     fn add_component_below(&mut self) -> Result<(), SpecError> {
         self.add_recursive_def(
             "def whnf_component_below (n : Nat) (a : KExpr) (r : KExpr) (c : KExpr) \
-             (hr : Eq (OptionType KExpr) (whnf_fuel_red the_red_env n a) \
-             (OptionType.some KExpr r)) \
+             (hr : @Eq (OptionType KExpr) (whnf_fuel_red the_red_env n a) \
+             (@OptionType.some KExpr r)) \
              (hc : subexpr_step c r) : rbelow_plus c a := \
              rbelow_plus_of_step_rtc c r a (rbelow.sub c r hc) \
              (whnf_fuel_red_rbelow_rtc n a r hr)",

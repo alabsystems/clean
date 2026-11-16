@@ -27,9 +27,9 @@ use crate::spec::Specification;
 /// and hence not a nested recursor redex.
 const DISJOINT_FACT: &str = concat!(
     "forall (recname : Name) (cname : Name) (rule : RecRule) (major : KExpr), ",
-    "Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname) -> ",
-    "Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule) -> ",
-    "Eq (OptionType KExpr) (iota_reduct env major) (OptionType.none KExpr)"
+    "@Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (@OptionType.some Name cname) -> ",
+    "@Eq (OptionType RecRule) (recrule_for env recname cname) (@OptionType.some RecRule rule) -> ",
+    "@Eq (OptionType KExpr) (iota_reduct env major) (@OptionType.none KExpr)"
 );
 
 /// The SHARPENED disjointness fact carried by `RecEnvCtorNoRecMeta env`: the head
@@ -48,9 +48,9 @@ const DISJOINT_FACT: &str = concat!(
 /// projector.
 const NO_RECMETA_FACT: &str = concat!(
     "forall (recname : Name) (cname : Name) (rule : RecRule) (major : KExpr), ",
-    "Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname) -> ",
-    "Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule) -> ",
-    "Eq (OptionType RecMeta) (recmeta_for env cname) (OptionType.none RecMeta)"
+    "@Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (@OptionType.some Name cname) -> ",
+    "@Eq (OptionType RecRule) (recrule_for env recname cname) (@OptionType.some RecRule rule) -> ",
+    "@Eq (OptionType RecMeta) (recmeta_for env cname) (@OptionType.none RecMeta)"
 );
 
 impl Specification {
@@ -58,7 +58,7 @@ impl Specification {
         self.add_recursive_def(
             r"def RecEnvRhsClosed (env : RecEnv) : Type :=
  forall (rname : Name) (cname : Name) (rule : RecRule),
- Eq (OptionType RecRule) (recrule_for env rname cname) (OptionType.some RecRule rule) ->
+ @Eq (OptionType RecRule) (recrule_for env rname cname) (@OptionType.some RecRule rule) ->
  is_closed_at (recrule_rhs rule) Nat.zero",
             "Shared schematic structural closedness field. Universe parameters are allowed; loose term bound variables are not.",
         )?;
@@ -78,9 +78,9 @@ impl Specification {
         self.add_recursive_def(
             r"def recenv_closed_raw_rhs (env : RecEnv) (rname : Name) (cname : Name) (rule : RecRule)
  (w : RecEnvClosed env)
- (hlk : Eq (OptionType RecRule) (recrule_for env rname cname) (OptionType.some RecRule rule)) :
+ (hlk : @Eq (OptionType RecRule) (recrule_for env rname cname) (@OptionType.some RecRule rule)) :
  is_closed_at (recrule_rhs rule) Nat.zero :=
- RecEnvClosed.rec env
+ @RecEnvClosed.rec env
   (fun (_ : RecEnvClosed env) => is_closed_at (recrule_rhs rule) Nat.zero)
   (fun (hc : RecEnvRhsClosed env) => hc rname cname rule hlk) w",
             "Projects actual structural closedness of the looked-up schematic RHS.",
@@ -89,9 +89,9 @@ impl Specification {
         self.add_recursive_def(
             r"def recenv_lift_closed_raw_rhs (env : RecEnv) (rname : Name) (cname : Name) (rule : RecRule)
  (w : RecEnvLiftClosed env)
- (hlk : Eq (OptionType RecRule) (recrule_for env rname cname) (OptionType.some RecRule rule)) :
+ (hlk : @Eq (OptionType RecRule) (recrule_for env rname cname) (@OptionType.some RecRule rule)) :
  is_closed_at (recrule_rhs rule) Nat.zero :=
- RecEnvLiftClosed.rec env
+ @RecEnvLiftClosed.rec env
   (fun (_ : RecEnvLiftClosed env) => is_closed_at (recrule_rhs rule) Nat.zero)
   (fun (hc : RecEnvRhsClosed env) => hc rname cname rule hlk) w",
             "Projects actual structural closedness of the looked-up schematic RHS.",
@@ -99,14 +99,14 @@ impl Specification {
 
         self.add_recursive_def(
             r"def recenv_closed_to_lift_closed (env : RecEnv) (w : RecEnvClosed env) : RecEnvLiftClosed env :=
- RecEnvLiftClosed.mk env (fun (rname : Name) (cname : Name) (rule : RecRule) =>
+ @RecEnvLiftClosed.mk env (fun (rname : Name) (cname : Name) (rule : RecRule) =>
   recenv_closed_raw_rhs env rname cname rule w)",
             "Constructive conversion between the nominal interfaces sharing the raw field.",
         )?;
 
         self.add_recursive_def(
             r"def recenv_lift_closed_to_closed (env : RecEnv) (w : RecEnvLiftClosed env) : RecEnvClosed env :=
- RecEnvClosed.mk env (fun (rname : Name) (cname : Name) (rule : RecRule) =>
+ @RecEnvClosed.mk env (fun (rname : Name) (cname : Name) (rule : RecRule) =>
   recenv_lift_closed_raw_rhs env rname cname rule w)",
             "Reverse constructive conversion of the same raw field.",
         )?;
@@ -114,8 +114,8 @@ impl Specification {
         self.add_recursive_def(
             r"def recenv_closed_rhs (env : RecEnv) (rname : Name) (cname : Name) (rule : RecRule)
  (val : KExpr) (depth : Nat) (w : RecEnvClosed env)
- (hlk : Eq (OptionType RecRule) (recrule_for env rname cname) (OptionType.some RecRule rule)) :
- Eq KExpr (instantiate_at (recrule_rhs rule) val depth) (recrule_rhs rule) :=
+ (hlk : @Eq (OptionType RecRule) (recrule_for env rname cname) (@OptionType.some RecRule rule)) :
+ @Eq KExpr (instantiate_at (recrule_rhs rule) val depth) (recrule_rhs rule) :=
  inst_closed_at_id (recrule_rhs rule) Nat.zero
   (recenv_closed_raw_rhs env rname cname rule w hlk) val depth (le_zero_n depth)",
             "Preserves the historical public argument order and conclusion, now derived from structural closedness.",
@@ -125,8 +125,8 @@ impl Specification {
             r"def recenv_closed_rhs_instance (env : RecEnv) (rname : Name) (cname : Name) (rule : RecRule)
  (sig : KConstSig) (us : ListType Level) (val : KExpr) (depth : Nat)
  (w : RecEnvClosed env)
- (hlk : Eq (OptionType RecRule) (recrule_for env rname cname) (OptionType.some RecRule rule)) :
- Eq KExpr (instantiate_at (recursor_rhs_instance sig (recrule_rhs rule) us) val depth)
+ (hlk : @Eq (OptionType RecRule) (recrule_for env rname cname) (@OptionType.some RecRule rule)) :
+ @Eq KExpr (instantiate_at (recursor_rhs_instance sig (recrule_rhs rule) us) val depth)
   (recursor_rhs_instance sig (recrule_rhs rule) us) :=
  inst_closed_at_id (recursor_rhs_instance sig (recrule_rhs rule) us) Nat.zero
   (instL_preserves_closed_at (paramSubstN (kconst_params sig) us)
@@ -139,17 +139,17 @@ impl Specification {
             r"def recenv_closed_rhs_at (env : RecEnv) (rname : Name) (cname : Name) (rule : RecRule)
  (sig : KConstSig) (us : ListType Level) (returned : KExpr) (val : KExpr) (depth : Nat)
  (w : RecEnvClosed env)
- (hlk : Eq (OptionType RecRule) (recrule_for env rname cname) (OptionType.some RecRule rule))
- (accepted : Eq (OptionType KExpr) (recursor_rhs_at sig (recrule_rhs rule) us)
-  (OptionType.some KExpr returned)) :
- Eq KExpr (instantiate_at returned val depth) returned :=
+ (hlk : @Eq (OptionType RecRule) (recrule_for env rname cname) (@OptionType.some RecRule rule))
+ (accepted : @Eq (OptionType KExpr) (recursor_rhs_at sig (recrule_rhs rule) us)
+  (@OptionType.some KExpr returned)) :
+ @Eq KExpr (instantiate_at returned val depth) returned :=
  recursor_rhs_at_guard_inv_prop sig (recrule_rhs rule) us returned accepted
-  (Eq KExpr (instantiate_at returned val depth) returned)
-  (fun (_arity : Eq Bool (nat_eqb (name_list_len (kconst_params sig)) (level_list_len us)) Bool.true)
-    (hresult : Eq KExpr returned (recursor_rhs_instance sig (recrule_rhs rule) us)) =>
-    Eq.subst KExpr (fun (rhs : KExpr) => Eq KExpr (instantiate_at rhs val depth) rhs)
+  (@Eq KExpr (instantiate_at returned val depth) returned)
+  (fun (_arity : @Eq Bool (nat_eqb (name_list_len (kconst_params sig)) (level_list_len us)) Bool.true)
+    (hresult : @Eq KExpr returned (recursor_rhs_instance sig (recrule_rhs rule) us)) =>
+    @Eq.subst KExpr (fun (rhs : KExpr) => @Eq KExpr (instantiate_at rhs val depth) rhs)
      (recursor_rhs_instance sig (recrule_rhs rule) us) returned
-     (Eq.symm KExpr returned (recursor_rhs_instance sig (recrule_rhs rule) us) hresult)
+     (@Eq.symm KExpr returned (recursor_rhs_instance sig (recrule_rhs rule) us) hresult)
      (recenv_closed_rhs_instance env rname cname rule sig us val depth w hlk))",
             "A successful actual guarded RHS lookup inherits invariance by genuine guard/result inversion; no guard reflection is assumed.",
         )?;
@@ -157,8 +157,8 @@ impl Specification {
         self.add_recursive_def(
             r"def recenv_lift_closed_rhs (env : RecEnv) (rname : Name) (cname : Name) (rule : RecRule)
  (cutoff : Nat) (amount : Nat) (w : RecEnvLiftClosed env)
- (hlk : Eq (OptionType RecRule) (recrule_for env rname cname) (OptionType.some RecRule rule)) :
- Eq KExpr (lift_at (recrule_rhs rule) cutoff amount) (recrule_rhs rule) :=
+ (hlk : @Eq (OptionType RecRule) (recrule_for env rname cname) (@OptionType.some RecRule rule)) :
+ @Eq KExpr (lift_at (recrule_rhs rule) cutoff amount) (recrule_rhs rule) :=
  lift_closed_at_id (recrule_rhs rule) Nat.zero
   (recenv_lift_closed_raw_rhs env rname cname rule w hlk) cutoff amount (le_zero_n cutoff)",
             "Preserves the historical public argument order and conclusion, now derived from structural closedness.",
@@ -168,8 +168,8 @@ impl Specification {
             r"def recenv_lift_closed_rhs_instance (env : RecEnv) (rname : Name) (cname : Name) (rule : RecRule)
  (sig : KConstSig) (us : ListType Level) (cutoff : Nat) (amount : Nat)
  (w : RecEnvLiftClosed env)
- (hlk : Eq (OptionType RecRule) (recrule_for env rname cname) (OptionType.some RecRule rule)) :
- Eq KExpr (lift_at (recursor_rhs_instance sig (recrule_rhs rule) us) cutoff amount)
+ (hlk : @Eq (OptionType RecRule) (recrule_for env rname cname) (@OptionType.some RecRule rule)) :
+ @Eq KExpr (lift_at (recursor_rhs_instance sig (recrule_rhs rule) us) cutoff amount)
   (recursor_rhs_instance sig (recrule_rhs rule) us) :=
  lift_closed_at_id (recursor_rhs_instance sig (recrule_rhs rule) us) Nat.zero
   (instL_preserves_closed_at (paramSubstN (kconst_params sig) us)
@@ -182,17 +182,17 @@ impl Specification {
             r"def recenv_lift_closed_rhs_at (env : RecEnv) (rname : Name) (cname : Name) (rule : RecRule)
  (sig : KConstSig) (us : ListType Level) (returned : KExpr) (cutoff : Nat) (amount : Nat)
  (w : RecEnvLiftClosed env)
- (hlk : Eq (OptionType RecRule) (recrule_for env rname cname) (OptionType.some RecRule rule))
- (accepted : Eq (OptionType KExpr) (recursor_rhs_at sig (recrule_rhs rule) us)
-  (OptionType.some KExpr returned)) :
- Eq KExpr (lift_at returned cutoff amount) returned :=
+ (hlk : @Eq (OptionType RecRule) (recrule_for env rname cname) (@OptionType.some RecRule rule))
+ (accepted : @Eq (OptionType KExpr) (recursor_rhs_at sig (recrule_rhs rule) us)
+  (@OptionType.some KExpr returned)) :
+ @Eq KExpr (lift_at returned cutoff amount) returned :=
  recursor_rhs_at_guard_inv_prop sig (recrule_rhs rule) us returned accepted
-  (Eq KExpr (lift_at returned cutoff amount) returned)
-  (fun (_arity : Eq Bool (nat_eqb (name_list_len (kconst_params sig)) (level_list_len us)) Bool.true)
-    (hresult : Eq KExpr returned (recursor_rhs_instance sig (recrule_rhs rule) us)) =>
-    Eq.subst KExpr (fun (rhs : KExpr) => Eq KExpr (lift_at rhs cutoff amount) rhs)
+  (@Eq KExpr (lift_at returned cutoff amount) returned)
+  (fun (_arity : @Eq Bool (nat_eqb (name_list_len (kconst_params sig)) (level_list_len us)) Bool.true)
+    (hresult : @Eq KExpr returned (recursor_rhs_instance sig (recrule_rhs rule) us)) =>
+    @Eq.subst KExpr (fun (rhs : KExpr) => @Eq KExpr (lift_at rhs cutoff amount) rhs)
      (recursor_rhs_instance sig (recrule_rhs rule) us) returned
-     (Eq.symm KExpr returned (recursor_rhs_instance sig (recrule_rhs rule) us) hresult)
+     (@Eq.symm KExpr returned (recursor_rhs_instance sig (recrule_rhs rule) us) hresult)
      (recenv_lift_closed_rhs_instance env rname cname rule sig us cutoff amount w hlk))",
             "A successful actual guarded RHS lookup inherits invariance by genuine guard/result inversion; no guard reflection is assumed.",
         )?;
@@ -230,19 +230,19 @@ impl Specification {
             type_src: "forall (env : RecEnv) (recname : Name) (cname : Name) (rule : RecRule) \
                  (major : KExpr), \
                  RecEnvCtorRecDisjoint env -> \
-                 Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname) -> \
-                 Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule) -> \
-                 Eq (OptionType KExpr) (iota_reduct env major) (OptionType.none KExpr)"
+                 @Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (@OptionType.some Name cname) -> \
+                 @Eq (OptionType RecRule) (recrule_for env recname cname) (@OptionType.some RecRule rule) -> \
+                 @Eq (OptionType KExpr) (iota_reduct env major) (@OptionType.none KExpr)"
                 .to_string(),
             value_src: Some(format!(
                 "fun (env : RecEnv) (recname : Name) (cname : Name) (rule : RecRule) \
                  (major : KExpr) \
                  (w : RecEnvCtorRecDisjoint env) \
-                 (hhead : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname)) \
-                 (hrule : Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule)) => \
-                 RecEnvCtorRecDisjoint.rec env \
+                 (hhead : @Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (@OptionType.some Name cname)) \
+                 (hrule : @Eq (OptionType RecRule) (recrule_for env recname cname) (@OptionType.some RecRule rule)) => \
+                 @RecEnvCtorRecDisjoint.rec env \
                  (fun (_ : RecEnvCtorRecDisjoint env) => \
-                 Eq (OptionType KExpr) (iota_reduct env major) (OptionType.none KExpr)) \
+                 @Eq (OptionType KExpr) (iota_reduct env major) (@OptionType.none KExpr)) \
                  (fun (hc : {DISJOINT_FACT}) => hc recname cname rule major hhead hrule) \
                  w"
             )),
@@ -308,19 +308,19 @@ impl Specification {
             type_src: "forall (env : RecEnv) (recname : Name) (cname : Name) (rule : RecRule) \
                  (major : KExpr), \
                  RecEnvCtorNoRecMeta env -> \
-                 Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname) -> \
-                 Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule) -> \
-                 Eq (OptionType RecMeta) (recmeta_for env cname) (OptionType.none RecMeta)"
+                 @Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (@OptionType.some Name cname) -> \
+                 @Eq (OptionType RecRule) (recrule_for env recname cname) (@OptionType.some RecRule rule) -> \
+                 @Eq (OptionType RecMeta) (recmeta_for env cname) (@OptionType.none RecMeta)"
                 .to_string(),
             value_src: Some(format!(
                 "fun (env : RecEnv) (recname : Name) (cname : Name) (rule : RecRule) \
                  (major : KExpr) \
                  (w : RecEnvCtorNoRecMeta env) \
-                 (hhead : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname)) \
-                 (hrule : Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule)) => \
-                 RecEnvCtorNoRecMeta.rec env \
+                 (hhead : @Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (@OptionType.some Name cname)) \
+                 (hrule : @Eq (OptionType RecRule) (recrule_for env recname cname) (@OptionType.some RecRule rule)) => \
+                 @RecEnvCtorNoRecMeta.rec env \
                  (fun (_ : RecEnvCtorNoRecMeta env) => \
-                 Eq (OptionType RecMeta) (recmeta_for env cname) (OptionType.none RecMeta)) \
+                 @Eq (OptionType RecMeta) (recmeta_for env cname) (@OptionType.none RecMeta)) \
                  (fun (hc : {NO_RECMETA_FACT}) => hc recname cname rule major hhead hrule) \
                  w"
             )),
@@ -366,31 +366,31 @@ mod tests {
   (RecMeta.mk Nat.zero Nat.zero Nat.zero Nat.zero Bool.true recursor_rhs_fixture_sig Nat.zero)
   (RecRules.cons recenv_schematic_test_rule RecRules.nil)",
         r"def recenv_schematic_test_closed : RecEnvClosed recenv_schematic_test_env :=
- rec_env_closed_of_b2 recenv_schematic_test_env (Eq.refl Bool Bool.true)",
+ rec_env_closed_of_b2 recenv_schematic_test_env (@Eq.refl Bool Bool.true)",
         r"def recenv_schematic_test_lift_closed : RecEnvLiftClosed recenv_schematic_test_env :=
  recenv_closed_to_lift_closed recenv_schematic_test_env recenv_schematic_test_closed",
         r"def recenv_schematic_test_lookup :
- Eq (OptionType RecRule) (recrule_for recenv_schematic_test_env Name.anonymous Name.anonymous)
-  (OptionType.some RecRule recenv_schematic_test_rule) :=
- Eq.refl (OptionType RecRule) (OptionType.some RecRule recenv_schematic_test_rule)",
+ @Eq (OptionType RecRule) (recrule_for recenv_schematic_test_env Name.anonymous Name.anonymous)
+  (@OptionType.some RecRule recenv_schematic_test_rule) :=
+ @Eq.refl (OptionType RecRule) (@OptionType.some RecRule recenv_schematic_test_rule)",
         r"def recenv_schematic_test_inst :
- Eq KExpr
+ @Eq KExpr
   (instantiate_at (recursor_rhs_fixture_output (Level.succ Level.zero))
     (KExpr.bvar Nat.zero) Nat.zero)
   (recursor_rhs_fixture_output (Level.succ Level.zero)) :=
  recenv_closed_rhs_at recenv_schematic_test_env Name.anonymous Name.anonymous
   recenv_schematic_test_rule recursor_rhs_fixture_sig
-  (ListType.cons Level (Level.succ Level.zero) (ListType.nil Level))
+  (@ListType.cons Level (Level.succ Level.zero) (@ListType.nil Level))
   (recursor_rhs_fixture_output (Level.succ Level.zero)) (KExpr.bvar Nat.zero) Nat.zero
   recenv_schematic_test_closed recenv_schematic_test_lookup
   (recursor_rhs_fixture_step (Level.succ Level.zero))",
         r"def recenv_schematic_test_lift :
- Eq KExpr
+ @Eq KExpr
   (lift_at (recursor_rhs_fixture_output (Level.succ Level.zero)) Nat.zero (Nat.succ Nat.zero))
   (recursor_rhs_fixture_output (Level.succ Level.zero)) :=
  recenv_lift_closed_rhs_at recenv_schematic_test_env Name.anonymous Name.anonymous
   recenv_schematic_test_rule recursor_rhs_fixture_sig
-  (ListType.cons Level (Level.succ Level.zero) (ListType.nil Level))
+  (@ListType.cons Level (Level.succ Level.zero) (@ListType.nil Level))
   (recursor_rhs_fixture_output (Level.succ Level.zero)) Nat.zero (Nat.succ Nat.zero)
   recenv_schematic_test_lift_closed recenv_schematic_test_lookup
   (recursor_rhs_fixture_step (Level.succ Level.zero))",
@@ -449,12 +449,12 @@ mod tests {
                 r"def recenv_schematic_forged_closed : is_closed_at (KExpr.bvar Nat.zero) Nat.zero :=
  is_closed_at.bvar Nat.zero Nat.zero (Lt.zero_lt_succ Nat.zero)",
                 r"def recenv_schematic_forged_missing :
- Eq (OptionType KExpr) (recursor_rhs_at recursor_rhs_fixture_sig recursor_rhs_fixture_body (ListType.nil Level))
-  (OptionType.some KExpr (recursor_rhs_fixture_output Level.zero)) :=
- Eq.refl (OptionType KExpr) (OptionType.some KExpr (recursor_rhs_fixture_output Level.zero))",
+ @Eq (OptionType KExpr) (recursor_rhs_at recursor_rhs_fixture_sig recursor_rhs_fixture_body (@ListType.nil Level))
+  (@OptionType.some KExpr (recursor_rhs_fixture_output Level.zero)) :=
+ @Eq.refl (OptionType KExpr) (@OptionType.some KExpr (recursor_rhs_fixture_output Level.zero))",
                 r"def recenv_schematic_forged_identity :
- Eq KExpr (instantiate_at (KExpr.bvar Nat.zero) (KExpr.sort Level.zero) Nat.zero) (KExpr.bvar Nat.zero) :=
- Eq.refl KExpr (KExpr.bvar Nat.zero)",
+ @Eq KExpr (instantiate_at (KExpr.bvar Nat.zero) (KExpr.sort Level.zero) Nat.zero) (KExpr.bvar Nat.zero) :=
+ @Eq.refl KExpr (KExpr.bvar Nat.zero)",
             ] {
                 assert!(
                     spec.add_recursive_def(source, "Planted missing closure/arity premise")

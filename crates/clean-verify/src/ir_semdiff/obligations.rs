@@ -207,7 +207,7 @@ pub fn value_obligation(
     let call = shape.call(module, &ir_numeral(fuel)?, &ir_numeral(tag)?);
     let rhs = format!("(IROutcome.ret (ir_vl1 {scalar}))");
     Ok(format!(
-        "def {def_name} : Eq IROutcome ({call}) {rhs} := Eq.refl IROutcome {rhs}"
+        "def {def_name} : @Eq IROutcome ({call}) {rhs} := @Eq.refl IROutcome {rhs}"
     ))
 }
 
@@ -228,8 +228,8 @@ pub fn fuel_out_obligation(
 ) -> Result<String, DiffError> {
     let call = shape.call(module, &ir_numeral(fuel)?, &ir_numeral(tag)?);
     Ok(format!(
-        "def {def_name} : Eq IROutcome ({call}) IROutcome.fuel_out \
-         := Eq.refl IROutcome IROutcome.fuel_out"
+        "def {def_name} : @Eq IROutcome ({call}) IROutcome.fuel_out \
+         := @Eq.refl IROutcome IROutcome.fuel_out"
     ))
 }
 

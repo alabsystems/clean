@@ -69,9 +69,9 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def level_eqb (a : Level) (b : Level) : Bool := ",
-                "Level.rec (fun (_ : Level) => Level -> Bool) ",
+                "@Level.rec (fun (_ : Level) => Level -> Bool) ",
                 // a = zero
-                "(fun (y : Level) => Level.rec (fun (_ : Level) => Bool) ",
+                "(fun (y : Level) => @Level.rec (fun (_ : Level) => Bool) ",
                 "Bool.true ",
                 "(fun (yp : Level) (_ : Bool) => Bool.false) ",
                 "(fun (yl : Level) (yr : Level) (_ : Bool) (_ : Bool) => Bool.false) ",
@@ -79,7 +79,7 @@ impl Specification {
                 "(fun (yn : Name) => Bool.false) y) ",
                 // a = succ ap  (ih_ap : Level -> Bool)
                 "(fun (ap : Level) (ih_ap : Level -> Bool) => fun (y : Level) => ",
-                "Level.rec (fun (_ : Level) => Bool) ",
+                "@Level.rec (fun (_ : Level) => Bool) ",
                 "Bool.false ",
                 "(fun (yp : Level) (_ : Bool) => ih_ap yp) ",
                 "(fun (yl : Level) (yr : Level) (_ : Bool) (_ : Bool) => Bool.false) ",
@@ -87,7 +87,7 @@ impl Specification {
                 "(fun (yn : Name) => Bool.false) y) ",
                 // a = max al ar  (ih_al ih_ar : Level -> Bool)
                 "(fun (al : Level) (ar : Level) (ih_al : Level -> Bool) (ih_ar : Level -> Bool) => ",
-                "fun (y : Level) => Level.rec (fun (_ : Level) => Bool) ",
+                "fun (y : Level) => @Level.rec (fun (_ : Level) => Bool) ",
                 "Bool.false ",
                 "(fun (yp : Level) (_ : Bool) => Bool.false) ",
                 "(fun (yl : Level) (yr : Level) (_ : Bool) (_ : Bool) => Bool.and (ih_al yl) (ih_ar yr)) ",
@@ -95,14 +95,14 @@ impl Specification {
                 "(fun (yn : Name) => Bool.false) y) ",
                 // a = imax al ar  (ih_al ih_ar : Level -> Bool)
                 "(fun (al : Level) (ar : Level) (ih_al : Level -> Bool) (ih_ar : Level -> Bool) => ",
-                "fun (y : Level) => Level.rec (fun (_ : Level) => Bool) ",
+                "fun (y : Level) => @Level.rec (fun (_ : Level) => Bool) ",
                 "Bool.false ",
                 "(fun (yp : Level) (_ : Bool) => Bool.false) ",
                 "(fun (yl : Level) (yr : Level) (_ : Bool) (_ : Bool) => Bool.false) ",
                 "(fun (yl : Level) (yr : Level) (_ : Bool) (_ : Bool) => Bool.and (ih_al yl) (ih_ar yr)) ",
                 "(fun (yn : Name) => Bool.false) y) ",
                 // a = param am  (compare Names via name_eqb)
-                "(fun (am : Name) => fun (y : Level) => Level.rec (fun (_ : Level) => Bool) ",
+                "(fun (am : Name) => fun (y : Level) => @Level.rec (fun (_ : Level) => Bool) ",
                 "Bool.false ",
                 "(fun (yp : Level) (_ : Bool) => Bool.false) ",
                 "(fun (yl : Level) (yr : Level) (_ : Bool) (_ : Bool) => Bool.false) ",
@@ -189,9 +189,9 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def level_max (l1 : Level) (l2 : Level) : Level := ",
-                "Bool.rec (fun (_ : Bool) => Level) ",
-                "(Bool.rec (fun (_ : Bool) => Level) ",
-                "(Bool.rec (fun (_ : Bool) => Level) (Level.max l1 l2) l1 (level_is_zero l2)) ",
+                "@Bool.rec (fun (_ : Bool) => Level) ",
+                "(@Bool.rec (fun (_ : Bool) => Level) ",
+                "(@Bool.rec (fun (_ : Bool) => Level) (Level.max l1 l2) l1 (level_is_zero l2)) ",
                 "l2 (level_is_zero l1)) ",
                 "l1 (level_eqb l1 l2)",
             ),
@@ -209,11 +209,11 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def level_imax (l1 : Level) (l2 : Level) : Level := ",
-                "Bool.rec (fun (_ : Bool) => Level) ",
-                "(Bool.rec (fun (_ : Bool) => Level) ",
-                "(Bool.rec (fun (_ : Bool) => Level) ",
-                "(Bool.rec (fun (_ : Bool) => Level) ",
-                "(Bool.rec (fun (_ : Bool) => Level) (Level.imax l1 l2) l1 (level_eqb l1 l2)) ",
+                "@Bool.rec (fun (_ : Bool) => Level) ",
+                "(@Bool.rec (fun (_ : Bool) => Level) ",
+                "(@Bool.rec (fun (_ : Bool) => Level) ",
+                "(@Bool.rec (fun (_ : Bool) => Level) ",
+                "(@Bool.rec (fun (_ : Bool) => Level) (Level.imax l1 l2) l1 (level_eqb l1 l2)) ",
                 "l2 (level_eqb l1 (Level.succ Level.zero))) ",
                 "l2 (level_is_zero l1)) ",
                 "(level_max l1 l2) (level_is_nonzero l2)) ",
@@ -232,9 +232,9 @@ impl Specification {
         // Impredicativity: imax(l, 0) = 0 (arm 1, mod.rs:325-328).
         self.add_definition(SpecDefinition {
             name: "level_imax_impredicative_zero".to_string(),
-            type_src: "forall (u : Level), Eq Level (level_imax u Level.zero) Level.zero"
+            type_src: "forall (u : Level), @Eq Level (level_imax u Level.zero) Level.zero"
                 .to_string(),
-            value_src: Some("fun (u : Level) => Eq.refl Level Level.zero".to_string()),
+            value_src: Some("fun (u : Level) => @Eq.refl Level Level.zero".to_string()),
             is_axiom: false,
             description: "level_imax u 0 = 0 (impredicative collapse, arm 1). Kernel-checked by \
                           reduction. Non-vacuity witness for level_imax."
@@ -256,10 +256,10 @@ impl Specification {
             name: "level_imax_zero_param".to_string(),
             type_src: concat!(
                 "forall (n : Name), ",
-                "Eq Level (level_imax Level.zero (Level.param n)) (Level.param n)"
+                "@Eq Level (level_imax Level.zero (Level.param n)) (Level.param n)"
             )
             .to_string(),
-            value_src: Some("fun (n : Name) => Eq.refl Level (Level.param n)".to_string()),
+            value_src: Some("fun (n : Name) => @Eq.refl Level (Level.param n)".to_string()),
             is_axiom: false,
             description: "level_imax 0 (param n) = param n (arm 3). Kernel-checked by reduction. \
                           Non-vacuity witness for level_imax."
@@ -280,10 +280,10 @@ impl Specification {
             name: "level_imax_one_param".to_string(),
             type_src: concat!(
                 "forall (n : Name), ",
-                "Eq Level (level_imax (Level.succ Level.zero) (Level.param n)) (Level.param n)"
+                "@Eq Level (level_imax (Level.succ Level.zero) (Level.param n)) (Level.param n)"
             )
             .to_string(),
-            value_src: Some("fun (n : Name) => Eq.refl Level (Level.param n)".to_string()),
+            value_src: Some("fun (n : Name) => @Eq.refl Level (Level.param n)".to_string()),
             is_axiom: false,
             description: "level_imax 1 (param n) = param n (arm 4, is_one parity). Kernel-checked \
                           by reduction. Non-vacuity witness for level_imax."
@@ -305,14 +305,14 @@ impl Specification {
             name: "level_imax_param_one_stuck".to_string(),
             type_src: concat!(
                 "forall (m : Name), ",
-                "Eq Level (level_imax (Level.param m) (Level.succ Level.zero)) ",
+                "@Eq Level (level_imax (Level.param m) (Level.succ Level.zero)) ",
                 "(Level.max (Level.param m) (Level.succ Level.zero))"
             )
             .to_string(),
             value_src: Some(
                 concat!(
                     "fun (m : Name) => ",
-                    "Eq.refl Level (Level.max (Level.param m) (Level.succ Level.zero))"
+                    "@Eq.refl Level (Level.max (Level.param m) (Level.succ Level.zero))"
                 )
                 .to_string(),
             ),
@@ -341,14 +341,14 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ulist_eqb (xs : ListType Level) (ys : ListType Level) : Bool := ",
-                "ListType.rec Level (fun (_ : ListType Level) => ListType Level -> Bool) ",
+                "@ListType.rec Level (fun (_ : ListType Level) => ListType Level -> Bool) ",
                 // xs = nil
-                "(fun (w : ListType Level) => ListType.rec Level (fun (_ : ListType Level) => Bool) ",
+                "(fun (w : ListType Level) => @ListType.rec Level (fun (_ : ListType Level) => Bool) ",
                 "Bool.true ",
                 "(fun (wh : Level) (wt : ListType Level) (_ : Bool) => Bool.false) w) ",
                 // xs = cons xh xt  (ih_xt : ListType Level -> Bool)
                 "(fun (xh : Level) (xt : ListType Level) (ih_xt : ListType Level -> Bool) => ",
-                "fun (w : ListType Level) => ListType.rec Level (fun (_ : ListType Level) => Bool) ",
+                "fun (w : ListType Level) => @ListType.rec Level (fun (_ : ListType Level) => Bool) ",
                 "Bool.false ",
                 "(fun (wh : Level) (wt : ListType Level) (_ : Bool) => Bool.and (level_eqb xh wh) (ih_xt wt)) w) ",
                 "xs ys",
@@ -376,9 +376,9 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def kexpr_beq (a : KExpr) (b : KExpr) : Bool := ",
-                "KExpr.rec (fun (_ : KExpr) => KExpr -> Bool) ",
+                "@KExpr.rec (fun (_ : KExpr) => KExpr -> Bool) ",
                 // a = sort n
-                "(fun (n : Level) => fun (y : KExpr) => KExpr.rec (fun (_ : KExpr) => Bool) ",
+                "(fun (n : Level) => fun (y : KExpr) => @KExpr.rec (fun (_ : KExpr) => Bool) ",
                 "(fun (m : Level) => level_eqb n m) ",
                 "(fun (j : Nat) => Bool.false) ",
                 "(fun (g : KExpr) (c : KExpr) (_ : Bool) (_ : Bool) => Bool.false) ",
@@ -389,7 +389,7 @@ impl Specification {
                 "(fun (qs : Name) (qi : Nat) (qsub : KExpr) (_ : Bool) => Bool.false) ",
                 "(fun (w : Nat) => Bool.false) y) ",
                 // a = bvar i
-                "(fun (i : Nat) => fun (y : KExpr) => KExpr.rec (fun (_ : KExpr) => Bool) ",
+                "(fun (i : Nat) => fun (y : KExpr) => @KExpr.rec (fun (_ : KExpr) => Bool) ",
                 "(fun (m : Level) => Bool.false) ",
                 "(fun (j : Nat) => nat_eqb i j) ",
                 "(fun (g : KExpr) (c : KExpr) (_ : Bool) (_ : Bool) => Bool.false) ",
@@ -401,7 +401,7 @@ impl Specification {
                 "(fun (w : Nat) => Bool.false) y) ",
                 // a = app f a1  (ih_f ih_a : KExpr -> Bool)
                 "(fun (f : KExpr) (a1 : KExpr) (ih_f : KExpr -> Bool) (ih_a : KExpr -> Bool) => ",
-                "fun (y : KExpr) => KExpr.rec (fun (_ : KExpr) => Bool) ",
+                "fun (y : KExpr) => @KExpr.rec (fun (_ : KExpr) => Bool) ",
                 "(fun (m : Level) => Bool.false) ",
                 "(fun (j : Nat) => Bool.false) ",
                 "(fun (g : KExpr) (c : KExpr) (_ : Bool) (_ : Bool) => Bool.and (ih_f g) (ih_a c)) ",
@@ -413,7 +413,7 @@ impl Specification {
                 "(fun (w : Nat) => Bool.false) y) ",
                 // a = lam ty1 b1  (ih_ty ih_b : KExpr -> Bool)
                 "(fun (ty1 : KExpr) (b1 : KExpr) (ih_ty : KExpr -> Bool) (ih_b : KExpr -> Bool) => ",
-                "fun (y : KExpr) => KExpr.rec (fun (_ : KExpr) => Bool) ",
+                "fun (y : KExpr) => @KExpr.rec (fun (_ : KExpr) => Bool) ",
                 "(fun (m : Level) => Bool.false) ",
                 "(fun (j : Nat) => Bool.false) ",
                 "(fun (g : KExpr) (c : KExpr) (_ : Bool) (_ : Bool) => Bool.false) ",
@@ -425,7 +425,7 @@ impl Specification {
                 "(fun (w : Nat) => Bool.false) y) ",
                 // a = pi ty1 b1  (ih_ty ih_b : KExpr -> Bool)
                 "(fun (ty1 : KExpr) (b1 : KExpr) (ih_ty : KExpr -> Bool) (ih_b : KExpr -> Bool) => ",
-                "fun (y : KExpr) => KExpr.rec (fun (_ : KExpr) => Bool) ",
+                "fun (y : KExpr) => @KExpr.rec (fun (_ : KExpr) => Bool) ",
                 "(fun (m : Level) => Bool.false) ",
                 "(fun (j : Nat) => Bool.false) ",
                 "(fun (g : KExpr) (c : KExpr) (_ : Bool) (_ : Bool) => Bool.false) ",
@@ -437,7 +437,7 @@ impl Specification {
                 "(fun (w : Nat) => Bool.false) y) ",
                 // a = const n1 us1
                 "(fun (n1 : Name) (us1 : ListType Level) => fun (y : KExpr) => ",
-                "KExpr.rec (fun (_ : KExpr) => Bool) ",
+                "@KExpr.rec (fun (_ : KExpr) => Bool) ",
                 "(fun (m : Level) => Bool.false) ",
                 "(fun (j : Nat) => Bool.false) ",
                 "(fun (g : KExpr) (c : KExpr) (_ : Bool) (_ : Bool) => Bool.false) ",
@@ -449,7 +449,7 @@ impl Specification {
                 "(fun (w : Nat) => Bool.false) y) ",
                 // a = let_ lt lv lb  (ih_lt ih_lv ih_lb : KExpr -> Bool)
                 "(fun (lt : KExpr) (lv : KExpr) (lb : KExpr) (ih_lt : KExpr -> Bool) (ih_lv : KExpr -> Bool) (ih_lb : KExpr -> Bool) => ",
-                "fun (y : KExpr) => KExpr.rec (fun (_ : KExpr) => Bool) ",
+                "fun (y : KExpr) => @KExpr.rec (fun (_ : KExpr) => Bool) ",
                 "(fun (m : Level) => Bool.false) ",
                 "(fun (j : Nat) => Bool.false) ",
                 "(fun (g : KExpr) (c : KExpr) (_ : Bool) (_ : Bool) => Bool.false) ",
@@ -462,7 +462,7 @@ impl Specification {
                 // a = proj ps pidx psub (ih_sub : KExpr -> Bool) — the sole matching
                 // inner arm compares name + index + sub (recursively via ih_sub).
                 "(fun (ps : Name) (pidx : Nat) (psub : KExpr) (ih_sub : KExpr -> Bool) => ",
-                "fun (y : KExpr) => KExpr.rec (fun (_ : KExpr) => Bool) ",
+                "fun (y : KExpr) => @KExpr.rec (fun (_ : KExpr) => Bool) ",
                 "(fun (m : Level) => Bool.false) ",
                 "(fun (j : Nat) => Bool.false) ",
                 "(fun (g : KExpr) (c : KExpr) (_ : Bool) (_ : Bool) => Bool.false) ",
@@ -473,7 +473,7 @@ impl Specification {
                 "(fun (qs : Name) (qi : Nat) (qsub : KExpr) (_ : Bool) => Bool.and (name_eqb ps qs) (Bool.and (nat_eqb pidx qi) (ih_sub qsub))) ",
                 "(fun (w : Nat) => Bool.false) y) ",
                 // a = lit v — matching inner arm compares the literal value.
-                "(fun (v : Nat) => fun (y : KExpr) => KExpr.rec (fun (_ : KExpr) => Bool) ",
+                "(fun (v : Nat) => fun (y : KExpr) => @KExpr.rec (fun (_ : KExpr) => Bool) ",
                 "(fun (m : Level) => Bool.false) ",
                 "(fun (j : Nat) => Bool.false) ",
                 "(fun (g : KExpr) (c : KExpr) (_ : Bool) (_ : Bool) => Bool.false) ",
@@ -508,7 +508,7 @@ impl Specification {
         // Thus a single Eq.cong delivers `Eq Bool (nat_eqb n n) true` up to defeq.
         self.add_definition_if_absent(SpecDefinition {
             name: "nat_eqb_refl".to_string(),
-            type_src: "forall (n : Nat), Eq Bool (nat_eqb n n) Bool.true".to_string(),
+            type_src: "forall (n : Nat), @Eq Bool (nat_eqb n n) Bool.true".to_string(),
             value_src: Some(
                 concat!(
                     "fun (n : Nat) => ",
@@ -547,15 +547,15 @@ impl Specification {
         //   (zero arm of Bool.and / Bool.rec on true), then nat_eqb_refl k closes it.
         self.add_definition_structural_if_absent(SpecDefinition {
             name: "name_eqb_refl".to_string(),
-            type_src: "forall (m : Name), Eq Bool (name_eqb m m) Bool.true".to_string(),
+            type_src: "forall (m : Name), @Eq Bool (name_eqb m m) Bool.true".to_string(),
             value_src: Some(
                 concat!(
-                    "fun (m : Name) => Name.rec ",
-                    "(fun (z : Name) => Eq Bool (name_eqb z z) Bool.true) ",
+                    "fun (m : Name) => @Name.rec ",
+                    "(fun (z : Name) => @Eq Bool (name_eqb z z) Bool.true) ",
                     // anonymous case
-                    "(Eq.refl Bool Bool.true) ",
+                    "(@Eq.refl Bool Bool.true) ",
                     // str p k case: ih : name_eqb p p = true
-                    "(fun (p : Name) (k : Nat) (ih : Eq Bool (name_eqb p p) Bool.true) => ",
+                    "(fun (p : Name) (k : Nat) (ih : @Eq Bool (name_eqb p p) Bool.true) => ",
                     "Eq.trans Bool ",
                     "(name_eqb (Name.str p k) (Name.str p k)) ",
                     "(Bool.and Bool.true (nat_eqb k k)) ",
@@ -598,19 +598,19 @@ impl Specification {
         //   by the right IH).
         self.add_definition_structural(SpecDefinition {
             name: "level_eqb_refl".to_string(),
-            type_src: "forall (a : Level), Eq Bool (level_eqb a a) Bool.true".to_string(),
+            type_src: "forall (a : Level), @Eq Bool (level_eqb a a) Bool.true".to_string(),
             value_src: Some(
                 concat!(
-                    "fun (a : Level) => Level.rec ",
-                    "(fun (z : Level) => Eq Bool (level_eqb z z) Bool.true) ",
+                    "fun (a : Level) => @Level.rec ",
+                    "(fun (z : Level) => @Eq Bool (level_eqb z z) Bool.true) ",
                     // zero
-                    "(Eq.refl Bool Bool.true) ",
+                    "(@Eq.refl Bool Bool.true) ",
                     // succ p : ih : level_eqb p p = true
-                    "(fun (p : Level) (ih : Eq Bool (level_eqb p p) Bool.true) => ih) ",
+                    "(fun (p : Level) (ih : @Eq Bool (level_eqb p p) Bool.true) => ih) ",
                     // max l r : ih_l, ih_r
                     "(fun (l : Level) (r : Level) ",
-                    "(ih_l : Eq Bool (level_eqb l l) Bool.true) ",
-                    "(ih_r : Eq Bool (level_eqb r r) Bool.true) => ",
+                    "(ih_l : @Eq Bool (level_eqb l l) Bool.true) ",
+                    "(ih_r : @Eq Bool (level_eqb r r) Bool.true) => ",
                     "Eq.trans Bool ",
                     "(level_eqb (Level.max l r) (Level.max l r)) ",
                     "(Bool.and Bool.true (level_eqb r r)) ",
@@ -621,8 +621,8 @@ impl Specification {
                     "ih_r) ",
                     // imax l r : ih_l, ih_r
                     "(fun (l : Level) (r : Level) ",
-                    "(ih_l : Eq Bool (level_eqb l l) Bool.true) ",
-                    "(ih_r : Eq Bool (level_eqb r r) Bool.true) => ",
+                    "(ih_l : @Eq Bool (level_eqb l l) Bool.true) ",
+                    "(ih_r : @Eq Bool (level_eqb r r) Bool.true) => ",
                     "Eq.trans Bool ",
                     "(level_eqb (Level.imax l r) (Level.imax l r)) ",
                     "(Bool.and Bool.true (level_eqb r r)) ",
@@ -665,18 +665,18 @@ impl Specification {
         //   `Bool.and true (ulist_eqb t t)` reduces to `ulist_eqb t t`, closed by IH.
         self.add_definition_structural(SpecDefinition {
             name: "ulist_eqb_refl".to_string(),
-            type_src: "forall (xs : ListType Level), Eq Bool (ulist_eqb xs xs) Bool.true"
+            type_src: "forall (xs : ListType Level), @Eq Bool (ulist_eqb xs xs) Bool.true"
                 .to_string(),
             value_src: Some(
                 concat!(
-                    "fun (xs : ListType Level) => ListType.rec Level ",
-                    "(fun (z : ListType Level) => Eq Bool (ulist_eqb z z) Bool.true) ",
+                    "fun (xs : ListType Level) => @ListType.rec Level ",
+                    "(fun (z : ListType Level) => @Eq Bool (ulist_eqb z z) Bool.true) ",
                     // nil
-                    "(Eq.refl Bool Bool.true) ",
+                    "(@Eq.refl Bool Bool.true) ",
                     // cons h t : ih : ulist_eqb t t = true
-                    "(fun (h : Level) (t : ListType Level) (ih : Eq Bool (ulist_eqb t t) Bool.true) => ",
+                    "(fun (h : Level) (t : ListType Level) (ih : @Eq Bool (ulist_eqb t t) Bool.true) => ",
                     "Eq.trans Bool ",
-                    "(ulist_eqb (ListType.cons Level h t) (ListType.cons Level h t)) ",
+                    "(ulist_eqb (@ListType.cons Level h t) (@ListType.cons Level h t)) ",
                     "(Bool.and Bool.true (ulist_eqb t t)) ",
                     "Bool.true ",
                     "(Eq.cong Bool Bool ",
@@ -719,19 +719,19 @@ impl Specification {
         //             ulist_eqb_refl.
         self.add_definition_structural(SpecDefinition {
             name: "kexpr_beq_refl".to_string(),
-            type_src: "forall (e : KExpr), Eq Bool (kexpr_beq e e) Bool.true".to_string(),
+            type_src: "forall (e : KExpr), @Eq Bool (kexpr_beq e e) Bool.true".to_string(),
             value_src: Some(
                 concat!(
-                    "fun (e : KExpr) => KExpr.rec ",
-                    "(fun (z : KExpr) => Eq Bool (kexpr_beq z z) Bool.true) ",
+                    "fun (e : KExpr) => @KExpr.rec ",
+                    "(fun (z : KExpr) => @Eq Bool (kexpr_beq z z) Bool.true) ",
                     // sort n
                     "(fun (n : Level) => level_eqb_refl n) ",
                     // bvar i
                     "(fun (i : Nat) => nat_eqb_refl i) ",
                     // app f a : ih_f, ih_a
                     "(fun (f : KExpr) (a : KExpr) ",
-                    "(ih_f : Eq Bool (kexpr_beq f f) Bool.true) ",
-                    "(ih_a : Eq Bool (kexpr_beq a a) Bool.true) => ",
+                    "(ih_f : @Eq Bool (kexpr_beq f f) Bool.true) ",
+                    "(ih_a : @Eq Bool (kexpr_beq a a) Bool.true) => ",
                     "Eq.trans Bool ",
                     "(kexpr_beq (KExpr.app f a) (KExpr.app f a)) ",
                     "(Bool.and Bool.true (kexpr_beq a a)) ",
@@ -742,8 +742,8 @@ impl Specification {
                     "ih_a) ",
                     // lam ty b : ih_ty, ih_b
                     "(fun (ty : KExpr) (b : KExpr) ",
-                    "(ih_ty : Eq Bool (kexpr_beq ty ty) Bool.true) ",
-                    "(ih_b : Eq Bool (kexpr_beq b b) Bool.true) => ",
+                    "(ih_ty : @Eq Bool (kexpr_beq ty ty) Bool.true) ",
+                    "(ih_b : @Eq Bool (kexpr_beq b b) Bool.true) => ",
                     "Eq.trans Bool ",
                     "(kexpr_beq (KExpr.lam ty b) (KExpr.lam ty b)) ",
                     "(Bool.and Bool.true (kexpr_beq b b)) ",
@@ -754,8 +754,8 @@ impl Specification {
                     "ih_b) ",
                     // pi ty b : ih_ty, ih_b
                     "(fun (ty : KExpr) (b : KExpr) ",
-                    "(ih_ty : Eq Bool (kexpr_beq ty ty) Bool.true) ",
-                    "(ih_b : Eq Bool (kexpr_beq b b) Bool.true) => ",
+                    "(ih_ty : @Eq Bool (kexpr_beq ty ty) Bool.true) ",
+                    "(ih_b : @Eq Bool (kexpr_beq b b) Bool.true) => ",
                     "Eq.trans Bool ",
                     "(kexpr_beq (KExpr.pi ty b) (KExpr.pi ty b)) ",
                     "(Bool.and Bool.true (kexpr_beq b b)) ",
@@ -776,9 +776,9 @@ impl Specification {
                     "(ulist_eqb_refl us)) ",
                     // let_ lt lv lb : ih_lt, ih_lv, ih_lb (triple conjunction, nested Bool.and)
                     "(fun (lt : KExpr) (lv : KExpr) (lb : KExpr) ",
-                    "(ih_lt : Eq Bool (kexpr_beq lt lt) Bool.true) ",
-                    "(ih_lv : Eq Bool (kexpr_beq lv lv) Bool.true) ",
-                    "(ih_lb : Eq Bool (kexpr_beq lb lb) Bool.true) => ",
+                    "(ih_lt : @Eq Bool (kexpr_beq lt lt) Bool.true) ",
+                    "(ih_lv : @Eq Bool (kexpr_beq lv lv) Bool.true) ",
+                    "(ih_lb : @Eq Bool (kexpr_beq lb lb) Bool.true) => ",
                     "Eq.trans Bool ",
                     "(kexpr_beq (KExpr.let_ lt lv lb) (KExpr.let_ lt lv lb)) ",
                     "(Bool.and Bool.true (Bool.and (kexpr_beq lv lv) (kexpr_beq lb lb))) ",
@@ -797,7 +797,7 @@ impl Specification {
                     // proj s i sub : = Bool.and (name_eqb s s) (Bool.and (nat_eqb i i)
                     // (kexpr_beq sub sub)); rewrite name then nat, close with ih_sub.
                     "(fun (s : Name) (i : Nat) (sub : KExpr) ",
-                    "(ih_sub : Eq Bool (kexpr_beq sub sub) Bool.true) => ",
+                    "(ih_sub : @Eq Bool (kexpr_beq sub sub) Bool.true) => ",
                     "Eq.trans Bool ",
                     "(kexpr_beq (KExpr.proj s i sub) (KExpr.proj s i sub)) ",
                     "(Bool.and Bool.true (Bool.and (nat_eqb i i) (kexpr_beq sub sub))) ",
@@ -853,9 +853,9 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "kexpr_beq_distinct_sort_bvar_false".to_string(),
             type_src:
-                "Eq Bool (kexpr_beq (KExpr.sort Level.zero) (KExpr.bvar Nat.zero)) Bool.false"
+                "@Eq Bool (kexpr_beq (KExpr.sort Level.zero) (KExpr.bvar Nat.zero)) Bool.false"
                     .to_string(),
-            value_src: Some("Eq.refl Bool Bool.false".to_string()),
+            value_src: Some("@Eq.refl Bool Bool.false".to_string()),
             is_axiom: false,
             description: "kexpr_beq (sort 0) (bvar 0) = false: distinct constructors compare unequal. \
                           Non-vacuity witness (kexpr_beq is not constantly-true). Kernel-checked by \
@@ -873,12 +873,12 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "kexpr_beq_distinct_app_lam_false".to_string(),
             type_src: concat!(
-                "Eq Bool (kexpr_beq ",
+                "@Eq Bool (kexpr_beq ",
                 "(KExpr.app (KExpr.bvar Nat.zero) (KExpr.bvar Nat.zero)) ",
                 "(KExpr.lam (KExpr.bvar Nat.zero) (KExpr.bvar Nat.zero))) Bool.false",
             )
             .to_string(),
-            value_src: Some("Eq.refl Bool Bool.false".to_string()),
+            value_src: Some("@Eq.refl Bool Bool.false".to_string()),
             is_axiom: false,
             description:
                 "kexpr_beq (app ..) (lam ..) = false: distinct constructors with identical \
@@ -900,9 +900,9 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "kexpr_beq_distinct_bvar_index_false".to_string(),
             type_src:
-                "Eq Bool (kexpr_beq (KExpr.bvar Nat.zero) (KExpr.bvar (Nat.succ Nat.zero))) Bool.false"
+                "@Eq Bool (kexpr_beq (KExpr.bvar Nat.zero) (KExpr.bvar (Nat.succ Nat.zero))) Bool.false"
                     .to_string(),
-            value_src: Some("Eq.refl Bool Bool.false".to_string()),
+            value_src: Some("@Eq.refl Bool Bool.false".to_string()),
             is_axiom: false,
             description: "kexpr_beq (bvar 0) (bvar 1) = false: same constructor, distinct de Bruijn \
                           index compares unequal (genuine payload comparison, not just constructor \

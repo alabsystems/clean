@@ -18,20 +18,20 @@ const ROOTS: &[&str] = &[
     "ir_byte_gep_site_mkt_legacy_v1",
     "ir_byte_gep_site_mki_selected_v1",
 ];
-const NONE: &str = "IROption.none Nat";
+const NONE: &str = "@IROption.none Nat";
 const PARAMS: &str =
     "(providers : IRByteProvidersV1 Nat) (bytes : Nat -> IROption Nat) (host : Nat)";
 const MEMORY_PARAMS: &str = "(bytes : Nat -> IROption Nat)";
-const EMPTY: &str = "(IRList.nil Nat)";
-const RESULTS: &str = "(IRList.cons Nat 99 (IRList.nil Nat))";
-const PTR_RESULTS: &str = "(IRList.cons IRTy IRTy.ptr_ (IRList.nil IRTy))";
-const TAIL: &str = "(IRList.cons IRFrame (IRFrame.mk 3 4 5 (IRList.nil IRBinding)
-  (IRList.cons Nat 123 (IRList.nil Nat))) (IRList.nil IRFrame))";
-const ALLOCS: &str = "(IRList.cons IRByteAllocationV1
-  (IRByteAllocationV1.mk 16 64 1 Bool.true) (IRList.nil IRByteAllocationV1))";
+const EMPTY: &str = "(@IRList.nil Nat)";
+const RESULTS: &str = "(@IRList.cons Nat 99 (@IRList.nil Nat))";
+const PTR_RESULTS: &str = "(@IRList.cons IRTy IRTy.ptr_ (@IRList.nil IRTy))";
+const TAIL: &str = "(@IRList.cons IRFrame (IRFrame.mk 3 4 5 (@IRList.nil IRBinding)
+  (@IRList.cons Nat 123 (@IRList.nil Nat))) (@IRList.nil IRFrame))";
+const ALLOCS: &str = "(@IRList.cons IRByteAllocationV1
+  (IRByteAllocationV1.mk 16 64 1 Bool.true) (@IRList.nil IRByteAllocationV1))";
 const MEMORY: &str = "(IRByteMemoryV1.mk typed_gep_allocs bytes 128)";
-const WORLD: &str = "(IRByteWorldV1.mk Nat (IRByteMemoryV1.mk typed_gep_allocs bytes 128)
-  host (IRList.cons Nat 2 (IRList.cons Nat 1 (IRList.nil Nat))) 3)";
+const WORLD: &str = "(@IRByteWorldV1.mk Nat (IRByteMemoryV1.mk typed_gep_allocs bytes 128)
+  host (@IRList.cons Nat 2 (@IRList.cons Nat 1 (@IRList.nil Nat))) 3)";
 
 fn checked(spec: &Specification, name: &str) {
     let def = spec.get_definition(name).expect("actual registered value");
@@ -83,8 +83,8 @@ fn replay(
     expected: &str,
     accepts: bool,
 ) {
-    let eq = format!("Eq ({ty}) ({actual}) ({expected})");
-    let refl = format!("Eq.refl ({ty}) ({expected})");
+    let eq = format!("@Eq ({ty}) ({actual}) ({expected})");
+    let refl = format!("@Eq.refl ({ty}) ({expected})");
     let (claim, proof) = if params.is_empty() {
         (eq, refl)
     } else {
@@ -129,15 +129,15 @@ fn equal(
     expected: &str,
 ) {
     replay(spec, params, ty, actual, expected, true);
-    add(spec, &format!("def {name} {params} : Eq ({ty}) ({actual}) ({expected}) := Eq.refl ({ty}) ({expected})"));
+    add(spec, &format!("def {name} {params} : @Eq ({ty}) ({actual}) ({expected}) := @Eq.refl ({ty}) ({expected})"));
 }
 
 fn list(ty: &str, values: &[String]) -> String {
     values
         .iter()
         .rev()
-        .fold(format!("(IRList.nil {ty})"), |tail, value| {
-            format!("(IRList.cons {ty} ({value}) {tail})")
+        .fold(format!("(@IRList.nil {ty})"), |tail, value| {
+            format!("(@IRList.cons {ty} ({value}) {tail})")
         })
 }
 
@@ -168,11 +168,11 @@ fn frame(left: &str, right: &str, base: &str) -> String {
             "IRBinding.mk 88 (IRScalar.bool_ Bool.true)".into(),
         ],
     );
-    format!("(IRFrame.mk 9 7 1 {locals} (IRList.cons Nat 77 {EMPTY}))")
+    format!("(IRFrame.mk 9 7 1 {locals} (@IRList.cons Nat 77 {EMPTY}))")
 }
 
 fn machine(frame: &str) -> String {
-    format!("(IRMachine.mk (IRList.cons IRFrame {frame} {TAIL}) (IRList.nil IRMemSlot) 91)")
+    format!("(IRMachine.mk (@IRList.cons IRFrame {frame} {TAIL}) (@IRList.nil IRMemSlot) 91)")
 }
 
 fn site(constructor: &str, operands: &str, result_types: &str) -> String {
@@ -199,16 +199,16 @@ fn context(site: &str, indices: &[u64], inbounds: bool, stride: u64) -> String {
         ],
     );
     format!("(IRByteContextV1.mk
-  (IRModule.mk (IRList.cons IRFunc (IRFunc.mk 9 {} 7
-    (IRList.cons IRBlock (IRBlock.mk 7 {EMPTY} {nodes}) (IRList.nil IRBlock))) (IRList.nil IRFunc)) (IRList.nil IRGlobal))
-  (IRList.cons IRByteLayoutV1 (IRByteLayoutV1.mk (IRTy.int_ 64) {stride} 8 (IRList.nil IRTy) {EMPTY}) (IRList.nil IRByteLayoutV1))
-  (IRList.nil IRByteSignatureV1) (IRList.nil IRByteFunctionV1)
-  (IRList.cons IRByteSiteV1 {site} (IRList.nil IRByteSiteV1)))", ids(&[40, 78, 79]))
+  (IRModule.mk (@IRList.cons IRFunc (IRFunc.mk 9 {} 7
+    (@IRList.cons IRBlock (IRBlock.mk 7 {EMPTY} {nodes}) (@IRList.nil IRBlock))) (@IRList.nil IRFunc)) (@IRList.nil IRGlobal))
+  (@IRList.cons IRByteLayoutV1 (IRByteLayoutV1.mk (IRTy.int_ 64) {stride} 8 (@IRList.nil IRTy) {EMPTY}) (@IRList.nil IRByteLayoutV1))
+  (@IRList.nil IRByteSignatureV1) (@IRList.nil IRByteFunctionV1)
+  (@IRList.cons IRByteSiteV1 {site} (@IRList.nil IRByteSiteV1)))", ids(&[40, 78, 79]))
 }
 
 fn run(ctx: &str, current: &str) -> String {
     format!(
-        "ir_byte_step_v1 Nat {ctx} providers (IRByteConfigV1.running Nat {} {WORLD})",
+        "ir_byte_step_v1 Nat {ctx} providers (@IRByteConfigV1.running Nat {} {WORLD})",
         machine(current)
     )
 }
@@ -216,13 +216,13 @@ fn run(ctx: &str, current: &str) -> String {
 fn running(current: &str, address: u64) -> String {
     let next = format!(
         "(ir_frame_advance (ir_frame_set_many {current} {RESULTS}
-      (IRList.cons IRScalar (IRScalar.ptr_ {address}) (IRList.nil IRScalar))))"
+      (@IRList.cons IRScalar (IRScalar.ptr_ {address}) (@IRList.nil IRScalar))))"
     );
-    format!("IRByteConfigV1.running Nat {} {WORLD}", machine(&next))
+    format!("@IRByteConfigV1.running Nat {} {WORLD}", machine(&next))
 }
 
 fn halted(outcome: &str) -> String {
-    format!("IRByteConfigV1.halted Nat ({outcome}) {WORLD}")
+    format!("@IRByteConfigV1.halted Nat ({outcome}) {WORLD}")
 }
 
 #[test]
@@ -242,10 +242,10 @@ fn byte_typed_gep_public_roots_and_legacy_equations_are_checked_without_axioms()
         let actual = format!(
             "ir_byte_gep_site_v1 {ctx} {typed} (IRTy.int_ 64) {s} 40 {indices} Bool.true {MEMORY}"
         );
-        let expected = format!("ir_byte_gep_typed_v1 {ctx} (IRTy.int_ 64) (ir_getd {s} 40) (IROption.some Nat 5) Bool.true {MEMORY}");
-        add(&mut spec, &format!("def typed_gep_selected_law {params} : Eq IRByteMemoryResultV1 ({actual}) ({expected}) :=
+        let expected = format!("ir_byte_gep_typed_v1 {ctx} (IRTy.int_ 64) (ir_getd {s} 40) (@IROption.some Nat 5) Bool.true {MEMORY}");
+        add(&mut spec, &format!("def typed_gep_selected_law {params} : @Eq IRByteMemoryResultV1 ({actual}) ({expected}) :=
   ir_byte_gep_site_mki_selected_v1 {ctx} 9 7 1 0 1 {PTR_RESULTS} {operands} (IRTy.int_ 64) {s} 40 {indices} Bool.true {MEMORY} 5
-    (Eq.refl (IROption Nat) (IROption.some Nat 5))"));
+    (@Eq.refl (IROption Nat) (@IROption.some Nat 5))"));
         for constructor in ["mk", "mkt"] {
             let old = site(constructor, &operands, PTR_RESULTS);
             let actual = format!("ir_byte_gep_site_v1 {ctx} {old} (IRTy.int_ 64) {s} 40 {indices} Bool.true {MEMORY}");
@@ -280,7 +280,7 @@ fn byte_typed_gep_nominal_widths_signed_halves_and_unsigned_ranges_are_exact() {
                 {
                     let actual = format!("ir_byte_gep_typed_index_v1 (IRTy.{family} {width}) (IRScalar.int_ {value})");
                     let expected = if value < limit {
-                        format!("IROption.some Nat {value}")
+                        format!("@IROption.some Nat {value}")
                     } else {
                         NONE.into()
                     };
@@ -300,7 +300,7 @@ fn byte_typed_gep_nominal_widths_signed_halves_and_unsigned_ranges_are_exact() {
             "",
             "IROption Nat",
             "ir_byte_gep_typed_index_v1 (IRTy.int_ 32) (IRScalar.int_ 4294967295)",
-            "IROption.some Nat 4294967295",
+            "@IROption.some Nat 4294967295",
             false,
         );
     });
@@ -361,14 +361,14 @@ fn byte_typed_gep_wrong_types_and_noninteger_carriers_never_infer_nominal_types(
             "",
             "IROption Nat",
             "ir_byte_gep_typed_index_v1 (IRTy.uint_ 32) (IRScalar.int_ 2147483648)",
-            "IROption.some Nat 2147483648",
+            "@IROption.some Nat 2147483648",
         );
         replay(
             &spec,
             "",
             "IROption Nat",
             "ir_byte_gep_typed_index_v1 (IRTy.int_ 8) (IRScalar.int_ 256)",
-            "IROption.some Nat 0",
+            "@IROption.some Nat 0",
             false,
         );
     });
@@ -385,14 +385,14 @@ fn byte_typed_gep_catalog_uniqueness_missing_values_repeats_and_sum_overflow_are
         ));
         let valid = rows(&[(78, "IRTy.int_ 32"), (79, "IRTy.uint_ 16")]);
         for (case, operands, indices, expected) in [
-            ("sum", valid.clone(), ids(&[78, 79]), "IROption.some Nat 5"),
+            ("sum", valid.clone(), ids(&[78, 79]), "@IROption.some Nat 5"),
             (
                 "repeated",
                 valid.clone(),
                 ids(&[78, 78, 79]),
-                "IROption.some Nat 8",
+                "@IROption.some Nat 8",
             ),
-            ("empty", rows(&[]), ids(&[]), "IROption.some Nat 0"),
+            ("empty", rows(&[]), ids(&[]), "@IROption.some Nat 0"),
             (
                 "missing_row",
                 rows(&[(78, "IRTy.int_ 32")]),
@@ -448,7 +448,7 @@ fn byte_typed_gep_catalog_uniqueness_missing_values_repeats_and_sum_overflow_are
                 "ir_byte_gep_typed_indices_v1 {operands} {big} {}",
                 ids(&[78, 78])
             ),
-            "IROption.some Nat 18446744073709551614",
+            "@IROption.some Nat 18446744073709551614",
         );
         equal(
             &mut spec,
@@ -469,7 +469,7 @@ fn byte_typed_gep_catalog_uniqueness_missing_values_repeats_and_sum_overflow_are
                 "ir_byte_gep_typed_indices_v1 {valid} {s} {}",
                 ids(&[78, 78])
             ),
-            "IROption.some Nat 3",
+            "@IROption.some Nat 3",
             false,
         );
     });
@@ -485,7 +485,7 @@ fn byte_typed_gep_layout_stride_address_and_inbounds_keep_complete_memory() {
                 "stride",
                 8,
                 "IRScalar.ptr_ 16",
-                "IROption.some Nat 5",
+                "@IROption.some Nat 5",
                 "Bool.true",
                 "IRByteMemoryResultV1.value (IRScalar.ptr_ 56)",
             ),
@@ -493,7 +493,7 @@ fn byte_typed_gep_layout_stride_address_and_inbounds_keep_complete_memory() {
                 "flat_other_stride",
                 3,
                 "IRScalar.ptr_ 16",
-                "IROption.some Nat 5",
+                "@IROption.some Nat 5",
                 "Bool.true",
                 "IRByteMemoryResultV1.value (IRScalar.ptr_ 31)",
             ),
@@ -501,7 +501,7 @@ fn byte_typed_gep_layout_stride_address_and_inbounds_keep_complete_memory() {
                 "one_past",
                 8,
                 "IRScalar.ptr_ 16",
-                "IROption.some Nat 8",
+                "@IROption.some Nat 8",
                 "Bool.true",
                 "IRByteMemoryResultV1.value (IRScalar.ptr_ 80)",
             ),
@@ -509,7 +509,7 @@ fn byte_typed_gep_layout_stride_address_and_inbounds_keep_complete_memory() {
                 "outside",
                 8,
                 "IRScalar.ptr_ 16",
-                "IROption.some Nat 9",
+                "@IROption.some Nat 9",
                 "Bool.true",
                 "IRByteMemoryResultV1.fault (IROutcome.ub IRFault.bad_addr)",
             ),
@@ -517,7 +517,7 @@ fn byte_typed_gep_layout_stride_address_and_inbounds_keep_complete_memory() {
                 "unconfined",
                 8,
                 "IRScalar.ptr_ 16",
-                "IROption.some Nat 9",
+                "@IROption.some Nat 9",
                 "Bool.false",
                 "IRByteMemoryResultV1.value (IRScalar.ptr_ 88)",
             ),
@@ -525,7 +525,7 @@ fn byte_typed_gep_layout_stride_address_and_inbounds_keep_complete_memory() {
                 "not_ptr",
                 8,
                 "IRScalar.int_ 16",
-                "IROption.some Nat 1",
+                "@IROption.some Nat 1",
                 "Bool.false",
                 "IRByteMemoryResultV1.fault (IROutcome.type_error IRFault.not_ptr)",
             ),
@@ -533,7 +533,7 @@ fn byte_typed_gep_layout_stride_address_and_inbounds_keep_complete_memory() {
                 "null",
                 8,
                 "IRScalar.nullptr_",
-                "IROption.some Nat 0",
+                "@IROption.some Nat 0",
                 "Bool.false",
                 "IRByteMemoryResultV1.fault (IROutcome.ub IRFault.bad_addr)",
             ),
@@ -541,7 +541,7 @@ fn byte_typed_gep_layout_stride_address_and_inbounds_keep_complete_memory() {
                 "stride_overflow",
                 8,
                 "IRScalar.ptr_ 16",
-                "IROption.some Nat 2305843009213693952",
+                "@IROption.some Nat 2305843009213693952",
                 "Bool.false",
                 "IRByteMemoryResultV1.fault (IROutcome.ub IRFault.bad_addr)",
             ),
@@ -549,7 +549,7 @@ fn byte_typed_gep_layout_stride_address_and_inbounds_keep_complete_memory() {
                 "address_overflow",
                 1,
                 "IRScalar.ptr_ 18446744073709551615",
-                "IROption.some Nat 1",
+                "@IROption.some Nat 1",
                 "Bool.false",
                 "IRByteMemoryResultV1.fault (IROutcome.ub IRFault.bad_addr)",
             ),
@@ -589,7 +589,7 @@ fn byte_typed_gep_layout_stride_address_and_inbounds_keep_complete_memory() {
             );
         }
         let ctx = context(&typed, &[78], false, 8);
-        equal(&mut spec, "typed_gep_missing_layout", MEMORY_PARAMS, "IRByteMemoryResultV1", &format!("ir_byte_gep_typed_v1 {ctx} (IRTy.int_ 16) (IRScalar.ptr_ 16) (IROption.some Nat 1) Bool.false {MEMORY}"), &format!("IRByteMemoryResultV1.fault (IROutcome.unmodelled IRFault.width_bounded) {MEMORY}"));
+        equal(&mut spec, "typed_gep_missing_layout", MEMORY_PARAMS, "IRByteMemoryResultV1", &format!("ir_byte_gep_typed_v1 {ctx} (IRTy.int_ 16) (IRScalar.ptr_ 16) (@IROption.some Nat 1) Bool.false {MEMORY}"), &format!("IRByteMemoryResultV1.fault (IROutcome.unmodelled IRFault.width_bounded) {MEMORY}"));
     });
 }
 
@@ -672,7 +672,7 @@ fn byte_typed_gep_fetched_faults_retain_world_and_cannot_rebind_a_wrong_lane() {
             (
                 "result_lane",
                 rows(&[(78, "IRTy.int_ 32")]),
-                "(IRList.cons IRTy (IRTy.uint_ 64) (IRList.nil IRTy))",
+                "(@IRList.cons IRTy (IRTy.uint_ 64) (@IRList.nil IRTy))",
                 vec![78],
                 "IROutcome.type_error IRFault.bad_field",
             ),

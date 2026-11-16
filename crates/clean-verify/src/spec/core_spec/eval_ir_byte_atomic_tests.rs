@@ -39,13 +39,14 @@ fn register(spec: &mut Specification, source: &str) {
 fn check(spec: &mut Specification, name: &str, ty: &str, actual: &str, expected: &str) {
     register(
         spec,
-        &format!("def {name} : Eq ({ty}) ({actual}) ({expected}) := Eq.refl ({ty}) ({expected})"),
+        &format!("def {name} : @Eq ({ty}) ({actual}) ({expected}) := @Eq.refl ({ty}) ({expected})"),
     );
     checked(spec, name);
 }
 
 fn reject(spec: &mut Specification, name: &str, ty: &str, actual: &str, wrong: &str) {
-    let source = format!("def {name} : Eq ({ty}) ({actual}) ({wrong}) := Eq.refl ({ty}) ({wrong})");
+    let source =
+        format!("def {name} : @Eq ({ty}) ({actual}) ({wrong}) := @Eq.refl ({ty}) ({wrong})");
     let error = spec
         .add_recursive_def(&source, "Deliberately false fetch-add observation")
         .expect_err("false observation must fail");
@@ -58,15 +59,15 @@ fn fixture() -> Specification {
         .expect("actual public byte-profile registration");
     for source in [
         r"def fetch_test_ctx : IRByteContextV1 := IRByteContextV1.mk
-  (IRModule.mk (IRList.nil IRFunc) (IRList.nil IRGlobal))
-  (IRList.cons IRByteLayoutV1
-    (IRByteLayoutV1.mk (IRTy.uint_ 64) 8 8 (IRList.nil IRTy) (IRList.nil Nat))
-    (IRList.nil IRByteLayoutV1))
-  (IRList.nil IRByteSignatureV1) (IRList.nil IRByteFunctionV1) (IRList.nil IRByteSiteV1)",
+  (IRModule.mk (@IRList.nil IRFunc) (@IRList.nil IRGlobal))
+  (@IRList.cons IRByteLayoutV1
+    (IRByteLayoutV1.mk (IRTy.uint_ 64) 8 8 (@IRList.nil IRTy) (@IRList.nil Nat))
+    (@IRList.nil IRByteLayoutV1))
+  (@IRList.nil IRByteSignatureV1) (@IRList.nil IRByteFunctionV1) (@IRList.nil IRByteSiteV1)",
         r"def fetch_test_allocs : IRList IRByteAllocationV1 :=
-  IRList.cons IRByteAllocationV1 (IRByteAllocationV1.mk 16 32 7 Bool.true)
-    (IRList.nil IRByteAllocationV1)",
-        r"def fetch_test_blank : Nat -> IROption Nat := fun (_ : Nat) => IROption.none Nat",
+  @IRList.cons IRByteAllocationV1 (IRByteAllocationV1.mk 16 32 7 Bool.true)
+    (@IRList.nil IRByteAllocationV1)",
+        r"def fetch_test_blank : Nat -> IROption Nat := fun (_ : Nat) => @IROption.none Nat",
         r"def fetch_test_memory (n : Nat) : IRByteMemoryV1 :=
   IRByteMemoryV1.mk fetch_test_allocs
     (ir_byte_write_word_v1
@@ -114,7 +115,7 @@ IRByteMemoryV1.mk fetch_test_allocs (ir_byte_write_word_v1 bytes 16 8 n) 128",
         register(
             &mut spec,
             r"def fetch_test_symbolic_41_to_42 (bytes : Nat -> IROption Nat) :
-Eq IRByteMemoryResultV1
+@Eq IRByteMemoryResultV1
   (ir_byte_fetch_add_relaxed_u64_seq_v1 fetch_test_ctx (IRScalar.ptr_ 16) (IRScalar.int_ 1)
     (fetch_test_symbolic_memory bytes 41))
   (IRByteMemoryResultV1.value (IRScalar.int_ 41)
@@ -122,9 +123,9 @@ Eq IRByteMemoryResultV1
       (ir_byte_write_word_v1 (ir_byte_write_word_v1 bytes 16 8 41) 16 8 42) 128)) :=
 ir_byte_fetch_add_relaxed_u64_seq_below_v1 fetch_test_ctx (fetch_test_symbolic_memory bytes 41) 16 41 1
   (Nat.le_add_right 17 18446744073709551599)
-  (Eq.refl (IROption IRByteLayoutV1)
-    (IROption.some IRByteLayoutV1 (IRByteLayoutV1.mk (IRTy.uint_ 64) 8 8 (IRList.nil IRTy) (IRList.nil Nat))))
-  (Eq.refl Bool Bool.true)
+  (@Eq.refl (IROption IRByteLayoutV1)
+    (@IROption.some IRByteLayoutV1 (IRByteLayoutV1.mk (IRTy.uint_ 64) 8 8 (@IRList.nil IRTy) (@IRList.nil Nat))))
+  (@Eq.refl Bool Bool.true)
   (ir_byte_u64_rep_write_v1 (IRByteMemoryV1.mk fetch_test_allocs bytes 128) 16 41)
   (Nat.le_add_right 43 18446744073709551573)",
         );
@@ -149,28 +150,28 @@ fn sequential_fetch_add_returns_old_stores_wrapped_new_and_preserves_frame() {
                 &format!("fetch_old_{index}"),
                 "IROption IRScalar",
                 &format!("ir_byte_fetch_add_old_v1 ({operation})"),
-                &format!("IROption.some IRScalar (IRScalar.int_ {old})"),
+                &format!("@IROption.some IRScalar (IRScalar.int_ {old})"),
             );
             check(
                 &mut spec,
                 &format!("fetch_new_{index}"),
                 "IROption Nat",
                 &format!("fetch_test_read ({operation}) 16 8"),
-                &format!("IROption.some Nat {new}"),
+                &format!("@IROption.some Nat {new}"),
             );
             check(
                 &mut spec,
                 &format!("fetch_neighbor_{index}"),
                 "IROption Nat",
                 &format!("fetch_test_read ({operation}) 32 8"),
-                "IROption.some Nat 77",
+                "@IROption.some Nat 77",
             );
             check(
                 &mut spec,
                 &format!("fetch_undefined_frame_{index}"),
                 "IROption Nat",
                 &format!("fetch_test_read ({operation}) 24 8"),
-                "IROption.none Nat",
+                "@IROption.none Nat",
             );
             check(
                 &mut spec,
@@ -255,7 +256,7 @@ fn sequential_fetch_add_faults_preserve_the_original_memory() {
                 8,
                 "IRScalar.ptr_ 16",
                 "IRScalar.int_ 1",
-                "IRByteMemoryV1.mk fetch_test_allocs (fun (_ : Nat) => IROption.some Nat 256) 128",
+                "IRByteMemoryV1.mk fetch_test_allocs (fun (_ : Nat) => @IROption.some Nat 256) 128",
                 "IROutcome.ub IRFault.uninit",
             ),
             (
@@ -285,10 +286,10 @@ fn sequential_fetch_add_faults_preserve_the_original_memory() {
             );
         }
         for (index, layouts, fault) in [
-            (0, "IRList.nil IRByteLayoutV1", "IROutcome.unmodelled IRFault.width_bounded"),
-            (1, "IRList.cons IRByteLayoutV1 (IRByteLayoutV1.mk (IRTy.uint_ 64) 4 8 (IRList.nil IRTy) (IRList.nil Nat)) (IRList.nil IRByteLayoutV1)", "IROutcome.type_error IRFault.width_bounded"),
+            (0, "@IRList.nil IRByteLayoutV1", "IROutcome.unmodelled IRFault.width_bounded"),
+            (1, "@IRList.cons IRByteLayoutV1 (IRByteLayoutV1.mk (IRTy.uint_ 64) 4 8 (@IRList.nil IRTy) (@IRList.nil Nat)) (@IRList.nil IRByteLayoutV1)", "IROutcome.type_error IRFault.width_bounded"),
         ] {
-            let ctx = format!("IRByteContextV1.mk (IRModule.mk (IRList.nil IRFunc) (IRList.nil IRGlobal)) ({layouts}) (IRList.nil IRByteSignatureV1) (IRList.nil IRByteFunctionV1) (IRList.nil IRByteSiteV1)");
+            let ctx = format!("IRByteContextV1.mk (IRModule.mk (@IRList.nil IRFunc) (@IRList.nil IRGlobal)) ({layouts}) (@IRList.nil IRByteSignatureV1) (@IRList.nil IRByteFunctionV1) (@IRList.nil IRByteSiteV1)");
             check(&mut spec, &format!("fetch_layout_fault_{index}"), "IRByteMemoryResultV1",
                 &format!("ir_byte_fetch_add_relaxed_u64_seq_v1 ({ctx}) (IRScalar.ptr_ 16) (IRScalar.int_ 1) (fetch_test_memory 41)"),
                 &format!("IRByteMemoryResultV1.fault ({fault}) (fetch_test_memory 41)"));
@@ -305,37 +306,37 @@ fn sequential_fetch_add_wrong_observations_fail_for_type_mismatch() {
                 "fetch_wrong_return",
                 "IROption IRScalar",
                 "ir_byte_fetch_add_old_v1 (fetch_test_operation 41 1)",
-                "IROption.some IRScalar (IRScalar.int_ 42)",
+                "@IROption.some IRScalar (IRScalar.int_ 42)",
             ),
             (
                 "fetch_wrong_increment",
                 "IROption Nat",
                 "fetch_test_read (fetch_test_operation 41 1) 16 8",
-                "IROption.some Nat 43",
+                "@IROption.some Nat 43",
             ),
             (
                 "fetch_wrong_stale",
                 "IROption Nat",
                 "fetch_test_read (fetch_test_operation 41 1) 16 8",
-                "IROption.some Nat 41",
+                "@IROption.some Nat 41",
             ),
             (
                 "fetch_wrong_address",
                 "IROption Nat",
                 "fetch_test_read (fetch_test_operation 41 1) 24 8",
-                "IROption.some Nat 42",
+                "@IROption.some Nat 42",
             ),
             (
                 "fetch_wrong_frame",
                 "IROption Nat",
                 "fetch_test_read (fetch_test_operation 41 1) 32 8",
-                "IROption.some Nat 78",
+                "@IROption.some Nat 78",
             ),
             (
                 "fetch_wrong_wrap",
                 "IROption Nat",
                 "fetch_test_read (fetch_test_operation 18446744073709551615 1) 16 8",
-                "IROption.some Nat 18446744073709551616",
+                "@IROption.some Nat 18446744073709551616",
             ),
         ] {
             reject(&mut spec, name, ty, actual, wrong);

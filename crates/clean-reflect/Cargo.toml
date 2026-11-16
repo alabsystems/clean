@@ -16,7 +16,7 @@ clean-kernel = { workspace = true }
 # External input IR. The exact Git identity unifies with the other TrustIR
 # consumers and is reproducible without a sibling checkout. `serde` mirrors
 # clean-auto / spec Section 1.1.
-trust-ir = { git = "https://github.com/alabsystems/trust-ir.git", rev = "a98dfbbe7f0b7ee8c60f2ee7c2cfd641ba850b87", default-features = false, features = ["serde"] }
+trust-ir = { git = "https://github.com/alabsystems/trust-ir.git", rev = "8bae728257b123d6394b2dc049b3573ad885049f", default-features = false, features = ["serde"] }
 
 serde = { workspace = true }
 thiserror = { workspace = true }

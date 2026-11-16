@@ -282,7 +282,7 @@ impl Specification {
                 "(IRDivMod.mk r (ir_nat_dbl q)) ",
                 "(ir_nat_ltb r w)",
             ),
-            "ONE RESTORING STEP at width w. Bool.rec minor order is (false, true), so the FIRST \
+            "ONE RESTORING STEP at width w. @Bool.rec minor order is (false, true), so the FIRST \
              minor is the `r >= w` case — subtract and set the bit — and the second is the \
              `r < w` case, which only shifts. `inc` is what the set bit contributes: 1 makes this \
              division, and the multiplicand makes it multiplication. DerivedProved, zero \

@@ -91,7 +91,7 @@ pub(super) const SRC_IS_CAND_SET: &str = "def IsCandSet (S : KExpr -> Type) : Ty
 
 pub(super) const TY_ISCANDSET_INTRO: &str =
     "forall (S : KExpr -> Type), candCr1 S -> candCr2 S -> candCr3 S -> IsCandSet S";
-pub(super) const VAL_ISCANDSET_INTRO: &str = "fun (S : KExpr -> Type) (h1 : candCr1 S) (h2 : candCr2 S) (h3 : candCr3 S) => AndType.intro (candCr1 S) (AndType (candCr2 S) (candCr3 S)) h1 (AndType.intro (candCr2 S) (candCr3 S) h2 h3)";
+pub(super) const VAL_ISCANDSET_INTRO: &str = "fun (S : KExpr -> Type) (h1 : candCr1 S) (h2 : candCr2 S) (h3 : candCr3 S) => @AndType.intro (candCr1 S) (AndType (candCr2 S) (candCr3 S)) h1 (@AndType.intro (candCr2 S) (candCr3 S) h2 h3)";
 
 pub(super) const TY_ISCANDSET_CR1: &str =
     "forall (S : KExpr -> Type), IsCandSet S -> forall (e : KExpr), S e -> whnf_acc e";
@@ -110,7 +110,7 @@ pub(super) const VAL_ISCANDSET_CR3: &str = "fun (S : KExpr -> Type) (hS : IsCand
 
 pub(super) const TY_WHNFACC_INV_STEP: &str =
     "forall (e : KExpr), whnf_acc e -> forall (e2 : KExpr), whnf_step e e2 -> whnf_acc e2";
-pub(super) const VAL_WHNFACC_INV_STEP: &str = "fun (e : KExpr) (h : whnf_acc e) => whnf_acc.rec (fun (e0 : KExpr) (_h : whnf_acc e0) => forall (e2 : KExpr), whnf_step e0 e2 -> whnf_acc e2) (fun (e0 : KExpr) (hsteps : forall (e1 : KExpr), whnf_step e0 e1 -> whnf_acc e1) (_ih : forall (e1 : KExpr), whnf_step e0 e1 -> forall (e2 : KExpr), whnf_step e1 e2 -> whnf_acc e2) => hsteps) e h";
+pub(super) const VAL_WHNFACC_INV_STEP: &str = "fun (e : KExpr) (h : whnf_acc e) => @whnf_acc.rec (fun (e0 : KExpr) (_h : whnf_acc e0) => forall (e2 : KExpr), whnf_step e0 e2 -> whnf_acc e2) (fun (e0 : KExpr) (hsteps : forall (e1 : KExpr), whnf_step e0 e1 -> whnf_acc e1) (_ih : forall (e1 : KExpr), whnf_step e0 e1 -> forall (e2 : KExpr), whnf_step e1 e2 -> whnf_acc e2) => hsteps) e h";
 
 pub(super) const TY_ISCAND_WHNFACC: &str = "IsCandSet (fun (e : KExpr) => whnf_acc e)";
 pub(super) const VAL_ISCAND_WHNFACC: &str = "isCandSet_intro (fun (e : KExpr) => whnf_acc e) (fun (e : KExpr) (h : whnf_acc e) => h) (fun (e : KExpr) (e2 : KExpr) (h : whnf_acc e) (hs : whnf_step e e2) => whnfAcc_inv_step e h e2 hs) (fun (e : KExpr) (_hn : Neutral e) (hred : forall (e2 : KExpr), whnf_step e e2 -> whnf_acc e2) => whnf_acc.intro e hred)";
@@ -166,14 +166,14 @@ pub(super) const SRC_SELF_APP: &str = "def selfApp : KExpr := KExpr.lam (KExpr.s
 
 pub(super) const SRC_OMEGA_LOOP: &str = "def omegaLoop : KExpr := KExpr.app selfApp selfApp";
 
-pub(super) const TY_OMEGA_INST_PIN: &str = "Eq KExpr (instantiate (KExpr.app (KExpr.bvar Nat.zero) (KExpr.bvar Nat.zero)) selfApp) omegaLoop";
-pub(super) const VAL_OMEGA_INST_PIN: &str = "Eq.refl KExpr omegaLoop";
+pub(super) const TY_OMEGA_INST_PIN: &str = "@Eq KExpr (instantiate (KExpr.app (KExpr.bvar Nat.zero) (KExpr.bvar Nat.zero)) selfApp) omegaLoop";
+pub(super) const VAL_OMEGA_INST_PIN: &str = "@Eq.refl KExpr omegaLoop";
 
 pub(super) const TY_OMEGA_STEP_SELF: &str = "whnf_step omegaLoop omegaLoop";
 pub(super) const VAL_OMEGA_STEP_SELF: &str = "whnf_step.beta omegaLoop omegaLoop (beta_reduces.beta (KExpr.sort Level.zero) (KExpr.app (KExpr.bvar Nat.zero) (KExpr.bvar Nat.zero)) selfApp)";
 
 pub(super) const TY_OMEGA_NOT_WHNFACC: &str = "whnf_acc omegaLoop -> Empty";
-pub(super) const VAL_OMEGA_NOT_WHNFACC: &str = "fun (h : whnf_acc omegaLoop) => whnf_acc.rec (fun (e : KExpr) (_h : whnf_acc e) => Eq KExpr omegaLoop e -> Empty) (fun (e : KExpr) (_hsteps : forall (e1 : KExpr), whnf_step e e1 -> whnf_acc e1) (ih : forall (e1 : KExpr), whnf_step e e1 -> Eq KExpr omegaLoop e1 -> Empty) (heq : Eq KExpr omegaLoop e) => ih omegaLoop (Eq.substType KExpr (fun (z : KExpr) => whnf_step z omegaLoop) omegaLoop e heq omega_step_self) (Eq.refl KExpr omegaLoop)) omegaLoop h (Eq.refl KExpr omegaLoop)";
+pub(super) const VAL_OMEGA_NOT_WHNFACC: &str = "fun (h : whnf_acc omegaLoop) => @whnf_acc.rec (fun (e : KExpr) (_h : whnf_acc e) => @Eq KExpr omegaLoop e -> Empty) (fun (e : KExpr) (_hsteps : forall (e1 : KExpr), whnf_step e e1 -> whnf_acc e1) (ih : forall (e1 : KExpr), whnf_step e e1 -> @Eq KExpr omegaLoop e1 -> Empty) (heq : @Eq KExpr omegaLoop e) => ih omegaLoop (@Eq.substType KExpr (fun (z : KExpr) => whnf_step z omegaLoop) omegaLoop e heq omega_step_self) (@Eq.refl KExpr omegaLoop)) omegaLoop h (@Eq.refl KExpr omegaLoop)";
 
 pub(super) const TY_CAND_EXCLUDES_OMEGA: &str =
     "forall (S : KExpr -> Type), IsCandSet S -> S omegaLoop -> Empty";

@@ -138,7 +138,7 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (a : KExpr) (b : KExpr) (h : HeadMatch a b) => ",
-                    "HeadMatch.rec ",
+                    "@HeadMatch.rec ",
                     "(fun (x : KExpr) (y : KExpr) (_ : HeadMatch x y) => DefEq x y) ",
                     "(fun (n : Level) => DefEq.refl (KExpr.sort n)) ",
                     "(fun (n : Name) (us : ListType Level) (_ : const_whnf n us) => ",

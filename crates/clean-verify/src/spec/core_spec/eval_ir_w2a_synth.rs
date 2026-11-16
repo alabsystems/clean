@@ -66,9 +66,9 @@ use crate::spec::Specification;
 
 const SRC_IR_W2A_SEL_B0: &str = "def ir_w2a_sel_b0 : IRBlock := IRBlock.mk ir_d0 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.select (IRTy.uint_ 32) ir_d0 ir_d1 ir_d2) ir_d3) (ir_nd (IRInst.ret (ir_nl1 ir_d3))))";
 
-const SRC_IR_W2A_SEL_FUNC: &str = "def ir_w2a_sel_func : IRFunc := IRFunc.mk ir_d0 (IRList.cons Nat ir_d0 (IRList.cons Nat ir_d1 (IRList.cons Nat ir_d2 (IRList.nil Nat)))) ir_d0 (ir_blk ir_w2a_sel_b0 ir_blk0)";
+const SRC_IR_W2A_SEL_FUNC: &str = "def ir_w2a_sel_func : IRFunc := IRFunc.mk ir_d0 (@IRList.cons Nat ir_d0 (@IRList.cons Nat ir_d1 (@IRList.cons Nat ir_d2 (@IRList.nil Nat)))) ir_d0 (ir_blk ir_w2a_sel_b0 ir_blk0)";
 
-const SRC_IR_W2A_SEL_MODULE: &str = "def ir_w2a_sel_module : IRModule := IRModule.mk (IRList.cons IRFunc ir_w2a_sel_func (IRList.nil IRFunc)) (IRList.nil IRGlobal)";
+const SRC_IR_W2A_SEL_MODULE: &str = "def ir_w2a_sel_module : IRModule := IRModule.mk (@IRList.cons IRFunc ir_w2a_sel_func (@IRList.nil IRFunc)) (@IRList.nil IRGlobal)";
 
 /// The `select` micro-module's definitions, in registration order — the lines
 /// the battery registers, re-exported rather than re-typed.
@@ -81,11 +81,11 @@ pub fn ir_w2a_sel_module_defs() -> &'static [&'static str] {
     ]
 }
 
-const SRC_IR_W2A_SEL_ON_TRUE: &str = "def ir_w2a_sel_on_true (a : Nat) (b : Nat) : Eq IROutcome (ir_eval ir_d4 ir_w2a_sel_module ir_d0 (IRList.cons IRScalar (IRScalar.bool_ Bool.true) (IRList.cons IRScalar (IRScalar.int_ a) (IRList.cons IRScalar (IRScalar.int_ b) (IRList.nil IRScalar)))) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 (IRScalar.int_ a))) := Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.int_ a)))";
+const SRC_IR_W2A_SEL_ON_TRUE: &str = "def ir_w2a_sel_on_true (a : Nat) (b : Nat) : @Eq IROutcome (ir_eval ir_d4 ir_w2a_sel_module ir_d0 (@IRList.cons IRScalar (IRScalar.bool_ Bool.true) (@IRList.cons IRScalar (IRScalar.int_ a) (@IRList.cons IRScalar (IRScalar.int_ b) (@IRList.nil IRScalar)))) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 (IRScalar.int_ a))) := @Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.int_ a)))";
 
-const SRC_IR_W2A_SEL_ON_FALSE: &str = "def ir_w2a_sel_on_false (a : Nat) (b : Nat) : Eq IROutcome (ir_eval ir_d4 ir_w2a_sel_module ir_d0 (IRList.cons IRScalar (IRScalar.bool_ Bool.false) (IRList.cons IRScalar (IRScalar.int_ a) (IRList.cons IRScalar (IRScalar.int_ b) (IRList.nil IRScalar)))) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 (IRScalar.int_ b))) := Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.int_ b)))";
+const SRC_IR_W2A_SEL_ON_FALSE: &str = "def ir_w2a_sel_on_false (a : Nat) (b : Nat) : @Eq IROutcome (ir_eval ir_d4 ir_w2a_sel_module ir_d0 (@IRList.cons IRScalar (IRScalar.bool_ Bool.false) (@IRList.cons IRScalar (IRScalar.int_ a) (@IRList.cons IRScalar (IRScalar.int_ b) (@IRList.nil IRScalar)))) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 (IRScalar.int_ b))) := @Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.int_ b)))";
 
-const SRC_IR_W2A_SEL_NONBOOL: &str = "def ir_w2a_sel_nonbool (c : Nat) (a : Nat) (b : Nat) : Eq IROutcome (ir_eval ir_d4 ir_w2a_sel_module ir_d0 (IRList.cons IRScalar (IRScalar.int_ c) (IRList.cons IRScalar (IRScalar.int_ a) (IRList.cons IRScalar (IRScalar.int_ b) (IRList.nil IRScalar)))) ir_mem0 ir_d0) (IROutcome.type_error IRFault.not_bool) := Eq.refl IROutcome (IROutcome.type_error IRFault.not_bool)";
+const SRC_IR_W2A_SEL_NONBOOL: &str = "def ir_w2a_sel_nonbool (c : Nat) (a : Nat) (b : Nat) : @Eq IROutcome (ir_eval ir_d4 ir_w2a_sel_module ir_d0 (@IRList.cons IRScalar (IRScalar.int_ c) (@IRList.cons IRScalar (IRScalar.int_ a) (@IRList.cons IRScalar (IRScalar.int_ b) (@IRList.nil IRScalar)))) ir_mem0 ir_d0) (IROutcome.type_error IRFault.not_bool) := @Eq.refl IROutcome (IROutcome.type_error IRFault.not_bool)";
 
 // ── undef: one block, `%0 = undef u32; ret %0` ───────────────────────────
 
@@ -94,7 +94,7 @@ const SRC_IR_W2A_UD_B0: &str = "def ir_w2a_ud_b0 : IRBlock := IRBlock.mk ir_d0 i
 const SRC_IR_W2A_UD_FUNC: &str =
     "def ir_w2a_ud_func : IRFunc := IRFunc.mk ir_d0 ir_nl0 ir_d0 (ir_blk ir_w2a_ud_b0 ir_blk0)";
 
-const SRC_IR_W2A_UD_MODULE: &str = "def ir_w2a_ud_module : IRModule := IRModule.mk (IRList.cons IRFunc ir_w2a_ud_func (IRList.nil IRFunc)) (IRList.nil IRGlobal)";
+const SRC_IR_W2A_UD_MODULE: &str = "def ir_w2a_ud_module : IRModule := IRModule.mk (@IRList.cons IRFunc ir_w2a_ud_func (@IRList.nil IRFunc)) (@IRList.nil IRGlobal)";
 
 /// The `undef` micro-module's definitions, in registration order.
 #[must_use]
@@ -102,7 +102,7 @@ pub fn ir_w2a_ud_module_defs() -> &'static [&'static str] {
     &[SRC_IR_W2A_UD_B0, SRC_IR_W2A_UD_FUNC, SRC_IR_W2A_UD_MODULE]
 }
 
-const SRC_IR_W2A_UD_ON_RUN: &str = "def ir_w2a_ud_on_run : Eq IROutcome (ir_eval ir_d4 ir_w2a_ud_module ir_d0 (IRList.nil IRScalar) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 IRScalar.undef_)) := Eq.refl IROutcome (IROutcome.ret (ir_vl1 IRScalar.undef_))";
+const SRC_IR_W2A_UD_ON_RUN: &str = "def ir_w2a_ud_on_run : @Eq IROutcome (ir_eval ir_d4 ir_w2a_ud_module ir_d0 (@IRList.nil IRScalar) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 IRScalar.undef_)) := @Eq.refl IROutcome (IROutcome.ret (ir_vl1 IRScalar.undef_))";
 
 // ── unreachable: condbr to a returning arm or the unreachable arm ────────
 
@@ -115,7 +115,7 @@ const SRC_IR_W2A_UR_B2: &str =
 
 const SRC_IR_W2A_UR_FUNC: &str = "def ir_w2a_ur_func : IRFunc := IRFunc.mk ir_d0 (ir_nl1 ir_d0) ir_d0 (ir_blk ir_w2a_ur_b0 (ir_blk ir_w2a_ur_b1 (ir_blk ir_w2a_ur_b2 ir_blk0)))";
 
-const SRC_IR_W2A_UR_MODULE: &str = "def ir_w2a_ur_module : IRModule := IRModule.mk (IRList.cons IRFunc ir_w2a_ur_func (IRList.nil IRFunc)) (IRList.nil IRGlobal)";
+const SRC_IR_W2A_UR_MODULE: &str = "def ir_w2a_ur_module : IRModule := IRModule.mk (@IRList.cons IRFunc ir_w2a_ur_func (@IRList.nil IRFunc)) (@IRList.nil IRGlobal)";
 
 /// The `unreachable` micro-module's definitions, in registration order.
 #[must_use]
@@ -129,11 +129,11 @@ pub fn ir_w2a_ur_module_defs() -> &'static [&'static str] {
     ]
 }
 
-const SRC_IR_W2A_UR_ON_TRUE: &str = "def ir_w2a_ur_on_true : Eq IROutcome (ir_eval ir_d4 ir_w2a_ur_module ir_d0 (ir_vl1 (IRScalar.bool_ Bool.true)) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 (IRScalar.int_ ir_d3))) := Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.int_ ir_d3)))";
+const SRC_IR_W2A_UR_ON_TRUE: &str = "def ir_w2a_ur_on_true : @Eq IROutcome (ir_eval ir_d4 ir_w2a_ur_module ir_d0 (ir_vl1 (IRScalar.bool_ Bool.true)) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 (IRScalar.int_ ir_d3))) := @Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.int_ ir_d3)))";
 
-const SRC_IR_W2A_UR_ON_FALSE: &str = "def ir_w2a_ur_on_false : Eq IROutcome (ir_eval ir_d4 ir_w2a_ur_module ir_d0 (ir_vl1 (IRScalar.bool_ Bool.false)) ir_mem0 ir_d0) (IROutcome.ub IRFault.unreachable) := Eq.refl IROutcome (IROutcome.ub IRFault.unreachable)";
+const SRC_IR_W2A_UR_ON_FALSE: &str = "def ir_w2a_ur_on_false : @Eq IROutcome (ir_eval ir_d4 ir_w2a_ur_module ir_d0 (ir_vl1 (IRScalar.bool_ Bool.false)) ir_mem0 ir_d0) (IROutcome.ub IRFault.unreachable) := @Eq.refl IROutcome (IROutcome.ub IRFault.unreachable)";
 
-const SRC_IR_W2A_UR_NONBOOL: &str = "def ir_w2a_ur_nonbool (n : Nat) : Eq IROutcome (ir_eval ir_d4 ir_w2a_ur_module ir_d0 (ir_vl1 (IRScalar.int_ n)) ir_mem0 ir_d0) (IROutcome.type_error IRFault.not_bool) := Eq.refl IROutcome (IROutcome.type_error IRFault.not_bool)";
+const SRC_IR_W2A_UR_NONBOOL: &str = "def ir_w2a_ur_nonbool (n : Nat) : @Eq IROutcome (ir_eval ir_d4 ir_w2a_ur_module ir_d0 (ir_vl1 (IRScalar.int_ n)) ir_mem0 ir_d0) (IROutcome.type_error IRFault.not_bool) := @Eq.refl IROutcome (IROutcome.type_error IRFault.not_bool)";
 
 // ── extractelement: `%2 = extractelement u32 %0, %1; ret %2` ─────────────
 
@@ -141,7 +141,7 @@ const SRC_IR_W2A_EE_B0: &str = "def ir_w2a_ee_b0 : IRBlock := IRBlock.mk ir_d0 i
 
 const SRC_IR_W2A_EE_FUNC: &str = "def ir_w2a_ee_func : IRFunc := IRFunc.mk ir_d0 (ir_nl2 ir_d0 ir_d1) ir_d0 (ir_blk ir_w2a_ee_b0 ir_blk0)";
 
-const SRC_IR_W2A_EE_MODULE: &str = "def ir_w2a_ee_module : IRModule := IRModule.mk (IRList.cons IRFunc ir_w2a_ee_func (IRList.nil IRFunc)) (IRList.nil IRGlobal)";
+const SRC_IR_W2A_EE_MODULE: &str = "def ir_w2a_ee_module : IRModule := IRModule.mk (@IRList.cons IRFunc ir_w2a_ee_func (@IRList.nil IRFunc)) (@IRList.nil IRGlobal)";
 
 /// The `extractelement` micro-module's definitions, in registration order.
 #[must_use]
@@ -149,17 +149,17 @@ pub fn ir_w2a_ee_module_defs() -> &'static [&'static str] {
     &[SRC_IR_W2A_EE_B0, SRC_IR_W2A_EE_FUNC, SRC_IR_W2A_EE_MODULE]
 }
 
-const SRC_IR_W2A_EE_AT0: &str = "def ir_w2a_ee_at0 (x : Nat) (y : Nat) (z : Nat) : Eq IROutcome (ir_eval ir_d4 ir_w2a_ee_module ir_d0 (IRList.cons IRScalar (IRScalar.aggv (IRScalar.vcons (IRScalar.int_ x) (IRScalar.vcons (IRScalar.int_ y) (IRScalar.vcons (IRScalar.int_ z) IRScalar.vnil)))) (IRList.cons IRScalar (IRScalar.int_ ir_d0) (IRList.nil IRScalar))) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 (IRScalar.int_ x))) := Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.int_ x)))";
+const SRC_IR_W2A_EE_AT0: &str = "def ir_w2a_ee_at0 (x : Nat) (y : Nat) (z : Nat) : @Eq IROutcome (ir_eval ir_d4 ir_w2a_ee_module ir_d0 (@IRList.cons IRScalar (IRScalar.aggv (IRScalar.vcons (IRScalar.int_ x) (IRScalar.vcons (IRScalar.int_ y) (IRScalar.vcons (IRScalar.int_ z) IRScalar.vnil)))) (@IRList.cons IRScalar (IRScalar.int_ ir_d0) (@IRList.nil IRScalar))) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 (IRScalar.int_ x))) := @Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.int_ x)))";
 
-const SRC_IR_W2A_EE_AT1: &str = "def ir_w2a_ee_at1 (x : Nat) (y : Nat) (z : Nat) : Eq IROutcome (ir_eval ir_d4 ir_w2a_ee_module ir_d0 (IRList.cons IRScalar (IRScalar.aggv (IRScalar.vcons (IRScalar.int_ x) (IRScalar.vcons (IRScalar.int_ y) (IRScalar.vcons (IRScalar.int_ z) IRScalar.vnil)))) (IRList.cons IRScalar (IRScalar.int_ ir_d1) (IRList.nil IRScalar))) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 (IRScalar.int_ y))) := Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.int_ y)))";
+const SRC_IR_W2A_EE_AT1: &str = "def ir_w2a_ee_at1 (x : Nat) (y : Nat) (z : Nat) : @Eq IROutcome (ir_eval ir_d4 ir_w2a_ee_module ir_d0 (@IRList.cons IRScalar (IRScalar.aggv (IRScalar.vcons (IRScalar.int_ x) (IRScalar.vcons (IRScalar.int_ y) (IRScalar.vcons (IRScalar.int_ z) IRScalar.vnil)))) (@IRList.cons IRScalar (IRScalar.int_ ir_d1) (@IRList.nil IRScalar))) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 (IRScalar.int_ y))) := @Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.int_ y)))";
 
-const SRC_IR_W2A_EE_AT2: &str = "def ir_w2a_ee_at2 (x : Nat) (y : Nat) (z : Nat) : Eq IROutcome (ir_eval ir_d4 ir_w2a_ee_module ir_d0 (IRList.cons IRScalar (IRScalar.aggv (IRScalar.vcons (IRScalar.int_ x) (IRScalar.vcons (IRScalar.int_ y) (IRScalar.vcons (IRScalar.int_ z) IRScalar.vnil)))) (IRList.cons IRScalar (IRScalar.int_ ir_d2) (IRList.nil IRScalar))) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 (IRScalar.int_ z))) := Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.int_ z)))";
+const SRC_IR_W2A_EE_AT2: &str = "def ir_w2a_ee_at2 (x : Nat) (y : Nat) (z : Nat) : @Eq IROutcome (ir_eval ir_d4 ir_w2a_ee_module ir_d0 (@IRList.cons IRScalar (IRScalar.aggv (IRScalar.vcons (IRScalar.int_ x) (IRScalar.vcons (IRScalar.int_ y) (IRScalar.vcons (IRScalar.int_ z) IRScalar.vnil)))) (@IRList.cons IRScalar (IRScalar.int_ ir_d2) (@IRList.nil IRScalar))) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 (IRScalar.int_ z))) := @Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.int_ z)))";
 
-const SRC_IR_W2A_EE_OOB: &str = "def ir_w2a_ee_oob (x : Nat) (y : Nat) (z : Nat) : Eq IROutcome (ir_eval ir_d4 ir_w2a_ee_module ir_d0 (IRList.cons IRScalar (IRScalar.aggv (IRScalar.vcons (IRScalar.int_ x) (IRScalar.vcons (IRScalar.int_ y) (IRScalar.vcons (IRScalar.int_ z) IRScalar.vnil)))) (IRList.cons IRScalar (IRScalar.int_ ir_d3) (IRList.nil IRScalar))) ir_mem0 ir_d0) (IROutcome.type_error IRFault.bad_field) := Eq.refl IROutcome (IROutcome.type_error IRFault.bad_field)";
+const SRC_IR_W2A_EE_OOB: &str = "def ir_w2a_ee_oob (x : Nat) (y : Nat) (z : Nat) : @Eq IROutcome (ir_eval ir_d4 ir_w2a_ee_module ir_d0 (@IRList.cons IRScalar (IRScalar.aggv (IRScalar.vcons (IRScalar.int_ x) (IRScalar.vcons (IRScalar.int_ y) (IRScalar.vcons (IRScalar.int_ z) IRScalar.vnil)))) (@IRList.cons IRScalar (IRScalar.int_ ir_d3) (@IRList.nil IRScalar))) ir_mem0 ir_d0) (IROutcome.type_error IRFault.bad_field) := @Eq.refl IROutcome (IROutcome.type_error IRFault.bad_field)";
 
-const SRC_IR_W2A_EE_NOT_AGG: &str = "def ir_w2a_ee_not_agg (n : Nat) (k : Nat) : Eq IROutcome (ir_eval ir_d4 ir_w2a_ee_module ir_d0 (IRList.cons IRScalar (IRScalar.int_ n) (IRList.cons IRScalar (IRScalar.int_ k) (IRList.nil IRScalar))) ir_mem0 ir_d0) (IROutcome.type_error IRFault.not_agg) := Eq.refl IROutcome (IROutcome.type_error IRFault.not_agg)";
+const SRC_IR_W2A_EE_NOT_AGG: &str = "def ir_w2a_ee_not_agg (n : Nat) (k : Nat) : @Eq IROutcome (ir_eval ir_d4 ir_w2a_ee_module ir_d0 (@IRList.cons IRScalar (IRScalar.int_ n) (@IRList.cons IRScalar (IRScalar.int_ k) (@IRList.nil IRScalar))) ir_mem0 ir_d0) (IROutcome.type_error IRFault.not_agg) := @Eq.refl IROutcome (IROutcome.type_error IRFault.not_agg)";
 
-const SRC_IR_W2A_EE_NOT_INT: &str = "def ir_w2a_ee_not_int (x : Nat) : Eq IROutcome (ir_eval ir_d4 ir_w2a_ee_module ir_d0 (IRList.cons IRScalar (IRScalar.aggv (IRScalar.vcons (IRScalar.int_ x) IRScalar.vnil)) (IRList.cons IRScalar (IRScalar.bool_ Bool.true) (IRList.nil IRScalar))) ir_mem0 ir_d0) (IROutcome.type_error IRFault.not_int) := Eq.refl IROutcome (IROutcome.type_error IRFault.not_int)";
+const SRC_IR_W2A_EE_NOT_INT: &str = "def ir_w2a_ee_not_int (x : Nat) : @Eq IROutcome (ir_eval ir_d4 ir_w2a_ee_module ir_d0 (@IRList.cons IRScalar (IRScalar.aggv (IRScalar.vcons (IRScalar.int_ x) IRScalar.vnil)) (@IRList.cons IRScalar (IRScalar.bool_ Bool.true) (@IRList.nil IRScalar))) ir_mem0 ir_d0) (IROutcome.type_error IRFault.not_int) := @Eq.refl IROutcome (IROutcome.type_error IRFault.not_int)";
 
 // ── unop: `%1 = not u8 %0; %2 = ctpop u8 %1; ret %2` ─────────────────────
 
@@ -167,7 +167,7 @@ const SRC_IR_W2A_UO_B0: &str = "def ir_w2a_uo_b0 : IRBlock := IRBlock.mk ir_d0 i
 
 const SRC_IR_W2A_UO_FUNC: &str = "def ir_w2a_uo_func : IRFunc := IRFunc.mk ir_d0 (ir_nl1 ir_d0) ir_d0 (ir_blk ir_w2a_uo_b0 ir_blk0)";
 
-const SRC_IR_W2A_UO_MODULE: &str = "def ir_w2a_uo_module : IRModule := IRModule.mk (IRList.cons IRFunc ir_w2a_uo_func (IRList.nil IRFunc)) (IRList.nil IRGlobal)";
+const SRC_IR_W2A_UO_MODULE: &str = "def ir_w2a_uo_module : IRModule := IRModule.mk (@IRList.cons IRFunc ir_w2a_uo_func (@IRList.nil IRFunc)) (@IRList.nil IRGlobal)";
 
 /// The `unop` micro-module's definitions, in registration order.
 #[must_use]
@@ -175,13 +175,13 @@ pub fn ir_w2a_uo_module_defs() -> &'static [&'static str] {
     &[SRC_IR_W2A_UO_B0, SRC_IR_W2A_UO_FUNC, SRC_IR_W2A_UO_MODULE]
 }
 
-const SRC_IR_W2A_UO_ON_ZERO: &str = "def ir_w2a_uo_on_zero : Eq IROutcome (ir_eval ir_d4 ir_w2a_uo_module ir_d0 (ir_vl1 (IRScalar.int_ ir_d0)) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 (IRScalar.int_ ir_d8))) := Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.int_ ir_d8)))";
+const SRC_IR_W2A_UO_ON_ZERO: &str = "def ir_w2a_uo_on_zero : @Eq IROutcome (ir_eval ir_d4 ir_w2a_uo_module ir_d0 (ir_vl1 (IRScalar.int_ ir_d0)) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 (IRScalar.int_ ir_d8))) := @Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.int_ ir_d8)))";
 
-const SRC_IR_W2A_UO_ON_FF: &str = "def ir_w2a_uo_on_ff : Eq IROutcome (ir_eval ir_d4 ir_w2a_uo_module ir_d0 (ir_vl1 (IRScalar.int_ 255)) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 (IRScalar.int_ ir_d0))) := Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.int_ ir_d0)))";
+const SRC_IR_W2A_UO_ON_FF: &str = "def ir_w2a_uo_on_ff : @Eq IROutcome (ir_eval ir_d4 ir_w2a_uo_module ir_d0 (ir_vl1 (IRScalar.int_ 255)) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 (IRScalar.int_ ir_d0))) := @Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.int_ ir_d0)))";
 
-const SRC_IR_W2A_UO_ON_AA: &str = "def ir_w2a_uo_on_aa : Eq IROutcome (ir_eval ir_d4 ir_w2a_uo_module ir_d0 (ir_vl1 (IRScalar.int_ 170)) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 (IRScalar.int_ ir_d4))) := Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.int_ ir_d4)))";
+const SRC_IR_W2A_UO_ON_AA: &str = "def ir_w2a_uo_on_aa : @Eq IROutcome (ir_eval ir_d4 ir_w2a_uo_module ir_d0 (ir_vl1 (IRScalar.int_ 170)) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 (IRScalar.int_ ir_d4))) := @Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.int_ ir_d4)))";
 
-const SRC_IR_W2A_UO_NOT_INT: &str = "def ir_w2a_uo_not_int : Eq IROutcome (ir_eval ir_d4 ir_w2a_uo_module ir_d0 (ir_vl1 (IRScalar.bool_ Bool.true)) ir_mem0 ir_d0) (IROutcome.type_error IRFault.not_int) := Eq.refl IROutcome (IROutcome.type_error IRFault.not_int)";
+const SRC_IR_W2A_UO_NOT_INT: &str = "def ir_w2a_uo_not_int : @Eq IROutcome (ir_eval ir_d4 ir_w2a_uo_module ir_d0 (ir_vl1 (IRScalar.bool_ Bool.true)) ir_mem0 ir_d0) (IROutcome.type_error IRFault.not_int) := @Eq.refl IROutcome (IROutcome.type_error IRFault.not_int)";
 
 impl Specification {
     /// The W2a synthetic micro-modules and their kernel-executed witnesses.

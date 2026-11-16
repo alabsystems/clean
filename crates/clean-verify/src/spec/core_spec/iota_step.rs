@@ -30,13 +30,13 @@ impl Specification {
         // opt_bind: monadic bind for OptionType (chains the partial lookups in
         // iota_reduct). Generic over the element types.
         self.add_recursive_def(
-            r"def opt_bind (α : Type) (β : Type) (o : OptionType α) (f : α → OptionType β) : OptionType β := OptionType.rec α (fun (_ : OptionType α) => OptionType β) (OptionType.none β) (fun (a : α) => f a) o",
+            r"def opt_bind (α : Type) (β : Type) (o : OptionType α) (f : α → OptionType β) : OptionType β := @OptionType.rec α (fun (_ : OptionType α) => OptionType β) (@OptionType.none β) (fun (a : α) => f a) o",
             "OptionType monadic bind: none >>= f = none, some a >>= f = f a. Part of #2859 (Increment C).",
         )?;
 
         // list_append: append two KExpr lists (recursion via ListType.rec IH).
         self.add_recursive_def(
-            r"def list_append (xs : ListType KExpr) (ys : ListType KExpr) : ListType KExpr := ListType.rec KExpr (fun (_ : ListType KExpr) => ListType KExpr) ys (fun (x : KExpr) (rest : ListType KExpr) (ih : ListType KExpr) => ListType.cons KExpr x ih) xs",
+            r"def list_append (xs : ListType KExpr) (ys : ListType KExpr) : ListType KExpr := @ListType.rec KExpr (fun (_ : ListType KExpr) => ListType KExpr) ys (fun (x : KExpr) (rest : ListType KExpr) (ih : ListType KExpr) => @ListType.cons KExpr x ih) xs",
             "Append two KExpr lists. Part of #2859 (Increment C).",
         )?;
 
@@ -44,7 +44,7 @@ impl Specification {
         // (args, head) recursing on args — head is the trailing varying param
         // (the proven extra-param shape, NOT a leading accumulator).
         self.add_recursive_def(
-            r"def apply_spine (args : ListType KExpr) (head : KExpr) : KExpr := ListType.rec KExpr (fun (_ : ListType KExpr) => KExpr -> KExpr) (fun (h : KExpr) => h) (fun (x : KExpr) (rest : ListType KExpr) (ih : KExpr -> KExpr) => fun (h : KExpr) => ih (KExpr.app h x)) args head",
+            r"def apply_spine (args : ListType KExpr) (head : KExpr) : KExpr := @ListType.rec KExpr (fun (_ : ListType KExpr) => KExpr -> KExpr) (fun (h : KExpr) => h) (fun (x : KExpr) (rest : ListType KExpr) (ih : KExpr -> KExpr) => fun (h : KExpr) => ih (KExpr.app h x)) args head",
             "apply_spine [a0,..,an] head = app (.. (app head a0) ..) an (left-nested spine). Part of #2859 (Increment C).",
         )?;
 
@@ -52,53 +52,53 @@ impl Specification {
         // Structural on the `app` field f; self-call passed to list_append.
         self.add_recursive_def(
             r"def kapp_args (e : KExpr) : ListType KExpr := match e with
-| KExpr.sort n => ListType.nil KExpr
-| KExpr.bvar i => ListType.nil KExpr
-| KExpr.app f a => list_append (kapp_args f) (ListType.cons KExpr a (ListType.nil KExpr))
-| KExpr.lam ty b => ListType.nil KExpr
-| KExpr.pi ty b => ListType.nil KExpr
-| KExpr.const n us => ListType.nil KExpr
-| KExpr.let_ ty v b => ListType.nil KExpr
-| KExpr.proj s i sub => ListType.nil KExpr
-| KExpr.lit n => ListType.nil KExpr",
+| KExpr.sort n => @ListType.nil KExpr
+| KExpr.bvar i => @ListType.nil KExpr
+| KExpr.app f a => list_append (kapp_args f) (@ListType.cons KExpr a (@ListType.nil KExpr))
+| KExpr.lam ty b => @ListType.nil KExpr
+| KExpr.pi ty b => @ListType.nil KExpr
+| KExpr.const n us => @ListType.nil KExpr
+| KExpr.let_ ty v b => @ListType.nil KExpr
+| KExpr.proj s i sub => @ListType.nil KExpr
+| KExpr.lit n => @ListType.nil KExpr",
             "Argument list of an application spine: kapp_args (app (app h a0) a1) = [a0, a1]. Part of #2859 (Increment C).",
         )?;
 
         // list_tail: drop the first element (nil if empty).
         self.add_recursive_def(
-            r"def list_tail (xs : ListType KExpr) : ListType KExpr := ListType.rec KExpr (fun (_ : ListType KExpr) => ListType KExpr) (ListType.nil KExpr) (fun (x : KExpr) (rest : ListType KExpr) (_ : ListType KExpr) => rest) xs",
+            r"def list_tail (xs : ListType KExpr) : ListType KExpr := @ListType.rec KExpr (fun (_ : ListType KExpr) => ListType KExpr) (@ListType.nil KExpr) (fun (x : KExpr) (rest : ListType KExpr) (_ : ListType KExpr) => rest) xs",
             "Tail of a KExpr list (nil if empty). Part of #2859 (Increment C).",
         )?;
 
         // list_head: the first element, or none.
         self.add_recursive_def(
-            r"def list_head (xs : ListType KExpr) : OptionType KExpr := ListType.rec KExpr (fun (_ : ListType KExpr) => OptionType KExpr) (OptionType.none KExpr) (fun (x : KExpr) (rest : ListType KExpr) (_ : OptionType KExpr) => OptionType.some KExpr x) xs",
+            r"def list_head (xs : ListType KExpr) : OptionType KExpr := @ListType.rec KExpr (fun (_ : ListType KExpr) => OptionType KExpr) (@OptionType.none KExpr) (fun (x : KExpr) (rest : ListType KExpr) (_ : OptionType KExpr) => @OptionType.some KExpr x) xs",
             "Head of a KExpr list as an OptionType (none if empty). Part of #2859 (Increment C).",
         )?;
 
         // list_drop: drop the first n elements. Nat.rec with motive
         // `ListType KExpr -> ListType KExpr`, recursion via the IH.
         self.add_recursive_def(
-            r"def list_drop (n : Nat) (xs : ListType KExpr) : ListType KExpr := Nat.rec (fun (_ : Nat) => ListType KExpr -> ListType KExpr) (fun (l : ListType KExpr) => l) (fun (m : Nat) (ih : ListType KExpr -> ListType KExpr) => fun (l : ListType KExpr) => ih (list_tail l)) n xs",
+            r"def list_drop (n : Nat) (xs : ListType KExpr) : ListType KExpr := @Nat.rec (fun (_ : Nat) => ListType KExpr -> ListType KExpr) (fun (l : ListType KExpr) => l) (fun (m : Nat) (ih : ListType KExpr -> ListType KExpr) => fun (l : ListType KExpr) => ih (list_tail l)) n xs",
             "Drop the first n elements of a KExpr list. Part of #2859 (Increment C).",
         )?;
 
         // list_take: keep the first n elements.
         self.add_recursive_def(
-            r"def list_take (n : Nat) (xs : ListType KExpr) : ListType KExpr := Nat.rec (fun (_ : Nat) => ListType KExpr -> ListType KExpr) (fun (l : ListType KExpr) => ListType.nil KExpr) (fun (m : Nat) (ih : ListType KExpr -> ListType KExpr) => fun (l : ListType KExpr) => ListType.rec KExpr (fun (_ : ListType KExpr) => ListType KExpr) (ListType.nil KExpr) (fun (x : KExpr) (rest : ListType KExpr) (_ : ListType KExpr) => ListType.cons KExpr x (ih rest)) l) n xs",
+            r"def list_take (n : Nat) (xs : ListType KExpr) : ListType KExpr := @Nat.rec (fun (_ : Nat) => ListType KExpr -> ListType KExpr) (fun (l : ListType KExpr) => @ListType.nil KExpr) (fun (m : Nat) (ih : ListType KExpr -> ListType KExpr) => fun (l : ListType KExpr) => @ListType.rec KExpr (fun (_ : ListType KExpr) => ListType KExpr) (@ListType.nil KExpr) (fun (x : KExpr) (rest : ListType KExpr) (_ : ListType KExpr) => @ListType.cons KExpr x (ih rest)) l) n xs",
             "Keep the first n elements of a KExpr list. Part of #2859 (Increment C).",
         )?;
 
         // kexpr_const_name: the head const's Name, or none (for the recursor /
         // constructor name lookups). KExpr.rec discriminator.
         self.add_recursive_def(
-            r"def kexpr_const_name (e : KExpr) : OptionType Name := KExpr.rec (fun (_ : KExpr) => OptionType Name) (fun (n : Level) => OptionType.none Name) (fun (i : Nat) => OptionType.none Name) (fun (f : KExpr) (a : KExpr) (_ : OptionType Name) (_ : OptionType Name) => OptionType.none Name) (fun (ty : KExpr) (b : KExpr) (_ : OptionType Name) (_ : OptionType Name) => OptionType.none Name) (fun (ty : KExpr) (b : KExpr) (_ : OptionType Name) (_ : OptionType Name) => OptionType.none Name) (fun (nm : Name) (us : ListType Level) => OptionType.some Name nm) (fun (ty : KExpr) (v : KExpr) (b : KExpr) (_ : OptionType Name) (_ : OptionType Name) (_ : OptionType Name) => OptionType.none Name) (fun (_ : Name) (_ : Nat) (_ : KExpr) (_ : OptionType Name) => OptionType.none Name) (fun (_ : Nat) => OptionType.none Name) e",
+            r"def kexpr_const_name (e : KExpr) : OptionType Name := @KExpr.rec (fun (_ : KExpr) => OptionType Name) (fun (n : Level) => @OptionType.none Name) (fun (i : Nat) => @OptionType.none Name) (fun (f : KExpr) (a : KExpr) (_ : OptionType Name) (_ : OptionType Name) => @OptionType.none Name) (fun (ty : KExpr) (b : KExpr) (_ : OptionType Name) (_ : OptionType Name) => @OptionType.none Name) (fun (ty : KExpr) (b : KExpr) (_ : OptionType Name) (_ : OptionType Name) => @OptionType.none Name) (fun (nm : Name) (us : ListType Level) => @OptionType.some Name nm) (fun (ty : KExpr) (v : KExpr) (b : KExpr) (_ : OptionType Name) (_ : OptionType Name) (_ : OptionType Name) => @OptionType.none Name) (fun (_ : Name) (_ : Nat) (_ : KExpr) (_ : OptionType Name) => @OptionType.none Name) (fun (_ : Nat) => @OptionType.none Name) e",
             "The head const's Name (none unless e is itself a const). Used after kapp_fn to read recursor/constructor names. Part of #2859 (Increment C).",
         )?;
 
         // list_length: length of a KExpr list.
         self.add_recursive_def(
-            r"def list_length (xs : ListType KExpr) : Nat := ListType.rec KExpr (fun (_ : ListType KExpr) => Nat) Nat.zero (fun (x : KExpr) (rest : ListType KExpr) (ih : Nat) => Nat.succ ih) xs",
+            r"def list_length (xs : ListType KExpr) : Nat := @ListType.rec KExpr (fun (_ : ListType KExpr) => Nat) Nat.zero (fun (x : KExpr) (rest : ListType KExpr) (ih : Nat) => Nat.succ ih) xs",
             "Length of a KExpr list. Part of #2859 (Increment C).",
         )?;
 
@@ -106,16 +106,16 @@ impl Specification {
         // Shared head universes, previously registered in the delta stage.
         self.add_recursive_def(
             r"def kexpr_const_levels (e : KExpr) : ListType Level :=
-KExpr.rec (fun (_e : KExpr) => ListType Level)
-  (fun (_u : Level) => ListType.nil Level)
-  (fun (_i : Nat) => ListType.nil Level)
-  (fun (_f : KExpr) (_a : KExpr) (_ihf : ListType Level) (_iha : ListType Level) => ListType.nil Level)
-  (fun (_A : KExpr) (_b : KExpr) (_ihA : ListType Level) (_ihb : ListType Level) => ListType.nil Level)
-  (fun (_A : KExpr) (_B : KExpr) (_ihA : ListType Level) (_ihB : ListType Level) => ListType.nil Level)
+@KExpr.rec (fun (_e : KExpr) => ListType Level)
+  (fun (_u : Level) => @ListType.nil Level)
+  (fun (_i : Nat) => @ListType.nil Level)
+  (fun (_f : KExpr) (_a : KExpr) (_ihf : ListType Level) (_iha : ListType Level) => @ListType.nil Level)
+  (fun (_A : KExpr) (_b : KExpr) (_ihA : ListType Level) (_ihb : ListType Level) => @ListType.nil Level)
+  (fun (_A : KExpr) (_B : KExpr) (_ihA : ListType Level) (_ihB : ListType Level) => @ListType.nil Level)
   (fun (_n : Name) (us : ListType Level) => us)
-  (fun (_A : KExpr) (_v : KExpr) (_b : KExpr) (_ihA : ListType Level) (_ihv : ListType Level) (_ihb : ListType Level) => ListType.nil Level)
-  (fun (_s : Name) (_i : Nat) (_e : KExpr) (_ihe : ListType Level) => ListType.nil Level)
-  (fun (_n : Nat) => ListType.nil Level) e",
+  (fun (_A : KExpr) (_v : KExpr) (_b : KExpr) (_ihA : ListType Level) (_ihv : ListType Level) (_ihb : ListType Level) => @ListType.nil Level)
+  (fun (_s : Name) (_i : Nat) (_e : KExpr) (_ihe : ListType Level) => @ListType.nil Level)
+  (fun (_n : Nat) => @ListType.nil Level) e",
             "Retain the supplied universe arguments of a constant head; return nil on nonconstants. The iota and delta operators require a successful constant-name view before using these head universes.",
         )?;
 
@@ -159,7 +159,7 @@ KExpr.rec (fun (_e : KExpr) => ListType Level)
         // function maps e to `some e'`. The graph of a function, so it is a
         // FUNCTION — the determinism the abstract iota_reduces could never give.
         self.add_recursive_def(
-            r"def iota_step (env : RecEnv) (e : KExpr) (e' : KExpr) : Prop := Eq (OptionType KExpr) (iota_reduct env e) (OptionType.some KExpr e')",
+            r"def iota_step (env : RecEnv) (e : KExpr) (e' : KExpr) : Prop := @Eq (OptionType KExpr) (iota_reduct env e) (@OptionType.some KExpr e')",
             "Directed iota step: iota_step env e e' holds iff iota_reduct env e = some e'. The graph of the reduct function. Part of #2859 (Increment C).",
         )?;
 
@@ -173,20 +173,20 @@ KExpr.rec (fun (_e : KExpr) => ListType Level)
             name: "iota_step_deterministic".to_string(),
             type_src: concat!(
                 "forall (env : RecEnv) (e : KExpr) (e1 : KExpr) (e2 : KExpr), ",
-                "Eq (OptionType KExpr) (iota_reduct env e) (OptionType.some KExpr e1) -> ",
-                "Eq (OptionType KExpr) (iota_reduct env e) (OptionType.some KExpr e2) -> ",
-                "Eq KExpr e1 e2"
+                "@Eq (OptionType KExpr) (iota_reduct env e) (@OptionType.some KExpr e1) -> ",
+                "@Eq (OptionType KExpr) (iota_reduct env e) (@OptionType.some KExpr e2) -> ",
+                "@Eq KExpr e1 e2"
             )
             .to_string(),
             value_src: Some(
                 concat!(
                     "fun (env : RecEnv) (e : KExpr) (e1 : KExpr) (e2 : KExpr) ",
-                    "(h1 : Eq (OptionType KExpr) (iota_reduct env e) (OptionType.some KExpr e1)) ",
-                    "(h2 : Eq (OptionType KExpr) (iota_reduct env e) (OptionType.some KExpr e2)) => ",
+                    "(h1 : @Eq (OptionType KExpr) (iota_reduct env e) (@OptionType.some KExpr e1)) ",
+                    "(h2 : @Eq (OptionType KExpr) (iota_reduct env e) (@OptionType.some KExpr e2)) => ",
                     "option_some_inj KExpr e1 e2 ",
-                    "(Eq.trans (OptionType KExpr) ",
-                    "(OptionType.some KExpr e1) (iota_reduct env e) (OptionType.some KExpr e2) ",
-                    "(Eq.symm (OptionType KExpr) (iota_reduct env e) (OptionType.some KExpr e1) h1) ",
+                    "(@Eq.trans (OptionType KExpr) ",
+                    "(@OptionType.some KExpr e1) (iota_reduct env e) (@OptionType.some KExpr e2) ",
+                    "(@Eq.symm (OptionType KExpr) (iota_reduct env e) (@OptionType.some KExpr e1) h1) ",
                     "h2)"
                 )
                 .to_string(),
@@ -238,80 +238,80 @@ KExpr.rec (fun (_e : KExpr) => ListType Level)
         // apply_spine [] head = head
         self.add_definition(unfold(
             "apply_spine_nil",
-            "forall (head : KExpr), Eq KExpr (apply_spine (ListType.nil KExpr) head) head",
-            "fun (head : KExpr) => Eq.refl KExpr head",
+            "forall (head : KExpr), @Eq KExpr (apply_spine (@ListType.nil KExpr) head) head",
+            "fun (head : KExpr) => @Eq.refl KExpr head",
             "Unfolding: apply_spine nil head = head. DerivedProved. Part of #2859 (Increment C).",
         ))?;
 
         // apply_spine (x :: rest) head = apply_spine rest (app head x)
         self.add_definition(unfold(
             "apply_spine_cons",
-            "forall (x : KExpr) (rest : ListType KExpr) (head : KExpr), Eq KExpr (apply_spine (ListType.cons KExpr x rest) head) (apply_spine rest (KExpr.app head x))",
-            "fun (x : KExpr) (rest : ListType KExpr) (head : KExpr) => Eq.refl KExpr (apply_spine rest (KExpr.app head x))",
+            "forall (x : KExpr) (rest : ListType KExpr) (head : KExpr), @Eq KExpr (apply_spine (@ListType.cons KExpr x rest) head) (apply_spine rest (KExpr.app head x))",
+            "fun (x : KExpr) (rest : ListType KExpr) (head : KExpr) => @Eq.refl KExpr (apply_spine rest (KExpr.app head x))",
             "Unfolding: apply_spine (x :: rest) head = apply_spine rest (app head x). DerivedProved. Part of #2859 (Increment C).",
         ))?;
 
         // list_append [] ys = ys
         self.add_definition(unfold(
             "list_append_nil",
-            "forall (ys : ListType KExpr), Eq (ListType KExpr) (list_append (ListType.nil KExpr) ys) ys",
-            "fun (ys : ListType KExpr) => Eq.refl (ListType KExpr) ys",
+            "forall (ys : ListType KExpr), @Eq (ListType KExpr) (list_append (@ListType.nil KExpr) ys) ys",
+            "fun (ys : ListType KExpr) => @Eq.refl (ListType KExpr) ys",
             "Unfolding: list_append nil ys = ys. DerivedProved. Part of #2859 (Increment C).",
         ))?;
 
         // list_append (x :: rest) ys = x :: (list_append rest ys)
         self.add_definition(unfold(
             "list_append_cons",
-            "forall (x : KExpr) (rest : ListType KExpr) (ys : ListType KExpr), Eq (ListType KExpr) (list_append (ListType.cons KExpr x rest) ys) (ListType.cons KExpr x (list_append rest ys))",
-            "fun (x : KExpr) (rest : ListType KExpr) (ys : ListType KExpr) => Eq.refl (ListType KExpr) (ListType.cons KExpr x (list_append rest ys))",
+            "forall (x : KExpr) (rest : ListType KExpr) (ys : ListType KExpr), @Eq (ListType KExpr) (list_append (@ListType.cons KExpr x rest) ys) (@ListType.cons KExpr x (list_append rest ys))",
+            "fun (x : KExpr) (rest : ListType KExpr) (ys : ListType KExpr) => @Eq.refl (ListType KExpr) (@ListType.cons KExpr x (list_append rest ys))",
             "Unfolding: list_append (x :: rest) ys = x :: list_append rest ys. DerivedProved. Part of #2859 (Increment C).",
         ))?;
 
         // kapp_args (app f a) = list_append (kapp_args f) [a]
         self.add_definition(unfold(
             "kapp_args_app",
-            "forall (f : KExpr) (a : KExpr), Eq (ListType KExpr) (kapp_args (KExpr.app f a)) (list_append (kapp_args f) (ListType.cons KExpr a (ListType.nil KExpr)))",
-            "fun (f : KExpr) (a : KExpr) => Eq.refl (ListType KExpr) (list_append (kapp_args f) (ListType.cons KExpr a (ListType.nil KExpr)))",
+            "forall (f : KExpr) (a : KExpr), @Eq (ListType KExpr) (kapp_args (KExpr.app f a)) (list_append (kapp_args f) (@ListType.cons KExpr a (@ListType.nil KExpr)))",
+            "fun (f : KExpr) (a : KExpr) => @Eq.refl (ListType KExpr) (list_append (kapp_args f) (@ListType.cons KExpr a (@ListType.nil KExpr)))",
             "Unfolding: kapp_args (app f a) = list_append (kapp_args f) [a]. DerivedProved. Part of #2859 (Increment C).",
         ))?;
 
         // list_tail (x :: rest) = rest
         self.add_definition(unfold(
             "list_tail_cons",
-            "forall (x : KExpr) (rest : ListType KExpr), Eq (ListType KExpr) (list_tail (ListType.cons KExpr x rest)) rest",
-            "fun (x : KExpr) (rest : ListType KExpr) => Eq.refl (ListType KExpr) rest",
+            "forall (x : KExpr) (rest : ListType KExpr), @Eq (ListType KExpr) (list_tail (@ListType.cons KExpr x rest)) rest",
+            "fun (x : KExpr) (rest : ListType KExpr) => @Eq.refl (ListType KExpr) rest",
             "Unfolding: list_tail (x :: rest) = rest. DerivedProved. Part of #2859 (Increment C).",
         ))?;
 
         // list_head (x :: rest) = some x
         self.add_definition(unfold(
             "list_head_cons",
-            "forall (x : KExpr) (rest : ListType KExpr), Eq (OptionType KExpr) (list_head (ListType.cons KExpr x rest)) (OptionType.some KExpr x)",
-            "fun (x : KExpr) (rest : ListType KExpr) => Eq.refl (OptionType KExpr) (OptionType.some KExpr x)",
+            "forall (x : KExpr) (rest : ListType KExpr), @Eq (OptionType KExpr) (list_head (@ListType.cons KExpr x rest)) (@OptionType.some KExpr x)",
+            "fun (x : KExpr) (rest : ListType KExpr) => @Eq.refl (OptionType KExpr) (@OptionType.some KExpr x)",
             "Unfolding: list_head (x :: rest) = some x. DerivedProved. Part of #2859 (Increment C).",
         ))?;
 
         // list_drop 0 xs = xs
         self.add_definition(unfold(
             "list_drop_zero",
-            "forall (xs : ListType KExpr), Eq (ListType KExpr) (list_drop Nat.zero xs) xs",
-            "fun (xs : ListType KExpr) => Eq.refl (ListType KExpr) xs",
+            "forall (xs : ListType KExpr), @Eq (ListType KExpr) (list_drop Nat.zero xs) xs",
+            "fun (xs : ListType KExpr) => @Eq.refl (ListType KExpr) xs",
             "Unfolding: list_drop 0 xs = xs. DerivedProved. Part of #2859 (Increment C).",
         ))?;
 
         // list_drop (succ n) xs = list_drop n (list_tail xs)
         self.add_definition(unfold(
             "list_drop_succ",
-            "forall (n : Nat) (xs : ListType KExpr), Eq (ListType KExpr) (list_drop (Nat.succ n) xs) (list_drop n (list_tail xs))",
-            "fun (n : Nat) (xs : ListType KExpr) => Eq.refl (ListType KExpr) (list_drop n (list_tail xs))",
+            "forall (n : Nat) (xs : ListType KExpr), @Eq (ListType KExpr) (list_drop (Nat.succ n) xs) (list_drop n (list_tail xs))",
+            "fun (n : Nat) (xs : ListType KExpr) => @Eq.refl (ListType KExpr) (list_drop n (list_tail xs))",
             "Unfolding: list_drop (succ n) xs = list_drop n (list_tail xs). DerivedProved. Part of #2859 (Increment C).",
         ))?;
 
         // list_length (x :: rest) = succ (list_length rest)
         self.add_definition(unfold(
             "list_length_cons",
-            "forall (x : KExpr) (rest : ListType KExpr), Eq Nat (list_length (ListType.cons KExpr x rest)) (Nat.succ (list_length rest))",
-            "fun (x : KExpr) (rest : ListType KExpr) => Eq.refl Nat (Nat.succ (list_length rest))",
+            "forall (x : KExpr) (rest : ListType KExpr), @Eq Nat (list_length (@ListType.cons KExpr x rest)) (Nat.succ (list_length rest))",
+            "fun (x : KExpr) (rest : ListType KExpr) => @Eq.refl Nat (Nat.succ (list_length rest))",
             "Unfolding: list_length (x :: rest) = succ (list_length rest). DerivedProved. Part of #2859 (Increment C).",
         ))?;
 
@@ -328,68 +328,68 @@ KExpr.rec (fun (_e : KExpr) => ListType Level)
             name: "apply_spine_snoc".to_string(),
             type_src: concat!(
                 "forall (xs : ListType KExpr) (a : KExpr) (head : KExpr), ",
-                "Eq KExpr (apply_spine (list_append xs (ListType.cons KExpr a (ListType.nil KExpr))) head) ",
+                "@Eq KExpr (apply_spine (list_append xs (@ListType.cons KExpr a (@ListType.nil KExpr))) head) ",
                 "(KExpr.app (apply_spine xs head) a)"
             )
             .to_string(),
             value_src: Some(
                 concat!(
                     "fun (xs : ListType KExpr) (a : KExpr) (head : KExpr) => ",
-                    "ListType.rec KExpr ",
+                    "@ListType.rec KExpr ",
                     "(fun (xs0 : ListType KExpr) => forall (a0 : KExpr) (head0 : KExpr), ",
-                    "Eq KExpr (apply_spine (list_append xs0 (ListType.cons KExpr a0 (ListType.nil KExpr))) head0) ",
+                    "@Eq KExpr (apply_spine (list_append xs0 (@ListType.cons KExpr a0 (@ListType.nil KExpr))) head0) ",
                     "(KExpr.app (apply_spine xs0 head0) a0)) ",
                     // nil case
                     "(fun (a0 : KExpr) (head0 : KExpr) => ",
-                    "Eq.trans KExpr ",
-                    "(apply_spine (list_append (ListType.nil KExpr) (ListType.cons KExpr a0 (ListType.nil KExpr))) head0) ",
-                    "(apply_spine (ListType.cons KExpr a0 (ListType.nil KExpr)) head0) ",
-                    "(KExpr.app (apply_spine (ListType.nil KExpr) head0) a0) ",
-                    "(Eq.cong (ListType KExpr) KExpr (fun (L : ListType KExpr) => apply_spine L head0) ",
-                    "(list_append (ListType.nil KExpr) (ListType.cons KExpr a0 (ListType.nil KExpr))) ",
-                    "(ListType.cons KExpr a0 (ListType.nil KExpr)) ",
-                    "(list_append_nil (ListType.cons KExpr a0 (ListType.nil KExpr)))) ",
-                    "(Eq.trans KExpr ",
-                    "(apply_spine (ListType.cons KExpr a0 (ListType.nil KExpr)) head0) ",
+                    "@Eq.trans KExpr ",
+                    "(apply_spine (list_append (@ListType.nil KExpr) (@ListType.cons KExpr a0 (@ListType.nil KExpr))) head0) ",
+                    "(apply_spine (@ListType.cons KExpr a0 (@ListType.nil KExpr)) head0) ",
+                    "(KExpr.app (apply_spine (@ListType.nil KExpr) head0) a0) ",
+                    "(@Eq.cong (ListType KExpr) KExpr (fun (L : ListType KExpr) => apply_spine L head0) ",
+                    "(list_append (@ListType.nil KExpr) (@ListType.cons KExpr a0 (@ListType.nil KExpr))) ",
+                    "(@ListType.cons KExpr a0 (@ListType.nil KExpr)) ",
+                    "(list_append_nil (@ListType.cons KExpr a0 (@ListType.nil KExpr)))) ",
+                    "(@Eq.trans KExpr ",
+                    "(apply_spine (@ListType.cons KExpr a0 (@ListType.nil KExpr)) head0) ",
                     "(KExpr.app head0 a0) ",
-                    "(KExpr.app (apply_spine (ListType.nil KExpr) head0) a0) ",
-                    "(Eq.trans KExpr ",
-                    "(apply_spine (ListType.cons KExpr a0 (ListType.nil KExpr)) head0) ",
-                    "(apply_spine (ListType.nil KExpr) (KExpr.app head0 a0)) ",
+                    "(KExpr.app (apply_spine (@ListType.nil KExpr) head0) a0) ",
+                    "(@Eq.trans KExpr ",
+                    "(apply_spine (@ListType.cons KExpr a0 (@ListType.nil KExpr)) head0) ",
+                    "(apply_spine (@ListType.nil KExpr) (KExpr.app head0 a0)) ",
                     "(KExpr.app head0 a0) ",
-                    "(apply_spine_cons a0 (ListType.nil KExpr) head0) ",
+                    "(apply_spine_cons a0 (@ListType.nil KExpr) head0) ",
                     "(apply_spine_nil (KExpr.app head0 a0))) ",
-                    "(Eq.symm KExpr (KExpr.app (apply_spine (ListType.nil KExpr) head0) a0) (KExpr.app head0 a0) ",
-                    "(Eq.cong KExpr KExpr (fun (h : KExpr) => KExpr.app h a0) ",
-                    "(apply_spine (ListType.nil KExpr) head0) head0 (apply_spine_nil head0))))) ",
+                    "(@Eq.symm KExpr (KExpr.app (apply_spine (@ListType.nil KExpr) head0) a0) (KExpr.app head0 a0) ",
+                    "(@Eq.cong KExpr KExpr (fun (h : KExpr) => KExpr.app h a0) ",
+                    "(apply_spine (@ListType.nil KExpr) head0) head0 (apply_spine_nil head0))))) ",
                     // cons case
                     "(fun (x : KExpr) (rest : ListType KExpr) ",
                     "(ih : forall (a0 : KExpr) (head0 : KExpr), ",
-                    "Eq KExpr (apply_spine (list_append rest (ListType.cons KExpr a0 (ListType.nil KExpr))) head0) ",
+                    "@Eq KExpr (apply_spine (list_append rest (@ListType.cons KExpr a0 (@ListType.nil KExpr))) head0) ",
                     "(KExpr.app (apply_spine rest head0) a0)) => ",
                     "fun (a0 : KExpr) (head0 : KExpr) => ",
-                    "Eq.trans KExpr ",
-                    "(apply_spine (list_append (ListType.cons KExpr x rest) (ListType.cons KExpr a0 (ListType.nil KExpr))) head0) ",
-                    "(apply_spine (list_append rest (ListType.cons KExpr a0 (ListType.nil KExpr))) (KExpr.app head0 x)) ",
-                    "(KExpr.app (apply_spine (ListType.cons KExpr x rest) head0) a0) ",
-                    "(Eq.trans KExpr ",
-                    "(apply_spine (list_append (ListType.cons KExpr x rest) (ListType.cons KExpr a0 (ListType.nil KExpr))) head0) ",
-                    "(apply_spine (ListType.cons KExpr x (list_append rest (ListType.cons KExpr a0 (ListType.nil KExpr)))) head0) ",
-                    "(apply_spine (list_append rest (ListType.cons KExpr a0 (ListType.nil KExpr))) (KExpr.app head0 x)) ",
-                    "(Eq.cong (ListType KExpr) KExpr (fun (L : ListType KExpr) => apply_spine L head0) ",
-                    "(list_append (ListType.cons KExpr x rest) (ListType.cons KExpr a0 (ListType.nil KExpr))) ",
-                    "(ListType.cons KExpr x (list_append rest (ListType.cons KExpr a0 (ListType.nil KExpr)))) ",
-                    "(list_append_cons x rest (ListType.cons KExpr a0 (ListType.nil KExpr)))) ",
-                    "(apply_spine_cons x (list_append rest (ListType.cons KExpr a0 (ListType.nil KExpr))) head0)) ",
-                    "(Eq.trans KExpr ",
-                    "(apply_spine (list_append rest (ListType.cons KExpr a0 (ListType.nil KExpr))) (KExpr.app head0 x)) ",
+                    "@Eq.trans KExpr ",
+                    "(apply_spine (list_append (@ListType.cons KExpr x rest) (@ListType.cons KExpr a0 (@ListType.nil KExpr))) head0) ",
+                    "(apply_spine (list_append rest (@ListType.cons KExpr a0 (@ListType.nil KExpr))) (KExpr.app head0 x)) ",
+                    "(KExpr.app (apply_spine (@ListType.cons KExpr x rest) head0) a0) ",
+                    "(@Eq.trans KExpr ",
+                    "(apply_spine (list_append (@ListType.cons KExpr x rest) (@ListType.cons KExpr a0 (@ListType.nil KExpr))) head0) ",
+                    "(apply_spine (@ListType.cons KExpr x (list_append rest (@ListType.cons KExpr a0 (@ListType.nil KExpr)))) head0) ",
+                    "(apply_spine (list_append rest (@ListType.cons KExpr a0 (@ListType.nil KExpr))) (KExpr.app head0 x)) ",
+                    "(@Eq.cong (ListType KExpr) KExpr (fun (L : ListType KExpr) => apply_spine L head0) ",
+                    "(list_append (@ListType.cons KExpr x rest) (@ListType.cons KExpr a0 (@ListType.nil KExpr))) ",
+                    "(@ListType.cons KExpr x (list_append rest (@ListType.cons KExpr a0 (@ListType.nil KExpr)))) ",
+                    "(list_append_cons x rest (@ListType.cons KExpr a0 (@ListType.nil KExpr)))) ",
+                    "(apply_spine_cons x (list_append rest (@ListType.cons KExpr a0 (@ListType.nil KExpr))) head0)) ",
+                    "(@Eq.trans KExpr ",
+                    "(apply_spine (list_append rest (@ListType.cons KExpr a0 (@ListType.nil KExpr))) (KExpr.app head0 x)) ",
                     "(KExpr.app (apply_spine rest (KExpr.app head0 x)) a0) ",
-                    "(KExpr.app (apply_spine (ListType.cons KExpr x rest) head0) a0) ",
+                    "(KExpr.app (apply_spine (@ListType.cons KExpr x rest) head0) a0) ",
                     "(ih a0 (KExpr.app head0 x)) ",
-                    "(Eq.symm KExpr (KExpr.app (apply_spine (ListType.cons KExpr x rest) head0) a0) ",
+                    "(@Eq.symm KExpr (KExpr.app (apply_spine (@ListType.cons KExpr x rest) head0) a0) ",
                     "(KExpr.app (apply_spine rest (KExpr.app head0 x)) a0) ",
-                    "(Eq.cong KExpr KExpr (fun (h : KExpr) => KExpr.app h a0) ",
-                    "(apply_spine (ListType.cons KExpr x rest) head0) (apply_spine rest (KExpr.app head0 x)) ",
+                    "(@Eq.cong KExpr KExpr (fun (h : KExpr) => KExpr.app h a0) ",
+                    "(apply_spine (@ListType.cons KExpr x rest) head0) (apply_spine rest (KExpr.app head0 x)) ",
                     "(apply_spine_cons x rest head0))))) ",
                     "xs a head"
                 )
@@ -429,39 +429,39 @@ KExpr.rec (fun (_e : KExpr) => ListType Level)
         self.add_definition(SpecDefinition {
             name: "kapp_spine_roundtrip".to_string(),
             type_src:
-                "forall (e : KExpr), Eq KExpr (apply_spine (kapp_args e) (kapp_fn e)) e".to_string(),
+                "forall (e : KExpr), @Eq KExpr (apply_spine (kapp_args e) (kapp_fn e)) e".to_string(),
             value_src: Some(
                 concat!(
-                    "fun (e : KExpr) => KExpr.rec ",
-                    "(fun (e0 : KExpr) => Eq KExpr (apply_spine (kapp_args e0) (kapp_fn e0)) e0) ",
+                    "fun (e : KExpr) => @KExpr.rec ",
+                    "(fun (e0 : KExpr) => @Eq KExpr (apply_spine (kapp_args e0) (kapp_fn e0)) e0) ",
                     "(fun (n : Level) => apply_spine_nil (KExpr.sort n)) ",
                     "(fun (i : Nat) => apply_spine_nil (KExpr.bvar i)) ",
                     "(fun (f : KExpr) (a : KExpr) ",
-                    "(ih_f : Eq KExpr (apply_spine (kapp_args f) (kapp_fn f)) f) ",
-                    "(ih_a : Eq KExpr (apply_spine (kapp_args a) (kapp_fn a)) a) => ",
-                    "Eq.trans KExpr ",
-                    "(apply_spine (list_append (kapp_args f) (ListType.cons KExpr a (ListType.nil KExpr))) (kapp_fn f)) ",
+                    "(ih_f : @Eq KExpr (apply_spine (kapp_args f) (kapp_fn f)) f) ",
+                    "(ih_a : @Eq KExpr (apply_spine (kapp_args a) (kapp_fn a)) a) => ",
+                    "@Eq.trans KExpr ",
+                    "(apply_spine (list_append (kapp_args f) (@ListType.cons KExpr a (@ListType.nil KExpr))) (kapp_fn f)) ",
                     "(KExpr.app (apply_spine (kapp_args f) (kapp_fn f)) a) ",
                     "(KExpr.app f a) ",
                     "(apply_spine_snoc (kapp_args f) a (kapp_fn f)) ",
-                    "(Eq.cong KExpr KExpr (fun (h : KExpr) => KExpr.app h a) ",
+                    "(@Eq.cong KExpr KExpr (fun (h : KExpr) => KExpr.app h a) ",
                     "(apply_spine (kapp_args f) (kapp_fn f)) f ih_f)) ",
                     "(fun (ty : KExpr) (b : KExpr) ",
-                    "(ih_ty : Eq KExpr (apply_spine (kapp_args ty) (kapp_fn ty)) ty) ",
-                    "(ih_b : Eq KExpr (apply_spine (kapp_args b) (kapp_fn b)) b) => ",
+                    "(ih_ty : @Eq KExpr (apply_spine (kapp_args ty) (kapp_fn ty)) ty) ",
+                    "(ih_b : @Eq KExpr (apply_spine (kapp_args b) (kapp_fn b)) b) => ",
                     "apply_spine_nil (KExpr.lam ty b)) ",
                     "(fun (ty : KExpr) (b : KExpr) ",
-                    "(ih_ty : Eq KExpr (apply_spine (kapp_args ty) (kapp_fn ty)) ty) ",
-                    "(ih_b : Eq KExpr (apply_spine (kapp_args b) (kapp_fn b)) b) => ",
+                    "(ih_ty : @Eq KExpr (apply_spine (kapp_args ty) (kapp_fn ty)) ty) ",
+                    "(ih_b : @Eq KExpr (apply_spine (kapp_args b) (kapp_fn b)) b) => ",
                     "apply_spine_nil (KExpr.pi ty b)) ",
                     "(fun (nm : Name) (us : ListType Level) => apply_spine_nil (KExpr.const nm us)) ",
                     "(fun (ty : KExpr) (v : KExpr) (b : KExpr) ",
-                    "(ih_ty : Eq KExpr (apply_spine (kapp_args ty) (kapp_fn ty)) ty) ",
-                    "(ih_v : Eq KExpr (apply_spine (kapp_args v) (kapp_fn v)) v) ",
-                    "(ih_b : Eq KExpr (apply_spine (kapp_args b) (kapp_fn b)) b) => ",
+                    "(ih_ty : @Eq KExpr (apply_spine (kapp_args ty) (kapp_fn ty)) ty) ",
+                    "(ih_v : @Eq KExpr (apply_spine (kapp_args v) (kapp_fn v)) v) ",
+                    "(ih_b : @Eq KExpr (apply_spine (kapp_args b) (kapp_fn b)) b) => ",
                     "apply_spine_nil (KExpr.let_ ty v b)) ",
                     "(fun (s : Name) (i : Nat) (sub : KExpr) ",
-                    "(ih_sub : Eq KExpr (apply_spine (kapp_args sub) (kapp_fn sub)) sub) => ",
+                    "(ih_sub : @Eq KExpr (apply_spine (kapp_args sub) (kapp_fn sub)) sub) => ",
                     "apply_spine_nil (KExpr.proj s i sub)) ",
                     "(fun (n : Nat) => apply_spine_nil (KExpr.lit n)) ",
                     "e"

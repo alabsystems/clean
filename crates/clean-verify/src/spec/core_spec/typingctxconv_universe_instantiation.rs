@@ -64,7 +64,7 @@ impl Specification {
  (iota_closed : forall (e : KExpr) (e' : KExpr), iota_reduces e e' ->
    iota_reduces (instL s e) (instL s e'))
  (a : KExpr) (b : KExpr) (equivalent : DefEq a b) =>
- DefEq.rec
+ @DefEq.rec
    (fun (a0 : KExpr) (b0 : KExpr) (_h : DefEq a0 b0) => DefEq (instL s a0) (instL s b0))
    (fun (a0 : KExpr) => DefEq.refl (instL s a0))
    (fun (a0 : KExpr) (b0 : KExpr) (_h : DefEq a0 b0)
@@ -74,10 +74,10 @@ impl Specification {
      (ihab : DefEq (instL s a0) (instL s b0)) (ihbc : DefEq (instL s b0) (instL s c0)) =>
      DefEq.trans (instL s a0) (instL s b0) (instL s c0) ihab ihbc)
    (fun (A : KExpr) (body : KExpr) (arg : KExpr) =>
-     Eq.substType KExpr
+     @Eq.substType KExpr
        (fun (T : KExpr) => DefEq (KExpr.app (KExpr.lam (instL s A) (instL s body)) (instL s arg)) T)
        (instantiate (instL s body) (instL s arg)) (instL s (instantiate body arg))
-       (Eq.symm KExpr (instL s (instantiate body arg))
+       (@Eq.symm KExpr (instL s (instantiate body arg))
          (instantiate (instL s body) (instL s arg)) (instL_instantiate s body arg))
        (DefEq.beta (instL s A) (instL s body) (instL s arg)))
    (fun (f : KExpr) (f' : KExpr) (arg : KExpr) (arg' : KExpr)
@@ -97,10 +97,10 @@ impl Specification {
    (fun (e : KExpr) (e' : KExpr) (step : iota_reduces e e') =>
      DefEq.iota (instL s e) (instL s e') (iota_closed e e' step))
    (fun (ty : KExpr) (value : KExpr) (body : KExpr) =>
-     Eq.substType KExpr
+     @Eq.substType KExpr
        (fun (T : KExpr) => DefEq (KExpr.let_ (instL s ty) (instL s value) (instL s body)) T)
        (instantiate (instL s body) (instL s value)) (instL s (instantiate body value))
-       (Eq.symm KExpr (instL s (instantiate body value))
+       (@Eq.symm KExpr (instL s (instantiate body value))
          (instantiate (instL s body) (instL s value)) (instL_instantiate s body value))
        (DefEq.zeta (instL s ty) (instL s value) (instL s body)))
    (fun (ty : KExpr) (ty' : KExpr) (value : KExpr) (value' : KExpr) (body : KExpr) (body' : KExpr)
@@ -120,32 +120,32 @@ impl Specification {
         instantiation_theorem(
             self,
             "instL_literal_nat",
-            r"forall (s : Name -> Level) (n : Nat), Eq KExpr (instL s (literal_nat n)) (literal_nat n)",
-            r"fun (s : Name -> Level) (n : Nat) => Eq.refl KExpr (literal_nat n)",
+            r"forall (s : Name -> Level) (n : Nat), @Eq KExpr (instL s (literal_nat n)) (literal_nat n)",
+            r"fun (s : Name -> Level) (n : Nat) => @Eq.refl KExpr (literal_nat n)",
             "Raw universe substitution preserves every tagged natural-literal payload.",
         )?;
 
         instantiation_theorem(
             self,
             "instL_literal_nat_type",
-            r"forall (s : Name -> Level), Eq KExpr (instL s literal_nat_type) literal_nat_type",
-            r"fun (s : Name -> Level) => Eq.refl KExpr literal_nat_type",
+            r"forall (s : Name -> Level), @Eq KExpr (instL s literal_nat_type) literal_nat_type",
+            r"fun (s : Name -> Level) => @Eq.refl KExpr literal_nat_type",
             "Raw universe substitution preserves the canonical natural-literal type, whose constant carries an empty universe argument list.",
         )?;
 
         instantiation_theorem(
             self,
             "instL_literal_string",
-            r"forall (s : Name -> Level) (n : Nat), Eq KExpr (instL s (literal_string n)) (literal_string n)",
-            r"fun (s : Name -> Level) (n : Nat) => Eq.refl KExpr (literal_string n)",
+            r"forall (s : Name -> Level) (n : Nat), @Eq KExpr (instL s (literal_string n)) (literal_string n)",
+            r"fun (s : Name -> Level) (n : Nat) => @Eq.refl KExpr (literal_string n)",
             "Raw universe substitution preserves every tagged string-identity payload.",
         )?;
 
         instantiation_theorem(
             self,
             "instL_literal_string_type",
-            r"forall (s : Name -> Level), Eq KExpr (instL s literal_string_type) literal_string_type",
-            r"fun (s : Name -> Level) => Eq.refl KExpr literal_string_type",
+            r"forall (s : Name -> Level), @Eq KExpr (instL s literal_string_type) literal_string_type",
+            r"fun (s : Name -> Level) => @Eq.refl KExpr literal_string_type",
             "Raw universe substitution preserves the canonical string-literal type, whose constant carries an empty universe argument list.",
         )?;
 
@@ -154,7 +154,7 @@ impl Specification {
             "typingctxconv_instL",
             r"forall (tenv : KDeclEnv),
  (forall (n : Name) (sig : KConstSig),
-   Eq (OptionType KConstSig) (tenv n) (OptionType.some KConstSig sig) ->
+   @Eq (OptionType KConstSig) (tenv n) (@OptionType.some KConstSig sig) ->
    KExprParamSupport (kconst_params sig) (kconst_type sig)) ->
  forall (s : Name -> Level),
  (forall (e : KExpr) (e' : KExpr), delta_reduces e e' ->
@@ -166,7 +166,7 @@ impl Specification {
  TypingCtxConv tenv (mapLT (instL s) G) (instL s e) (instL s T)",
             r"fun (tenv : KDeclEnv)
  (supported : forall (n : Name) (sig : KConstSig),
-   Eq (OptionType KConstSig) (tenv n) (OptionType.some KConstSig sig) ->
+   @Eq (OptionType KConstSig) (tenv n) (@OptionType.some KConstSig sig) ->
    KExprParamSupport (kconst_params sig) (kconst_type sig))
  (s : Name -> Level)
  (delta_closed : forall (e : KExpr) (e' : KExpr), delta_reduces e e' ->
@@ -175,79 +175,79 @@ impl Specification {
    iota_reduces (instL s e) (instL s e'))
  (G : ListType KExpr) (e : KExpr) (T : KExpr)
  (typed : TypingCtxConv tenv G e T) =>
- TypingCtxConv.rec tenv
+ @TypingCtxConv.rec tenv
    (fun (G0 : ListType KExpr) (e0 : KExpr) (T0 : KExpr)
      (_h : TypingCtxConv tenv G0 e0 T0) =>
      TypingCtxConv tenv (mapLT (instL s) G0) (instL s e0) (instL s T0))
    (fun (G0 : ListType KExpr) (i : Nat) (A : KExpr)
-     (found : Eq (OptionType KExpr) (ctx_lookup G0 i) (OptionType.some KExpr A)) =>
-     Eq.substType KExpr
+     (found : @Eq (OptionType KExpr) (ctx_lookup G0 i) (@OptionType.some KExpr A)) =>
+     @Eq.substType KExpr
        (fun (T0 : KExpr) => TypingCtxConv tenv (mapLT (instL s) G0) (KExpr.bvar i) T0)
        (lift_at (instL s A) Nat.zero (Nat.succ i))
        (instL s (lift_at A Nat.zero (Nat.succ i)))
-       (Eq.symm KExpr (instL s (lift_at A Nat.zero (Nat.succ i)))
+       (@Eq.symm KExpr (instL s (lift_at A Nat.zero (Nat.succ i)))
          (lift_at (instL s A) Nat.zero (Nat.succ i))
          (instL_lift_at s A Nat.zero (Nat.succ i)))
-       (TypingCtxConv.var tenv (mapLT (instL s) G0) i (instL s A)
+       (@TypingCtxConv.var tenv (mapLT (instL s) G0) i (instL s A)
          (ctx_lookup_mapLT_some (instL s) G0 i A found)))
    (fun (G0 : ListType KExpr) (u : Level) =>
-     TypingCtxConv.sort tenv (mapLT (instL s) G0) (substL s u))
+     @TypingCtxConv.sort tenv (mapLT (instL s) G0) (substL s u))
    (fun (G0 : ListType KExpr) (A : KExpr) (B : KExpr) (u : Level) (v : Level)
      (_hA : TypingCtxConv tenv G0 A (KExpr.sort u))
-     (_hB : TypingCtxConv tenv (ListType.cons KExpr A G0) B (KExpr.sort v))
+     (_hB : TypingCtxConv tenv (@ListType.cons KExpr A G0) B (KExpr.sort v))
      (ihA : TypingCtxConv tenv (mapLT (instL s) G0) (instL s A) (instL s (KExpr.sort u)))
-     (ihB : TypingCtxConv tenv (mapLT (instL s) (ListType.cons KExpr A G0)) (instL s B) (instL s (KExpr.sort v))) =>
-     TypingCtxConv.pi tenv (mapLT (instL s) G0) (instL s A) (instL s B)
+     (ihB : TypingCtxConv tenv (mapLT (instL s) (@ListType.cons KExpr A G0)) (instL s B) (instL s (KExpr.sort v))) =>
+     @TypingCtxConv.pi tenv (mapLT (instL s) G0) (instL s A) (instL s B)
        (substL s u) (substL s v) ihA ihB)
    (fun (G0 : ListType KExpr) (A : KExpr) (b : KExpr) (B : KExpr) (u : Level)
      (_hA : TypingCtxConv tenv G0 A (KExpr.sort u))
-     (_hb : TypingCtxConv tenv (ListType.cons KExpr A G0) b B)
+     (_hb : TypingCtxConv tenv (@ListType.cons KExpr A G0) b B)
      (ihA : TypingCtxConv tenv (mapLT (instL s) G0) (instL s A) (instL s (KExpr.sort u)))
-     (ihb : TypingCtxConv tenv (mapLT (instL s) (ListType.cons KExpr A G0)) (instL s b) (instL s B)) =>
-     TypingCtxConv.lam tenv (mapLT (instL s) G0) (instL s A) (instL s b) (instL s B)
+     (ihb : TypingCtxConv tenv (mapLT (instL s) (@ListType.cons KExpr A G0)) (instL s b) (instL s B)) =>
+     @TypingCtxConv.lam tenv (mapLT (instL s) G0) (instL s A) (instL s b) (instL s B)
        (substL s u) ihA ihb)
    (fun (G0 : ListType KExpr) (f : KExpr) (a : KExpr) (A : KExpr) (B : KExpr)
      (_hf : TypingCtxConv tenv G0 f (KExpr.pi A B))
      (_ha : TypingCtxConv tenv G0 a A)
      (ihf : TypingCtxConv tenv (mapLT (instL s) G0) (instL s f) (instL s (KExpr.pi A B)))
      (iha : TypingCtxConv tenv (mapLT (instL s) G0) (instL s a) (instL s A)) =>
-     Eq.substType KExpr
+     @Eq.substType KExpr
        (fun (T0 : KExpr) => TypingCtxConv tenv (mapLT (instL s) G0)
          (KExpr.app (instL s f) (instL s a)) T0)
        (instantiate (instL s B) (instL s a)) (instL s (instantiate B a))
-       (Eq.symm KExpr (instL s (instantiate B a))
+       (@Eq.symm KExpr (instL s (instantiate B a))
          (instantiate (instL s B) (instL s a)) (instL_instantiate s B a))
-       (TypingCtxConv.app tenv (mapLT (instL s) G0)
+       (@TypingCtxConv.app tenv (mapLT (instL s) G0)
          (instL s f) (instL s a) (instL s A) (instL s B) ihf iha))
    (fun (G0 : ListType KExpr) (n : Name) (us : ListType Level) (A : KExpr)
-     (found : Eq (OptionType KExpr) (kdecl_type_at tenv n us) (OptionType.some KExpr A)) =>
-     TypingCtxConv.const tenv (mapLT (instL s) G0) n (mapLL (substL s) us) (instL s A)
+     (found : @Eq (OptionType KExpr) (kdecl_type_at tenv n us) (@OptionType.some KExpr A)) =>
+     @TypingCtxConv.const tenv (mapLT (instL s) G0) n (mapLL (substL s) us) (instL s A)
        (kdecl_type_at_instL_supported tenv supported n us A found s))
    (fun (G0 : ListType KExpr) (e0 : KExpr) (A : KExpr) (B : KExpr)
      (_typed : TypingCtxConv tenv G0 e0 A) (equivalent : DefEq A B)
      (ih : TypingCtxConv tenv (mapLT (instL s) G0) (instL s e0) (instL s A)) =>
-     TypingCtxConv.conv tenv (mapLT (instL s) G0) (instL s e0) (instL s A) (instL s B)
+     @TypingCtxConv.conv tenv (mapLT (instL s) G0) (instL s e0) (instL s A) (instL s B)
        ih (defeq_instL s delta_closed iota_closed A B equivalent))
    (fun (G0 : ListType KExpr) (ty : KExpr) (v : KExpr) (b : KExpr) (B : KExpr) (u : Level)
      (_hty : TypingCtxConv tenv G0 ty (KExpr.sort u))
      (_hv : TypingCtxConv tenv G0 v ty)
-     (_hb : TypingCtxConv tenv (ListType.cons KExpr ty G0) b B)
+     (_hb : TypingCtxConv tenv (@ListType.cons KExpr ty G0) b B)
      (ihty : TypingCtxConv tenv (mapLT (instL s) G0) (instL s ty) (instL s (KExpr.sort u)))
      (ihv : TypingCtxConv tenv (mapLT (instL s) G0) (instL s v) (instL s ty))
-     (ihb : TypingCtxConv tenv (mapLT (instL s) (ListType.cons KExpr ty G0)) (instL s b) (instL s B)) =>
-     Eq.substType KExpr
+     (ihb : TypingCtxConv tenv (mapLT (instL s) (@ListType.cons KExpr ty G0)) (instL s b) (instL s B)) =>
+     @Eq.substType KExpr
        (fun (T0 : KExpr) => TypingCtxConv tenv (mapLT (instL s) G0)
          (KExpr.let_ (instL s ty) (instL s v) (instL s b)) T0)
        (instantiate (instL s B) (instL s v)) (instL s (instantiate B v))
-       (Eq.symm KExpr (instL s (instantiate B v))
+       (@Eq.symm KExpr (instL s (instantiate B v))
          (instantiate (instL s B) (instL s v)) (instL_instantiate s B v))
-       (TypingCtxConv.let_ tenv (mapLT (instL s) G0)
+       (@TypingCtxConv.let_ tenv (mapLT (instL s) G0)
          (instL s ty) (instL s v) (instL s b) (instL s B) (substL s u)
          ihty ihv ihb))
    (fun (G0 : ListType KExpr) (n : Nat) =>
-     TypingCtxConv.lit_nat tenv (mapLT (instL s) G0) n)
+     @TypingCtxConv.lit_nat tenv (mapLT (instL s) G0) n)
    (fun (G0 : ListType KExpr) (n : Nat) =>
-     TypingCtxConv.lit_string tenv (mapLT (instL s) G0) n)
+     @TypingCtxConv.lit_string tenv (mapLT (instL s) G0) n)
    G e T typed",
             "Universe-substitution preservation for all ten signature-aware TypingCtxConv constructors. Premises are stored schematic-type support and explicit operational delta/iota closure at the chosen substitution; neither conversion preservation nor instantiated-output typing is assumed.",
         )?;
@@ -257,7 +257,7 @@ impl Specification {
             "typingctxconv_instLevels",
             r"forall (tenv : KDeclEnv),
  (forall (n : Name) (sig : KConstSig),
-   Eq (OptionType KConstSig) (tenv n) (OptionType.some KConstSig sig) ->
+   @Eq (OptionType KConstSig) (tenv n) (@OptionType.some KConstSig sig) ->
    KExprParamSupport (kconst_params sig) (kconst_type sig)) ->
  forall (ps : ListType Name) (us : ListType Level),
  (forall (e : KExpr) (e' : KExpr), delta_reduces e e' ->
@@ -270,7 +270,7 @@ impl Specification {
    (instLevels ps e us) (instLevels ps T us)",
             r"fun (tenv : KDeclEnv)
  (supported : forall (n : Name) (sig : KConstSig),
-   Eq (OptionType KConstSig) (tenv n) (OptionType.some KConstSig sig) ->
+   @Eq (OptionType KConstSig) (tenv n) (@OptionType.some KConstSig sig) ->
    KExprParamSupport (kconst_params sig) (kconst_type sig))
  (ps : ListType Name) (us : ListType Level)
  (delta_closed : forall (e : KExpr) (e' : KExpr), delta_reduces e e' ->
@@ -287,7 +287,7 @@ impl Specification {
             "typingctxconv_kdef_instantiated",
             r"forall (tenv : KDeclEnv),
  (forall (n : Name) (sig : KConstSig),
-   Eq (OptionType KConstSig) (tenv n) (OptionType.some KConstSig sig) ->
+   @Eq (OptionType KConstSig) (tenv n) (@OptionType.some KConstSig sig) ->
    KExprParamSupport (kconst_params sig) (kconst_type sig)) ->
  forall (defn : KDefSig) (us : ListType Level),
  (forall (e : KExpr) (e' : KExpr), delta_reduces e e' ->
@@ -298,12 +298,12 @@ impl Specification {
    iota_reduces
      (instL (paramSubstN (kconst_params (kdef_signature defn)) us) e)
      (instL (paramSubstN (kconst_params (kdef_signature defn)) us) e')) ->
- TypingCtxConv tenv (ListType.nil KExpr) (kdef_value defn) (kconst_type (kdef_signature defn)) ->
- TypingCtxConv tenv (ListType.nil KExpr) (kdef_inst_value defn us)
+ TypingCtxConv tenv (@ListType.nil KExpr) (kdef_value defn) (kconst_type (kdef_signature defn)) ->
+ TypingCtxConv tenv (@ListType.nil KExpr) (kdef_inst_value defn us)
    (kconst_inst_type (kdef_signature defn) us)",
             r"fun (tenv : KDeclEnv)
  (supported : forall (n : Name) (sig : KConstSig),
-   Eq (OptionType KConstSig) (tenv n) (OptionType.some KConstSig sig) ->
+   @Eq (OptionType KConstSig) (tenv n) (@OptionType.some KConstSig sig) ->
    KExprParamSupport (kconst_params sig) (kconst_type sig))
  (defn : KDefSig) (us : ListType Level)
  (delta_closed : forall (e : KExpr) (e' : KExpr), delta_reduces e e' ->
@@ -314,10 +314,10 @@ impl Specification {
    iota_reduces
      (instL (paramSubstN (kconst_params (kdef_signature defn)) us) e)
      (instL (paramSubstN (kconst_params (kdef_signature defn)) us) e'))
- (schematic : TypingCtxConv tenv (ListType.nil KExpr)
+ (schematic : TypingCtxConv tenv (@ListType.nil KExpr)
    (kdef_value defn) (kconst_type (kdef_signature defn))) =>
  typingctxconv_instLevels tenv supported (kconst_params (kdef_signature defn)) us
-   delta_closed iota_closed (ListType.nil KExpr)
+   delta_closed iota_closed (@ListType.nil KExpr)
    (kdef_value defn) (kconst_type (kdef_signature defn)) schematic",
             "Derive an instantiated definition value's type from ONE schematic empty-context body-typing derivation, shared KDefSig parameters, stored-type support and the explicit operational closure premises. This is a derived conclusion, not a strengthened defval_typed field.",
         )?;
@@ -367,78 +367,78 @@ impl Specification {
             "typingctxconv_tenv_mono",
             r"forall (tenv : KDeclEnv) (tenv2 : KDeclEnv),
  (forall (n : Name) (sig : KConstSig),
-   Eq (OptionType KConstSig) (tenv n) (OptionType.some KConstSig sig) ->
-   Eq (OptionType KConstSig) (tenv2 n) (OptionType.some KConstSig sig)) ->
+   @Eq (OptionType KConstSig) (tenv n) (@OptionType.some KConstSig sig) ->
+   @Eq (OptionType KConstSig) (tenv2 n) (@OptionType.some KConstSig sig)) ->
  forall (G : ListType KExpr) (e : KExpr) (T : KExpr),
  TypingCtxConv tenv G e T ->
  TypingCtxConv tenv2 G e T",
             r"fun (tenv : KDeclEnv) (tenv2 : KDeclEnv)
  (ext : forall (n : Name) (sig : KConstSig),
-   Eq (OptionType KConstSig) (tenv n) (OptionType.some KConstSig sig) ->
-   Eq (OptionType KConstSig) (tenv2 n) (OptionType.some KConstSig sig))
+   @Eq (OptionType KConstSig) (tenv n) (@OptionType.some KConstSig sig) ->
+   @Eq (OptionType KConstSig) (tenv2 n) (@OptionType.some KConstSig sig))
  (G : ListType KExpr) (e : KExpr) (T : KExpr)
  (typed : TypingCtxConv tenv G e T) =>
- TypingCtxConv.rec tenv
+ @TypingCtxConv.rec tenv
    (fun (G0 : ListType KExpr) (e0 : KExpr) (T0 : KExpr)
      (_h : TypingCtxConv tenv G0 e0 T0) =>
      TypingCtxConv tenv2 G0 e0 T0)
    (fun (G0 : ListType KExpr) (i : Nat) (A : KExpr)
-     (found : Eq (OptionType KExpr) (ctx_lookup G0 i) (OptionType.some KExpr A)) =>
-     TypingCtxConv.var tenv2 G0 i A found)
+     (found : @Eq (OptionType KExpr) (ctx_lookup G0 i) (@OptionType.some KExpr A)) =>
+     @TypingCtxConv.var tenv2 G0 i A found)
    (fun (G0 : ListType KExpr) (u : Level) =>
-     TypingCtxConv.sort tenv2 G0 u)
+     @TypingCtxConv.sort tenv2 G0 u)
    (fun (G0 : ListType KExpr) (A : KExpr) (B : KExpr) (u : Level) (v : Level)
      (_hA : TypingCtxConv tenv G0 A (KExpr.sort u))
-     (_hB : TypingCtxConv tenv (ListType.cons KExpr A G0) B (KExpr.sort v))
+     (_hB : TypingCtxConv tenv (@ListType.cons KExpr A G0) B (KExpr.sort v))
      (ihA : TypingCtxConv tenv2 G0 A (KExpr.sort u))
-     (ihB : TypingCtxConv tenv2 (ListType.cons KExpr A G0) B (KExpr.sort v)) =>
-     TypingCtxConv.pi tenv2 G0 A B u v ihA ihB)
+     (ihB : TypingCtxConv tenv2 (@ListType.cons KExpr A G0) B (KExpr.sort v)) =>
+     @TypingCtxConv.pi tenv2 G0 A B u v ihA ihB)
    (fun (G0 : ListType KExpr) (A : KExpr) (b : KExpr) (B : KExpr) (u : Level)
      (_hA : TypingCtxConv tenv G0 A (KExpr.sort u))
-     (_hb : TypingCtxConv tenv (ListType.cons KExpr A G0) b B)
+     (_hb : TypingCtxConv tenv (@ListType.cons KExpr A G0) b B)
      (ihA : TypingCtxConv tenv2 G0 A (KExpr.sort u))
-     (ihb : TypingCtxConv tenv2 (ListType.cons KExpr A G0) b B) =>
-     TypingCtxConv.lam tenv2 G0 A b B u ihA ihb)
+     (ihb : TypingCtxConv tenv2 (@ListType.cons KExpr A G0) b B) =>
+     @TypingCtxConv.lam tenv2 G0 A b B u ihA ihb)
    (fun (G0 : ListType KExpr) (f : KExpr) (a : KExpr) (A : KExpr) (B : KExpr)
      (_hf : TypingCtxConv tenv G0 f (KExpr.pi A B))
      (_ha : TypingCtxConv tenv G0 a A)
      (ihf : TypingCtxConv tenv2 G0 f (KExpr.pi A B))
      (iha : TypingCtxConv tenv2 G0 a A) =>
-     TypingCtxConv.app tenv2 G0 f a A B ihf iha)
+     @TypingCtxConv.app tenv2 G0 f a A B ihf iha)
    (fun (G0 : ListType KExpr) (n : Name) (us : ListType Level) (A : KExpr)
-     (found : Eq (OptionType KExpr) (kdecl_type_at tenv n us) (OptionType.some KExpr A)) =>
+     (found : @Eq (OptionType KExpr) (kdecl_type_at tenv n us) (@OptionType.some KExpr A)) =>
      kdecl_type_at_some_inv tenv n us A found
        (TypingCtxConv tenv2 G0 (KExpr.const n us) A)
        (fun (sig : KConstSig)
-         (hlk : Eq (OptionType KConstSig) (tenv n) (OptionType.some KConstSig sig))
+         (hlk : @Eq (OptionType KConstSig) (tenv n) (@OptionType.some KConstSig sig))
          (harity : kconst_arity sig us)
-         (hres : Eq KExpr A (kconst_inst_type sig us)) =>
-         TypingCtxConv.const tenv2 G0 n us A
-           (Eq.trans (OptionType KExpr)
+         (hres : @Eq KExpr A (kconst_inst_type sig us)) =>
+         @TypingCtxConv.const tenv2 G0 n us A
+           (@Eq.trans (OptionType KExpr)
              (kdecl_type_at tenv2 n us)
-             (OptionType.some KExpr (kconst_inst_type sig us))
-             (OptionType.some KExpr A)
+             (@OptionType.some KExpr (kconst_inst_type sig us))
+             (@OptionType.some KExpr A)
              (kdecl_type_at_intro tenv2 n sig us (ext n sig hlk) harity)
-             (Eq.cong KExpr (OptionType KExpr)
-               (fun (T0 : KExpr) => OptionType.some KExpr T0)
+             (@Eq.cong KExpr (OptionType KExpr)
+               (fun (T0 : KExpr) => @OptionType.some KExpr T0)
                (kconst_inst_type sig us) A
-               (Eq.symm KExpr A (kconst_inst_type sig us) hres)))))
+               (@Eq.symm KExpr A (kconst_inst_type sig us) hres)))))
    (fun (G0 : ListType KExpr) (e0 : KExpr) (A : KExpr) (B : KExpr)
      (_typed : TypingCtxConv tenv G0 e0 A) (equivalent : DefEq A B)
      (ih : TypingCtxConv tenv2 G0 e0 A) =>
-     TypingCtxConv.conv tenv2 G0 e0 A B ih equivalent)
+     @TypingCtxConv.conv tenv2 G0 e0 A B ih equivalent)
    (fun (G0 : ListType KExpr) (ty : KExpr) (v : KExpr) (b : KExpr) (B : KExpr) (u : Level)
      (_hty : TypingCtxConv tenv G0 ty (KExpr.sort u))
      (_hv : TypingCtxConv tenv G0 v ty)
-     (_hb : TypingCtxConv tenv (ListType.cons KExpr ty G0) b B)
+     (_hb : TypingCtxConv tenv (@ListType.cons KExpr ty G0) b B)
      (ihty : TypingCtxConv tenv2 G0 ty (KExpr.sort u))
      (ihv : TypingCtxConv tenv2 G0 v ty)
-     (ihb : TypingCtxConv tenv2 (ListType.cons KExpr ty G0) b B) =>
-     TypingCtxConv.let_ tenv2 G0 ty v b B u ihty ihv ihb)
+     (ihb : TypingCtxConv tenv2 (@ListType.cons KExpr ty G0) b B) =>
+     @TypingCtxConv.let_ tenv2 G0 ty v b B u ihty ihv ihb)
    (fun (G0 : ListType KExpr) (n : Nat) =>
-     TypingCtxConv.lit_nat tenv2 G0 n)
+     @TypingCtxConv.lit_nat tenv2 G0 n)
    (fun (G0 : ListType KExpr) (n : Nat) =>
-     TypingCtxConv.lit_string tenv2 G0 n)
+     @TypingCtxConv.lit_string tenv2 G0 n)
    G e T typed",
             "typingctxconv_tenv_mono: DECLARATION-ENVIRONMENT MONOTONICITY of the ten-constructor              TypingCtxConv judgment. A derivation in tenv survives into any tenv2 that preserves              tenv's ENTRIES — signature and all, not merely their definedness. Nine rules              re-assemble their induction hypotheses unchanged and DefEq carries no environment, so              conv transports untouched; the entire content is the const arm, const's lookup              equation being the only premise in the judgment that reads tenv. It is discharged by              kdecl_type_at_some_inv (exposing the stored signature, its lookup equation, the              checked arity and the returned type), re-derived at tenv2 by kdecl_type_at_intro, and              re-aligned with the original A. No Eq.substType transport anywhere: G, e and T are              untouched, which makes this strictly simpler than typingctx_instL.                           WHY THE PREMISE IS SIGNATURE-PRESERVING AND NOT MERELY DEFINEDNESS-PRESERVING:              kdecl_type_at reads env at the single point n and then GUARDS on the stored              signature's parameter count against us, so an extension free to rebind n changes the              returned type and one free to change the parameter list's LENGTH sends the lookup to              none. The hypothesis is forced, not conservative.                           WHAT IT DOES NOT GIVE, measured: it does NOT compose with              kernel_add_decl_extends_env to yield 'add_decl preserves every earlier derivation'.              That lemma is over KEnv, the structural empty/addConst/addInductive environment of              the Phase-4 definitional-extension lane; TypingCtxConv's environment is KDeclEnv, the              FUNCTION Name -> OptionType KConstSig. Two unrelated types with no bridge in this              tree.                           NO CONSUMER TODAY: TypingCtx's consumers all hold tenv fixed. Registered over              TypingCtxConv rather than the conv-free TypingCtx because TypingCtxConv is what the              Layer-1 / ImplInfer soundness lane targets, which is where a consumer would arrive.              DerivedProved, zero axiom_deps, census-neutral.",
         )?;

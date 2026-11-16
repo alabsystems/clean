@@ -37,16 +37,16 @@ fn sparse(alias: bool, address: u128, size: u128) -> String {
 
 fn cached(alias: bool) -> String {
     format!(
-        "{} 77 (fun (word : Nat) => Eq Nat word 77)
-  (Eq.refl Nat 77) (Eq.refl (IROption Nat) (IROption.some Nat 77))",
+        "{} 77 (fun (word : Nat) => @Eq Nat word 77)
+  (@Eq.refl Nat 77) (@Eq.refl (IROption Nat) (@IROption.some Nat 77))",
         frame(alias, 80, 8).replacen("range_frame", "cached_word", 1)
     )
 }
 
 fn cache_equation(alias: bool, name: &str) -> String {
     format!(
-        "def {name} : And (Eq Nat 77 77)
-  (Eq (IROption Nat) ({}) (IROption.some Nat 77)) :=\n{}",
+        "def {name} : And (@Eq Nat 77 77)
+  (@Eq (IROption Nat) ({}) (@IROption.some Nat 77)) :=\n{}",
         read(alias, "arc_pair_seed", 41, 7, 80, 8),
         cached(alias)
     )
@@ -59,14 +59,14 @@ fn byte_arc_count_pair_sparse_slots_cache_and_undefined_padding_are_framed() {
         for alias in [false, true] {
             let case = super::super::suffix(alias);
             for (address, size, endpoint) in [
-                (48, 8, "IROption.some Nat 1"),
-                (56, 8, "IROption.some Nat 144"),
-                (64, 8, "IROption.some Nat 200"),
-                (72, 8, "IROption.some Nat 3"),
-                (80, 8, "IROption.some Nat 77"),
+                (48, 8, "@IROption.some Nat 1"),
+                (56, 8, "@IROption.some Nat 144"),
+                (64, 8, "@IROption.some Nat 200"),
+                (72, 8, "@IROption.some Nat 3"),
+                (80, 8, "@IROption.some Nat 77"),
                 // Unobserved/padding initialization is never an input premise.
                 // This selected padding read happens to be NONE, and stays so.
-                (104, 1, "IROption.none Nat"),
+                (104, 1, "@IROption.none Nat"),
             ] {
                 let initial = format!(
                     "ir_byte_read_word_v1 (ir_byte_mem_bytes_v1 ({})) {size} {address}",
@@ -79,7 +79,7 @@ fn byte_arc_count_pair_sparse_slots_cache_and_undefined_padding_are_framed() {
                     &initial,
                     endpoint,
                     &sparse(alias, address, size),
-                    &format!("Eq.refl ({OPTION}) ({endpoint})"),
+                    &format!("@Eq.refl ({OPTION}) ({endpoint})"),
                 );
                 add(
                     &mut spec,
@@ -116,7 +116,7 @@ fn builtin(alias: bool, text: &str, name: &str) -> String {
         "ir_byte_builtin_name_atom_v1 ({}) IRTy.fatstr_ (IRScalar.fat_ 96 {length})",
         memory(seed, 41, 7)
     );
-    let endpoint = format!("IROption.some IRBuiltinNameAtomV1 IRBuiltinNameAtomV1.{atom}");
+    let endpoint = format!("@IROption.some IRBuiltinNameAtomV1 IRBuiltinNameAtomV1.{atom}");
     let second = if alias { 16 } else { 32 };
     let proof = format!(
         "{} 96 ({}) ({})",
@@ -132,16 +132,16 @@ fn builtin(alias: bool, text: &str, name: &str) -> String {
         let initial_memory = memory(seed, 41, 7);
         let byte_proofs = b"String"
             .iter()
-            .map(|byte| format!(" (Eq.refl (IROption Nat) (IROption.some Nat {byte}))"))
+            .map(|byte| format!(" (@Eq.refl (IROption Nat) (@IROption.some Nat {byte}))"))
             .collect::<String>();
         format!(
             "ir_byte_builtin_string_input_v1 (ir_byte_mem_allocs_v1 ({initial_memory})) \
              (ir_byte_mem_bytes_v1 ({initial_memory})) (ir_byte_mem_next_v1 ({initial_memory})) \
-             96 ({}) (Eq.refl Bool Bool.true){byte_proofs}",
+             96 ({}) (@Eq.refl Bool Bool.true){byte_proofs}",
             le(97, LIMIT)
         )
     } else {
-        format!("Eq.refl ({ty}) ({endpoint})")
+        format!("@Eq.refl ({ty}) ({endpoint})")
     };
     equation(
         name,
@@ -219,7 +219,7 @@ fn byte_arc_count_pair_clone_bound_allows_equality_and_separately_bounds_alias_s
                     &format!("arc_pair_{case}_boundary_new"),
                     OPTION,
                     &read(alias, "arc_pair_seed", n, m, address, 8),
-                    &format!("IROption.some Nat {new}"),
+                    &format!("@IROption.some Nat {new}"),
                     &law(alias, suffix, "arc_pair_seed", n, m),
                 ),
             );
@@ -242,8 +242,8 @@ fn byte_arc_count_pair_clone_bound_allows_equality_and_separately_bounds_alias_s
   (ir_byte_fetch_add_relaxed_usize_seq_v1 64 arc_pair_ctx (IRScalar.ptr_ 16) (IRScalar.int_ 1) ({initial})))) 8 16");
         let proof = format!(
             "ir_byte_fetch_add_relaxed_usize64_seq_new_v1 arc_pair_ctx ({initial}) 16 {old} 1
-  ({}) (Eq.refl (IROption IRByteLayoutV1) (IROption.some IRByteLayoutV1 ({})))
-  (Eq.refl Bool Bool.true) (ir_byte_usize64_rep_write_v1 ({before_second}) 16 {old}) ({})",
+  ({}) (@Eq.refl (IROption IRByteLayoutV1) (@IROption.some IRByteLayoutV1 ({})))
+  (@Eq.refl Bool Bool.true) (ir_byte_usize64_rep_write_v1 ({before_second}) 16 {old}) ({})",
             le(17, LIMIT),
             super::super::LAYOUT,
             le(old + 2, LIMIT)
@@ -254,7 +254,7 @@ fn byte_arc_count_pair_clone_bound_allows_equality_and_separately_bounds_alias_s
                 "arc_pair_above_max_single_model_still_writes",
                 OPTION,
                 &actual,
-                &format!("IROption.some Nat {}", old + 1),
+                &format!("@IROption.some Nat {}", old + 1),
                 &proof,
             ),
         );
@@ -311,12 +311,12 @@ fn byte_arc_count_pair_faults_preserve_exact_first_or_intermediate_memory() {
                 &format!("arc_pair_fault_{name}_old_none"),
                 "IROption IRScalar",
                 &format!("ir_byte_arc_count_pair_old_at_v1 ({operation}) 0"),
-                "IROption.none IRScalar",
+                "@IROption.none IRScalar",
             );
         }
-        let u64_context = "IRByteContextV1.mk (IRModule.mk (IRList.nil IRFunc) (IRList.nil IRGlobal))
-  (IRList.cons IRByteLayoutV1 (IRByteLayoutV1.mk (IRTy.uint_ 64) 8 8 (IRList.nil IRTy) (IRList.nil Nat)) (IRList.nil IRByteLayoutV1))
-  (IRList.nil IRByteSignatureV1) (IRList.nil IRByteFunctionV1) (IRList.nil IRByteSiteV1)";
+        let u64_context = "IRByteContextV1.mk (IRModule.mk (@IRList.nil IRFunc) (@IRList.nil IRGlobal))
+  (@IRList.cons IRByteLayoutV1 (IRByteLayoutV1.mk (IRTy.uint_ 64) 8 8 (@IRList.nil IRTy) (@IRList.nil Nat)) (@IRList.nil IRByteLayoutV1))
+  (@IRList.nil IRByteSignatureV1) (@IRList.nil IRByteFunctionV1) (@IRList.nil IRByteSiteV1)";
         let memory = memory("arc_pair_seed", 41, 7);
         compute(
             &mut spec,
@@ -358,15 +358,15 @@ fn byte_arc_count_pair_wrong_conclusions_fail_with_unchanged_proofs() {
                 &format!("arc_pair_control_{case}_new_positive"),
                 OPTION,
                 &read(alias, "arc_pair_seed", 41, 7, 16, 8),
-                &format!("IROption.some Nat {correct}"),
+                &format!("@IROption.some Nat {correct}"),
                 &law(alias, "first_new", "arc_pair_seed", 41, 7),
             );
             conclusion_control(
                 &mut spec,
                 &source,
                 &format!("arc_pair_control_{case}_stale_new"),
-                &format!("IROption.some Nat {correct}"),
-                &format!("IROption.some Nat {stale}"),
+                &format!("@IROption.some Nat {correct}"),
+                &format!("@IROption.some Nat {stale}"),
             );
         }
         let cache = cache_equation(false, "arc_pair_control_cache_positive");
@@ -374,16 +374,16 @@ fn byte_arc_count_pair_wrong_conclusions_fail_with_unchanged_proofs() {
             &mut spec,
             &cache,
             "arc_pair_control_cache_changed",
-            "IROption.some Nat 77",
-            "IROption.some Nat 78",
+            "@IROption.some Nat 77",
+            "@IROption.some Nat 78",
         );
         let atom = builtin(false, "nat", "arc_pair_control_atom_positive");
         conclusion_control(
             &mut spec,
             &atom,
             "arc_pair_control_atom_changed",
-            "IROption.some IRBuiltinNameAtomV1 IRBuiltinNameAtomV1.nat_",
-            "IROption.some IRBuiltinNameAtomV1 IRBuiltinNameAtomV1.string_",
+            "@IROption.some IRBuiltinNameAtomV1 IRBuiltinNameAtomV1.nat_",
+            "@IROption.some IRBuiltinNameAtomV1 IRBuiltinNameAtomV1.string_",
         );
 
         let initial = super::super::written("arc_pair_seed", "16", "41");
@@ -395,7 +395,7 @@ fn byte_arc_count_pair_wrong_conclusions_fail_with_unchanged_proofs() {
             RESULT,
             &actual,
             &endpoint,
-            &format!("Eq.refl ({RESULT}) ({endpoint})"),
+            &format!("@Eq.refl ({RESULT}) ({endpoint})"),
         );
         conclusion_control(
             &mut spec,

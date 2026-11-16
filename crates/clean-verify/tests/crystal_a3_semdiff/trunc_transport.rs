@@ -107,7 +107,7 @@ fn add(spec: &mut Specification, source: &str, expected: usize) -> Result<(), Bo
 }
 
 fn values(n: &str) -> String {
-    format!("(IRList.cons IRScalar (IRScalar.int_ {n}) (IRList.nil IRScalar))")
+    format!("(@IRList.cons IRScalar (IRScalar.int_ {n}) (@IRList.nil IRScalar))")
 }
 
 fn ret(n: &str) -> String {
@@ -278,15 +278,15 @@ fn build_spec() -> Result<Specification, Box<dyn Error>> {
     compare_model(&original, &spec);
     add(
         &mut spec,
-        "def a3_trunc_pow2_step (w : Nat) : Eq Nat (ir_nat_pow2 (Nat.succ w)) \
+        "def a3_trunc_pow2_step (w : Nat) : @Eq Nat (ir_nat_pow2 (Nat.succ w)) \
          (Nat.add (ir_nat_pow2 w) (ir_nat_pow2 w)) := \
-         Eq.refl Nat (Nat.add (ir_nat_pow2 w) (ir_nat_pow2 w))",
+         @Eq.refl Nat (Nat.add (ir_nat_pow2 w) (ir_nat_pow2 w))",
         1,
     )?;
     add(
         &mut spec,
-        "def a3_trunc_double_eq (a b : Nat) (h : Eq Nat a b) : \
-         Eq Nat (Nat.add a a) (Nat.add b b) := \
+        "def a3_trunc_double_eq (a b : Nat) (h : @Eq Nat a b) : \
+         @Eq Nat (Nat.add a a) (Nat.add b b) := \
          Eq.trans Nat (Nat.add a a) (Nat.add a b) (Nat.add b b) \
           (ir_eq_cong Nat Nat (fun (z : Nat) => Nat.add a z) a b h) \
           (ir_eq_cong Nat Nat (fun (z : Nat) => Nat.add z b) a b h)",
@@ -294,7 +294,7 @@ fn build_spec() -> Result<Specification, Box<dyn Error>> {
     )?;
     add(
         &mut spec,
-        "def a3_trunc_pow_0 : Eq Nat (ir_nat_pow2 0) 1 := Eq.refl Nat 1",
+        "def a3_trunc_pow_0 : @Eq Nat (ir_nat_pow2 0) 1 := @Eq.refl Nat 1",
         0,
     )?;
     for k in 1..=32 {
@@ -303,7 +303,7 @@ fn build_spec() -> Result<Specification, Box<dyn Error>> {
         let half = value / 2;
         let name = format!("a3_trunc_pow_{k}");
         let source = format!(
-            "def {name} : Eq Nat (ir_nat_pow2 {k}) {value} := \
+            "def {name} : @Eq Nat (ir_nat_pow2 {k}) {value} := \
              Eq.trans Nat (ir_nat_pow2 {k}) \
               (Nat.add (ir_nat_pow2 {previous}) (ir_nat_pow2 {previous})) {value} \
               (a3_trunc_pow2_step {previous}) \
@@ -311,14 +311,14 @@ fn build_spec() -> Result<Specification, Box<dyn Error>> {
                 (Nat.add (ir_nat_pow2 {previous}) (ir_nat_pow2 {previous})) \
                 (Nat.add {half} {half}) {value} \
                 (a3_trunc_double_eq (ir_nat_pow2 {previous}) {half} a3_trunc_pow_{previous}) \
-                (Eq.refl Nat {value}))"
+                (@Eq.refl Nat {value}))"
         );
         add(&mut spec, &source, 0)?;
     }
     add(
         &mut spec,
         "def a3_trunc_wrap32 (n : Nat) : \
-         Eq Nat (ir_wrap 32 n) (ir_nat_rem_total_v1 n 4294967296) := \
+         @Eq Nat (ir_wrap 32 n) (ir_nat_rem_total_v1 n 4294967296) := \
          Eq.trans Nat (ir_wrap 32 n) (ir_nat_rem n 4294967296) \
           (ir_nat_rem_total_v1 n 4294967296) \
           (ir_eq_cong Nat Nat (fun (d : Nat) => ir_nat_rem n d) \
@@ -349,10 +349,10 @@ pub(super) fn register(spec: &mut Specification, chain: &WideChain) {
         "original truncation input inventory changed"
     );
     let source = format!(
-        "def a3_trunc_symbolic (n : Nat) : Eq IROutcome \
+        "def a3_trunc_symbolic (n : Nat) : @Eq IROutcome \
          (ir_eval ir_d2 ir_gc_module ir_d0 \
-          (IRList.cons IRScalar IRScalar.undef_ {}) ir_mem0 ir_d0) {} \
-         := Eq.refl IROutcome {}",
+          (@IRList.cons IRScalar IRScalar.undef_ {}) ir_mem0 ir_d0) {} \
+         := @Eq.refl IROutcome {}",
         values("n"),
         ret("(ir_wrap 32 n)"),
         ret("(ir_wrap 32 n)")
@@ -410,7 +410,7 @@ pub(super) fn value_obligation(
         .rsplit_once(" := ")
         .expect("original Eq declaration");
     let rhs = reflexive
-        .strip_prefix("Eq.refl IROutcome ")
+        .strip_prefix("@Eq.refl IROutcome ")
         .expect("original candidate");
     let n = input(tail);
     let lhs = format!("(ir_eval ir_d{fuel} {module} {fid} {tail})");
@@ -422,7 +422,7 @@ pub(super) fn value_obligation(
          (Eq.trans IROutcome {middle} {normalized} {rhs} \
            (ir_eq_cong Nat IROutcome (fun (z : Nat) => {}) \
              (ir_wrap 32 {n}) {fast} (a3_trunc_wrap32 {n})) \
-           (Eq.refl IROutcome {rhs}))",
+           (@Eq.refl IROutcome {rhs}))",
         ret("z")
     );
     let transported = format!("{goal} := {body}");

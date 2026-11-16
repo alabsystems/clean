@@ -224,6 +224,15 @@ fn test_environment_constructors_expose_split_core_trust_surface() {
     let env = Environment::new();
     assert_core_trust_surface(&env);
 
-    let env = Environment::with_prelude();
+    let mut env = Environment::with_prelude();
+    // Admission markers are opt-in for the default checked prelude.
+    for marker in ["sorry", "trustedArith", "trustedAy"] {
+        assert!(
+            env.get_const(&Name::from_string(marker)).is_none(),
+            "the default prelude must not install the admission marker {marker}"
+        );
+    }
+    env.init_admission_stub_theory()
+        .expect("explicit admission-marker opt-in");
     assert_core_trust_surface(&env);
 }

@@ -364,14 +364,14 @@ fn battery() -> Result<BTreeMap<&'static str, Vec<String>>, String> {
             "KExpr.bvar Nat.zero".to_string(),
             "KExpr.bvar (Nat.succ Nat.zero)".to_string(),
             // a const with a literal Name (anonymous) + empty universe list
-            "KExpr.const Name.anonymous (ListType.nil Level)".to_string(),
+            "KExpr.const Name.anonymous (@ListType.nil Level)".to_string(),
             // A real reflected inductive name (delta/iota-inert), resolved
             // semantically because frequency-ordered tags can move.
-            format!("KExpr.const {kexpr} (ListType.nil Level)"),
+            format!("KExpr.const {kexpr} (@ListType.nil Level)"),
             // Semantic atoms are resolved through the fully validated committed
             // interning table, never copied numeric tags.
-            format!("KExpr.const {nat_add} (ListType.nil Level)"),
-            format!("KExpr.const {nat_zero} (ListType.nil Level)"),
+            format!("KExpr.const {nat_add} (@ListType.nil Level)"),
+            format!("KExpr.const {nat_zero} (@ListType.nil Level)"),
             // a plain lambda value: λ (sort 0). bvar0
             "KExpr.lam (KExpr.sort Level.zero) (KExpr.bvar Nat.zero)".to_string(),
             // a plain pi value: Π (sort 0). bvar0
@@ -389,7 +389,7 @@ fn battery() -> Result<BTreeMap<&'static str, Vec<String>>, String> {
             // depth-3 nest: a lambda whose body is an app of a const onto a bvar,
             // wrapped in another lambda — exercises instantiate/lift under two
             // binders without being a redex itself.
-            "KExpr.lam (KExpr.sort Level.zero) (KExpr.lam (KExpr.sort (Level.succ Level.zero)) (KExpr.app (KExpr.const Name.anonymous (ListType.nil Level)) (KExpr.bvar (Nat.succ Nat.zero))))".to_string(),
+            "KExpr.lam (KExpr.sort Level.zero) (KExpr.lam (KExpr.sort (Level.succ Level.zero)) (KExpr.app (KExpr.const Name.anonymous (@ListType.nil Level)) (KExpr.bvar (Nat.succ Nat.zero))))".to_string(),
             // The remaining live constructors: genuine dependent let, field
             // projection syntax, and natural literal.
             "KExpr.let_ (KExpr.sort Level.zero) (KExpr.lit Nat.zero) (KExpr.bvar Nat.zero)".to_string(),

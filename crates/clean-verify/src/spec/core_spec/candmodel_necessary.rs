@@ -67,20 +67,20 @@ impl Specification {
     fn candmodel_forces_const_whnf_acc_src() -> String {
         let motive = "(fun (M0 : CandModel tenv) => \
                       forall (nn : Name) (uu : ListType Level) (AA : KExpr), \
-                      Eq (OptionType KExpr) (kdecl_type_at tenv nn uu) \
-                      (OptionType.some KExpr AA) -> whnf_acc (KExpr.const nn uu)) ";
+                      @Eq (OptionType KExpr) (kdecl_type_at tenv nn uu) \
+                      (@OptionType.some KExpr AA) -> whnf_acc (KExpr.const nn uu)) ";
         let minor = "fun (nn : Name) (uu : ListType Level) (AA : KExpr) \
-                     (hh : Eq (OptionType KExpr) (kdecl_type_at tenv nn uu) \
-                     (OptionType.some KExpr AA)) => \
+                     (hh : @Eq (OptionType KExpr) (kdecl_type_at tenv nn uu) \
+                     (@OptionType.some KExpr AA)) => \
                      cr1 (psubst idsubst AA) (KExpr.const nn uu) \
                      (redConst nn uu AA idsubst hh))";
         format!(
             "def candmodel_forces_const_whnf_acc \
              (tenv : KDeclEnv) (M : CandModel tenv) \
              (n : Name) (us : ListType Level) (A : KExpr) \
-             (h : Eq (OptionType KExpr) (kdecl_type_at tenv n us) (OptionType.some KExpr A)) : \
+             (h : @Eq (OptionType KExpr) (kdecl_type_at tenv n us) (@OptionType.some KExpr A)) : \
              whnf_acc (KExpr.const n us) := \
-             CandModel.rec tenv {motive}{tele}{minor} M n us A h",
+             @CandModel.rec tenv {motive}{tele}{minor} M n us A h",
             tele = CANDMODEL_MK_BINDERS,
         )
     }
@@ -95,7 +95,7 @@ impl Specification {
     fn candmodel_uninhabited_of_nonsn_const_src() -> String {
         "def candmodel_uninhabited_of_nonsn_const \
          (tenv : KDeclEnv) (n : Name) (us : ListType Level) (A : KExpr) \
-         (h : Eq (OptionType KExpr) (kdecl_type_at tenv n us) (OptionType.some KExpr A)) \
+         (h : @Eq (OptionType KExpr) (kdecl_type_at tenv n us) (@OptionType.some KExpr A)) \
          (hbad : forall (C : Type), whnf_acc (KExpr.const n us) -> C) \
          (M : CandModel tenv) (C : Type) : C := \
          hbad C (candmodel_forces_const_whnf_acc tenv M n us A h)"
@@ -140,20 +140,20 @@ impl Specification {
         let motive = "(fun (M0 : CandModel tenv) => \
                       forall (nn : Name) (uu : ListType Level) (AA : KExpr) \
                       (ss : Nat -> KExpr) (uv : Level) (BB : KExpr) (aa : KExpr), \
-                      Eq (OptionType KExpr) (kdecl_type_at tenv nn uu) \
-                      (OptionType.some KExpr AA) -> \
-                      Eq KExpr (psubst ss AA) (KExpr.pi (KExpr.sort uv) BB) -> \
+                      @Eq (OptionType KExpr) (kdecl_type_at tenv nn uu) \
+                      (@OptionType.some KExpr AA) -> \
+                      @Eq KExpr (psubst ss AA) (KExpr.pi (KExpr.sort uv) BB) -> \
                       whnf_acc aa -> \
                       whnf_acc (KExpr.app (KExpr.const nn uu) aa)) ";
         let minor = "fun (nn : Name) (uu : ListType Level) (AA : KExpr) \
                      (ss : Nat -> KExpr) (uv : Level) (BB : KExpr) (aa : KExpr) \
-                     (hh : Eq (OptionType KExpr) (kdecl_type_at tenv nn uu) \
-                     (OptionType.some KExpr AA)) \
-                     (hpi : Eq KExpr (psubst ss AA) (KExpr.pi (KExpr.sort uv) BB)) \
+                     (hh : @Eq (OptionType KExpr) (kdecl_type_at tenv nn uu) \
+                     (@OptionType.some KExpr AA)) \
+                     (hpi : @Eq KExpr (psubst ss AA) (KExpr.pi (KExpr.sort uv) BB)) \
                      (ha : whnf_acc aa) => \
                      cr1 (instantiate BB aa) (KExpr.app (KExpr.const nn uu) aa) \
                      (pi_elim (KExpr.sort uv) BB (KExpr.const nn uu) aa \
-                     (Eq.substType KExpr \
+                     (@Eq.substType KExpr \
                      (fun (z : KExpr) => Red z (KExpr.const nn uu)) \
                      (psubst ss AA) (KExpr.pi (KExpr.sort uv) BB) hpi \
                      (redConst nn uu AA ss hh)) \
@@ -163,11 +163,11 @@ impl Specification {
              (tenv : KDeclEnv) (M : CandModel tenv) \
              (n : Name) (us : ListType Level) (A : KExpr) (s : Nat -> KExpr) \
              (u : Level) (B : KExpr) (a : KExpr) \
-             (h : Eq (OptionType KExpr) (kdecl_type_at tenv n us) (OptionType.some KExpr A)) \
-             (hpi : Eq KExpr (psubst s A) (KExpr.pi (KExpr.sort u) B)) \
+             (h : @Eq (OptionType KExpr) (kdecl_type_at tenv n us) (@OptionType.some KExpr A)) \
+             (hpi : @Eq KExpr (psubst s A) (KExpr.pi (KExpr.sort u) B)) \
              (ha : whnf_acc a) : \
              whnf_acc (KExpr.app (KExpr.const n us) a) := \
-             CandModel.rec tenv {motive}{tele}{minor} M n us A s u B a h hpi ha",
+             @CandModel.rec tenv {motive}{tele}{minor} M n us A s u B a h hpi ha",
             tele = CANDMODEL_MK_BINDERS,
         )
     }
@@ -183,8 +183,8 @@ impl Specification {
         "def candmodel_uninhabited_of_nonsn_app \
          (tenv : KDeclEnv) (n : Name) (us : ListType Level) (A : KExpr) \
          (s : Nat -> KExpr) (u : Level) (B : KExpr) (a : KExpr) \
-         (h : Eq (OptionType KExpr) (kdecl_type_at tenv n us) (OptionType.some KExpr A)) \
-         (hpi : Eq KExpr (psubst s A) (KExpr.pi (KExpr.sort u) B)) \
+         (h : @Eq (OptionType KExpr) (kdecl_type_at tenv n us) (@OptionType.some KExpr A)) \
+         (hpi : @Eq KExpr (psubst s A) (KExpr.pi (KExpr.sort u) B)) \
          (ha : whnf_acc a) \
          (hbad : forall (C : Type), whnf_acc (KExpr.app (KExpr.const n us) a) -> C) \
          (M : CandModel tenv) (C : Type) : C := \
@@ -248,15 +248,15 @@ impl Specification {
             (
                 "kdecl_empty".to_string(),
                 "def kdecl_empty : KDeclEnv := \
-                 fun (_n : Name) => OptionType.none KConstSig"
+                 fun (_n : Name) => @OptionType.none KConstSig"
                     .to_string(),
             ),
             (
                 "kdecl_empty_type_at_is_none".to_string(),
                 "def kdecl_empty_type_at_is_none (n : Name) (us : ListType Level) : \
                  Eq (OptionType KExpr) (kdecl_type_at kdecl_empty n us) \
-                 (OptionType.none KExpr) := \
-                 Eq.refl (OptionType KExpr) (OptionType.none KExpr)"
+                 (@OptionType.none KExpr) := \
+                 @Eq.refl (OptionType KExpr) (@OptionType.none KExpr)"
                     .to_string(),
             ),
             (
@@ -264,7 +264,7 @@ impl Specification {
                 "def redconst_premise_is_refutable_at_the_empty_env \
                  (n : Name) (us : ListType Level) (A : KExpr) (C : Type) \
                  (h : Eq (OptionType KExpr) (kdecl_type_at kdecl_empty n us) \
-                 (OptionType.some KExpr A)) : C := \
+                 (@OptionType.some KExpr A)) : C := \
                  option_none_ne_some_type KExpr A C h"
                     .to_string(),
             ),
@@ -319,11 +319,11 @@ impl Specification {
         let arm = |vals: &str| format!("(fun ({vals}) => {blind})");
         let redn = format!(
             "def RedN : Nat -> KExpr -> KExpr -> Type := \
-             Nat.rec (fun (_k : Nat) => KExpr -> KExpr -> Type) \
+             @Nat.rec (fun (_k : Nat) => KExpr -> KExpr -> Type) \
              (fun (T0 : KExpr) (e0 : KExpr) => {blind}) \
              (fun (n : Nat) (ih : KExpr -> KExpr -> Type) => \
              fun (T0 : KExpr) (e0 : KExpr) => \
-             KExpr.rec (fun (_t : KExpr) => Type) \
+             @KExpr.rec (fun (_t : KExpr) => Type) \
              {sort} {bvar} {app} {lam} \
              (fun (ty : KExpr) (bb : KExpr) (i1 : Type) (i2 : Type) => \
              AndType (whnf_acc e0) \
@@ -403,7 +403,7 @@ impl Specification {
                 "def redstep_red_sort (nn : Level) (e : KExpr) (h : whnf_acc e) : \
                  RedStep (KExpr.sort nn) e := \
                  fun (n : Nat) => \
-                 Nat.rec (fun (k : Nat) => RedN k (KExpr.sort nn) e) h \
+                 @Nat.rec (fun (k : Nat) => RedN k (KExpr.sort nn) e) h \
                  (fun (k : Nat) (_ih : RedN k (KExpr.sort nn) e) => h) n"
                     .to_string(),
             ),
@@ -415,9 +415,9 @@ impl Specification {
                  RedN k (instantiate B x) (KExpr.app f x)) : \
                  RedStep (KExpr.pi A B) f := \
                  fun (n : Nat) => \
-                 Nat.rec (fun (k : Nat) => RedN k (KExpr.pi A B) f) hw \
+                 @Nat.rec (fun (k : Nat) => RedN k (KExpr.pi A B) f) hw \
                  (fun (k : Nat) (_ih : RedN k (KExpr.pi A B) f) => \
-                 AndType.intro (whnf_acc f) \
+                 @AndType.intro (whnf_acc f) \
                  (forall (x : KExpr), RedN k A x -> \
                  RedN k (instantiate B x) (KExpr.app f x)) hw (hp k)) n"
                     .to_string(),
@@ -472,7 +472,7 @@ impl Specification {
         let pi_arm = format!(
             "(fun (ty : KExpr) (bb : KExpr) (j0 : {ihty}) (j1 : {ihbb}) => \
              fun (h : RedN (Nat.succ k) (KExpr.pi ty bb) x) (st : whnf_step x y) => \
-             AndType.intro (whnf_acc y) \
+             @AndType.intro (whnf_acc y) \
              (forall (z : KExpr), RedN k ty z -> \
              RedN k (instantiate bb z) (KExpr.app y z)) \
              (whnf_acc_step x y \
@@ -489,13 +489,13 @@ impl Specification {
             ihbb = ih("bb"),
         );
         let body = format!(
-            "Nat.rec ({motive}) \
+            "@Nat.rec ({motive}) \
              (fun (T : KExpr) (x : KExpr) (y : KExpr) (h : whnf_acc x) \
              (st : whnf_step x y) => whnf_acc_step x y h st) \
              (fun (k : Nat) (ih : forall (T : KExpr) (x : KExpr) (y : KExpr), \
              RedN k T x -> whnf_step x y -> RedN k T y) => \
              fun (T : KExpr) (x : KExpr) (y : KExpr) => \
-             KExpr.rec ({inner}) \
+             @KExpr.rec ({inner}) \
              {sort} {bvar} {app} {lam} {pi_arm} {konst} {let_} {proj} {mvar} \
              T) n TT e e2 (h n) st",
             sort = arm("l : Level", &[]),
@@ -567,7 +567,7 @@ impl Specification {
         // `whnf_acc OMEGA_LAM`. Needs a `Nat.rec` because `RedN n` does not
         // reduce at a variable index -- the same shape `redstep_red_sort` uses.
         let red_t = format!(
-            "(fun (n : Nat) => Nat.rec (fun (k : Nat) => RedN k {t} {om}) \
+            "(fun (n : Nat) => @Nat.rec (fun (k : Nat) => RedN k {t} {om}) \
              whnf_acc_omega_lam_uncond \
              (fun (k : Nat) (_ih : RedN k {t} {om}) => whnf_acc_omega_lam_uncond) n)"
         );

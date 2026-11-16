@@ -187,7 +187,7 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (env : RecEnv) (e : KExpr) (e' : KExpr) (h : par_reduces_p env e e') => ",
-                    "par_reduces_p_star.step env e e' e' h (par_reduces_p_star.refl env e')"
+                    "@par_reduces_p_star.step env e e' e' h (@par_reduces_p_star.refl env e')"
                 )
                 .to_string(),
             ),
@@ -219,7 +219,7 @@ impl Specification {
                 concat!(
                     "fun (env : RecEnv) (e1 : KExpr) (e2 : KExpr) (e3 : KExpr) ",
                     "(h1 : par_reduces_p_star env e1 e2) (h2 : par_reduces_p_star env e2 e3) => ",
-                    "par_reduces_p_star.rec env ",
+                    "@par_reduces_p_star.rec env ",
                     "(fun (a : KExpr) (b : KExpr) (_ : par_reduces_p_star env a b) => ",
                     "par_reduces_p_star env b e3 -> par_reduces_p_star env a e3) ",
                     "(fun (e : KExpr) (k : par_reduces_p_star env e e3) => k) ",
@@ -228,7 +228,7 @@ impl Specification {
                     "(_htail : par_reduces_p_star env e' e'') ",
                     "(ih : par_reduces_p_star env e'' e3 -> par_reduces_p_star env e' e3) ",
                     "(k : par_reduces_p_star env e'' e3) => ",
-                    "par_reduces_p_star.step env e e' e3 hstep (ih k)) ",
+                    "@par_reduces_p_star.step env e e' e3 hstep (ih k)) ",
                     "e1 e2 h1 h2"
                 )
                 .to_string(),
@@ -283,7 +283,7 @@ impl Specification {
                     "@par_strips_witness_p.rec env e1 e2 ",
                     "(fun (_w : par_strips_witness_p env e1 e2) => par_strips_witness_p_star env e1 e2) ",
                     "(fun (e3 : KExpr) (l1 : par_reduces_p env e1 e3) (l2 : par_reduces_p env e2 e3) => ",
-                    "par_strips_witness_p_star.intro env e1 e2 e3 ",
+                    "@par_strips_witness_p_star.intro env e1 e2 e3 ",
                     "(par_subsumes_par_p_star env e1 e3 l1) (par_subsumes_par_p_star env e2 e3 l2)) ",
                     "w"
                 )
@@ -343,26 +343,26 @@ impl Specification {
                     "(hf : par_reduces_p_star env f f') (ha : par_reduces_p_star env a a') => ",
                     // left leg: app f a =>* app f' a  (induct on hf, fix arg a)
                     "par_reduces_p_star_trans env (KExpr.app f a) (KExpr.app f' a) (KExpr.app f' a') ",
-                    "(par_reduces_p_star.rec env ",
+                    "(@par_reduces_p_star.rec env ",
                     "(fun (x : KExpr) (y : KExpr) (_ : par_reduces_p_star env x y) => ",
                     "par_reduces_p_star env (KExpr.app x a) (KExpr.app y a)) ",
-                    "(fun (x : KExpr) => par_reduces_p_star.refl env (KExpr.app x a)) ",
+                    "(fun (x : KExpr) => @par_reduces_p_star.refl env (KExpr.app x a)) ",
                     "(fun (x : KExpr) (x' : KExpr) (x'' : KExpr) ",
                     "(hstep : par_reduces_p env x x') (_htail : par_reduces_p_star env x' x'') ",
                     "(ih : par_reduces_p_star env (KExpr.app x' a) (KExpr.app x'' a)) => ",
-                    "par_reduces_p_star.step env (KExpr.app x a) (KExpr.app x' a) (KExpr.app x'' a) ",
-                    "(par_reduces_p.app env x x' a a hstep (par_reduces_p.refl env a)) ih) ",
+                    "@par_reduces_p_star.step env (KExpr.app x a) (KExpr.app x' a) (KExpr.app x'' a) ",
+                    "(@par_reduces_p.app env x x' a a hstep (@par_reduces_p.refl env a)) ih) ",
                     "f f' hf) ",
                     // right leg: app f' a =>* app f' a'  (induct on ha, fix fn f')
-                    "(par_reduces_p_star.rec env ",
+                    "(@par_reduces_p_star.rec env ",
                     "(fun (x : KExpr) (y : KExpr) (_ : par_reduces_p_star env x y) => ",
                     "par_reduces_p_star env (KExpr.app f' x) (KExpr.app f' y)) ",
-                    "(fun (x : KExpr) => par_reduces_p_star.refl env (KExpr.app f' x)) ",
+                    "(fun (x : KExpr) => @par_reduces_p_star.refl env (KExpr.app f' x)) ",
                     "(fun (x : KExpr) (x' : KExpr) (x'' : KExpr) ",
                     "(hstep : par_reduces_p env x x') (_htail : par_reduces_p_star env x' x'') ",
                     "(ih : par_reduces_p_star env (KExpr.app f' x') (KExpr.app f' x'')) => ",
-                    "par_reduces_p_star.step env (KExpr.app f' x) (KExpr.app f' x') (KExpr.app f' x'') ",
-                    "(par_reduces_p.app env f' f' x x' (par_reduces_p.refl env f') hstep) ih) ",
+                    "@par_reduces_p_star.step env (KExpr.app f' x) (KExpr.app f' x') (KExpr.app f' x'') ",
+                    "(@par_reduces_p.app env f' f' x x' (@par_reduces_p.refl env f') hstep) ih) ",
                     "a a' ha)"
                 )
                 .to_string(),
@@ -434,26 +434,26 @@ impl Specification {
                         "(hty : par_reduces_p_star env ty ty') (hbody : par_reduces_p_star env body body') => ",
                         // left leg: HEAD ty body =>* HEAD ty' body  (induct on hty)
                         "par_reduces_p_star_trans env ({head} ty body) ({head} ty' body) ({head} ty' body') ",
-                        "(par_reduces_p_star.rec env ",
+                        "(@par_reduces_p_star.rec env ",
                         "(fun (x : KExpr) (y : KExpr) (_ : par_reduces_p_star env x y) => ",
                         "par_reduces_p_star env ({head} x body) ({head} y body)) ",
-                        "(fun (x : KExpr) => par_reduces_p_star.refl env ({head} x body)) ",
+                        "(fun (x : KExpr) => @par_reduces_p_star.refl env ({head} x body)) ",
                         "(fun (x : KExpr) (x' : KExpr) (x'' : KExpr) ",
                         "(hstep : par_reduces_p env x x') (_htail : par_reduces_p_star env x' x'') ",
                         "(ih : par_reduces_p_star env ({head} x' body) ({head} x'' body)) => ",
-                        "par_reduces_p_star.step env ({head} x body) ({head} x' body) ({head} x'' body) ",
-                        "({ctor} env x x' body body hstep (par_reduces_p.refl env body)) ih) ",
+                        "@par_reduces_p_star.step env ({head} x body) ({head} x' body) ({head} x'' body) ",
+                        "(@{ctor} env x x' body body hstep (@par_reduces_p.refl env body)) ih) ",
                         "ty ty' hty) ",
                         // right leg: HEAD ty' body =>* HEAD ty' body'  (induct on hbody)
-                        "(par_reduces_p_star.rec env ",
+                        "(@par_reduces_p_star.rec env ",
                         "(fun (x : KExpr) (y : KExpr) (_ : par_reduces_p_star env x y) => ",
                         "par_reduces_p_star env ({head} ty' x) ({head} ty' y)) ",
-                        "(fun (x : KExpr) => par_reduces_p_star.refl env ({head} ty' x)) ",
+                        "(fun (x : KExpr) => @par_reduces_p_star.refl env ({head} ty' x)) ",
                         "(fun (x : KExpr) (x' : KExpr) (x'' : KExpr) ",
                         "(hstep : par_reduces_p env x x') (_htail : par_reduces_p_star env x' x'') ",
                         "(ih : par_reduces_p_star env ({head} ty' x') ({head} ty' x'')) => ",
-                        "par_reduces_p_star.step env ({head} ty' x) ({head} ty' x') ({head} ty' x'') ",
-                        "({ctor} env ty' ty' x x' (par_reduces_p.refl env ty') hstep) ih) ",
+                        "@par_reduces_p_star.step env ({head} ty' x) ({head} ty' x') ({head} ty' x'') ",
+                        "(@{ctor} env ty' ty' x x' (@par_reduces_p.refl env ty') hstep) ih) ",
                         "body body' hbody)"
                     ),
                     head = head,
@@ -502,8 +502,8 @@ impl Specification {
         // par_reduces_p_list: pointwise parallel reduction of KExpr lists.
         self.add_inductive(
             r"inductive par_reduces_p_list (env : RecEnv) : ListType KExpr → ListType KExpr → Type
-| nil : par_reduces_p_list env (ListType.nil KExpr) (ListType.nil KExpr)
-| cons : forall (x : KExpr) (x' : KExpr) (xs : ListType KExpr) (xs' : ListType KExpr), par_reduces_p env x x' → par_reduces_p_list env xs xs' → par_reduces_p_list env (ListType.cons KExpr x xs) (ListType.cons KExpr x' xs')",
+| nil : par_reduces_p_list env (@ListType.nil KExpr) (@ListType.nil KExpr)
+| cons : forall (x : KExpr) (x' : KExpr) (xs : ListType KExpr) (xs' : ListType KExpr), par_reduces_p env x x' → par_reduces_p_list env xs xs' → par_reduces_p_list env (@ListType.cons KExpr x xs) (@ListType.cons KExpr x' xs')",
             "par_reduces_p_list env xs xs' — pointwise parallel reduction of KExpr lists for the proper \
              relation (nil to nil; cons reduces head and tail). The spine-argument relation the \
              par_reduces_p reduct congruence consumes. Part of #2859 (Increment F+).",
@@ -522,36 +522,36 @@ impl Specification {
                 concat!(
                     "fun (env : RecEnv) (xs : ListType KExpr) (xs' : ListType KExpr) (head : KExpr) (head' : KExpr) ",
                     "(hl : par_reduces_p_list env xs xs') (hh : par_reduces_p env head head') => ",
-                    "par_reduces_p_list.rec env ",
+                    "@par_reduces_p_list.rec env ",
                     "(fun (a : ListType KExpr) (a' : ListType KExpr) (_ : par_reduces_p_list env a a') => ",
                     "forall (h : KExpr) (h' : KExpr), par_reduces_p env h h' -> ",
                     "par_reduces_p env (apply_spine a h) (apply_spine a' h')) ",
                     "(fun (h : KExpr) (h' : KExpr) (hp : par_reduces_p env h h') => ",
-                    "Eq.substType KExpr ",
-                    "(fun (Z : KExpr) => par_reduces_p env (apply_spine (ListType.nil KExpr) h) Z) ",
-                    "h' (apply_spine (ListType.nil KExpr) h') ",
-                    "(Eq.symm KExpr (apply_spine (ListType.nil KExpr) h') h' (apply_spine_nil h')) ",
-                    "(Eq.substType KExpr ",
+                    "@Eq.substType KExpr ",
+                    "(fun (Z : KExpr) => par_reduces_p env (apply_spine (@ListType.nil KExpr) h) Z) ",
+                    "h' (apply_spine (@ListType.nil KExpr) h') ",
+                    "(@Eq.symm KExpr (apply_spine (@ListType.nil KExpr) h') h' (apply_spine_nil h')) ",
+                    "(@Eq.substType KExpr ",
                     "(fun (Z : KExpr) => par_reduces_p env Z h') ",
-                    "h (apply_spine (ListType.nil KExpr) h) ",
-                    "(Eq.symm KExpr (apply_spine (ListType.nil KExpr) h) h (apply_spine_nil h)) ",
+                    "h (apply_spine (@ListType.nil KExpr) h) ",
+                    "(@Eq.symm KExpr (apply_spine (@ListType.nil KExpr) h) h (apply_spine_nil h)) ",
                     "hp)) ",
                     "(fun (x : KExpr) (x' : KExpr) (xs0 : ListType KExpr) (xs0' : ListType KExpr) ",
                     "(hx : par_reduces_p env x x') (hxs : par_reduces_p_list env xs0 xs0') ",
                     "(ihxs : forall (h : KExpr) (h' : KExpr), par_reduces_p env h h' -> ",
                     "par_reduces_p env (apply_spine xs0 h) (apply_spine xs0' h')) => ",
                     "fun (h : KExpr) (h' : KExpr) (hp : par_reduces_p env h h') => ",
-                    "Eq.substType KExpr ",
-                    "(fun (Z : KExpr) => par_reduces_p env (apply_spine (ListType.cons KExpr x xs0) h) Z) ",
-                    "(apply_spine xs0' (KExpr.app h' x')) (apply_spine (ListType.cons KExpr x' xs0') h') ",
-                    "(Eq.symm KExpr (apply_spine (ListType.cons KExpr x' xs0') h') (apply_spine xs0' (KExpr.app h' x')) ",
+                    "@Eq.substType KExpr ",
+                    "(fun (Z : KExpr) => par_reduces_p env (apply_spine (@ListType.cons KExpr x xs0) h) Z) ",
+                    "(apply_spine xs0' (KExpr.app h' x')) (apply_spine (@ListType.cons KExpr x' xs0') h') ",
+                    "(@Eq.symm KExpr (apply_spine (@ListType.cons KExpr x' xs0') h') (apply_spine xs0' (KExpr.app h' x')) ",
                     "(apply_spine_cons x' xs0' h')) ",
-                    "(Eq.substType KExpr ",
+                    "(@Eq.substType KExpr ",
                     "(fun (Z : KExpr) => par_reduces_p env Z (apply_spine xs0' (KExpr.app h' x'))) ",
-                    "(apply_spine xs0 (KExpr.app h x)) (apply_spine (ListType.cons KExpr x xs0) h) ",
-                    "(Eq.symm KExpr (apply_spine (ListType.cons KExpr x xs0) h) (apply_spine xs0 (KExpr.app h x)) ",
+                    "(apply_spine xs0 (KExpr.app h x)) (apply_spine (@ListType.cons KExpr x xs0) h) ",
+                    "(@Eq.symm KExpr (apply_spine (@ListType.cons KExpr x xs0) h) (apply_spine xs0 (KExpr.app h x)) ",
                     "(apply_spine_cons x xs0 h)) ",
-                    "(ihxs (KExpr.app h x) (KExpr.app h' x') (par_reduces_p.app env h h' x x' hp hx)))) ",
+                    "(ihxs (KExpr.app h x) (KExpr.app h' x') (@par_reduces_p.app env h h' x x' hp hx)))) ",
                     "xs xs' hl head head' hh"
                 )
                 .to_string(),
@@ -584,11 +584,11 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (env : RecEnv) (xs : ListType KExpr) => ",
-                    "ListType.rec KExpr ",
+                    "@ListType.rec KExpr ",
                     "(fun (a : ListType KExpr) => par_reduces_p_list env a a) ",
-                    "(par_reduces_p_list.nil env) ",
+                    "(@par_reduces_p_list.nil env) ",
                     "(fun (x : KExpr) (rest : ListType KExpr) (ih : par_reduces_p_list env rest rest) => ",
-                    "par_reduces_p_list.cons env x x rest rest (par_reduces_p.refl env x) ih) ",
+                    "@par_reduces_p_list.cons env x x rest rest (@par_reduces_p.refl env x) ih) ",
                     "xs"
                 )
                 .to_string(),
@@ -623,32 +623,32 @@ impl Specification {
                 concat!(
                     "fun (env : RecEnv) (xs : ListType KExpr) (xs' : ListType KExpr) (ys : ListType KExpr) (ys' : ListType KExpr) ",
                     "(hxs : par_reduces_p_list env xs xs') (hys : par_reduces_p_list env ys ys') => ",
-                    "par_reduces_p_list.rec env ",
+                    "@par_reduces_p_list.rec env ",
                     "(fun (a : ListType KExpr) (a' : ListType KExpr) (_ : par_reduces_p_list env a a') => ",
                     "par_reduces_p_list env (list_append a ys) (list_append a' ys')) ",
-                    "(Eq.substType (ListType KExpr) ",
-                    "(fun (Z : ListType KExpr) => par_reduces_p_list env (list_append (ListType.nil KExpr) ys) Z) ",
-                    "ys' (list_append (ListType.nil KExpr) ys') ",
-                    "(Eq.symm (ListType KExpr) (list_append (ListType.nil KExpr) ys') ys' (list_append_nil ys')) ",
-                    "(Eq.substType (ListType KExpr) ",
+                    "(@Eq.substType (ListType KExpr) ",
+                    "(fun (Z : ListType KExpr) => par_reduces_p_list env (list_append (@ListType.nil KExpr) ys) Z) ",
+                    "ys' (list_append (@ListType.nil KExpr) ys') ",
+                    "(@Eq.symm (ListType KExpr) (list_append (@ListType.nil KExpr) ys') ys' (list_append_nil ys')) ",
+                    "(@Eq.substType (ListType KExpr) ",
                     "(fun (Z : ListType KExpr) => par_reduces_p_list env Z ys') ",
-                    "ys (list_append (ListType.nil KExpr) ys) ",
-                    "(Eq.symm (ListType KExpr) (list_append (ListType.nil KExpr) ys) ys (list_append_nil ys)) ",
+                    "ys (list_append (@ListType.nil KExpr) ys) ",
+                    "(@Eq.symm (ListType KExpr) (list_append (@ListType.nil KExpr) ys) ys (list_append_nil ys)) ",
                     "hys)) ",
                     "(fun (x : KExpr) (x' : KExpr) (xs0 : ListType KExpr) (xs0' : ListType KExpr) ",
                     "(hx : par_reduces_p env x x') (hxs0 : par_reduces_p_list env xs0 xs0') ",
                     "(ih : par_reduces_p_list env (list_append xs0 ys) (list_append xs0' ys')) => ",
-                    "Eq.substType (ListType KExpr) ",
-                    "(fun (Z : ListType KExpr) => par_reduces_p_list env (list_append (ListType.cons KExpr x xs0) ys) Z) ",
-                    "(ListType.cons KExpr x' (list_append xs0' ys')) (list_append (ListType.cons KExpr x' xs0') ys') ",
-                    "(Eq.symm (ListType KExpr) (list_append (ListType.cons KExpr x' xs0') ys') (ListType.cons KExpr x' (list_append xs0' ys')) ",
+                    "@Eq.substType (ListType KExpr) ",
+                    "(fun (Z : ListType KExpr) => par_reduces_p_list env (list_append (@ListType.cons KExpr x xs0) ys) Z) ",
+                    "(@ListType.cons KExpr x' (list_append xs0' ys')) (list_append (@ListType.cons KExpr x' xs0') ys') ",
+                    "(@Eq.symm (ListType KExpr) (list_append (@ListType.cons KExpr x' xs0') ys') (@ListType.cons KExpr x' (list_append xs0' ys')) ",
                     "(list_append_cons x' xs0' ys')) ",
-                    "(Eq.substType (ListType KExpr) ",
-                    "(fun (Z : ListType KExpr) => par_reduces_p_list env Z (ListType.cons KExpr x' (list_append xs0' ys'))) ",
-                    "(ListType.cons KExpr x (list_append xs0 ys)) (list_append (ListType.cons KExpr x xs0) ys) ",
-                    "(Eq.symm (ListType KExpr) (list_append (ListType.cons KExpr x xs0) ys) (ListType.cons KExpr x (list_append xs0 ys)) ",
+                    "(@Eq.substType (ListType KExpr) ",
+                    "(fun (Z : ListType KExpr) => par_reduces_p_list env Z (@ListType.cons KExpr x' (list_append xs0' ys'))) ",
+                    "(@ListType.cons KExpr x (list_append xs0 ys)) (list_append (@ListType.cons KExpr x xs0) ys) ",
+                    "(@Eq.symm (ListType KExpr) (list_append (@ListType.cons KExpr x xs0) ys) (@ListType.cons KExpr x (list_append xs0 ys)) ",
                     "(list_append_cons x xs0 ys)) ",
-                    "(par_reduces_p_list.cons env x x' (list_append xs0 ys) (list_append xs0' ys') hx ih))) ",
+                    "(@par_reduces_p_list.cons env x x' (list_append xs0 ys) (list_append xs0' ys') hx ih))) ",
                     "xs xs' hxs"
                 )
                 .to_string(),
@@ -686,31 +686,31 @@ impl Specification {
                 concat!(
                     "fun (env : RecEnv) (xs : ListType KExpr) (xs' : ListType KExpr) ",
                     "(hxs : par_reduces_p_list env xs xs') => ",
-                    "par_reduces_p_list.rec env ",
+                    "@par_reduces_p_list.rec env ",
                     "(fun (a : ListType KExpr) (a' : ListType KExpr) (_ : par_reduces_p_list env a a') => ",
                     "par_reduces_p_list env (list_tail a) (list_tail a')) ",
                     // nil arm
-                    "(Eq.substType (ListType KExpr) ",
-                    "(fun (Z : ListType KExpr) => par_reduces_p_list env (list_tail (ListType.nil KExpr)) Z) ",
-                    "(ListType.nil KExpr) (list_tail (ListType.nil KExpr)) ",
-                    "(Eq.symm (ListType KExpr) (list_tail (ListType.nil KExpr)) (ListType.nil KExpr) list_tail_nil) ",
-                    "(Eq.substType (ListType KExpr) ",
-                    "(fun (Z : ListType KExpr) => par_reduces_p_list env Z (ListType.nil KExpr)) ",
-                    "(ListType.nil KExpr) (list_tail (ListType.nil KExpr)) ",
-                    "(Eq.symm (ListType KExpr) (list_tail (ListType.nil KExpr)) (ListType.nil KExpr) list_tail_nil) ",
-                    "(par_reduces_p_list.nil env))) ",
+                    "(@Eq.substType (ListType KExpr) ",
+                    "(fun (Z : ListType KExpr) => par_reduces_p_list env (list_tail (@ListType.nil KExpr)) Z) ",
+                    "(@ListType.nil KExpr) (list_tail (@ListType.nil KExpr)) ",
+                    "(@Eq.symm (ListType KExpr) (list_tail (@ListType.nil KExpr)) (@ListType.nil KExpr) list_tail_nil) ",
+                    "(@Eq.substType (ListType KExpr) ",
+                    "(fun (Z : ListType KExpr) => par_reduces_p_list env Z (@ListType.nil KExpr)) ",
+                    "(@ListType.nil KExpr) (list_tail (@ListType.nil KExpr)) ",
+                    "(@Eq.symm (ListType KExpr) (list_tail (@ListType.nil KExpr)) (@ListType.nil KExpr) list_tail_nil) ",
+                    "(@par_reduces_p_list.nil env))) ",
                     // cons arm
                     "(fun (x : KExpr) (x' : KExpr) (xs0 : ListType KExpr) (xs0' : ListType KExpr) ",
                     "(hx : par_reduces_p env x x') (hxs0 : par_reduces_p_list env xs0 xs0') ",
                     "(_ih : par_reduces_p_list env (list_tail xs0) (list_tail xs0')) => ",
-                    "Eq.substType (ListType KExpr) ",
-                    "(fun (Z : ListType KExpr) => par_reduces_p_list env (list_tail (ListType.cons KExpr x xs0)) Z) ",
-                    "xs0' (list_tail (ListType.cons KExpr x' xs0')) ",
-                    "(Eq.symm (ListType KExpr) (list_tail (ListType.cons KExpr x' xs0')) xs0' (list_tail_cons x' xs0')) ",
-                    "(Eq.substType (ListType KExpr) ",
+                    "@Eq.substType (ListType KExpr) ",
+                    "(fun (Z : ListType KExpr) => par_reduces_p_list env (list_tail (@ListType.cons KExpr x xs0)) Z) ",
+                    "xs0' (list_tail (@ListType.cons KExpr x' xs0')) ",
+                    "(@Eq.symm (ListType KExpr) (list_tail (@ListType.cons KExpr x' xs0')) xs0' (list_tail_cons x' xs0')) ",
+                    "(@Eq.substType (ListType KExpr) ",
                     "(fun (Z : ListType KExpr) => par_reduces_p_list env Z xs0') ",
-                    "xs0 (list_tail (ListType.cons KExpr x xs0)) ",
-                    "(Eq.symm (ListType KExpr) (list_tail (ListType.cons KExpr x xs0)) xs0 (list_tail_cons x xs0)) ",
+                    "xs0 (list_tail (@ListType.cons KExpr x xs0)) ",
+                    "(@Eq.symm (ListType KExpr) (list_tail (@ListType.cons KExpr x xs0)) xs0 (list_tail_cons x xs0)) ",
                     "hxs0)) ",
                     "xs xs' hxs"
                 )
@@ -754,32 +754,32 @@ impl Specification {
                 concat!(
                     "fun (env : RecEnv) (n : Nat) (xs : ListType KExpr) (xs' : ListType KExpr) ",
                     "(hxs : par_reduces_p_list env xs xs') => ",
-                    "Nat.rec ",
+                    "@Nat.rec ",
                     "(fun (n0 : Nat) => forall (a : ListType KExpr) (a' : ListType KExpr), ",
                     "par_reduces_p_list env a a' -> par_reduces_p_list env (list_drop n0 a) (list_drop n0 a')) ",
                     // zero arm
                     "(fun (a : ListType KExpr) (a' : ListType KExpr) (ha : par_reduces_p_list env a a') => ",
-                    "Eq.substType (ListType KExpr) ",
+                    "@Eq.substType (ListType KExpr) ",
                     "(fun (Z : ListType KExpr) => par_reduces_p_list env (list_drop Nat.zero a) Z) ",
                     "a' (list_drop Nat.zero a') ",
-                    "(Eq.symm (ListType KExpr) (list_drop Nat.zero a') a' (list_drop_zero a')) ",
-                    "(Eq.substType (ListType KExpr) ",
+                    "(@Eq.symm (ListType KExpr) (list_drop Nat.zero a') a' (list_drop_zero a')) ",
+                    "(@Eq.substType (ListType KExpr) ",
                     "(fun (Z : ListType KExpr) => par_reduces_p_list env Z a') ",
                     "a (list_drop Nat.zero a) ",
-                    "(Eq.symm (ListType KExpr) (list_drop Nat.zero a) a (list_drop_zero a)) ",
+                    "(@Eq.symm (ListType KExpr) (list_drop Nat.zero a) a (list_drop_zero a)) ",
                     "ha)) ",
                     // succ arm
                     "(fun (m : Nat) (ihm : forall (a : ListType KExpr) (a' : ListType KExpr), ",
                     "par_reduces_p_list env a a' -> par_reduces_p_list env (list_drop m a) (list_drop m a')) => ",
                     "fun (a : ListType KExpr) (a' : ListType KExpr) (ha : par_reduces_p_list env a a') => ",
-                    "Eq.substType (ListType KExpr) ",
+                    "@Eq.substType (ListType KExpr) ",
                     "(fun (Z : ListType KExpr) => par_reduces_p_list env (list_drop (Nat.succ m) a) Z) ",
                     "(list_drop m (list_tail a')) (list_drop (Nat.succ m) a') ",
-                    "(Eq.symm (ListType KExpr) (list_drop (Nat.succ m) a') (list_drop m (list_tail a')) (list_drop_succ m a')) ",
-                    "(Eq.substType (ListType KExpr) ",
+                    "(@Eq.symm (ListType KExpr) (list_drop (Nat.succ m) a') (list_drop m (list_tail a')) (list_drop_succ m a')) ",
+                    "(@Eq.substType (ListType KExpr) ",
                     "(fun (Z : ListType KExpr) => par_reduces_p_list env Z (list_drop m (list_tail a'))) ",
                     "(list_drop m (list_tail a)) (list_drop (Nat.succ m) a) ",
-                    "(Eq.symm (ListType KExpr) (list_drop (Nat.succ m) a) (list_drop m (list_tail a)) (list_drop_succ m a)) ",
+                    "(@Eq.symm (ListType KExpr) (list_drop (Nat.succ m) a) (list_drop m (list_tail a)) (list_drop_succ m a)) ",
                     "(ihm (list_tail a) (list_tail a') (list_tail_par_p env a a' ha)))) ",
                     "n xs xs' hxs"
                 )
@@ -826,50 +826,50 @@ impl Specification {
                 concat!(
                     "fun (env : RecEnv) (n : Nat) (xs : ListType KExpr) (xs' : ListType KExpr) ",
                     "(hxs : par_reduces_p_list env xs xs') => ",
-                    "Nat.rec ",
+                    "@Nat.rec ",
                     "(fun (n0 : Nat) => forall (a : ListType KExpr) (a' : ListType KExpr), ",
                     "par_reduces_p_list env a a' -> par_reduces_p_list env (list_take n0 a) (list_take n0 a')) ",
                     // zero arm: list_take zero _ = nil
                     "(fun (a : ListType KExpr) (a' : ListType KExpr) (ha : par_reduces_p_list env a a') => ",
-                    "Eq.substType (ListType KExpr) ",
+                    "@Eq.substType (ListType KExpr) ",
                     "(fun (Z : ListType KExpr) => par_reduces_p_list env (list_take Nat.zero a) Z) ",
-                    "(ListType.nil KExpr) (list_take Nat.zero a') ",
-                    "(Eq.symm (ListType KExpr) (list_take Nat.zero a') (ListType.nil KExpr) (list_take_zero a')) ",
-                    "(Eq.substType (ListType KExpr) ",
-                    "(fun (Z : ListType KExpr) => par_reduces_p_list env Z (ListType.nil KExpr)) ",
-                    "(ListType.nil KExpr) (list_take Nat.zero a) ",
-                    "(Eq.symm (ListType KExpr) (list_take Nat.zero a) (ListType.nil KExpr) (list_take_zero a)) ",
-                    "(par_reduces_p_list.nil env))) ",
+                    "(@ListType.nil KExpr) (list_take Nat.zero a') ",
+                    "(@Eq.symm (ListType KExpr) (list_take Nat.zero a') (@ListType.nil KExpr) (list_take_zero a')) ",
+                    "(@Eq.substType (ListType KExpr) ",
+                    "(fun (Z : ListType KExpr) => par_reduces_p_list env Z (@ListType.nil KExpr)) ",
+                    "(@ListType.nil KExpr) (list_take Nat.zero a) ",
+                    "(@Eq.symm (ListType KExpr) (list_take Nat.zero a) (@ListType.nil KExpr) (list_take_zero a)) ",
+                    "(@par_reduces_p_list.nil env))) ",
                     // succ arm
                     "(fun (m : Nat) (ihm : forall (a : ListType KExpr) (a' : ListType KExpr), ",
                     "par_reduces_p_list env a a' -> par_reduces_p_list env (list_take m a) (list_take m a')) => ",
                     "fun (a : ListType KExpr) (a' : ListType KExpr) (h : par_reduces_p_list env a a') => ",
-                    "par_reduces_p_list.rec env ",
+                    "@par_reduces_p_list.rec env ",
                     "(fun (b : ListType KExpr) (b' : ListType KExpr) (_ : par_reduces_p_list env b b') => ",
                     "par_reduces_p_list env (list_take (Nat.succ m) b) (list_take (Nat.succ m) b')) ",
                     // inner nil
-                    "(Eq.substType (ListType KExpr) ",
-                    "(fun (Z : ListType KExpr) => par_reduces_p_list env (list_take (Nat.succ m) (ListType.nil KExpr)) Z) ",
-                    "(ListType.nil KExpr) (list_take (Nat.succ m) (ListType.nil KExpr)) ",
-                    "(Eq.symm (ListType KExpr) (list_take (Nat.succ m) (ListType.nil KExpr)) (ListType.nil KExpr) (list_take_succ_nil m)) ",
-                    "(Eq.substType (ListType KExpr) ",
-                    "(fun (Z : ListType KExpr) => par_reduces_p_list env Z (ListType.nil KExpr)) ",
-                    "(ListType.nil KExpr) (list_take (Nat.succ m) (ListType.nil KExpr)) ",
-                    "(Eq.symm (ListType KExpr) (list_take (Nat.succ m) (ListType.nil KExpr)) (ListType.nil KExpr) (list_take_succ_nil m)) ",
-                    "(par_reduces_p_list.nil env))) ",
+                    "(@Eq.substType (ListType KExpr) ",
+                    "(fun (Z : ListType KExpr) => par_reduces_p_list env (list_take (Nat.succ m) (@ListType.nil KExpr)) Z) ",
+                    "(@ListType.nil KExpr) (list_take (Nat.succ m) (@ListType.nil KExpr)) ",
+                    "(@Eq.symm (ListType KExpr) (list_take (Nat.succ m) (@ListType.nil KExpr)) (@ListType.nil KExpr) (list_take_succ_nil m)) ",
+                    "(@Eq.substType (ListType KExpr) ",
+                    "(fun (Z : ListType KExpr) => par_reduces_p_list env Z (@ListType.nil KExpr)) ",
+                    "(@ListType.nil KExpr) (list_take (Nat.succ m) (@ListType.nil KExpr)) ",
+                    "(@Eq.symm (ListType KExpr) (list_take (Nat.succ m) (@ListType.nil KExpr)) (@ListType.nil KExpr) (list_take_succ_nil m)) ",
+                    "(@par_reduces_p_list.nil env))) ",
                     // inner cons: cons x (list_take m xs0), tail via ihm
                     "(fun (x : KExpr) (x' : KExpr) (xs0 : ListType KExpr) (xs0' : ListType KExpr) ",
                     "(hx : par_reduces_p env x x') (hxs0 : par_reduces_p_list env xs0 xs0') ",
                     "(_ih2 : par_reduces_p_list env (list_take (Nat.succ m) xs0) (list_take (Nat.succ m) xs0')) => ",
-                    "Eq.substType (ListType KExpr) ",
-                    "(fun (Z : ListType KExpr) => par_reduces_p_list env (list_take (Nat.succ m) (ListType.cons KExpr x xs0)) Z) ",
-                    "(ListType.cons KExpr x' (list_take m xs0')) (list_take (Nat.succ m) (ListType.cons KExpr x' xs0')) ",
-                    "(Eq.symm (ListType KExpr) (list_take (Nat.succ m) (ListType.cons KExpr x' xs0')) (ListType.cons KExpr x' (list_take m xs0')) (list_take_succ_cons m x' xs0')) ",
-                    "(Eq.substType (ListType KExpr) ",
-                    "(fun (Z : ListType KExpr) => par_reduces_p_list env Z (ListType.cons KExpr x' (list_take m xs0'))) ",
-                    "(ListType.cons KExpr x (list_take m xs0)) (list_take (Nat.succ m) (ListType.cons KExpr x xs0)) ",
-                    "(Eq.symm (ListType KExpr) (list_take (Nat.succ m) (ListType.cons KExpr x xs0)) (ListType.cons KExpr x (list_take m xs0)) (list_take_succ_cons m x xs0)) ",
-                    "(par_reduces_p_list.cons env x x' (list_take m xs0) (list_take m xs0') hx (ihm xs0 xs0' hxs0)))) ",
+                    "@Eq.substType (ListType KExpr) ",
+                    "(fun (Z : ListType KExpr) => par_reduces_p_list env (list_take (Nat.succ m) (@ListType.cons KExpr x xs0)) Z) ",
+                    "(@ListType.cons KExpr x' (list_take m xs0')) (list_take (Nat.succ m) (@ListType.cons KExpr x' xs0')) ",
+                    "(@Eq.symm (ListType KExpr) (list_take (Nat.succ m) (@ListType.cons KExpr x' xs0')) (@ListType.cons KExpr x' (list_take m xs0')) (list_take_succ_cons m x' xs0')) ",
+                    "(@Eq.substType (ListType KExpr) ",
+                    "(fun (Z : ListType KExpr) => par_reduces_p_list env Z (@ListType.cons KExpr x' (list_take m xs0'))) ",
+                    "(@ListType.cons KExpr x (list_take m xs0)) (list_take (Nat.succ m) (@ListType.cons KExpr x xs0)) ",
+                    "(@Eq.symm (ListType KExpr) (list_take (Nat.succ m) (@ListType.cons KExpr x xs0)) (@ListType.cons KExpr x (list_take m xs0)) (list_take_succ_cons m x xs0)) ",
+                    "(@par_reduces_p_list.cons env x x' (list_take m xs0) (list_take m xs0') hx (ihm xs0 xs0' hxs0)))) ",
                     "a a' h) ",
                     "n xs xs' hxs"
                 )
@@ -923,18 +923,18 @@ impl Specification {
                     "fun (env : RecEnv) (f : KExpr) (f' : KExpr) (a : KExpr) (a' : KExpr) ",
                     "(hf : par_reduces_p_list env (kapp_args f) (kapp_args f')) ",
                     "(ha : par_reduces_p env a a') => ",
-                    "Eq.substType (ListType KExpr) ",
+                    "@Eq.substType (ListType KExpr) ",
                     "(fun (Z : ListType KExpr) => par_reduces_p_list env (kapp_args (KExpr.app f a)) Z) ",
-                    "(list_append (kapp_args f') (ListType.cons KExpr a' (ListType.nil KExpr))) (kapp_args (KExpr.app f' a')) ",
-                    "(Eq.symm (ListType KExpr) (kapp_args (KExpr.app f' a')) (list_append (kapp_args f') (ListType.cons KExpr a' (ListType.nil KExpr))) (kapp_args_app f' a')) ",
-                    "(Eq.substType (ListType KExpr) ",
-                    "(fun (Z : ListType KExpr) => par_reduces_p_list env Z (list_append (kapp_args f') (ListType.cons KExpr a' (ListType.nil KExpr)))) ",
-                    "(list_append (kapp_args f) (ListType.cons KExpr a (ListType.nil KExpr))) (kapp_args (KExpr.app f a)) ",
-                    "(Eq.symm (ListType KExpr) (kapp_args (KExpr.app f a)) (list_append (kapp_args f) (ListType.cons KExpr a (ListType.nil KExpr))) (kapp_args_app f a)) ",
+                    "(list_append (kapp_args f') (@ListType.cons KExpr a' (@ListType.nil KExpr))) (kapp_args (KExpr.app f' a')) ",
+                    "(@Eq.symm (ListType KExpr) (kapp_args (KExpr.app f' a')) (list_append (kapp_args f') (@ListType.cons KExpr a' (@ListType.nil KExpr))) (kapp_args_app f' a')) ",
+                    "(@Eq.substType (ListType KExpr) ",
+                    "(fun (Z : ListType KExpr) => par_reduces_p_list env Z (list_append (kapp_args f') (@ListType.cons KExpr a' (@ListType.nil KExpr)))) ",
+                    "(list_append (kapp_args f) (@ListType.cons KExpr a (@ListType.nil KExpr))) (kapp_args (KExpr.app f a)) ",
+                    "(@Eq.symm (ListType KExpr) (kapp_args (KExpr.app f a)) (list_append (kapp_args f) (@ListType.cons KExpr a (@ListType.nil KExpr))) (kapp_args_app f a)) ",
                     "(par_reduces_p_list_append env (kapp_args f) (kapp_args f') ",
-                    "(ListType.cons KExpr a (ListType.nil KExpr)) (ListType.cons KExpr a' (ListType.nil KExpr)) ",
+                    "(@ListType.cons KExpr a (@ListType.nil KExpr)) (@ListType.cons KExpr a' (@ListType.nil KExpr)) ",
                     "hf ",
-                    "(par_reduces_p_list.cons env a a' (ListType.nil KExpr) (ListType.nil KExpr) ha (par_reduces_p_list.nil env)))))"
+                    "(@par_reduces_p_list.cons env a a' (@ListType.nil KExpr) (@ListType.nil KExpr) ha (@par_reduces_p_list.nil env)))))"
                 )
                 .to_string(),
             ),
@@ -974,33 +974,33 @@ impl Specification {
             name: "par_reduces_p_list_length_eq".to_string(),
             type_src: concat!(
                 "forall (env : RecEnv) (xs : ListType KExpr) (xs' : ListType KExpr), ",
-                "par_reduces_p_list env xs xs' -> Eq Nat (list_length xs) (list_length xs')"
+                "par_reduces_p_list env xs xs' -> @Eq Nat (list_length xs) (list_length xs')"
             )
             .to_string(),
             value_src: Some(
                 concat!(
                     "fun (env : RecEnv) (xs : ListType KExpr) (xs' : ListType KExpr) ",
                     "(h : par_reduces_p_list env xs xs') => ",
-                    "par_reduces_p_list.rec env ",
+                    "@par_reduces_p_list.rec env ",
                     "(fun (a : ListType KExpr) (a' : ListType KExpr) (_h : par_reduces_p_list env a a') => ",
-                    "Eq Nat (list_length a) (list_length a')) ",
+                    "@Eq Nat (list_length a) (list_length a')) ",
                     // nil arm: length nil = length nil
-                    "(Eq.refl Nat (list_length (ListType.nil KExpr))) ",
+                    "(@Eq.refl Nat (list_length (@ListType.nil KExpr))) ",
                     // cons arm: length (x::xs0) = succ (length xs0) = succ (length xs0') = length (x'::xs0')
                     "(fun (x : KExpr) (x' : KExpr) (xs0 : ListType KExpr) (xs0' : ListType KExpr) ",
                     "(_hx : par_reduces_p env x x') (_hxs : par_reduces_p_list env xs0 xs0') ",
-                    "(ih : Eq Nat (list_length xs0) (list_length xs0')) => ",
-                    "Eq.trans Nat ",
-                    "(list_length (ListType.cons KExpr x xs0)) ",
+                    "(ih : @Eq Nat (list_length xs0) (list_length xs0')) => ",
+                    "@Eq.trans Nat ",
+                    "(list_length (@ListType.cons KExpr x xs0)) ",
                     "(Nat.succ (list_length xs0)) ",
-                    "(list_length (ListType.cons KExpr x' xs0')) ",
+                    "(list_length (@ListType.cons KExpr x' xs0')) ",
                     "(list_length_cons x xs0) ",
-                    "(Eq.trans Nat ",
+                    "(@Eq.trans Nat ",
                     "(Nat.succ (list_length xs0)) ",
                     "(Nat.succ (list_length xs0')) ",
-                    "(list_length (ListType.cons KExpr x' xs0')) ",
-                    "(Eq.cong Nat Nat (fun (n : Nat) => Nat.succ n) (list_length xs0) (list_length xs0') ih) ",
-                    "(Eq.symm Nat (list_length (ListType.cons KExpr x' xs0')) (Nat.succ (list_length xs0')) (list_length_cons x' xs0')))) ",
+                    "(list_length (@ListType.cons KExpr x' xs0')) ",
+                    "(@Eq.cong Nat Nat (fun (n : Nat) => Nat.succ n) (list_length xs0) (list_length xs0') ih) ",
+                    "(@Eq.symm Nat (list_length (@ListType.cons KExpr x' xs0')) (Nat.succ (list_length xs0')) (list_length_cons x' xs0')))) ",
                     "xs xs' h"
                 )
                 .to_string(),
@@ -1064,26 +1064,26 @@ impl Specification {
                     "par_reduces_p_star_trans env ",
                     "(instantiate body val) (instantiate body' val) (instantiate body' val') ",
                     // left leg: instantiate body val =>* instantiate body' val  (induct on hbody, fix val)
-                    "(par_reduces_p_star.rec env ",
+                    "(@par_reduces_p_star.rec env ",
                     "(fun (x : KExpr) (y : KExpr) (_ : par_reduces_p_star env x y) => ",
                     "par_reduces_p_star env (instantiate x val) (instantiate y val)) ",
-                    "(fun (x : KExpr) => par_reduces_p_star.refl env (instantiate x val)) ",
+                    "(fun (x : KExpr) => @par_reduces_p_star.refl env (instantiate x val)) ",
                     "(fun (x : KExpr) (x' : KExpr) (x'' : KExpr) ",
                     "(hstep : par_reduces_p env x x') (_htail : par_reduces_p_star env x' x'') ",
                     "(ih : par_reduces_p_star env (instantiate x' val) (instantiate x'' val)) => ",
-                    "par_reduces_p_star.step env (instantiate x val) (instantiate x' val) (instantiate x'' val) ",
-                    "(par_subst_p env x x' val val Nat.zero hstep (par_reduces_p.refl env val) closed liftclosed) ih) ",
+                    "@par_reduces_p_star.step env (instantiate x val) (instantiate x' val) (instantiate x'' val) ",
+                    "(par_subst_p env x x' val val Nat.zero hstep (@par_reduces_p.refl env val) closed liftclosed) ih) ",
                     "body body' hbody) ",
                     // right leg: instantiate body' val =>* instantiate body' val'  (induct on hval, fix body')
-                    "(par_reduces_p_star.rec env ",
+                    "(@par_reduces_p_star.rec env ",
                     "(fun (x : KExpr) (y : KExpr) (_ : par_reduces_p_star env x y) => ",
                     "par_reduces_p_star env (instantiate body' x) (instantiate body' y)) ",
-                    "(fun (x : KExpr) => par_reduces_p_star.refl env (instantiate body' x)) ",
+                    "(fun (x : KExpr) => @par_reduces_p_star.refl env (instantiate body' x)) ",
                     "(fun (x : KExpr) (x' : KExpr) (x'' : KExpr) ",
                     "(hstep : par_reduces_p env x x') (_htail : par_reduces_p_star env x' x'') ",
                     "(ih : par_reduces_p_star env (instantiate body' x') (instantiate body' x'')) => ",
-                    "par_reduces_p_star.step env (instantiate body' x) (instantiate body' x') (instantiate body' x'') ",
-                    "(par_subst_p env body' body' x x' Nat.zero (par_reduces_p.refl env body') hstep closed liftclosed) ih) ",
+                    "@par_reduces_p_star.step env (instantiate body' x) (instantiate body' x') (instantiate body' x'') ",
+                    "(par_subst_p env body' body' x x' Nat.zero (@par_reduces_p.refl env body') hstep closed liftclosed) ih) ",
                     "val val' hval)"
                 )
                 .to_string(),
@@ -1420,14 +1420,14 @@ fn par_lift_p_full_proof() -> String {
     );
     let refl_arm = concat!(
         "(fun (e : KExpr) (c : Nat) (a : Nat) (_liftclosed : RecEnvLiftClosed env) => ",
-        "par_reduces_p.refl env (lift_at e c a))"
+        "@par_reduces_p.refl env (lift_at e c a))"
     );
     let app_arm = format!(
         concat!(
             "(fun (f : KExpr) (f' : KExpr) (a0 : KExpr) (a0' : KExpr) ",
             "(_hf : par_reduces_p env f f') (_ha : par_reduces_p env a0 a0') ",
             "(ihf : {ih_f}) (iha : {ih_a}) (c : Nat) (a : Nat) (liftclosed : RecEnvLiftClosed env) => ",
-            "par_reduces_p.app env (lift_at f c a) (lift_at f' c a) ",
+            "@par_reduces_p.app env (lift_at f c a) (lift_at f' c a) ",
             "(lift_at a0 c a) (lift_at a0' c a) (ihf c a liftclosed) (iha c a liftclosed))"
         ),
         ih_f = ih.replace("SUB'", "f'").replace("SUB", "f"),
@@ -1446,17 +1446,17 @@ fn par_lift_p_full_proof() -> String {
         );
         let swap_raw = format!("(lift_instantiate_swap {bodyp} {argp} Nat.zero c a)");
         let cong_lhs = format!(
-            "(Eq.cong Nat KExpr (fun (n : Nat) => lift_at (instantiate_at {bodyp} {argp} Nat.zero) n a) c (Nat.add Nat.zero c) (Eq.symm Nat (Nat.add Nat.zero c) c (nat_zero_add c)))"
+            "(@Eq.cong Nat KExpr (fun (n : Nat) => lift_at (instantiate_at {bodyp} {argp} Nat.zero) n a) c (Nat.add Nat.zero c) (@Eq.symm Nat (Nat.add Nat.zero c) c (nat_zero_add c)))"
         );
         let cong_rhs = format!(
-            "(Eq.cong Nat KExpr (fun (n : Nat) => instantiate_at (lift_at {bodyp} (Nat.succ n) a) (lift_at {argp} c a) Nat.zero) (Nat.add Nat.zero c) c (nat_zero_add c))"
+            "(@Eq.cong Nat KExpr (fun (n : Nat) => instantiate_at (lift_at {bodyp} (Nat.succ n) a) (lift_at {argp} c a) Nat.zero) (Nat.add Nat.zero c) c (nat_zero_add c))"
         );
         let eq = format!(
-            "(Eq.trans KExpr {goal_lhs} {swap_lhs} {goal_rhs} {cong_lhs} (Eq.trans KExpr {swap_lhs} {swap_rhs} {goal_rhs} {swap_raw} {cong_rhs}))"
+            "(@Eq.trans KExpr {goal_lhs} {swap_lhs} {goal_rhs} {cong_lhs} (@Eq.trans KExpr {swap_lhs} {swap_rhs} {goal_rhs} {swap_raw} {cong_rhs}))"
         );
         let p = format!("(fun (x : KExpr) => par_reduces_p env {lhs_head} x)");
         format!(
-            "(Eq.substType KExpr {p} {goal_rhs} {goal_lhs} (Eq.symm KExpr {goal_lhs} {goal_rhs} {eq}) {ctor_term})"
+            "(@Eq.substType KExpr {p} {goal_rhs} {goal_lhs} (@Eq.symm KExpr {goal_lhs} {goal_rhs} {eq}) {ctor_term})"
         )
     };
     let beta_lhs_head = concat!(
@@ -1464,7 +1464,7 @@ fn par_lift_p_full_proof() -> String {
         "(lift_at arg c a))"
     );
     let beta_ctor = concat!(
-        "(par_reduces_p.beta env (lift_at A c a) (lift_at A' c a) ",
+        "(@par_reduces_p.beta env (lift_at A c a) (lift_at A' c a) ",
         "(lift_at body (Nat.succ c) a) (lift_at body' (Nat.succ c) a) ",
         "(lift_at arg c a) (lift_at arg' c a) ",
         "(ihA c a liftclosed) (ihbody (Nat.succ c) a liftclosed) (iharg c a liftclosed))"
@@ -1489,7 +1489,7 @@ fn par_lift_p_full_proof() -> String {
                 "(fun (ty : KExpr) (ty' : KExpr) (body : KExpr) (body' : KExpr) ",
                 "(_hty : par_reduces_p env ty ty') (_hbody : par_reduces_p env body body') ",
                 "(ihty : {ih_ty}) (ihbody : {ih_body}) (c : Nat) (a : Nat) (liftclosed : RecEnvLiftClosed env) => ",
-                "{ctor} env (lift_at ty c a) (lift_at ty' c a) ",
+                "@{ctor} env (lift_at ty c a) (lift_at ty' c a) ",
                 "(lift_at body (Nat.succ c) a) (lift_at body' (Nat.succ c) a) ",
                 "(ihty c a liftclosed) (ihbody (Nat.succ c) a liftclosed))"
             ),
@@ -1504,7 +1504,7 @@ fn par_lift_p_full_proof() -> String {
     let let_lhs_head =
         "(KExpr.let_ (lift_at ty c a) (lift_at val c a) (lift_at body (Nat.succ c) a))";
     let let_ctor = concat!(
-        "(par_reduces_p.let_ env (lift_at ty c a) (lift_at ty' c a) ",
+        "(@par_reduces_p.let_ env (lift_at ty c a) (lift_at ty' c a) ",
         "(lift_at val c a) (lift_at val' c a) ",
         "(lift_at body (Nat.succ c) a) (lift_at body' (Nat.succ c) a) ",
         "(ihty c a liftclosed) (ihval c a liftclosed) (ihbody (Nat.succ c) a liftclosed))"
@@ -1533,7 +1533,7 @@ fn par_lift_p_full_proof() -> String {
             "(_hbody : par_reduces_p env body body') ",
             "(ihty : {ih_ty}) (ihval : {ih_val}) (ihbody : {ih_body}) ",
             "(c : Nat) (a : Nat) (liftclosed : RecEnvLiftClosed env) => ",
-            "par_reduces_p.let_cong env (lift_at ty c a) (lift_at ty' c a) ",
+            "@par_reduces_p.let_cong env (lift_at ty c a) (lift_at ty' c a) ",
             "(lift_at val c a) (lift_at val' c a) ",
             "(lift_at body (Nat.succ c) a) (lift_at body' (Nat.succ c) a) ",
             "(ihty c a liftclosed) (ihval c a liftclosed) (ihbody (Nat.succ c) a liftclosed))"
@@ -1551,7 +1551,7 @@ fn par_lift_p_full_proof() -> String {
             "(_hp : par_reduces_p env e0 e2) (hi : iota_step env e2 r) ",
             "(ihp : {ih_e0e2}) ",
             "(c : Nat) (a : Nat) (liftclosed : RecEnvLiftClosed env) => ",
-            "par_reduces_p.iota_p env (lift_at e0 c a) (lift_at e2 c a) (lift_at r c a) ",
+            "@par_reduces_p.iota_p env (lift_at e0 c a) (lift_at e2 c a) (lift_at r c a) ",
             "(ihp c a liftclosed) ",
             "(iota_lift_commutes env e2 r c a liftclosed hi))"
         ),
@@ -1563,7 +1563,7 @@ fn par_lift_p_full_proof() -> String {
             "(fun (s : Name) (i : Nat) (sub : KExpr) (sub' : KExpr) ",
             "(_hsub : par_reduces_p env sub sub') (ihsub : {ih_sub}) ",
             "(c : Nat) (a : Nat) (liftclosed : RecEnvLiftClosed env) => ",
-            "par_reduces_p.proj env s i (lift_at sub c a) (lift_at sub' c a) ",
+            "@par_reduces_p.proj env s i (lift_at sub c a) (lift_at sub' c a) ",
             "(ihsub c a liftclosed))"
         ),
         ih_sub = ih.replace("SUB'", "sub'").replace("SUB", "sub"),
@@ -1572,7 +1572,7 @@ fn par_lift_p_full_proof() -> String {
         concat!(
             "fun (env : RecEnv) (v0 : KExpr) (v0' : KExpr) (c0 : Nat) (a0 : Nat) ",
             "(liftclosed0 : RecEnvLiftClosed env) (h0 : par_reduces_p env v0 v0') => ",
-            "par_reduces_p.rec env {motive} ",
+            "@par_reduces_p.rec env {motive} ",
             "{refl_arm} {beta_arm} {app_arm} ",
             "{lam_arm} {pi_arm} {forall_arm} {let_arm} {iota_arm} {let_cong_arm} {proj_arm} ",
             "v0 v0' h0 c0 a0 liftclosed0"
@@ -1623,9 +1623,9 @@ fn par_subst_refl_p_full_proof() -> String {
         // inner : par_reduces_p env goal_l X'  (rewrite X -> goal_l on first index)
         let inner = format!(
             concat!(
-                "(Eq.substType KExpr (fun (y : KExpr) => par_reduces_p env y {xr}) ",
+                "(@Eq.substType KExpr (fun (y : KExpr) => par_reduces_p env y {xr}) ",
                 "{xl} {goal_l} ",
-                "(Eq.symm KExpr {goal_l} {xl} {eql}) {t})"
+                "(@Eq.symm KExpr {goal_l} {xl} {eql}) {t})"
             ),
             xr = xr,
             xl = xl,
@@ -1636,10 +1636,10 @@ fn par_subst_refl_p_full_proof() -> String {
         // outer : par_reduces_p env goal_l goal_r (rewrite X' -> goal_r on 2nd index)
         format!(
             concat!(
-                "(Eq.substType KExpr ",
+                "(@Eq.substType KExpr ",
                 "(fun (y : KExpr) => par_reduces_p env {goal_l} y) ",
                 "{xr} {goal_r} ",
-                "(Eq.symm KExpr {goal_r} {xr} {eqr}) {inner})"
+                "(@Eq.symm KExpr {goal_r} {xr} {eqr}) {inner})"
             ),
             goal_l = goal_l,
             xr = xr,
@@ -1667,7 +1667,7 @@ fn par_subst_refl_p_full_proof() -> String {
         let xr = "(KExpr.bvar i)";
         let eql = format!(
             concat!(
-                "(Eq.trans KExpr {goal_l} (instantiate_bvar_at i d v) (KExpr.bvar i) ",
+                "(@Eq.trans KExpr {goal_l} (instantiate_bvar_at i d v) (KExpr.bvar i) ",
                 "(instantiate_at_bvar i v d) ",
                 "(instantiate_bvar_at_below i d v {w_di}))"
             ),
@@ -1676,14 +1676,14 @@ fn par_subst_refl_p_full_proof() -> String {
         );
         let eqr = format!(
             concat!(
-                "(Eq.trans KExpr {goal_r} (instantiate_bvar_at i d v') (KExpr.bvar i) ",
+                "(@Eq.trans KExpr {goal_r} (instantiate_bvar_at i d v') (KExpr.bvar i) ",
                 "(instantiate_at_bvar i v' d) ",
                 "(instantiate_bvar_at_below i d v' {w_di}))"
             ),
             goal_r = goal_r,
             w_di = w_di,
         );
-        let t = "(par_reduces_p.refl env (KExpr.bvar i))";
+        let t = "(@par_reduces_p.refl env (KExpr.bvar i))";
         transport(xl, xr, &eql, &eqr, t)
     };
 
@@ -1695,7 +1695,7 @@ fn par_subst_refl_p_full_proof() -> String {
         let xr = "(KExpr.bvar (Nat.sub i (Nat.succ Nat.zero)))";
         let eql = format!(
             concat!(
-                "(Eq.trans KExpr {goal_l} (instantiate_bvar_at i d v) ",
+                "(@Eq.trans KExpr {goal_l} (instantiate_bvar_at i d v) ",
                 "(KExpr.bvar (Nat.sub i (Nat.succ Nat.zero))) ",
                 "(instantiate_at_bvar i v d) ",
                 "(instantiate_bvar_at_above i d v {h_di0} {w_id}))"
@@ -1706,7 +1706,7 @@ fn par_subst_refl_p_full_proof() -> String {
         );
         let eqr = format!(
             concat!(
-                "(Eq.trans KExpr {goal_r} (instantiate_bvar_at i d v') ",
+                "(@Eq.trans KExpr {goal_r} (instantiate_bvar_at i d v') ",
                 "(KExpr.bvar (Nat.sub i (Nat.succ Nat.zero))) ",
                 "(instantiate_at_bvar i v' d) ",
                 "(instantiate_bvar_at_above i d v' {h_di0} {w_id}))"
@@ -1715,7 +1715,7 @@ fn par_subst_refl_p_full_proof() -> String {
             h_di0 = h_di0,
             w_id = w_id,
         );
-        let t = "(par_reduces_p.refl env (KExpr.bvar (Nat.sub i (Nat.succ Nat.zero))))";
+        let t = "(@par_reduces_p.refl env (KExpr.bvar (Nat.sub i (Nat.succ Nat.zero))))";
         transport(xl, xr, &eql, &eqr, t)
     };
 
@@ -1725,27 +1725,27 @@ fn par_subst_refl_p_full_proof() -> String {
             "(fun (i : Nat) (v : KExpr) (v' : KExpr) (d : Nat) ",
             "(liftclosed : RecEnvLiftClosed env) (h : par_reduces_p env v v') => ",
             // OUTER Nat.rec on sub(i, d)
-            "Nat.rec ",
-            "(fun (g : Nat) => Eq Nat (Nat.sub i d) g -> ",
+            "@Nat.rec ",
+            "(fun (g : Nat) => @Eq Nat (Nat.sub i d) g -> ",
             "par_reduces_p env {goal_l} {goal_r}) ",
             // OUTER ZERO: sub(i,d) = 0
-            "(fun (h_id : Eq Nat (Nat.sub i d) Nat.zero) => ",
+            "(fun (h_id : @Eq Nat (Nat.sub i d) Nat.zero) => ",
             // MIDDLE Nat.rec on sub(d, i)
-            "Nat.rec ",
-            "(fun (g2 : Nat) => Eq Nat (Nat.sub d i) g2 -> ",
+            "@Nat.rec ",
+            "(fun (g2 : Nat) => @Eq Nat (Nat.sub d i) g2 -> ",
             "par_reduces_p env {goal_l} {goal_r}) ",
             // MIDDLE ZERO: sub(d,i) = 0 (i = d)
-            "(fun (h_di0 : Eq Nat (Nat.sub d i) Nat.zero) => {leaf_eq}) ",
+            "(fun (h_di0 : @Eq Nat (Nat.sub d i) Nat.zero) => {leaf_eq}) ",
             // MIDDLE SUCC: sub(d,i) = succ k2 (i < d)
             "(fun (k2 : Nat) ",
-            "(_ : Eq Nat (Nat.sub d i) k2 -> par_reduces_p env {goal_l} {goal_r}) ",
-            "(h_di : Eq Nat (Nat.sub d i) (Nat.succ k2)) => {leaf_below}) ",
-            "(Nat.sub d i) (Eq.refl Nat (Nat.sub d i))) ",
+            "(_ : @Eq Nat (Nat.sub d i) k2 -> par_reduces_p env {goal_l} {goal_r}) ",
+            "(h_di : @Eq Nat (Nat.sub d i) (Nat.succ k2)) => {leaf_below}) ",
+            "(Nat.sub d i) (@Eq.refl Nat (Nat.sub d i))) ",
             // OUTER SUCC: sub(i,d) = succ k4 (i > d)
             "(fun (k4 : Nat) ",
-            "(_ : Eq Nat (Nat.sub i d) k4 -> par_reduces_p env {goal_l} {goal_r}) ",
-            "(h_id : Eq Nat (Nat.sub i d) (Nat.succ k4)) => {leaf_above}) ",
-            "(Nat.sub i d) (Eq.refl Nat (Nat.sub i d)))"
+            "(_ : @Eq Nat (Nat.sub i d) k4 -> par_reduces_p env {goal_l} {goal_r}) ",
+            "(h_id : @Eq Nat (Nat.sub i d) (Nat.succ k4)) => {leaf_above}) ",
+            "(Nat.sub i d) (@Eq.refl Nat (Nat.sub i d)))"
         ),
         goal_l = goal_l,
         goal_r = goal_r,
@@ -1758,12 +1758,12 @@ fn par_subst_refl_p_full_proof() -> String {
     let sort_arm = concat!(
         "(fun (sv : Level) (v : KExpr) (v' : KExpr) (d : Nat) ",
         "(_lc : RecEnvLiftClosed env) (_h : par_reduces_p env v v') => ",
-        "par_reduces_p.refl env (KExpr.sort sv))"
+        "@par_reduces_p.refl env (KExpr.sort sv))"
     );
     let const_arm = concat!(
         "(fun (nm : Name) (us : ListType Level) (v : KExpr) (v' : KExpr) (d : Nat) ",
         "(_lc : RecEnvLiftClosed env) (_h : par_reduces_p env v v') => ",
-        "par_reduces_p.refl env (KExpr.const nm us))"
+        "@par_reduces_p.refl env (KExpr.const nm us))"
     );
 
     // app arm: the app congruence on the two IHs.
@@ -1772,7 +1772,7 @@ fn par_subst_refl_p_full_proof() -> String {
             "(fun (f : KExpr) (a0 : KExpr) ",
             "(ihf : {ih_f}) (iha : {ih_a}) ",
             "(v : KExpr) (v' : KExpr) (d : Nat) (lc : RecEnvLiftClosed env) (h : par_reduces_p env v v') => ",
-            "par_reduces_p.app env ",
+            "@par_reduces_p.app env ",
             "(instantiate_at f v d) (instantiate_at f v' d) ",
             "(instantiate_at a0 v d) (instantiate_at a0 v' d) ",
             "(ihf v v' d lc h) (iha v v' d lc h))"
@@ -1788,7 +1788,7 @@ fn par_subst_refl_p_full_proof() -> String {
                 "(fun (ty : KExpr) (body : KExpr) ",
                 "(ihty : {ih_ty}) (ihbody : {ih_body}) ",
                 "(v : KExpr) (v' : KExpr) (d : Nat) (lc : RecEnvLiftClosed env) (h : par_reduces_p env v v') => ",
-                "{star_cong} env ",
+                "@{star_cong} env ",
                 "(instantiate_at ty v d) (instantiate_at ty v' d) ",
                 "(instantiate_at body v (Nat.succ d)) (instantiate_at body v' (Nat.succ d)) ",
                 "(ihty v v' d lc h) (ihbody v v' (Nat.succ d) lc h))"
@@ -1808,7 +1808,7 @@ fn par_subst_refl_p_full_proof() -> String {
             "(fun (ty : KExpr) (val : KExpr) (body : KExpr) ",
             "(ihty : {ih_ty}) (ihval : {ih_val}) (ihbody : {ih_body}) ",
             "(v : KExpr) (v' : KExpr) (d : Nat) (lc : RecEnvLiftClosed env) (h : par_reduces_p env v v') => ",
-            "par_reduces_p.let_cong env ",
+            "@par_reduces_p.let_cong env ",
             "(instantiate_at ty v d) (instantiate_at ty v' d) ",
             "(instantiate_at val v d) (instantiate_at val v' d) ",
             "(instantiate_at body v (Nat.succ d)) (instantiate_at body v' (Nat.succ d)) ",
@@ -1824,7 +1824,7 @@ fn par_subst_refl_p_full_proof() -> String {
         concat!(
             "(fun (s : Name) (i : Nat) (sub : KExpr) (ihsub : {ih_sub}) ",
             "(v : KExpr) (v' : KExpr) (d : Nat) (lc : RecEnvLiftClosed env) (h : par_reduces_p env v v') => ",
-            "par_reduces_p.proj env s i ",
+            "@par_reduces_p.proj env s i ",
             "(instantiate_at sub v d) (instantiate_at sub v' d) ",
             "(ihsub v v' d lc h))"
         ),
@@ -1835,13 +1835,13 @@ fn par_subst_refl_p_full_proof() -> String {
     let lit_arm = concat!(
         "(fun (litv : Nat) (v : KExpr) (v' : KExpr) (d : Nat) ",
         "(_lc : RecEnvLiftClosed env) (_h : par_reduces_p env v v') => ",
-        "par_reduces_p.refl env (KExpr.lit litv))"
+        "@par_reduces_p.refl env (KExpr.lit litv))"
     );
 
     format!(
         concat!(
             "fun (env : RecEnv) (e0 : KExpr) => ",
-            "KExpr.rec {motive} ",
+            "@KExpr.rec {motive} ",
             "{sort_arm} {bvar_arm} {app_arm} ",
             "{lam_arm} {pi_arm} {const_arm} {let_arm} {proj_arm} {lit_arm} ",
             "e0"
@@ -1865,51 +1865,51 @@ fn par_subst_refl_p_full_proof() -> String {
 fn par_reduces_c_subsumes_par_p_proof() -> String {
     concat!(
         "fun (env : RecEnv) (e : KExpr) (e' : KExpr) (h : par_reduces_c env e e') => ",
-        "par_reduces_c.rec env ",
+        "@par_reduces_c.rec env ",
         "(fun (x : KExpr) (y : KExpr) (_h : par_reduces_c env x y) => par_reduces_p env x y) ",
         // refl
-        "(fun (a : KExpr) => par_reduces_p.refl env a) ",
+        "(fun (a : KExpr) => @par_reduces_p.refl env a) ",
         // beta
         "(fun (A : KExpr) (A' : KExpr) (body : KExpr) (body' : KExpr) (arg : KExpr) (arg' : KExpr) ",
         "(_hA : par_reduces_c env A A') (_hbody : par_reduces_c env body body') (_harg : par_reduces_c env arg arg') ",
         "(ihA : par_reduces_p env A A') (ihbody : par_reduces_p env body body') (iharg : par_reduces_p env arg arg') => ",
-        "par_reduces_p.beta env A A' body body' arg arg' ihA ihbody iharg) ",
+        "@par_reduces_p.beta env A A' body body' arg arg' ihA ihbody iharg) ",
         // app
         "(fun (f : KExpr) (f' : KExpr) (a : KExpr) (a' : KExpr) ",
         "(_hf : par_reduces_c env f f') (_ha : par_reduces_c env a a') ",
         "(ihf : par_reduces_p env f f') (iha : par_reduces_p env a a') => ",
-        "par_reduces_p.app env f f' a a' ihf iha) ",
+        "@par_reduces_p.app env f f' a a' ihf iha) ",
         // lam
         "(fun (ty : KExpr) (ty' : KExpr) (body : KExpr) (body' : KExpr) ",
         "(_hty : par_reduces_c env ty ty') (_hbody : par_reduces_c env body body') ",
         "(ihty : par_reduces_p env ty ty') (ihbody : par_reduces_p env body body') => ",
-        "par_reduces_p.lam env ty ty' body body' ihty ihbody) ",
+        "@par_reduces_p.lam env ty ty' body body' ihty ihbody) ",
         // pi
         "(fun (dom : KExpr) (dom' : KExpr) (body : KExpr) (body' : KExpr) ",
         "(_hd : par_reduces_c env dom dom') (_hbody : par_reduces_c env body body') ",
         "(ihd : par_reduces_p env dom dom') (ihbody : par_reduces_p env body body') => ",
-        "par_reduces_p.pi env dom dom' body body' ihd ihbody) ",
+        "@par_reduces_p.pi env dom dom' body body' ihd ihbody) ",
         // forall_
         "(fun (dom : KExpr) (dom' : KExpr) (body : KExpr) (body' : KExpr) ",
         "(_hd : par_reduces_c env dom dom') (_hbody : par_reduces_c env body body') ",
         "(ihd : par_reduces_p env dom dom') (ihbody : par_reduces_p env body body') => ",
-        "par_reduces_p.forall_ env dom dom' body body' ihd ihbody) ",
+        "@par_reduces_p.forall_ env dom dom' body body' ihd ihbody) ",
         // let_
         "(fun (ty : KExpr) (ty' : KExpr) (val : KExpr) (val' : KExpr) (body : KExpr) (body' : KExpr) ",
         "(_hty : par_reduces_c env ty ty') (_hval : par_reduces_c env val val') (_hbody : par_reduces_c env body body') ",
         "(ihty : par_reduces_p env ty ty') (ihval : par_reduces_p env val val') (ihbody : par_reduces_p env body body') => ",
-        "par_reduces_p.let_ env ty ty' val val' body body' ihty ihval ihbody) ",
+        "@par_reduces_p.let_ env ty ty' val val' body body' ihty ihval ihbody) ",
         // iota (atomic): map to iota_p with a reflexive subterm reduction.
         "(fun (a : KExpr) (a' : KExpr) (hi : iota_step env a a') => ",
-        "par_reduces_p.iota_p env a a a' (par_reduces_p.refl env a) hi) ",
+        "@par_reduces_p.iota_p env a a a' (@par_reduces_p.refl env a) hi) ",
         // let_cong (trailing congruence): map to par_reduces_p.let_cong on the IHs.
         "(fun (ty : KExpr) (ty' : KExpr) (val : KExpr) (val' : KExpr) (body : KExpr) (body' : KExpr) ",
         "(_hty : par_reduces_c env ty ty') (_hval : par_reduces_c env val val') (_hbody : par_reduces_c env body body') ",
         "(ihty : par_reduces_p env ty ty') (ihval : par_reduces_p env val val') (ihbody : par_reduces_p env body body') => ",
-        "par_reduces_p.let_cong env ty ty' val val' body body' ihty ihval ihbody) ",
+        "@par_reduces_p.let_cong env ty ty' val val' body body' ihty ihval ihbody) ",
         "(fun (s : Name) (i : Nat) (sub : KExpr) (sub' : KExpr) ",
         "(_hsub : par_reduces_c env sub sub') (ihsub : par_reduces_p env sub sub') => ",
-        "par_reduces_p.proj env s i sub sub' ihsub) ",
+        "@par_reduces_p.proj env s i sub sub' ihsub) ",
         "e e' h"
     )
     .to_string()
@@ -1921,10 +1921,10 @@ fn par_reduces_c_subsumes_par_p_proof() -> String {
 fn par_reduces_p_subsumes_par_c_star_proof() -> String {
     concat!(
         "fun (env : RecEnv) (e : KExpr) (e' : KExpr) (h : par_reduces_p env e e') => ",
-        "par_reduces_p.rec env ",
+        "@par_reduces_p.rec env ",
         "(fun (x : KExpr) (y : KExpr) (_h : par_reduces_p env x y) => par_reduces_c_star env x y) ",
         // refl
-        "(fun (a : KExpr) => par_reduces_c_star.refl env a) ",
+        "(fun (a : KExpr) => @par_reduces_c_star.refl env a) ",
         // beta
         "(fun (A : KExpr) (A' : KExpr) (body : KExpr) (body' : KExpr) (arg : KExpr) (arg' : KExpr) ",
         "(_hA : par_reduces_p env A A') (_hbody : par_reduces_p env body body') (_harg : par_reduces_p env arg arg') ",
@@ -1960,7 +1960,7 @@ fn par_reduces_p_subsumes_par_c_star_proof() -> String {
         "(_hp : par_reduces_p env a a2) (hi : iota_step env a2 r) ",
         "(ihp : par_reduces_c_star env a a2) => ",
         "par_reduces_c_star_trans env a a2 r ihp ",
-        "(par_subsumes_par_c_star env a2 r (par_reduces_c.iota env a2 r hi))) ",
+        "(par_subsumes_par_c_star env a2 r (@par_reduces_c.iota env a2 r hi))) ",
         // let_cong (trailing congruence): lift via the c-star let congruence on the IHs.
         "(fun (ty : KExpr) (ty' : KExpr) (val : KExpr) (val' : KExpr) (body : KExpr) (body' : KExpr) ",
         "(_hty : par_reduces_p env ty ty') (_hval : par_reduces_p env val val') (_hbody : par_reduces_p env body body') ",
@@ -2015,7 +2015,7 @@ fn par_subst_p_proof() -> String {
             "(ihf : {ih_f}) (iha : {ih_a}) ",
             "(v : KExpr) (v' : KExpr) (d : Nat) (h : par_reduces_p env v v') ",
             "(closed : RecEnvClosed env) (liftclosed : RecEnvLiftClosed env) => ",
-            "par_reduces_p.app env ",
+            "@par_reduces_p.app env ",
             "(instantiate_at f v d) (instantiate_at f' v' d) ",
             "(instantiate_at a0 v d) (instantiate_at a0' v' d) ",
             "(ihf v v' d h closed liftclosed) (iha v v' d h closed liftclosed))"
@@ -2033,7 +2033,7 @@ fn par_subst_p_proof() -> String {
                 "(ihty : {ih_ty}) (ihbody : {ih_body}) ",
                 "(v : KExpr) (v' : KExpr) (d : Nat) (h : par_reduces_p env v v') ",
                 "(closed : RecEnvClosed env) (liftclosed : RecEnvLiftClosed env) => ",
-                "{ctor} env ",
+                "@{ctor} env ",
                 "(instantiate_at ty v d) (instantiate_at ty' v' d) ",
                 "(instantiate_at body v (Nat.succ d)) (instantiate_at body' v' (Nat.succ d)) ",
                 "(ihty v v' d h closed liftclosed) (ihbody v v' (Nat.succ d) h closed liftclosed))"
@@ -2068,10 +2068,10 @@ fn par_subst_p_proof() -> String {
         );
         format!(
             concat!(
-                "(Eq.substType KExpr ",
+                "(@Eq.substType KExpr ",
                 "(fun (x : KExpr) => par_reduces_p env {lhs_head} x) ",
                 "{ctor_rhs} {goal_rhs} ",
-                "(Eq.symm KExpr {goal_rhs} {ctor_rhs} {eq}) ",
+                "(@Eq.symm KExpr {goal_rhs} {ctor_rhs} {eq}) ",
                 "{ctor_term})"
             ),
             lhs_head = lhs_head,
@@ -2089,7 +2089,7 @@ fn par_subst_p_proof() -> String {
         "(instantiate_at arg v d))"
     );
     let beta_ctor = concat!(
-        "(par_reduces_p.beta env ",
+        "(@par_reduces_p.beta env ",
         "(instantiate_at A v d) (instantiate_at A' v' d) ",
         "(instantiate_at body v (Nat.succ d)) (instantiate_at body' v' (Nat.succ d)) ",
         "(instantiate_at arg v d) (instantiate_at arg' v' d) ",
@@ -2118,7 +2118,7 @@ fn par_subst_p_proof() -> String {
     let let_lhs_head =
         "(KExpr.let_ (instantiate_at ty v d) (instantiate_at val v d) (instantiate_at body v (Nat.succ d)))";
     let let_ctor = concat!(
-        "(par_reduces_p.let_ env ",
+        "(@par_reduces_p.let_ env ",
         "(instantiate_at ty v d) (instantiate_at ty' v' d) ",
         "(instantiate_at val v d) (instantiate_at val' v' d) ",
         "(instantiate_at body v (Nat.succ d)) (instantiate_at body' v' (Nat.succ d)) ",
@@ -2151,7 +2151,7 @@ fn par_subst_p_proof() -> String {
             "(ihty : {ih_ty}) (ihval : {ih_val}) (ihbody : {ih_body}) ",
             "(v : KExpr) (v' : KExpr) (d : Nat) (h : par_reduces_p env v v') ",
             "(closed : RecEnvClosed env) (liftclosed : RecEnvLiftClosed env) => ",
-            "par_reduces_p.let_cong env ",
+            "@par_reduces_p.let_cong env ",
             "(instantiate_at ty v d) (instantiate_at ty' v' d) ",
             "(instantiate_at val v d) (instantiate_at val' v' d) ",
             "(instantiate_at body v (Nat.succ d)) (instantiate_at body' v' (Nat.succ d)) ",
@@ -2173,7 +2173,7 @@ fn par_subst_p_proof() -> String {
             "(ihp : {ih_e0e2}) ",
             "(v : KExpr) (v' : KExpr) (d : Nat) (h : par_reduces_p env v v') ",
             "(closed : RecEnvClosed env) (liftclosed : RecEnvLiftClosed env) => ",
-            "par_reduces_p.iota_p env (instantiate_at e0 v d) (instantiate_at e2 v' d) (instantiate_at r v' d) ",
+            "@par_reduces_p.iota_p env (instantiate_at e0 v d) (instantiate_at e2 v' d) (instantiate_at r v' d) ",
             "(ihp v v' d h closed liftclosed) ",
             "(iota_subst_commutes env e2 r v' d closed hi))"
         ),
@@ -2187,7 +2187,7 @@ fn par_subst_p_proof() -> String {
             "(_hsub : par_reduces_p env sub sub') (ihsub : {ih_sub}) ",
             "(v : KExpr) (v' : KExpr) (d : Nat) (h : par_reduces_p env v v') ",
             "(closed : RecEnvClosed env) (liftclosed : RecEnvLiftClosed env) => ",
-            "par_reduces_p.proj env s i ",
+            "@par_reduces_p.proj env s i ",
             "(instantiate_at sub v d) (instantiate_at sub' v' d) ",
             "(ihsub v v' d h closed liftclosed))"
         ),
@@ -2199,7 +2199,7 @@ fn par_subst_p_proof() -> String {
             "fun (env : RecEnv) (e0 : KExpr) (e0' : KExpr) (v0 : KExpr) (v0' : KExpr) (d0 : Nat) ",
             "(h_ee : par_reduces_p env e0 e0') (h_vv : par_reduces_p env v0 v0') ",
             "(closed0 : RecEnvClosed env) (liftclosed0 : RecEnvLiftClosed env) => ",
-            "par_reduces_p.rec env {motive} ",
+            "@par_reduces_p.rec env {motive} ",
             "{refl_arm} {beta_arm} {app_arm} ",
             "{lam_arm} {pi_arm} {forall_arm} {let_arm} {iota_arm} {let_cong_arm} {proj_arm} ",
             "e0 e0' h_ee v0 v0' d0 h_vv closed0 liftclosed0"

@@ -11,9 +11,9 @@ use super::{
 use crate::spec::Specification;
 
 const LIVE: &str =
-    "IRByteWorldV1.mk Nat byte_machine_external_mem 73 (IRList.cons Nat 1 (IRList.nil Nat)) 2";
+    "@IRByteWorldV1.mk Nat byte_machine_external_mem 73 (@IRList.cons Nat 1 (@IRList.nil Nat)) 2";
 const RETURNED: &str =
-    "IRByteWorldV1.mk Nat (ir_byte_retire_v1 1 byte_machine_external_mem) 73 (IRList.nil Nat) 2";
+    "@IRByteWorldV1.mk Nat (ir_byte_retire_v1 1 byte_machine_external_mem) 73 (@IRList.nil Nat) 2";
 const BAD: &str = "IROutcome.type_error IRFault.bad_field";
 const UNSUPPORTED: &str = "IROutcome.unmodelled IRFault.width_bounded";
 
@@ -107,7 +107,7 @@ fn refusal(
         &format!("{name}_fault"),
         "IRByteConfigV1 Nat",
         &actual,
-        &format!("IRByteConfigV1.halted Nat ({fault}) ({LIVE})"),
+        &format!("@IRByteConfigV1.halted Nat ({fault}) ({LIVE})"),
     );
 }
 
@@ -353,11 +353,11 @@ fn byte_cast_step_binds_once_advances_once_and_preserves_the_exact_world() {
                 ],
             )],
         );
-        let initial = "ir_byte_init_v1 Nat byte_cast_step_context 41 (IRList.cons IRScalar (IRScalar.int_ 16) (IRList.nil IRScalar)) byte_machine_external_mem 73";
+        let initial = "ir_byte_init_v1 Nat byte_cast_step_context 41 (@IRList.cons IRScalar (IRScalar.int_ 16) (@IRList.nil IRScalar)) byte_machine_external_mem 73";
         let actual = format!(
             "ir_byte_step_v1 Nat byte_cast_step_context byte_machine_no_import ({initial})"
         );
-        let expected = format!("IRByteConfigV1.running Nat (IRMachine.mk (IRList.cons IRFrame (IRFrame.mk 41 0 1 (IRList.cons IRBinding (IRBinding.mk 77 (IRScalar.ptr_ 16)) (IRList.cons IRBinding (IRBinding.mk 0 (IRScalar.int_ 16)) (IRList.nil IRBinding))) (IRList.nil Nat)) (IRList.nil IRFrame)) (IRList.nil IRMemSlot) 0) ({LIVE})");
+        let expected = format!("@IRByteConfigV1.running Nat (IRMachine.mk (@IRList.cons IRFrame (IRFrame.mk 41 0 1 (@IRList.cons IRBinding (IRBinding.mk 77 (IRScalar.ptr_ 16)) (@IRList.cons IRBinding (IRBinding.mk 0 (IRScalar.int_ 16)) (@IRList.nil IRBinding))) (@IRList.nil Nat)) (@IRList.nil IRFrame)) (@IRList.nil IRMemSlot) 0) ({LIVE})");
         check(
             &mut spec,
             "byte_cast_exact_step",
@@ -523,14 +523,14 @@ fn byte_cast_noncanonical_word_pointer_and_undefined_binding_fail_closed() {
             );
             // Deliberately malformed SSA values enter at step, not through
             // init's earlier value admission. The live world is still valid.
-            let machine = format!("IRMachine.mk (IRList.cons IRFrame (IRFrame.mk 41 0 0 (IRList.cons IRBinding (IRBinding.mk 0 ({value})) (IRList.nil IRBinding)) (IRList.nil Nat)) (IRList.nil IRFrame)) (IRList.nil IRMemSlot) 0");
-            let actual = format!("ir_byte_step_v1 Nat {ctx} byte_machine_no_import (IRByteConfigV1.running Nat ({machine}) ({LIVE}))");
+            let machine = format!("IRMachine.mk (@IRList.cons IRFrame (IRFrame.mk 41 0 0 (@IRList.cons IRBinding (IRBinding.mk 0 ({value})) (@IRList.nil IRBinding)) (@IRList.nil Nat)) (@IRList.nil IRFrame)) (@IRList.nil IRMemSlot) 0");
+            let actual = format!("ir_byte_step_v1 Nat {ctx} byte_machine_no_import (@IRByteConfigV1.running Nat ({machine}) ({LIVE}))");
             check(
                 &mut spec,
                 &format!("byte_cast_untrusted_binding_{index}"),
                 "IRByteConfigV1 Nat",
                 &actual,
-                &format!("IRByteConfigV1.halted Nat ({BAD}) ({LIVE})"),
+                &format!("@IRByteConfigV1.halted Nat ({BAD}) ({LIVE})"),
             );
         }
     });
@@ -572,7 +572,7 @@ fn byte_cast_result_site_does_not_override_the_declared_destination() {
                 &format!("byte_cast_bad_site_{index}"),
                 "IRByteConfigV1 Nat",
                 &actual,
-                &format!("IRByteConfigV1.halted Nat ({BAD}) ({LIVE})"),
+                &format!("@IRByteConfigV1.halted Nat ({BAD}) ({LIVE})"),
             );
         }
     });
@@ -613,7 +613,7 @@ fn byte_cast_pointer_creation_does_not_authorize_a_store() {
                 &format!("byte_cast_unallocated_store_{index}"),
                 "IRByteConfigV1 Nat",
                 &actual,
-                &format!("IRByteConfigV1.halted Nat (IROutcome.ub IRFault.bad_addr) ({LIVE})"),
+                &format!("@IRByteConfigV1.halted Nat (IROutcome.ub IRFault.bad_addr) ({LIVE})"),
             );
         }
     });
@@ -655,14 +655,14 @@ fn byte_cast_checked_definitions_reject_a_fabricated_null_roundtrip_claim() {
             &outcome(&actual),
             &returned(&["IRScalar.nullptr_"]),
         );
-        let error = spec.add_recursive_def(&format!("def byte_cast_forged_null : Eq IROutcome ({}) ({wrong}) := Eq.refl IROutcome ({wrong})", outcome(&actual)),
+        let error = spec.add_recursive_def(&format!("def byte_cast_forged_null : @Eq IROutcome ({}) ({wrong}) := @Eq.refl IROutcome ({wrong})", outcome(&actual)),
             "Deliberately false cast result, required to fail kernel checking.").expect_err("false null result must not be registered");
         crate::test_utils::assert_type_mismatch_rejection(&error, "byte_cast_forged_null");
         assert!(spec.get_definition("byte_cast_forged_null").is_none());
         // Ordinary registrations still work after the rejected definition.
         register(
             &mut spec,
-            "def byte_cast_after_refusal : Eq Nat 7 7 := Eq.refl Nat 7",
+            "def byte_cast_after_refusal : @Eq Nat 7 7 := @Eq.refl Nat 7",
         );
         spec.verify_definition("byte_cast_after_refusal")
             .expect("clean post-refusal replay");

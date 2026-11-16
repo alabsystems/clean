@@ -56,9 +56,9 @@
     "programs": 40,
     "checker": "advice_replay: BYTE_EQUAL on both lanes. Its mutant advice_replay_no_compare: BYTE_EQUAL on both lanes, which is Lean's bytes for the mutant, accepting three corrupted cases.",
     "probes": 38,
-    "probes_byte_equal_on_both_lanes": 26,
-    "probes_not_byte_equal_on_either_lane": 12,
-    "open_gaps": 8,
+    "probes_byte_equal_on_both_lanes": 27,
+    "probes_not_byte_equal_on_either_lane": 11,
+    "open_gaps": 7,
     "r4_items": "The current primary probes include true call cycles c34/c35/c36 for (i)/(ix)/(x); pinned Lean accepts all ten and every cycle member uses every _f auxiliary with Nat.brecOn. The original capture had only eight recovery-free acceptances because c36 dropped three structural clauses. After the 2026-11-14 parser and explicit-major fixes, all ten are rechecked recovery-aware: nine accepted, vii refused for absent ByteArray. See reports/x1-recheck/README.md; the original nine-pass claim was invalid. Both backends: i, ii, iii, vi, ix byte-equal; iv and x SIGSEGV; v and viii refused at lowering; vii refused at elaboration. The old c24/c32/c33 remain acyclic controls. The fenced ReferenceKernel re-check for vi remains unmeasured."
   },
   "programs": [
@@ -122,18 +122,12 @@
       "name": "c03_nested_overlapping_patterns",
       "construct": "nested and overlapping constructor patterns, first match wins",
       "c_lane": {
-        "outcome": "REFUSED_BUILD",
-        "refusal": "Error: cannot compile source dependency `Tm.isNormal` of `main`: RC linearity violation in _lifted.Tm.isNormal._rec.0",
-        "gaps": [
-          "rc-linearity-nested-pattern-under-unary-ctor"
-        ]
+        "outcome": "BYTE_EQUAL",
+        "gaps": []
       },
       "trust_cg_lane": {
-        "outcome": "EMIT_TRUSTIR_REFUSED",
-        "refusal": "front-end: cannot compile source dependency `Tm.isNormal` of `main`: RC linearity violation in _lifted.Tm.isNormal._rec.0",
-        "gaps": [
-          "rc-linearity-nested-pattern-under-unary-ctor"
-        ]
+        "outcome": "BYTE_EQUAL",
+        "gaps": []
       }
     },
     {
@@ -752,26 +746,6 @@
     }
   ],
   "gaps": [
-    {
-      "id": "rc-linearity-nested-pattern-under-unary-ctor",
-      "construct": "in a structurally recursive definition, a nested constructor pattern under a ONE-field recursive constructor followed by an overlapping row on that constructor: `| .succ (.lit _) => false | .succ a => Tm.isNormal a`",
-      "needed_for": "a checker's redex and normal-form tests are first-match nested patterns over terms. The checker here states the `succ` row of `isNormal` through a helper predicate (`isLit`) because of this gap.",
-      "lanes": [
-        "c",
-        "trust_cg"
-      ],
-      "stage": "clean-compiler, the RC linearity verification of the final L5IR (shared by both lanes)",
-      "refusal": "RC linearity violation in _lifted.Tm.isNormal._rec.0: object %12 is consumed 0 times with 0 incs on path entry/alt4/alt3: 1 reference(s) never released at return (a leak: the object is never consumed or dec'd)",
-      "refusal_seen_with": "clean compile <program> --decl Tm.isNormal --emit c (`clean run` now preserves this original cause at the source dependency closure)",
-      "site": {
-        "file": "crates/clean-compiler/src/rc_repair_linearity.rs",
-        "line": 909,
-        "needle": "reference(s) never released {when} (a leak: the object is never consumed or dec'd)"
-      },
-      "measured_shape": "refused: `.succ (.lit _)`, `.succ (.lam _)`, `.succ (.var _)` before `.succ a => Tm.isNormal a`. Byte-equal: the same nested row under a two-field constructor (`.app (.lam _) _`, `.app (.lit _) _`, `.add (.lit _) (.lit _)`); the one-field shape in a definition that does not recurse; the test moved into a helper predicate or an inner `match`.",
-      "regression": "the same program was byte-equal through `clean run` of the installed clean 0.9.0+g6c8fda90f (2026-11-07); the commit that moved it is not identified",
-      "fix_scope": "not local: RC insertion for the equation compiler's nested-match lowering. The verifier is right to refuse a leak; the fix is in what it is given."
-    },
     {
       "id": "list-form-absent-from-builtin-prelude",
       "construct": "`List.forM` (the checker's `main` uses `for … in`, which both lanes run)",
@@ -1411,5 +1385,21 @@
     ],
     "native_rows_live_test_log": "reports/x1-fixup/latest-consumers.log",
     "full_40_program_detail_snapshot": "reports/x1-fixup/execution-full-f9.json"
-  }
+  },
+  "closed_gaps": [
+    {
+      "id": "rc-linearity-nested-pattern-under-unary-ctor",
+      "evidence": "reports/nested-pattern-rc-2026-11-16/README.md",
+      "scope": "Actual c03 source: C and trust-cg 11616 both print pinned Lean bytes after preserving zero-arg FVar alias scalar metadata; original refusal retained in the report. No license or authority claim."
+    }
+  ],
+  "scoped_rechecks": [
+    {
+      "date": "2026-11-16",
+      "program": "c03_nested_overlapping_patterns",
+      "evidence": "reports/nested-pattern-rc-2026-11-16/README.md",
+      "trust_cg": "managed build 11616; exact source/tool/stdout/receipt hashes in report",
+      "claim": "C and trust-cg BYTE_EQUAL, measured only. Historical measured_with remains the dated full-battery snapshot; the report states the separately qualified current scope."
+    }
+  ]
 }

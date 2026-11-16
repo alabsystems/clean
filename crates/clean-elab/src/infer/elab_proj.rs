@@ -140,7 +140,7 @@ impl<'a> ElabCtx<'a> {
     fn elab_proj_resolved(
         &mut self,
         expr: &SurfaceExpr,
-        proj: &clean_parser::Projection,
+        proj: &Projection,
     ) -> Result<Expr, ElabError> {
         // Projection/qualified-name disambiguation (#497, #501):
         // The parser produces Proj for all dotted terms like `x.y`.

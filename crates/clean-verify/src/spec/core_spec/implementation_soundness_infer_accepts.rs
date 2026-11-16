@@ -124,7 +124,7 @@ impl Specification {
         // reference KernelInferResult st f / st a).
         self.add_inductive(
             r"inductive AppInferWitness : KernelState → KExpr → KExpr → KExpr → KExpr → Type
-| mk : forall (st : KernelState) (Rf : KExpr) (Ra : KExpr) (a : KExpr) (T : KExpr) (dom : KExpr) (cod : KExpr), KernelWhnfAccepts st Rf (KExpr.pi dom cod) → KernelDefEqAccepts st Ra dom → Eq KExpr (instantiate cod a) T → (KernelStateEnvValid st → KernelStateLocalCtxWellFormed st → KernelInputAdmissible st a → KernelBinaryInputAdmissible st Ra dom) → AppInferWitness st Rf Ra a T",
+| mk : forall (st : KernelState) (Rf : KExpr) (Ra : KExpr) (a : KExpr) (T : KExpr) (dom : KExpr) (cod : KExpr), KernelWhnfAccepts st Rf (KExpr.pi dom cod) → KernelDefEqAccepts st Ra dom → @Eq KExpr (instantiate cod a) T → (KernelStateEnvValid st → KernelStateLocalCtxWellFormed st → KernelInputAdmissible st a → KernelBinaryInputAdmissible st Ra dom) → AppInferWitness st Rf Ra a T",
             "App-case inference witness: AppInferWitness st Rf Ra a T packages the app branch's \
              pi-decomposition of the EXISTENTIALLY-BOUND inferred function type Rf and argument \
              type Ra (the un-Skolemization retiring KernelInferResult: Rf/Ra are now explicit \
@@ -138,7 +138,7 @@ impl Specification {
 
         self.add_inductive(
             r"inductive LamInferWitness : KExpr → KExpr → KExpr → KExpr → Type
-| mk : forall (A : KExpr) (body : KExpr) (bt : KExpr) (T : KExpr) (dl : Level), Typing A (KExpr.sort dl) → Typing body bt → Eq KExpr (KExpr.pi A bt) T → LamInferWitness A body bt T",
+| mk : forall (A : KExpr) (body : KExpr) (bt : KExpr) (T : KExpr) (dl : Level), Typing A (KExpr.sort dl) → Typing body bt → @Eq KExpr (KExpr.pi A bt) T → LamInferWitness A body bt T",
             "Lam-case inference witness: LamInferWitness A body bt T packages the lam branch's typing \
              content, with the body type bt now an EXPLICIT INDEX (exposed at the constructor level so \
              the KernelInferAccepts.lam recursive body-infer premise can share it — the AppInferWitness \
@@ -151,7 +151,7 @@ impl Specification {
 
         self.add_inductive(
             r"inductive PiInferWitness : KExpr → KExpr → KExpr → Type
-| mk : forall (A : KExpr) (B : KExpr) (T : KExpr) (dom : Level) (cod : Level), Typing A (KExpr.sort dom) → Typing B (KExpr.sort cod) → Eq KExpr (KExpr.sort (Level.imax dom cod)) T → PiInferWitness A B T",
+| mk : forall (A : KExpr) (B : KExpr) (T : KExpr) (dom : Level) (cod : Level), Typing A (KExpr.sort dom) → Typing B (KExpr.sort cod) → @Eq KExpr (KExpr.sort (Level.imax dom cod)) T → PiInferWitness A B T",
             "Pi-case inference witness: PiInferWitness A B T packages the pi branch's typing \
              content. The single mk constructor binds the domain/codomain levels dom/cod INTERNALLY \
              (the packaged existential retiring KernelPiDomainLevel/KernelPiCodomainLevel), \
@@ -330,7 +330,7 @@ impl Specification {
         // was missing was this note at the site the prose is about.
         self.add_inductive(
             r"inductive KernelInferAccepts (st : KernelState) : KExpr → KExpr → Type
-| sort : forall (l : Level) (T : KExpr), Eq KExpr (KExpr.sort (Level.succ l)) T → KernelInferAccepts st (KExpr.sort l) T
+| sort : forall (l : Level) (T : KExpr), @Eq KExpr (KExpr.sort (Level.succ l)) T → KernelInferAccepts st (KExpr.sort l) T
 | const : forall (n : Name) (us : ListType Level) (T : KExpr), (KernelStateEnvValid st → KernelStateLocalCtxWellFormed st → KernelInputAdmissible st (KExpr.const n us) → has_type (KExpr.const n us) T) → KernelInferAccepts st (KExpr.const n us) T
 | app : forall (f : KExpr) (a : KExpr) (T : KExpr) (Rf : KExpr) (Ra : KExpr), KernelInferAccepts st f Rf → KernelInferAccepts st a Ra → AppInferWitness st Rf Ra a T → (KernelStateEnvValid st → KernelStateLocalCtxWellFormed st → KernelInputAdmissible st (KExpr.app f a) → KernelInputAdmissible st Rf) → KernelInferAccepts st (KExpr.app f a) T
 | lam : forall (A : KExpr) (body : KExpr) (T : KExpr) (bt : KExpr), KernelInferAccepts st body bt → LamInferWitness A body bt T → KernelInferAccepts st (KExpr.lam A body) T
@@ -575,7 +575,7 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (st : KernelState) (x : KExpr) (T : KExpr) => ",
-                    "KExpr.rec (fun (_ : KExpr) => Type) ",
+                    "@KExpr.rec (fun (_ : KExpr) => Type) ",
                     "(fun (l : Level) => KExprEqT (KExpr.sort (Level.succ l)) T) ",
                     "(fun (_ : Nat) => Empty) ",
                     "(fun (f : KExpr) (a : KExpr) (_ : Type) (_ : Type) => ",
@@ -679,17 +679,17 @@ impl Specification {
                 concat!(
                     "fun (st : KernelState) (e : KExpr) (T : KExpr) ",
                     "(h : KernelInferAccepts st e T) => ",
-                    "KernelInferAccepts.rec st ",
+                    "@KernelInferAccepts.rec st ",
                     "(fun (x : KExpr) (y : KExpr) (_h : KernelInferAccepts st x y) => ",
                     "InferInversionAt st x y) ",
                     // sort minor: transport the Prop-valued exact-result field
                     // into the Type-valued KExprEqT payload (universe adapter)
                     "(fun (l : Level) (T2 : KExpr) ",
-                    "(hfield : Eq KExpr (KExpr.sort (Level.succ l)) T2) => ",
-                    "Eq.substType KExpr ",
+                    "(hfield : @Eq KExpr (KExpr.sort (Level.succ l)) T2) => ",
+                    "@Eq.substType KExpr ",
                     "(fun (X : KExpr) => KExprEqT (KExpr.sort (Level.succ l)) X) ",
                     "(KExpr.sort (Level.succ l)) T2 hfield ",
-                    "(KExprEqT.refl (KExpr.sort (Level.succ l)))) ",
+                    "(@KExprEqT.refl (KExpr.sort (Level.succ l)))) ",
                     // const minor: identity on the guarded has_type implication
                     "(fun (n : Name) (us : ListType Level) (T2 : KExpr) ",
                     "(hfield : KernelStateEnvValid st -> KernelStateLocalCtxWellFormed st -> ",

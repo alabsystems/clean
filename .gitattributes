@@ -46,3 +46,31 @@ reports/self-proof-q6-recapture-2026-11-14/captures/stock/default.log whitespace
 reports/self-proof-q6-recapture-2026-11-14/captures/stock/export.log whitespace=-blank-at-eof
 reports/self-proof-q6-recapture-2026-11-14/captures/trust/default.log whitespace=-blank-at-eof
 reports/self-proof-q6-recapture-2026-11-14/captures/trust/export.log whitespace=-blank-at-eof
+
+# Exact failed unittest output is hashed evidence, including its trailing space.
+reports/q6-json-evidence-2026-11-16/prose-before-fix/stderr whitespace=-blank-at-eol
+
+# Exact widest-diagnostic terminal output retains aligned padding and final blanks.
+reports/q6-widest-helper-custody-2026-11-16/gate/stdout whitespace=-blank-at-eol,-blank-at-eof
+reports/q6-widest-helper-custody-2026-11-16/gate-final/stdout whitespace=-blank-at-eol,-blank-at-eof
+
+# Exact intermediate merged-tree gate output retains terminal padding.
+reports/q6-widest-helper-intake-2026-11-16/gate/stdout whitespace=-blank-at-eol,-blank-at-eof
+
+# Exact combined scoreboard intake diagnostic output is raw terminal data.
+reports/q6-widest-helper-final-main-2026-11-16/gate/stdout whitespace=-blank-at-eol,-blank-at-eof
+
+# Preserve the incoming literal probe transcript byte-for-byte.
+reports/self-proof-island-probe-2026-11-15/probe_level.log whitespace=-blank-at-eof
+
+# Exact final publication-tree gate stdout is hashed terminal data.
+reports/q6-helper-publication-join-2026-11-16/gate/stdout whitespace=-blank-at-eol,-blank-at-eof
+
+# Exact final native-intake gate stdout retains its aligned terminal padding.
+reports/q6-helper-native-intake-2026-11-16/gate/stdout whitespace=-blank-at-eol
+
+# Preserve exact incoming diagnostic/diff bytes; source whitespace stays enforced.
+reports/isabelle-emitter-current-intake-source-2026-11-15/owned-code-intake.diff whitespace=-blank-at-eol
+reports/isabelle-emitter-e6-failed78-2026-11-15/logs/elab-goal-universes-run.stdout.log whitespace=-blank-at-eof
+reports/isabelle-emitter-e6-failed78-2026-11-15/logs/mathverse-term-resolution-run.stdout.log whitespace=-blank-at-eof
+reports/merged-source-qualification-2026-11-16/registry-progress/widest/stdout whitespace=-blank-at-eol

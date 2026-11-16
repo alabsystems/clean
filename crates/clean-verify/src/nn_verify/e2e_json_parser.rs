@@ -206,7 +206,7 @@ fn is_valid_layer_type(layer_type: &str) -> bool {
 /// # Errors
 ///
 /// Returns the first validation error found.
-pub fn validate_certificate(cert: &JsonCertificate) -> Result<(), PipelineParseError> {
+pub(crate) fn validate_certificate(cert: &JsonCertificate) -> Result<(), PipelineParseError> {
     // Layer count consistency.
     if cert.num_layers != cert.layer_certs.len() {
         return Err(PipelineParseError::LayerCountMismatch {
@@ -384,7 +384,7 @@ fn layer_to_farkas(
 ///
 /// Returns per-dimension (lower, upper) bounds for L-infinity perturbation.
 #[must_use]
-pub fn input_spec_to_bounds(spec: &JsonInputSpec) -> Vec<(f64, f64)> {
+pub(crate) fn input_spec_to_bounds(spec: &JsonInputSpec) -> Vec<(f64, f64)> {
     spec.center
         .iter()
         .map(|&c| (c - spec.epsilon, c + spec.epsilon))

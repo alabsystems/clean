@@ -150,7 +150,7 @@ fn the_a4_shaped_theorem_states_its_premises_and_its_transported_value() {
         "(gs : IRList IRGlobal)",
         "IRModule.mk fs gs",
         // function 0 is the minted body, 1 and 2 are the contracts' functions
-        "(ir_func_find fs ir_d0) (IROption.some IRFunc ir_it_func)",
+        "(ir_func_find fs ir_d0) (@IROption.some IRFunc ir_it_func)",
         "(hc1 :",
         "(hc2 :",
         "ir_func_params g1",

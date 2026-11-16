@@ -64,16 +64,16 @@ impl Specification {
         let goal = "StuckAppRedWitness the_red_env f a w";
         let motive = |z: &str| {
             format!(
-                "forall (f : KExpr) (a : KExpr), Eq KExpr {z} (KExpr.app f a) -> \
+                "forall (f : KExpr) (a : KExpr), @Eq KExpr {z} (KExpr.app f a) -> \
                  par_reduces_cd_star the_red_env {z} w -> {goal}"
             )
         };
         // An impossible leaf: the term is not an application.
         let kill = |form: &str| {
             format!(
-                "(fun (f : KExpr) (a : KExpr) (heq : Eq KExpr {form} (KExpr.app f a)) \
+                "(fun (f : KExpr) (a : KExpr) (heq : @Eq KExpr {form} (KExpr.app f a)) \
                  (_hs : par_reduces_cd_star the_red_env {form} w) => \
-                 kexpr_discr_t ({goal}) {form} (KExpr.app f a) heq (Eq.refl Bool Bool.false))"
+                 kexpr_discr_t ({goal}) {form} (KExpr.app f a) heq (@Eq.refl Bool Bool.false))"
             )
         };
         // Transport a fact about the leaf's own form onto `app f a`.
@@ -89,7 +89,7 @@ impl Specification {
             "{sort} {pi} {lit} \
              (fun (raf : KExpr) (raa : KExpr) (hraf : rigid_app_head raf) \
              (_ihr : {ih}) (f : KExpr) (a : KExpr) \
-             (heq : Eq KExpr {rigid_app_form} (KExpr.app f a)) \
+             (heq : @Eq KExpr {rigid_app_form} (KExpr.app f a)) \
              (hs : par_reduces_cd_star the_red_env {rigid_app_form} w) => \
              rigid_app_leg_inv f a w \
              {rig} \
@@ -113,43 +113,43 @@ impl Specification {
         let rigid_arms = rigid_arms
             .replacen("(fun (f : KExpr)", "(fun (rn : Level) (f : KExpr)", 1)
             .replacen(
-                "(fun (f : KExpr) (a : KExpr) (heq : Eq KExpr (KExpr.pi rpty rpbody)",
+                "(fun (f : KExpr) (a : KExpr) (heq : @Eq KExpr (KExpr.pi rpty rpbody)",
                 "(fun (rpty : KExpr) (rpbody : KExpr) (f : KExpr) (a : KExpr) \
-                 (heq : Eq KExpr (KExpr.pi rpty rpbody)",
+                 (heq : @Eq KExpr (KExpr.pi rpty rpbody)",
                 1,
             )
             .replacen(
-                "(fun (f : KExpr) (a : KExpr) (heq : Eq KExpr (KExpr.lit rv)",
-                "(fun (rv : Nat) (f : KExpr) (a : KExpr) (heq : Eq KExpr (KExpr.lit rv)",
+                "(fun (f : KExpr) (a : KExpr) (heq : @Eq KExpr (KExpr.lit rv)",
+                "(fun (rv : Nat) (f : KExpr) (a : KExpr) (heq : @Eq KExpr (KExpr.lit rv)",
                 1,
             )
             .replacen(
-                "(fun (f : KExpr) (a : KExpr) (heq : Eq KExpr (KExpr.proj rs ri rsub)",
+                "(fun (f : KExpr) (a : KExpr) (heq : @Eq KExpr (KExpr.proj rs ri rsub)",
                 "(fun (rs : Name) (ri : Nat) (rsub : KExpr) (f : KExpr) (a : KExpr) \
-                 (heq : Eq KExpr (KExpr.proj rs ri rsub)",
+                 (heq : @Eq KExpr (KExpr.proj rs ri rsub)",
                 1,
             )
             .replacen(
-                "(fun (f : KExpr) (a : KExpr) (heq : Eq KExpr (KExpr.bvar rbi)",
-                "(fun (rbi : Nat) (f : KExpr) (a : KExpr) (heq : Eq KExpr (KExpr.bvar rbi)",
+                "(fun (f : KExpr) (a : KExpr) (heq : @Eq KExpr (KExpr.bvar rbi)",
+                "(fun (rbi : Nat) (f : KExpr) (a : KExpr) (heq : @Eq KExpr (KExpr.bvar rbi)",
                 1,
             );
 
         let neutral_form = "(KExpr.app nfh nag)";
         format!(
             "def nf_app_leg_inv (w : KExpr) (e : KExpr) (hn : nf_head e) : {m} := \
-             nf_head.rec (fun (z : KExpr) (_h : nf_head z) => {mz}) \
+             @nf_head.rec (fun (z : KExpr) (_h : nf_head z) => {mz}) \
              (fun (qty : KExpr) (qbody : KExpr) (f : KExpr) (a : KExpr) \
-             (heq : Eq KExpr (KExpr.lam qty qbody) (KExpr.app f a)) \
+             (heq : @Eq KExpr (KExpr.lam qty qbody) (KExpr.app f a)) \
              (_hs : par_reduces_cd_star the_red_env (KExpr.lam qty qbody) w) => \
              kexpr_discr_t ({goal}) (KExpr.lam qty qbody) (KExpr.app f a) heq \
-             (Eq.refl Bool Bool.false)) \
+             (@Eq.refl Bool Bool.false)) \
              (fun (e0 : KExpr) (hr : rigid_app_head e0) => \
-             rigid_app_head.rec (fun (z : KExpr) (_h : rigid_app_head z) => {mz}) \
+             @rigid_app_head.rec (fun (z : KExpr) (_h : rigid_app_head z) => {mz}) \
              {rigid_arms} e0 hr) \
              (fun (nfh : KExpr) (nag : KExpr) (hin : iota_neutral nfh) \
              (hii : iota_immune {neutral_form}) (f : KExpr) (a : KExpr) \
-             (heq : Eq KExpr {neutral_form} (KExpr.app f a)) \
+             (heq : @Eq KExpr {neutral_form} (KExpr.app f a)) \
              (hs : par_reduces_cd_star the_red_env {neutral_form} w) => \
              neutral_app_leg_inv f a w \
              (Eq.substType KExpr (fun (z : KExpr) => iota_neutral z) nfh f \
@@ -157,18 +157,18 @@ impl Specification {
              {nimm} \
              {nleg}) \
              (fun (cn : Name) (cus : ListType Level) \
-             (_hdd : Eq (OptionType KExpr) \
-             (delta_reduct (red_def the_red_env) (KExpr.const cn cus)) (OptionType.none KExpr)) \
+             (_hdd : @Eq (OptionType KExpr) \
+             (delta_reduct (red_def the_red_env) (KExpr.const cn cus)) (@OptionType.none KExpr)) \
              (f : KExpr) (a : KExpr) \
-             (heq : Eq KExpr (KExpr.const cn cus) (KExpr.app f a)) \
+             (heq : @Eq KExpr (KExpr.const cn cus) (KExpr.app f a)) \
              (_hs : par_reduces_cd_star the_red_env (KExpr.const cn cus) w) => \
              kexpr_discr_t ({goal}) (KExpr.const cn cus) (KExpr.app f a) heq \
-             (Eq.refl Bool Bool.false)) \
+             (@Eq.refl Bool Bool.false)) \
              (fun (bi : Nat) (f : KExpr) (a : KExpr) \
-             (heq : Eq KExpr (KExpr.bvar bi) (KExpr.app f a)) \
+             (heq : @Eq KExpr (KExpr.bvar bi) (KExpr.app f a)) \
              (_hs : par_reduces_cd_star the_red_env (KExpr.bvar bi) w) => \
              kexpr_discr_t ({goal}) (KExpr.bvar bi) (KExpr.app f a) heq \
-             (Eq.refl Bool Bool.false)) \
+             (@Eq.refl Bool Bool.false)) \
              e hn",
             m = motive("e"),
             mz = motive("z"),

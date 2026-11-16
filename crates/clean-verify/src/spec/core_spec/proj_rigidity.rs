@@ -71,7 +71,7 @@ impl Specification {
         self.add_inductive(
             "inductive ProjRedWitness (env : RedEnv) (s : Name) (i : Nat) (sub : KExpr) \
              (t : KExpr) : Type\n\
-             | mk : forall (sub2 : KExpr), Eq KExpr t (KExpr.proj s i sub2) -> \
+             | mk : forall (sub2 : KExpr), @Eq KExpr t (KExpr.proj s i sub2) -> \
              par_reduces_cd_star env sub sub2 -> ProjRedWitness env s i sub t",
             "ProjRedWitness env s i sub t packages the conclusion of proj head rigidity: t IS a \
              projection at the SAME struct name and field index, and its subject is reachable \
@@ -90,8 +90,8 @@ impl Specification {
         // refl: nothing moved, so the subject reaches itself.
         let mut arms = String::from(
             "(fun (e0 : KExpr) (s : Name) (i : Nat) (sub : KExpr) \
-             (heq : Eq KExpr e0 (KExpr.proj s i sub)) => \
-             ProjRedWitness.mk env s i sub e0 sub heq (par_reduces_cd_star.refl env sub)) ",
+             (heq : @Eq KExpr e0 (KExpr.proj s i sub)) => \
+             @ProjRedWitness.mk env s i sub e0 sub heq (@par_reduces_cd_star.refl env sub)) ",
         );
 
         let absurd = |idx: usize| {
@@ -102,16 +102,16 @@ impl Specification {
                 proofs.push_str(&format!("(_ : par_reduces_cd env {from} {to}) "));
                 ihs.push_str(&format!(
                     "(_ : forall (s : Name) (i : Nat) (sub : KExpr), \
-                     Eq KExpr {from} (KExpr.proj s i sub) -> \
+                     @Eq KExpr {from} (KExpr.proj s i sub) -> \
                      {g}) ",
                     g = goal(to)
                 ));
             }
             format!(
                 "(fun {payload_binders} {proofs}{ihs}(s : Name) (i : Nat) (sub : KExpr) \
-                 (heq : Eq KExpr {src} (KExpr.proj s i sub)) => \
+                 (heq : @Eq KExpr {src} (KExpr.proj s i sub)) => \
                  kexpr_discr_t {g} {src} (KExpr.proj s i sub) heq \
-                 (Eq.refl Bool Bool.false)) ",
+                 (@Eq.refl Bool Bool.false)) ",
                 g = goal(tgt)
             )
         };
@@ -144,9 +144,9 @@ impl Specification {
                 "(fun ({var} : KExpr) ({var}2 : KExpr) \
                  (hst : {ctor}_step ({envsel}) {var} {var}2) \
                  (s : Name) (i : Nat) (sub : KExpr) \
-                 (heq : Eq KExpr {var} (KExpr.proj s i sub)) => \
+                 (heq : @Eq KExpr {var} (KExpr.proj s i sub)) => \
                  {lemma} ({envsel}) (KExpr.proj s i sub) {var}2 \
-                 {g} (Eq.refl (OptionType Name) (OptionType.none Name)) \
+                 {g} (@Eq.refl (OptionType Name) (@OptionType.none Name)) \
                  (Eq.substType KExpr \
                  (fun (z : KExpr) => {ctor}_step ({envsel}) z {var}2) \
                  {var} (KExpr.proj s i sub) heq hst)) ",
@@ -162,19 +162,19 @@ impl Specification {
             "(fun (ps : Name) (pidx : Nat) (psub : KExpr) (psub2 : KExpr) \
              (hp : par_reduces_cd env psub psub2) \
              (_ih : forall (s : Name) (i : Nat) (sub : KExpr), \
-             Eq KExpr psub (KExpr.proj s i sub) -> \
+             @Eq KExpr psub (KExpr.proj s i sub) -> \
              ProjRedWitness env s i sub psub2) \
              (s : Name) (i : Nat) (sub : KExpr) \
-             (heq : Eq KExpr (KExpr.proj ps pidx psub) (KExpr.proj s i sub)) => \
-             (fun (hn : Eq Name ps s) (hi : Eq Nat pidx i) (hs : Eq KExpr psub sub) => \
-             ProjRedWitness.mk env s i sub (KExpr.proj ps pidx psub2) psub2 \
+             (heq : @Eq KExpr (KExpr.proj ps pidx psub) (KExpr.proj s i sub)) => \
+             (fun (hn : @Eq Name ps s) (hi : @Eq Nat pidx i) (hs : @Eq KExpr psub sub) => \
+             @ProjRedWitness.mk env s i sub (KExpr.proj ps pidx psub2) psub2 \
              (Eq.trans KExpr (KExpr.proj ps pidx psub2) (KExpr.proj s pidx psub2) \
              (KExpr.proj s i psub2) \
              (Eq.cong Name KExpr (fun (w : Name) => KExpr.proj w pidx psub2) ps s hn) \
              (Eq.cong Nat KExpr (fun (w : Nat) => KExpr.proj s w psub2) pidx i hi)) \
-             (par_reduces_cd_star.step env sub psub2 psub2 \
+             (@par_reduces_cd_star.step env sub psub2 psub2 \
              (Eq.substType KExpr (fun (z : KExpr) => par_reduces_cd env z psub2) \
-             psub sub hs hp) (par_reduces_cd_star.refl env psub2))) \
+             psub sub hs hp) (@par_reduces_cd_star.refl env psub2))) \
              (proj_inj_name ps pidx psub s i sub heq) \
              (proj_inj_idx ps pidx psub s i sub heq) \
              (proj_inj_sub ps pidx psub s i sub heq)) ",
@@ -191,11 +191,11 @@ impl Specification {
                 "def par_reduces_cd_proj_inv (env : RedEnv) (p : KExpr) (q : KExpr) \
                  (h : par_reduces_cd env p q) : \
                  forall (s : Name) (i : Nat) (sub : KExpr), \
-                 Eq KExpr p (KExpr.proj s i sub) -> ProjRedWitness env s i sub q := \
-                 par_reduces_cd.rec env \
+                 @Eq KExpr p (KExpr.proj s i sub) -> ProjRedWitness env s i sub q := \
+                 @par_reduces_cd.rec env \
                  (fun (pp : KExpr) (qq : KExpr) (_h : par_reduces_cd env pp qq) => \
                  forall (s : Name) (i : Nat) (sub : KExpr), \
-                 Eq KExpr pp (KExpr.proj s i sub) -> ProjRedWitness env s i sub qq) \
+                 @Eq KExpr pp (KExpr.proj s i sub) -> ProjRedWitness env s i sub qq) \
                  {arms}p q h"
             ),
             "par_reduces_cd_proj_inv: SINGLE-STEP proj head rigidity — one parallel step out of a \
@@ -215,30 +215,30 @@ impl Specification {
             "def par_reduces_cd_star_proj_inv (env : RedEnv) (p : KExpr) (t : KExpr) \
              (h : par_reduces_cd_star env p t) : \
              forall (s : Name) (i : Nat) (sub : KExpr), \
-             Eq KExpr p (KExpr.proj s i sub) -> ProjRedWitness env s i sub t := \
-             par_reduces_cd_star.rec env \
+             @Eq KExpr p (KExpr.proj s i sub) -> ProjRedWitness env s i sub t := \
+             @par_reduces_cd_star.rec env \
              (fun (pp : KExpr) (qq : KExpr) (_h : par_reduces_cd_star env pp qq) => \
              forall (s : Name) (i : Nat) (sub : KExpr), \
-             Eq KExpr pp (KExpr.proj s i sub) -> ProjRedWitness env s i sub qq) \
+             @Eq KExpr pp (KExpr.proj s i sub) -> ProjRedWitness env s i sub qq) \
              (fun (e0 : KExpr) (s : Name) (i : Nat) (sub : KExpr) \
-             (heq : Eq KExpr e0 (KExpr.proj s i sub)) => \
-             ProjRedWitness.mk env s i sub e0 sub heq (par_reduces_cd_star.refl env sub)) \
+             (heq : @Eq KExpr e0 (KExpr.proj s i sub)) => \
+             @ProjRedWitness.mk env s i sub e0 sub heq (@par_reduces_cd_star.refl env sub)) \
              (fun (e0 : KExpr) (e1 : KExpr) (e2 : KExpr) \
              (hstep : par_reduces_cd env e0 e1) \
              (_hstar : par_reduces_cd_star env e1 e2) \
              (ih : forall (s : Name) (i : Nat) (sub : KExpr), \
-             Eq KExpr e1 (KExpr.proj s i sub) -> ProjRedWitness env s i sub e2) \
+             @Eq KExpr e1 (KExpr.proj s i sub) -> ProjRedWitness env s i sub e2) \
              (s : Name) (i : Nat) (sub : KExpr) \
-             (heq : Eq KExpr e0 (KExpr.proj s i sub)) => \
-             ProjRedWitness.rec env s i sub e1 \
+             (heq : @Eq KExpr e0 (KExpr.proj s i sub)) => \
+             @ProjRedWitness.rec env s i sub e1 \
              (fun (_w : ProjRedWitness env s i sub e1) => ProjRedWitness env s i sub e2) \
-             (fun (sub1 : KExpr) (he1 : Eq KExpr e1 (KExpr.proj s i sub1)) \
+             (fun (sub1 : KExpr) (he1 : @Eq KExpr e1 (KExpr.proj s i sub1)) \
              (hr1 : par_reduces_cd_star env sub sub1) => \
-             ProjRedWitness.rec env s i sub1 e2 \
+             @ProjRedWitness.rec env s i sub1 e2 \
              (fun (_w2 : ProjRedWitness env s i sub1 e2) => ProjRedWitness env s i sub e2) \
-             (fun (sub2 : KExpr) (he2 : Eq KExpr e2 (KExpr.proj s i sub2)) \
+             (fun (sub2 : KExpr) (he2 : @Eq KExpr e2 (KExpr.proj s i sub2)) \
              (hr2 : par_reduces_cd_star env sub1 sub2) => \
-             ProjRedWitness.mk env s i sub e2 sub2 he2 \
+             @ProjRedWitness.mk env s i sub e2 sub2 he2 \
              (par_reduces_cd_star_trans env sub sub1 sub2 hr1 hr2)) \
              (ih s i sub1 he1)) \
              (par_reduces_cd_proj_inv env e0 e1 hstep s i sub heq)) \

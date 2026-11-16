@@ -101,16 +101,16 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "nat_add_zero_zero".to_string(),
             type_src: concat!(
-                "forall (a : Nat) (b : Nat), Eq Nat a Nat.zero -> Eq Nat b Nat.zero -> ",
-                "Eq Nat (Nat.add a b) Nat.zero"
+                "forall (a : Nat) (b : Nat), @Eq Nat a Nat.zero -> @Eq Nat b Nat.zero -> ",
+                "@Eq Nat (Nat.add a b) Nat.zero"
             )
             .to_string(),
             value_src: Some(
                 concat!(
-                    "fun (a : Nat) (b : Nat) (ha : Eq Nat a Nat.zero) ",
-                    "(hb : Eq Nat b Nat.zero) => ",
-                    "Eq.trans Nat (Nat.add a b) a Nat.zero ",
-                    "(Eq.cong Nat Nat (fun (z : Nat) => Nat.add a z) b Nat.zero hb) ",
+                    "fun (a : Nat) (b : Nat) (ha : @Eq Nat a Nat.zero) ",
+                    "(hb : @Eq Nat b Nat.zero) => ",
+                    "@Eq.trans Nat (Nat.add a b) a Nat.zero ",
+                    "(@Eq.cong Nat Nat (fun (z : Nat) => Nat.add a z) b Nat.zero hb) ",
                     "ha"
                 )
                 .to_string(),
@@ -147,7 +147,7 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (a : Nat) (b : Nat) (c : Nat) (h : Lt a b) => ",
-                    "Nat.rec (fun (c0 : Nat) => Lt (Nat.add a c0) (Nat.add b c0)) ",
+                    "@Nat.rec (fun (c0 : Nat) => Lt (Nat.add a c0) (Nat.add b c0)) ",
                     "h ",
                     "(fun (m : Nat) (ih : Lt (Nat.add a m) (Nat.add b m)) => ",
                     "Lt.succ_lt_succ (Nat.add a m) (Nat.add b m) ih) ",
@@ -189,7 +189,7 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (a : Nat) (b : Nat) (c : Nat) (h : Lt a b) => ",
-                    "Lt.rec ",
+                    "@Lt.rec ",
                     "(fun (x : Nat) (y : Nat) (_ : Lt x y) => Lt (Nat.add c x) (Nat.add c y)) ",
                     "(fun (m : Nat) => lt_add_succ_left c m) ",
                     "(fun (n : Nat) (m : Nat) (_hnm : Lt n m) ",
@@ -233,7 +233,7 @@ impl Specification {
         // the Prop eq; CeilZeroBox.rec unwraps it.
         self.add_inductive(
             r"inductive CeilZeroBox (e : KExpr) : Type
-| mk : Eq Nat (bvar_ceiling e) Nat.zero → CeilZeroBox e",
+| mk : @Eq Nat (bvar_ceiling e) Nat.zero → CeilZeroBox e",
             "Type-valued box around the Prop equality bvar_ceiling e = 0 (bvar-freeness), \
              so the Type-motive Typing.rec can carry it. Part of the beta_reduces_bd SN \
              ladder (Aristotle port).",
@@ -242,14 +242,14 @@ impl Specification {
         // ceil_zero_unbox: project the Prop equality back out of the box.
         self.add_definition(SpecDefinition {
             name: "ceil_zero_unbox".to_string(),
-            type_src: "forall (e : KExpr), CeilZeroBox e -> Eq Nat (bvar_ceiling e) Nat.zero"
+            type_src: "forall (e : KExpr), CeilZeroBox e -> @Eq Nat (bvar_ceiling e) Nat.zero"
                 .to_string(),
             value_src: Some(
                 concat!(
                     "fun (e : KExpr) (bx : CeilZeroBox e) => ",
-                    "CeilZeroBox.rec e ",
-                    "(fun (_b : CeilZeroBox e) => Eq Nat (bvar_ceiling e) Nat.zero) ",
-                    "(fun (h : Eq Nat (bvar_ceiling e) Nat.zero) => h) ",
+                    "@CeilZeroBox.rec e ",
+                    "(fun (_b : CeilZeroBox e) => @Eq Nat (bvar_ceiling e) Nat.zero) ",
+                    "(fun (h : @Eq Nat (bvar_ceiling e) Nat.zero) => h) ",
                     "bx"
                 )
                 .to_string(),
@@ -315,7 +315,7 @@ impl Specification {
             name: "typable_bvar_ceiling_zero".to_string(),
             type_src: concat!(
                 "forall (e : KExpr) (T : KExpr), Typing e T -> ",
-                "Eq Nat (bvar_ceiling e) Nat.zero"
+                "@Eq Nat (bvar_ceiling e) Nat.zero"
             )
             .to_string(),
             value_src: Some(
@@ -350,18 +350,18 @@ impl Specification {
             name: "inst_id_of_ceiling_zero".to_string(),
             type_src: concat!(
                 "forall (body : KExpr) (val : KExpr), ",
-                "Eq Nat (bvar_ceiling body) Nat.zero -> ",
-                "Eq KExpr (instantiate body val) body"
+                "@Eq Nat (bvar_ceiling body) Nat.zero -> ",
+                "@Eq KExpr (instantiate body val) body"
             )
             .to_string(),
             value_src: Some(
                 concat!(
                     "fun (body : KExpr) (val : KExpr) ",
-                    "(h : Eq Nat (bvar_ceiling body) Nat.zero) => ",
+                    "(h : @Eq Nat (bvar_ceiling body) Nat.zero) => ",
                     "inst_above_ceiling_id body val Nat.zero ",
-                    "(Eq.subst Nat (fun (z : Nat) => Le z Nat.zero) ",
+                    "(@Eq.subst Nat (fun (z : Nat) => Le z Nat.zero) ",
                     "Nat.zero (bvar_ceiling body) ",
-                    "(Eq.symm Nat (bvar_ceiling body) Nat.zero h) ",
+                    "(@Eq.symm Nat (bvar_ceiling body) Nat.zero h) ",
                     "(le_zero_n Nat.zero))"
                 )
                 .to_string(),
@@ -404,7 +404,7 @@ impl Specification {
             name: "beta_bd_step_preserves_ceiling_zero".to_string(),
             type_src: concat!(
                 "forall (e : KExpr) (e' : KExpr), beta_reduces_bd e e' -> ",
-                "Eq Nat (bvar_ceiling e) Nat.zero -> Eq Nat (bvar_ceiling e') Nat.zero"
+                "@Eq Nat (bvar_ceiling e) Nat.zero -> @Eq Nat (bvar_ceiling e') Nat.zero"
             )
             .to_string(),
             value_src: Some(beta_bd_step_preserves_ceiling_zero_proof()),
@@ -445,7 +445,7 @@ impl Specification {
             name: "beta_bd_step_decreases_size".to_string(),
             type_src: concat!(
                 "forall (e : KExpr) (e' : KExpr), beta_reduces_bd e e' -> ",
-                "Eq Nat (bvar_ceiling e) Nat.zero -> Lt (expr_size e') (expr_size e)"
+                "@Eq Nat (bvar_ceiling e) Nat.zero -> Lt (expr_size e') (expr_size e)"
             )
             .to_string(),
             value_src: Some(beta_bd_step_decreases_size_proof()),
@@ -521,29 +521,29 @@ impl Specification {
         // the course-of-values IH applies at expr_size y.
         self.add_definition(SpecDefinition {
             name: "beta_bd_acc_of_ceiling_zero".to_string(),
-            type_src: "forall (e : KExpr), Eq Nat (bvar_ceiling e) Nat.zero -> beta_bd_acc e"
+            type_src: "forall (e : KExpr), @Eq Nat (bvar_ceiling e) Nat.zero -> beta_bd_acc e"
                 .to_string(),
             value_src: Some(
                 concat!(
                     "fun (e : KExpr) => ",
                     "nat_strong_rec ",
-                    "(fun (n : Nat) => forall (x : KExpr), Eq Nat (expr_size x) n -> ",
-                    "Eq Nat (bvar_ceiling x) Nat.zero -> beta_bd_acc x) ",
+                    "(fun (n : Nat) => forall (x : KExpr), @Eq Nat (expr_size x) n -> ",
+                    "@Eq Nat (bvar_ceiling x) Nat.zero -> beta_bd_acc x) ",
                     "(fun (k : Nat) ",
                     "(ih : forall (j : Nat), Lt j k -> forall (x : KExpr), ",
-                    "Eq Nat (expr_size x) j -> Eq Nat (bvar_ceiling x) Nat.zero -> ",
+                    "@Eq Nat (expr_size x) j -> @Eq Nat (bvar_ceiling x) Nat.zero -> ",
                     "beta_bd_acc x) ",
-                    "(x : KExpr) (hsz : Eq Nat (expr_size x) k) ",
-                    "(hnb : Eq Nat (bvar_ceiling x) Nat.zero) => ",
+                    "(x : KExpr) (hsz : @Eq Nat (expr_size x) k) ",
+                    "(hnb : @Eq Nat (bvar_ceiling x) Nat.zero) => ",
                     "beta_bd_acc.intro x ",
                     "(fun (y : KExpr) (hstep : beta_reduces_bd x y) => ",
                     "ih (expr_size y) ",
-                    "(Eq.substType Nat (fun (z : Nat) => Lt (expr_size y) z) ",
+                    "(@Eq.substType Nat (fun (z : Nat) => Lt (expr_size y) z) ",
                     "(expr_size x) k hsz ",
                     "(beta_bd_step_decreases_size x y hstep hnb)) ",
-                    "y (Eq.refl Nat (expr_size y)) ",
+                    "y (@Eq.refl Nat (expr_size y)) ",
                     "(beta_bd_step_preserves_ceiling_zero x y hstep hnb))) ",
-                    "(expr_size e) e (Eq.refl Nat (expr_size e))"
+                    "(expr_size e) e (@Eq.refl Nat (expr_size e))"
                 )
                 .to_string(),
             ),
@@ -664,29 +664,29 @@ impl Specification {
 fn typable_ceil_zero_box_proof() -> String {
     concat!(
         "fun (e0 : KExpr) (T0 : KExpr) (h0 : Typing e0 T0) => ",
-        "Typing.rec ",
+        "@Typing.rec ",
         "(fun (e : KExpr) (T : KExpr) (_ : Typing e T) => CeilZeroBox e) ",
         // sort n : bvar_ceiling (sort n) ≡ 0.
-        "(fun (n : Level) => CeilZeroBox.mk (KExpr.sort n) (Eq.refl Nat Nat.zero)) ",
+        "(fun (n : Level) => @CeilZeroBox.mk (KExpr.sort n) (@Eq.refl Nat Nat.zero)) ",
         // pi A B n m
         "(fun (A : KExpr) (B : KExpr) (n : Level) (m : Level) ",
         "(_hA : Typing A (KExpr.sort n)) (_hB : Typing B (KExpr.sort m)) ",
         "(ihA : CeilZeroBox A) (ihB : CeilZeroBox B) => ",
-        "CeilZeroBox.mk (KExpr.pi A B) ",
+        "@CeilZeroBox.mk (KExpr.pi A B) ",
         "(nat_add_zero_zero (bvar_ceiling A) (bvar_ceiling B) ",
         "(ceil_zero_unbox A ihA) (ceil_zero_unbox B ihB))) ",
         // lam A b B u
         "(fun (A : KExpr) (b : KExpr) (B : KExpr) (u : Level) ",
         "(_hA : Typing A (KExpr.sort u)) (_hb : Typing b B) ",
         "(ihA : CeilZeroBox A) (ihb : CeilZeroBox b) => ",
-        "CeilZeroBox.mk (KExpr.lam A b) ",
+        "@CeilZeroBox.mk (KExpr.lam A b) ",
         "(nat_add_zero_zero (bvar_ceiling A) (bvar_ceiling b) ",
         "(ceil_zero_unbox A ihA) (ceil_zero_unbox b ihb))) ",
         // app f a A B
         "(fun (f : KExpr) (a : KExpr) (A : KExpr) (B : KExpr) ",
         "(_hf : Typing f (KExpr.pi A B)) (_ha : Typing a A) ",
         "(ihf : CeilZeroBox f) (iha : CeilZeroBox a) => ",
-        "CeilZeroBox.mk (KExpr.app f a) ",
+        "@CeilZeroBox.mk (KExpr.app f a) ",
         "(nat_add_zero_zero (bvar_ceiling f) (bvar_ceiling a) ",
         "(ceil_zero_unbox f ihf) (ceil_zero_unbox a iha))) ",
         // conv e A B — subject unchanged, forward the IH.
@@ -707,18 +707,18 @@ fn typable_ceil_zero_box_proof() -> String {
 fn beta_bd_step_preserves_ceiling_zero_proof() -> String {
     concat!(
         "fun (s : KExpr) (t : KExpr) (hst : beta_reduces_bd s t) => ",
-        "beta_reduces_bd.rec ",
+        "@beta_reduces_bd.rec ",
         "(fun (e : KExpr) (e' : KExpr) (_ : beta_reduces_bd e e') => ",
-        "Eq Nat (bvar_ceiling e) Nat.zero -> Eq Nat (bvar_ceiling e') Nat.zero) ",
+        "@Eq Nat (bvar_ceiling e) Nat.zero -> @Eq Nat (bvar_ceiling e') Nat.zero) ",
         // beta A body arg : (app (lam A body) arg) ~> instantiate body arg.
         // Split the zero sum down to the body, then rewrite the instantiation
         // away (bvar-free bodies are fixed points of instantiate).
         "(fun (A : KExpr) (body : KExpr) (arg : KExpr) ",
-        "(h : Eq Nat (bvar_ceiling (KExpr.app (KExpr.lam A body) arg)) Nat.zero) => ",
-        "(fun (hbody : Eq Nat (bvar_ceiling body) Nat.zero) => ",
-        "Eq.subst KExpr (fun (z : KExpr) => Eq Nat (bvar_ceiling z) Nat.zero) ",
+        "(h : @Eq Nat (bvar_ceiling (KExpr.app (KExpr.lam A body) arg)) Nat.zero) => ",
+        "(fun (hbody : @Eq Nat (bvar_ceiling body) Nat.zero) => ",
+        "@Eq.subst KExpr (fun (z : KExpr) => @Eq Nat (bvar_ceiling z) Nat.zero) ",
         "body (instantiate body arg) ",
-        "(Eq.symm KExpr (instantiate body arg) body ",
+        "(@Eq.symm KExpr (instantiate body arg) body ",
         "(inst_id_of_ceiling_zero body arg hbody)) ",
         "hbody) ",
         "(nat_add_eq_zero_right (bvar_ceiling A) (bvar_ceiling body) ",
@@ -727,69 +727,69 @@ fn beta_bd_step_preserves_ceiling_zero_proof() -> String {
         // app_left f f' a
         "(fun (f : KExpr) (f' : KExpr) (a : KExpr) ",
         "(_hf : beta_reduces_bd f f') ",
-        "(ih : Eq Nat (bvar_ceiling f) Nat.zero -> Eq Nat (bvar_ceiling f') Nat.zero) ",
-        "(h : Eq Nat (bvar_ceiling (KExpr.app f a)) Nat.zero) => ",
+        "(ih : @Eq Nat (bvar_ceiling f) Nat.zero -> @Eq Nat (bvar_ceiling f') Nat.zero) ",
+        "(h : @Eq Nat (bvar_ceiling (KExpr.app f a)) Nat.zero) => ",
         "nat_add_zero_zero (bvar_ceiling f') (bvar_ceiling a) ",
         "(ih (nat_add_eq_zero_left (bvar_ceiling f) (bvar_ceiling a) h)) ",
         "(nat_add_eq_zero_right (bvar_ceiling f) (bvar_ceiling a) h)) ",
         // app_right f a a'
         "(fun (f : KExpr) (a : KExpr) (a' : KExpr) ",
         "(_ha : beta_reduces_bd a a') ",
-        "(ih : Eq Nat (bvar_ceiling a) Nat.zero -> Eq Nat (bvar_ceiling a') Nat.zero) ",
-        "(h : Eq Nat (bvar_ceiling (KExpr.app f a)) Nat.zero) => ",
+        "(ih : @Eq Nat (bvar_ceiling a) Nat.zero -> @Eq Nat (bvar_ceiling a') Nat.zero) ",
+        "(h : @Eq Nat (bvar_ceiling (KExpr.app f a)) Nat.zero) => ",
         "nat_add_zero_zero (bvar_ceiling f) (bvar_ceiling a') ",
         "(nat_add_eq_zero_left (bvar_ceiling f) (bvar_ceiling a) h) ",
         "(ih (nat_add_eq_zero_right (bvar_ceiling f) (bvar_ceiling a) h))) ",
         // lam_ty ty ty' body
         "(fun (ty : KExpr) (ty' : KExpr) (body : KExpr) ",
         "(_hty : beta_reduces_bd ty ty') ",
-        "(ih : Eq Nat (bvar_ceiling ty) Nat.zero -> Eq Nat (bvar_ceiling ty') Nat.zero) ",
-        "(h : Eq Nat (bvar_ceiling (KExpr.lam ty body)) Nat.zero) => ",
+        "(ih : @Eq Nat (bvar_ceiling ty) Nat.zero -> @Eq Nat (bvar_ceiling ty') Nat.zero) ",
+        "(h : @Eq Nat (bvar_ceiling (KExpr.lam ty body)) Nat.zero) => ",
         "nat_add_zero_zero (bvar_ceiling ty') (bvar_ceiling body) ",
         "(ih (nat_add_eq_zero_left (bvar_ceiling ty) (bvar_ceiling body) h)) ",
         "(nat_add_eq_zero_right (bvar_ceiling ty) (bvar_ceiling body) h)) ",
         // lam_body ty body body'
         "(fun (ty : KExpr) (body : KExpr) (body' : KExpr) ",
         "(_hb : beta_reduces_bd body body') ",
-        "(ih : Eq Nat (bvar_ceiling body) Nat.zero -> ",
-        "Eq Nat (bvar_ceiling body') Nat.zero) ",
-        "(h : Eq Nat (bvar_ceiling (KExpr.lam ty body)) Nat.zero) => ",
+        "(ih : @Eq Nat (bvar_ceiling body) Nat.zero -> ",
+        "@Eq Nat (bvar_ceiling body') Nat.zero) ",
+        "(h : @Eq Nat (bvar_ceiling (KExpr.lam ty body)) Nat.zero) => ",
         "nat_add_zero_zero (bvar_ceiling ty) (bvar_ceiling body') ",
         "(nat_add_eq_zero_left (bvar_ceiling ty) (bvar_ceiling body) h) ",
         "(ih (nat_add_eq_zero_right (bvar_ceiling ty) (bvar_ceiling body) h))) ",
         // pi_dom dom dom' body
         "(fun (dom : KExpr) (dom' : KExpr) (body : KExpr) ",
         "(_hd : beta_reduces_bd dom dom') ",
-        "(ih : Eq Nat (bvar_ceiling dom) Nat.zero -> ",
-        "Eq Nat (bvar_ceiling dom') Nat.zero) ",
-        "(h : Eq Nat (bvar_ceiling (KExpr.pi dom body)) Nat.zero) => ",
+        "(ih : @Eq Nat (bvar_ceiling dom) Nat.zero -> ",
+        "@Eq Nat (bvar_ceiling dom') Nat.zero) ",
+        "(h : @Eq Nat (bvar_ceiling (KExpr.pi dom body)) Nat.zero) => ",
         "nat_add_zero_zero (bvar_ceiling dom') (bvar_ceiling body) ",
         "(ih (nat_add_eq_zero_left (bvar_ceiling dom) (bvar_ceiling body) h)) ",
         "(nat_add_eq_zero_right (bvar_ceiling dom) (bvar_ceiling body) h)) ",
         // pi_cod dom body body'
         "(fun (dom : KExpr) (body : KExpr) (body' : KExpr) ",
         "(_hb : beta_reduces_bd body body') ",
-        "(ih : Eq Nat (bvar_ceiling body) Nat.zero -> ",
-        "Eq Nat (bvar_ceiling body') Nat.zero) ",
-        "(h : Eq Nat (bvar_ceiling (KExpr.pi dom body)) Nat.zero) => ",
+        "(ih : @Eq Nat (bvar_ceiling body) Nat.zero -> ",
+        "@Eq Nat (bvar_ceiling body') Nat.zero) ",
+        "(h : @Eq Nat (bvar_ceiling (KExpr.pi dom body)) Nat.zero) => ",
         "nat_add_zero_zero (bvar_ceiling dom) (bvar_ceiling body') ",
         "(nat_add_eq_zero_left (bvar_ceiling dom) (bvar_ceiling body) h) ",
         "(ih (nat_add_eq_zero_right (bvar_ceiling dom) (bvar_ceiling body) h))) ",
         // forall_congr_dom — forall_ is the reducible pi alias; same proof.
         "(fun (dom : KExpr) (dom' : KExpr) (body : KExpr) ",
         "(_hd : beta_reduces_bd dom dom') ",
-        "(ih : Eq Nat (bvar_ceiling dom) Nat.zero -> ",
-        "Eq Nat (bvar_ceiling dom') Nat.zero) ",
-        "(h : Eq Nat (bvar_ceiling (KExpr.forall_ dom body)) Nat.zero) => ",
+        "(ih : @Eq Nat (bvar_ceiling dom) Nat.zero -> ",
+        "@Eq Nat (bvar_ceiling dom') Nat.zero) ",
+        "(h : @Eq Nat (bvar_ceiling (KExpr.forall_ dom body)) Nat.zero) => ",
         "nat_add_zero_zero (bvar_ceiling dom') (bvar_ceiling body) ",
         "(ih (nat_add_eq_zero_left (bvar_ceiling dom) (bvar_ceiling body) h)) ",
         "(nat_add_eq_zero_right (bvar_ceiling dom) (bvar_ceiling body) h)) ",
         // forall_congr_cod
         "(fun (dom : KExpr) (body : KExpr) (body' : KExpr) ",
         "(_hb : beta_reduces_bd body body') ",
-        "(ih : Eq Nat (bvar_ceiling body) Nat.zero -> ",
-        "Eq Nat (bvar_ceiling body') Nat.zero) ",
-        "(h : Eq Nat (bvar_ceiling (KExpr.forall_ dom body)) Nat.zero) => ",
+        "(ih : @Eq Nat (bvar_ceiling body) Nat.zero -> ",
+        "@Eq Nat (bvar_ceiling body') Nat.zero) ",
+        "(h : @Eq Nat (bvar_ceiling (KExpr.forall_ dom body)) Nat.zero) => ",
         "nat_add_zero_zero (bvar_ceiling dom) (bvar_ceiling body') ",
         "(nat_add_eq_zero_left (bvar_ceiling dom) (bvar_ceiling body) h) ",
         "(ih (nat_add_eq_zero_right (bvar_ceiling dom) (bvar_ceiling body) h))) ",
@@ -798,11 +798,11 @@ fn beta_bd_step_preserves_ceiling_zero_proof() -> String {
         // transport its ceiling. Triple split: bvar_ceiling (let_ ty val body)
         // = add (ceil ty) (add (ceil val) (ceil body)).
         "(fun (ty : KExpr) (val : KExpr) (body : KExpr) ",
-        "(h : Eq Nat (bvar_ceiling (KExpr.let_ ty val body)) Nat.zero) => ",
-        "(fun (hbody : Eq Nat (bvar_ceiling body) Nat.zero) => ",
-        "Eq.subst KExpr (fun (z : KExpr) => Eq Nat (bvar_ceiling z) Nat.zero) ",
+        "(h : @Eq Nat (bvar_ceiling (KExpr.let_ ty val body)) Nat.zero) => ",
+        "(fun (hbody : @Eq Nat (bvar_ceiling body) Nat.zero) => ",
+        "@Eq.subst KExpr (fun (z : KExpr) => @Eq Nat (bvar_ceiling z) Nat.zero) ",
         "body (instantiate body val) ",
-        "(Eq.symm KExpr (instantiate body val) body ",
+        "(@Eq.symm KExpr (instantiate body val) body ",
         "(inst_id_of_ceiling_zero body val hbody)) ",
         "hbody) ",
         "(nat_add_eq_zero_right (bvar_ceiling val) (bvar_ceiling body) ",
@@ -811,8 +811,8 @@ fn beta_bd_step_preserves_ceiling_zero_proof() -> String {
         // let_ty ty ty' val body — plain congruence; recompose the zero sum.
         "(fun (ty : KExpr) (ty' : KExpr) (val : KExpr) (body : KExpr) ",
         "(_hty : beta_reduces_bd ty ty') ",
-        "(ih : Eq Nat (bvar_ceiling ty) Nat.zero -> Eq Nat (bvar_ceiling ty') Nat.zero) ",
-        "(h : Eq Nat (bvar_ceiling (KExpr.let_ ty val body)) Nat.zero) => ",
+        "(ih : @Eq Nat (bvar_ceiling ty) Nat.zero -> @Eq Nat (bvar_ceiling ty') Nat.zero) ",
+        "(h : @Eq Nat (bvar_ceiling (KExpr.let_ ty val body)) Nat.zero) => ",
         "nat_add_zero_zero (bvar_ceiling ty') (Nat.add (bvar_ceiling val) (bvar_ceiling body)) ",
         "(ih (nat_add_eq_zero_left (bvar_ceiling ty) ",
         "(Nat.add (bvar_ceiling val) (bvar_ceiling body)) h)) ",
@@ -821,8 +821,8 @@ fn beta_bd_step_preserves_ceiling_zero_proof() -> String {
         // let_val ty val val' body
         "(fun (ty : KExpr) (val : KExpr) (val' : KExpr) (body : KExpr) ",
         "(_hv : beta_reduces_bd val val') ",
-        "(ih : Eq Nat (bvar_ceiling val) Nat.zero -> Eq Nat (bvar_ceiling val') Nat.zero) ",
-        "(h : Eq Nat (bvar_ceiling (KExpr.let_ ty val body)) Nat.zero) => ",
+        "(ih : @Eq Nat (bvar_ceiling val) Nat.zero -> @Eq Nat (bvar_ceiling val') Nat.zero) ",
+        "(h : @Eq Nat (bvar_ceiling (KExpr.let_ ty val body)) Nat.zero) => ",
         "nat_add_zero_zero (bvar_ceiling ty) (Nat.add (bvar_ceiling val') (bvar_ceiling body)) ",
         "(nat_add_eq_zero_left (bvar_ceiling ty) ",
         "(Nat.add (bvar_ceiling val) (bvar_ceiling body)) h) ",
@@ -837,8 +837,8 @@ fn beta_bd_step_preserves_ceiling_zero_proof() -> String {
         // instantiate premise is gone; zeta carries the contraction).
         "(fun (ty : KExpr) (val : KExpr) (body : KExpr) (body' : KExpr) ",
         "(_hb : beta_reduces_bd body body') ",
-        "(ih : Eq Nat (bvar_ceiling body) Nat.zero -> Eq Nat (bvar_ceiling body') Nat.zero) ",
-        "(h : Eq Nat (bvar_ceiling (KExpr.let_ ty val body)) Nat.zero) => ",
+        "(ih : @Eq Nat (bvar_ceiling body) Nat.zero -> @Eq Nat (bvar_ceiling body') Nat.zero) ",
+        "(h : @Eq Nat (bvar_ceiling (KExpr.let_ ty val body)) Nat.zero) => ",
         "nat_add_zero_zero (bvar_ceiling ty) (Nat.add (bvar_ceiling val) (bvar_ceiling body')) ",
         "(nat_add_eq_zero_left (bvar_ceiling ty) ",
         "(Nat.add (bvar_ceiling val) (bvar_ceiling body)) h) ",
@@ -853,8 +853,8 @@ fn beta_bd_step_preserves_ceiling_zero_proof() -> String {
         // sub by defeq (proj is a transparent node), so the ceiling is carried by ih.
         "(fun (ps : Name) (pidx : Nat) (sub : KExpr) (sub' : KExpr) ",
         "(_hsub : beta_reduces_bd sub sub') ",
-        "(ih : Eq Nat (bvar_ceiling sub) Nat.zero -> Eq Nat (bvar_ceiling sub') Nat.zero) ",
-        "(h : Eq Nat (bvar_ceiling (KExpr.proj ps pidx sub)) Nat.zero) => ih h) ",
+        "(ih : @Eq Nat (bvar_ceiling sub) Nat.zero -> @Eq Nat (bvar_ceiling sub') Nat.zero) ",
+        "(h : @Eq Nat (bvar_ceiling (KExpr.proj ps pidx sub)) Nat.zero) => ih h) ",
         // indices + major
         "s t hst"
     )
@@ -869,18 +869,18 @@ fn beta_bd_step_preserves_ceiling_zero_proof() -> String {
 fn beta_bd_step_decreases_size_proof() -> String {
     concat!(
         "fun (s : KExpr) (t : KExpr) (hst : beta_reduces_bd s t) => ",
-        "beta_reduces_bd.rec ",
+        "@beta_reduces_bd.rec ",
         "(fun (e : KExpr) (e' : KExpr) (_ : beta_reduces_bd e e') => ",
-        "Eq Nat (bvar_ceiling e) Nat.zero -> Lt (expr_size e') (expr_size e)) ",
+        "@Eq Nat (bvar_ceiling e) Nat.zero -> Lt (expr_size e') (expr_size e)) ",
         // beta A body arg: size (instantiate body arg) = size body (bvar-free)
         // < size (lam A body) < size (app (lam A body) arg).
         "(fun (A : KExpr) (body : KExpr) (arg : KExpr) ",
-        "(h : Eq Nat (bvar_ceiling (KExpr.app (KExpr.lam A body) arg)) Nat.zero) => ",
-        "Eq.substType KExpr ",
+        "(h : @Eq Nat (bvar_ceiling (KExpr.app (KExpr.lam A body) arg)) Nat.zero) => ",
+        "@Eq.substType KExpr ",
         "(fun (z : KExpr) => Lt (expr_size z) ",
         "(expr_size (KExpr.app (KExpr.lam A body) arg))) ",
         "body (instantiate body arg) ",
-        "(Eq.symm KExpr (instantiate body arg) body ",
+        "(@Eq.symm KExpr (instantiate body arg) body ",
         "(inst_id_of_ceiling_zero body arg ",
         "(nat_add_eq_zero_right (bvar_ceiling A) (bvar_ceiling body) ",
         "(nat_add_eq_zero_left (Nat.add (bvar_ceiling A) (bvar_ceiling body)) ",
@@ -892,8 +892,8 @@ fn beta_bd_step_decreases_size_proof() -> String {
         // app_left f f' a: succ (add sf' sa) < succ (add sf sa).
         "(fun (f : KExpr) (f' : KExpr) (a : KExpr) ",
         "(_hf : beta_reduces_bd f f') ",
-        "(ih : Eq Nat (bvar_ceiling f) Nat.zero -> Lt (expr_size f') (expr_size f)) ",
-        "(h : Eq Nat (bvar_ceiling (KExpr.app f a)) Nat.zero) => ",
+        "(ih : @Eq Nat (bvar_ceiling f) Nat.zero -> Lt (expr_size f') (expr_size f)) ",
+        "(h : @Eq Nat (bvar_ceiling (KExpr.app f a)) Nat.zero) => ",
         "Lt.succ_lt_succ (Nat.add (expr_size f') (expr_size a)) ",
         "(Nat.add (expr_size f) (expr_size a)) ",
         "(lt_add_right_mono (expr_size f') (expr_size f) (expr_size a) ",
@@ -901,8 +901,8 @@ fn beta_bd_step_decreases_size_proof() -> String {
         // app_right f a a'
         "(fun (f : KExpr) (a : KExpr) (a' : KExpr) ",
         "(_ha : beta_reduces_bd a a') ",
-        "(ih : Eq Nat (bvar_ceiling a) Nat.zero -> Lt (expr_size a') (expr_size a)) ",
-        "(h : Eq Nat (bvar_ceiling (KExpr.app f a)) Nat.zero) => ",
+        "(ih : @Eq Nat (bvar_ceiling a) Nat.zero -> Lt (expr_size a') (expr_size a)) ",
+        "(h : @Eq Nat (bvar_ceiling (KExpr.app f a)) Nat.zero) => ",
         "Lt.succ_lt_succ (Nat.add (expr_size f) (expr_size a')) ",
         "(Nat.add (expr_size f) (expr_size a)) ",
         "(lt_add_left_mono (expr_size a') (expr_size a) (expr_size f) ",
@@ -910,8 +910,8 @@ fn beta_bd_step_decreases_size_proof() -> String {
         // lam_ty ty ty' body
         "(fun (ty : KExpr) (ty' : KExpr) (body : KExpr) ",
         "(_hty : beta_reduces_bd ty ty') ",
-        "(ih : Eq Nat (bvar_ceiling ty) Nat.zero -> Lt (expr_size ty') (expr_size ty)) ",
-        "(h : Eq Nat (bvar_ceiling (KExpr.lam ty body)) Nat.zero) => ",
+        "(ih : @Eq Nat (bvar_ceiling ty) Nat.zero -> Lt (expr_size ty') (expr_size ty)) ",
+        "(h : @Eq Nat (bvar_ceiling (KExpr.lam ty body)) Nat.zero) => ",
         "Lt.succ_lt_succ (Nat.add (expr_size ty') (expr_size body)) ",
         "(Nat.add (expr_size ty) (expr_size body)) ",
         "(lt_add_right_mono (expr_size ty') (expr_size ty) (expr_size body) ",
@@ -919,9 +919,9 @@ fn beta_bd_step_decreases_size_proof() -> String {
         // lam_body ty body body'
         "(fun (ty : KExpr) (body : KExpr) (body' : KExpr) ",
         "(_hb : beta_reduces_bd body body') ",
-        "(ih : Eq Nat (bvar_ceiling body) Nat.zero -> ",
+        "(ih : @Eq Nat (bvar_ceiling body) Nat.zero -> ",
         "Lt (expr_size body') (expr_size body)) ",
-        "(h : Eq Nat (bvar_ceiling (KExpr.lam ty body)) Nat.zero) => ",
+        "(h : @Eq Nat (bvar_ceiling (KExpr.lam ty body)) Nat.zero) => ",
         "Lt.succ_lt_succ (Nat.add (expr_size ty) (expr_size body')) ",
         "(Nat.add (expr_size ty) (expr_size body)) ",
         "(lt_add_left_mono (expr_size body') (expr_size body) (expr_size ty) ",
@@ -929,9 +929,9 @@ fn beta_bd_step_decreases_size_proof() -> String {
         // pi_dom dom dom' body
         "(fun (dom : KExpr) (dom' : KExpr) (body : KExpr) ",
         "(_hd : beta_reduces_bd dom dom') ",
-        "(ih : Eq Nat (bvar_ceiling dom) Nat.zero -> ",
+        "(ih : @Eq Nat (bvar_ceiling dom) Nat.zero -> ",
         "Lt (expr_size dom') (expr_size dom)) ",
-        "(h : Eq Nat (bvar_ceiling (KExpr.pi dom body)) Nat.zero) => ",
+        "(h : @Eq Nat (bvar_ceiling (KExpr.pi dom body)) Nat.zero) => ",
         "Lt.succ_lt_succ (Nat.add (expr_size dom') (expr_size body)) ",
         "(Nat.add (expr_size dom) (expr_size body)) ",
         "(lt_add_right_mono (expr_size dom') (expr_size dom) (expr_size body) ",
@@ -939,9 +939,9 @@ fn beta_bd_step_decreases_size_proof() -> String {
         // pi_cod dom body body'
         "(fun (dom : KExpr) (body : KExpr) (body' : KExpr) ",
         "(_hb : beta_reduces_bd body body') ",
-        "(ih : Eq Nat (bvar_ceiling body) Nat.zero -> ",
+        "(ih : @Eq Nat (bvar_ceiling body) Nat.zero -> ",
         "Lt (expr_size body') (expr_size body)) ",
-        "(h : Eq Nat (bvar_ceiling (KExpr.pi dom body)) Nat.zero) => ",
+        "(h : @Eq Nat (bvar_ceiling (KExpr.pi dom body)) Nat.zero) => ",
         "Lt.succ_lt_succ (Nat.add (expr_size dom) (expr_size body')) ",
         "(Nat.add (expr_size dom) (expr_size body)) ",
         "(lt_add_left_mono (expr_size body') (expr_size body) (expr_size dom) ",
@@ -949,9 +949,9 @@ fn beta_bd_step_decreases_size_proof() -> String {
         // forall_congr_dom — forall_ is the reducible pi alias; same proof.
         "(fun (dom : KExpr) (dom' : KExpr) (body : KExpr) ",
         "(_hd : beta_reduces_bd dom dom') ",
-        "(ih : Eq Nat (bvar_ceiling dom) Nat.zero -> ",
+        "(ih : @Eq Nat (bvar_ceiling dom) Nat.zero -> ",
         "Lt (expr_size dom') (expr_size dom)) ",
-        "(h : Eq Nat (bvar_ceiling (KExpr.forall_ dom body)) Nat.zero) => ",
+        "(h : @Eq Nat (bvar_ceiling (KExpr.forall_ dom body)) Nat.zero) => ",
         "Lt.succ_lt_succ (Nat.add (expr_size dom') (expr_size body)) ",
         "(Nat.add (expr_size dom) (expr_size body)) ",
         "(lt_add_right_mono (expr_size dom') (expr_size dom) (expr_size body) ",
@@ -959,9 +959,9 @@ fn beta_bd_step_decreases_size_proof() -> String {
         // forall_congr_cod
         "(fun (dom : KExpr) (body : KExpr) (body' : KExpr) ",
         "(_hb : beta_reduces_bd body body') ",
-        "(ih : Eq Nat (bvar_ceiling body) Nat.zero -> ",
+        "(ih : @Eq Nat (bvar_ceiling body) Nat.zero -> ",
         "Lt (expr_size body') (expr_size body)) ",
-        "(h : Eq Nat (bvar_ceiling (KExpr.forall_ dom body)) Nat.zero) => ",
+        "(h : @Eq Nat (bvar_ceiling (KExpr.forall_ dom body)) Nat.zero) => ",
         "Lt.succ_lt_succ (Nat.add (expr_size dom) (expr_size body')) ",
         "(Nat.add (expr_size dom) (expr_size body)) ",
         "(lt_add_left_mono (expr_size body') (expr_size body) (expr_size dom) ",
@@ -970,11 +970,11 @@ fn beta_bd_step_decreases_size_proof() -> String {
         // < size (let_ ty val body), directly via size_let_thd (the contractum
         // is the genuine third component of the let_ node).
         "(fun (ty : KExpr) (val : KExpr) (body : KExpr) ",
-        "(h : Eq Nat (bvar_ceiling (KExpr.let_ ty val body)) Nat.zero) => ",
-        "Eq.substType KExpr ",
+        "(h : @Eq Nat (bvar_ceiling (KExpr.let_ ty val body)) Nat.zero) => ",
+        "@Eq.substType KExpr ",
         "(fun (z : KExpr) => Lt (expr_size z) (expr_size (KExpr.let_ ty val body))) ",
         "body (instantiate body val) ",
-        "(Eq.symm KExpr (instantiate body val) body ",
+        "(@Eq.symm KExpr (instantiate body val) body ",
         "(inst_id_of_ceiling_zero body val ",
         "(nat_add_eq_zero_right (bvar_ceiling val) (bvar_ceiling body) ",
         "(nat_add_eq_zero_right (bvar_ceiling ty) ",
@@ -984,8 +984,8 @@ fn beta_bd_step_decreases_size_proof() -> String {
         // succ (add sty (add sval sbody)).
         "(fun (ty : KExpr) (ty' : KExpr) (val : KExpr) (body : KExpr) ",
         "(_hty : beta_reduces_bd ty ty') ",
-        "(ih : Eq Nat (bvar_ceiling ty) Nat.zero -> Lt (expr_size ty') (expr_size ty)) ",
-        "(h : Eq Nat (bvar_ceiling (KExpr.let_ ty val body)) Nat.zero) => ",
+        "(ih : @Eq Nat (bvar_ceiling ty) Nat.zero -> Lt (expr_size ty') (expr_size ty)) ",
+        "(h : @Eq Nat (bvar_ceiling (KExpr.let_ ty val body)) Nat.zero) => ",
         "Lt.succ_lt_succ ",
         "(Nat.add (expr_size ty') (Nat.add (expr_size val) (expr_size body))) ",
         "(Nat.add (expr_size ty) (Nat.add (expr_size val) (expr_size body))) ",
@@ -996,8 +996,8 @@ fn beta_bd_step_decreases_size_proof() -> String {
         // let_val ty val val' body
         "(fun (ty : KExpr) (val : KExpr) (val' : KExpr) (body : KExpr) ",
         "(_hv : beta_reduces_bd val val') ",
-        "(ih : Eq Nat (bvar_ceiling val) Nat.zero -> Lt (expr_size val') (expr_size val)) ",
-        "(h : Eq Nat (bvar_ceiling (KExpr.let_ ty val body)) Nat.zero) => ",
+        "(ih : @Eq Nat (bvar_ceiling val) Nat.zero -> Lt (expr_size val') (expr_size val)) ",
+        "(h : @Eq Nat (bvar_ceiling (KExpr.let_ ty val body)) Nat.zero) => ",
         "Lt.succ_lt_succ ",
         "(Nat.add (expr_size ty) (Nat.add (expr_size val') (expr_size body))) ",
         "(Nat.add (expr_size ty) (Nat.add (expr_size val) (expr_size body))) ",
@@ -1012,8 +1012,8 @@ fn beta_bd_step_decreases_size_proof() -> String {
         // let_body ty val body body'
         "(fun (ty : KExpr) (val : KExpr) (body : KExpr) (body' : KExpr) ",
         "(_hb : beta_reduces_bd body body') ",
-        "(ih : Eq Nat (bvar_ceiling body) Nat.zero -> Lt (expr_size body') (expr_size body)) ",
-        "(h : Eq Nat (bvar_ceiling (KExpr.let_ ty val body)) Nat.zero) => ",
+        "(ih : @Eq Nat (bvar_ceiling body) Nat.zero -> Lt (expr_size body') (expr_size body)) ",
+        "(h : @Eq Nat (bvar_ceiling (KExpr.let_ ty val body)) Nat.zero) => ",
         "Lt.succ_lt_succ ",
         "(Nat.add (expr_size ty) (Nat.add (expr_size val) (expr_size body'))) ",
         "(Nat.add (expr_size ty) (Nat.add (expr_size val) (expr_size body))) ",
@@ -1029,8 +1029,8 @@ fn beta_bd_step_decreases_size_proof() -> String {
         // sub) by defeq, so the strict decrease lifts through succ monotonicity.
         "(fun (ps : Name) (pidx : Nat) (sub : KExpr) (sub' : KExpr) ",
         "(_hsub : beta_reduces_bd sub sub') ",
-        "(ih : Eq Nat (bvar_ceiling sub) Nat.zero -> Lt (expr_size sub') (expr_size sub)) ",
-        "(h : Eq Nat (bvar_ceiling (KExpr.proj ps pidx sub)) Nat.zero) => ",
+        "(ih : @Eq Nat (bvar_ceiling sub) Nat.zero -> Lt (expr_size sub') (expr_size sub)) ",
+        "(h : @Eq Nat (bvar_ceiling (KExpr.proj ps pidx sub)) Nat.zero) => ",
         "Lt.succ_lt_succ (expr_size sub') (expr_size sub) (ih h)) ",
         // indices + major
         "s t hst"

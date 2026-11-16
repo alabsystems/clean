@@ -3,17 +3,21 @@
 //!
 //! The diagnostic token journal is not an advice certificate. The separate
 //! core::advice producer emits untrusted candidates for bounded ordinary-core
-//! inputs; only the adopted checker can accept those candidates. The observing
-//! fenced replay calls it without changing admission. Normal checking and
-//! ReferenceKernel do not use candidate success as authority. Full Init/C4
+//! inputs, while [`advice`] writes the finalized journal as candidate bytes.
+//! Only the adopted checker can accept either candidate. The observing fenced
+//! replay calls these producers without changing admission. Normal checking and
+//! `ReferenceKernel` do not use candidate success as authority. Full Init/C4
 //! coverage and R2/R3 are not established by this API.
+pub mod advice;
 pub mod core;
 pub mod term;
 /// Untrusted token/frame encoding; checker acceptance remains separate.
 pub mod wire;
 use term::{Label, Node, Term};
 
-/// The tags named in design section 3.2; wire defines their candidate encoding.
+/// The tags named in design section 3.2; [`wire`] defines their candidate
+/// encoding and [`advice`] exposes it for finalized journals without changing
+/// their order.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Token {
     /// Declaration's supplied depth bound (Revision 1).

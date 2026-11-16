@@ -130,18 +130,18 @@ impl Specification {
         // premise is an `is_whnf`, not a recursive occurrence, so it does not.
         let goal = "(C : Type)";
         let motive = "forall (C : Type) (lty : KExpr) (lbd : KExpr), \
-                      Eq KExpr x (KExpr.lam lty lbd) -> C";
+                      @Eq KExpr x (KExpr.lam lty lbd) -> C";
         let motive_at = |v: &str| {
             format!(
                 "forall (C : Type) (lty : KExpr) (lbd : KExpr), \
-                 Eq KExpr {v} (KExpr.lam lty lbd) -> C"
+                 @Eq KExpr {v} (KExpr.lam lty lbd) -> C"
             )
         };
         let kill = |form: &str| {
             format!(
                 "(fun (C : Type) (lty : KExpr) (lbd : KExpr) \
-                 (heq : Eq KExpr {form} (KExpr.lam lty lbd)) => \
-                 kexpr_discr_t C {form} (KExpr.lam lty lbd) heq (Eq.refl Bool Bool.false)) "
+                 (heq : @Eq KExpr {form} (KExpr.lam lty lbd)) => \
+                 kexpr_discr_t C {form} (KExpr.lam lty lbd) heq (@Eq.refl Bool Bool.false)) "
             )
         };
 
@@ -177,8 +177,8 @@ impl Specification {
             &format!(
                 "def whnf_stuck_head_not_lam (f : KExpr) (hs : whnf_stuck_head f) : \
                  forall {goal} (lty : KExpr) (lbd : KExpr), \
-                 Eq KExpr f (KExpr.lam lty lbd) -> C := \
-                 whnf_stuck_head.rec (fun (x : KExpr) (_h : whnf_stuck_head x) => {motive}) \
+                 @Eq KExpr f (KExpr.lam lty lbd) -> C := \
+                 @whnf_stuck_head.rec (fun (x : KExpr) (_h : whnf_stuck_head x) => {motive}) \
                  {arms} f hs"
             ),
             "whnf_stuck_head_not_lam: a stuck head is never a lambda. Like \
@@ -195,7 +195,7 @@ impl Specification {
         self.add_inductive(
             "inductive StuckAppRedWitness (env : RedEnv) (f : KExpr) (a : KExpr) (t : KExpr) : \
              Type\n\
-             | mk : forall (f2 : KExpr) (a2 : KExpr), Eq KExpr t (KExpr.app f2 a2) -> \
+             | mk : forall (f2 : KExpr) (a2 : KExpr), @Eq KExpr t (KExpr.app f2 a2) -> \
              par_reduces_cd_star env f f2 -> par_reduces_cd_star env a a2 -> \
              StuckAppRedWitness env f a t",
             "StuckAppRedWitness env f a t: t IS an application, and both its function and its \
@@ -212,7 +212,7 @@ impl Specification {
         let motive_at = |p: &str, q: &str| {
             format!(
                 "forall (f : KExpr) (a : KExpr), whnf_stuck_head f -> \
-                 Eq KExpr {p} (KExpr.app f a) -> {g}",
+                 @Eq KExpr {p} (KExpr.app f a) -> {g}",
                 g = goal(q)
             )
         };
@@ -220,9 +220,9 @@ impl Specification {
         // refl: nothing moved.
         let mut arms = String::from(
             "(fun (e0 : KExpr) (f : KExpr) (a : KExpr) (_hs : whnf_stuck_head f) \
-             (heq : Eq KExpr e0 (KExpr.app f a)) => \
-             StuckAppRedWitness.mk env f a e0 f a heq \
-             (par_reduces_cd_star.refl env f) (par_reduces_cd_star.refl env a)) ",
+             (heq : @Eq KExpr e0 (KExpr.app f a)) => \
+             @StuckAppRedWitness.mk env f a e0 f a heq \
+             (@par_reduces_cd_star.refl env f) (@par_reduces_cd_star.refl env a)) ",
         );
 
         // `names` supplies a name for each recursive proof binder. Anonymous
@@ -253,7 +253,7 @@ impl Specification {
             let (_, _, src, tgt) = CD_STRUCTURAL_ARMS[BETA_INDEX];
             arms.push_str(&format!(
                 "(fun {payload} {proofs}{ihs}(f : KExpr) (a : KExpr) \
-                 (hs : whnf_stuck_head f) (heq : Eq KExpr {src} (KExpr.app f a)) => \
+                 (hs : whnf_stuck_head f) (heq : @Eq KExpr {src} (KExpr.app f a)) => \
                  whnf_stuck_head_not_lam f hs {g} bA bbody \
                  (Eq.symm KExpr (KExpr.lam bA bbody) f \
                  (app_inj_fst (KExpr.lam bA bbody) barg f a heq))) ",
@@ -267,16 +267,16 @@ impl Specification {
             let (_, _, src, tgt) = CD_STRUCTURAL_ARMS[APP_INDEX];
             arms.push_str(&format!(
                 "(fun {payload} {proofs}{ihs}(f : KExpr) (a : KExpr) \
-                 (_hs : whnf_stuck_head f) (heq : Eq KExpr {src} (KExpr.app f a)) => \
-                 (fun (hf : Eq KExpr af f) (ha : Eq KExpr aa a) => \
-                 StuckAppRedWitness.mk env f a {tgt} af2 aa2 \
-                 (Eq.refl KExpr {tgt}) \
+                 (_hs : whnf_stuck_head f) (heq : @Eq KExpr {src} (KExpr.app f a)) => \
+                 (fun (hf : @Eq KExpr af f) (ha : @Eq KExpr aa a) => \
+                 @StuckAppRedWitness.mk env f a {tgt} af2 aa2 \
+                 (@Eq.refl KExpr {tgt}) \
                  (Eq.substType KExpr (fun (z : KExpr) => par_reduces_cd_star env z af2) \
-                 af f hf (par_reduces_cd_star.step env af af2 af2 hpf \
-                 (par_reduces_cd_star.refl env af2))) \
+                 af f hf (@par_reduces_cd_star.step env af af2 af2 hpf \
+                 (@par_reduces_cd_star.refl env af2))) \
                  (Eq.substType KExpr (fun (z : KExpr) => par_reduces_cd_star env z aa2) \
-                 aa a ha (par_reduces_cd_star.step env aa aa2 aa2 hpa \
-                 (par_reduces_cd_star.refl env aa2)))) \
+                 aa a ha (@par_reduces_cd_star.step env aa aa2 aa2 hpa \
+                 (@par_reduces_cd_star.refl env aa2)))) \
                  (app_inj_fst af aa f a heq) (app_inj_snd af aa f a heq)) "
             ));
         }
@@ -286,8 +286,8 @@ impl Specification {
             let (payload, proofs, ihs) = binder_block(idx, &[]);
             arms.push_str(&format!(
                 "(fun {payload} {proofs}{ihs}(f : KExpr) (a : KExpr) \
-                 (_hs : whnf_stuck_head f) (heq : Eq KExpr {src} (KExpr.app f a)) => \
-                 kexpr_discr_t {g} {src} (KExpr.app f a) heq (Eq.refl Bool Bool.false)) ",
+                 (_hs : whnf_stuck_head f) (heq : @Eq KExpr {src} (KExpr.app f a)) => \
+                 kexpr_discr_t {g} {src} (KExpr.app f a) heq (@Eq.refl Bool Bool.false)) ",
                 g = goal(tgt)
             ));
         }
@@ -300,16 +300,16 @@ impl Specification {
             arms.push_str(&format!(
                 "(fun ({var} : KExpr) ({var}2 : KExpr) \
                  (hst : {ctor}_step ({envsel}) {var} {var}2) (f : KExpr) (a : KExpr) \
-                 (hs : whnf_stuck_head f) (heq : Eq KExpr {var} (KExpr.app f a)) => \
+                 (hs : whnf_stuck_head f) (heq : @Eq KExpr {var} (KExpr.app f a)) => \
                  opt_none_ne_some_t KExpr {var}2 {g} \
-                 (Eq.trans (OptionType KExpr) (OptionType.none KExpr) \
+                 (Eq.trans (OptionType KExpr) (@OptionType.none KExpr) \
                  ({ctor}_reduct ({envsel}) (KExpr.app f a)) \
-                 (OptionType.some KExpr {var}2) \
+                 (@OptionType.some KExpr {var}2) \
                  (Eq.symm (OptionType KExpr) ({ctor}_reduct ({envsel}) (KExpr.app f a)) \
-                 (OptionType.none KExpr) ({immune} env f a hs)) \
+                 (@OptionType.none KExpr) ({immune} env f a hs)) \
                  (Eq.substType KExpr \
-                 (fun (z : KExpr) => Eq (OptionType KExpr) ({ctor}_reduct ({envsel}) z) \
-                 (OptionType.some KExpr {var}2)) {var} (KExpr.app f a) heq hst))) ",
+                 (fun (z : KExpr) => @Eq (OptionType KExpr) ({ctor}_reduct ({envsel}) z) \
+                 (@OptionType.some KExpr {var}2)) {var} (KExpr.app f a) heq hst))) ",
                 g = goal(&format!("{var}2"))
             ));
         }
@@ -320,8 +320,8 @@ impl Specification {
             let (_, _, src, tgt) = CD_STRUCTURAL_ARMS[idx];
             arms.push_str(&format!(
                 "(fun {payload} {proofs}{ihs}(f : KExpr) (a : KExpr) \
-                 (_hs : whnf_stuck_head f) (heq : Eq KExpr {src} (KExpr.app f a)) => \
-                 kexpr_discr_t {g} {src} (KExpr.app f a) heq (Eq.refl Bool Bool.false)) ",
+                 (_hs : whnf_stuck_head f) (heq : @Eq KExpr {src} (KExpr.app f a)) => \
+                 kexpr_discr_t {g} {src} (KExpr.app f a) heq (@Eq.refl Bool Bool.false)) ",
                 g = goal(tgt)
             ));
         }
@@ -336,11 +336,11 @@ impl Specification {
                 "def par_reduces_cd_stuck_app_inv (env : RedEnv) (p : KExpr) (q : KExpr) \
                  (h : par_reduces_cd env p q) : \
                  forall (f : KExpr) (a : KExpr), whnf_stuck_head f -> \
-                 Eq KExpr p (KExpr.app f a) -> StuckAppRedWitness env f a q := \
-                 par_reduces_cd.rec env \
+                 @Eq KExpr p (KExpr.app f a) -> StuckAppRedWitness env f a q := \
+                 @par_reduces_cd.rec env \
                  (fun (pp : KExpr) (qq : KExpr) (_h : par_reduces_cd env pp qq) => \
                  forall (f : KExpr) (a : KExpr), whnf_stuck_head f -> \
-                 Eq KExpr pp (KExpr.app f a) -> StuckAppRedWitness env f a qq) \
+                 @Eq KExpr pp (KExpr.app f a) -> StuckAppRedWitness env f a qq) \
                  {arms}p q h"
             ),
             "par_reduces_cd_stuck_app_inv: SINGLE-STEP head rigidity for an application on a \

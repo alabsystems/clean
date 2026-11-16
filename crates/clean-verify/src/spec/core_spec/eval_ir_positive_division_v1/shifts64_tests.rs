@@ -168,7 +168,7 @@ impl Shift {
             Self::Logical => q,
             Self::Arithmetic => {
                 let fill = quotient("ir_nat_pow2 64", amount, 65);
-                format!("Bool.rec (fun (_ : Bool) => Nat) ({q}) (Nat.add ({q}) (Nat.sub (ir_nat_pow2 64) ({fill}))) (ir_sign_bit 64 ({word}))")
+                format!("@Bool.rec (fun (_ : Bool) => Nat) ({q}) (Nat.add ({q}) (Nat.sub (ir_nat_pow2 64) ({fill}))) (ir_sign_bit 64 ({word}))")
             }
         }
     }
@@ -232,17 +232,17 @@ fn arbitrary_amount_operations_connect_to_actual_nominal_fits_without_result_pre
             let name = format!("general_shift_{op}_universal");
             let actual = format!("ir_binop_eval IRBinOp.{op} (IRTy.{carrier} 64) (IRScalar.int_ word) (IRScalar.int_ amount)");
             let result = format!("IRStepResult.value (IRScalar.int_ ({value}))");
-            let output_fit = format!("Eq Bool (ir_byte_value_matches_v1 ctx (IRTy.{carrier} 64) (IRScalar.int_ ({value}))) Bool.true");
+            let output_fit = format!("@Eq Bool (ir_byte_value_matches_v1 ctx (IRTy.{carrier} 64) (IRScalar.int_ ({value}))) Bool.true");
             add(
                 &mut spec,
                 &name,
                 &format!(
                     "def {name} (ctx : IRByteContextV1) (word amount : Nat) \
                  (input : Nat.lt word (ir_nat_pow2 64)) (inRange : Nat.lt amount 64) : \
-                 And (Eq IRStepResult ({actual}) ({result})) ({output_fit}) := \
-                 let fits : Eq Bool (ir_nat_ltb word (ir_nat_pow2 64)) Bool.true := \
+                 And (@Eq IRStepResult ({actual}) ({result})) ({output_fit}) := \
+                 let fits : @Eq Bool (ir_nat_ltb word (ir_nat_pow2 64)) Bool.true := \
                    ir_byte_ltb_of_lt_v1 word (ir_nat_pow2 64) input; \
-                 @And.intro (Eq IRStepResult ({actual}) ({result})) ({output_fit}) \
+                 @And.intro (@Eq IRStepResult ({actual}) ({result})) ({output_fit}) \
                    ({root} word amount fits inRange) \
                    ({fit} ctx ({value}) ({bound} word amount fits inRange))"
                 ),
@@ -287,7 +287,9 @@ fn independent_fullwidth_residues_cover_amount_zero_one_three_thirty_one_and_six
                 add(
                     &mut spec,
                     &name,
-                    &format!("def {name} : Eq Nat ({value}) {expected} := Eq.refl Nat {expected}"),
+                    &format!(
+                        "def {name} : @Eq Nat ({value}) {expected} := @Eq.refl Nat {expected}"
+                    ),
                 );
                 let bounded = format!("{name}_bound");
                 let law = shift.bound();
@@ -295,7 +297,7 @@ fn independent_fullwidth_residues_cover_amount_zero_one_three_thirty_one_and_six
                     &mut spec,
                     &bounded,
                     &format!(
-                    "def {bounded} : Eq Bool (ir_nat_ltb ({value}) (ir_nat_pow2 64)) Bool.true := \
+                    "def {bounded} : @Eq Bool (ir_nat_ltb ({value}) (ir_nat_pow2 64)) Bool.true := \
                      {law} {word} {amount} (ir_byte_ltb_of_lt_v1 {word} (ir_nat_pow2 64) \
                        (@Nat.le_add_right (Nat.succ {word}) {})) \
                        (@Nat.le_add_right (Nat.succ {amount}) {})", u64::MAX - word, 63 - amount),
@@ -350,8 +352,8 @@ fn amount_zero_requires_fill_fuel_sixty_five_and_amount_sixty_four_is_out_of_ran
         ] {
             checker
                 .check_type(
-                    &elaborate(spec, &format!("Eq.refl Bool {actual}")),
-                    &elaborate(spec, &format!("Eq Bool ({boolean}) {actual}")),
+                    &elaborate(spec, &format!("@Eq.refl Bool {actual}")),
+                    &elaborate(spec, &format!("@Eq Bool ({boolean}) {actual}")),
                 )
                 .unwrap();
             let opposite = if actual == "Bool.true" {
@@ -361,8 +363,8 @@ fn amount_zero_requires_fill_fuel_sixty_five_and_amount_sixty_four_is_out_of_ran
             };
             let error = checker
                 .check_type(
-                    &elaborate(spec, &format!("Eq.refl Bool {opposite}")),
-                    &elaborate(spec, &format!("Eq Bool ({boolean}) {opposite}")),
+                    &elaborate(spec, &format!("@Eq.refl Bool {opposite}")),
+                    &elaborate(spec, &format!("@Eq Bool ({boolean}) {opposite}")),
                 )
                 .unwrap_err();
             assert!(matches!(error, TypeError::TypeMismatch { .. }), "{error}");
@@ -373,8 +375,8 @@ fn amount_zero_requires_fill_fuel_sixty_five_and_amount_sixty_four_is_out_of_ran
             let q = quotient("ir_nat_pow2 64", "0", fuel);
             checker
                 .check_type(
-                    &elaborate(spec, &format!("Eq.refl Nat ({expected})")),
-                    &elaborate(spec, &format!("Eq Nat ({q}) ({expected})")),
+                    &elaborate(spec, &format!("@Eq.refl Nat ({expected})")),
+                    &elaborate(spec, &format!("@Eq Nat ({q}) ({expected})")),
                 )
                 .unwrap();
             assert!(!checker.heartbeat_spent());
@@ -400,7 +402,7 @@ fn every_general_name_collision_and_false_final_law_leave_owner_unchanged() {
             );
             owner_unchanged(&before, &spec);
         }
-        const BAD: &str = "def ir_byte_ashr_i64_in_range_result_bound_v1 : Eq Bool Bool.true Bool.false := Eq.refl Bool Bool.false";
+        const BAD: &str = "def ir_byte_ashr_i64_in_range_result_bound_v1 : @Eq Bool Bool.true Bool.false := @Eq.refl Bool Bool.false";
         let mut spec = base().clone();
         let before = spec.clone();
         assert_eq!(

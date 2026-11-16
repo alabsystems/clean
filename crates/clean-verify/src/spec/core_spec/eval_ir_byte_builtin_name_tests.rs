@@ -8,7 +8,7 @@ use crate::spec::Specification;
 use clean_kernel::Name;
 
 const RESULT: &str = "IROption IRBuiltinNameAtomV1";
-const NONE: &str = "IROption.none IRBuiltinNameAtomV1";
+const NONE: &str = "@IROption.none IRBuiltinNameAtomV1";
 const LIMIT: u128 = 1_u128 << 64;
 const WORDS: [(&str, &[u16]); 2] = [
     ("nat_", &[78, 97, 116]),
@@ -39,23 +39,23 @@ fn equality(spec: &mut Specification, name: &str, actual: &str, expected: &str) 
     add(
         spec,
         &format!(
-            "def {name} : Eq ({RESULT}) ({actual}) ({expected}) :=
-             Eq.refl ({RESULT}) ({expected})"
+            "def {name} : @Eq ({RESULT}) ({actual}) ({expected}) :=
+             @Eq.refl ({RESULT}) ({expected})"
         ),
     );
 }
 
 fn some(atom: &str) -> String {
-    format!("IROption.some IRBuiltinNameAtomV1 IRBuiltinNameAtomV1.{atom}")
+    format!("@IROption.some IRBuiltinNameAtomV1 IRBuiltinNameAtomV1.{atom}")
 }
 
 fn allocations(rows: &[(u128, u128, u128, bool)]) -> String {
     rows.iter().rev().fold(
-        "IRList.nil IRByteAllocationV1".to_string(),
+        "@IRList.nil IRByteAllocationV1".to_string(),
         |tail, (base, size, owner, live)| {
             let live = if *live { "Bool.true" } else { "Bool.false" };
             format!(
-                "IRList.cons IRByteAllocationV1
+                "@IRList.cons IRByteAllocationV1
                  (IRByteAllocationV1.mk {base} {size} {owner} {live}) ({tail})"
             )
         },
@@ -67,10 +67,10 @@ fn memory(rows: &[(u128, u128, u128, bool)], bytes: &[(u128, u16)], next: u128) 
         bytes
             .iter()
             .rev()
-            .fold("IROption.none Nat".to_string(), |tail, (address, byte)| {
+            .fold("@IROption.none Nat".to_string(), |tail, (address, byte)| {
                 format!(
-                    "Bool.rec (fun (_ : Bool) => IROption Nat) ({tail})
-                 (IROption.some Nat {byte}) (ir_nat_eqb address {address})"
+                    "@Bool.rec (fun (_ : Bool) => IROption Nat) ({tail})
+                 (@IROption.some Nat {byte}) (ir_nat_eqb address {address})"
                 )
             });
     format!(
@@ -312,8 +312,8 @@ fn byte_builtin_name_swapped_atoms_are_semantic_proof_failures() {
             let wrong = some(WORDS[1 - index].0);
             let actual = view(&mem, 65, word.len() as u128);
             let source = format!(
-                "def {name} : Eq ({RESULT}) ({actual}) ({wrong}) :=
-                 Eq.refl ({RESULT}) ({wrong})"
+                "def {name} : @Eq ({RESULT}) ({actual}) ({wrong}) :=
+                 @Eq.refl ({RESULT}) ({wrong})"
             );
             let error = spec
                 .add_recursive_def(&source, "Deliberately false builtin-name decoding")
@@ -339,8 +339,8 @@ fn byte_builtin_name_general_input_and_frame_laws_have_inhabited_applications() 
             let mut arguments = String::new();
             for (position, byte) in word.iter().enumerate() {
                 premises.push_str(&format!(
-                    " (byte{position} : Eq (IROption Nat) (bytes ({address}))
-                      (IROption.some Nat {byte}))"
+                    " (byte{position} : @Eq (IROption Nat) (bytes ({address}))
+                      (@IROption.some Nat {byte}))"
                 ));
                 arguments.push_str(&format!(" byte{position}"));
                 address = format!("Nat.succ ({address})");
@@ -352,9 +352,9 @@ fn byte_builtin_name_general_input_and_frame_laws_have_inhabited_applications() 
                     "def builtin_general_input_{kind}
                       (allocs : IRList IRByteAllocationV1) (bytes : Nat -> IROption Nat)
                       (next data : Nat) (bounded : Nat.lt data ir_byte_limit_v1)
-                      (access : Eq Bool (ir_byte_accessible_v1 allocs data {length} 1)
+                      (access : @Eq Bool (ir_byte_accessible_v1 allocs data {length} 1)
                         Bool.true) {premises} :
-                      Eq ({RESULT}) (ir_byte_builtin_name_atom_v1
+                      @Eq ({RESULT}) (ir_byte_builtin_name_atom_v1
                         (IRByteMemoryV1.mk allocs bytes next)
                         IRTy.fatstr_ (IRScalar.fat_ data {length})) ({expected}) :=
                       ir_byte_builtin_{kind}_input_v1 allocs bytes next data bounded access
@@ -368,9 +368,9 @@ fn byte_builtin_name_general_input_and_frame_laws_have_inhabited_applications() 
                       (allocs : IRList IRByteAllocationV1)
                       (left right : Nat -> IROption Nat) (leftNext rightNext data : Nat)
                       (same : forall (offset : Nat), Nat.lt offset {length} ->
-                        Eq (IROption Nat) (left (Nat.add data offset))
+                        @Eq (IROption Nat) (left (Nat.add data offset))
                           (right (Nat.add data offset))) :
-                      Eq ({RESULT}) (ir_byte_builtin_name_atom_v1
+                      @Eq ({RESULT}) (ir_byte_builtin_name_atom_v1
                         (IRByteMemoryV1.mk allocs left leftNext)
                         IRTy.fatstr_ (IRScalar.fat_ data {length}))
                         (ir_byte_builtin_name_atom_v1
@@ -386,7 +386,7 @@ fn byte_builtin_name_general_input_and_frame_laws_have_inhabited_applications() 
             let bytes = format!("(ir_byte_mem_bytes_v1 {mem})");
             let byte_proofs = word
                 .iter()
-                .map(|byte| format!(" (Eq.refl (IROption Nat) (IROption.some Nat {byte}))"))
+                .map(|byte| format!(" (@Eq.refl (IROption Nat) (@IROption.some Nat {byte}))"))
                 .collect::<String>();
             let encoded = word
                 .iter()
@@ -396,8 +396,8 @@ fn byte_builtin_name_general_input_and_frame_laws_have_inhabited_applications() 
                 &mut spec,
                 &format!(
                     "def builtin_read_inhabited_{kind} :
-                      Eq (IROption Nat) (ir_byte_read_word_v1 {bytes} {length} 65)
-                        (IROption.some Nat {encoded}) :=
+                      @Eq (IROption Nat) (ir_byte_read_word_v1 {bytes} {length} 65)
+                        (@IROption.some Nat {encoded}) :=
                       ir_byte_builtin_{kind}_read_v1 {bytes} 65 {byte_proofs}"
                 ),
             );
@@ -405,9 +405,9 @@ fn byte_builtin_name_general_input_and_frame_laws_have_inhabited_applications() 
                 &mut spec,
                 &format!(
                     "def builtin_input_inhabited_{kind} :
-                      Eq ({RESULT}) ({}) ({expected}) :=
+                      @Eq ({RESULT}) ({}) ({expected}) :=
                       ir_byte_builtin_{kind}_input_v1 {allocs} {bytes} 1024 65
-                        (Nat.le_add_right 66 {}) (Eq.refl Bool Bool.true) {byte_proofs}",
+                        (Nat.le_add_right 66 {}) (@Eq.refl Bool Bool.true) {byte_proofs}",
                     view(&mem, 65, length as u128),
                     LIMIT - 66
                 ),
@@ -437,7 +437,7 @@ fn byte_builtin_name_general_input_and_frame_laws_have_inhabited_applications() 
                         &mut spec,
                         &format!(
                             "def builtin_{operation}_inhabited_{kind}_{side} :
-                              Eq ({RESULT}) ({}) ({expected}) :=
+                              @Eq ({RESULT}) ({}) ({expected}) :=
                               ir_byte_builtin_{kind}_{operation}_frame_v1
                                 {allocs} {bytes} 1024 65 {write_base} 8 {extra} ({apart})",
                             view(&modified, 65, length as u128)

@@ -117,14 +117,14 @@ pub(super) const NEGATIVE_CONTROLS: &[(&str, &str, &str)] = &[
     ),
     (
         "dia_false_reuse_position",
-        r"Eq (OptionType KEnv) (sfa_entry_at env_freshness_const_result Nat.zero)
- (OptionType.some KEnv env_freshness_first)",
-        r"Eq.refl (OptionType KEnv) (OptionType.some KEnv env_freshness_first)",
+        r"@Eq (OptionType KEnv) (sfa_entry_at env_freshness_const_result Nat.zero)
+ (@OptionType.some KEnv env_freshness_first)",
+        r"@Eq.refl (OptionType KEnv) (@OptionType.some KEnv env_freshness_first)",
     ),
     (
         "dia_false_nonempty_nil",
         r"KernelDeclInputChain env_freshness_const_result
- (ListType.cons KernelDeclInput dia_family_request (ListType.nil KernelDeclInput)) env_freshness_const_result",
+ (@ListType.cons KernelDeclInput dia_family_request (@ListType.nil KernelDeclInput)) env_freshness_const_result",
         "KernelDeclInputChain.nil env_freshness_const_result",
     ),
     (

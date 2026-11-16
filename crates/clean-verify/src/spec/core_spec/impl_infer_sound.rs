@@ -199,16 +199,16 @@ impl Specification {
                     "(to_kexpr_at a rho Nat.zero)) ",
                     "(to_kexpr_at_instantiate rho a B Nat.zero)) ",
                     // TypingCtxConv.app, with each premise fixed up by conv.
-                    "(TypingCtxConv.app tenvK Gk (to_kexpr f rho) (to_kexpr a rho) ",
+                    "(@TypingCtxConv.app tenvK Gk (to_kexpr f rho) (to_kexpr a rho) ",
                     "(to_kexpr_at A rho Nat.zero) (to_kexpr_at B rho (Nat.succ Nat.zero)) ",
                     // f : F, and F whnf's to a Pi — THE step KernelInfers could
                     // not take. conv absorbs it.
-                    "(TypingCtxConv.conv tenvK Gk (to_kexpr f rho) (to_kexpr F rho) ",
+                    "(@TypingCtxConv.conv tenvK Gk (to_kexpr f rho) (to_kexpr F rho) ",
                     "(KExpr.pi (to_kexpr_at A rho Nat.zero) ",
                     "(to_kexpr_at B rho (Nat.succ Nat.zero))) ihf ",
                     "(impl_whnf_to_defeq rho F (ImplExpr.pi bd A B) hw)) ",
                     // a : A2, and A2 is_le A — the argument ascription.
-                    "(TypingCtxConv.conv tenvK Gk (to_kexpr a rho) (to_kexpr A2 rho) ",
+                    "(@TypingCtxConv.conv tenvK Gk (to_kexpr a rho) (to_kexpr A2 rho) ",
                     "(to_kexpr A rho) iha (impl_is_le_defeq rho A2 A hle)))"
                 )
                 .to_string(),
@@ -268,7 +268,7 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (tenvK : KDeclEnv) (Gk : ListType KExpr) ",
-                    "(rho : ListType Nat) (l : Level) => TypingCtxConv.sort tenvK Gk l"
+                    "(rho : ListType Nat) (l : Level) => @TypingCtxConv.sort tenvK Gk l"
                 )
                 .to_string(),
             ),
@@ -292,7 +292,7 @@ impl Specification {
             type_src: concat!(
                 "forall (tenvK : KDeclEnv) (Gk : ListType KExpr) ",
                 "(rho : ListType Nat) (nm : Name) (us : ListType Level) (Ak : KExpr), ",
-                "Eq (OptionType KExpr) (kdecl_type_at tenvK nm us) (OptionType.some KExpr Ak) -> ",
+                "@Eq (OptionType KExpr) (kdecl_type_at tenvK nm us) (@OptionType.some KExpr Ak) -> ",
                 "TypingCtxConv tenvK Gk (to_kexpr (ImplExpr.const nm us) rho) Ak"
             )
             .to_string(),
@@ -300,8 +300,8 @@ impl Specification {
                 concat!(
                     "fun (tenvK : KDeclEnv) (Gk : ListType KExpr) ",
                     "(rho : ListType Nat) (nm : Name) (us : ListType Level) (Ak : KExpr) ",
-                    "(hget : Eq (OptionType KExpr) (kdecl_type_at tenvK nm us) (OptionType.some KExpr Ak)) => ",
-                    "TypingCtxConv.const tenvK Gk nm us Ak hget"
+                    "(hget : @Eq (OptionType KExpr) (kdecl_type_at tenvK nm us) (@OptionType.some KExpr Ak)) => ",
+                    "@TypingCtxConv.const tenvK Gk nm us Ak hget"
                 )
                 .to_string(),
             ),
@@ -393,10 +393,10 @@ impl Specification {
                 "ListType Nat) (x : Nat) (bd : BinderData) (A : ImplExpr) (b : ImplExpr) (S ",
                 ": ImplExpr) (l : Level) (bt : ImplExpr), KernelInfers tenv G (to_kexpr A ",
                 "rho) (to_kexpr S rho) -> ImplWhnfTo S (ImplExpr.sort l) -> KernelInfers ",
-                "tenv (ListType.cons KExpr (to_kexpr A rho) G) (to_kexpr (impl_open b x) ",
-                "(ListType.cons Nat x rho)) (to_kexpr bt (ListType.cons Nat x rho)) -> Eq ",
-                "KExpr (to_kexpr (impl_open b x) (ListType.cons Nat x rho)) (to_kexpr_at b ",
-                "rho (Nat.succ Nat.zero)) -> Eq KExpr (to_kexpr bt (ListType.cons Nat x ",
+                "tenv (@ListType.cons KExpr (to_kexpr A rho) G) (to_kexpr (impl_open b x) ",
+                "(@ListType.cons Nat x rho)) (to_kexpr bt (@ListType.cons Nat x rho)) -> @Eq ",
+                "KExpr (to_kexpr (impl_open b x) (@ListType.cons Nat x rho)) (to_kexpr_at b ",
+                "rho (Nat.succ Nat.zero)) -> @Eq KExpr (to_kexpr bt (@ListType.cons Nat x ",
                 "rho)) (to_kexpr_at (impl_abstract_fvar bt x) rho (Nat.succ Nat.zero)) -> ",
                 "KernelInfers tenv G (to_kexpr (ImplExpr.lam bd A b) rho) (to_kexpr ",
                 "(ImplExpr.pi bd A (impl_abstract_fvar bt x)) rho)",
@@ -408,11 +408,11 @@ impl Specification {
                     "Nat) (x : Nat) (bd : BinderData) (A : ImplExpr) (b : ImplExpr) (S : ",
                     "ImplExpr) (l : Level) (bt : ImplExpr) (ihA : KernelInfers tenv G (to_kexpr ",
                     "A rho) (to_kexpr S rho)) (hs : ImplWhnfTo S (ImplExpr.sort l)) (ihb : ",
-                    "KernelInfers tenv (ListType.cons KExpr (to_kexpr A rho) G) (to_kexpr ",
-                    "(impl_open b x) (ListType.cons Nat x rho)) (to_kexpr bt (ListType.cons Nat ",
-                    "x rho))) (hopen : Eq KExpr (to_kexpr (impl_open b x) (ListType.cons Nat x ",
-                    "rho)) (to_kexpr_at b rho (Nat.succ Nat.zero))) (habs : Eq KExpr (to_kexpr ",
-                    "bt (ListType.cons Nat x rho)) (to_kexpr_at (impl_abstract_fvar bt x) rho ",
+                    "KernelInfers tenv (@ListType.cons KExpr (to_kexpr A rho) G) (to_kexpr ",
+                    "(impl_open b x) (@ListType.cons Nat x rho)) (to_kexpr bt (@ListType.cons Nat ",
+                    "x rho))) (hopen : @Eq KExpr (to_kexpr (impl_open b x) (@ListType.cons Nat x ",
+                    "rho)) (to_kexpr_at b rho (Nat.succ Nat.zero))) (habs : @Eq KExpr (to_kexpr ",
+                    "bt (@ListType.cons Nat x rho)) (to_kexpr_at (impl_abstract_fvar bt x) rho ",
                     "(Nat.succ Nat.zero))) => impl_bridge_lam tenv G rho x bd A b S l bt ihA ",
                     "(impl_whnf_to_whnf_to rho S (ImplExpr.sort l) hs (is_whnf.sort l)) ihb ",
                     "hopen habs",
@@ -451,9 +451,9 @@ impl Specification {
                 "ListType Nat) (x : Nat) (bd : BinderData) (A : ImplExpr) (b : ImplExpr) (S ",
                 ": ImplExpr) (l : Level) (bt : ImplExpr), ImplScoped x b Nat.zero -> ImplLC ",
                 "bt Nat.zero -> KernelInfers tenv G (to_kexpr A rho) (to_kexpr S rho) -> ",
-                "ImplWhnfTo S (ImplExpr.sort l) -> KernelInfers tenv (ListType.cons KExpr ",
-                "(to_kexpr A rho) G) (to_kexpr (impl_open b x) (ListType.cons Nat x rho)) ",
-                "(to_kexpr bt (ListType.cons Nat x rho)) -> KernelInfers tenv G (to_kexpr ",
+                "ImplWhnfTo S (ImplExpr.sort l) -> KernelInfers tenv (@ListType.cons KExpr ",
+                "(to_kexpr A rho) G) (to_kexpr (impl_open b x) (@ListType.cons Nat x rho)) ",
+                "(to_kexpr bt (@ListType.cons Nat x rho)) -> KernelInfers tenv G (to_kexpr ",
                 "(ImplExpr.lam bd A b) rho) (to_kexpr (ImplExpr.pi bd A (impl_abstract_fvar ",
                 "bt x)) rho)",
             )
@@ -465,8 +465,8 @@ impl Specification {
                     "ImplExpr) (l : Level) (bt : ImplExpr) (hsc : ImplScoped x b Nat.zero) (hlc ",
                     ": ImplLC bt Nat.zero) (ihA : KernelInfers tenv G (to_kexpr A rho) (to_kexpr ",
                     "S rho)) (hs : ImplWhnfTo S (ImplExpr.sort l)) (ihb : KernelInfers tenv ",
-                    "(ListType.cons KExpr (to_kexpr A rho) G) (to_kexpr (impl_open b x) ",
-                    "(ListType.cons Nat x rho)) (to_kexpr bt (ListType.cons Nat x rho))) => ",
+                    "(@ListType.cons KExpr (to_kexpr A rho) G) (to_kexpr (impl_open b x) ",
+                    "(@ListType.cons Nat x rho)) (to_kexpr bt (@ListType.cons Nat x rho))) => ",
                     "impl_kinfers_lam tenv G rho x bd A b S l bt ihA hs ihb (to_kexpr_open rho x ",
                     "b Nat.zero hsc) (to_kexpr_abstract rho x bt Nat.zero hlc)",
                 )
@@ -506,9 +506,9 @@ impl Specification {
                 ": ImplExpr) (S2 : ImplExpr) (l1 : Level) (l2 : Level), ImplScoped x b ",
                 "Nat.zero -> ImplWhnfTo S1 (ImplExpr.sort l1) -> ImplWhnfTo S2 ",
                 "(ImplExpr.sort l2) -> KernelInfers tenv Gk (to_kexpr A rho) (to_kexpr S1 ",
-                "rho) -> KernelInfers tenv (ListType.cons KExpr (to_kexpr A rho) Gk) ",
-                "(to_kexpr (impl_open b x) (ListType.cons Nat x rho)) (to_kexpr S2 ",
-                "(ListType.cons Nat x rho)) -> KernelInfers tenv Gk (to_kexpr (ImplExpr.pi ",
+                "rho) -> KernelInfers tenv (@ListType.cons KExpr (to_kexpr A rho) Gk) ",
+                "(to_kexpr (impl_open b x) (@ListType.cons Nat x rho)) (to_kexpr S2 ",
+                "(@ListType.cons Nat x rho)) -> KernelInfers tenv Gk (to_kexpr (ImplExpr.pi ",
                 "bd A b) rho) (to_kexpr (ImplExpr.sort (Level.imax l1 l2)) rho)",
             )
             .to_string(),
@@ -519,11 +519,11 @@ impl Specification {
                     "ImplExpr) (S2 : ImplExpr) (l1 : Level) (l2 : Level) (hsc : ImplScoped x b ",
                     "Nat.zero) (hs1 : ImplWhnfTo S1 (ImplExpr.sort l1)) (hs2 : ImplWhnfTo S2 ",
                     "(ImplExpr.sort l2)) (ihA : KernelInfers tenv Gk (to_kexpr A rho) (to_kexpr ",
-                    "S1 rho)) (ihb : KernelInfers tenv (ListType.cons KExpr (to_kexpr A rho) Gk) ",
-                    "(to_kexpr (impl_open b x) (ListType.cons Nat x rho)) (to_kexpr S2 ",
-                    "(ListType.cons Nat x rho))) => impl_bridge_pi tenv Gk rho x bd A b S1 S2 l1 ",
+                    "S1 rho)) (ihb : KernelInfers tenv (@ListType.cons KExpr (to_kexpr A rho) Gk) ",
+                    "(to_kexpr (impl_open b x) (@ListType.cons Nat x rho)) (to_kexpr S2 ",
+                    "(@ListType.cons Nat x rho))) => impl_bridge_pi tenv Gk rho x bd A b S1 S2 l1 ",
                     "l2 ihA (impl_whnf_to_whnf_to rho S1 (ImplExpr.sort l1) hs1 (is_whnf.sort ",
-                    "l1)) ihb (impl_whnf_to_whnf_to (ListType.cons Nat x rho) S2 (ImplExpr.sort ",
+                    "l1)) ihb (impl_whnf_to_whnf_to (@ListType.cons Nat x rho) S2 (ImplExpr.sort ",
                     "l2) hs2 (is_whnf.sort l2)) (to_kexpr_open rho x b Nat.zero hsc)",
                 )
                 .to_string(),
@@ -563,7 +563,7 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "impl_bridge_app_witness".to_string(),
             type_src: concat!(
-                "KernelInfers (fun (nm : Name) => OptionType.none KConstSig) (ListType.nil ",
+                "KernelInfers (fun (nm : Name) => @OptionType.none KConstSig) (@ListType.nil ",
                 "KExpr) (KExpr.app (KExpr.lam (KExpr.sort (Level.succ Level.zero)) ",
                 "(KExpr.sort Level.zero)) (KExpr.sort Level.zero)) (KExpr.sort (Level.succ ",
                 "Level.zero))",
@@ -571,8 +571,8 @@ impl Specification {
             .to_string(),
             value_src: Some(
                 concat!(
-                    "impl_bridge_app (fun (nm : Name) => OptionType.none KConstSig) (ListType.nil ",
-                    "KExpr) (ListType.nil Nat) (ImplExpr.lam (BinderData.mk BinderInfo.default ",
+                    "impl_bridge_app (fun (nm : Name) => @OptionType.none KConstSig) (@ListType.nil ",
+                    "KExpr) (@ListType.nil Nat) (ImplExpr.lam (BinderData.mk BinderInfo.default ",
                     "Multiplicity.many) (ImplExpr.sort (Level.succ Level.zero)) (ImplExpr.sort ",
                     "Level.zero)) (ImplExpr.sort Level.zero) (ImplExpr.pi (BinderData.mk ",
                     "BinderInfo.default Multiplicity.many) (ImplExpr.sort (Level.succ ",
@@ -580,19 +580,19 @@ impl Specification {
                     "BinderInfo.default Multiplicity.many) (ImplExpr.sort (Level.succ ",
                     "Level.zero)) (ImplExpr.sort (Level.succ Level.zero)) (ImplExpr.sort ",
                     "(Level.succ Level.zero)) impl_whnf_to_whnf_to impl_is_le_defeq ",
-                    "to_kexpr_at_instantiate (KernelInfers.lam (fun (nm : Name) => ",
-                    "OptionType.none KConstSig) (ListType.nil KExpr) (KExpr.sort (Level.succ ",
+                    "to_kexpr_at_instantiate (@KernelInfers.lam (fun (nm : Name) => ",
+                    "@OptionType.none KConstSig) (@ListType.nil KExpr) (KExpr.sort (Level.succ ",
                     "Level.zero)) (KExpr.sort Level.zero) (KExpr.sort (Level.succ Level.zero)) ",
                     "(KExpr.sort (Level.succ (Level.succ Level.zero))) (Level.succ (Level.succ ",
-                    "Level.zero)) (KernelInfers.sort (fun (nm : Name) => OptionType.none KConstSig) ",
-                    "(ListType.nil KExpr) (Level.succ Level.zero)) (whnf_to.refl (KExpr.sort ",
+                    "Level.zero)) (@KernelInfers.sort (fun (nm : Name) => @OptionType.none KConstSig) ",
+                    "(@ListType.nil KExpr) (Level.succ Level.zero)) (whnf_to.refl (KExpr.sort ",
                     "(Level.succ (Level.succ Level.zero))) (is_whnf.sort (Level.succ (Level.succ ",
-                    "Level.zero)))) (KernelInfers.sort (fun (nm : Name) => OptionType.none ",
-                    "KConstSig) (ListType.cons KExpr (KExpr.sort (Level.succ Level.zero)) ",
-                    "(ListType.nil KExpr)) Level.zero)) (ImplWhnfTo.done (ImplExpr.pi ",
+                    "Level.zero)))) (@KernelInfers.sort (fun (nm : Name) => @OptionType.none ",
+                    "KConstSig) (@ListType.cons KExpr (KExpr.sort (Level.succ Level.zero)) ",
+                    "(@ListType.nil KExpr)) Level.zero)) (ImplWhnfTo.done (ImplExpr.pi ",
                     "(BinderData.mk BinderInfo.default Multiplicity.many) (ImplExpr.sort ",
                     "(Level.succ Level.zero)) (ImplExpr.sort (Level.succ Level.zero)))) ",
-                    "(KernelInfers.sort (fun (nm : Name) => OptionType.none KConstSig) (ListType.nil ",
+                    "(@KernelInfers.sort (fun (nm : Name) => @OptionType.none KConstSig) (@ListType.nil ",
                     "KExpr) Level.zero) (ImplIsLe.refl (ImplExpr.sort (Level.succ Level.zero)))",
                 )
                 .to_string(),
@@ -662,9 +662,9 @@ impl Specification {
                 "ImplWhnfTo S (ImplExpr.sort l) -> ImplIsLe Tv ty -> ",
                 "KernelInfers tenvK Gk (to_kexpr ty rho) (to_kexpr S rho) -> ",
                 "KernelInfers tenvK Gk (to_kexpr v rho) (to_kexpr Tv rho) -> ",
-                "KernelInfers tenvK (ListType.cons KExpr (to_kexpr ty rho) Gk) ",
-                "(to_kexpr (impl_open b x) (ListType.cons Nat x rho)) ",
-                "(to_kexpr bt (ListType.cons Nat x rho)) -> ",
+                "KernelInfers tenvK (@ListType.cons KExpr (to_kexpr ty rho) Gk) ",
+                "(to_kexpr (impl_open b x) (@ListType.cons Nat x rho)) ",
+                "(to_kexpr bt (@ListType.cons Nat x rho)) -> ",
                 "KernelInfers tenvK Gk (to_kexpr (ImplExpr.let_ nm ty v b) rho) ",
                 "(to_kexpr (impl_subst_fvar bt x v) rho)"
             )
@@ -679,9 +679,9 @@ impl Specification {
                     "(hs : ImplWhnfTo S (ImplExpr.sort l)) (hle : ImplIsLe Tv ty) ",
                     "(ihty : KernelInfers tenvK Gk (to_kexpr ty rho) (to_kexpr S rho)) ",
                     "(ihv : KernelInfers tenvK Gk (to_kexpr v rho) (to_kexpr Tv rho)) ",
-                    "(ihb : KernelInfers tenvK (ListType.cons KExpr (to_kexpr ty rho) Gk) ",
-                    "(to_kexpr (impl_open b x) (ListType.cons Nat x rho)) ",
-                    "(to_kexpr bt (ListType.cons Nat x rho))) => ",
+                    "(ihb : KernelInfers tenvK (@ListType.cons KExpr (to_kexpr ty rho) Gk) ",
+                    "(to_kexpr (impl_open b x) (@ListType.cons Nat x rho)) ",
+                    "(to_kexpr bt (@ListType.cons Nat x rho))) => ",
                     "impl_bridge_let tenvK Gk rho x nm ty v b S l Tv bt ",
                     "impl_whnf_to_whnf_to impl_is_le_defeq hs hle ihty ihv ihb ",
                     "(to_kexpr_open rho x b Nat.zero hsc) ",
@@ -772,7 +772,7 @@ impl Specification {
             concat!(
                 "inductive ImplScoped (x : Nat) : ImplExpr -> Nat -> Type\n",
                 "| bvar : forall (i : Nat) (d : Nat), Le i d -> ImplScoped x (ImplExpr.bvar i) d\n",
-                "| fvar : forall (y : Nat) (d : Nat), Eq Bool (nat_eqb x y) Bool.false -> ImplScoped x (ImplExpr.fvar y) d\n",
+                "| fvar : forall (y : Nat) (d : Nat), @Eq Bool (nat_eqb x y) Bool.false -> ImplScoped x (ImplExpr.fvar y) d\n",
                 "| sort : forall (l : Level) (d : Nat), ImplScoped x (ImplExpr.sort l) d\n",
                 "| const : forall (nm : Name) (us : ListType Level) (d : Nat), ImplScoped x (ImplExpr.const nm us) d\n",
                 "| app : forall (f : ImplExpr) (a : ImplExpr) (d : Nat), ImplScoped x f d -> ImplScoped x a d -> ImplScoped x (ImplExpr.app f a) d\n",
@@ -804,8 +804,8 @@ impl Specification {
             type_src: concat!(
                 "forall (rho : ListType Nat) (x : Nat) (b : ImplExpr) (d : Nat), ",
                 "ImplScoped x b d -> ",
-                "Eq KExpr (to_kexpr_at (impl_instantiate_at b (ImplExpr.fvar x) d) ",
-                "(ListType.cons Nat x rho) d) ",
+                "@Eq KExpr (to_kexpr_at (impl_instantiate_at b (ImplExpr.fvar x) d) ",
+                "(@ListType.cons Nat x rho) d) ",
                 "(to_kexpr_at b rho (Nat.succ d))"
             )
             .to_string(),
@@ -813,36 +813,36 @@ impl Specification {
                 concat!(
                     "fun (rho : ListType Nat) (x : Nat) (b : ImplExpr) (d : Nat) ",
                     "(h : ImplScoped x b d) => ",
-                    "ImplScoped.rec x ",
-                    "(fun (b0 : ImplExpr) (d0 : Nat) (_h0 : ImplScoped x b0 d0) => Eq KExpr ",
+                    "@ImplScoped.rec x ",
+                    "(fun (b0 : ImplExpr) (d0 : Nat) (_h0 : ImplScoped x b0 d0) => @Eq KExpr ",
                     "(to_kexpr_at (impl_instantiate_at b0 (ImplExpr.fvar x) d0) ",
-                    "(ListType.cons Nat x rho) d0) ",
+                    "(@ListType.cons Nat x rho) d0) ",
                     "(to_kexpr_at b0 rho (Nat.succ d0))) ",
                     // ── bvar: i <= d, so the substitution either leaves it
                     // alone (i < d) or replaces it with the fresh fvar (i = d).
                     // The i > d branch, the only one that would break, is what
                     // the Le field rules out.
                     "(fun (i : Nat) (d0 : Nat) (hle : Le i d0) => ",
-                    "Nat.rec (fun (s : Nat) => Eq Nat (Nat.sub d0 i) s -> Eq KExpr ",
-                    "(to_kexpr_at (Nat.rec (fun (_m : Nat) => ImplExpr) ",
+                    "@Nat.rec (fun (s : Nat) => @Eq Nat (Nat.sub d0 i) s -> @Eq KExpr ",
+                    "(to_kexpr_at (@Nat.rec (fun (_m : Nat) => ImplExpr) ",
                     "(impl_inst_bvar_geq i d0 (ImplExpr.fvar x)) ",
                     "(fun (_q : Nat) (_r : ImplExpr) => ImplExpr.bvar i) s) ",
-                    "(ListType.cons Nat x rho) d0) (KExpr.bvar i)) ",
+                    "(@ListType.cons Nat x rho) d0) (KExpr.bvar i)) ",
                     // s = 0 : i >= d0, and with Le i d0 that means i = d0.
-                    "(fun (hz : Eq Nat (Nat.sub d0 i) Nat.zero) => ",
+                    "(fun (hz : @Eq Nat (Nat.sub d0 i) Nat.zero) => ",
                     // reduce the geq scrutinee Nat.sub i d0 to zero
-                    "Eq.substType Nat (fun (t : Nat) => Eq KExpr ",
-                    "(to_kexpr_at (Nat.rec (fun (_m : Nat) => ImplExpr) ",
+                    "Eq.substType Nat (fun (t : Nat) => @Eq KExpr ",
+                    "(to_kexpr_at (@Nat.rec (fun (_m : Nat) => ImplExpr) ",
                     "(impl_lift_at (ImplExpr.fvar x) Nat.zero d0) ",
                     "(fun (_q : Nat) (_r : ImplExpr) => ",
                     "ImplExpr.bvar (Nat.sub i (Nat.succ Nat.zero))) t) ",
-                    "(ListType.cons Nat x rho) d0) (KExpr.bvar i)) ",
+                    "(@ListType.cons Nat x rho) d0) (KExpr.bvar i)) ",
                     "Nat.zero (Nat.sub i d0) ",
                     "(Eq.symm Nat (Nat.sub i d0) Nat.zero (le_sub_zero i d0 hle)) ",
                     // now: to_kexpr_at (fvar x) (cons x rho) d0 = bvar i.
                     // reduce rho_index (cons x rho) x to zero via nat_eqb_refl
-                    "(Eq.substType Bool (fun (bb : Bool) => Eq KExpr ",
-                    "(KExpr.bvar (Nat.add (Bool.rec (fun (_c : Bool) => Nat) ",
+                    "(Eq.substType Bool (fun (bb : Bool) => @Eq KExpr ",
+                    "(KExpr.bvar (Nat.add (@Bool.rec (fun (_c : Bool) => Nat) ",
                     "(Nat.succ (rho_index rho x)) Nat.zero bb) d0)) (KExpr.bvar i)) ",
                     "Bool.true (nat_eqb x x) ",
                     "(Eq.symm Bool (nat_eqb x x) Bool.true (nat_eqb_refl x)) ",
@@ -852,19 +852,19 @@ impl Specification {
                     "(Eq.trans Nat (Nat.add Nat.zero d0) d0 i (nat_zero_add d0) ",
                     "(Eq.symm Nat i d0 (nat_sub_zero_eq i d0 hle hz)))))) ",
                     // s = succ _ : i < d0, untouched on both sides.
-                    "(fun (_s : Nat) (_ih : Eq Nat (Nat.sub d0 i) _s -> Eq KExpr ",
-                    "(to_kexpr_at (Nat.rec (fun (_m : Nat) => ImplExpr) ",
+                    "(fun (_s : Nat) (_ih : @Eq Nat (Nat.sub d0 i) _s -> @Eq KExpr ",
+                    "(to_kexpr_at (@Nat.rec (fun (_m : Nat) => ImplExpr) ",
                     "(impl_inst_bvar_geq i d0 (ImplExpr.fvar x)) ",
                     "(fun (_q : Nat) (_r : ImplExpr) => ImplExpr.bvar i) _s) ",
-                    "(ListType.cons Nat x rho) d0) (KExpr.bvar i)) => ",
-                    "fun (_hs : Eq Nat (Nat.sub d0 i) (Nat.succ _s)) => ",
-                    "Eq.refl KExpr (KExpr.bvar i)) ",
-                    "(Nat.sub d0 i) (Eq.refl Nat (Nat.sub d0 i))) ",
+                    "(@ListType.cons Nat x rho) d0) (KExpr.bvar i)) => ",
+                    "fun (_hs : @Eq Nat (Nat.sub d0 i) (Nat.succ _s)) => ",
+                    "@Eq.refl KExpr (KExpr.bvar i)) ",
+                    "(Nat.sub d0 i) (@Eq.refl Nat (Nat.sub d0 i))) ",
                     // ── fvar y, y != x : the renaming shifts by one, and the
                     // extra binder depth shifts by one. Same place.
-                    "(fun (y : Nat) (d0 : Nat) (hne : Eq Bool (nat_eqb x y) Bool.false) => ",
-                    "Eq.substType Bool (fun (bb : Bool) => Eq KExpr ",
-                    "(KExpr.bvar (Nat.add (Bool.rec (fun (_c : Bool) => Nat) ",
+                    "(fun (y : Nat) (d0 : Nat) (hne : @Eq Bool (nat_eqb x y) Bool.false) => ",
+                    "Eq.substType Bool (fun (bb : Bool) => @Eq KExpr ",
+                    "(KExpr.bvar (Nat.add (@Bool.rec (fun (_c : Bool) => Nat) ",
                     "(Nat.succ (rho_index rho y)) Nat.zero bb) d0)) ",
                     "(KExpr.bvar (Nat.add (rho_index rho y) (Nat.succ d0)))) ",
                     "Bool.false (nat_eqb x y) ",
@@ -874,166 +874,166 @@ impl Specification {
                     "(Nat.add (rho_index rho y) (Nat.succ d0)) ",
                     "(nat_succ_add (rho_index rho y) d0))) ",
                     // ── sort / const ────────────────────────────────────────
-                    "(fun (l : Level) (d0 : Nat) => Eq.refl KExpr (KExpr.sort l)) ",
+                    "(fun (l : Level) (d0 : Nat) => @Eq.refl KExpr (KExpr.sort l)) ",
                     "(fun (nm : Name) (us : ListType Level) (d0 : Nat) => ",
-                    "Eq.refl KExpr (KExpr.const nm us)) ",
+                    "@Eq.refl KExpr (KExpr.const nm us)) ",
                     // ── app ─────────────────────────────────────────────────
                     "(fun (f : ImplExpr) (a : ImplExpr) (d0 : Nat) ",
                     "(_sf : ImplScoped x f d0) (_sa : ImplScoped x a d0) ",
-                    "(rf : Eq KExpr (to_kexpr_at (impl_instantiate_at f (ImplExpr.fvar x) d0) ",
-                    "(ListType.cons Nat x rho) d0) (to_kexpr_at f rho (Nat.succ d0))) ",
-                    "(ra : Eq KExpr (to_kexpr_at (impl_instantiate_at a (ImplExpr.fvar x) d0) ",
-                    "(ListType.cons Nat x rho) d0) (to_kexpr_at a rho (Nat.succ d0))) => ",
+                    "(rf : @Eq KExpr (to_kexpr_at (impl_instantiate_at f (ImplExpr.fvar x) d0) ",
+                    "(@ListType.cons Nat x rho) d0) (to_kexpr_at f rho (Nat.succ d0))) ",
+                    "(ra : @Eq KExpr (to_kexpr_at (impl_instantiate_at a (ImplExpr.fvar x) d0) ",
+                    "(@ListType.cons Nat x rho) d0) (to_kexpr_at a rho (Nat.succ d0))) => ",
                     "Eq.trans KExpr ",
                     "(KExpr.app (to_kexpr_at (impl_instantiate_at f (ImplExpr.fvar x) d0) ",
-                    "(ListType.cons Nat x rho) d0) ",
+                    "(@ListType.cons Nat x rho) d0) ",
                     "(to_kexpr_at (impl_instantiate_at a (ImplExpr.fvar x) d0) ",
-                    "(ListType.cons Nat x rho) d0)) ",
+                    "(@ListType.cons Nat x rho) d0)) ",
                     "(KExpr.app (to_kexpr_at f rho (Nat.succ d0)) ",
                     "(to_kexpr_at (impl_instantiate_at a (ImplExpr.fvar x) d0) ",
-                    "(ListType.cons Nat x rho) d0)) ",
+                    "(@ListType.cons Nat x rho) d0)) ",
                     "(KExpr.app (to_kexpr_at f rho (Nat.succ d0)) ",
                     "(to_kexpr_at a rho (Nat.succ d0))) ",
                     "(Eq.cong KExpr KExpr (fun (w : KExpr) => KExpr.app w ",
                     "(to_kexpr_at (impl_instantiate_at a (ImplExpr.fvar x) d0) ",
-                    "(ListType.cons Nat x rho) d0)) ",
+                    "(@ListType.cons Nat x rho) d0)) ",
                     "(to_kexpr_at (impl_instantiate_at f (ImplExpr.fvar x) d0) ",
-                    "(ListType.cons Nat x rho) d0) ",
+                    "(@ListType.cons Nat x rho) d0) ",
                     "(to_kexpr_at f rho (Nat.succ d0)) rf) ",
                     "(Eq.cong KExpr KExpr (fun (w : KExpr) => KExpr.app ",
                     "(to_kexpr_at f rho (Nat.succ d0)) w) ",
                     "(to_kexpr_at (impl_instantiate_at a (ImplExpr.fvar x) d0) ",
-                    "(ListType.cons Nat x rho) d0) ",
+                    "(@ListType.cons Nat x rho) d0) ",
                     "(to_kexpr_at a rho (Nat.succ d0)) ra)) ",
                     // ── lam — the IH for the body is already at succ d0, and
                     // both sides step the depth the same way, so there is NO
                     // arithmetic transport here.
                     "(fun (bd : BinderData) (ty : ImplExpr) (bb : ImplExpr) (d0 : Nat) ",
                     "(_st : ImplScoped x ty d0) (_sb : ImplScoped x bb (Nat.succ d0)) ",
-                    "(rt : Eq KExpr (to_kexpr_at (impl_instantiate_at ty (ImplExpr.fvar x) d0) ",
-                    "(ListType.cons Nat x rho) d0) (to_kexpr_at ty rho (Nat.succ d0))) ",
-                    "(rb : Eq KExpr (to_kexpr_at (impl_instantiate_at bb (ImplExpr.fvar x) ",
-                    "(Nat.succ d0)) (ListType.cons Nat x rho) (Nat.succ d0)) ",
+                    "(rt : @Eq KExpr (to_kexpr_at (impl_instantiate_at ty (ImplExpr.fvar x) d0) ",
+                    "(@ListType.cons Nat x rho) d0) (to_kexpr_at ty rho (Nat.succ d0))) ",
+                    "(rb : @Eq KExpr (to_kexpr_at (impl_instantiate_at bb (ImplExpr.fvar x) ",
+                    "(Nat.succ d0)) (@ListType.cons Nat x rho) (Nat.succ d0)) ",
                     "(to_kexpr_at bb rho (Nat.succ (Nat.succ d0)))) => ",
                     "Eq.trans KExpr ",
                     "(KExpr.lam (to_kexpr_at (impl_instantiate_at ty (ImplExpr.fvar x) d0) ",
-                    "(ListType.cons Nat x rho) d0) ",
+                    "(@ListType.cons Nat x rho) d0) ",
                     "(to_kexpr_at (impl_instantiate_at bb (ImplExpr.fvar x) (Nat.succ d0)) ",
-                    "(ListType.cons Nat x rho) (Nat.succ d0))) ",
+                    "(@ListType.cons Nat x rho) (Nat.succ d0))) ",
                     "(KExpr.lam (to_kexpr_at ty rho (Nat.succ d0)) ",
                     "(to_kexpr_at (impl_instantiate_at bb (ImplExpr.fvar x) (Nat.succ d0)) ",
-                    "(ListType.cons Nat x rho) (Nat.succ d0))) ",
+                    "(@ListType.cons Nat x rho) (Nat.succ d0))) ",
                     "(KExpr.lam (to_kexpr_at ty rho (Nat.succ d0)) ",
                     "(to_kexpr_at bb rho (Nat.succ (Nat.succ d0)))) ",
                     "(Eq.cong KExpr KExpr (fun (w : KExpr) => KExpr.lam w ",
                     "(to_kexpr_at (impl_instantiate_at bb (ImplExpr.fvar x) (Nat.succ d0)) ",
-                    "(ListType.cons Nat x rho) (Nat.succ d0))) ",
+                    "(@ListType.cons Nat x rho) (Nat.succ d0))) ",
                     "(to_kexpr_at (impl_instantiate_at ty (ImplExpr.fvar x) d0) ",
-                    "(ListType.cons Nat x rho) d0) ",
+                    "(@ListType.cons Nat x rho) d0) ",
                     "(to_kexpr_at ty rho (Nat.succ d0)) rt) ",
                     "(Eq.cong KExpr KExpr (fun (w : KExpr) => KExpr.lam ",
                     "(to_kexpr_at ty rho (Nat.succ d0)) w) ",
                     "(to_kexpr_at (impl_instantiate_at bb (ImplExpr.fvar x) (Nat.succ d0)) ",
-                    "(ListType.cons Nat x rho) (Nat.succ d0)) ",
+                    "(@ListType.cons Nat x rho) (Nat.succ d0)) ",
                     "(to_kexpr_at bb rho (Nat.succ (Nat.succ d0))) rb)) ",
                     // ── pi ──────────────────────────────────────────────────
                     "(fun (bd : BinderData) (ty : ImplExpr) (bb : ImplExpr) (d0 : Nat) ",
                     "(_st : ImplScoped x ty d0) (_sb : ImplScoped x bb (Nat.succ d0)) ",
-                    "(rt : Eq KExpr (to_kexpr_at (impl_instantiate_at ty (ImplExpr.fvar x) d0) ",
-                    "(ListType.cons Nat x rho) d0) (to_kexpr_at ty rho (Nat.succ d0))) ",
-                    "(rb : Eq KExpr (to_kexpr_at (impl_instantiate_at bb (ImplExpr.fvar x) ",
-                    "(Nat.succ d0)) (ListType.cons Nat x rho) (Nat.succ d0)) ",
+                    "(rt : @Eq KExpr (to_kexpr_at (impl_instantiate_at ty (ImplExpr.fvar x) d0) ",
+                    "(@ListType.cons Nat x rho) d0) (to_kexpr_at ty rho (Nat.succ d0))) ",
+                    "(rb : @Eq KExpr (to_kexpr_at (impl_instantiate_at bb (ImplExpr.fvar x) ",
+                    "(Nat.succ d0)) (@ListType.cons Nat x rho) (Nat.succ d0)) ",
                     "(to_kexpr_at bb rho (Nat.succ (Nat.succ d0)))) => ",
                     "Eq.trans KExpr ",
                     "(KExpr.pi (to_kexpr_at (impl_instantiate_at ty (ImplExpr.fvar x) d0) ",
-                    "(ListType.cons Nat x rho) d0) ",
+                    "(@ListType.cons Nat x rho) d0) ",
                     "(to_kexpr_at (impl_instantiate_at bb (ImplExpr.fvar x) (Nat.succ d0)) ",
-                    "(ListType.cons Nat x rho) (Nat.succ d0))) ",
+                    "(@ListType.cons Nat x rho) (Nat.succ d0))) ",
                     "(KExpr.pi (to_kexpr_at ty rho (Nat.succ d0)) ",
                     "(to_kexpr_at (impl_instantiate_at bb (ImplExpr.fvar x) (Nat.succ d0)) ",
-                    "(ListType.cons Nat x rho) (Nat.succ d0))) ",
+                    "(@ListType.cons Nat x rho) (Nat.succ d0))) ",
                     "(KExpr.pi (to_kexpr_at ty rho (Nat.succ d0)) ",
                     "(to_kexpr_at bb rho (Nat.succ (Nat.succ d0)))) ",
                     "(Eq.cong KExpr KExpr (fun (w : KExpr) => KExpr.pi w ",
                     "(to_kexpr_at (impl_instantiate_at bb (ImplExpr.fvar x) (Nat.succ d0)) ",
-                    "(ListType.cons Nat x rho) (Nat.succ d0))) ",
+                    "(@ListType.cons Nat x rho) (Nat.succ d0))) ",
                     "(to_kexpr_at (impl_instantiate_at ty (ImplExpr.fvar x) d0) ",
-                    "(ListType.cons Nat x rho) d0) ",
+                    "(@ListType.cons Nat x rho) d0) ",
                     "(to_kexpr_at ty rho (Nat.succ d0)) rt) ",
                     "(Eq.cong KExpr KExpr (fun (w : KExpr) => KExpr.pi ",
                     "(to_kexpr_at ty rho (Nat.succ d0)) w) ",
                     "(to_kexpr_at (impl_instantiate_at bb (ImplExpr.fvar x) (Nat.succ d0)) ",
-                    "(ListType.cons Nat x rho) (Nat.succ d0)) ",
+                    "(@ListType.cons Nat x rho) (Nat.succ d0)) ",
                     "(to_kexpr_at bb rho (Nat.succ (Nat.succ d0))) rb)) ",
                     // ── let_ ────────────────────────────────────────────────
                     "(fun (nm : Name) (ty : ImplExpr) (vv : ImplExpr) (bb : ImplExpr) (d0 : Nat) ",
                     "(_st : ImplScoped x ty d0) (_sv : ImplScoped x vv d0) ",
                     "(_sb : ImplScoped x bb (Nat.succ d0)) ",
-                    "(rt : Eq KExpr (to_kexpr_at (impl_instantiate_at ty (ImplExpr.fvar x) d0) ",
-                    "(ListType.cons Nat x rho) d0) (to_kexpr_at ty rho (Nat.succ d0))) ",
-                    "(rv : Eq KExpr (to_kexpr_at (impl_instantiate_at vv (ImplExpr.fvar x) d0) ",
-                    "(ListType.cons Nat x rho) d0) (to_kexpr_at vv rho (Nat.succ d0))) ",
-                    "(rb : Eq KExpr (to_kexpr_at (impl_instantiate_at bb (ImplExpr.fvar x) ",
-                    "(Nat.succ d0)) (ListType.cons Nat x rho) (Nat.succ d0)) ",
+                    "(rt : @Eq KExpr (to_kexpr_at (impl_instantiate_at ty (ImplExpr.fvar x) d0) ",
+                    "(@ListType.cons Nat x rho) d0) (to_kexpr_at ty rho (Nat.succ d0))) ",
+                    "(rv : @Eq KExpr (to_kexpr_at (impl_instantiate_at vv (ImplExpr.fvar x) d0) ",
+                    "(@ListType.cons Nat x rho) d0) (to_kexpr_at vv rho (Nat.succ d0))) ",
+                    "(rb : @Eq KExpr (to_kexpr_at (impl_instantiate_at bb (ImplExpr.fvar x) ",
+                    "(Nat.succ d0)) (@ListType.cons Nat x rho) (Nat.succ d0)) ",
                     "(to_kexpr_at bb rho (Nat.succ (Nat.succ d0)))) => ",
                     "Eq.trans KExpr ",
                     "(KExpr.let_ (to_kexpr_at (impl_instantiate_at ty (ImplExpr.fvar x) d0) ",
-                    "(ListType.cons Nat x rho) d0) ",
+                    "(@ListType.cons Nat x rho) d0) ",
                     "(to_kexpr_at (impl_instantiate_at vv (ImplExpr.fvar x) d0) ",
-                    "(ListType.cons Nat x rho) d0) ",
+                    "(@ListType.cons Nat x rho) d0) ",
                     "(to_kexpr_at (impl_instantiate_at bb (ImplExpr.fvar x) (Nat.succ d0)) ",
-                    "(ListType.cons Nat x rho) (Nat.succ d0))) ",
+                    "(@ListType.cons Nat x rho) (Nat.succ d0))) ",
                     "(KExpr.let_ (to_kexpr_at ty rho (Nat.succ d0)) ",
                     "(to_kexpr_at (impl_instantiate_at vv (ImplExpr.fvar x) d0) ",
-                    "(ListType.cons Nat x rho) d0) ",
+                    "(@ListType.cons Nat x rho) d0) ",
                     "(to_kexpr_at (impl_instantiate_at bb (ImplExpr.fvar x) (Nat.succ d0)) ",
-                    "(ListType.cons Nat x rho) (Nat.succ d0))) ",
+                    "(@ListType.cons Nat x rho) (Nat.succ d0))) ",
                     "(KExpr.let_ (to_kexpr_at ty rho (Nat.succ d0)) ",
                     "(to_kexpr_at vv rho (Nat.succ d0)) ",
                     "(to_kexpr_at bb rho (Nat.succ (Nat.succ d0)))) ",
                     "(Eq.cong KExpr KExpr (fun (w : KExpr) => KExpr.let_ w ",
                     "(to_kexpr_at (impl_instantiate_at vv (ImplExpr.fvar x) d0) ",
-                    "(ListType.cons Nat x rho) d0) ",
+                    "(@ListType.cons Nat x rho) d0) ",
                     "(to_kexpr_at (impl_instantiate_at bb (ImplExpr.fvar x) (Nat.succ d0)) ",
-                    "(ListType.cons Nat x rho) (Nat.succ d0))) ",
+                    "(@ListType.cons Nat x rho) (Nat.succ d0))) ",
                     "(to_kexpr_at (impl_instantiate_at ty (ImplExpr.fvar x) d0) ",
-                    "(ListType.cons Nat x rho) d0) ",
+                    "(@ListType.cons Nat x rho) d0) ",
                     "(to_kexpr_at ty rho (Nat.succ d0)) rt) ",
                     "(Eq.trans KExpr ",
                     "(KExpr.let_ (to_kexpr_at ty rho (Nat.succ d0)) ",
                     "(to_kexpr_at (impl_instantiate_at vv (ImplExpr.fvar x) d0) ",
-                    "(ListType.cons Nat x rho) d0) ",
+                    "(@ListType.cons Nat x rho) d0) ",
                     "(to_kexpr_at (impl_instantiate_at bb (ImplExpr.fvar x) (Nat.succ d0)) ",
-                    "(ListType.cons Nat x rho) (Nat.succ d0))) ",
+                    "(@ListType.cons Nat x rho) (Nat.succ d0))) ",
                     "(KExpr.let_ (to_kexpr_at ty rho (Nat.succ d0)) ",
                     "(to_kexpr_at vv rho (Nat.succ d0)) ",
                     "(to_kexpr_at (impl_instantiate_at bb (ImplExpr.fvar x) (Nat.succ d0)) ",
-                    "(ListType.cons Nat x rho) (Nat.succ d0))) ",
+                    "(@ListType.cons Nat x rho) (Nat.succ d0))) ",
                     "(KExpr.let_ (to_kexpr_at ty rho (Nat.succ d0)) ",
                     "(to_kexpr_at vv rho (Nat.succ d0)) ",
                     "(to_kexpr_at bb rho (Nat.succ (Nat.succ d0)))) ",
                     "(Eq.cong KExpr KExpr (fun (w : KExpr) => KExpr.let_ ",
                     "(to_kexpr_at ty rho (Nat.succ d0)) w ",
                     "(to_kexpr_at (impl_instantiate_at bb (ImplExpr.fvar x) (Nat.succ d0)) ",
-                    "(ListType.cons Nat x rho) (Nat.succ d0))) ",
+                    "(@ListType.cons Nat x rho) (Nat.succ d0))) ",
                     "(to_kexpr_at (impl_instantiate_at vv (ImplExpr.fvar x) d0) ",
-                    "(ListType.cons Nat x rho) d0) ",
+                    "(@ListType.cons Nat x rho) d0) ",
                     "(to_kexpr_at vv rho (Nat.succ d0)) rv) ",
                     "(Eq.cong KExpr KExpr (fun (w : KExpr) => KExpr.let_ ",
                     "(to_kexpr_at ty rho (Nat.succ d0)) ",
                     "(to_kexpr_at vv rho (Nat.succ d0)) w) ",
                     "(to_kexpr_at (impl_instantiate_at bb (ImplExpr.fvar x) (Nat.succ d0)) ",
-                    "(ListType.cons Nat x rho) (Nat.succ d0)) ",
+                    "(@ListType.cons Nat x rho) (Nat.succ d0)) ",
                     "(to_kexpr_at bb rho (Nat.succ (Nat.succ d0))) rb))) ",
                     // ── lit / mdata ─────────────────────────────────────────
                     "(fun (lt : ImplLit) (d0 : Nat) => ",
-                    "ImplLit.rec (fun (z : ImplLit) => Eq KExpr (impl_lit_to_kexpr z) ",
+                    "@ImplLit.rec (fun (z : ImplLit) => @Eq KExpr (impl_lit_to_kexpr z) ",
                     "(impl_lit_to_kexpr z)) ",
-                    "(fun (k : Nat) => Eq.refl KExpr (literal_nat k)) ",
-                    "(fun (k : Nat) => Eq.refl KExpr (literal_string k)) lt) ",
+                    "(fun (k : Nat) => @Eq.refl KExpr (literal_nat k)) ",
+                    "(fun (k : Nat) => @Eq.refl KExpr (literal_string k)) lt) ",
                     "(fun (e0 : ImplExpr) (d0 : Nat) (_se : ImplScoped x e0 d0) ",
-                    "(ri : Eq KExpr (to_kexpr_at (impl_instantiate_at e0 (ImplExpr.fvar x) d0) ",
-                    "(ListType.cons Nat x rho) d0) (to_kexpr_at e0 rho (Nat.succ d0))) => ri) ",
+                    "(ri : @Eq KExpr (to_kexpr_at (impl_instantiate_at e0 (ImplExpr.fvar x) d0) ",
+                    "(@ListType.cons Nat x rho) d0) (to_kexpr_at e0 rho (Nat.succ d0))) => ri) ",
                     "b d h"
                 )
                 .to_string(),
@@ -1111,36 +1111,36 @@ impl Specification {
             name: "sub_zero_lt_succ".to_string(),
             type_src: concat!(
                 "forall (d : Nat) (i : Nat), ",
-                "Eq Nat (Nat.sub d i) Nat.zero -> Lt d (Nat.succ i)"
+                "@Eq Nat (Nat.sub d i) Nat.zero -> Lt d (Nat.succ i)"
             )
             .to_string(),
             value_src: Some(
                 concat!(
                     "fun (d : Nat) => ",
-                    "Nat.rec (fun (d0 : Nat) => forall (i : Nat), ",
-                    "Eq Nat (Nat.sub d0 i) Nat.zero -> Lt d0 (Nat.succ i)) ",
+                    "@Nat.rec (fun (d0 : Nat) => forall (i : Nat), ",
+                    "@Eq Nat (Nat.sub d0 i) Nat.zero -> Lt d0 (Nat.succ i)) ",
                     // d = 0 : 0 < succ i unconditionally.
-                    "(fun (i : Nat) (_h : Eq Nat (Nat.sub Nat.zero i) Nat.zero) => ",
+                    "(fun (i : Nat) (_h : @Eq Nat (Nat.sub Nat.zero i) Nat.zero) => ",
                     "Lt.zero_lt_succ i) ",
                     // d = succ d'
                     "(fun (dp : Nat) (ih : forall (i : Nat), ",
-                    "Eq Nat (Nat.sub dp i) Nat.zero -> Lt dp (Nat.succ i)) => ",
-                    "Nat.rec (fun (i0 : Nat) => ",
-                    "Eq Nat (Nat.sub (Nat.succ dp) i0) Nat.zero -> ",
+                    "@Eq Nat (Nat.sub dp i) Nat.zero -> Lt dp (Nat.succ i)) => ",
+                    "@Nat.rec (fun (i0 : Nat) => ",
+                    "@Eq Nat (Nat.sub (Nat.succ dp) i0) Nat.zero -> ",
                     "Lt (Nat.succ dp) (Nat.succ i0)) ",
                     // i = 0 : succ dp - 0 = succ dp, so the hypothesis says
                     // succ dp = 0. Absurd, and nat_zero_ne_succ is Type-valued
                     // precisely so it can discharge a Lt goal.
-                    "(fun (h0 : Eq Nat (Nat.sub (Nat.succ dp) Nat.zero) Nat.zero) => ",
+                    "(fun (h0 : @Eq Nat (Nat.sub (Nat.succ dp) Nat.zero) Nat.zero) => ",
                     "nat_zero_ne_succ dp (Lt (Nat.succ dp) (Nat.succ Nat.zero)) ",
                     "(Eq.symm Nat (Nat.succ dp) Nat.zero ",
                     "(Eq.trans Nat (Nat.succ dp) (Nat.sub (Nat.succ dp) Nat.zero) Nat.zero ",
                     "(Eq.symm Nat (Nat.sub (Nat.succ dp) Nat.zero) (Nat.succ dp) ",
                     "(nat_sub_zero_right (Nat.succ dp))) h0))) ",
                     // i = succ i' : peel both and recurse.
-                    "(fun (ip : Nat) (_ihi : Eq Nat (Nat.sub (Nat.succ dp) ip) Nat.zero -> ",
+                    "(fun (ip : Nat) (_ihi : @Eq Nat (Nat.sub (Nat.succ dp) ip) Nat.zero -> ",
                     "Lt (Nat.succ dp) (Nat.succ ip)) => ",
-                    "fun (hs : Eq Nat (Nat.sub (Nat.succ dp) (Nat.succ ip)) Nat.zero) => ",
+                    "fun (hs : @Eq Nat (Nat.sub (Nat.succ dp) (Nat.succ ip)) Nat.zero) => ",
                     "Lt.succ_lt_succ dp (Nat.succ ip) ",
                     "(ih ip (Eq.trans Nat (Nat.sub dp ip) ",
                     "(Nat.sub (Nat.succ dp) (Nat.succ ip)) Nat.zero ",
@@ -1194,43 +1194,43 @@ impl Specification {
             type_src: concat!(
                 "forall (e : ImplExpr) (d : Nat), ImplLC e d -> ",
                 "forall (c : Nat), Le d c -> forall (amount : Nat), ",
-                "Eq ImplExpr (impl_lift_at e c amount) e"
+                "@Eq ImplExpr (impl_lift_at e c amount) e"
             )
             .to_string(),
             value_src: Some(
                 concat!(
                     "fun (e : ImplExpr) (d : Nat) (h : ImplLC e d) => ",
-                    "ImplLC.rec ",
+                    "@ImplLC.rec ",
                     "(fun (e0 : ImplExpr) (d0 : Nat) (_h0 : ImplLC e0 d0) => ",
                     "forall (c : Nat), Le d0 c -> forall (amount : Nat), ",
-                    "Eq ImplExpr (impl_lift_at e0 c amount) e0) ",
+                    "@Eq ImplExpr (impl_lift_at e0 c amount) e0) ",
                     // bvar : i < d <= c, so the cutoff test keeps it.
                     "(fun (i : Nat) (d0 : Nat) (hlt : Lt i d0) => ",
                     "fun (c : Nat) (hle : Le d0 c) (amount : Nat) => ",
-                    "Eq.substType Nat (fun (s : Nat) => Eq ImplExpr ",
-                    "(Nat.rec (fun (_m : Nat) => ImplExpr) ",
+                    "Eq.substType Nat (fun (s : Nat) => @Eq ImplExpr ",
+                    "(@Nat.rec (fun (_m : Nat) => ImplExpr) ",
                     "(ImplExpr.bvar (Nat.add i amount)) ",
                     "(fun (_q : Nat) (_r : ImplExpr) => ImplExpr.bvar i) s) (ImplExpr.bvar i)) ",
                     "(Nat.succ (Nat.sub (Nat.sub c i) (Nat.succ Nat.zero))) (Nat.sub c i) ",
                     "(Eq.symm Nat (Nat.sub c i) ",
                     "(Nat.succ (Nat.sub (Nat.sub c i) (Nat.succ Nat.zero))) ",
                     "(lt_sub_succ i c (lt_of_lt_of_le i d0 c hlt hle))) ",
-                    "(Eq.refl ImplExpr (ImplExpr.bvar i))) ",
+                    "(@Eq.refl ImplExpr (ImplExpr.bvar i))) ",
                     // fvar / sort / const : leaves the lift never touches.
                     "(fun (y : Nat) (d0 : Nat) (c : Nat) (_hle : Le d0 c) (amount : Nat) => ",
-                    "Eq.refl ImplExpr (ImplExpr.fvar y)) ",
+                    "@Eq.refl ImplExpr (ImplExpr.fvar y)) ",
                     "(fun (l : Level) (d0 : Nat) (c : Nat) (_hle : Le d0 c) (amount : Nat) => ",
-                    "Eq.refl ImplExpr (ImplExpr.sort l)) ",
+                    "@Eq.refl ImplExpr (ImplExpr.sort l)) ",
                     "(fun (nm : Name) (us : ListType Level) (d0 : Nat) (c : Nat) ",
                     "(_hle : Le d0 c) (amount : Nat) => ",
-                    "Eq.refl ImplExpr (ImplExpr.const nm us)) ",
+                    "@Eq.refl ImplExpr (ImplExpr.const nm us)) ",
                     // app
                     "(fun (f : ImplExpr) (a : ImplExpr) (d0 : Nat) ",
                     "(_lf : ImplLC f d0) (_la : ImplLC a d0) ",
                     "(rf : forall (c : Nat), Le d0 c -> forall (amount : Nat), ",
-                    "Eq ImplExpr (impl_lift_at f c amount) f) ",
+                    "@Eq ImplExpr (impl_lift_at f c amount) f) ",
                     "(ra : forall (c : Nat), Le d0 c -> forall (amount : Nat), ",
-                    "Eq ImplExpr (impl_lift_at a c amount) a) ",
+                    "@Eq ImplExpr (impl_lift_at a c amount) a) ",
                     "(c : Nat) (hle : Le d0 c) (amount : Nat) => ",
                     "Eq.trans ImplExpr ",
                     "(ImplExpr.app (impl_lift_at f c amount) (impl_lift_at a c amount)) ",
@@ -1245,9 +1245,9 @@ impl Specification {
                     "(fun (bd : BinderData) (ty : ImplExpr) (bb : ImplExpr) (d0 : Nat) ",
                     "(_lt : ImplLC ty d0) (_lb : ImplLC bb (Nat.succ d0)) ",
                     "(rt : forall (c : Nat), Le d0 c -> forall (amount : Nat), ",
-                    "Eq ImplExpr (impl_lift_at ty c amount) ty) ",
+                    "@Eq ImplExpr (impl_lift_at ty c amount) ty) ",
                     "(rb : forall (c : Nat), Le (Nat.succ d0) c -> forall (amount : Nat), ",
-                    "Eq ImplExpr (impl_lift_at bb c amount) bb) ",
+                    "@Eq ImplExpr (impl_lift_at bb c amount) bb) ",
                     "(c : Nat) (hle : Le d0 c) (amount : Nat) => ",
                     "Eq.trans ImplExpr ",
                     "(ImplExpr.lam bd (impl_lift_at ty c amount) ",
@@ -1264,9 +1264,9 @@ impl Specification {
                     "(fun (bd : BinderData) (ty : ImplExpr) (bb : ImplExpr) (d0 : Nat) ",
                     "(_lt : ImplLC ty d0) (_lb : ImplLC bb (Nat.succ d0)) ",
                     "(rt : forall (c : Nat), Le d0 c -> forall (amount : Nat), ",
-                    "Eq ImplExpr (impl_lift_at ty c amount) ty) ",
+                    "@Eq ImplExpr (impl_lift_at ty c amount) ty) ",
                     "(rb : forall (c : Nat), Le (Nat.succ d0) c -> forall (amount : Nat), ",
-                    "Eq ImplExpr (impl_lift_at bb c amount) bb) ",
+                    "@Eq ImplExpr (impl_lift_at bb c amount) bb) ",
                     "(c : Nat) (hle : Le d0 c) (amount : Nat) => ",
                     "Eq.trans ImplExpr ",
                     "(ImplExpr.pi bd (impl_lift_at ty c amount) ",
@@ -1283,11 +1283,11 @@ impl Specification {
                     "(fun (nm : Name) (ty : ImplExpr) (vv : ImplExpr) (bb : ImplExpr) (d0 : Nat) ",
                     "(_lt : ImplLC ty d0) (_lv : ImplLC vv d0) (_lb : ImplLC bb (Nat.succ d0)) ",
                     "(rt : forall (c : Nat), Le d0 c -> forall (amount : Nat), ",
-                    "Eq ImplExpr (impl_lift_at ty c amount) ty) ",
+                    "@Eq ImplExpr (impl_lift_at ty c amount) ty) ",
                     "(rv : forall (c : Nat), Le d0 c -> forall (amount : Nat), ",
-                    "Eq ImplExpr (impl_lift_at vv c amount) vv) ",
+                    "@Eq ImplExpr (impl_lift_at vv c amount) vv) ",
                     "(rb : forall (c : Nat), Le (Nat.succ d0) c -> forall (amount : Nat), ",
-                    "Eq ImplExpr (impl_lift_at bb c amount) bb) ",
+                    "@Eq ImplExpr (impl_lift_at bb c amount) bb) ",
                     "(c : Nat) (hle : Le d0 c) (amount : Nat) => ",
                     "Eq.trans ImplExpr ",
                     "(ImplExpr.let_ nm (impl_lift_at ty c amount) (impl_lift_at vv c amount) ",
@@ -1313,10 +1313,10 @@ impl Specification {
                     "(rb (Nat.succ c) (le_succ_succ d0 c hle) amount)))) ",
                     // lit / mdata
                     "(fun (lt : ImplLit) (d0 : Nat) (c : Nat) (_hle : Le d0 c) (amount : Nat) => ",
-                    "Eq.refl ImplExpr (ImplExpr.lit lt)) ",
+                    "@Eq.refl ImplExpr (ImplExpr.lit lt)) ",
                     "(fun (e0 : ImplExpr) (d0 : Nat) (_le : ImplLC e0 d0) ",
                     "(ri : forall (c : Nat), Le d0 c -> forall (amount : Nat), ",
-                    "Eq ImplExpr (impl_lift_at e0 c amount) e0) ",
+                    "@Eq ImplExpr (impl_lift_at e0 c amount) e0) ",
                     "(c : Nat) (hle : Le d0 c) (amount : Nat) => ",
                     "Eq.cong ImplExpr ImplExpr (fun (w : ImplExpr) => ImplExpr.mdata w) ",
                     "(impl_lift_at e0 c amount) e0 (ri c hle amount)) ",
@@ -1376,37 +1376,37 @@ impl Specification {
             type_src: concat!(
                 "forall (v : ImplExpr), ImplLC v Nat.zero -> ",
                 "forall (x : Nat) (bt : ImplExpr) (d : Nat), ",
-                "Eq ImplExpr (impl_subst_fvar bt x v) ",
+                "@Eq ImplExpr (impl_subst_fvar bt x v) ",
                 "(impl_instantiate_at (impl_abstract_at bt x d) v d)"
             )
             .to_string(),
             value_src: Some(
                 concat!(
                     "fun (v : ImplExpr) (hlc : ImplLC v Nat.zero) (x : Nat) (bt : ImplExpr) => ",
-                    "ImplExpr.rec ",
-                    "(fun (z : ImplExpr) => forall (d : Nat), Eq ImplExpr ",
+                    "@ImplExpr.rec ",
+                    "(fun (z : ImplExpr) => forall (d : Nat), @Eq ImplExpr ",
                     "(impl_subst_fvar z x v) ",
                     "(impl_instantiate_at (impl_abstract_at z x d) v d)) ",
                     // ── bvar — abstraction's shift-up and instantiation's
                     // shift-down cancel at EVERY index, so no scoping on bt.
                     "(fun (i : Nat) (d : Nat) => ",
-                    "Nat.rec (fun (s : Nat) => Eq Nat (Nat.sub d i) s -> Eq ImplExpr ",
+                    "@Nat.rec (fun (s : Nat) => @Eq Nat (Nat.sub d i) s -> @Eq ImplExpr ",
                     "(ImplExpr.bvar i) ",
-                    "(impl_instantiate_at (Nat.rec (fun (_m : Nat) => ImplExpr) ",
+                    "(impl_instantiate_at (@Nat.rec (fun (_m : Nat) => ImplExpr) ",
                     "(ImplExpr.bvar (Nat.succ i)) ",
                     "(fun (_q : Nat) (_r : ImplExpr) => ImplExpr.bvar i) s) v d)) ",
                     // s = 0 : i >= d, so abstraction bumped it to succ i and
                     // instantiation must bring it back down.
-                    "(fun (hz : Eq Nat (Nat.sub d i) Nat.zero) => ",
-                    "Eq.substType Nat (fun (t : Nat) => Eq ImplExpr (ImplExpr.bvar i) ",
-                    "(Nat.rec (fun (_m : Nat) => ImplExpr) ",
+                    "(fun (hz : @Eq Nat (Nat.sub d i) Nat.zero) => ",
+                    "Eq.substType Nat (fun (t : Nat) => @Eq ImplExpr (ImplExpr.bvar i) ",
+                    "(@Nat.rec (fun (_m : Nat) => ImplExpr) ",
                     "(impl_inst_bvar_geq (Nat.succ i) d v) ",
                     "(fun (_q : Nat) (_r : ImplExpr) => ImplExpr.bvar (Nat.succ i)) t)) ",
                     "Nat.zero (Nat.sub d (Nat.succ i)) ",
                     "(Eq.symm Nat (Nat.sub d (Nat.succ i)) Nat.zero ",
                     "(nat_sub_zero_implies_sub_succ_zero d i hz)) ",
-                    "(Eq.substType Nat (fun (u : Nat) => Eq ImplExpr (ImplExpr.bvar i) ",
-                    "(Nat.rec (fun (_m : Nat) => ImplExpr) (impl_lift_at v Nat.zero d) ",
+                    "(Eq.substType Nat (fun (u : Nat) => @Eq ImplExpr (ImplExpr.bvar i) ",
+                    "(@Nat.rec (fun (_m : Nat) => ImplExpr) (impl_lift_at v Nat.zero d) ",
                     "(fun (_q : Nat) (_r : ImplExpr) => ",
                     "ImplExpr.bvar (Nat.sub (Nat.succ i) (Nat.succ Nat.zero))) u)) ",
                     "(Nat.succ (Nat.sub (Nat.sub (Nat.succ i) d) (Nat.succ Nat.zero))) ",
@@ -1420,56 +1420,56 @@ impl Specification {
                     "(nat_sub_succ_one i))))) ",
                     // s = succ : i < d, so abstraction left it alone and so
                     // does instantiation — the SAME scrutinee decides both.
-                    "(fun (sp : Nat) (_ihs : Eq Nat (Nat.sub d i) sp -> Eq ImplExpr ",
+                    "(fun (sp : Nat) (_ihs : @Eq Nat (Nat.sub d i) sp -> @Eq ImplExpr ",
                     "(ImplExpr.bvar i) ",
-                    "(impl_instantiate_at (Nat.rec (fun (_m : Nat) => ImplExpr) ",
+                    "(impl_instantiate_at (@Nat.rec (fun (_m : Nat) => ImplExpr) ",
                     "(ImplExpr.bvar (Nat.succ i)) ",
                     "(fun (_q : Nat) (_r : ImplExpr) => ImplExpr.bvar i) sp) v d)) => ",
-                    "fun (hs : Eq Nat (Nat.sub d i) (Nat.succ sp)) => ",
-                    "Eq.substType Nat (fun (t : Nat) => Eq ImplExpr (ImplExpr.bvar i) ",
-                    "(Nat.rec (fun (_m : Nat) => ImplExpr) (impl_inst_bvar_geq i d v) ",
+                    "fun (hs : @Eq Nat (Nat.sub d i) (Nat.succ sp)) => ",
+                    "Eq.substType Nat (fun (t : Nat) => @Eq ImplExpr (ImplExpr.bvar i) ",
+                    "(@Nat.rec (fun (_m : Nat) => ImplExpr) (impl_inst_bvar_geq i d v) ",
                     "(fun (_q : Nat) (_r : ImplExpr) => ImplExpr.bvar i) t)) ",
                     "(Nat.succ sp) (Nat.sub d i) ",
                     "(Eq.symm Nat (Nat.sub d i) (Nat.succ sp) hs) ",
-                    "(Eq.refl ImplExpr (ImplExpr.bvar i))) ",
-                    "(Nat.sub d i) (Eq.refl Nat (Nat.sub d i))) ",
+                    "(@Eq.refl ImplExpr (ImplExpr.bvar i))) ",
+                    "(Nat.sub d i) (@Eq.refl Nat (Nat.sub d i))) ",
                     // ── fvar — BOTH sides scrutinise the same nat_eqb y x, so
                     // one Bool.rec with it abstracted in both places.
                     "(fun (y : Nat) (d : Nat) => ",
-                    "Bool.rec (fun (bb : Bool) => Eq Bool (nat_eqb y x) bb -> Eq ImplExpr ",
-                    "(Bool.rec (fun (_c : Bool) => ImplExpr) (ImplExpr.fvar y) v bb) ",
-                    "(impl_instantiate_at (Bool.rec (fun (_c : Bool) => ImplExpr) ",
+                    "@Bool.rec (fun (bb : Bool) => @Eq Bool (nat_eqb y x) bb -> @Eq ImplExpr ",
+                    "(@Bool.rec (fun (_c : Bool) => ImplExpr) (ImplExpr.fvar y) v bb) ",
+                    "(impl_instantiate_at (@Bool.rec (fun (_c : Bool) => ImplExpr) ",
                     "(ImplExpr.fvar y) (ImplExpr.bvar d) bb) v d)) ",
                     // bb = false : untouched on both sides.
-                    "(fun (_hf : Eq Bool (nat_eqb y x) Bool.false) => ",
-                    "Eq.refl ImplExpr (ImplExpr.fvar y)) ",
+                    "(fun (_hf : @Eq Bool (nat_eqb y x) Bool.false) => ",
+                    "@Eq.refl ImplExpr (ImplExpr.fvar y)) ",
                     // bb = true : abstraction put a bvar d here, and
                     // instantiating at depth d substitutes the LIFTED value —
                     // which is v itself, by impl_lift_lc.
-                    "(fun (_ht : Eq Bool (nat_eqb y x) Bool.true) => ",
-                    "Eq.substType Nat (fun (t : Nat) => Eq ImplExpr v ",
-                    "(Nat.rec (fun (_m : Nat) => ImplExpr) (impl_inst_bvar_geq d d v) ",
+                    "(fun (_ht : @Eq Bool (nat_eqb y x) Bool.true) => ",
+                    "Eq.substType Nat (fun (t : Nat) => @Eq ImplExpr v ",
+                    "(@Nat.rec (fun (_m : Nat) => ImplExpr) (impl_inst_bvar_geq d d v) ",
                     "(fun (_q : Nat) (_r : ImplExpr) => ImplExpr.bvar d) t)) ",
                     "Nat.zero (Nat.sub d d) ",
                     "(Eq.symm Nat (Nat.sub d d) Nat.zero (nat_sub_self d)) ",
-                    "(Eq.substType Nat (fun (u : Nat) => Eq ImplExpr v ",
-                    "(Nat.rec (fun (_m : Nat) => ImplExpr) (impl_lift_at v Nat.zero d) ",
+                    "(Eq.substType Nat (fun (u : Nat) => @Eq ImplExpr v ",
+                    "(@Nat.rec (fun (_m : Nat) => ImplExpr) (impl_lift_at v Nat.zero d) ",
                     "(fun (_q : Nat) (_r : ImplExpr) => ",
                     "ImplExpr.bvar (Nat.sub d (Nat.succ Nat.zero))) u)) ",
                     "Nat.zero (Nat.sub d d) ",
                     "(Eq.symm Nat (Nat.sub d d) Nat.zero (nat_sub_self d)) ",
                     "(Eq.symm ImplExpr (impl_lift_at v Nat.zero d) v ",
                     "(impl_lift_lc v Nat.zero hlc Nat.zero (Le.refl Nat.zero) d)))) ",
-                    "(nat_eqb y x) (Eq.refl Bool (nat_eqb y x))) ",
+                    "(nat_eqb y x) (@Eq.refl Bool (nat_eqb y x))) ",
                     // ── sort / const ────────────────────────────────────────
-                    "(fun (l : Level) (d : Nat) => Eq.refl ImplExpr (ImplExpr.sort l)) ",
+                    "(fun (l : Level) (d : Nat) => @Eq.refl ImplExpr (ImplExpr.sort l)) ",
                     "(fun (nm : Name) (us : ListType Level) (d : Nat) => ",
-                    "Eq.refl ImplExpr (ImplExpr.const nm us)) ",
+                    "@Eq.refl ImplExpr (ImplExpr.const nm us)) ",
                     // ── app ─────────────────────────────────────────────────
                     "(fun (f : ImplExpr) (a : ImplExpr) ",
-                    "(rf : forall (d : Nat), Eq ImplExpr (impl_subst_fvar f x v) ",
+                    "(rf : forall (d : Nat), @Eq ImplExpr (impl_subst_fvar f x v) ",
                     "(impl_instantiate_at (impl_abstract_at f x d) v d)) ",
-                    "(ra : forall (d : Nat), Eq ImplExpr (impl_subst_fvar a x v) ",
+                    "(ra : forall (d : Nat), @Eq ImplExpr (impl_subst_fvar a x v) ",
                     "(impl_instantiate_at (impl_abstract_at a x d) v d)) (d : Nat) => ",
                     "Eq.trans ImplExpr ",
                     "(ImplExpr.app (impl_subst_fvar f x v) (impl_subst_fvar a x v)) ",
@@ -1489,9 +1489,9 @@ impl Specification {
                     // is used at succ d while the LHS is unchanged. That is
                     // exactly why the statement generalises over d.
                     "(fun (bd : BinderData) (ty : ImplExpr) (bb : ImplExpr) ",
-                    "(rt : forall (d : Nat), Eq ImplExpr (impl_subst_fvar ty x v) ",
+                    "(rt : forall (d : Nat), @Eq ImplExpr (impl_subst_fvar ty x v) ",
                     "(impl_instantiate_at (impl_abstract_at ty x d) v d)) ",
-                    "(rb : forall (d : Nat), Eq ImplExpr (impl_subst_fvar bb x v) ",
+                    "(rb : forall (d : Nat), @Eq ImplExpr (impl_subst_fvar bb x v) ",
                     "(impl_instantiate_at (impl_abstract_at bb x d) v d)) (d : Nat) => ",
                     "Eq.trans ImplExpr ",
                     "(ImplExpr.lam bd (impl_subst_fvar ty x v) (impl_subst_fvar bb x v)) ",
@@ -1510,9 +1510,9 @@ impl Specification {
                     "(rb (Nat.succ d)))) ",
                     // ── pi ──────────────────────────────────────────────────
                     "(fun (bd : BinderData) (ty : ImplExpr) (bb : ImplExpr) ",
-                    "(rt : forall (d : Nat), Eq ImplExpr (impl_subst_fvar ty x v) ",
+                    "(rt : forall (d : Nat), @Eq ImplExpr (impl_subst_fvar ty x v) ",
                     "(impl_instantiate_at (impl_abstract_at ty x d) v d)) ",
-                    "(rb : forall (d : Nat), Eq ImplExpr (impl_subst_fvar bb x v) ",
+                    "(rb : forall (d : Nat), @Eq ImplExpr (impl_subst_fvar bb x v) ",
                     "(impl_instantiate_at (impl_abstract_at bb x d) v d)) (d : Nat) => ",
                     "Eq.trans ImplExpr ",
                     "(ImplExpr.pi bd (impl_subst_fvar ty x v) (impl_subst_fvar bb x v)) ",
@@ -1531,11 +1531,11 @@ impl Specification {
                     "(rb (Nat.succ d)))) ",
                     // ── let_ ────────────────────────────────────────────────
                     "(fun (nm : Name) (ty : ImplExpr) (vv : ImplExpr) (bb : ImplExpr) ",
-                    "(rt : forall (d : Nat), Eq ImplExpr (impl_subst_fvar ty x v) ",
+                    "(rt : forall (d : Nat), @Eq ImplExpr (impl_subst_fvar ty x v) ",
                     "(impl_instantiate_at (impl_abstract_at ty x d) v d)) ",
-                    "(rv : forall (d : Nat), Eq ImplExpr (impl_subst_fvar vv x v) ",
+                    "(rv : forall (d : Nat), @Eq ImplExpr (impl_subst_fvar vv x v) ",
                     "(impl_instantiate_at (impl_abstract_at vv x d) v d)) ",
-                    "(rb : forall (d : Nat), Eq ImplExpr (impl_subst_fvar bb x v) ",
+                    "(rb : forall (d : Nat), @Eq ImplExpr (impl_subst_fvar bb x v) ",
                     "(impl_instantiate_at (impl_abstract_at bb x d) v d)) (d : Nat) => ",
                     "Eq.trans ImplExpr ",
                     "(ImplExpr.let_ nm (impl_subst_fvar ty x v) (impl_subst_fvar vv x v) ",
@@ -1570,9 +1570,9 @@ impl Specification {
                     "(impl_instantiate_at (impl_abstract_at bb x (Nat.succ d)) v (Nat.succ d)) ",
                     "(rb (Nat.succ d))))) ",
                     // ── lit / mdata ─────────────────────────────────────────
-                    "(fun (lt : ImplLit) (d : Nat) => Eq.refl ImplExpr (ImplExpr.lit lt)) ",
+                    "(fun (lt : ImplLit) (d : Nat) => @Eq.refl ImplExpr (ImplExpr.lit lt)) ",
                     "(fun (inner : ImplExpr) ",
-                    "(ri : forall (d : Nat), Eq ImplExpr (impl_subst_fvar inner x v) ",
+                    "(ri : forall (d : Nat), @Eq ImplExpr (impl_subst_fvar inner x v) ",
                     "(impl_instantiate_at (impl_abstract_at inner x d) v d)) (d : Nat) => ",
                     "Eq.cong ImplExpr ImplExpr (fun (w : ImplExpr) => ImplExpr.mdata w) ",
                     "(impl_subst_fvar inner x v) ",
@@ -1642,9 +1642,9 @@ impl Specification {
                 "ImplWhnfTo S (ImplExpr.sort l) -> ImplIsLe Tv ty -> ",
                 "TypingCtxConv tenvK Gk (to_kexpr ty rho) (to_kexpr S rho) -> ",
                 "TypingCtxConv tenvK Gk (to_kexpr v rho) (to_kexpr Tv rho) -> ",
-                "TypingCtxConv tenvK (ListType.cons KExpr (to_kexpr ty rho) Gk) ",
-                "(to_kexpr (impl_open b x) (ListType.cons Nat x rho)) ",
-                "(to_kexpr bt (ListType.cons Nat x rho)) -> ",
+                "TypingCtxConv tenvK (@ListType.cons KExpr (to_kexpr ty rho) Gk) ",
+                "(to_kexpr (impl_open b x) (@ListType.cons Nat x rho)) ",
+                "(to_kexpr bt (@ListType.cons Nat x rho)) -> ",
                 "TypingCtxConv tenvK Gk (to_kexpr (ImplExpr.let_ nm ty v b) rho) ",
                 "(to_kexpr (impl_subst_fvar bt x v) rho)"
             )
@@ -1659,9 +1659,9 @@ impl Specification {
                     "(hs : ImplWhnfTo S (ImplExpr.sort l)) (hle : ImplIsLe Tv ty) ",
                     "(ihty : TypingCtxConv tenvK Gk (to_kexpr ty rho) (to_kexpr S rho)) ",
                     "(ihv : TypingCtxConv tenvK Gk (to_kexpr v rho) (to_kexpr Tv rho)) ",
-                    "(ihb : TypingCtxConv tenvK (ListType.cons KExpr (to_kexpr ty rho) Gk) ",
-                    "(to_kexpr (impl_open b x) (ListType.cons Nat x rho)) ",
-                    "(to_kexpr bt (ListType.cons Nat x rho))) => ",
+                    "(ihb : TypingCtxConv tenvK (@ListType.cons KExpr (to_kexpr ty rho) Gk) ",
+                    "(to_kexpr (impl_open b x) (@ListType.cons Nat x rho)) ",
+                    "(to_kexpr bt (@ListType.cons Nat x rho))) => ",
                     "impl_sound_let tenvK Gk rho x nm ty v b S l Tv bt hs hle ihty ihv ihb ",
                     "(to_kexpr_open rho x b Nat.zero hsc) ",
                     "(to_kexpr_abstract rho x bt Nat.zero hlcbt) ",
@@ -1759,7 +1759,7 @@ impl Specification {
             type_src: concat!(
                 "forall (rho : ListType Nat) (x : Nat) (e : ImplExpr) (d : Nat), ",
                 "ImplLC e d -> ",
-                "Eq KExpr (to_kexpr_at e (ListType.cons Nat x rho) d) ",
+                "@Eq KExpr (to_kexpr_at e (@ListType.cons Nat x rho) d) ",
                 "(to_kexpr_at (impl_abstract_at e x d) rho (Nat.succ d))"
             )
             .to_string(),
@@ -1767,31 +1767,31 @@ impl Specification {
                 concat!(
                     "fun (rho : ListType Nat) (x : Nat) (e : ImplExpr) (d : Nat) ",
                     "(h : ImplLC e d) => ",
-                    "ImplLC.rec ",
-                    "(fun (e0 : ImplExpr) (d0 : Nat) (_h0 : ImplLC e0 d0) => Eq KExpr ",
-                    "(to_kexpr_at e0 (ListType.cons Nat x rho) d0) ",
+                    "@ImplLC.rec ",
+                    "(fun (e0 : ImplExpr) (d0 : Nat) (_h0 : ImplLC e0 d0) => @Eq KExpr ",
+                    "(to_kexpr_at e0 (@ListType.cons Nat x rho) d0) ",
                     "(to_kexpr_at (impl_abstract_at e0 x d0) rho (Nat.succ d0))) ",
                     // bvar: i < d, so impl_abstract_bvar leaves it alone.
                     "(fun (i : Nat) (d0 : Nat) (hlt : Lt i d0) => ",
-                    "Eq.substType Nat (fun (s : Nat) => Eq KExpr (KExpr.bvar i) ",
-                    "(to_kexpr_at (Nat.rec (fun (_m : Nat) => ImplExpr) ",
+                    "Eq.substType Nat (fun (s : Nat) => @Eq KExpr (KExpr.bvar i) ",
+                    "(to_kexpr_at (@Nat.rec (fun (_m : Nat) => ImplExpr) ",
                     "(ImplExpr.bvar (Nat.succ i)) ",
                     "(fun (_q : Nat) (_r : ImplExpr) => ImplExpr.bvar i) s) rho (Nat.succ d0))) ",
                     "(Nat.succ (Nat.sub (Nat.sub d0 i) (Nat.succ Nat.zero))) (Nat.sub d0 i) ",
                     "(Eq.symm Nat (Nat.sub d0 i) ",
                     "(Nat.succ (Nat.sub (Nat.sub d0 i) (Nat.succ Nat.zero))) ",
                     "(lt_sub_succ i d0 hlt)) ",
-                    "(Eq.refl KExpr (KExpr.bvar i))) ",
+                    "(@Eq.refl KExpr (KExpr.bvar i))) ",
                     // fvar: BOTH branches — abstraction is looking FOR x.
                     "(fun (y : Nat) (d0 : Nat) => ",
-                    "Bool.rec (fun (bb : Bool) => Eq Bool (nat_eqb y x) bb -> Eq KExpr ",
-                    "(KExpr.bvar (Nat.add (Bool.rec (fun (_c : Bool) => Nat) ",
+                    "@Bool.rec (fun (bb : Bool) => @Eq Bool (nat_eqb y x) bb -> @Eq KExpr ",
+                    "(KExpr.bvar (Nat.add (@Bool.rec (fun (_c : Bool) => Nat) ",
                     "(Nat.succ (rho_index rho y)) Nat.zero (nat_eqb x y)) d0)) ",
-                    "(to_kexpr_at (Bool.rec (fun (_c : Bool) => ImplExpr) (ImplExpr.fvar y) ",
+                    "(to_kexpr_at (@Bool.rec (fun (_c : Bool) => ImplExpr) (ImplExpr.fvar y) ",
                     "(ImplExpr.bvar d0) bb) rho (Nat.succ d0))) ",
-                    "(fun (hf : Eq Bool (nat_eqb y x) Bool.false) => ",
-                    "Eq.substType Bool (fun (cc : Bool) => Eq KExpr ",
-                    "(KExpr.bvar (Nat.add (Bool.rec (fun (_c : Bool) => Nat) ",
+                    "(fun (hf : @Eq Bool (nat_eqb y x) Bool.false) => ",
+                    "Eq.substType Bool (fun (cc : Bool) => @Eq KExpr ",
+                    "(KExpr.bvar (Nat.add (@Bool.rec (fun (_c : Bool) => Nat) ",
                     "(Nat.succ (rho_index rho y)) Nat.zero cc) d0)) ",
                     "(KExpr.bvar (Nat.add (rho_index rho y) (Nat.succ d0)))) ",
                     "Bool.false (nat_eqb x y) ",
@@ -1802,9 +1802,9 @@ impl Specification {
                     "(Nat.add (Nat.succ (rho_index rho y)) d0) ",
                     "(Nat.add (rho_index rho y) (Nat.succ d0)) ",
                     "(nat_succ_add (rho_index rho y) d0))) ",
-                    "(fun (ht : Eq Bool (nat_eqb y x) Bool.true) => ",
-                    "Eq.substType Bool (fun (cc : Bool) => Eq KExpr ",
-                    "(KExpr.bvar (Nat.add (Bool.rec (fun (_c : Bool) => Nat) ",
+                    "(fun (ht : @Eq Bool (nat_eqb y x) Bool.true) => ",
+                    "Eq.substType Bool (fun (cc : Bool) => @Eq KExpr ",
+                    "(KExpr.bvar (Nat.add (@Bool.rec (fun (_c : Bool) => Nat) ",
                     "(Nat.succ (rho_index rho y)) Nat.zero cc) d0)) (KExpr.bvar d0)) ",
                     "Bool.true (nat_eqb x y) ",
                     "(Eq.symm Bool (nat_eqb x y) Bool.true ",
@@ -1812,139 +1812,139 @@ impl Specification {
                     "(nat_eqb_symm x y) ht)) ",
                     "(Eq.cong Nat KExpr (fun (w : Nat) => KExpr.bvar w) ",
                     "(Nat.add Nat.zero d0) d0 (nat_zero_add d0))) ",
-                    "(nat_eqb y x) (Eq.refl Bool (nat_eqb y x))) ",
+                    "(nat_eqb y x) (@Eq.refl Bool (nat_eqb y x))) ",
                     // sort / const
-                    "(fun (l : Level) (d0 : Nat) => Eq.refl KExpr (KExpr.sort l)) ",
+                    "(fun (l : Level) (d0 : Nat) => @Eq.refl KExpr (KExpr.sort l)) ",
                     "(fun (nm : Name) (us : ListType Level) (d0 : Nat) => ",
-                    "Eq.refl KExpr (KExpr.const nm us)) ",
+                    "@Eq.refl KExpr (KExpr.const nm us)) ",
                     // app
                     "(fun (f : ImplExpr) (a : ImplExpr) (d0 : Nat) ",
                     "(_lf : ImplLC f d0) (_la : ImplLC a d0) ",
-                    "(rf : Eq KExpr (to_kexpr_at f (ListType.cons Nat x rho) d0) ",
+                    "(rf : @Eq KExpr (to_kexpr_at f (@ListType.cons Nat x rho) d0) ",
                     "(to_kexpr_at (impl_abstract_at f x d0) rho (Nat.succ d0))) ",
-                    "(ra : Eq KExpr (to_kexpr_at a (ListType.cons Nat x rho) d0) ",
+                    "(ra : @Eq KExpr (to_kexpr_at a (@ListType.cons Nat x rho) d0) ",
                     "(to_kexpr_at (impl_abstract_at a x d0) rho (Nat.succ d0))) => ",
                     "Eq.trans KExpr ",
-                    "(KExpr.app (to_kexpr_at f (ListType.cons Nat x rho) d0) ",
-                    "(to_kexpr_at a (ListType.cons Nat x rho) d0)) ",
+                    "(KExpr.app (to_kexpr_at f (@ListType.cons Nat x rho) d0) ",
+                    "(to_kexpr_at a (@ListType.cons Nat x rho) d0)) ",
                     "(KExpr.app (to_kexpr_at (impl_abstract_at f x d0) rho (Nat.succ d0)) ",
-                    "(to_kexpr_at a (ListType.cons Nat x rho) d0)) ",
+                    "(to_kexpr_at a (@ListType.cons Nat x rho) d0)) ",
                     "(KExpr.app (to_kexpr_at (impl_abstract_at f x d0) rho (Nat.succ d0)) ",
                     "(to_kexpr_at (impl_abstract_at a x d0) rho (Nat.succ d0))) ",
                     "(Eq.cong KExpr KExpr (fun (w : KExpr) => KExpr.app w ",
-                    "(to_kexpr_at a (ListType.cons Nat x rho) d0)) ",
-                    "(to_kexpr_at f (ListType.cons Nat x rho) d0) ",
+                    "(to_kexpr_at a (@ListType.cons Nat x rho) d0)) ",
+                    "(to_kexpr_at f (@ListType.cons Nat x rho) d0) ",
                     "(to_kexpr_at (impl_abstract_at f x d0) rho (Nat.succ d0)) rf) ",
                     "(Eq.cong KExpr KExpr (fun (w : KExpr) => KExpr.app ",
                     "(to_kexpr_at (impl_abstract_at f x d0) rho (Nat.succ d0)) w) ",
-                    "(to_kexpr_at a (ListType.cons Nat x rho) d0) ",
+                    "(to_kexpr_at a (@ListType.cons Nat x rho) d0) ",
                     "(to_kexpr_at (impl_abstract_at a x d0) rho (Nat.succ d0)) ra)) ",
                     // lam
                     "(fun (bd : BinderData) (ty : ImplExpr) (bb : ImplExpr) (d0 : Nat) ",
                     "(_lt : ImplLC ty d0) (_lb : ImplLC bb (Nat.succ d0)) ",
-                    "(rt : Eq KExpr (to_kexpr_at ty (ListType.cons Nat x rho) d0) ",
+                    "(rt : @Eq KExpr (to_kexpr_at ty (@ListType.cons Nat x rho) d0) ",
                     "(to_kexpr_at (impl_abstract_at ty x d0) rho (Nat.succ d0))) ",
-                    "(rb : Eq KExpr (to_kexpr_at bb (ListType.cons Nat x rho) (Nat.succ d0)) ",
+                    "(rb : @Eq KExpr (to_kexpr_at bb (@ListType.cons Nat x rho) (Nat.succ d0)) ",
                     "(to_kexpr_at (impl_abstract_at bb x (Nat.succ d0)) rho ",
                     "(Nat.succ (Nat.succ d0)))) => ",
                     "Eq.trans KExpr ",
-                    "(KExpr.lam (to_kexpr_at ty (ListType.cons Nat x rho) d0) ",
-                    "(to_kexpr_at bb (ListType.cons Nat x rho) (Nat.succ d0))) ",
+                    "(KExpr.lam (to_kexpr_at ty (@ListType.cons Nat x rho) d0) ",
+                    "(to_kexpr_at bb (@ListType.cons Nat x rho) (Nat.succ d0))) ",
                     "(KExpr.lam (to_kexpr_at (impl_abstract_at ty x d0) rho (Nat.succ d0)) ",
-                    "(to_kexpr_at bb (ListType.cons Nat x rho) (Nat.succ d0))) ",
+                    "(to_kexpr_at bb (@ListType.cons Nat x rho) (Nat.succ d0))) ",
                     "(KExpr.lam (to_kexpr_at (impl_abstract_at ty x d0) rho (Nat.succ d0)) ",
                     "(to_kexpr_at (impl_abstract_at bb x (Nat.succ d0)) rho ",
                     "(Nat.succ (Nat.succ d0)))) ",
                     "(Eq.cong KExpr KExpr (fun (w : KExpr) => KExpr.lam w ",
-                    "(to_kexpr_at bb (ListType.cons Nat x rho) (Nat.succ d0))) ",
-                    "(to_kexpr_at ty (ListType.cons Nat x rho) d0) ",
+                    "(to_kexpr_at bb (@ListType.cons Nat x rho) (Nat.succ d0))) ",
+                    "(to_kexpr_at ty (@ListType.cons Nat x rho) d0) ",
                     "(to_kexpr_at (impl_abstract_at ty x d0) rho (Nat.succ d0)) rt) ",
                     "(Eq.cong KExpr KExpr (fun (w : KExpr) => KExpr.lam ",
                     "(to_kexpr_at (impl_abstract_at ty x d0) rho (Nat.succ d0)) w) ",
-                    "(to_kexpr_at bb (ListType.cons Nat x rho) (Nat.succ d0)) ",
+                    "(to_kexpr_at bb (@ListType.cons Nat x rho) (Nat.succ d0)) ",
                     "(to_kexpr_at (impl_abstract_at bb x (Nat.succ d0)) rho ",
                     "(Nat.succ (Nat.succ d0))) rb)) ",
                     // pi
                     "(fun (bd : BinderData) (ty : ImplExpr) (bb : ImplExpr) (d0 : Nat) ",
                     "(_lt : ImplLC ty d0) (_lb : ImplLC bb (Nat.succ d0)) ",
-                    "(rt : Eq KExpr (to_kexpr_at ty (ListType.cons Nat x rho) d0) ",
+                    "(rt : @Eq KExpr (to_kexpr_at ty (@ListType.cons Nat x rho) d0) ",
                     "(to_kexpr_at (impl_abstract_at ty x d0) rho (Nat.succ d0))) ",
-                    "(rb : Eq KExpr (to_kexpr_at bb (ListType.cons Nat x rho) (Nat.succ d0)) ",
+                    "(rb : @Eq KExpr (to_kexpr_at bb (@ListType.cons Nat x rho) (Nat.succ d0)) ",
                     "(to_kexpr_at (impl_abstract_at bb x (Nat.succ d0)) rho ",
                     "(Nat.succ (Nat.succ d0)))) => ",
                     "Eq.trans KExpr ",
-                    "(KExpr.pi (to_kexpr_at ty (ListType.cons Nat x rho) d0) ",
-                    "(to_kexpr_at bb (ListType.cons Nat x rho) (Nat.succ d0))) ",
+                    "(KExpr.pi (to_kexpr_at ty (@ListType.cons Nat x rho) d0) ",
+                    "(to_kexpr_at bb (@ListType.cons Nat x rho) (Nat.succ d0))) ",
                     "(KExpr.pi (to_kexpr_at (impl_abstract_at ty x d0) rho (Nat.succ d0)) ",
-                    "(to_kexpr_at bb (ListType.cons Nat x rho) (Nat.succ d0))) ",
+                    "(to_kexpr_at bb (@ListType.cons Nat x rho) (Nat.succ d0))) ",
                     "(KExpr.pi (to_kexpr_at (impl_abstract_at ty x d0) rho (Nat.succ d0)) ",
                     "(to_kexpr_at (impl_abstract_at bb x (Nat.succ d0)) rho ",
                     "(Nat.succ (Nat.succ d0)))) ",
                     "(Eq.cong KExpr KExpr (fun (w : KExpr) => KExpr.pi w ",
-                    "(to_kexpr_at bb (ListType.cons Nat x rho) (Nat.succ d0))) ",
-                    "(to_kexpr_at ty (ListType.cons Nat x rho) d0) ",
+                    "(to_kexpr_at bb (@ListType.cons Nat x rho) (Nat.succ d0))) ",
+                    "(to_kexpr_at ty (@ListType.cons Nat x rho) d0) ",
                     "(to_kexpr_at (impl_abstract_at ty x d0) rho (Nat.succ d0)) rt) ",
                     "(Eq.cong KExpr KExpr (fun (w : KExpr) => KExpr.pi ",
                     "(to_kexpr_at (impl_abstract_at ty x d0) rho (Nat.succ d0)) w) ",
-                    "(to_kexpr_at bb (ListType.cons Nat x rho) (Nat.succ d0)) ",
+                    "(to_kexpr_at bb (@ListType.cons Nat x rho) (Nat.succ d0)) ",
                     "(to_kexpr_at (impl_abstract_at bb x (Nat.succ d0)) rho ",
                     "(Nat.succ (Nat.succ d0))) rb)) ",
                     // let_
                     "(fun (nm : Name) (ty : ImplExpr) (vv : ImplExpr) (bb : ImplExpr) (d0 : Nat) ",
                     "(_lt : ImplLC ty d0) (_lv : ImplLC vv d0) (_lb : ImplLC bb (Nat.succ d0)) ",
-                    "(rt : Eq KExpr (to_kexpr_at ty (ListType.cons Nat x rho) d0) ",
+                    "(rt : @Eq KExpr (to_kexpr_at ty (@ListType.cons Nat x rho) d0) ",
                     "(to_kexpr_at (impl_abstract_at ty x d0) rho (Nat.succ d0))) ",
-                    "(rv : Eq KExpr (to_kexpr_at vv (ListType.cons Nat x rho) d0) ",
+                    "(rv : @Eq KExpr (to_kexpr_at vv (@ListType.cons Nat x rho) d0) ",
                     "(to_kexpr_at (impl_abstract_at vv x d0) rho (Nat.succ d0))) ",
-                    "(rb : Eq KExpr (to_kexpr_at bb (ListType.cons Nat x rho) (Nat.succ d0)) ",
+                    "(rb : @Eq KExpr (to_kexpr_at bb (@ListType.cons Nat x rho) (Nat.succ d0)) ",
                     "(to_kexpr_at (impl_abstract_at bb x (Nat.succ d0)) rho ",
                     "(Nat.succ (Nat.succ d0)))) => ",
                     "Eq.trans KExpr ",
-                    "(KExpr.let_ (to_kexpr_at ty (ListType.cons Nat x rho) d0) ",
-                    "(to_kexpr_at vv (ListType.cons Nat x rho) d0) ",
-                    "(to_kexpr_at bb (ListType.cons Nat x rho) (Nat.succ d0))) ",
+                    "(KExpr.let_ (to_kexpr_at ty (@ListType.cons Nat x rho) d0) ",
+                    "(to_kexpr_at vv (@ListType.cons Nat x rho) d0) ",
+                    "(to_kexpr_at bb (@ListType.cons Nat x rho) (Nat.succ d0))) ",
                     "(KExpr.let_ (to_kexpr_at (impl_abstract_at ty x d0) rho (Nat.succ d0)) ",
-                    "(to_kexpr_at vv (ListType.cons Nat x rho) d0) ",
-                    "(to_kexpr_at bb (ListType.cons Nat x rho) (Nat.succ d0))) ",
+                    "(to_kexpr_at vv (@ListType.cons Nat x rho) d0) ",
+                    "(to_kexpr_at bb (@ListType.cons Nat x rho) (Nat.succ d0))) ",
                     "(KExpr.let_ (to_kexpr_at (impl_abstract_at ty x d0) rho (Nat.succ d0)) ",
                     "(to_kexpr_at (impl_abstract_at vv x d0) rho (Nat.succ d0)) ",
                     "(to_kexpr_at (impl_abstract_at bb x (Nat.succ d0)) rho ",
                     "(Nat.succ (Nat.succ d0)))) ",
                     "(Eq.cong KExpr KExpr (fun (w : KExpr) => KExpr.let_ w ",
-                    "(to_kexpr_at vv (ListType.cons Nat x rho) d0) ",
-                    "(to_kexpr_at bb (ListType.cons Nat x rho) (Nat.succ d0))) ",
-                    "(to_kexpr_at ty (ListType.cons Nat x rho) d0) ",
+                    "(to_kexpr_at vv (@ListType.cons Nat x rho) d0) ",
+                    "(to_kexpr_at bb (@ListType.cons Nat x rho) (Nat.succ d0))) ",
+                    "(to_kexpr_at ty (@ListType.cons Nat x rho) d0) ",
                     "(to_kexpr_at (impl_abstract_at ty x d0) rho (Nat.succ d0)) rt) ",
                     "(Eq.trans KExpr ",
                     "(KExpr.let_ (to_kexpr_at (impl_abstract_at ty x d0) rho (Nat.succ d0)) ",
-                    "(to_kexpr_at vv (ListType.cons Nat x rho) d0) ",
-                    "(to_kexpr_at bb (ListType.cons Nat x rho) (Nat.succ d0))) ",
+                    "(to_kexpr_at vv (@ListType.cons Nat x rho) d0) ",
+                    "(to_kexpr_at bb (@ListType.cons Nat x rho) (Nat.succ d0))) ",
                     "(KExpr.let_ (to_kexpr_at (impl_abstract_at ty x d0) rho (Nat.succ d0)) ",
                     "(to_kexpr_at (impl_abstract_at vv x d0) rho (Nat.succ d0)) ",
-                    "(to_kexpr_at bb (ListType.cons Nat x rho) (Nat.succ d0))) ",
+                    "(to_kexpr_at bb (@ListType.cons Nat x rho) (Nat.succ d0))) ",
                     "(KExpr.let_ (to_kexpr_at (impl_abstract_at ty x d0) rho (Nat.succ d0)) ",
                     "(to_kexpr_at (impl_abstract_at vv x d0) rho (Nat.succ d0)) ",
                     "(to_kexpr_at (impl_abstract_at bb x (Nat.succ d0)) rho ",
                     "(Nat.succ (Nat.succ d0)))) ",
                     "(Eq.cong KExpr KExpr (fun (w : KExpr) => KExpr.let_ ",
                     "(to_kexpr_at (impl_abstract_at ty x d0) rho (Nat.succ d0)) w ",
-                    "(to_kexpr_at bb (ListType.cons Nat x rho) (Nat.succ d0))) ",
-                    "(to_kexpr_at vv (ListType.cons Nat x rho) d0) ",
+                    "(to_kexpr_at bb (@ListType.cons Nat x rho) (Nat.succ d0))) ",
+                    "(to_kexpr_at vv (@ListType.cons Nat x rho) d0) ",
                     "(to_kexpr_at (impl_abstract_at vv x d0) rho (Nat.succ d0)) rv) ",
                     "(Eq.cong KExpr KExpr (fun (w : KExpr) => KExpr.let_ ",
                     "(to_kexpr_at (impl_abstract_at ty x d0) rho (Nat.succ d0)) ",
                     "(to_kexpr_at (impl_abstract_at vv x d0) rho (Nat.succ d0)) w) ",
-                    "(to_kexpr_at bb (ListType.cons Nat x rho) (Nat.succ d0)) ",
+                    "(to_kexpr_at bb (@ListType.cons Nat x rho) (Nat.succ d0)) ",
                     "(to_kexpr_at (impl_abstract_at bb x (Nat.succ d0)) rho ",
                     "(Nat.succ (Nat.succ d0))) rb))) ",
                     // lit / mdata
                     "(fun (lt : ImplLit) (d0 : Nat) => ",
-                    "ImplLit.rec (fun (z : ImplLit) => Eq KExpr (impl_lit_to_kexpr z) ",
+                    "@ImplLit.rec (fun (z : ImplLit) => @Eq KExpr (impl_lit_to_kexpr z) ",
                     "(impl_lit_to_kexpr z)) ",
-                    "(fun (k : Nat) => Eq.refl KExpr (literal_nat k)) ",
-                    "(fun (k : Nat) => Eq.refl KExpr (literal_string k)) lt) ",
+                    "(fun (k : Nat) => @Eq.refl KExpr (literal_nat k)) ",
+                    "(fun (k : Nat) => @Eq.refl KExpr (literal_string k)) lt) ",
                     "(fun (e0 : ImplExpr) (d0 : Nat) (_le : ImplLC e0 d0) ",
-                    "(ri : Eq KExpr (to_kexpr_at e0 (ListType.cons Nat x rho) d0) ",
+                    "(ri : @Eq KExpr (to_kexpr_at e0 (@ListType.cons Nat x rho) d0) ",
                     "(to_kexpr_at (impl_abstract_at e0 x d0) rho (Nat.succ d0))) => ri) ",
                     "e d h"
                 )
@@ -2002,9 +2002,9 @@ impl Specification {
                 "ImplScoped x b Nat.zero -> ImplLC bt Nat.zero -> ",
                 "ImplWhnfTo S (ImplExpr.sort l) -> ",
                 "TypingCtxConv tenvK Gk (to_kexpr A rho) (to_kexpr S rho) -> ",
-                "TypingCtxConv tenvK (ListType.cons KExpr (to_kexpr A rho) Gk) ",
-                "(to_kexpr (impl_open b x) (ListType.cons Nat x rho)) ",
-                "(to_kexpr bt (ListType.cons Nat x rho)) -> ",
+                "TypingCtxConv tenvK (@ListType.cons KExpr (to_kexpr A rho) Gk) ",
+                "(to_kexpr (impl_open b x) (@ListType.cons Nat x rho)) ",
+                "(to_kexpr bt (@ListType.cons Nat x rho)) -> ",
                 "TypingCtxConv tenvK Gk (to_kexpr (ImplExpr.lam bd A b) rho) ",
                 "(to_kexpr (ImplExpr.pi bd A (impl_abstract_fvar bt x)) rho)"
             )
@@ -2017,9 +2017,9 @@ impl Specification {
                     "(hsc : ImplScoped x b Nat.zero) (hlc : ImplLC bt Nat.zero) ",
                     "(hs : ImplWhnfTo S (ImplExpr.sort l)) ",
                     "(ihA : TypingCtxConv tenvK Gk (to_kexpr A rho) (to_kexpr S rho)) ",
-                    "(ihb : TypingCtxConv tenvK (ListType.cons KExpr (to_kexpr A rho) Gk) ",
-                    "(to_kexpr (impl_open b x) (ListType.cons Nat x rho)) ",
-                    "(to_kexpr bt (ListType.cons Nat x rho))) => ",
+                    "(ihb : TypingCtxConv tenvK (@ListType.cons KExpr (to_kexpr A rho) Gk) ",
+                    "(to_kexpr (impl_open b x) (@ListType.cons Nat x rho)) ",
+                    "(to_kexpr bt (@ListType.cons Nat x rho))) => ",
                     "impl_sound_lam tenvK Gk rho x bd A b S l bt hs ihA ihb ",
                     "(to_kexpr_open rho x b Nat.zero hsc) ",
                     "(to_kexpr_abstract rho x bt Nat.zero hlc)"
@@ -2064,9 +2064,9 @@ impl Specification {
                 "ImplScoped x b Nat.zero -> ",
                 "ImplWhnfTo S1 (ImplExpr.sort l1) -> ImplWhnfTo S2 (ImplExpr.sort l2) -> ",
                 "TypingCtxConv tenvK Gk (to_kexpr A rho) (to_kexpr S1 rho) -> ",
-                "TypingCtxConv tenvK (ListType.cons KExpr (to_kexpr A rho) Gk) ",
-                "(to_kexpr (impl_open b x) (ListType.cons Nat x rho)) ",
-                "(to_kexpr S2 (ListType.cons Nat x rho)) -> ",
+                "TypingCtxConv tenvK (@ListType.cons KExpr (to_kexpr A rho) Gk) ",
+                "(to_kexpr (impl_open b x) (@ListType.cons Nat x rho)) ",
+                "(to_kexpr S2 (@ListType.cons Nat x rho)) -> ",
                 "TypingCtxConv tenvK Gk (to_kexpr (ImplExpr.pi bd A b) rho) ",
                 "(to_kexpr (ImplExpr.sort (Level.imax l1 l2)) rho)"
             )
@@ -2080,9 +2080,9 @@ impl Specification {
                     "(hs1 : ImplWhnfTo S1 (ImplExpr.sort l1)) ",
                     "(hs2 : ImplWhnfTo S2 (ImplExpr.sort l2)) ",
                     "(ihA : TypingCtxConv tenvK Gk (to_kexpr A rho) (to_kexpr S1 rho)) ",
-                    "(ihb : TypingCtxConv tenvK (ListType.cons KExpr (to_kexpr A rho) Gk) ",
-                    "(to_kexpr (impl_open b x) (ListType.cons Nat x rho)) ",
-                    "(to_kexpr S2 (ListType.cons Nat x rho))) => ",
+                    "(ihb : TypingCtxConv tenvK (@ListType.cons KExpr (to_kexpr A rho) Gk) ",
+                    "(to_kexpr (impl_open b x) (@ListType.cons Nat x rho)) ",
+                    "(to_kexpr S2 (@ListType.cons Nat x rho))) => ",
                     "impl_sound_pi tenvK Gk rho x bd A b S1 S2 l1 l2 hs1 hs2 ihA ihb ",
                     "(to_kexpr_open rho x b Nat.zero hsc)"
                 )
@@ -2143,12 +2143,12 @@ impl Specification {
                 "(b : ImplExpr) (S : ImplExpr) (l : Level) (bt : ImplExpr), ",
                 "ImplWhnfTo S (ImplExpr.sort l) -> ",
                 "TypingCtxConv tenvK Gk (to_kexpr A rho) (to_kexpr S rho) -> ",
-                "TypingCtxConv tenvK (ListType.cons KExpr (to_kexpr A rho) Gk) ",
-                "(to_kexpr (impl_open b x) (ListType.cons Nat x rho)) ",
-                "(to_kexpr bt (ListType.cons Nat x rho)) -> ",
-                "Eq KExpr (to_kexpr (impl_open b x) (ListType.cons Nat x rho)) ",
+                "TypingCtxConv tenvK (@ListType.cons KExpr (to_kexpr A rho) Gk) ",
+                "(to_kexpr (impl_open b x) (@ListType.cons Nat x rho)) ",
+                "(to_kexpr bt (@ListType.cons Nat x rho)) -> ",
+                "@Eq KExpr (to_kexpr (impl_open b x) (@ListType.cons Nat x rho)) ",
                 "(to_kexpr_at b rho (Nat.succ Nat.zero)) -> ",
-                "Eq KExpr (to_kexpr bt (ListType.cons Nat x rho)) ",
+                "@Eq KExpr (to_kexpr bt (@ListType.cons Nat x rho)) ",
                 "(to_kexpr_at (impl_abstract_fvar bt x) rho (Nat.succ Nat.zero)) -> ",
                 "TypingCtxConv tenvK Gk (to_kexpr (ImplExpr.lam bd A b) rho) ",
                 "(to_kexpr (ImplExpr.pi bd A (impl_abstract_fvar bt x)) rho)"
@@ -2161,30 +2161,30 @@ impl Specification {
                     "(b : ImplExpr) (S : ImplExpr) (l : Level) (bt : ImplExpr) ",
                     "(hs : ImplWhnfTo S (ImplExpr.sort l)) ",
                     "(ihA : TypingCtxConv tenvK Gk (to_kexpr A rho) (to_kexpr S rho)) ",
-                    "(ihb : TypingCtxConv tenvK (ListType.cons KExpr (to_kexpr A rho) Gk) ",
-                    "(to_kexpr (impl_open b x) (ListType.cons Nat x rho)) ",
-                    "(to_kexpr bt (ListType.cons Nat x rho))) ",
-                    "(hopen : Eq KExpr (to_kexpr (impl_open b x) (ListType.cons Nat x rho)) ",
+                    "(ihb : TypingCtxConv tenvK (@ListType.cons KExpr (to_kexpr A rho) Gk) ",
+                    "(to_kexpr (impl_open b x) (@ListType.cons Nat x rho)) ",
+                    "(to_kexpr bt (@ListType.cons Nat x rho))) ",
+                    "(hopen : @Eq KExpr (to_kexpr (impl_open b x) (@ListType.cons Nat x rho)) ",
                     "(to_kexpr_at b rho (Nat.succ Nat.zero))) ",
-                    "(habs : Eq KExpr (to_kexpr bt (ListType.cons Nat x rho)) ",
+                    "(habs : @Eq KExpr (to_kexpr bt (@ListType.cons Nat x rho)) ",
                     "(to_kexpr_at (impl_abstract_fvar bt x) rho (Nat.succ Nat.zero))) => ",
-                    "TypingCtxConv.lam tenvK Gk (to_kexpr A rho) ",
+                    "@TypingCtxConv.lam tenvK Gk (to_kexpr A rho) ",
                     "(to_kexpr_at b rho (Nat.succ Nat.zero)) ",
                     "(to_kexpr_at (impl_abstract_fvar bt x) rho (Nat.succ Nat.zero)) l ",
                     // domain : sort — THE step KernelInfers could not take.
-                    "(TypingCtxConv.conv tenvK Gk (to_kexpr A rho) (to_kexpr S rho) ",
+                    "(@TypingCtxConv.conv tenvK Gk (to_kexpr A rho) (to_kexpr S rho) ",
                     "(KExpr.sort l) ihA ",
                     "(impl_whnf_to_defeq rho S (ImplExpr.sort l) hs)) ",
                     // body : rewrite subject then type, along the two equations.
                     "(Eq.substType KExpr (fun (w : KExpr) => TypingCtxConv tenvK ",
-                    "(ListType.cons KExpr (to_kexpr A rho) Gk) w ",
+                    "(@ListType.cons KExpr (to_kexpr A rho) Gk) w ",
                     "(to_kexpr_at (impl_abstract_fvar bt x) rho (Nat.succ Nat.zero))) ",
-                    "(to_kexpr (impl_open b x) (ListType.cons Nat x rho)) ",
+                    "(to_kexpr (impl_open b x) (@ListType.cons Nat x rho)) ",
                     "(to_kexpr_at b rho (Nat.succ Nat.zero)) hopen ",
                     "(Eq.substType KExpr (fun (w : KExpr) => TypingCtxConv tenvK ",
-                    "(ListType.cons KExpr (to_kexpr A rho) Gk) ",
-                    "(to_kexpr (impl_open b x) (ListType.cons Nat x rho)) w) ",
-                    "(to_kexpr bt (ListType.cons Nat x rho)) ",
+                    "(@ListType.cons KExpr (to_kexpr A rho) Gk) ",
+                    "(to_kexpr (impl_open b x) (@ListType.cons Nat x rho)) w) ",
+                    "(to_kexpr bt (@ListType.cons Nat x rho)) ",
                     "(to_kexpr_at (impl_abstract_fvar bt x) rho (Nat.succ Nat.zero)) ",
                     "habs ihb))"
                 )
@@ -2238,10 +2238,10 @@ impl Specification {
                 "(b : ImplExpr) (S1 : ImplExpr) (S2 : ImplExpr) (l1 : Level) (l2 : Level), ",
                 "ImplWhnfTo S1 (ImplExpr.sort l1) -> ImplWhnfTo S2 (ImplExpr.sort l2) -> ",
                 "TypingCtxConv tenvK Gk (to_kexpr A rho) (to_kexpr S1 rho) -> ",
-                "TypingCtxConv tenvK (ListType.cons KExpr (to_kexpr A rho) Gk) ",
-                "(to_kexpr (impl_open b x) (ListType.cons Nat x rho)) ",
-                "(to_kexpr S2 (ListType.cons Nat x rho)) -> ",
-                "Eq KExpr (to_kexpr (impl_open b x) (ListType.cons Nat x rho)) ",
+                "TypingCtxConv tenvK (@ListType.cons KExpr (to_kexpr A rho) Gk) ",
+                "(to_kexpr (impl_open b x) (@ListType.cons Nat x rho)) ",
+                "(to_kexpr S2 (@ListType.cons Nat x rho)) -> ",
+                "@Eq KExpr (to_kexpr (impl_open b x) (@ListType.cons Nat x rho)) ",
                 "(to_kexpr_at b rho (Nat.succ Nat.zero)) -> ",
                 "TypingCtxConv tenvK Gk (to_kexpr (ImplExpr.pi bd A b) rho) ",
                 "(to_kexpr (ImplExpr.sort (Level.imax l1 l2)) rho)"
@@ -2255,24 +2255,24 @@ impl Specification {
                     "(hs1 : ImplWhnfTo S1 (ImplExpr.sort l1)) ",
                     "(hs2 : ImplWhnfTo S2 (ImplExpr.sort l2)) ",
                     "(ihA : TypingCtxConv tenvK Gk (to_kexpr A rho) (to_kexpr S1 rho)) ",
-                    "(ihb : TypingCtxConv tenvK (ListType.cons KExpr (to_kexpr A rho) Gk) ",
-                    "(to_kexpr (impl_open b x) (ListType.cons Nat x rho)) ",
-                    "(to_kexpr S2 (ListType.cons Nat x rho))) ",
-                    "(hopen : Eq KExpr (to_kexpr (impl_open b x) (ListType.cons Nat x rho)) ",
+                    "(ihb : TypingCtxConv tenvK (@ListType.cons KExpr (to_kexpr A rho) Gk) ",
+                    "(to_kexpr (impl_open b x) (@ListType.cons Nat x rho)) ",
+                    "(to_kexpr S2 (@ListType.cons Nat x rho))) ",
+                    "(hopen : @Eq KExpr (to_kexpr (impl_open b x) (@ListType.cons Nat x rho)) ",
                     "(to_kexpr_at b rho (Nat.succ Nat.zero))) => ",
-                    "TypingCtxConv.pi tenvK Gk (to_kexpr A rho) ",
+                    "@TypingCtxConv.pi tenvK Gk (to_kexpr A rho) ",
                     "(to_kexpr_at b rho (Nat.succ Nat.zero)) l1 l2 ",
-                    "(TypingCtxConv.conv tenvK Gk (to_kexpr A rho) (to_kexpr S1 rho) ",
+                    "(@TypingCtxConv.conv tenvK Gk (to_kexpr A rho) (to_kexpr S1 rho) ",
                     "(KExpr.sort l1) ihA ",
                     "(impl_whnf_to_defeq rho S1 (ImplExpr.sort l1) hs1)) ",
                     "(Eq.substType KExpr (fun (w : KExpr) => TypingCtxConv tenvK ",
-                    "(ListType.cons KExpr (to_kexpr A rho) Gk) w (KExpr.sort l2)) ",
-                    "(to_kexpr (impl_open b x) (ListType.cons Nat x rho)) ",
+                    "(@ListType.cons KExpr (to_kexpr A rho) Gk) w (KExpr.sort l2)) ",
+                    "(to_kexpr (impl_open b x) (@ListType.cons Nat x rho)) ",
                     "(to_kexpr_at b rho (Nat.succ Nat.zero)) hopen ",
-                    "(TypingCtxConv.conv tenvK (ListType.cons KExpr (to_kexpr A rho) Gk) ",
-                    "(to_kexpr (impl_open b x) (ListType.cons Nat x rho)) ",
-                    "(to_kexpr S2 (ListType.cons Nat x rho)) (KExpr.sort l2) ihb ",
-                    "(impl_whnf_to_defeq (ListType.cons Nat x rho) S2 (ImplExpr.sort l2) hs2)))"
+                    "(@TypingCtxConv.conv tenvK (@ListType.cons KExpr (to_kexpr A rho) Gk) ",
+                    "(to_kexpr (impl_open b x) (@ListType.cons Nat x rho)) ",
+                    "(to_kexpr S2 (@ListType.cons Nat x rho)) (KExpr.sort l2) ihb ",
+                    "(impl_whnf_to_defeq (@ListType.cons Nat x rho) S2 (ImplExpr.sort l2) hs2)))"
                 )
                 .to_string(),
             ),
@@ -2319,14 +2319,14 @@ impl Specification {
                 "ImplWhnfTo S (ImplExpr.sort l) -> ImplIsLe Tv ty -> ",
                 "TypingCtxConv tenvK Gk (to_kexpr ty rho) (to_kexpr S rho) -> ",
                 "TypingCtxConv tenvK Gk (to_kexpr v rho) (to_kexpr Tv rho) -> ",
-                "TypingCtxConv tenvK (ListType.cons KExpr (to_kexpr ty rho) Gk) ",
-                "(to_kexpr (impl_open b x) (ListType.cons Nat x rho)) ",
-                "(to_kexpr bt (ListType.cons Nat x rho)) -> ",
-                "Eq KExpr (to_kexpr (impl_open b x) (ListType.cons Nat x rho)) ",
+                "TypingCtxConv tenvK (@ListType.cons KExpr (to_kexpr ty rho) Gk) ",
+                "(to_kexpr (impl_open b x) (@ListType.cons Nat x rho)) ",
+                "(to_kexpr bt (@ListType.cons Nat x rho)) -> ",
+                "@Eq KExpr (to_kexpr (impl_open b x) (@ListType.cons Nat x rho)) ",
                 "(to_kexpr_at b rho (Nat.succ Nat.zero)) -> ",
-                "Eq KExpr (to_kexpr bt (ListType.cons Nat x rho)) ",
+                "@Eq KExpr (to_kexpr bt (@ListType.cons Nat x rho)) ",
                 "(to_kexpr_at (impl_abstract_fvar bt x) rho (Nat.succ Nat.zero)) -> ",
-                "Eq KExpr (to_kexpr (impl_subst_fvar bt x v) rho) ",
+                "@Eq KExpr (to_kexpr (impl_subst_fvar bt x v) rho) ",
                 "(instantiate (to_kexpr_at (impl_abstract_fvar bt x) rho (Nat.succ Nat.zero)) ",
                 "(to_kexpr v rho)) -> ",
                 "TypingCtxConv tenvK Gk (to_kexpr (ImplExpr.let_ nm ty v b) rho) ",
@@ -2341,14 +2341,14 @@ impl Specification {
                     "(hs : ImplWhnfTo S (ImplExpr.sort l)) (hle : ImplIsLe Tv ty) ",
                     "(ihty : TypingCtxConv tenvK Gk (to_kexpr ty rho) (to_kexpr S rho)) ",
                     "(ihv : TypingCtxConv tenvK Gk (to_kexpr v rho) (to_kexpr Tv rho)) ",
-                    "(ihb : TypingCtxConv tenvK (ListType.cons KExpr (to_kexpr ty rho) Gk) ",
-                    "(to_kexpr (impl_open b x) (ListType.cons Nat x rho)) ",
-                    "(to_kexpr bt (ListType.cons Nat x rho))) ",
-                    "(hopen : Eq KExpr (to_kexpr (impl_open b x) (ListType.cons Nat x rho)) ",
+                    "(ihb : TypingCtxConv tenvK (@ListType.cons KExpr (to_kexpr ty rho) Gk) ",
+                    "(to_kexpr (impl_open b x) (@ListType.cons Nat x rho)) ",
+                    "(to_kexpr bt (@ListType.cons Nat x rho))) ",
+                    "(hopen : @Eq KExpr (to_kexpr (impl_open b x) (@ListType.cons Nat x rho)) ",
                     "(to_kexpr_at b rho (Nat.succ Nat.zero))) ",
-                    "(habs : Eq KExpr (to_kexpr bt (ListType.cons Nat x rho)) ",
+                    "(habs : @Eq KExpr (to_kexpr bt (@ListType.cons Nat x rho)) ",
                     "(to_kexpr_at (impl_abstract_fvar bt x) rho (Nat.succ Nat.zero))) ",
-                    "(hzeta : Eq KExpr (to_kexpr (impl_subst_fvar bt x v) rho) ",
+                    "(hzeta : @Eq KExpr (to_kexpr (impl_subst_fvar bt x v) rho) ",
                     "(instantiate (to_kexpr_at (impl_abstract_fvar bt x) rho (Nat.succ Nat.zero)) ",
                     "(to_kexpr v rho))) => ",
                     // Rewrite the CONCLUSION's type from layer 2's instantiate
@@ -2362,26 +2362,26 @@ impl Specification {
                     "(Eq.symm KExpr (to_kexpr (impl_subst_fvar bt x v) rho) ",
                     "(instantiate (to_kexpr_at (impl_abstract_fvar bt x) rho (Nat.succ Nat.zero)) ",
                     "(to_kexpr v rho)) hzeta) ",
-                    "(TypingCtxConv.let_ tenvK Gk (to_kexpr ty rho) (to_kexpr v rho) ",
+                    "(@TypingCtxConv.let_ tenvK Gk (to_kexpr ty rho) (to_kexpr v rho) ",
                     "(to_kexpr_at b rho (Nat.succ Nat.zero)) ",
                     "(to_kexpr_at (impl_abstract_fvar bt x) rho (Nat.succ Nat.zero)) l ",
                     // annotation : sort — conv over the whnf step.
-                    "(TypingCtxConv.conv tenvK Gk (to_kexpr ty rho) (to_kexpr S rho) ",
+                    "(@TypingCtxConv.conv tenvK Gk (to_kexpr ty rho) (to_kexpr S rho) ",
                     "(KExpr.sort l) ihty ",
                     "(impl_whnf_to_defeq rho S (ImplExpr.sort l) hs)) ",
                     // value : annotation — conv over the is_le ascription.
-                    "(TypingCtxConv.conv tenvK Gk (to_kexpr v rho) (to_kexpr Tv rho) ",
+                    "(@TypingCtxConv.conv tenvK Gk (to_kexpr v rho) (to_kexpr Tv rho) ",
                     "(to_kexpr ty rho) ihv (impl_is_le_defeq rho Tv ty hle)) ",
                     // body, under the extended context.
                     "(Eq.substType KExpr (fun (w : KExpr) => TypingCtxConv tenvK ",
-                    "(ListType.cons KExpr (to_kexpr ty rho) Gk) w ",
+                    "(@ListType.cons KExpr (to_kexpr ty rho) Gk) w ",
                     "(to_kexpr_at (impl_abstract_fvar bt x) rho (Nat.succ Nat.zero))) ",
-                    "(to_kexpr (impl_open b x) (ListType.cons Nat x rho)) ",
+                    "(to_kexpr (impl_open b x) (@ListType.cons Nat x rho)) ",
                     "(to_kexpr_at b rho (Nat.succ Nat.zero)) hopen ",
                     "(Eq.substType KExpr (fun (w : KExpr) => TypingCtxConv tenvK ",
-                    "(ListType.cons KExpr (to_kexpr ty rho) Gk) ",
-                    "(to_kexpr (impl_open b x) (ListType.cons Nat x rho)) w) ",
-                    "(to_kexpr bt (ListType.cons Nat x rho)) ",
+                    "(@ListType.cons KExpr (to_kexpr ty rho) Gk) ",
+                    "(to_kexpr (impl_open b x) (@ListType.cons Nat x rho)) w) ",
+                    "(to_kexpr bt (@ListType.cons Nat x rho)) ",
                     "(to_kexpr_at (impl_abstract_fvar bt x) rho (Nat.succ Nat.zero)) ",
                     "habs ihb)))"
                 )
@@ -2456,7 +2456,7 @@ impl Specification {
                 concat!(
                     "fun (rho : ListType Nat) (e : ImplExpr) (r : ImplExpr) ",
                     "(h : ImplWhnfTo e r) => ",
-                    "ImplWhnfTo.rec ",
+                    "@ImplWhnfTo.rec ",
                     "(fun (e0 : ImplExpr) (r0 : ImplExpr) (_h0 : ImplWhnfTo e0 r0) => ",
                     "DefEq (to_kexpr e0 rho) (to_kexpr r0 rho)) ",
                     // done — reflexivity, and note this arm is why the relation
@@ -2578,7 +2578,7 @@ impl Specification {
                 concat!(
                     "fun (rho : ListType Nat) (e : ImplExpr) (r : ImplExpr) ",
                     "(h : ImplWhnfTo e r) => ",
-                    "ImplWhnfTo.rec ",
+                    "@ImplWhnfTo.rec ",
                     "(fun (e0 : ImplExpr) (r0 : ImplExpr) (_h0 : ImplWhnfTo e0 r0) => ",
                     "is_whnf (to_kexpr r0 rho) -> ",
                     "whnf_to (to_kexpr e0 rho) (to_kexpr r0 rho)) ",
@@ -2703,7 +2703,7 @@ impl Specification {
                 concat!(
                     "fun (rho : ListType Nat) (x : ImplExpr) (y : ImplExpr) ",
                     "(h : ImplIsLe x y) => ",
-                    "ImplIsLe.rec ",
+                    "@ImplIsLe.rec ",
                     "(fun (x0 : ImplExpr) (y0 : ImplExpr) (_h0 : ImplIsLe x0 y0) => ",
                     "DefEq (to_kexpr x0 rho) (to_kexpr y0 rho)) ",
                     "(fun (e0 : ImplExpr) => DefEq.refl (to_kexpr e0 rho)) ",
@@ -2817,7 +2817,7 @@ impl Specification {
                     "(instantiate (to_kexpr_at B rho (Nat.succ Nat.zero)) ",
                     "(to_kexpr_at a rho Nat.zero)) ",
                     "(to_kexpr_at_instantiate rho a B Nat.zero)) ",
-                    "(KernelInfers.app tenvK Gk ",
+                    "(@KernelInfers.app tenvK Gk ",
                     "(to_kexpr_at f rho Nat.zero) (to_kexpr_at a rho Nat.zero) ",
                     "(to_kexpr F rho) ",
                     "(to_kexpr_at A rho Nat.zero) ",
@@ -2882,7 +2882,7 @@ impl Specification {
             name: "to_kexpr_at_lift".to_string(),
             type_src: concat!(
                 "forall (rho : ListType Nat) (c : Nat) (e : ImplExpr) (k : Nat), ",
-                "Eq KExpr ",
+                "@Eq KExpr ",
                 lhs!("e", "k"),
                 " ",
                 rhs!("e", "k")
@@ -2891,9 +2891,9 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (rho : ListType Nat) (c : Nat) (e : ImplExpr) => ",
-                    "ImplExpr.rec ",
+                    "@ImplExpr.rec ",
                     // motive — k generalised, rho and c fixed.
-                    "(fun (z : ImplExpr) => forall (k : Nat), Eq KExpr ",
+                    "(fun (z : ImplExpr) => forall (k : Nat), @Eq KExpr ",
                     lhs!("z", "k"),
                     " ",
                     rhs!("z", "k"),
@@ -2903,29 +2903,29 @@ impl Specification {
                     // split is one Nat.rec and each branch is Eq.refl. The
                     // motive re-abstracts that shared scrutinee.
                     "(fun (i : Nat) (k : Nat) => ",
-                    "Nat.rec (fun (s : Nat) => Eq KExpr ",
-                    "(to_kexpr_at (Nat.rec (fun (_m : Nat) => ImplExpr) ",
+                    "@Nat.rec (fun (s : Nat) => @Eq KExpr ",
+                    "(to_kexpr_at (@Nat.rec (fun (_m : Nat) => ImplExpr) ",
                     "(ImplExpr.bvar (Nat.add i c)) ",
                     "(fun (_q : Nat) (_r : ImplExpr) => ImplExpr.bvar i) s) rho (Nat.add k c)) ",
-                    "(Nat.rec (fun (_m : Nat) => KExpr) (KExpr.bvar (Nat.add i c)) ",
+                    "(@Nat.rec (fun (_m : Nat) => KExpr) (KExpr.bvar (Nat.add i c)) ",
                     "(fun (_q : Nat) (_r : KExpr) => KExpr.bvar i) s)) ",
-                    "(Eq.refl KExpr (KExpr.bvar (Nat.add i c))) ",
-                    "(fun (_s : Nat) (_ih : Eq KExpr ",
-                    "(to_kexpr_at (Nat.rec (fun (_m : Nat) => ImplExpr) ",
+                    "(@Eq.refl KExpr (KExpr.bvar (Nat.add i c))) ",
+                    "(fun (_s : Nat) (_ih : @Eq KExpr ",
+                    "(to_kexpr_at (@Nat.rec (fun (_m : Nat) => ImplExpr) ",
                     "(ImplExpr.bvar (Nat.add i c)) ",
                     "(fun (_q : Nat) (_r : ImplExpr) => ImplExpr.bvar i) _s) rho (Nat.add k c)) ",
-                    "(Nat.rec (fun (_m : Nat) => KExpr) (KExpr.bvar (Nat.add i c)) ",
+                    "(@Nat.rec (fun (_m : Nat) => KExpr) (KExpr.bvar (Nat.add i c)) ",
                     "(fun (_q : Nat) (_r : KExpr) => KExpr.bvar i) _s)) => ",
-                    "Eq.refl KExpr (KExpr.bvar i)) ",
+                    "@Eq.refl KExpr (KExpr.bvar i)) ",
                     "(Nat.sub k i)) ",
                     // ── fvar — the asymmetric case ──────────────────────────
                     // Layer 1: a leaf. Layer 2: bvar (rho_index + k), which is
                     // >= k and so DOES lift. They meet at rho_index + k + c.
                     "(fun (y : Nat) (k : Nat) => ",
                     "Eq.substType Nat ",
-                    "(fun (s : Nat) => Eq KExpr ",
+                    "(fun (s : Nat) => @Eq KExpr ",
                     "(KExpr.bvar (Nat.add (rho_index rho y) (Nat.add k c))) ",
-                    "(Nat.rec (fun (_m : Nat) => KExpr) ",
+                    "(@Nat.rec (fun (_m : Nat) => KExpr) ",
                     "(KExpr.bvar (Nat.add (Nat.add (rho_index rho y) k) c)) ",
                     "(fun (_q : Nat) (_r : KExpr) => KExpr.bvar (Nat.add (rho_index rho y) k)) s)) ",
                     "Nat.zero (Nat.sub k (Nat.add (rho_index rho y) k)) ",
@@ -2945,17 +2945,17 @@ impl Specification {
                     "(Nat.add (rho_index rho y) (Nat.add k c)) ",
                     "(nat_add_assoc (rho_index rho y) k c)))) ",
                     // ── sort / const — translation-inert leaves ─────────────
-                    "(fun (l : Level) (k : Nat) => Eq.refl KExpr (KExpr.sort l)) ",
+                    "(fun (l : Level) (k : Nat) => @Eq.refl KExpr (KExpr.sort l)) ",
                     "(fun (nm : Name) (us : ListType Level) (k : Nat) => ",
-                    "Eq.refl KExpr (KExpr.const nm us)) ",
+                    "@Eq.refl KExpr (KExpr.const nm us)) ",
                     // ── app ─────────────────────────────────────────────────
                     "(fun (f : ImplExpr) (a : ImplExpr) ",
-                    "(rf : forall (k : Nat), Eq KExpr ",
+                    "(rf : forall (k : Nat), @Eq KExpr ",
                     lhs!("f", "k"),
                     " ",
                     rhs!("f", "k"),
                     ") ",
-                    "(ra : forall (k : Nat), Eq KExpr ",
+                    "(ra : forall (k : Nat), @Eq KExpr ",
                     lhs!("a", "k"),
                     " ",
                     rhs!("a", "k"),
@@ -2996,12 +2996,12 @@ impl Specification {
                     // its SECOND argument, so those are NOT definitionally equal
                     // and nat_succ_add has to transport it.
                     "(fun (bd : BinderData) (ty : ImplExpr) (b : ImplExpr) ",
-                    "(rt : forall (k : Nat), Eq KExpr ",
+                    "(rt : forall (k : Nat), @Eq KExpr ",
                     lhs!("ty", "k"),
                     " ",
                     rhs!("ty", "k"),
                     ") ",
-                    "(rb : forall (k : Nat), Eq KExpr ",
+                    "(rb : forall (k : Nat), @Eq KExpr ",
                     lhs!("b", "k"),
                     " ",
                     rhs!("b", "k"),
@@ -3030,7 +3030,7 @@ impl Specification {
                     "(to_kexpr_at (impl_lift_at b (Nat.succ k) c) rho (Nat.succ (Nat.add k c))) ",
                     rhs!("b", "(Nat.succ k)"),
                     " ",
-                    "(Eq.substType Nat (fun (dd : Nat) => Eq KExpr ",
+                    "(Eq.substType Nat (fun (dd : Nat) => @Eq KExpr ",
                     "(to_kexpr_at (impl_lift_at b (Nat.succ k) c) rho dd) ",
                     rhs!("b", "(Nat.succ k)"),
                     ") ",
@@ -3038,12 +3038,12 @@ impl Specification {
                     "(nat_succ_add k c) (rb (Nat.succ k))))) ",
                     // ── pi — identical shape to lam ─────────────────────────
                     "(fun (bd : BinderData) (ty : ImplExpr) (b : ImplExpr) ",
-                    "(rt : forall (k : Nat), Eq KExpr ",
+                    "(rt : forall (k : Nat), @Eq KExpr ",
                     lhs!("ty", "k"),
                     " ",
                     rhs!("ty", "k"),
                     ") ",
-                    "(rb : forall (k : Nat), Eq KExpr ",
+                    "(rb : forall (k : Nat), @Eq KExpr ",
                     lhs!("b", "k"),
                     " ",
                     rhs!("b", "k"),
@@ -3072,7 +3072,7 @@ impl Specification {
                     "(to_kexpr_at (impl_lift_at b (Nat.succ k) c) rho (Nat.succ (Nat.add k c))) ",
                     rhs!("b", "(Nat.succ k)"),
                     " ",
-                    "(Eq.substType Nat (fun (dd : Nat) => Eq KExpr ",
+                    "(Eq.substType Nat (fun (dd : Nat) => @Eq KExpr ",
                     "(to_kexpr_at (impl_lift_at b (Nat.succ k) c) rho dd) ",
                     rhs!("b", "(Nat.succ k)"),
                     ") ",
@@ -3080,17 +3080,17 @@ impl Specification {
                     "(nat_succ_add k c) (rb (Nat.succ k))))) ",
                     // ── let_ — three subterms, only the body under a binder ──
                     "(fun (nm : Name) (ty : ImplExpr) (v : ImplExpr) (b : ImplExpr) ",
-                    "(rt : forall (k : Nat), Eq KExpr ",
+                    "(rt : forall (k : Nat), @Eq KExpr ",
                     lhs!("ty", "k"),
                     " ",
                     rhs!("ty", "k"),
                     ") ",
-                    "(rv : forall (k : Nat), Eq KExpr ",
+                    "(rv : forall (k : Nat), @Eq KExpr ",
                     lhs!("v", "k"),
                     " ",
                     rhs!("v", "k"),
                     ") ",
-                    "(rb : forall (k : Nat), Eq KExpr ",
+                    "(rb : forall (k : Nat), @Eq KExpr ",
                     lhs!("b", "k"),
                     " ",
                     rhs!("b", "k"),
@@ -3154,7 +3154,7 @@ impl Specification {
                     "(to_kexpr_at (impl_lift_at b (Nat.succ k) c) rho (Nat.succ (Nat.add k c))) ",
                     rhs!("b", "(Nat.succ k)"),
                     " ",
-                    "(Eq.substType Nat (fun (dd : Nat) => Eq KExpr ",
+                    "(Eq.substType Nat (fun (dd : Nat) => @Eq KExpr ",
                     "(to_kexpr_at (impl_lift_at b (Nat.succ k) c) rho dd) ",
                     rhs!("b", "(Nat.succ k)"),
                     ") ",
@@ -3169,15 +3169,15 @@ impl Specification {
                     // `lift_at` does discard. (`sort`/`const` need no split —
                     // their translations are already constructor-headed.)
                     "(fun (lt : ImplLit) (k : Nat) => ",
-                    "ImplLit.rec (fun (z : ImplLit) => Eq KExpr (impl_lit_to_kexpr z) ",
+                    "@ImplLit.rec (fun (z : ImplLit) => @Eq KExpr (impl_lit_to_kexpr z) ",
                     "(lift_at (impl_lit_to_kexpr z) k c)) ",
-                    "(fun (n : Nat) => Eq.refl KExpr (literal_nat n)) ",
-                    "(fun (n : Nat) => Eq.refl KExpr (literal_string n)) ",
+                    "(fun (n : Nat) => @Eq.refl KExpr (literal_nat n)) ",
+                    "(fun (n : Nat) => @Eq.refl KExpr (literal_string n)) ",
                     "lt) ",
                     // ── mdata — ERASED by the translation, so the IH is the
                     // whole proof: both sides reduce to the inner term's.
                     "(fun (inner : ImplExpr) ",
-                    "(ri : forall (k : Nat), Eq KExpr ",
+                    "(ri : forall (k : Nat), @Eq KExpr ",
                     lhs!("inner", "k"),
                     " ",
                     rhs!("inner", "k"),
@@ -3249,7 +3249,7 @@ impl Specification {
             name: "to_kexpr_at_instantiate".to_string(),
             type_src: concat!(
                 "forall (rho : ListType Nat) (a : ImplExpr) (b : ImplExpr) (d : Nat), ",
-                "Eq KExpr ",
+                "@Eq KExpr ",
                 ilhs!("b", "d"),
                 " ",
                 irhs!("b", "d")
@@ -3258,8 +3258,8 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (rho : ListType Nat) (a : ImplExpr) (b : ImplExpr) => ",
-                    "ImplExpr.rec ",
-                    "(fun (z : ImplExpr) => forall (d : Nat), Eq KExpr ",
+                    "@ImplExpr.rec ",
+                    "(fun (z : ImplExpr) => forall (d : Nat), @Eq KExpr ",
                     ilhs!("z", "d"),
                     " ",
                     irhs!("z", "d"),
@@ -3268,22 +3268,22 @@ impl Specification {
                     // nested three-way comparisons and layer 1 / layer 2 share
                     // both scrutinees (`Nat.sub d i` then `Nat.sub i d`).
                     "(fun (i : Nat) (d : Nat) => ",
-                    "Nat.rec (fun (s : Nat) => Eq KExpr ",
-                    "(to_kexpr_at (Nat.rec (fun (_m : Nat) => ImplExpr) ",
+                    "@Nat.rec (fun (s : Nat) => @Eq KExpr ",
+                    "(to_kexpr_at (@Nat.rec (fun (_m : Nat) => ImplExpr) ",
                     "(impl_inst_bvar_geq i d a) ",
                     "(fun (_q : Nat) (_r : ImplExpr) => ImplExpr.bvar i) s) rho d) ",
-                    "(Nat.rec (fun (_m : Nat) => KExpr) ",
+                    "(@Nat.rec (fun (_m : Nat) => KExpr) ",
                     "(instantiate_bvar_geq i d ",
                     "(to_kexpr_at a rho Nat.zero)",
                     ") ",
                     "(fun (_q : Nat) (_r : KExpr) => KExpr.bvar i) s)) ",
                     // s = 0, i.e. i >= d: descend into the geq helpers.
-                    "(Nat.rec (fun (t : Nat) => Eq KExpr ",
-                    "(to_kexpr_at (Nat.rec (fun (_m : Nat) => ImplExpr) ",
+                    "(@Nat.rec (fun (t : Nat) => @Eq KExpr ",
+                    "(to_kexpr_at (@Nat.rec (fun (_m : Nat) => ImplExpr) ",
                     "(impl_lift_at a Nat.zero d) ",
                     "(fun (_q : Nat) (_r : ImplExpr) => ",
                     "ImplExpr.bvar (Nat.sub i (Nat.succ Nat.zero))) t) rho d) ",
-                    "(Nat.rec (fun (_m : Nat) => KExpr) ",
+                    "(@Nat.rec (fun (_m : Nat) => KExpr) ",
                     "(lift_at ",
                     "(to_kexpr_at a rho Nat.zero)",
                     " Nat.zero d) ",
@@ -3293,7 +3293,7 @@ impl Specification {
                     // keystone, modulo `Nat.add Nat.zero d` vs `d` (Nat.add
                     // recurses on its second argument, so that is a transport,
                     // not a reduction).
-                    "(Eq.substType Nat (fun (dd : Nat) => Eq KExpr ",
+                    "(Eq.substType Nat (fun (dd : Nat) => @Eq KExpr ",
                     "(to_kexpr_at (impl_lift_at a Nat.zero d) rho dd) ",
                     "(lift_at ",
                     "(to_kexpr_at a rho Nat.zero)",
@@ -3301,30 +3301,30 @@ impl Specification {
                     "(Nat.add Nat.zero d) d (nat_zero_add d) ",
                     "(to_kexpr_at_lift rho d a Nat.zero)) ",
                     // t = succ _, i.e. i > d: both sides decrement identically.
-                    "(fun (_t : Nat) (_iht : Eq KExpr ",
-                    "(to_kexpr_at (Nat.rec (fun (_m : Nat) => ImplExpr) ",
+                    "(fun (_t : Nat) (_iht : @Eq KExpr ",
+                    "(to_kexpr_at (@Nat.rec (fun (_m : Nat) => ImplExpr) ",
                     "(impl_lift_at a Nat.zero d) ",
                     "(fun (_q : Nat) (_r : ImplExpr) => ",
                     "ImplExpr.bvar (Nat.sub i (Nat.succ Nat.zero))) _t) rho d) ",
-                    "(Nat.rec (fun (_m : Nat) => KExpr) ",
+                    "(@Nat.rec (fun (_m : Nat) => KExpr) ",
                     "(lift_at ",
                     "(to_kexpr_at a rho Nat.zero)",
                     " Nat.zero d) ",
                     "(fun (_q : Nat) (_r : KExpr) => ",
                     "KExpr.bvar (Nat.sub i (Nat.succ Nat.zero))) _t)) => ",
-                    "Eq.refl KExpr (KExpr.bvar (Nat.sub i (Nat.succ Nat.zero)))) ",
+                    "@Eq.refl KExpr (KExpr.bvar (Nat.sub i (Nat.succ Nat.zero)))) ",
                     "(Nat.sub i d)) ",
                     // s = succ _, i.e. i < d: untouched on both sides.
-                    "(fun (_s : Nat) (_ihs : Eq KExpr ",
-                    "(to_kexpr_at (Nat.rec (fun (_m : Nat) => ImplExpr) ",
+                    "(fun (_s : Nat) (_ihs : @Eq KExpr ",
+                    "(to_kexpr_at (@Nat.rec (fun (_m : Nat) => ImplExpr) ",
                     "(impl_inst_bvar_geq i d a) ",
                     "(fun (_q : Nat) (_r : ImplExpr) => ImplExpr.bvar i) _s) rho d) ",
-                    "(Nat.rec (fun (_m : Nat) => KExpr) ",
+                    "(@Nat.rec (fun (_m : Nat) => KExpr) ",
                     "(instantiate_bvar_geq i d ",
                     "(to_kexpr_at a rho Nat.zero)",
                     ") ",
                     "(fun (_q : Nat) (_r : KExpr) => KExpr.bvar i) _s)) => ",
-                    "Eq.refl KExpr (KExpr.bvar i)) ",
+                    "@Eq.refl KExpr (KExpr.bvar i)) ",
                     "(Nat.sub d i)) ",
                     // ── fvar — layer 1 leaves it alone; layer 2 has already
                     // turned it into `bvar (r + succ d)`, which is ABOVE the
@@ -3333,9 +3333,9 @@ impl Specification {
                     "(fun (y : Nat) (d : Nat) => ",
                     // 1. the outer comparison: d <= succ (r + d), so we are in
                     //    the geq branch.
-                    "Eq.substType Nat (fun (s : Nat) => Eq KExpr ",
+                    "Eq.substType Nat (fun (s : Nat) => @Eq KExpr ",
                     "(KExpr.bvar (Nat.add (rho_index rho y) d)) ",
-                    "(Nat.rec (fun (_m : Nat) => KExpr) ",
+                    "(@Nat.rec (fun (_m : Nat) => KExpr) ",
                     "(instantiate_bvar_geq (Nat.succ (Nat.add (rho_index rho y) d)) d ",
                     "(to_kexpr_at a rho Nat.zero)",
                     ") ",
@@ -3356,9 +3356,9 @@ impl Specification {
                     //    SUCC, so we are in the decrement branch, not the
                     //    substitute branch. This is what makes the fvar case
                     //    independent of `a` entirely.
-                    "(Eq.substType Nat (fun (t : Nat) => Eq KExpr ",
+                    "(Eq.substType Nat (fun (t : Nat) => @Eq KExpr ",
                     "(KExpr.bvar (Nat.add (rho_index rho y) d)) ",
-                    "(Nat.rec (fun (_m : Nat) => KExpr) ",
+                    "(@Nat.rec (fun (_m : Nat) => KExpr) ",
                     "(lift_at ",
                     "(to_kexpr_at a rho Nat.zero)",
                     " Nat.zero d) ",
@@ -3394,17 +3394,17 @@ impl Specification {
                     "(nat_sub_succ_succ (Nat.add (rho_index rho y) d) Nat.zero) ",
                     "(nat_sub_zero_right (Nat.add (rho_index rho y) d))))))) ",
                     // ── sort / const ────────────────────────────────────────
-                    "(fun (l : Level) (d : Nat) => Eq.refl KExpr (KExpr.sort l)) ",
+                    "(fun (l : Level) (d : Nat) => @Eq.refl KExpr (KExpr.sort l)) ",
                     "(fun (nm : Name) (us : ListType Level) (d : Nat) => ",
-                    "Eq.refl KExpr (KExpr.const nm us)) ",
+                    "@Eq.refl KExpr (KExpr.const nm us)) ",
                     // ── app ─────────────────────────────────────────────────
                     "(fun (f : ImplExpr) (aa : ImplExpr) ",
-                    "(rf : forall (d : Nat), Eq KExpr ",
+                    "(rf : forall (d : Nat), @Eq KExpr ",
                     ilhs!("f", "d"),
                     " ",
                     irhs!("f", "d"),
                     ") ",
-                    "(ra : forall (d : Nat), Eq KExpr ",
+                    "(ra : forall (d : Nat), @Eq KExpr ",
                     ilhs!("aa", "d"),
                     " ",
                     irhs!("aa", "d"),
@@ -3443,12 +3443,12 @@ impl Specification {
                     // Both sides step the depth to `Nat.succ d` directly, so the
                     // body IH at `Nat.succ d` is the body goal on the nose.
                     "(fun (bd : BinderData) (ty : ImplExpr) (bb : ImplExpr) ",
-                    "(rt : forall (d : Nat), Eq KExpr ",
+                    "(rt : forall (d : Nat), @Eq KExpr ",
                     ilhs!("ty", "d"),
                     " ",
                     irhs!("ty", "d"),
                     ") ",
-                    "(rb : forall (d : Nat), Eq KExpr ",
+                    "(rb : forall (d : Nat), @Eq KExpr ",
                     ilhs!("bb", "d"),
                     " ",
                     irhs!("bb", "d"),
@@ -3485,12 +3485,12 @@ impl Specification {
                     " (rb (Nat.succ d)))) ",
                     // ── pi ──────────────────────────────────────────────────
                     "(fun (bd : BinderData) (ty : ImplExpr) (bb : ImplExpr) ",
-                    "(rt : forall (d : Nat), Eq KExpr ",
+                    "(rt : forall (d : Nat), @Eq KExpr ",
                     ilhs!("ty", "d"),
                     " ",
                     irhs!("ty", "d"),
                     ") ",
-                    "(rb : forall (d : Nat), Eq KExpr ",
+                    "(rb : forall (d : Nat), @Eq KExpr ",
                     ilhs!("bb", "d"),
                     " ",
                     irhs!("bb", "d"),
@@ -3527,17 +3527,17 @@ impl Specification {
                     " (rb (Nat.succ d)))) ",
                     // ── let_ ────────────────────────────────────────────────
                     "(fun (nm : Name) (ty : ImplExpr) (vv : ImplExpr) (bb : ImplExpr) ",
-                    "(rt : forall (d : Nat), Eq KExpr ",
+                    "(rt : forall (d : Nat), @Eq KExpr ",
                     ilhs!("ty", "d"),
                     " ",
                     irhs!("ty", "d"),
                     ") ",
-                    "(rv : forall (d : Nat), Eq KExpr ",
+                    "(rv : forall (d : Nat), @Eq KExpr ",
                     ilhs!("vv", "d"),
                     " ",
                     irhs!("vv", "d"),
                     ") ",
-                    "(rb : forall (d : Nat), Eq KExpr ",
+                    "(rb : forall (d : Nat), @Eq KExpr ",
                     ilhs!("bb", "d"),
                     " ",
                     irhs!("bb", "d"),
@@ -3615,16 +3615,16 @@ impl Specification {
                     " (rb (Nat.succ d))))) ",
                     // ── lit — the same stuck-scrutinee split as the keystone.
                     "(fun (lt : ImplLit) (d : Nat) => ",
-                    "ImplLit.rec (fun (z : ImplLit) => Eq KExpr (impl_lit_to_kexpr z) ",
+                    "@ImplLit.rec (fun (z : ImplLit) => @Eq KExpr (impl_lit_to_kexpr z) ",
                     "(instantiate_at (impl_lit_to_kexpr z) ",
                     "(to_kexpr_at a rho Nat.zero)",
                     " d)) ",
-                    "(fun (n : Nat) => Eq.refl KExpr (literal_nat n)) ",
-                    "(fun (n : Nat) => Eq.refl KExpr (literal_string n)) ",
+                    "(fun (n : Nat) => @Eq.refl KExpr (literal_nat n)) ",
+                    "(fun (n : Nat) => @Eq.refl KExpr (literal_string n)) ",
                     "lt) ",
                     // ── mdata — erased by the translation on both sides ──────
                     "(fun (inner : ImplExpr) ",
-                    "(ri : forall (d : Nat), Eq KExpr ",
+                    "(ri : forall (d : Nat), @Eq KExpr ",
                     ilhs!("inner", "d"),
                     " ",
                     irhs!("inner", "d"),
@@ -3711,23 +3711,23 @@ impl Specification {
                     "fun (tenv : Name -> OptionType ImplConstInfo) (lps : ListType Name) ",
                     "(n : Nat) (G : LCtx) (e : ImplExpr) (T : ImplExpr) (m : Nat) ",
                     "(h : ImplInfer tenv lps n G e T m) => ",
-                    "ImplInfer.rec tenv lps ",
+                    "@ImplInfer.rec tenv lps ",
                     "(fun (n0 : Nat) (G0 : LCtx) (e0 : ImplExpr) (T0 : ImplExpr) (m0 : Nat) ",
                     "(_h0 : ImplInfer tenv lps n0 G0 e0 T0 m0) => Type) ",
                     // sort / fvar / const — no scoping obligation.
                     "(fun (sn : Nat) (sG : LCtx) (sl : Level) ",
-                    "(_shl : Eq Bool (level_params_ok lps sl) Bool.true) => ImplUnit) ",
+                    "(_shl : @Eq Bool (level_params_ok lps sl) Bool.true) => ImplUnit) ",
                     "(fun (vn : Nat) (vG : LCtx) (vx : Nat) (vA : ImplExpr) ",
-                    "(_vlk : Eq (OptionType ImplExpr) (lctx_lookup vG vx) ",
-                    "(OptionType.some ImplExpr vA)) => ImplUnit) ",
+                    "(_vlk : @Eq (OptionType ImplExpr) (lctx_lookup vG vx) ",
+                    "(@OptionType.some ImplExpr vA)) => ImplUnit) ",
                     "(fun (cn : Nat) (cG : LCtx) (cnm : Name) (cus : ListType Level) ",
                     "(cci : ImplConstInfo) ",
-                    "(_cget : Eq (OptionType ImplConstInfo) (tenv cnm) ",
-                    "(OptionType.some ImplConstInfo cci)) ",
-                    "(_car : Eq Nat (name_list_len (impl_const_lps cci)) (level_list_len cus)) ",
-                    "(_clv : Eq Bool (impl_levels_ok lps cus) Bool.true) ",
-                    "(_cuf : Eq Bool (impl_const_unsafe cci) Bool.false) ",
-                    "(_cpf : Eq Bool (impl_const_partial cci) Bool.false) => ImplUnit) ",
+                    "(_cget : @Eq (OptionType ImplConstInfo) (tenv cnm) ",
+                    "(@OptionType.some ImplConstInfo cci)) ",
+                    "(_car : @Eq Nat (name_list_len (impl_const_lps cci)) (level_list_len cus)) ",
+                    "(_clv : @Eq Bool (impl_levels_ok lps cus) Bool.true) ",
+                    "(_cuf : @Eq Bool (impl_const_unsafe cci) Bool.false) ",
+                    "(_cpf : @Eq Bool (impl_const_partial cci) Bool.false) => ImplUnit) ",
                     // app — no scoping of its own; just both children.
                     "(fun (an : Nat) (an1 : Nat) (an2 : Nat) (aG : LCtx) (af : ImplExpr) ",
                     "(aa : ImplExpr) (aF : ImplExpr) (abd : BinderData) (aA : ImplExpr) ",
@@ -3743,15 +3743,15 @@ impl Specification {
                     "(_lhA : ImplInfer tenv lps ln lG lA lS ln1) ",
                     "(_lhS : ImplWhnfTo lS (ImplExpr.sort ll)) ",
                     "(_lhb : ImplInfer tenv lps (Nat.succ ln1) ",
-                    "(LCtx.snoc lG (LocalDecl.mk ln1 lA (OptionType.none ImplExpr) lbd)) ",
+                    "(LCtx.snoc lG (LocalDecl.mk ln1 lA (@OptionType.none ImplExpr) lbd)) ",
                     "(impl_open lb ln1) lbt ln2) ",
                     "(rA : Type) (rb : Type) => ",
                     "AndType (ImplScoped ln1 lb Nat.zero) ",
                     "(AndType (ImplLC lbt Nat.zero) ",
                     "(AndType (ImplFreshLC ln1 lA Nat.zero) ",
                     "(AndType (forall (y : Nat) (Ay : ImplExpr), ",
-                    "Eq (OptionType ImplExpr) (lctx_lookup lG y) ",
-                    "(OptionType.some ImplExpr Ay) -> ImplFreshLC ln1 Ay Nat.zero) ",
+                    "@Eq (OptionType ImplExpr) (lctx_lookup lG y) ",
+                    "(@OptionType.some ImplExpr Ay) -> ImplFreshLC ln1 Ay Nat.zero) ",
                     "(AndType rA rb))))) ",
                     // pi — body scoped; its result is a SORT, so nothing to close.
                     "(fun (pn : Nat) (pn1 : Nat) (pn2 : Nat) (pG : LCtx) (pbd : BinderData) ",
@@ -3760,15 +3760,15 @@ impl Specification {
                     "(_phA : ImplInfer tenv lps pn pG pA pS1 pn1) ",
                     "(_phS1 : ImplWhnfTo pS1 (ImplExpr.sort pl1)) ",
                     "(_phb : ImplInfer tenv lps (Nat.succ pn1) ",
-                    "(LCtx.snoc pG (LocalDecl.mk pn1 pA (OptionType.none ImplExpr) pbd)) ",
+                    "(LCtx.snoc pG (LocalDecl.mk pn1 pA (@OptionType.none ImplExpr) pbd)) ",
                     "(impl_open pb pn1) pS2 pn2) ",
                     "(_phS2 : ImplWhnfTo pS2 (ImplExpr.sort pl2)) ",
                     "(rA : Type) (rb : Type) => ",
                     "AndType (ImplScoped pn1 pb Nat.zero) ",
                     "(AndType (ImplFreshLC pn1 pA Nat.zero) ",
                     "(AndType (forall (y : Nat) (Ay : ImplExpr), ",
-                    "Eq (OptionType ImplExpr) (lctx_lookup pG y) ",
-                    "(OptionType.some ImplExpr Ay) -> ImplFreshLC pn1 Ay Nat.zero) ",
+                    "@Eq (OptionType ImplExpr) (lctx_lookup pG y) ",
+                    "(@OptionType.some ImplExpr Ay) -> ImplFreshLC pn1 Ay Nat.zero) ",
                     "(AndType rA rb)))) ",
                     // let_ — one MORE than lam: the substituted value must be
                     // closed too, because impl_subst_fvar inserts it raw.
@@ -3780,7 +3780,7 @@ impl Specification {
                     "(_zhv : ImplInfer tenv lps zn1 zG zv zTv zn2) ",
                     "(_zhle : ImplIsLe zTv zty) ",
                     "(_zhb : ImplInfer tenv lps (Nat.succ zn2) ",
-                    "(LCtx.snoc zG (LocalDecl.mk zn2 zty (OptionType.some ImplExpr zv) ",
+                    "(LCtx.snoc zG (LocalDecl.mk zn2 zty (@OptionType.some ImplExpr zv) ",
                     "(BinderData.mk BinderInfo.default Multiplicity.many))) ",
                     "(impl_open zb zn2) zbt zn3) ",
                     "(rty : Type) (rv : Type) (rb : Type) => ",
@@ -3789,8 +3789,8 @@ impl Specification {
                     "(AndType (ImplLC zv Nat.zero) ",
                     "(AndType (ImplFreshLC zn2 zty Nat.zero) ",
                     "(AndType (forall (y : Nat) (Ay : ImplExpr), ",
-                    "Eq (OptionType ImplExpr) (lctx_lookup zG y) ",
-                    "(OptionType.some ImplExpr Ay) -> ImplFreshLC zn2 Ay Nat.zero) ",
+                    "@Eq (OptionType ImplExpr) (lctx_lookup zG y) ",
+                    "(@OptionType.some ImplExpr Ay) -> ImplFreshLC zn2 Ay Nat.zero) ",
                     "(AndType rty (AndType rv rb))))))) ",
                     // Both literal kinds are supported by the typing model.
                     "(fun (in2 : Nat) (iG : LCtx) (ilt : ImplLit) => ImplUnit) ",
@@ -3865,7 +3865,7 @@ impl Specification {
             concat!(
                 "inductive ImplFreshLC (x : Nat) : ImplExpr -> Nat -> Type\n",
                 "| bvar : forall (i : Nat) (d : Nat), Lt i d -> ImplFreshLC x (ImplExpr.bvar i) d\n",
-                "| fvar : forall (y : Nat) (d : Nat), Eq Bool (nat_eqb x y) Bool.false -> ImplFreshLC x (ImplExpr.fvar y) d\n",
+                "| fvar : forall (y : Nat) (d : Nat), @Eq Bool (nat_eqb x y) Bool.false -> ImplFreshLC x (ImplExpr.fvar y) d\n",
                 "| sort : forall (l : Level) (d : Nat), ImplFreshLC x (ImplExpr.sort l) d\n",
                 "| const : forall (nm : Name) (us : ListType Level) (d : Nat), ImplFreshLC x (ImplExpr.const nm us) d\n",
                 "| app : forall (f : ImplExpr) (a : ImplExpr) (d : Nat), ImplFreshLC x f d -> ImplFreshLC x a d -> ImplFreshLC x (ImplExpr.app f a) d\n",
@@ -3890,7 +3890,7 @@ impl Specification {
             type_src: concat!(
                 "forall (rho : ListType Nat) (x : Nat) (e : ImplExpr) (d : Nat), ",
                 "ImplFreshLC x e d -> ",
-                "Eq KExpr (to_kexpr_at e (ListType.cons Nat x rho) d) ",
+                "@Eq KExpr (to_kexpr_at e (@ListType.cons Nat x rho) d) ",
                 "(lift_at (to_kexpr_at e rho d) d (Nat.succ Nat.zero))"
             )
             .to_string(),
@@ -3898,37 +3898,37 @@ impl Specification {
                 concat!(
                     "fun (rho : ListType Nat) (x : Nat) (e : ImplExpr) (d : Nat) ",
                     "(h : ImplFreshLC x e d) => ",
-                    "ImplFreshLC.rec x ",
-                    "(fun (e0 : ImplExpr) (d0 : Nat) (_h0 : ImplFreshLC x e0 d0) => Eq KExpr ",
-                    "(to_kexpr_at e0 (ListType.cons Nat x rho) d0) ",
+                    "@ImplFreshLC.rec x ",
+                    "(fun (e0 : ImplExpr) (d0 : Nat) (_h0 : ImplFreshLC x e0 d0) => @Eq KExpr ",
+                    "(to_kexpr_at e0 (@ListType.cons Nat x rho) d0) ",
                     "(lift_at (to_kexpr_at e0 rho d0) d0 (Nat.succ Nat.zero))) ",
                     // bvar : i < d, below the cutoff, so the lift keeps it.
                     "(fun (i : Nat) (d0 : Nat) (hlt : Lt i d0) => ",
-                    "Eq.substType Nat (fun (s : Nat) => Eq KExpr (KExpr.bvar i) ",
-                    "(Nat.rec (fun (_m : Nat) => KExpr) ",
+                    "Eq.substType Nat (fun (s : Nat) => @Eq KExpr (KExpr.bvar i) ",
+                    "(@Nat.rec (fun (_m : Nat) => KExpr) ",
                     "(KExpr.bvar (Nat.add i (Nat.succ Nat.zero))) ",
                     "(fun (_q : Nat) (_r : KExpr) => KExpr.bvar i) s)) ",
                     "(Nat.succ (Nat.sub (Nat.sub d0 i) (Nat.succ Nat.zero))) (Nat.sub d0 i) ",
                     "(Eq.symm Nat (Nat.sub d0 i) ",
                     "(Nat.succ (Nat.sub (Nat.sub d0 i) (Nat.succ Nat.zero))) ",
                     "(lt_sub_succ i d0 hlt)) ",
-                    "(Eq.refl KExpr (KExpr.bvar i))) ",
+                    "(@Eq.refl KExpr (KExpr.bvar i))) ",
                     // fvar : y != x, so the scan steps past the new head; on the
                     // right the lift fires because rho_index + d is >= d.
-                    "(fun (y : Nat) (d0 : Nat) (hne : Eq Bool (nat_eqb x y) Bool.false) => ",
-                    "Eq.substType Bool (fun (bb : Bool) => Eq KExpr ",
-                    "(KExpr.bvar (Nat.add (Bool.rec (fun (_c : Bool) => Nat) ",
+                    "(fun (y : Nat) (d0 : Nat) (hne : @Eq Bool (nat_eqb x y) Bool.false) => ",
+                    "Eq.substType Bool (fun (bb : Bool) => @Eq KExpr ",
+                    "(KExpr.bvar (Nat.add (@Bool.rec (fun (_c : Bool) => Nat) ",
                     "(Nat.succ (rho_index rho y)) Nat.zero bb) d0)) ",
-                    "(Nat.rec (fun (_m : Nat) => KExpr) ",
+                    "(@Nat.rec (fun (_m : Nat) => KExpr) ",
                     "(KExpr.bvar (Nat.add (Nat.add (rho_index rho y) d0) (Nat.succ Nat.zero))) ",
                     "(fun (_q : Nat) (_r : KExpr) => ",
                     "KExpr.bvar (Nat.add (rho_index rho y) d0)) ",
                     "(Nat.sub d0 (Nat.add (rho_index rho y) d0)))) ",
                     "Bool.false (nat_eqb x y) ",
                     "(Eq.symm Bool (nat_eqb x y) Bool.false hne) ",
-                    "(Eq.substType Nat (fun (s : Nat) => Eq KExpr ",
+                    "(Eq.substType Nat (fun (s : Nat) => @Eq KExpr ",
                     "(KExpr.bvar (Nat.add (Nat.succ (rho_index rho y)) d0)) ",
-                    "(Nat.rec (fun (_m : Nat) => KExpr) ",
+                    "(@Nat.rec (fun (_m : Nat) => KExpr) ",
                     "(KExpr.bvar (Nat.add (Nat.add (rho_index rho y) d0) (Nat.succ Nat.zero))) ",
                     "(fun (_q : Nat) (_r : KExpr) => ",
                     "KExpr.bvar (Nat.add (rho_index rho y) d0)) s)) ",
@@ -3945,136 +3945,136 @@ impl Specification {
                     "(Nat.add (Nat.add (rho_index rho y) d0) (Nat.succ Nat.zero)) ",
                     "(nat_succ_add (rho_index rho y) d0)))) ",
                     // sort / const
-                    "(fun (l : Level) (d0 : Nat) => Eq.refl KExpr (KExpr.sort l)) ",
+                    "(fun (l : Level) (d0 : Nat) => @Eq.refl KExpr (KExpr.sort l)) ",
                     "(fun (nm : Name) (us : ListType Level) (d0 : Nat) => ",
-                    "Eq.refl KExpr (KExpr.const nm us)) ",
+                    "@Eq.refl KExpr (KExpr.const nm us)) ",
                     // app
                     "(fun (f : ImplExpr) (a : ImplExpr) (d0 : Nat) ",
                     "(_lf : ImplFreshLC x f d0) (_la : ImplFreshLC x a d0) ",
-                    "(rf : Eq KExpr (to_kexpr_at f (ListType.cons Nat x rho) d0) ",
+                    "(rf : @Eq KExpr (to_kexpr_at f (@ListType.cons Nat x rho) d0) ",
                     "(lift_at (to_kexpr_at f rho d0) d0 (Nat.succ Nat.zero))) ",
-                    "(ra : Eq KExpr (to_kexpr_at a (ListType.cons Nat x rho) d0) ",
+                    "(ra : @Eq KExpr (to_kexpr_at a (@ListType.cons Nat x rho) d0) ",
                     "(lift_at (to_kexpr_at a rho d0) d0 (Nat.succ Nat.zero))) => ",
                     "Eq.trans KExpr ",
-                    "(KExpr.app (to_kexpr_at f (ListType.cons Nat x rho) d0) ",
-                    "(to_kexpr_at a (ListType.cons Nat x rho) d0)) ",
+                    "(KExpr.app (to_kexpr_at f (@ListType.cons Nat x rho) d0) ",
+                    "(to_kexpr_at a (@ListType.cons Nat x rho) d0)) ",
                     "(KExpr.app (lift_at (to_kexpr_at f rho d0) d0 (Nat.succ Nat.zero)) ",
-                    "(to_kexpr_at a (ListType.cons Nat x rho) d0)) ",
+                    "(to_kexpr_at a (@ListType.cons Nat x rho) d0)) ",
                     "(KExpr.app (lift_at (to_kexpr_at f rho d0) d0 (Nat.succ Nat.zero)) ",
                     "(lift_at (to_kexpr_at a rho d0) d0 (Nat.succ Nat.zero))) ",
                     "(Eq.cong KExpr KExpr (fun (w : KExpr) => KExpr.app w ",
-                    "(to_kexpr_at a (ListType.cons Nat x rho) d0)) ",
-                    "(to_kexpr_at f (ListType.cons Nat x rho) d0) ",
+                    "(to_kexpr_at a (@ListType.cons Nat x rho) d0)) ",
+                    "(to_kexpr_at f (@ListType.cons Nat x rho) d0) ",
                     "(lift_at (to_kexpr_at f rho d0) d0 (Nat.succ Nat.zero)) rf) ",
                     "(Eq.cong KExpr KExpr (fun (w : KExpr) => KExpr.app ",
                     "(lift_at (to_kexpr_at f rho d0) d0 (Nat.succ Nat.zero)) w) ",
-                    "(to_kexpr_at a (ListType.cons Nat x rho) d0) ",
+                    "(to_kexpr_at a (@ListType.cons Nat x rho) d0) ",
                     "(lift_at (to_kexpr_at a rho d0) d0 (Nat.succ Nat.zero)) ra)) ",
                     // lam / pi / let_ : both sides step depth AND cutoff to succ d0.
                     "(fun (bd : BinderData) (ty : ImplExpr) (bb : ImplExpr) (d0 : Nat) ",
                     "(_lt : ImplFreshLC x ty d0) (_lb : ImplFreshLC x bb (Nat.succ d0)) ",
-                    "(rt : Eq KExpr (to_kexpr_at ty (ListType.cons Nat x rho) d0) ",
+                    "(rt : @Eq KExpr (to_kexpr_at ty (@ListType.cons Nat x rho) d0) ",
                     "(lift_at (to_kexpr_at ty rho d0) d0 (Nat.succ Nat.zero))) ",
-                    "(rb : Eq KExpr (to_kexpr_at bb (ListType.cons Nat x rho) (Nat.succ d0)) ",
+                    "(rb : @Eq KExpr (to_kexpr_at bb (@ListType.cons Nat x rho) (Nat.succ d0)) ",
                     "(lift_at (to_kexpr_at bb rho (Nat.succ d0)) (Nat.succ d0) ",
                     "(Nat.succ Nat.zero))) => ",
                     "Eq.trans KExpr ",
-                    "(KExpr.lam (to_kexpr_at ty (ListType.cons Nat x rho) d0) ",
-                    "(to_kexpr_at bb (ListType.cons Nat x rho) (Nat.succ d0))) ",
+                    "(KExpr.lam (to_kexpr_at ty (@ListType.cons Nat x rho) d0) ",
+                    "(to_kexpr_at bb (@ListType.cons Nat x rho) (Nat.succ d0))) ",
                     "(KExpr.lam (lift_at (to_kexpr_at ty rho d0) d0 (Nat.succ Nat.zero)) ",
-                    "(to_kexpr_at bb (ListType.cons Nat x rho) (Nat.succ d0))) ",
+                    "(to_kexpr_at bb (@ListType.cons Nat x rho) (Nat.succ d0))) ",
                     "(KExpr.lam (lift_at (to_kexpr_at ty rho d0) d0 (Nat.succ Nat.zero)) ",
                     "(lift_at (to_kexpr_at bb rho (Nat.succ d0)) (Nat.succ d0) ",
                     "(Nat.succ Nat.zero))) ",
                     "(Eq.cong KExpr KExpr (fun (w : KExpr) => KExpr.lam w ",
-                    "(to_kexpr_at bb (ListType.cons Nat x rho) (Nat.succ d0))) ",
-                    "(to_kexpr_at ty (ListType.cons Nat x rho) d0) ",
+                    "(to_kexpr_at bb (@ListType.cons Nat x rho) (Nat.succ d0))) ",
+                    "(to_kexpr_at ty (@ListType.cons Nat x rho) d0) ",
                     "(lift_at (to_kexpr_at ty rho d0) d0 (Nat.succ Nat.zero)) rt) ",
                     "(Eq.cong KExpr KExpr (fun (w : KExpr) => KExpr.lam ",
                     "(lift_at (to_kexpr_at ty rho d0) d0 (Nat.succ Nat.zero)) w) ",
-                    "(to_kexpr_at bb (ListType.cons Nat x rho) (Nat.succ d0)) ",
+                    "(to_kexpr_at bb (@ListType.cons Nat x rho) (Nat.succ d0)) ",
                     "(lift_at (to_kexpr_at bb rho (Nat.succ d0)) (Nat.succ d0) ",
                     "(Nat.succ Nat.zero)) rb)) ",
                     "(fun (bd : BinderData) (ty : ImplExpr) (bb : ImplExpr) (d0 : Nat) ",
                     "(_lt : ImplFreshLC x ty d0) (_lb : ImplFreshLC x bb (Nat.succ d0)) ",
-                    "(rt : Eq KExpr (to_kexpr_at ty (ListType.cons Nat x rho) d0) ",
+                    "(rt : @Eq KExpr (to_kexpr_at ty (@ListType.cons Nat x rho) d0) ",
                     "(lift_at (to_kexpr_at ty rho d0) d0 (Nat.succ Nat.zero))) ",
-                    "(rb : Eq KExpr (to_kexpr_at bb (ListType.cons Nat x rho) (Nat.succ d0)) ",
+                    "(rb : @Eq KExpr (to_kexpr_at bb (@ListType.cons Nat x rho) (Nat.succ d0)) ",
                     "(lift_at (to_kexpr_at bb rho (Nat.succ d0)) (Nat.succ d0) ",
                     "(Nat.succ Nat.zero))) => ",
                     "Eq.trans KExpr ",
-                    "(KExpr.pi (to_kexpr_at ty (ListType.cons Nat x rho) d0) ",
-                    "(to_kexpr_at bb (ListType.cons Nat x rho) (Nat.succ d0))) ",
+                    "(KExpr.pi (to_kexpr_at ty (@ListType.cons Nat x rho) d0) ",
+                    "(to_kexpr_at bb (@ListType.cons Nat x rho) (Nat.succ d0))) ",
                     "(KExpr.pi (lift_at (to_kexpr_at ty rho d0) d0 (Nat.succ Nat.zero)) ",
-                    "(to_kexpr_at bb (ListType.cons Nat x rho) (Nat.succ d0))) ",
+                    "(to_kexpr_at bb (@ListType.cons Nat x rho) (Nat.succ d0))) ",
                     "(KExpr.pi (lift_at (to_kexpr_at ty rho d0) d0 (Nat.succ Nat.zero)) ",
                     "(lift_at (to_kexpr_at bb rho (Nat.succ d0)) (Nat.succ d0) ",
                     "(Nat.succ Nat.zero))) ",
                     "(Eq.cong KExpr KExpr (fun (w : KExpr) => KExpr.pi w ",
-                    "(to_kexpr_at bb (ListType.cons Nat x rho) (Nat.succ d0))) ",
-                    "(to_kexpr_at ty (ListType.cons Nat x rho) d0) ",
+                    "(to_kexpr_at bb (@ListType.cons Nat x rho) (Nat.succ d0))) ",
+                    "(to_kexpr_at ty (@ListType.cons Nat x rho) d0) ",
                     "(lift_at (to_kexpr_at ty rho d0) d0 (Nat.succ Nat.zero)) rt) ",
                     "(Eq.cong KExpr KExpr (fun (w : KExpr) => KExpr.pi ",
                     "(lift_at (to_kexpr_at ty rho d0) d0 (Nat.succ Nat.zero)) w) ",
-                    "(to_kexpr_at bb (ListType.cons Nat x rho) (Nat.succ d0)) ",
+                    "(to_kexpr_at bb (@ListType.cons Nat x rho) (Nat.succ d0)) ",
                     "(lift_at (to_kexpr_at bb rho (Nat.succ d0)) (Nat.succ d0) ",
                     "(Nat.succ Nat.zero)) rb)) ",
                     "(fun (nm : Name) (ty : ImplExpr) (vv : ImplExpr) (bb : ImplExpr) (d0 : Nat) ",
                     "(_lt : ImplFreshLC x ty d0) (_lv : ImplFreshLC x vv d0) ",
                     "(_lb : ImplFreshLC x bb (Nat.succ d0)) ",
-                    "(rt : Eq KExpr (to_kexpr_at ty (ListType.cons Nat x rho) d0) ",
+                    "(rt : @Eq KExpr (to_kexpr_at ty (@ListType.cons Nat x rho) d0) ",
                     "(lift_at (to_kexpr_at ty rho d0) d0 (Nat.succ Nat.zero))) ",
-                    "(rv : Eq KExpr (to_kexpr_at vv (ListType.cons Nat x rho) d0) ",
+                    "(rv : @Eq KExpr (to_kexpr_at vv (@ListType.cons Nat x rho) d0) ",
                     "(lift_at (to_kexpr_at vv rho d0) d0 (Nat.succ Nat.zero))) ",
-                    "(rb : Eq KExpr (to_kexpr_at bb (ListType.cons Nat x rho) (Nat.succ d0)) ",
+                    "(rb : @Eq KExpr (to_kexpr_at bb (@ListType.cons Nat x rho) (Nat.succ d0)) ",
                     "(lift_at (to_kexpr_at bb rho (Nat.succ d0)) (Nat.succ d0) ",
                     "(Nat.succ Nat.zero))) => ",
                     "Eq.trans KExpr ",
-                    "(KExpr.let_ (to_kexpr_at ty (ListType.cons Nat x rho) d0) ",
-                    "(to_kexpr_at vv (ListType.cons Nat x rho) d0) ",
-                    "(to_kexpr_at bb (ListType.cons Nat x rho) (Nat.succ d0))) ",
+                    "(KExpr.let_ (to_kexpr_at ty (@ListType.cons Nat x rho) d0) ",
+                    "(to_kexpr_at vv (@ListType.cons Nat x rho) d0) ",
+                    "(to_kexpr_at bb (@ListType.cons Nat x rho) (Nat.succ d0))) ",
                     "(KExpr.let_ (lift_at (to_kexpr_at ty rho d0) d0 (Nat.succ Nat.zero)) ",
-                    "(to_kexpr_at vv (ListType.cons Nat x rho) d0) ",
-                    "(to_kexpr_at bb (ListType.cons Nat x rho) (Nat.succ d0))) ",
+                    "(to_kexpr_at vv (@ListType.cons Nat x rho) d0) ",
+                    "(to_kexpr_at bb (@ListType.cons Nat x rho) (Nat.succ d0))) ",
                     "(KExpr.let_ (lift_at (to_kexpr_at ty rho d0) d0 (Nat.succ Nat.zero)) ",
                     "(lift_at (to_kexpr_at vv rho d0) d0 (Nat.succ Nat.zero)) ",
                     "(lift_at (to_kexpr_at bb rho (Nat.succ d0)) (Nat.succ d0) ",
                     "(Nat.succ Nat.zero))) ",
                     "(Eq.cong KExpr KExpr (fun (w : KExpr) => KExpr.let_ w ",
-                    "(to_kexpr_at vv (ListType.cons Nat x rho) d0) ",
-                    "(to_kexpr_at bb (ListType.cons Nat x rho) (Nat.succ d0))) ",
-                    "(to_kexpr_at ty (ListType.cons Nat x rho) d0) ",
+                    "(to_kexpr_at vv (@ListType.cons Nat x rho) d0) ",
+                    "(to_kexpr_at bb (@ListType.cons Nat x rho) (Nat.succ d0))) ",
+                    "(to_kexpr_at ty (@ListType.cons Nat x rho) d0) ",
                     "(lift_at (to_kexpr_at ty rho d0) d0 (Nat.succ Nat.zero)) rt) ",
                     "(Eq.trans KExpr ",
                     "(KExpr.let_ (lift_at (to_kexpr_at ty rho d0) d0 (Nat.succ Nat.zero)) ",
-                    "(to_kexpr_at vv (ListType.cons Nat x rho) d0) ",
-                    "(to_kexpr_at bb (ListType.cons Nat x rho) (Nat.succ d0))) ",
+                    "(to_kexpr_at vv (@ListType.cons Nat x rho) d0) ",
+                    "(to_kexpr_at bb (@ListType.cons Nat x rho) (Nat.succ d0))) ",
                     "(KExpr.let_ (lift_at (to_kexpr_at ty rho d0) d0 (Nat.succ Nat.zero)) ",
                     "(lift_at (to_kexpr_at vv rho d0) d0 (Nat.succ Nat.zero)) ",
-                    "(to_kexpr_at bb (ListType.cons Nat x rho) (Nat.succ d0))) ",
+                    "(to_kexpr_at bb (@ListType.cons Nat x rho) (Nat.succ d0))) ",
                     "(KExpr.let_ (lift_at (to_kexpr_at ty rho d0) d0 (Nat.succ Nat.zero)) ",
                     "(lift_at (to_kexpr_at vv rho d0) d0 (Nat.succ Nat.zero)) ",
                     "(lift_at (to_kexpr_at bb rho (Nat.succ d0)) (Nat.succ d0) ",
                     "(Nat.succ Nat.zero))) ",
                     "(Eq.cong KExpr KExpr (fun (w : KExpr) => KExpr.let_ ",
                     "(lift_at (to_kexpr_at ty rho d0) d0 (Nat.succ Nat.zero)) w ",
-                    "(to_kexpr_at bb (ListType.cons Nat x rho) (Nat.succ d0))) ",
-                    "(to_kexpr_at vv (ListType.cons Nat x rho) d0) ",
+                    "(to_kexpr_at bb (@ListType.cons Nat x rho) (Nat.succ d0))) ",
+                    "(to_kexpr_at vv (@ListType.cons Nat x rho) d0) ",
                     "(lift_at (to_kexpr_at vv rho d0) d0 (Nat.succ Nat.zero)) rv) ",
                     "(Eq.cong KExpr KExpr (fun (w : KExpr) => KExpr.let_ ",
                     "(lift_at (to_kexpr_at ty rho d0) d0 (Nat.succ Nat.zero)) ",
                     "(lift_at (to_kexpr_at vv rho d0) d0 (Nat.succ Nat.zero)) w) ",
-                    "(to_kexpr_at bb (ListType.cons Nat x rho) (Nat.succ d0)) ",
+                    "(to_kexpr_at bb (@ListType.cons Nat x rho) (Nat.succ d0)) ",
                     "(lift_at (to_kexpr_at bb rho (Nat.succ d0)) (Nat.succ d0) ",
                     "(Nat.succ Nat.zero)) rb))) ",
                     // lit / mdata
                     "(fun (lt : ImplLit) (d0 : Nat) => ",
-                    "ImplLit.rec (fun (z : ImplLit) => Eq KExpr (impl_lit_to_kexpr z) ",
+                    "@ImplLit.rec (fun (z : ImplLit) => @Eq KExpr (impl_lit_to_kexpr z) ",
                     "(lift_at (impl_lit_to_kexpr z) d0 (Nat.succ Nat.zero))) ",
-                    "(fun (k : Nat) => Eq.refl KExpr (literal_nat k)) ",
-                    "(fun (k : Nat) => Eq.refl KExpr (literal_string k)) lt) ",
+                    "(fun (k : Nat) => @Eq.refl KExpr (literal_nat k)) ",
+                    "(fun (k : Nat) => @Eq.refl KExpr (literal_string k)) lt) ",
                     "(fun (e0 : ImplExpr) (d0 : Nat) (_le : ImplFreshLC x e0 d0) ",
-                    "(ri : Eq KExpr (to_kexpr_at e0 (ListType.cons Nat x rho) d0) ",
+                    "(ri : @Eq KExpr (to_kexpr_at e0 (@ListType.cons Nat x rho) d0) ",
                     "(lift_at (to_kexpr_at e0 rho d0) d0 (Nat.succ Nat.zero))) => ri) ",
                     "e d h"
                 )
@@ -4125,9 +4125,9 @@ impl Specification {
                 "(A : ImplExpr) (dv : OptionType ImplExpr) (bd : BinderData), ",
                 "CtxRep Gk rho D -> ImplFreshLC x A Nat.zero -> ",
                 "(forall (y : Nat) (Ay : ImplExpr), ",
-                "Eq (OptionType ImplExpr) (lctx_lookup D y) (OptionType.some ImplExpr Ay) -> ",
+                "@Eq (OptionType ImplExpr) (lctx_lookup D y) (@OptionType.some ImplExpr Ay) -> ",
                 "ImplFreshLC x Ay Nat.zero) -> ",
-                "CtxRep (ListType.cons KExpr (to_kexpr A rho) Gk) (ListType.cons Nat x rho) ",
+                "CtxRep (@ListType.cons KExpr (to_kexpr A rho) Gk) (@ListType.cons Nat x rho) ",
                 "(LCtx.snoc D (LocalDecl.mk x A dv bd))"
             )
             .to_string(),
@@ -4137,13 +4137,13 @@ impl Specification {
                     "(A : ImplExpr) (dv : OptionType ImplExpr) (bd : BinderData) ",
                     "(crep : CtxRep Gk rho D) (hfa : ImplFreshLC x A Nat.zero) ",
                     "(hfd : forall (y : Nat) (Ay : ImplExpr), ",
-                    "Eq (OptionType ImplExpr) (lctx_lookup D y) (OptionType.some ImplExpr Ay) -> ",
+                    "@Eq (OptionType ImplExpr) (lctx_lookup D y) (@OptionType.some ImplExpr Ay) -> ",
                     "ImplFreshLC x Ay Nat.zero) => ",
                     "CtxRep.snoc Gk rho D x (to_kexpr A rho) A dv bd crep ",
                     "(to_kexpr_weaken rho x A Nat.zero hfa) ",
                     "(fun (y : Nat) (Ay : ImplExpr) ",
-                    "(hy : Eq (OptionType ImplExpr) (lctx_lookup D y) ",
-                    "(OptionType.some ImplExpr Ay)) => ",
+                    "(hy : @Eq (OptionType ImplExpr) (lctx_lookup D y) ",
+                    "(@OptionType.some ImplExpr Ay)) => ",
                     "to_kexpr_weaken rho x Ay Nat.zero (hfd y Ay hy))"
                 )
                 .to_string(),
@@ -4182,7 +4182,7 @@ impl Specification {
             type_src: concat!(
                 "forall (tenv : KDeclEnv) (G : ListType KExpr) (i : Nat) ",
                 "(Tk : KExpr), ",
-                "Eq (OptionType KExpr) (ctx_var_type G i) (OptionType.some KExpr Tk) -> ",
+                "@Eq (OptionType KExpr) (ctx_var_type G i) (@OptionType.some KExpr Tk) -> ",
                 "TypingCtxConv tenv G (KExpr.bvar i) Tk"
             )
             .to_string(),
@@ -4190,29 +4190,29 @@ impl Specification {
                 concat!(
                     "fun (tenv : KDeclEnv) (G : ListType KExpr) (i : Nat) ",
                     "(Tk : KExpr) ",
-                    "(h : Eq (OptionType KExpr) (ctx_var_type G i) (OptionType.some KExpr Tk)) => ",
-                    "OptionType.rec KExpr ",
+                    "(h : @Eq (OptionType KExpr) (ctx_var_type G i) (@OptionType.some KExpr Tk)) => ",
+                    "@OptionType.rec KExpr ",
                     "(fun (o : OptionType KExpr) => ",
-                    "Eq (OptionType KExpr) (ctx_lookup G i) o -> ",
-                    "Eq (OptionType KExpr) (opt_var_type o i) (OptionType.some KExpr Tk) -> ",
+                    "@Eq (OptionType KExpr) (ctx_lookup G i) o -> ",
+                    "@Eq (OptionType KExpr) (opt_var_type o i) (@OptionType.some KExpr Tk) -> ",
                     "TypingCtxConv tenv G (KExpr.bvar i) Tk) ",
-                    "(fun (_hl : Eq (OptionType KExpr) (ctx_lookup G i) (OptionType.none KExpr)) ",
-                    "(hs : Eq (OptionType KExpr) (OptionType.none KExpr) ",
-                    "(OptionType.some KExpr Tk)) => ",
+                    "(fun (_hl : @Eq (OptionType KExpr) (ctx_lookup G i) (@OptionType.none KExpr)) ",
+                    "(hs : @Eq (OptionType KExpr) (@OptionType.none KExpr) ",
+                    "(@OptionType.some KExpr Tk)) => ",
                     "option_none_ne_some_type KExpr Tk ",
                     "(TypingCtxConv tenv G (KExpr.bvar i) Tk) hs) ",
                     "(fun (A : KExpr) ",
-                    "(hl : Eq (OptionType KExpr) (ctx_lookup G i) (OptionType.some KExpr A)) ",
-                    "(hs : Eq (OptionType KExpr) ",
-                    "(OptionType.some KExpr (lift_at A Nat.zero (Nat.succ i))) ",
-                    "(OptionType.some KExpr Tk)) => ",
+                    "(hl : @Eq (OptionType KExpr) (ctx_lookup G i) (@OptionType.some KExpr A)) ",
+                    "(hs : @Eq (OptionType KExpr) ",
+                    "(@OptionType.some KExpr (lift_at A Nat.zero (Nat.succ i))) ",
+                    "(@OptionType.some KExpr Tk)) => ",
                     "Eq.substType KExpr ",
                     "(fun (T : KExpr) => TypingCtxConv tenv G (KExpr.bvar i) T) ",
                     "(lift_at A Nat.zero (Nat.succ i)) Tk ",
                     "(option_some_inj KExpr (lift_at A Nat.zero (Nat.succ i)) Tk hs) ",
-                    "(TypingCtxConv.var tenv G i A hl)) ",
+                    "(@TypingCtxConv.var tenv G i A hl)) ",
                     "(ctx_lookup G i) ",
-                    "(Eq.refl (OptionType KExpr) (ctx_lookup G i)) ",
+                    "(@Eq.refl (OptionType KExpr) (ctx_lookup G i)) ",
                     "h"
                 )
                 .to_string(),
@@ -4297,10 +4297,10 @@ impl Specification {
         // The environment representation the `const` rule needs.
 
         // ── guard sub-terms, written once and reused by the projections ──────
-        let lam_decl = "(LocalDecl.mk ln1 lA (OptionType.none ImplExpr) lbd)";
-        let pi_decl = "(LocalDecl.mk pn1 pA (OptionType.none ImplExpr) pbd)";
+        let lam_decl = "(LocalDecl.mk ln1 lA (@OptionType.none ImplExpr) lbd)";
+        let pi_decl = "(LocalDecl.mk pn1 pA (@OptionType.none ImplExpr) pbd)";
         let let_decl = concat!(
-            "(LocalDecl.mk zn2 zty (OptionType.some ImplExpr zv) ",
+            "(LocalDecl.mk zn2 zty (@OptionType.some ImplExpr zv) ",
             "(BinderData.mk BinderInfo.default Multiplicity.many))"
         );
         let lam_ga = "(ImplSoundGuard tenv lps ln lG lA lS ln1 lhA)";
@@ -4319,14 +4319,14 @@ impl Specification {
             "(ImplSoundGuard tenv lps (Nat.succ zn2) (LCtx.snoc zG {let_decl}) \
              (impl_open zb zn2) zbt zn3 zhb)"
         );
-        let lam_cf = "(forall (y : Nat) (Ay : ImplExpr), Eq (OptionType ImplExpr) \
-                      (lctx_lookup lG y) (OptionType.some ImplExpr Ay) -> \
+        let lam_cf = "(forall (y : Nat) (Ay : ImplExpr), @Eq (OptionType ImplExpr) \
+                      (lctx_lookup lG y) (@OptionType.some ImplExpr Ay) -> \
                       ImplFreshLC ln1 Ay Nat.zero)";
-        let pi_cf = "(forall (y : Nat) (Ay : ImplExpr), Eq (OptionType ImplExpr) \
-                     (lctx_lookup pG y) (OptionType.some ImplExpr Ay) -> \
+        let pi_cf = "(forall (y : Nat) (Ay : ImplExpr), @Eq (OptionType ImplExpr) \
+                     (lctx_lookup pG y) (@OptionType.some ImplExpr Ay) -> \
                      ImplFreshLC pn1 Ay Nat.zero)";
-        let let_cf = "(forall (y : Nat) (Ay : ImplExpr), Eq (OptionType ImplExpr) \
-                      (lctx_lookup zG y) (OptionType.some ImplExpr Ay) -> \
+        let let_cf = "(forall (y : Nat) (Ay : ImplExpr), @Eq (OptionType ImplExpr) \
+                      (lctx_lookup zG y) (@OptionType.some ImplExpr Ay) -> \
                       ImplFreshLC zn2 Ay Nat.zero)";
 
         let motive = "(fun (n0 : Nat) (G0 : LCtx) (e0 : ImplExpr) (T0 : ImplExpr) (m0 : Nat) \
@@ -4360,16 +4360,16 @@ impl Specification {
              (tenvK : KDeclEnv) (lps : ListType Name) \
              (te : TEnvRepC tenv tenvK) (n : Nat) (G : LCtx) (e : ImplExpr) \
              (T : ImplExpr) (m : Nat) (h : ImplInfer tenv lps n G e T m) => \
-             ImplInfer.rec tenv lps {motive} \
+             @ImplInfer.rec tenv lps {motive} \
              \
              (fun (sn : Nat) (sG : LCtx) (sl : Level) \
-             (_shl : Eq Bool (level_params_ok lps sl) Bool.true) => \
+             (_shl : @Eq Bool (level_params_ok lps sl) Bool.true) => \
              fun (_g : ImplUnit) (rho : ListType Nat) (Gk : ListType KExpr) \
-             (_c : CtxRep Gk rho sG) => TypingCtxConv.sort tenvK Gk sl) \
+             (_c : CtxRep Gk rho sG) => @TypingCtxConv.sort tenvK Gk sl) \
              \
              (fun (vn : Nat) (vG : LCtx) (vx : Nat) (vA : ImplExpr) \
-             (vlk : Eq (OptionType ImplExpr) (lctx_lookup vG vx) \
-             (OptionType.some ImplExpr vA)) => \
+             (vlk : @Eq (OptionType ImplExpr) (lctx_lookup vG vx) \
+             (@OptionType.some ImplExpr vA)) => \
              fun (_g : ImplUnit) (rho : ListType Nat) (Gk : ListType KExpr) \
              (c : CtxRep Gk rho vG) => \
              tconv_var_of_var_type tenvK Gk (rho_index rho vx) (to_kexpr vA rho) \
@@ -4377,15 +4377,15 @@ impl Specification {
              \
              (fun (cn : Nat) (cG : LCtx) (cnm : Name) (cus : ListType Level) \
              (cci : ImplConstInfo) \
-             (cget : Eq (OptionType ImplConstInfo) (tenv cnm) \
-             (OptionType.some ImplConstInfo cci)) \
-             (car : Eq Nat (name_list_len (impl_const_lps cci)) (level_list_len cus)) \
-             (_clv : Eq Bool (impl_levels_ok lps cus) Bool.true) \
-             (_cuf : Eq Bool (impl_const_unsafe cci) Bool.false) \
-             (_cpf : Eq Bool (impl_const_partial cci) Bool.false) => \
+             (cget : @Eq (OptionType ImplConstInfo) (tenv cnm) \
+             (@OptionType.some ImplConstInfo cci)) \
+             (car : @Eq Nat (name_list_len (impl_const_lps cci)) (level_list_len cus)) \
+             (_clv : @Eq Bool (impl_levels_ok lps cus) Bool.true) \
+             (_cuf : @Eq Bool (impl_const_unsafe cci) Bool.false) \
+             (_cpf : @Eq Bool (impl_const_partial cci) Bool.false) => \
              fun (_g : ImplUnit) (rho : ListType Nat) (Gk : ListType KExpr) \
              (_c : CtxRep Gk rho cG) => \
-             TypingCtxConv.const tenvK Gk cnm cus \
+             @TypingCtxConv.const tenvK Gk cnm cus \
              (to_kexpr (impl_inst_levels (impl_const_lps cci) cus (impl_const_type cci)) rho) \
              (schematic_tenv_lookup tenv tenvK te cnm cci cus rho cget car)) \
              \
@@ -4434,9 +4434,9 @@ impl Specification {
              (AndType.right (ImplFreshLC ln1 lA Nat.zero) {lam_r3} \
              (AndType.right (ImplLC lbt Nat.zero) {lam_r2} \
              (AndType.right (ImplScoped ln1 lb Nat.zero) {lam_r1} g))))) \
-             (ListType.cons Nat ln1 rho) \
-             (ListType.cons KExpr (to_kexpr lA rho) Gk) \
-             (ctx_rep_snoc_fresh Gk rho lG ln1 lA (OptionType.none ImplExpr) lbd c \
+             (@ListType.cons Nat ln1 rho) \
+             (@ListType.cons KExpr (to_kexpr lA rho) Gk) \
+             (ctx_rep_snoc_fresh Gk rho lG ln1 lA (@OptionType.none ImplExpr) lbd c \
              (AndType.left (ImplFreshLC ln1 lA Nat.zero) {lam_r3} \
              (AndType.right (ImplLC lbt Nat.zero) {lam_r2} \
              (AndType.right (ImplScoped ln1 lb Nat.zero) {lam_r1} g))) \
@@ -4469,9 +4469,9 @@ impl Specification {
              (AndType.right {pi_cf} {pi_r3} \
              (AndType.right (ImplFreshLC pn1 pA Nat.zero) {pi_r2} \
              (AndType.right (ImplScoped pn1 pb Nat.zero) {pi_r1} g)))) \
-             (ListType.cons Nat pn1 rho) \
-             (ListType.cons KExpr (to_kexpr pA rho) Gk) \
-             (ctx_rep_snoc_fresh Gk rho pG pn1 pA (OptionType.none ImplExpr) pbd c \
+             (@ListType.cons Nat pn1 rho) \
+             (@ListType.cons KExpr (to_kexpr pA rho) Gk) \
+             (ctx_rep_snoc_fresh Gk rho pG pn1 pA (@OptionType.none ImplExpr) pbd c \
              (AndType.left (ImplFreshLC pn1 pA Nat.zero) {pi_r2} \
              (AndType.right (ImplScoped pn1 pb Nat.zero) {pi_r1} g)) \
              (AndType.left {pi_cf} {pi_r3} \
@@ -4521,9 +4521,9 @@ impl Specification {
              (AndType.right (ImplLC zv Nat.zero) {let_r3} \
              (AndType.right (ImplLC zbt Nat.zero) {let_r2} \
              (AndType.right (ImplScoped zn2 zb Nat.zero) {let_r1} g))))))) \
-             (ListType.cons Nat zn2 rho) \
-             (ListType.cons KExpr (to_kexpr zty rho) Gk) \
-             (ctx_rep_snoc_fresh Gk rho zG zn2 zty (OptionType.some ImplExpr zv) \
+             (@ListType.cons Nat zn2 rho) \
+             (@ListType.cons KExpr (to_kexpr zty rho) Gk) \
+             (ctx_rep_snoc_fresh Gk rho zG zn2 zty (@OptionType.some ImplExpr zv) \
              (BinderData.mk BinderInfo.default Multiplicity.many) c \
              (AndType.left (ImplFreshLC zn2 zty Nat.zero) {let_r4} \
              (AndType.right (ImplLC zv Nat.zero) {let_r3} \
@@ -4569,35 +4569,35 @@ impl Specification {
              (tenvK : KDeclEnv) (lps : ListType Name) \
              (te : TEnvRepC tenv tenvK) (n : Nat) (G : LCtx) (e : ImplExpr) \
              (T : ImplExpr) (m : Nat) (h : ImplInfer tenv lps n G e T m) => \
-             ImplInfer.rec tenv lps {kmotive} \
+             @ImplInfer.rec tenv lps {kmotive} \
              \
              (fun (sn : Nat) (sG : LCtx) (sl : Level) \
-             (_shl : Eq Bool (level_params_ok lps sl) Bool.true) => \
+             (_shl : @Eq Bool (level_params_ok lps sl) Bool.true) => \
              fun (_g : ImplUnit) (rho : ListType Nat) (Gk : ListType KExpr) \
              (_c : CtxRep Gk rho sG) => impl_bridge_sort tenvK Gk rho sl) \
              \
              (fun (vn : Nat) (vG : LCtx) (vx : Nat) (vA : ImplExpr) \
-             (vlk : Eq (OptionType ImplExpr) (lctx_lookup vG vx) \
-             (OptionType.some ImplExpr vA)) => \
+             (vlk : @Eq (OptionType ImplExpr) (lctx_lookup vG vx) \
+             (@OptionType.some ImplExpr vA)) => \
              fun (_g : ImplUnit) (rho : ListType Nat) (Gk : ListType KExpr) \
              (c : CtxRep Gk rho vG) => \
              impl_bridge_fvar tenvK Gk rho vG vx vA c vlk) \
              \
              (fun (cn : Nat) (cG : LCtx) (cnm : Name) (cus : ListType Level) \
              (cci : ImplConstInfo) \
-             (cget : Eq (OptionType ImplConstInfo) (tenv cnm) \
-             (OptionType.some ImplConstInfo cci)) \
-             (car : Eq Nat (name_list_len (impl_const_lps cci)) (level_list_len cus)) \
-             (_clv : Eq Bool (impl_levels_ok lps cus) Bool.true) \
-             (_cuf : Eq Bool (impl_const_unsafe cci) Bool.false) \
-             (_cpf : Eq Bool (impl_const_partial cci) Bool.false) => \
+             (cget : @Eq (OptionType ImplConstInfo) (tenv cnm) \
+             (@OptionType.some ImplConstInfo cci)) \
+             (car : @Eq Nat (name_list_len (impl_const_lps cci)) (level_list_len cus)) \
+             (_clv : @Eq Bool (impl_levels_ok lps cus) Bool.true) \
+             (_cuf : @Eq Bool (impl_const_unsafe cci) Bool.false) \
+             (_cpf : @Eq Bool (impl_const_partial cci) Bool.false) => \
              fun (_g : ImplUnit) (rho : ListType Nat) (Gk : ListType KExpr) \
              (_c : CtxRep Gk rho cG) => \
              impl_bridge_const tenvK tenv Gk rho cnm cus cci \
              (fun (nm2 : Name) (us2 : ListType Level) (ci2 : ImplConstInfo) \
-             (g2 : Eq (OptionType ImplConstInfo) (tenv nm2) \
-             (OptionType.some ImplConstInfo ci2)) \
-             (a2 : Eq Nat (name_list_len (impl_const_lps ci2)) (level_list_len us2)) => \
+             (g2 : @Eq (OptionType ImplConstInfo) (tenv nm2) \
+             (@OptionType.some ImplConstInfo ci2)) \
+             (a2 : @Eq Nat (name_list_len (impl_const_lps ci2)) (level_list_len us2)) => \
              schematic_tenv_lookup tenv tenvK te nm2 ci2 us2 rho g2 a2) cget car) \
              \
              (fun (an : Nat) (an1 : Nat) (an2 : Nat) (aG : LCtx) (af : ImplExpr) \
@@ -4645,9 +4645,9 @@ impl Specification {
              (AndType.right (ImplFreshLC ln1 lA Nat.zero) {lam_r3} \
              (AndType.right (ImplLC lbt Nat.zero) {lam_r2} \
              (AndType.right (ImplScoped ln1 lb Nat.zero) {lam_r1} g))))) \
-             (ListType.cons Nat ln1 rho) \
-             (ListType.cons KExpr (to_kexpr lA rho) Gk) \
-             (ctx_rep_snoc_fresh Gk rho lG ln1 lA (OptionType.none ImplExpr) lbd c \
+             (@ListType.cons Nat ln1 rho) \
+             (@ListType.cons KExpr (to_kexpr lA rho) Gk) \
+             (ctx_rep_snoc_fresh Gk rho lG ln1 lA (@OptionType.none ImplExpr) lbd c \
              (AndType.left (ImplFreshLC ln1 lA Nat.zero) {lam_r3} \
              (AndType.right (ImplLC lbt Nat.zero) {lam_r2} \
              (AndType.right (ImplScoped ln1 lb Nat.zero) {lam_r1} g))) \
@@ -4680,9 +4680,9 @@ impl Specification {
              (AndType.right {pi_cf} {pi_r3} \
              (AndType.right (ImplFreshLC pn1 pA Nat.zero) {pi_r2} \
              (AndType.right (ImplScoped pn1 pb Nat.zero) {pi_r1} g)))) \
-             (ListType.cons Nat pn1 rho) \
-             (ListType.cons KExpr (to_kexpr pA rho) Gk) \
-             (ctx_rep_snoc_fresh Gk rho pG pn1 pA (OptionType.none ImplExpr) pbd c \
+             (@ListType.cons Nat pn1 rho) \
+             (@ListType.cons KExpr (to_kexpr pA rho) Gk) \
+             (ctx_rep_snoc_fresh Gk rho pG pn1 pA (@OptionType.none ImplExpr) pbd c \
              (AndType.left (ImplFreshLC pn1 pA Nat.zero) {pi_r2} \
              (AndType.right (ImplScoped pn1 pb Nat.zero) {pi_r1} g)) \
              (AndType.left {pi_cf} {pi_r3} \
@@ -4732,9 +4732,9 @@ impl Specification {
              (AndType.right (ImplLC zv Nat.zero) {let_r3} \
              (AndType.right (ImplLC zbt Nat.zero) {let_r2} \
              (AndType.right (ImplScoped zn2 zb Nat.zero) {let_r1} g))))))) \
-             (ListType.cons Nat zn2 rho) \
-             (ListType.cons KExpr (to_kexpr zty rho) Gk) \
-             (ctx_rep_snoc_fresh Gk rho zG zn2 zty (OptionType.some ImplExpr zv) \
+             (@ListType.cons Nat zn2 rho) \
+             (@ListType.cons KExpr (to_kexpr zty rho) Gk) \
+             (ctx_rep_snoc_fresh Gk rho zG zn2 zty (@OptionType.some ImplExpr zv) \
              (BinderData.mk BinderInfo.default Multiplicity.many) c \
              (AndType.left (ImplFreshLC zn2 zty Nat.zero) {let_r4} \
              (AndType.right (ImplLC zv Nat.zero) {let_r3} \
@@ -4904,22 +4904,22 @@ impl Specification {
     }
 
     fn add_sound_witnesses(&mut self) -> Result<(), SpecError> {
-        let tenv = "(fun (nm : Name) => OptionType.none ImplConstInfo)";
-        let tenvk = "(fun (nm : Name) => OptionType.none KConstSig)";
+        let tenv = "(fun (nm : Name) => @OptionType.none ImplConstInfo)";
+        let tenvk = "(fun (nm : Name) => @OptionType.none KConstSig)";
         // The sort derivation written OUT, not named. ImplSoundGuard recurses on
         // the DERIVATION via ImplInfer.rec, so it only iota-reduces once the
         // derivation is a literal constructor application — a named constant
         // leaves the guard stuck and `ImplUnit.mk` will not typecheck against it.
         let deriv = format!(
-            "(ImplInfer.sort {tenv} (ListType.nil Name) Nat.zero LCtx.nil Level.zero \
-             (Eq.refl Bool Bool.true))"
+            "(@ImplInfer.sort {tenv} (@ListType.nil Name) Nat.zero LCtx.nil Level.zero \
+             (@Eq.refl Bool Bool.true))"
         );
 
         for (name, ty, val, why) in [
             (
                 "implscoped_witness",
                 "ImplScoped Nat.zero (ImplExpr.bvar Nat.zero) Nat.zero".to_string(),
-                "ImplScoped.bvar Nat.zero Nat.zero Nat.zero (Le.refl Nat.zero)".to_string(),
+                "@ImplScoped.bvar Nat.zero Nat.zero Nat.zero (Le.refl Nat.zero)".to_string(),
                 "ImplScoped IS INHABITED, on the term that matters: the body of the identity \
                  lambda. Its single loose index is 0 and the bound is Le 0 0 — the boundary \
                  case, which is precisely why this relation carries Le and not Lt.",
@@ -4974,7 +4974,7 @@ impl Specification {
             (
                 "implfreshlc_witness",
                 "ImplFreshLC Nat.zero (ImplExpr.sort Level.zero) Nat.zero".to_string(),
-                "ImplFreshLC.sort Nat.zero Level.zero Nat.zero".to_string(),
+                "@ImplFreshLC.sort Nat.zero Level.zero Nat.zero".to_string(),
                 "ImplFreshLC IS INHABITED. Both of its restrictions — the strict bound and the \
                  freshness — are vacuous on a sort, which is exactly the shape a stored context \
                  entry has in the smallest real case.",
@@ -5021,7 +5021,7 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "impl_sound_guard_witness".to_string(),
             type_src: format!(
-                "ImplSoundGuard {tenv} (ListType.nil Name) Nat.zero LCtx.nil \
+                "ImplSoundGuard {tenv} (@ListType.nil Name) Nat.zero LCtx.nil \
                  (ImplExpr.sort Level.zero) (ImplExpr.sort (Level.succ Level.zero)) Nat.zero \
                  {deriv}"
             ),
@@ -5051,14 +5051,14 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "impl_infer_sound_witness".to_string(),
             type_src: format!(
-                "TypingCtxConv {tenvk} (ListType.nil KExpr) (KExpr.sort Level.zero) \
+                "TypingCtxConv {tenvk} (@ListType.nil KExpr) (KExpr.sort Level.zero) \
                  (KExpr.sort (Level.succ Level.zero))"
             ),
             value_src: Some(format!(
-                "impl_infer_sound {tenv} {tenvk} (ListType.nil Name) tenvrepc_empty \
+                "impl_infer_sound {tenv} {tenvk} (@ListType.nil Name) tenvrepc_empty \
                  Nat.zero LCtx.nil (ImplExpr.sort Level.zero) \
                  (ImplExpr.sort (Level.succ Level.zero)) Nat.zero {deriv} \
-                 impl_sound_guard_witness (ListType.nil Nat) (ListType.nil KExpr) \
+                 impl_sound_guard_witness (@ListType.nil Nat) (@ListType.nil KExpr) \
                  ctx_rep_nil_witness"
             )),
             is_axiom: false,

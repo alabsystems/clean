@@ -118,7 +118,7 @@ impl Specification {
         // that is not in the renaming translates to junk that layer 2 cannot
         // type — the correct failure mode, not a silent success.
         self.add_recursive_def(
-            r"def rho_index (rho : ListType Nat) (x : Nat) : Nat := ListType.rec Nat (fun (_ : ListType Nat) => Nat) Nat.zero (fun (y : Nat) (rest : ListType Nat) (ih : Nat) => Bool.rec (fun (_ : Bool) => Nat) (Nat.succ ih) Nat.zero (nat_eqb y x)) rho",
+            r"def rho_index (rho : ListType Nat) (x : Nat) : Nat := @ListType.rec Nat (fun (_ : ListType Nat) => Nat) Nat.zero (fun (y : Nat) (rest : ListType Nat) (ih : Nat) => @Bool.rec (fun (_ : Bool) => Nat) (Nat.succ ih) Nat.zero (nat_eqb y x)) rho",
             "Position of an FVarId in the renaming = its de Bruijn index in the \
              layer-2 context. Scans most-recent-first, exactly as lctx_lookup does \
              on the layer-1 side, so both scrutinize the SAME boolean nat_eqb at \
@@ -208,17 +208,17 @@ impl Specification {
             name: "expr_rep_to_eq".to_string(),
             type_src: concat!(
                 "forall (rho : ListType Nat) (ek : KExpr) (ei : ImplExpr), ",
-                "ExprRep rho ek ei -> Eq KExpr ek (to_kexpr ei rho)"
+                "ExprRep rho ek ei -> @Eq KExpr ek (to_kexpr ei rho)"
             )
             .to_string(),
             value_src: Some(
                 concat!(
                     "fun (rho : ListType Nat) (ek : KExpr) (ei : ImplExpr) ",
                     "(h : ExprRep rho ek ei) => ",
-                    "ExprRep.rec rho ",
+                    "@ExprRep.rec rho ",
                     "(fun (z : KExpr) (e2 : ImplExpr) (_h : ExprRep rho z e2) => ",
-                    "Eq KExpr z (to_kexpr e2 rho)) ",
-                    "(fun (e2 : ImplExpr) => Eq.refl KExpr (to_kexpr e2 rho)) ",
+                    "@Eq KExpr z (to_kexpr e2 rho)) ",
+                    "(fun (e2 : ImplExpr) => @Eq.refl KExpr (to_kexpr e2 rho)) ",
                     "ek ei h"
                 )
                 .to_string(),
@@ -247,17 +247,17 @@ impl Specification {
             name: "expr_rep_of_eq".to_string(),
             type_src: concat!(
                 "forall (rho : ListType Nat) (ek : KExpr) (ei : ImplExpr), ",
-                "Eq KExpr ek (to_kexpr ei rho) -> ExprRep rho ek ei"
+                "@Eq KExpr ek (to_kexpr ei rho) -> ExprRep rho ek ei"
             )
             .to_string(),
             value_src: Some(
                 concat!(
                     "fun (rho : ListType Nat) (ek : KExpr) (ei : ImplExpr) ",
-                    "(h : Eq KExpr ek (to_kexpr ei rho)) => ",
+                    "(h : @Eq KExpr ek (to_kexpr ei rho)) => ",
                     "Eq.substType KExpr (fun (z : KExpr) => ExprRep rho z ei) ",
                     "(to_kexpr ei rho) ek ",
                     "(Eq.symm KExpr ek (to_kexpr ei rho) h) ",
-                    "(ExprRep.mk rho ei)"
+                    "(@ExprRep.mk rho ei)"
                 )
                 .to_string(),
             ),
@@ -298,7 +298,7 @@ impl Specification {
         // FUNCTION is what lets CtxRep's lookup lemma be stated without an
         // existential over the stored entry.
         self.add_recursive_def(
-            r"def opt_var_type (o : OptionType KExpr) (i : Nat) : OptionType KExpr := OptionType.rec KExpr (fun (_ : OptionType KExpr) => OptionType KExpr) (OptionType.none KExpr) (fun (A : KExpr) => OptionType.some KExpr (lift_at A Nat.zero (Nat.succ i))) o",
+            r"def opt_var_type (o : OptionType KExpr) (i : Nat) : OptionType KExpr := @OptionType.rec KExpr (fun (_ : OptionType KExpr) => OptionType KExpr) (@OptionType.none KExpr) (fun (A : KExpr) => @OptionType.some KExpr (lift_at A Nat.zero (Nat.succ i))) o",
             "Apply KernelInfers.bvar's lift discipline to an optional context entry: \
              none stays none, some A becomes some (lift_at A 0 (succ i)).",
         )?;
@@ -312,7 +312,7 @@ impl Specification {
         )?;
 
         self.add_recursive_def(
-            r"def opt_lift1 (o : OptionType KExpr) : OptionType KExpr := OptionType.rec KExpr (fun (_ : OptionType KExpr) => OptionType KExpr) (OptionType.none KExpr) (fun (A : KExpr) => OptionType.some KExpr (lift_at A Nat.zero (Nat.succ Nat.zero))) o",
+            r"def opt_lift1 (o : OptionType KExpr) : OptionType KExpr := @OptionType.rec KExpr (fun (_ : OptionType KExpr) => OptionType KExpr) (@OptionType.none KExpr) (fun (A : KExpr) => @OptionType.some KExpr (lift_at A Nat.zero (Nat.succ Nat.zero))) o",
             "Lift an optional KExpr by one at cutoff zero — the single-binder \
              weakening step relating the layer-2 view of a context to the view of \
              that context extended by one entry.",
@@ -349,8 +349,8 @@ impl Specification {
         self.add_inductive(
             concat!(
                 "inductive CtxRep : ListType KExpr -> ListType Nat -> LCtx -> Type\n",
-                "| nil : CtxRep (ListType.nil KExpr) (ListType.nil Nat) LCtx.nil\n",
-                "| snoc : forall (G : ListType KExpr) (rho : ListType Nat) (D : LCtx) (x : Nat) (Ak : KExpr) (Ai : ImplExpr) (dv : OptionType ImplExpr) (bd : BinderData), CtxRep G rho D -> Eq KExpr (to_kexpr Ai (ListType.cons Nat x rho)) (lift_at Ak Nat.zero (Nat.succ Nat.zero)) -> (forall (y : Nat) (Ay : ImplExpr), Eq (OptionType ImplExpr) (lctx_lookup D y) (OptionType.some ImplExpr Ay) -> Eq KExpr (to_kexpr Ay (ListType.cons Nat x rho)) (lift_at (to_kexpr Ay rho) Nat.zero (Nat.succ Nat.zero))) -> CtxRep (ListType.cons KExpr Ak G) (ListType.cons Nat x rho) (LCtx.snoc D (LocalDecl.mk x Ai dv bd))"
+                "| nil : CtxRep (@ListType.nil KExpr) (@ListType.nil Nat) LCtx.nil\n",
+                "| snoc : forall (G : ListType KExpr) (rho : ListType Nat) (D : LCtx) (x : Nat) (Ak : KExpr) (Ai : ImplExpr) (dv : OptionType ImplExpr) (bd : BinderData), CtxRep G rho D -> @Eq KExpr (to_kexpr Ai (@ListType.cons Nat x rho)) (lift_at Ak Nat.zero (Nat.succ Nat.zero)) -> (forall (y : Nat) (Ay : ImplExpr), @Eq (OptionType ImplExpr) (lctx_lookup D y) (@OptionType.some ImplExpr Ay) -> @Eq KExpr (to_kexpr Ay (@ListType.cons Nat x rho)) (lift_at (to_kexpr Ay rho) Nat.zero (Nat.succ Nat.zero))) -> CtxRep (@ListType.cons KExpr Ak G) (@ListType.cons Nat x rho) (LCtx.snoc D (LocalDecl.mk x Ai dv bd))"
             ),
             "CtxRep G rho D: the layer-2 de Bruijn context G represents the DEPLOYED \
              kernel's LocalContext D under the renaming rho. Three fields, each an \
@@ -384,18 +384,18 @@ impl Specification {
             name: "opt_var_type_succ".to_string(),
             type_src: concat!(
                 "forall (o : OptionType KExpr) (i : Nat), ",
-                "Eq (OptionType KExpr) (opt_var_type o (Nat.succ i)) (opt_lift1 (opt_var_type o i))"
+                "@Eq (OptionType KExpr) (opt_var_type o (Nat.succ i)) (opt_lift1 (opt_var_type o i))"
             )
             .to_string(),
             value_src: Some(
                 concat!(
                     "fun (o : OptionType KExpr) (i : Nat) => ",
-                    "OptionType.rec KExpr ",
-                    "(fun (o2 : OptionType KExpr) => Eq (OptionType KExpr) ",
+                    "@OptionType.rec KExpr ",
+                    "(fun (o2 : OptionType KExpr) => @Eq (OptionType KExpr) ",
                     "(opt_var_type o2 (Nat.succ i)) (opt_lift1 (opt_var_type o2 i))) ",
-                    "(Eq.refl (OptionType KExpr) (OptionType.none KExpr)) ",
+                    "(@Eq.refl (OptionType KExpr) (@OptionType.none KExpr)) ",
                     "(fun (A : KExpr) => ",
-                    "Eq.cong KExpr (OptionType KExpr) (fun (t : KExpr) => OptionType.some KExpr t) ",
+                    "Eq.cong KExpr (OptionType KExpr) (fun (t : KExpr) => @OptionType.some KExpr t) ",
                     "(lift_at A Nat.zero (Nat.succ (Nat.succ i))) ",
                     "(lift_at (lift_at A Nat.zero (Nat.succ i)) Nat.zero (Nat.succ Nat.zero)) ",
                     "(Eq.symm KExpr ",
@@ -449,88 +449,88 @@ impl Specification {
             type_src: concat!(
                 "forall (G : ListType KExpr) (rho : ListType Nat) (D : LCtx), ",
                 "CtxRep G rho D -> forall (x : Nat) (Ai : ImplExpr), ",
-                "Eq (OptionType ImplExpr) (lctx_lookup D x) (OptionType.some ImplExpr Ai) -> ",
-                "Eq (OptionType KExpr) (ctx_var_type G (rho_index rho x)) ",
-                "(OptionType.some KExpr (to_kexpr Ai rho))"
+                "@Eq (OptionType ImplExpr) (lctx_lookup D x) (@OptionType.some ImplExpr Ai) -> ",
+                "@Eq (OptionType KExpr) (ctx_var_type G (rho_index rho x)) ",
+                "(@OptionType.some KExpr (to_kexpr Ai rho))"
             )
             .to_string(),
             value_src: Some(
                 concat!(
                     "fun (G : ListType KExpr) (rho : ListType Nat) (D : LCtx) ",
                     "(h : CtxRep G rho D) => ",
-                    "CtxRep.rec ",
+                    "@CtxRep.rec ",
                     "(fun (G2 : ListType KExpr) (rho2 : ListType Nat) (D2 : LCtx) ",
                     "(_h : CtxRep G2 rho2 D2) => forall (x : Nat) (Ai : ImplExpr), ",
-                    "Eq (OptionType ImplExpr) (lctx_lookup D2 x) (OptionType.some ImplExpr Ai) -> ",
-                    "Eq (OptionType KExpr) (ctx_var_type G2 (rho_index rho2 x)) ",
-                    "(OptionType.some KExpr (to_kexpr Ai rho2))) ",
+                    "@Eq (OptionType ImplExpr) (lctx_lookup D2 x) (@OptionType.some ImplExpr Ai) -> ",
+                    "@Eq (OptionType KExpr) (ctx_var_type G2 (rho_index rho2 x)) ",
+                    "(@OptionType.some KExpr (to_kexpr Ai rho2))) ",
                     // ── nil: lctx_lookup LCtx.nil x is none, so the hypothesis
                     // is false and Empty.rec closes any goal (including this
                     // Prop-valued one).
                     "(fun (x : Nat) (Ai : ImplExpr) ",
-                    "(hlk : Eq (OptionType ImplExpr) (lctx_lookup LCtx.nil x) ",
-                    "(OptionType.some ImplExpr Ai)) => ",
-                    "Empty.rec (fun (_e : Empty) => Eq (OptionType KExpr) ",
-                    "(ctx_var_type (ListType.nil KExpr) (rho_index (ListType.nil Nat) x)) ",
-                    "(OptionType.some KExpr (to_kexpr Ai (ListType.nil Nat)))) ",
+                    "(hlk : @Eq (OptionType ImplExpr) (lctx_lookup LCtx.nil x) ",
+                    "(@OptionType.some ImplExpr Ai)) => ",
+                    "@Empty.rec (fun (_e : Empty) => @Eq (OptionType KExpr) ",
+                    "(ctx_var_type (@ListType.nil KExpr) (rho_index (@ListType.nil Nat) x)) ",
+                    "(@OptionType.some KExpr (to_kexpr Ai (@ListType.nil Nat)))) ",
                     "(option_none_ne_some_type ImplExpr Ai Empty hlk)) ",
                     // ── snoc
                     "(fun (G2 : ListType KExpr) (rho2 : ListType Nat) (D2 : LCtx) (x0 : Nat) ",
                     "(Ak : KExpr) (Ai0 : ImplExpr) (dv : OptionType ImplExpr) (bd : BinderData) ",
                     "(hrec : CtxRep G2 rho2 D2) ",
-                    "(hhead : Eq KExpr (to_kexpr Ai0 (ListType.cons Nat x0 rho2)) ",
+                    "(hhead : @Eq KExpr (to_kexpr Ai0 (@ListType.cons Nat x0 rho2)) ",
                     "(lift_at Ak Nat.zero (Nat.succ Nat.zero))) ",
                     "(hshift : forall (y : Nat) (Ay : ImplExpr), ",
-                    "Eq (OptionType ImplExpr) (lctx_lookup D2 y) (OptionType.some ImplExpr Ay) -> ",
-                    "Eq KExpr (to_kexpr Ay (ListType.cons Nat x0 rho2)) ",
+                    "@Eq (OptionType ImplExpr) (lctx_lookup D2 y) (@OptionType.some ImplExpr Ay) -> ",
+                    "@Eq KExpr (to_kexpr Ay (@ListType.cons Nat x0 rho2)) ",
                     "(lift_at (to_kexpr Ay rho2) Nat.zero (Nat.succ Nat.zero))) ",
                     "(ih : forall (x : Nat) (Ai : ImplExpr), ",
-                    "Eq (OptionType ImplExpr) (lctx_lookup D2 x) (OptionType.some ImplExpr Ai) -> ",
-                    "Eq (OptionType KExpr) (ctx_var_type G2 (rho_index rho2 x)) ",
-                    "(OptionType.some KExpr (to_kexpr Ai rho2))) ",
+                    "@Eq (OptionType ImplExpr) (lctx_lookup D2 x) (@OptionType.some ImplExpr Ai) -> ",
+                    "@Eq (OptionType KExpr) (ctx_var_type G2 (rho_index rho2 x)) ",
+                    "(@OptionType.some KExpr (to_kexpr Ai rho2))) ",
                     "(x : Nat) (Ai : ImplExpr) => ",
-                    "Bool.rec ",
+                    "@Bool.rec ",
                     "(fun (b : Bool) => ",
-                    "Eq (OptionType ImplExpr) ",
-                    "(Bool.rec (fun (_b : Bool) => OptionType ImplExpr) (lctx_lookup D2 x) ",
-                    "(OptionType.some ImplExpr Ai0) b) (OptionType.some ImplExpr Ai) -> ",
-                    "Eq (OptionType KExpr) ",
-                    "(ctx_var_type (ListType.cons KExpr Ak G2) ",
-                    "(Bool.rec (fun (_b : Bool) => Nat) (Nat.succ (rho_index rho2 x)) Nat.zero b)) ",
-                    "(OptionType.some KExpr (to_kexpr Ai (ListType.cons Nat x0 rho2)))) ",
+                    "@Eq (OptionType ImplExpr) ",
+                    "(@Bool.rec (fun (_b : Bool) => OptionType ImplExpr) (lctx_lookup D2 x) ",
+                    "(@OptionType.some ImplExpr Ai0) b) (@OptionType.some ImplExpr Ai) -> ",
+                    "@Eq (OptionType KExpr) ",
+                    "(ctx_var_type (@ListType.cons KExpr Ak G2) ",
+                    "(@Bool.rec (fun (_b : Bool) => Nat) (Nat.succ (rho_index rho2 x)) Nat.zero b)) ",
+                    "(@OptionType.some KExpr (to_kexpr Ai (@ListType.cons Nat x0 rho2)))) ",
                     // false branch — x is an OLDER entry
-                    "(fun (hlk : Eq (OptionType ImplExpr) (lctx_lookup D2 x) ",
-                    "(OptionType.some ImplExpr Ai)) => ",
+                    "(fun (hlk : @Eq (OptionType ImplExpr) (lctx_lookup D2 x) ",
+                    "(@OptionType.some ImplExpr Ai)) => ",
                     "Eq.trans (OptionType KExpr) ",
-                    "(ctx_var_type (ListType.cons KExpr Ak G2) (Nat.succ (rho_index rho2 x))) ",
-                    "(opt_lift1 (OptionType.some KExpr (to_kexpr Ai rho2))) ",
-                    "(OptionType.some KExpr (to_kexpr Ai (ListType.cons Nat x0 rho2))) ",
+                    "(ctx_var_type (@ListType.cons KExpr Ak G2) (Nat.succ (rho_index rho2 x))) ",
+                    "(opt_lift1 (@OptionType.some KExpr (to_kexpr Ai rho2))) ",
+                    "(@OptionType.some KExpr (to_kexpr Ai (@ListType.cons Nat x0 rho2))) ",
                     "(Eq.trans (OptionType KExpr) ",
-                    "(ctx_var_type (ListType.cons KExpr Ak G2) (Nat.succ (rho_index rho2 x))) ",
+                    "(ctx_var_type (@ListType.cons KExpr Ak G2) (Nat.succ (rho_index rho2 x))) ",
                     "(opt_lift1 (ctx_var_type G2 (rho_index rho2 x))) ",
-                    "(opt_lift1 (OptionType.some KExpr (to_kexpr Ai rho2))) ",
+                    "(opt_lift1 (@OptionType.some KExpr (to_kexpr Ai rho2))) ",
                     "(opt_var_type_succ (ctx_lookup G2 (rho_index rho2 x)) (rho_index rho2 x)) ",
                     "(Eq.cong (OptionType KExpr) (OptionType KExpr) opt_lift1 ",
                     "(ctx_var_type G2 (rho_index rho2 x)) ",
-                    "(OptionType.some KExpr (to_kexpr Ai rho2)) (ih x Ai hlk))) ",
+                    "(@OptionType.some KExpr (to_kexpr Ai rho2)) (ih x Ai hlk))) ",
                     "(Eq.cong KExpr (OptionType KExpr) ",
-                    "(fun (t : KExpr) => OptionType.some KExpr t) ",
+                    "(fun (t : KExpr) => @OptionType.some KExpr t) ",
                     "(lift_at (to_kexpr Ai rho2) Nat.zero (Nat.succ Nat.zero)) ",
-                    "(to_kexpr Ai (ListType.cons Nat x0 rho2)) ",
-                    "(Eq.symm KExpr (to_kexpr Ai (ListType.cons Nat x0 rho2)) ",
+                    "(to_kexpr Ai (@ListType.cons Nat x0 rho2)) ",
+                    "(Eq.symm KExpr (to_kexpr Ai (@ListType.cons Nat x0 rho2)) ",
                     "(lift_at (to_kexpr Ai rho2) Nat.zero (Nat.succ Nat.zero)) ",
                     "(hshift x Ai hlk)))) ",
                     // true branch — x IS the new entry, index 0
-                    "(fun (hlk : Eq (OptionType ImplExpr) (OptionType.some ImplExpr Ai0) ",
-                    "(OptionType.some ImplExpr Ai)) => ",
+                    "(fun (hlk : @Eq (OptionType ImplExpr) (@OptionType.some ImplExpr Ai0) ",
+                    "(@OptionType.some ImplExpr Ai)) => ",
                     "Eq.cong KExpr (OptionType KExpr) ",
-                    "(fun (t : KExpr) => OptionType.some KExpr t) ",
+                    "(fun (t : KExpr) => @OptionType.some KExpr t) ",
                     "(lift_at Ak Nat.zero (Nat.succ Nat.zero)) ",
-                    "(to_kexpr Ai (ListType.cons Nat x0 rho2)) ",
-                    "(Eq.symm KExpr (to_kexpr Ai (ListType.cons Nat x0 rho2)) ",
+                    "(to_kexpr Ai (@ListType.cons Nat x0 rho2)) ",
+                    "(Eq.symm KExpr (to_kexpr Ai (@ListType.cons Nat x0 rho2)) ",
                     "(lift_at Ak Nat.zero (Nat.succ Nat.zero)) ",
                     "(Eq.substType ImplExpr ",
-                    "(fun (z : ImplExpr) => Eq KExpr (to_kexpr z (ListType.cons Nat x0 rho2)) ",
+                    "(fun (z : ImplExpr) => @Eq KExpr (to_kexpr z (@ListType.cons Nat x0 rho2)) ",
                     "(lift_at Ak Nat.zero (Nat.succ Nat.zero))) ",
                     "Ai0 Ai (option_some_inj ImplExpr Ai0 Ai hlk) hhead))) ",
                     "(nat_eqb x0 x)) ",
@@ -585,7 +585,7 @@ impl Specification {
             name: "kernelinfers_var_of_var_type".to_string(),
             type_src: concat!(
                 "forall (tenv : KDeclEnv) (G : ListType KExpr) (i : Nat) (Tk : KExpr), ",
-                "Eq (OptionType KExpr) (ctx_var_type G i) (OptionType.some KExpr Tk) -> ",
+                "@Eq (OptionType KExpr) (ctx_var_type G i) (@OptionType.some KExpr Tk) -> ",
                 "KernelInfers tenv G (KExpr.bvar i) Tk"
             )
             .to_string(),
@@ -593,29 +593,29 @@ impl Specification {
                 concat!(
                     "fun (tenv : KDeclEnv) (G : ListType KExpr) (i : Nat) ",
                     "(Tk : KExpr) ",
-                    "(h : Eq (OptionType KExpr) (ctx_var_type G i) (OptionType.some KExpr Tk)) => ",
-                    "OptionType.rec KExpr ",
+                    "(h : @Eq (OptionType KExpr) (ctx_var_type G i) (@OptionType.some KExpr Tk)) => ",
+                    "@OptionType.rec KExpr ",
                     "(fun (o : OptionType KExpr) => ",
-                    "Eq (OptionType KExpr) (ctx_lookup G i) o -> ",
-                    "Eq (OptionType KExpr) (opt_var_type o i) (OptionType.some KExpr Tk) -> ",
+                    "@Eq (OptionType KExpr) (ctx_lookup G i) o -> ",
+                    "@Eq (OptionType KExpr) (opt_var_type o i) (@OptionType.some KExpr Tk) -> ",
                     "KernelInfers tenv G (KExpr.bvar i) Tk) ",
-                    "(fun (_hl : Eq (OptionType KExpr) (ctx_lookup G i) (OptionType.none KExpr)) ",
-                    "(hs : Eq (OptionType KExpr) (OptionType.none KExpr) ",
-                    "(OptionType.some KExpr Tk)) => ",
+                    "(fun (_hl : @Eq (OptionType KExpr) (ctx_lookup G i) (@OptionType.none KExpr)) ",
+                    "(hs : @Eq (OptionType KExpr) (@OptionType.none KExpr) ",
+                    "(@OptionType.some KExpr Tk)) => ",
                     "option_none_ne_some_type KExpr Tk ",
                     "(KernelInfers tenv G (KExpr.bvar i) Tk) hs) ",
                     "(fun (A : KExpr) ",
-                    "(hl : Eq (OptionType KExpr) (ctx_lookup G i) (OptionType.some KExpr A)) ",
-                    "(hs : Eq (OptionType KExpr) ",
-                    "(OptionType.some KExpr (lift_at A Nat.zero (Nat.succ i))) ",
-                    "(OptionType.some KExpr Tk)) => ",
+                    "(hl : @Eq (OptionType KExpr) (ctx_lookup G i) (@OptionType.some KExpr A)) ",
+                    "(hs : @Eq (OptionType KExpr) ",
+                    "(@OptionType.some KExpr (lift_at A Nat.zero (Nat.succ i))) ",
+                    "(@OptionType.some KExpr Tk)) => ",
                     "Eq.substType KExpr ",
                     "(fun (T : KExpr) => KernelInfers tenv G (KExpr.bvar i) T) ",
                     "(lift_at A Nat.zero (Nat.succ i)) Tk ",
                     "(option_some_inj KExpr (lift_at A Nat.zero (Nat.succ i)) Tk hs) ",
-                    "(KernelInfers.bvar tenv G i A hl)) ",
+                    "(@KernelInfers.bvar tenv G i A hl)) ",
                     "(ctx_lookup G i) ",
-                    "(Eq.refl (OptionType KExpr) (ctx_lookup G i)) ",
+                    "(@Eq.refl (OptionType KExpr) (ctx_lookup G i)) ",
                     "h"
                 )
                 .to_string(),
@@ -665,7 +665,7 @@ impl Specification {
                 "forall (tenv : KDeclEnv) (G : ListType KExpr) ",
                 "(rho : ListType Nat) (D : LCtx) (x : Nat) (Ai : ImplExpr), ",
                 "CtxRep G rho D -> ",
-                "Eq (OptionType ImplExpr) (lctx_lookup D x) (OptionType.some ImplExpr Ai) -> ",
+                "@Eq (OptionType ImplExpr) (lctx_lookup D x) (@OptionType.some ImplExpr Ai) -> ",
                 "KernelInfers tenv G (to_kexpr (ImplExpr.fvar x) rho) (to_kexpr Ai rho)"
             )
             .to_string(),
@@ -674,8 +674,8 @@ impl Specification {
                     "fun (tenv : KDeclEnv) (G : ListType KExpr) ",
                     "(rho : ListType Nat) (D : LCtx) (x : Nat) (Ai : ImplExpr) ",
                     "(hctx : CtxRep G rho D) ",
-                    "(hlk : Eq (OptionType ImplExpr) (lctx_lookup D x) ",
-                    "(OptionType.some ImplExpr Ai)) => ",
+                    "(hlk : @Eq (OptionType ImplExpr) (lctx_lookup D x) ",
+                    "(@OptionType.some ImplExpr Ai)) => ",
                     "kernelinfers_var_of_var_type tenv G (rho_index rho x) (to_kexpr Ai rho) ",
                     "(ctx_rep_lookup G rho D hctx x Ai hlk)"
                 )
@@ -725,7 +725,7 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (tenv : KDeclEnv) (G : ListType KExpr) ",
-                    "(rho : ListType Nat) (l : Level) => KernelInfers.sort tenv G l"
+                    "(rho : ListType Nat) (l : Level) => @KernelInfers.sort tenv G l"
                 )
                 .to_string(),
             ),
@@ -808,12 +808,12 @@ impl Specification {
                 "(tenv1 : Name -> OptionType ImplConstInfo) (G : ListType KExpr) ",
                 "(rho : ListType Nat) (nm : Name) (us : ListType Level) (ci : ImplConstInfo), ",
                 "(forall (nm2 : Name) (us2 : ListType Level) (ci2 : ImplConstInfo), ",
-                "Eq (OptionType ImplConstInfo) (tenv1 nm2) (OptionType.some ImplConstInfo ci2) -> ",
-                "Eq Nat (name_list_len (impl_const_lps ci2)) (level_list_len us2) -> ",
-                "Eq (OptionType KExpr) (kdecl_type_at tenv2 nm2 us2) (OptionType.some KExpr ",
+                "@Eq (OptionType ImplConstInfo) (tenv1 nm2) (@OptionType.some ImplConstInfo ci2) -> ",
+                "@Eq Nat (name_list_len (impl_const_lps ci2)) (level_list_len us2) -> ",
+                "@Eq (OptionType KExpr) (kdecl_type_at tenv2 nm2 us2) (@OptionType.some KExpr ",
                 "(to_kexpr (impl_inst_levels (impl_const_lps ci2) us2 (impl_const_type ci2)) rho))) -> ",
-                "Eq (OptionType ImplConstInfo) (tenv1 nm) (OptionType.some ImplConstInfo ci) -> ",
-                "Eq Nat (name_list_len (impl_const_lps ci)) (level_list_len us) -> ",
+                "@Eq (OptionType ImplConstInfo) (tenv1 nm) (@OptionType.some ImplConstInfo ci) -> ",
+                "@Eq Nat (name_list_len (impl_const_lps ci)) (level_list_len us) -> ",
                 "KernelInfers tenv2 G (to_kexpr (ImplExpr.const nm us) rho) ",
                 "(to_kexpr (impl_inst_levels (impl_const_lps ci) us (impl_const_type ci)) rho)"
             )
@@ -824,14 +824,14 @@ impl Specification {
                     "(tenv1 : Name -> OptionType ImplConstInfo) (G : ListType KExpr) ",
                     "(rho : ListType Nat) (nm : Name) (us : ListType Level) (ci : ImplConstInfo) ",
                     "(henv : forall (nm2 : Name) (us2 : ListType Level) (ci2 : ImplConstInfo), ",
-                    "Eq (OptionType ImplConstInfo) (tenv1 nm2) (OptionType.some ImplConstInfo ci2) -> ",
-                    "Eq Nat (name_list_len (impl_const_lps ci2)) (level_list_len us2) -> ",
-                    "Eq (OptionType KExpr) (kdecl_type_at tenv2 nm2 us2) (OptionType.some KExpr ",
+                    "@Eq (OptionType ImplConstInfo) (tenv1 nm2) (@OptionType.some ImplConstInfo ci2) -> ",
+                    "@Eq Nat (name_list_len (impl_const_lps ci2)) (level_list_len us2) -> ",
+                    "@Eq (OptionType KExpr) (kdecl_type_at tenv2 nm2 us2) (@OptionType.some KExpr ",
                     "(to_kexpr (impl_inst_levels (impl_const_lps ci2) us2 (impl_const_type ci2)) rho))) ",
-                    "(hget : Eq (OptionType ImplConstInfo) (tenv1 nm) ",
-                    "(OptionType.some ImplConstInfo ci)) ",
-                    "(arity : Eq Nat (name_list_len (impl_const_lps ci)) (level_list_len us)) => ",
-                    "KernelInfers.const tenv2 G nm us ",
+                    "(hget : @Eq (OptionType ImplConstInfo) (tenv1 nm) ",
+                    "(@OptionType.some ImplConstInfo ci)) ",
+                    "(arity : @Eq Nat (name_list_len (impl_const_lps ci)) (level_list_len us)) => ",
+                    "@KernelInfers.const tenv2 G nm us ",
                     "(to_kexpr (impl_inst_levels (impl_const_lps ci) us (impl_const_type ci)) rho) ",
                     "(henv nm us ci hget arity)"
                 )
@@ -883,7 +883,7 @@ impl Specification {
                 "(to_kexpr r2 rho2) -> whnf_to (to_kexpr e2 rho2) (to_kexpr r2 rho2)) -> ",
                 "(forall (rho2 : ListType Nat) (x2 : ImplExpr) (y2 : ImplExpr), ImplIsLe x2 ",
                 "y2 -> DefEq (to_kexpr x2 rho2) (to_kexpr y2 rho2)) -> (forall (rho2 : ",
-                "ListType Nat) (v2 : ImplExpr) (b2 : ImplExpr) (d2 : Nat), Eq KExpr ",
+                "ListType Nat) (v2 : ImplExpr) (b2 : ImplExpr) (d2 : Nat), @Eq KExpr ",
                 "(to_kexpr_at (impl_instantiate_at b2 v2 d2) rho2 d2) (instantiate_at ",
                 "(to_kexpr_at b2 rho2 (Nat.succ d2)) (to_kexpr_at v2 rho2 Nat.zero) d2)) -> ",
                 "KernelInfers tenv G (to_kexpr f rho) (to_kexpr F rho) -> ImplWhnfTo F ",
@@ -901,7 +901,7 @@ impl Specification {
                     "r2 rho2) -> whnf_to (to_kexpr e2 rho2) (to_kexpr r2 rho2)) (hcl : forall ",
                     "(rho2 : ListType Nat) (x2 : ImplExpr) (y2 : ImplExpr), ImplIsLe x2 y2 -> ",
                     "DefEq (to_kexpr x2 rho2) (to_kexpr y2 rho2)) (hsub : forall (rho2 : ",
-                    "ListType Nat) (v2 : ImplExpr) (b2 : ImplExpr) (d2 : Nat), Eq KExpr ",
+                    "ListType Nat) (v2 : ImplExpr) (b2 : ImplExpr) (d2 : Nat), @Eq KExpr ",
                     "(to_kexpr_at (impl_instantiate_at b2 v2 d2) rho2 d2) (instantiate_at ",
                     "(to_kexpr_at b2 rho2 (Nat.succ d2)) (to_kexpr_at v2 rho2 Nat.zero) d2)) (hf ",
                     ": KernelInfers tenv G (to_kexpr f rho) (to_kexpr F rho)) (hw : ImplWhnfTo F ",
@@ -912,7 +912,7 @@ impl Specification {
                     "(to_kexpr_at a rho Nat.zero)) (to_kexpr (impl_instantiate B a) rho) ",
                     "(Eq.symm KExpr (to_kexpr (impl_instantiate B a) rho) (instantiate ",
                     "(to_kexpr_at B rho (Nat.succ Nat.zero)) (to_kexpr_at a rho Nat.zero)) (hsub ",
-                    "rho a B Nat.zero)) (KernelInfers.app tenv G (to_kexpr_at f rho Nat.zero) ",
+                    "rho a B Nat.zero)) (@KernelInfers.app tenv G (to_kexpr_at f rho Nat.zero) ",
                     "(to_kexpr_at a rho Nat.zero) (to_kexpr F rho) (to_kexpr_at A rho Nat.zero) ",
                     "(to_kexpr_at B rho (Nat.succ Nat.zero)) (to_kexpr A2 rho) hf (hwt rho F ",
                     "(ImplExpr.pi bd A B) hw (is_whnf.pi (to_kexpr_at A rho Nat.zero) ",
@@ -970,11 +970,11 @@ impl Specification {
                 "ListType Nat) (x : Nat) (bd : BinderData) (A : ImplExpr) (b : ImplExpr) (S ",
                 ": ImplExpr) (l : Level) (bt : ImplExpr), KernelInfers tenv G (to_kexpr A ",
                 "rho) (to_kexpr S rho) -> whnf_to (to_kexpr S rho) (KExpr.sort l) -> ",
-                "KernelInfers tenv (ListType.cons KExpr (to_kexpr A rho) G) (to_kexpr ",
-                "(impl_open b x) (ListType.cons Nat x rho)) (to_kexpr bt (ListType.cons Nat ",
-                "x rho)) -> Eq KExpr (to_kexpr (impl_open b x) (ListType.cons Nat x rho)) ",
-                "(to_kexpr_at b rho (Nat.succ Nat.zero)) -> Eq KExpr (to_kexpr bt ",
-                "(ListType.cons Nat x rho)) (to_kexpr_at (impl_abstract_fvar bt x) rho ",
+                "KernelInfers tenv (@ListType.cons KExpr (to_kexpr A rho) G) (to_kexpr ",
+                "(impl_open b x) (@ListType.cons Nat x rho)) (to_kexpr bt (@ListType.cons Nat ",
+                "x rho)) -> @Eq KExpr (to_kexpr (impl_open b x) (@ListType.cons Nat x rho)) ",
+                "(to_kexpr_at b rho (Nat.succ Nat.zero)) -> @Eq KExpr (to_kexpr bt ",
+                "(@ListType.cons Nat x rho)) (to_kexpr_at (impl_abstract_fvar bt x) rho ",
                 "(Nat.succ Nat.zero)) -> KernelInfers tenv G (to_kexpr (ImplExpr.lam bd A b) ",
                 "rho) (to_kexpr (ImplExpr.pi bd A (impl_abstract_fvar bt x)) rho)",
             )
@@ -985,21 +985,21 @@ impl Specification {
                     "Nat) (x : Nat) (bd : BinderData) (A : ImplExpr) (b : ImplExpr) (S : ",
                     "ImplExpr) (l : Level) (bt : ImplExpr) (ihA : KernelInfers tenv G (to_kexpr ",
                     "A rho) (to_kexpr S rho)) (hsort : whnf_to (to_kexpr S rho) (KExpr.sort l)) ",
-                    "(ihb : KernelInfers tenv (ListType.cons KExpr (to_kexpr A rho) G) (to_kexpr ",
-                    "(impl_open b x) (ListType.cons Nat x rho)) (to_kexpr bt (ListType.cons Nat ",
-                    "x rho))) (hopen : Eq KExpr (to_kexpr (impl_open b x) (ListType.cons Nat x ",
-                    "rho)) (to_kexpr_at b rho (Nat.succ Nat.zero))) (habs : Eq KExpr (to_kexpr ",
-                    "bt (ListType.cons Nat x rho)) (to_kexpr_at (impl_abstract_fvar bt x) rho ",
-                    "(Nat.succ Nat.zero))) => KernelInfers.lam tenv G (to_kexpr A rho) ",
+                    "(ihb : KernelInfers tenv (@ListType.cons KExpr (to_kexpr A rho) G) (to_kexpr ",
+                    "(impl_open b x) (@ListType.cons Nat x rho)) (to_kexpr bt (@ListType.cons Nat ",
+                    "x rho))) (hopen : @Eq KExpr (to_kexpr (impl_open b x) (@ListType.cons Nat x ",
+                    "rho)) (to_kexpr_at b rho (Nat.succ Nat.zero))) (habs : @Eq KExpr (to_kexpr ",
+                    "bt (@ListType.cons Nat x rho)) (to_kexpr_at (impl_abstract_fvar bt x) rho ",
+                    "(Nat.succ Nat.zero))) => @KernelInfers.lam tenv G (to_kexpr A rho) ",
                     "(to_kexpr_at b rho (Nat.succ Nat.zero)) (to_kexpr_at (impl_abstract_fvar bt ",
                     "x) rho (Nat.succ Nat.zero)) (to_kexpr S rho) l ihA hsort (Eq.substType ",
-                    "KExpr (fun (w : KExpr) => KernelInfers tenv (ListType.cons KExpr (to_kexpr ",
+                    "KExpr (fun (w : KExpr) => KernelInfers tenv (@ListType.cons KExpr (to_kexpr ",
                     "A rho) G) w (to_kexpr_at (impl_abstract_fvar bt x) rho (Nat.succ ",
-                    "Nat.zero))) (to_kexpr (impl_open b x) (ListType.cons Nat x rho)) ",
+                    "Nat.zero))) (to_kexpr (impl_open b x) (@ListType.cons Nat x rho)) ",
                     "(to_kexpr_at b rho (Nat.succ Nat.zero)) hopen (Eq.substType KExpr (fun (w : ",
-                    "KExpr) => KernelInfers tenv (ListType.cons KExpr (to_kexpr A rho) G) ",
-                    "(to_kexpr (impl_open b x) (ListType.cons Nat x rho)) w) (to_kexpr bt ",
-                    "(ListType.cons Nat x rho)) (to_kexpr_at (impl_abstract_fvar bt x) rho ",
+                    "KExpr) => KernelInfers tenv (@ListType.cons KExpr (to_kexpr A rho) G) ",
+                    "(to_kexpr (impl_open b x) (@ListType.cons Nat x rho)) w) (to_kexpr bt ",
+                    "(@ListType.cons Nat x rho)) (to_kexpr_at (impl_abstract_fvar bt x) rho ",
                     "(Nat.succ Nat.zero)) habs ihb))",
                 )
                 .to_string(),
@@ -1057,10 +1057,10 @@ impl Specification {
                 "ListType Nat) (x : Nat) (bd : BinderData) (A : ImplExpr) (b : ImplExpr) (S1 ",
                 ": ImplExpr) (S2 : ImplExpr) (l1 : Level) (l2 : Level), KernelInfers tenv Gk ",
                 "(to_kexpr A rho) (to_kexpr S1 rho) -> whnf_to (to_kexpr S1 rho) (KExpr.sort ",
-                "l1) -> KernelInfers tenv (ListType.cons KExpr (to_kexpr A rho) Gk) ",
-                "(to_kexpr (impl_open b x) (ListType.cons Nat x rho)) (to_kexpr S2 ",
-                "(ListType.cons Nat x rho)) -> whnf_to (to_kexpr S2 (ListType.cons Nat x ",
-                "rho)) (KExpr.sort l2) -> Eq KExpr (to_kexpr (impl_open b x) (ListType.cons ",
+                "l1) -> KernelInfers tenv (@ListType.cons KExpr (to_kexpr A rho) Gk) ",
+                "(to_kexpr (impl_open b x) (@ListType.cons Nat x rho)) (to_kexpr S2 ",
+                "(@ListType.cons Nat x rho)) -> whnf_to (to_kexpr S2 (@ListType.cons Nat x ",
+                "rho)) (KExpr.sort l2) -> @Eq KExpr (to_kexpr (impl_open b x) (@ListType.cons ",
                 "Nat x rho)) (to_kexpr_at b rho (Nat.succ Nat.zero)) -> KernelInfers tenv Gk ",
                 "(to_kexpr (ImplExpr.pi bd A b) rho) (to_kexpr (ImplExpr.sort (Level.imax l1 ",
                 "l2)) rho)",
@@ -1072,16 +1072,16 @@ impl Specification {
                     "Nat) (x : Nat) (bd : BinderData) (A : ImplExpr) (b : ImplExpr) (S1 : ",
                     "ImplExpr) (S2 : ImplExpr) (l1 : Level) (l2 : Level) (ihA : KernelInfers ",
                     "tenv Gk (to_kexpr A rho) (to_kexpr S1 rho)) (hw1 : whnf_to (to_kexpr S1 ",
-                    "rho) (KExpr.sort l1)) (ihb : KernelInfers tenv (ListType.cons KExpr ",
-                    "(to_kexpr A rho) Gk) (to_kexpr (impl_open b x) (ListType.cons Nat x rho)) ",
-                    "(to_kexpr S2 (ListType.cons Nat x rho))) (hw2 : whnf_to (to_kexpr S2 ",
-                    "(ListType.cons Nat x rho)) (KExpr.sort l2)) (hopen : Eq KExpr (to_kexpr ",
-                    "(impl_open b x) (ListType.cons Nat x rho)) (to_kexpr_at b rho (Nat.succ ",
-                    "Nat.zero))) => KernelInfers.pi tenv Gk (to_kexpr A rho) (to_kexpr_at b rho ",
-                    "(Nat.succ Nat.zero)) (to_kexpr S1 rho) l1 (to_kexpr S2 (ListType.cons Nat x ",
+                    "rho) (KExpr.sort l1)) (ihb : KernelInfers tenv (@ListType.cons KExpr ",
+                    "(to_kexpr A rho) Gk) (to_kexpr (impl_open b x) (@ListType.cons Nat x rho)) ",
+                    "(to_kexpr S2 (@ListType.cons Nat x rho))) (hw2 : whnf_to (to_kexpr S2 ",
+                    "(@ListType.cons Nat x rho)) (KExpr.sort l2)) (hopen : @Eq KExpr (to_kexpr ",
+                    "(impl_open b x) (@ListType.cons Nat x rho)) (to_kexpr_at b rho (Nat.succ ",
+                    "Nat.zero))) => @KernelInfers.pi tenv Gk (to_kexpr A rho) (to_kexpr_at b rho ",
+                    "(Nat.succ Nat.zero)) (to_kexpr S1 rho) l1 (to_kexpr S2 (@ListType.cons Nat x ",
                     "rho)) l2 ihA hw1 (Eq.substType KExpr (fun (w : KExpr) => KernelInfers tenv ",
-                    "(ListType.cons KExpr (to_kexpr A rho) Gk) w (to_kexpr S2 (ListType.cons Nat ",
-                    "x rho))) (to_kexpr (impl_open b x) (ListType.cons Nat x rho)) (to_kexpr_at ",
+                    "(@ListType.cons KExpr (to_kexpr A rho) Gk) w (to_kexpr S2 (@ListType.cons Nat ",
+                    "x rho))) (to_kexpr (impl_open b x) (@ListType.cons Nat x rho)) (to_kexpr_at ",
                     "b rho (Nat.succ Nat.zero)) hopen ihb) hw2",
                 )
                 .to_string(),
@@ -1139,12 +1139,12 @@ impl Specification {
                 "KernelInfers tenvK Gk (to_kexpr ty rho) (to_kexpr S rho) -> whnf_to ",
                 "(to_kexpr S rho) (KExpr.sort l) -> KernelInfers tenvK Gk (to_kexpr v rho) ",
                 "(to_kexpr Tv rho) -> DefEq (to_kexpr Tv rho) (to_kexpr ty rho) -> ",
-                "KernelInfers tenvK (ListType.cons KExpr (to_kexpr ty rho) Gk) (to_kexpr ",
-                "(impl_open b x) (ListType.cons Nat x rho)) (to_kexpr bt (ListType.cons Nat ",
-                "x rho)) -> Eq KExpr (to_kexpr (impl_open b x) (ListType.cons Nat x rho)) ",
-                "(to_kexpr_at b rho (Nat.succ Nat.zero)) -> Eq KExpr (to_kexpr bt ",
-                "(ListType.cons Nat x rho)) (to_kexpr_at (impl_abstract_fvar bt x) rho ",
-                "(Nat.succ Nat.zero)) -> Eq KExpr (to_kexpr (impl_subst_fvar bt x v) rho) ",
+                "KernelInfers tenvK (@ListType.cons KExpr (to_kexpr ty rho) Gk) (to_kexpr ",
+                "(impl_open b x) (@ListType.cons Nat x rho)) (to_kexpr bt (@ListType.cons Nat ",
+                "x rho)) -> @Eq KExpr (to_kexpr (impl_open b x) (@ListType.cons Nat x rho)) ",
+                "(to_kexpr_at b rho (Nat.succ Nat.zero)) -> @Eq KExpr (to_kexpr bt ",
+                "(@ListType.cons Nat x rho)) (to_kexpr_at (impl_abstract_fvar bt x) rho ",
+                "(Nat.succ Nat.zero)) -> @Eq KExpr (to_kexpr (impl_subst_fvar bt x v) rho) ",
                 "(instantiate (to_kexpr_at (impl_abstract_fvar bt x) rho (Nat.succ ",
                 "Nat.zero)) (to_kexpr v rho)) -> KernelInfers tenvK Gk (to_kexpr ",
                 "(ImplExpr.let_ nm ty v b) rho) (to_kexpr (impl_subst_fvar bt x v) rho)",
@@ -1158,12 +1158,12 @@ impl Specification {
                     ": KernelInfers tenvK Gk (to_kexpr ty rho) (to_kexpr S rho)) (hsort : ",
                     "whnf_to (to_kexpr S rho) (KExpr.sort l)) (ihv : KernelInfers tenvK Gk ",
                     "(to_kexpr v rho) (to_kexpr Tv rho)) (hdef : DefEq (to_kexpr Tv rho) ",
-                    "(to_kexpr ty rho)) (ihb : KernelInfers tenvK (ListType.cons KExpr (to_kexpr ",
-                    "ty rho) Gk) (to_kexpr (impl_open b x) (ListType.cons Nat x rho)) (to_kexpr ",
-                    "bt (ListType.cons Nat x rho))) (hopen : Eq KExpr (to_kexpr (impl_open b x) ",
-                    "(ListType.cons Nat x rho)) (to_kexpr_at b rho (Nat.succ Nat.zero))) (habs : ",
-                    "Eq KExpr (to_kexpr bt (ListType.cons Nat x rho)) (to_kexpr_at ",
-                    "(impl_abstract_fvar bt x) rho (Nat.succ Nat.zero))) (hzeta : Eq KExpr ",
+                    "(to_kexpr ty rho)) (ihb : KernelInfers tenvK (@ListType.cons KExpr (to_kexpr ",
+                    "ty rho) Gk) (to_kexpr (impl_open b x) (@ListType.cons Nat x rho)) (to_kexpr ",
+                    "bt (@ListType.cons Nat x rho))) (hopen : @Eq KExpr (to_kexpr (impl_open b x) ",
+                    "(@ListType.cons Nat x rho)) (to_kexpr_at b rho (Nat.succ Nat.zero))) (habs : ",
+                    "@Eq KExpr (to_kexpr bt (@ListType.cons Nat x rho)) (to_kexpr_at ",
+                    "(impl_abstract_fvar bt x) rho (Nat.succ Nat.zero))) (hzeta : @Eq KExpr ",
                     "(to_kexpr (impl_subst_fvar bt x v) rho) (instantiate (to_kexpr_at ",
                     "(impl_abstract_fvar bt x) rho (Nat.succ Nat.zero)) (to_kexpr v rho))) => ",
                     "Eq.substType KExpr (fun (w : KExpr) => KernelInfers tenvK Gk (KExpr.let_ ",
@@ -1172,16 +1172,16 @@ impl Specification {
                     "bt x) rho (Nat.succ Nat.zero)) (to_kexpr v rho)) (to_kexpr (impl_subst_fvar ",
                     "bt x v) rho) (Eq.symm KExpr (to_kexpr (impl_subst_fvar bt x v) rho) ",
                     "(instantiate (to_kexpr_at (impl_abstract_fvar bt x) rho (Nat.succ ",
-                    "Nat.zero)) (to_kexpr v rho)) hzeta) (KernelInfers.let_ tenvK Gk (to_kexpr ",
+                    "Nat.zero)) (to_kexpr v rho)) hzeta) (@KernelInfers.let_ tenvK Gk (to_kexpr ",
                     "ty rho) (to_kexpr v rho) (to_kexpr_at b rho (Nat.succ Nat.zero)) (to_kexpr ",
                     "S rho) l (to_kexpr Tv rho) (to_kexpr_at (impl_abstract_fvar bt x) rho ",
                     "(Nat.succ Nat.zero)) ihty hsort ihv hdef (Eq.substType KExpr (fun (w : ",
-                    "KExpr) => KernelInfers tenvK (ListType.cons KExpr (to_kexpr ty rho) Gk) w ",
+                    "KExpr) => KernelInfers tenvK (@ListType.cons KExpr (to_kexpr ty rho) Gk) w ",
                     "(to_kexpr_at (impl_abstract_fvar bt x) rho (Nat.succ Nat.zero))) (to_kexpr ",
-                    "(impl_open b x) (ListType.cons Nat x rho)) (to_kexpr_at b rho (Nat.succ ",
+                    "(impl_open b x) (@ListType.cons Nat x rho)) (to_kexpr_at b rho (Nat.succ ",
                     "Nat.zero)) hopen (Eq.substType KExpr (fun (w : KExpr) => KernelInfers tenvK ",
-                    "(ListType.cons KExpr (to_kexpr ty rho) Gk) (to_kexpr (impl_open b x) ",
-                    "(ListType.cons Nat x rho)) w) (to_kexpr bt (ListType.cons Nat x rho)) ",
+                    "(@ListType.cons KExpr (to_kexpr ty rho) Gk) (to_kexpr (impl_open b x) ",
+                    "(@ListType.cons Nat x rho)) w) (to_kexpr bt (@ListType.cons Nat x rho)) ",
                     "(to_kexpr_at (impl_abstract_fvar bt x) rho (Nat.succ Nat.zero)) habs ihb)))",
                 )
                 .to_string(),
@@ -1238,12 +1238,12 @@ impl Specification {
                 "ImplIsLe x2 y2 -> DefEq (to_kexpr x2 rho2) (to_kexpr y2 rho2)) -> ",
                 "ImplWhnfTo S (ImplExpr.sort l) -> ImplIsLe Tv ty -> KernelInfers tenvK Gk ",
                 "(to_kexpr ty rho) (to_kexpr S rho) -> KernelInfers tenvK Gk (to_kexpr v ",
-                "rho) (to_kexpr Tv rho) -> KernelInfers tenvK (ListType.cons KExpr (to_kexpr ",
-                "ty rho) Gk) (to_kexpr (impl_open b x) (ListType.cons Nat x rho)) (to_kexpr ",
-                "bt (ListType.cons Nat x rho)) -> Eq KExpr (to_kexpr (impl_open b x) ",
-                "(ListType.cons Nat x rho)) (to_kexpr_at b rho (Nat.succ Nat.zero)) -> Eq ",
-                "KExpr (to_kexpr bt (ListType.cons Nat x rho)) (to_kexpr_at ",
-                "(impl_abstract_fvar bt x) rho (Nat.succ Nat.zero)) -> Eq KExpr (to_kexpr ",
+                "rho) (to_kexpr Tv rho) -> KernelInfers tenvK (@ListType.cons KExpr (to_kexpr ",
+                "ty rho) Gk) (to_kexpr (impl_open b x) (@ListType.cons Nat x rho)) (to_kexpr ",
+                "bt (@ListType.cons Nat x rho)) -> @Eq KExpr (to_kexpr (impl_open b x) ",
+                "(@ListType.cons Nat x rho)) (to_kexpr_at b rho (Nat.succ Nat.zero)) -> @Eq ",
+                "KExpr (to_kexpr bt (@ListType.cons Nat x rho)) (to_kexpr_at ",
+                "(impl_abstract_fvar bt x) rho (Nat.succ Nat.zero)) -> @Eq KExpr (to_kexpr ",
                 "(impl_subst_fvar bt x v) rho) (instantiate (to_kexpr_at (impl_abstract_fvar ",
                 "bt x) rho (Nat.succ Nat.zero)) (to_kexpr v rho)) -> KernelInfers tenvK Gk ",
                 "(to_kexpr (ImplExpr.let_ nm ty v b) rho) (to_kexpr (impl_subst_fvar bt x v) ",
@@ -1262,12 +1262,12 @@ impl Specification {
                     "(hs : ImplWhnfTo S (ImplExpr.sort l)) (hle : ImplIsLe Tv ty) (ihty : ",
                     "KernelInfers tenvK Gk (to_kexpr ty rho) (to_kexpr S rho)) (ihv : ",
                     "KernelInfers tenvK Gk (to_kexpr v rho) (to_kexpr Tv rho)) (ihb : ",
-                    "KernelInfers tenvK (ListType.cons KExpr (to_kexpr ty rho) Gk) (to_kexpr ",
-                    "(impl_open b x) (ListType.cons Nat x rho)) (to_kexpr bt (ListType.cons Nat ",
-                    "x rho))) (hopen : Eq KExpr (to_kexpr (impl_open b x) (ListType.cons Nat x ",
-                    "rho)) (to_kexpr_at b rho (Nat.succ Nat.zero))) (habs : Eq KExpr (to_kexpr ",
-                    "bt (ListType.cons Nat x rho)) (to_kexpr_at (impl_abstract_fvar bt x) rho ",
-                    "(Nat.succ Nat.zero))) (hzeta : Eq KExpr (to_kexpr (impl_subst_fvar bt x v) ",
+                    "KernelInfers tenvK (@ListType.cons KExpr (to_kexpr ty rho) Gk) (to_kexpr ",
+                    "(impl_open b x) (@ListType.cons Nat x rho)) (to_kexpr bt (@ListType.cons Nat ",
+                    "x rho))) (hopen : @Eq KExpr (to_kexpr (impl_open b x) (@ListType.cons Nat x ",
+                    "rho)) (to_kexpr_at b rho (Nat.succ Nat.zero))) (habs : @Eq KExpr (to_kexpr ",
+                    "bt (@ListType.cons Nat x rho)) (to_kexpr_at (impl_abstract_fvar bt x) rho ",
+                    "(Nat.succ Nat.zero))) (hzeta : @Eq KExpr (to_kexpr (impl_subst_fvar bt x v) ",
                     "rho) (instantiate (to_kexpr_at (impl_abstract_fvar bt x) rho (Nat.succ ",
                     "Nat.zero)) (to_kexpr v rho))) => impl_bridge_let_core tenvK Gk rho x nm ty ",
                     "v b S l Tv bt ihty (hwhnf rho S (ImplExpr.sort l) hs (is_whnf.sort l)) ihv ",
@@ -1317,11 +1317,11 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (tenv : KDeclEnv) (G : ListType KExpr) ",
-                    "(rho : ListType Nat) (lt : ImplLit) => ImplLit.rec ",
+                    "(rho : ListType Nat) (lt : ImplLit) => @ImplLit.rec ",
                     "(fun (v : ImplLit) => KernelInfers tenv G ",
                     "(to_kexpr (ImplExpr.lit v) rho) (to_kexpr (impl_lit_type v) rho)) ",
-                    "(fun (n : Nat) => KernelInfers.lit_nat tenv G n) ",
-                    "(fun (n : Nat) => KernelInfers.lit_string tenv G n) lt"
+                    "(fun (n : Nat) => @KernelInfers.lit_nat tenv G n) ",
+                    "(fun (n : Nat) => @KernelInfers.lit_string tenv G n) lt"
                 )
                 .to_string(),
             ),
@@ -1361,25 +1361,25 @@ impl Specification {
             "forall (tenv : KDeclEnv) (G : ListType KExpr) (e : KExpr) (T : KExpr), KernelInfers tenv G e T -> literal_infer_result e T",
             concat!(
                 "fun (tenv : KDeclEnv) (G : ListType KExpr) (e : KExpr) ",
-                "(T : KExpr) (h : KernelInfers tenv G e T) => KernelInfers.rec tenv ",
+                "(T : KExpr) (h : KernelInfers tenv G e T) => @KernelInfers.rec tenv ",
                 "(fun (G0 : ListType KExpr) (e0 : KExpr) (T0 : KExpr) ",
                 "(_h : KernelInfers tenv G0 e0 T0) => literal_infer_result e0 T0) ",
                 "(fun (G0 : ListType KExpr) (u : Level) => Nat.zero) ",
                 "(fun (G0 : ListType KExpr) (i : Nat) (A : KExpr) ",
-                "(_hl : Eq (OptionType KExpr) (ctx_lookup G0 i) (OptionType.some KExpr A)) => Nat.zero) ",
+                "(_hl : @Eq (OptionType KExpr) (ctx_lookup G0 i) (@OptionType.some KExpr A)) => Nat.zero) ",
                 "(fun (G0 : ListType KExpr) (A : KExpr) (B : KExpr) (SA : KExpr) ",
                 "(u : Level) (SB : KExpr) (v : Level) ",
                 "(_ha : KernelInfers tenv G0 A SA) (_hwa : whnf_to SA (KExpr.sort u)) ",
-                "(_hb : KernelInfers tenv (ListType.cons KExpr A G0) B SB) ",
+                "(_hb : KernelInfers tenv (@ListType.cons KExpr A G0) B SB) ",
                 "(_hwb : whnf_to SB (KExpr.sort v)) ",
                 "(_iha : literal_infer_result A SA) (_ihb : literal_infer_result B SB) => Nat.zero) ",
                 "(fun (G0 : ListType KExpr) (A : KExpr) (b : KExpr) (B : KExpr) ",
                 "(SA : KExpr) (u : Level) (_ha : KernelInfers tenv G0 A SA) ",
                 "(_hw : whnf_to SA (KExpr.sort u)) ",
-                "(_hb : KernelInfers tenv (ListType.cons KExpr A G0) b B) ",
+                "(_hb : KernelInfers tenv (@ListType.cons KExpr A G0) b B) ",
                 "(_iha : literal_infer_result A SA) (_ihb : literal_infer_result b B) => Nat.zero) ",
                 "(fun (G0 : ListType KExpr) (n : Name) (us : ListType Level) (A : KExpr) ",
-                "(_hl : Eq (OptionType KExpr) (kdecl_type_at tenv n us) (OptionType.some KExpr A)) => Nat.zero) ",
+                "(_hl : @Eq (OptionType KExpr) (kdecl_type_at tenv n us) (@OptionType.some KExpr A)) => Nat.zero) ",
                 "(fun (G0 : ListType KExpr) (f : KExpr) (a : KExpr) (F : KExpr) ",
                 "(A : KExpr) (B : KExpr) (A2 : KExpr) (_hf : KernelInfers tenv G0 f F) ",
                 "(_hw : whnf_to F (KExpr.pi A B)) (_ha : KernelInfers tenv G0 a A2) ",
@@ -1389,14 +1389,14 @@ impl Specification {
                 "(Ty : KExpr) (u : Level) (Tv : KExpr) (B : KExpr) ",
                 "(_ht : KernelInfers tenv G0 ty Ty) (_hw : whnf_to Ty (KExpr.sort u)) ",
                 "(_hv : KernelInfers tenv G0 v Tv) (_heq : DefEq Tv ty) ",
-                "(_hb : KernelInfers tenv (ListType.cons KExpr ty G0) b B) ",
+                "(_hb : KernelInfers tenv (@ListType.cons KExpr ty G0) b B) ",
                 "(_iht : literal_infer_result ty Ty) (_ihv : literal_infer_result v Tv) ",
                 "(_ihb : literal_infer_result b B) => Nat.zero) ",
-                "(fun (G0 : ListType KExpr) (n : Nat) => LiteralReturn.intro ",
+                "(fun (G0 : ListType KExpr) (n : Nat) => @LiteralReturn.intro ",
                 "(literal_nat_code n) literal_nat_type ",
                 "(Eq.symm KExpr (literal_type_of_code (literal_nat_code n)) ",
                 "literal_nat_type (literal_nat_code_type n))) ",
-                "(fun (G0 : ListType KExpr) (n : Nat) => LiteralReturn.intro ",
+                "(fun (G0 : ListType KExpr) (n : Nat) => @LiteralReturn.intro ",
                 "(literal_string_code n) literal_string_type ",
                 "(Eq.symm KExpr (literal_type_of_code (literal_string_code n)) ",
                 "literal_string_type (literal_string_code_type n))) G e T h"
@@ -1422,7 +1422,7 @@ impl Specification {
             theorem(
                 self,
                 &format!("kernelinfers_literal_{kind}_type"),
-                &format!("forall (tenv : KDeclEnv) (G : ListType KExpr) (n : Nat) (T : KExpr), KernelInfers tenv G ({subject} n) T -> Eq KExpr T {result_type}"),
+                &format!("forall (tenv : KDeclEnv) (G : ListType KExpr) (n : Nat) (T : KExpr), KernelInfers tenv G ({subject} n) T -> @Eq KExpr T {result_type}"),
                 &format!("fun (tenv : KDeclEnv) (G : ListType KExpr) (n : Nat) (T : KExpr) (h : KernelInfers tenv G ({subject} n) T) => Eq.trans KExpr T (literal_type_of_code ({code} n)) {result_type} (literal_return_eq ({code} n) T (kernelinfers_literal_result tenv G ({subject} n) T h)) (literal_{kind}_code_type n)"),
                 "For any environment, context and payload, inference can return only this literal kind's exact built-in type expression.",
                 &["kernelinfers_literal_result", "literal_return_eq", "Eq.trans"],
@@ -1450,7 +1450,7 @@ impl Specification {
     /// Non-vacuity witnesses — every relation and every bridge lemma exercised
     /// on a concrete instance, each discharged by computation.
     fn add_ctx_rep_witnesses(&mut self) -> Result<(), SpecError> {
-        let empty_tenv = "(fun (nm : Name) => OptionType.none KConstSig)";
+        let empty_tenv = "(fun (nm : Name) => @OptionType.none KConstSig)";
         for (name, ctor, subject, result_type) in [
             (
                 "impl_bridge_lit_nat_witness",
@@ -1468,12 +1468,12 @@ impl Specification {
             self.add_definition(SpecDefinition {
                 name: name.to_string(),
                 type_src: format!(
-                    "KernelInfers {empty_tenv} (ListType.nil KExpr) \
+                    "KernelInfers {empty_tenv} (@ListType.nil KExpr) \
                      ({subject} Nat.zero) {result_type}"
                 ),
                 value_src: Some(format!(
-                    "impl_bridge_lit {empty_tenv} (ListType.nil KExpr) \
-                     (ListType.nil Nat) (ImplLit.{ctor} Nat.zero)"
+                    "impl_bridge_lit {empty_tenv} (@ListType.nil KExpr) \
+                     (@ListType.nil Nat) (ImplLit.{ctor} Nat.zero)"
                 )),
                 is_axiom: false,
                 description: "Literal bridge executed at the closed top level. This witness \
@@ -1495,18 +1495,20 @@ impl Specification {
         // [FVarId 0 : Prop], value-less, Default/Many.
         let d1 = format!(
             "(LCtx.snoc LCtx.nil (LocalDecl.mk Nat.zero (ImplExpr.sort Level.zero) \
-             (OptionType.none ImplExpr) {BD}))"
+             (@OptionType.none ImplExpr) {BD}))"
         );
-        let g1 = "(ListType.cons KExpr (KExpr.sort Level.zero) (ListType.nil KExpr))";
-        let rho1 = "(ListType.cons Nat Nat.zero (ListType.nil Nat))";
+        let g1 = "(@ListType.cons KExpr (KExpr.sort Level.zero) (@ListType.nil KExpr))";
+        let rho1 = "(@ListType.cons Nat Nat.zero (@ListType.nil Nat))";
 
         // ── ExprRep is inhabited ────────────────────────────────────────────
         self.add_definition(SpecDefinition {
             name: "expr_rep_sort_witness".to_string(),
             type_src:
-                "ExprRep (ListType.nil Nat) (KExpr.sort Level.zero) (ImplExpr.sort Level.zero)"
+                "ExprRep (@ListType.nil Nat) (KExpr.sort Level.zero) (ImplExpr.sort Level.zero)"
                     .to_string(),
-            value_src: Some("ExprRep.mk (ListType.nil Nat) (ImplExpr.sort Level.zero)".to_string()),
+            value_src: Some(
+                "@ExprRep.mk (@ListType.nil Nat) (ImplExpr.sort Level.zero)".to_string(),
+            ),
             is_axiom: false,
             description: "Non-vacuity witness for ExprRep: the layer-2 sort represents the \
                           layer-1 sort under the empty renaming. Pure constructor application; \
@@ -1526,7 +1528,7 @@ impl Specification {
         // ── CtxRep at the closed top level ──────────────────────────────────
         self.add_definition(SpecDefinition {
             name: "ctx_rep_nil_witness".to_string(),
-            type_src: "CtxRep (ListType.nil KExpr) (ListType.nil Nat) LCtx.nil".to_string(),
+            type_src: "CtxRep (@ListType.nil KExpr) (@ListType.nil Nat) LCtx.nil".to_string(),
             value_src: Some("CtxRep.nil".to_string()),
             is_axiom: false,
             description: "Non-vacuity witness for CtxRep at the CLOSED TOP LEVEL — the \
@@ -1553,17 +1555,17 @@ impl Specification {
             name: "ctx_rep_one_witness".to_string(),
             type_src: format!("CtxRep {g1} {rho1} {d1}"),
             value_src: Some(format!(
-                "CtxRep.snoc (ListType.nil KExpr) (ListType.nil Nat) LCtx.nil Nat.zero \
+                "CtxRep.snoc (@ListType.nil KExpr) (@ListType.nil Nat) LCtx.nil Nat.zero \
                  (KExpr.sort Level.zero) (ImplExpr.sort Level.zero) \
-                 (OptionType.none ImplExpr) {BD} \
+                 (@OptionType.none ImplExpr) {BD} \
                  CtxRep.nil \
-                 (Eq.refl KExpr (KExpr.sort Level.zero)) \
+                 (@Eq.refl KExpr (KExpr.sort Level.zero)) \
                  (fun (y : Nat) (Ay : ImplExpr) \
-                 (hy : Eq (OptionType ImplExpr) (lctx_lookup LCtx.nil y) \
-                 (OptionType.some ImplExpr Ay)) => \
-                 Empty.rec (fun (_e : Empty) => Eq KExpr \
-                 (to_kexpr Ay (ListType.cons Nat Nat.zero (ListType.nil Nat))) \
-                 (lift_at (to_kexpr Ay (ListType.nil Nat)) Nat.zero (Nat.succ Nat.zero))) \
+                 (hy : @Eq (OptionType ImplExpr) (lctx_lookup LCtx.nil y) \
+                 (@OptionType.some ImplExpr Ay)) => \
+                 @Empty.rec (fun (_e : Empty) => @Eq KExpr \
+                 (to_kexpr Ay (@ListType.cons Nat Nat.zero (@ListType.nil Nat))) \
+                 (lift_at (to_kexpr Ay (@ListType.nil Nat)) Nat.zero (Nat.succ Nat.zero))) \
                  (option_none_ne_some_type ImplExpr Ay Empty hy))"
             )),
             is_axiom: false,
@@ -1607,8 +1609,8 @@ impl Specification {
             value_src: Some(format!(
                 "impl_bridge_fvar {empty_tenv} {g1} {rho1} {d1} Nat.zero \
                  (ImplExpr.sort Level.zero) ctx_rep_one_witness \
-                 (Eq.refl (OptionType ImplExpr) \
-                 (OptionType.some ImplExpr (ImplExpr.sort Level.zero)))"
+                 (@Eq.refl (OptionType ImplExpr) \
+                 (@OptionType.some ImplExpr (ImplExpr.sort Level.zero)))"
             )),
             is_axiom: false,
             description: "The fvar bridge FIRED on the flagship configuration: from the \
@@ -1637,12 +1639,12 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "impl_bridge_sort_witness".to_string(),
             type_src: format!(
-                "KernelInfers {empty_tenv} (ListType.nil KExpr) \
-                 (to_kexpr (ImplExpr.sort Level.zero) (ListType.nil Nat)) \
-                 (to_kexpr (ImplExpr.sort (Level.succ Level.zero)) (ListType.nil Nat))"
+                "KernelInfers {empty_tenv} (@ListType.nil KExpr) \
+                 (to_kexpr (ImplExpr.sort Level.zero) (@ListType.nil Nat)) \
+                 (to_kexpr (ImplExpr.sort (Level.succ Level.zero)) (@ListType.nil Nat))"
             ),
             value_src: Some(format!(
-                "impl_bridge_sort {empty_tenv} (ListType.nil KExpr) (ListType.nil Nat) Level.zero"
+                "impl_bridge_sort {empty_tenv} (@ListType.nil KExpr) (@ListType.nil Nat) Level.zero"
             )),
             is_axiom: false,
             description: "The sort bridge fired at the closed top level: (Prop : Type) in layer \
@@ -1664,12 +1666,12 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "impl_bridge_mdata_witness".to_string(),
             type_src: format!(
-                "KernelInfers {empty_tenv} (ListType.nil KExpr) \
-                 (to_kexpr (ImplExpr.mdata (ImplExpr.sort Level.zero)) (ListType.nil Nat)) \
-                 (to_kexpr (ImplExpr.sort (Level.succ Level.zero)) (ListType.nil Nat))"
+                "KernelInfers {empty_tenv} (@ListType.nil KExpr) \
+                 (to_kexpr (ImplExpr.mdata (ImplExpr.sort Level.zero)) (@ListType.nil Nat)) \
+                 (to_kexpr (ImplExpr.sort (Level.succ Level.zero)) (@ListType.nil Nat))"
             ),
             value_src: Some(format!(
-                "impl_bridge_mdata {empty_tenv} (ListType.nil KExpr) (ListType.nil Nat) \
+                "impl_bridge_mdata {empty_tenv} (@ListType.nil KExpr) (@ListType.nil Nat) \
                  (ImplExpr.sort Level.zero) (ImplExpr.sort (Level.succ Level.zero)) \
                  impl_bridge_sort_witness"
             )),
@@ -1694,39 +1696,39 @@ impl Specification {
         // function, not assumed: it recovers the record from the layer-1 lookup
         // by option_some_inj and then computes, so instantiate_level_params and
         // the translation both genuinely reduce.
-        let ci0 = "(ImplConstInfo.mk (ListType.nil Name) (ImplExpr.sort Level.zero) Bool.false Bool.false)";
-        let tenv1 = format!("(fun (nm : Name) => OptionType.some ImplConstInfo {ci0})");
-        let sig0 = "(KConstSig.mk (ListType.nil Name) (KExpr.sort Level.zero))";
-        let tenv2 = format!("(fun (nm : Name) => OptionType.some KConstSig {sig0})");
-        let nil_rho = "(ListType.nil Nat)";
+        let ci0 = "(ImplConstInfo.mk (@ListType.nil Name) (ImplExpr.sort Level.zero) Bool.false Bool.false)";
+        let tenv1 = format!("(fun (nm : Name) => @OptionType.some ImplConstInfo {ci0})");
+        let sig0 = "(KConstSig.mk (@ListType.nil Name) (KExpr.sort Level.zero))";
+        let tenv2 = format!("(fun (nm : Name) => @OptionType.some KConstSig {sig0})");
+        let nil_rho = "(@ListType.nil Nat)";
         let henv = format!(
             "(fun (nm2 : Name) (us2 : ListType Level) (ci2 : ImplConstInfo) \
-             (hc : Eq (OptionType ImplConstInfo) (OptionType.some ImplConstInfo {ci0}) \
-             (OptionType.some ImplConstInfo ci2)) => \
+             (hc : @Eq (OptionType ImplConstInfo) (@OptionType.some ImplConstInfo {ci0}) \
+             (@OptionType.some ImplConstInfo ci2)) => \
              Eq.substType ImplConstInfo \
              (fun (z : ImplConstInfo) => \
-             Eq Nat (name_list_len (impl_const_lps z)) (level_list_len us2) -> \
-             Eq (OptionType KExpr) (kdecl_type_at {tenv2} nm2 us2) \
-             (OptionType.some KExpr (to_kexpr (impl_inst_levels (impl_const_lps z) us2 \
+             @Eq Nat (name_list_len (impl_const_lps z)) (level_list_len us2) -> \
+             @Eq (OptionType KExpr) (kdecl_type_at {tenv2} nm2 us2) \
+             (@OptionType.some KExpr (to_kexpr (impl_inst_levels (impl_const_lps z) us2 \
              (impl_const_type z)) {nil_rho}))) \
              {ci0} ci2 (option_some_inj ImplConstInfo {ci0} ci2 hc) \
-             (fun (arity : Eq Nat Nat.zero (level_list_len us2)) => \
+             (fun (arity : @Eq Nat Nat.zero (level_list_len us2)) => \
              kdecl_type_at_intro {tenv2} nm2 {sig0} us2 \
-             (Eq.refl (OptionType KConstSig) (OptionType.some KConstSig {sig0})) arity))"
+             (@Eq.refl (OptionType KConstSig) (@OptionType.some KConstSig {sig0})) arity))"
         );
         self.add_definition(SpecDefinition {
             name: "impl_bridge_const_witness".to_string(),
             type_src: format!(
-                "KernelInfers {tenv2} (ListType.nil KExpr) \
-                 (to_kexpr (ImplExpr.const Name.anonymous (ListType.nil Level)) {nil_rho}) \
-                 (to_kexpr (impl_inst_levels (impl_const_lps {ci0}) (ListType.nil Level) \
+                "KernelInfers {tenv2} (@ListType.nil KExpr) \
+                 (to_kexpr (ImplExpr.const Name.anonymous (@ListType.nil Level)) {nil_rho}) \
+                 (to_kexpr (impl_inst_levels (impl_const_lps {ci0}) (@ListType.nil Level) \
                  (impl_const_type {ci0})) {nil_rho})"
             ),
             value_src: Some(format!(
-                "impl_bridge_const {tenv2} {tenv1} (ListType.nil KExpr) {nil_rho} \
-                 Name.anonymous (ListType.nil Level) {ci0} {henv} \
-                 (Eq.refl (OptionType ImplConstInfo) (OptionType.some ImplConstInfo {ci0})) \
-                 (Eq.refl Nat Nat.zero)"
+                "impl_bridge_const {tenv2} {tenv1} (@ListType.nil KExpr) {nil_rho} \
+                 Name.anonymous (@ListType.nil Level) {ci0} {henv} \
+                 (@Eq.refl (OptionType ImplConstInfo) (@OptionType.some ImplConstInfo {ci0})) \
+                 (@Eq.refl Nat Nat.zero)"
             )),
             is_axiom: false,
             description: "The const bridge fired with a REAL environment correspondence: the \
@@ -1756,25 +1758,25 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "impl_bridge_lam_witness".to_string(),
             type_src: concat!(
-                "KernelInfers (fun (nm : Name) => OptionType.none KConstSig) (ListType.nil ",
+                "KernelInfers (fun (nm : Name) => @OptionType.none KConstSig) (@ListType.nil ",
                 "KExpr) (to_kexpr (ImplExpr.lam (BinderData.mk BinderInfo.default ",
                 "Multiplicity.many) (ImplExpr.sort Level.zero) (ImplExpr.bvar Nat.zero)) ",
-                "(ListType.nil Nat)) (to_kexpr (ImplExpr.pi (BinderData.mk ",
+                "(@ListType.nil Nat)) (to_kexpr (ImplExpr.pi (BinderData.mk ",
                 "BinderInfo.default Multiplicity.many) (ImplExpr.sort Level.zero) ",
-                "(ImplExpr.sort Level.zero)) (ListType.nil Nat))",
+                "(ImplExpr.sort Level.zero)) (@ListType.nil Nat))",
             )
             .to_string(),
             value_src: Some(
                 concat!(
-                    "impl_bridge_lam (fun (nm : Name) => OptionType.none KConstSig) (ListType.nil ",
-                    "KExpr) (ListType.nil Nat) Nat.zero (BinderData.mk BinderInfo.default ",
+                    "impl_bridge_lam (fun (nm : Name) => @OptionType.none KConstSig) (@ListType.nil ",
+                    "KExpr) (@ListType.nil Nat) Nat.zero (BinderData.mk BinderInfo.default ",
                     "Multiplicity.many) (ImplExpr.sort Level.zero) (ImplExpr.bvar Nat.zero) ",
                     "(ImplExpr.sort (Level.succ Level.zero)) (Level.succ Level.zero) ",
                     "(ImplExpr.sort Level.zero) (impl_bridge_sort (fun (nm : Name) => ",
-                    "OptionType.none KConstSig) (ListType.nil KExpr) (ListType.nil Nat) Level.zero) ",
+                    "@OptionType.none KConstSig) (@ListType.nil KExpr) (@ListType.nil Nat) Level.zero) ",
                     "(whnf_to.refl (KExpr.sort (Level.succ Level.zero)) (is_whnf.sort ",
-                    "(Level.succ Level.zero))) impl_bridge_fvar_witness (Eq.refl KExpr ",
-                    "(KExpr.bvar Nat.zero)) (Eq.refl KExpr (KExpr.sort Level.zero))",
+                    "(Level.succ Level.zero))) impl_bridge_fvar_witness (@Eq.refl KExpr ",
+                    "(KExpr.bvar Nat.zero)) (@Eq.refl KExpr (KExpr.sort Level.zero))",
                 )
                 .to_string(),
             ),
@@ -1809,27 +1811,27 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "impl_bridge_pi_witness".to_string(),
             type_src: concat!(
-                "KernelInfers (fun (nm : Name) => OptionType.none KConstSig) (ListType.nil ",
+                "KernelInfers (fun (nm : Name) => @OptionType.none KConstSig) (@ListType.nil ",
                 "KExpr) (to_kexpr (ImplExpr.pi (BinderData.mk BinderInfo.default ",
                 "Multiplicity.many) (ImplExpr.sort Level.zero) (ImplExpr.sort Level.zero)) ",
-                "(ListType.nil Nat)) (to_kexpr (ImplExpr.sort (Level.imax (Level.succ ",
-                "Level.zero) (Level.succ Level.zero))) (ListType.nil Nat))",
+                "(@ListType.nil Nat)) (to_kexpr (ImplExpr.sort (Level.imax (Level.succ ",
+                "Level.zero) (Level.succ Level.zero))) (@ListType.nil Nat))",
             )
             .to_string(),
             value_src: Some(
                 concat!(
-                    "impl_bridge_pi (fun (nm : Name) => OptionType.none KConstSig) (ListType.nil ",
-                    "KExpr) (ListType.nil Nat) Nat.zero (BinderData.mk BinderInfo.default ",
+                    "impl_bridge_pi (fun (nm : Name) => @OptionType.none KConstSig) (@ListType.nil ",
+                    "KExpr) (@ListType.nil Nat) Nat.zero (BinderData.mk BinderInfo.default ",
                     "Multiplicity.many) (ImplExpr.sort Level.zero) (ImplExpr.sort Level.zero) ",
                     "(ImplExpr.sort (Level.succ Level.zero)) (ImplExpr.sort (Level.succ ",
                     "Level.zero)) (Level.succ Level.zero) (Level.succ Level.zero) ",
-                    "(impl_bridge_sort (fun (nm : Name) => OptionType.none KConstSig) (ListType.nil ",
-                    "KExpr) (ListType.nil Nat) Level.zero) (whnf_to.refl (KExpr.sort (Level.succ ",
+                    "(impl_bridge_sort (fun (nm : Name) => @OptionType.none KConstSig) (@ListType.nil ",
+                    "KExpr) (@ListType.nil Nat) Level.zero) (whnf_to.refl (KExpr.sort (Level.succ ",
                     "Level.zero)) (is_whnf.sort (Level.succ Level.zero))) (impl_bridge_sort (fun ",
-                    "(nm : Name) => OptionType.none KConstSig) (ListType.cons KExpr (KExpr.sort ",
-                    "Level.zero) (ListType.nil KExpr)) (ListType.cons Nat Nat.zero (ListType.nil ",
+                    "(nm : Name) => @OptionType.none KConstSig) (@ListType.cons KExpr (KExpr.sort ",
+                    "Level.zero) (@ListType.nil KExpr)) (@ListType.cons Nat Nat.zero (@ListType.nil ",
                     "Nat)) Level.zero) (whnf_to.refl (KExpr.sort (Level.succ Level.zero)) ",
-                    "(is_whnf.sort (Level.succ Level.zero))) (Eq.refl KExpr (KExpr.sort ",
+                    "(is_whnf.sort (Level.succ Level.zero))) (@Eq.refl KExpr (KExpr.sort ",
                     "Level.zero))",
                 )
                 .to_string(),
@@ -1864,33 +1866,33 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "impl_bridge_let_witness".to_string(),
             type_src: concat!(
-                "KernelInfers (fun (n0 : Name) => OptionType.none KConstSig) (ListType.nil ",
+                "KernelInfers (fun (n0 : Name) => @OptionType.none KConstSig) (@ListType.nil ",
                 "KExpr) (to_kexpr (ImplExpr.let_ Name.anonymous (ImplExpr.sort (Level.succ ",
                 "Level.zero)) (ImplExpr.sort Level.zero) (ImplExpr.bvar Nat.zero)) ",
-                "(ListType.nil Nat)) (to_kexpr (impl_subst_fvar (ImplExpr.sort (Level.succ ",
-                "Level.zero)) Nat.zero (ImplExpr.sort Level.zero)) (ListType.nil Nat))",
+                "(@ListType.nil Nat)) (to_kexpr (impl_subst_fvar (ImplExpr.sort (Level.succ ",
+                "Level.zero)) Nat.zero (ImplExpr.sort Level.zero)) (@ListType.nil Nat))",
             )
             .to_string(),
             value_src: Some(
                 concat!(
-                    "impl_bridge_let_core (fun (n0 : Name) => OptionType.none KConstSig) ",
-                    "(ListType.nil KExpr) (ListType.nil Nat) Nat.zero Name.anonymous ",
+                    "impl_bridge_let_core (fun (n0 : Name) => @OptionType.none KConstSig) ",
+                    "(@ListType.nil KExpr) (@ListType.nil Nat) Nat.zero Name.anonymous ",
                     "(ImplExpr.sort (Level.succ Level.zero)) (ImplExpr.sort Level.zero) ",
                     "(ImplExpr.bvar Nat.zero) (ImplExpr.sort (Level.succ (Level.succ ",
                     "Level.zero))) (Level.succ (Level.succ Level.zero)) (ImplExpr.sort ",
                     "(Level.succ Level.zero)) (ImplExpr.sort (Level.succ Level.zero)) ",
-                    "(impl_bridge_sort (fun (n0 : Name) => OptionType.none KConstSig) (ListType.nil ",
-                    "KExpr) (ListType.nil Nat) (Level.succ Level.zero)) (whnf_to.refl ",
+                    "(impl_bridge_sort (fun (n0 : Name) => @OptionType.none KConstSig) (@ListType.nil ",
+                    "KExpr) (@ListType.nil Nat) (Level.succ Level.zero)) (whnf_to.refl ",
                     "(KExpr.sort (Level.succ (Level.succ Level.zero))) (is_whnf.sort (Level.succ ",
                     "(Level.succ Level.zero)))) (impl_bridge_sort (fun (n0 : Name) => ",
-                    "OptionType.none KConstSig) (ListType.nil KExpr) (ListType.nil Nat) Level.zero) ",
-                    "(DefEq.refl (KExpr.sort (Level.succ Level.zero))) (KernelInfers.bvar (fun ",
-                    "(n0 : Name) => OptionType.none KConstSig) (ListType.cons KExpr (KExpr.sort ",
-                    "(Level.succ Level.zero)) (ListType.nil KExpr)) Nat.zero (KExpr.sort ",
-                    "(Level.succ Level.zero)) (Eq.refl (OptionType KExpr) (ctx_lookup ",
-                    "(ListType.cons KExpr (KExpr.sort (Level.succ Level.zero)) (ListType.nil ",
-                    "KExpr)) Nat.zero))) (Eq.refl KExpr (KExpr.bvar Nat.zero)) (Eq.refl KExpr ",
-                    "(KExpr.sort (Level.succ Level.zero))) (Eq.refl KExpr (KExpr.sort ",
+                    "@OptionType.none KConstSig) (@ListType.nil KExpr) (@ListType.nil Nat) Level.zero) ",
+                    "(DefEq.refl (KExpr.sort (Level.succ Level.zero))) (@KernelInfers.bvar (fun ",
+                    "(n0 : Name) => @OptionType.none KConstSig) (@ListType.cons KExpr (KExpr.sort ",
+                    "(Level.succ Level.zero)) (@ListType.nil KExpr)) Nat.zero (KExpr.sort ",
+                    "(Level.succ Level.zero)) (@Eq.refl (OptionType KExpr) (ctx_lookup ",
+                    "(@ListType.cons KExpr (KExpr.sort (Level.succ Level.zero)) (@ListType.nil ",
+                    "KExpr)) Nat.zero))) (@Eq.refl KExpr (KExpr.bvar Nat.zero)) (@Eq.refl KExpr ",
+                    "(KExpr.sort (Level.succ Level.zero))) (@Eq.refl KExpr (KExpr.sort ",
                     "(Level.succ Level.zero)))",
                 )
                 .to_string(),
@@ -1932,15 +1934,15 @@ impl Specification {
             name: "ctx_rep_nil_lookup_empty".to_string(),
             type_src: concat!(
                 "forall (x : Nat) (Ai : ImplExpr) (C : Type), ",
-                "Eq (OptionType ImplExpr) (lctx_lookup LCtx.nil x) ",
-                "(OptionType.some ImplExpr Ai) -> C"
+                "@Eq (OptionType ImplExpr) (lctx_lookup LCtx.nil x) ",
+                "(@OptionType.some ImplExpr Ai) -> C"
             )
             .to_string(),
             value_src: Some(
                 concat!(
                     "fun (x : Nat) (Ai : ImplExpr) (C : Type) ",
-                    "(h : Eq (OptionType ImplExpr) (lctx_lookup LCtx.nil x) ",
-                    "(OptionType.some ImplExpr Ai)) => ",
+                    "(h : @Eq (OptionType ImplExpr) (lctx_lookup LCtx.nil x) ",
+                    "(@OptionType.some ImplExpr Ai)) => ",
                     "option_none_ne_some_type ImplExpr Ai C h"
                 )
                 .to_string(),

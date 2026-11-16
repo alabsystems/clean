@@ -131,9 +131,9 @@ impl Specification {
         // Proof: Eq.substType KExpr (fun x => DefEq x b) a' a (Eq.symm KExpr a a' eq) h
         self.add_definition(SpecDefinition {
             name: "def_eq_eq_left".to_string(),
-            type_src: "forall (a : KExpr) (a' : KExpr) (b : KExpr), Eq KExpr a a' -> DefEq a' b -> DefEq a b".to_string(),
+            type_src: "forall (a : KExpr) (a' : KExpr) (b : KExpr), @Eq KExpr a a' -> DefEq a' b -> DefEq a b".to_string(),
             value_src: Some(
-                "fun (a : KExpr) (a' : KExpr) (b : KExpr) (eq : Eq KExpr a a') (h : DefEq a' b) => Eq.substType KExpr (fun (x : KExpr) => DefEq x b) a' a (Eq.symm KExpr a a' eq) h"
+                "fun (a : KExpr) (a' : KExpr) (b : KExpr) (eq : @Eq KExpr a a') (h : DefEq a' b) => @Eq.substType KExpr (fun (x : KExpr) => DefEq x b) a' a (@Eq.symm KExpr a a' eq) h"
                     .to_string(),
             ),
             is_axiom: false,
@@ -153,9 +153,9 @@ impl Specification {
         // Proof: Eq.substType KExpr (fun x => DefEq a x) b' b eq h
         self.add_definition(SpecDefinition {
             name: "def_eq_eq_right".to_string(),
-            type_src: "forall (a : KExpr) (b' : KExpr) (b : KExpr), DefEq a b' -> Eq KExpr b' b -> DefEq a b".to_string(),
+            type_src: "forall (a : KExpr) (b' : KExpr) (b : KExpr), DefEq a b' -> @Eq KExpr b' b -> DefEq a b".to_string(),
             value_src: Some(
-                "fun (a : KExpr) (b' : KExpr) (b : KExpr) (h : DefEq a b') (eq : Eq KExpr b' b) => Eq.substType KExpr (fun (x : KExpr) => DefEq a x) b' b eq h"
+                "fun (a : KExpr) (b' : KExpr) (b : KExpr) (h : DefEq a b') (eq : @Eq KExpr b' b) => @Eq.substType KExpr (fun (x : KExpr) => DefEq a x) b' b eq h"
                     .to_string(),
             ),
             is_axiom: false,

@@ -246,35 +246,35 @@ fn release_fetched_site_arity_and_world_preflights_keep_their_order() {
     crate::test_utils::run_with_stack(|| {
         let mut spec = owner();
         for source in [
-            "def release_frame : IRFrame := IRFrame.mk 71 0 2 (IRList.nil IRBinding) (IRList.nil Nat)",
-            "def release_machine : IRMachine := IRMachine.mk (IRList.cons IRFrame release_frame (IRList.nil IRFrame)) (IRList.nil IRMemSlot) 1",
-            "def release_world : IRByteWorldV1 Nat := IRByteWorldV1.mk Nat (ir_byte_memory_empty_v1 64) 91 (IRList.cons Nat 1 (IRList.nil Nat)) 2",
-            "def release_invalid_world : IRByteWorldV1 Nat := IRByteWorldV1.mk Nat (ir_byte_memory_empty_v1 64) 91 (IRList.nil Nat) 0",
-            "def release_provider : IRByteProvidersV1 Nat := fun (_ : Nat) (_ : IRList IRScalar) (mem : IRByteMemoryV1) (host : Nat) => IRByteImportResultV1.mk Nat (IROutcome.ret (IRList.nil IRScalar)) mem host",
-            "def release_site : IRByteSiteV1 := IRByteSiteV1.mk 71 0 2 0 1 (IRList.nil IRTy)",
-            "def release_context : IRByteContextV1 := IRByteContextV1.mk (IRModule.mk (IRList.nil IRFunc) (IRList.nil IRGlobal)) (IRList.nil IRByteLayoutV1) (IRList.nil IRByteSignatureV1) (IRList.nil IRByteFunctionV1) (IRList.cons IRByteSiteV1 release_site (IRList.nil IRByteSiteV1))",
-            "def release_full_module : IRModule := IRModule.mk (IRList.cons IRFunc (IRFunc.mk 71 (IRList.nil Nat) 0 (IRList.cons IRBlock (IRBlock.mk 0 (IRList.nil Nat) (IRList.cons IRNode (IRNode.mk (IRInst.release 0) (IRList.nil Nat)) (IRList.cons IRNode (IRNode.mk (IRInst.release 1) (IRList.nil Nat)) (IRList.nil IRNode)))) (IRList.nil IRBlock))) (IRList.nil IRFunc)) (IRList.nil IRGlobal)",
-            "def release_full_context : IRByteContextV1 := IRByteContextV1.mk release_full_module (IRList.nil IRByteLayoutV1) (IRList.nil IRByteSignatureV1) (IRList.nil IRByteFunctionV1) (IRList.cons IRByteSiteV1 (IRByteSiteV1.mk 71 0 0 0 1 (IRList.nil IRTy)) (IRList.cons IRByteSiteV1 (IRByteSiteV1.mk 71 0 1 0 1 (IRList.nil IRTy)) (IRList.nil IRByteSiteV1)))",
-            "def release_full_machine : IRMachine := IRMachine.mk (IRList.cons IRFrame (IRFrame.mk 71 0 0 (IRList.nil IRBinding) (IRList.nil Nat)) (IRList.nil IRFrame)) (IRList.nil IRMemSlot) 1",
-            "def release_missing_context : IRByteContextV1 := IRByteContextV1.mk (IRModule.mk (IRList.nil IRFunc) (IRList.nil IRGlobal)) (IRList.nil IRByteLayoutV1) (IRList.nil IRByteSignatureV1) (IRList.nil IRByteFunctionV1) (IRList.nil IRByteSiteV1)",
+            "def release_frame : IRFrame := IRFrame.mk 71 0 2 (@IRList.nil IRBinding) (@IRList.nil Nat)",
+            "def release_machine : IRMachine := IRMachine.mk (@IRList.cons IRFrame release_frame (@IRList.nil IRFrame)) (@IRList.nil IRMemSlot) 1",
+            "def release_world : IRByteWorldV1 Nat := @IRByteWorldV1.mk Nat (ir_byte_memory_empty_v1 64) 91 (@IRList.cons Nat 1 (@IRList.nil Nat)) 2",
+            "def release_invalid_world : IRByteWorldV1 Nat := @IRByteWorldV1.mk Nat (ir_byte_memory_empty_v1 64) 91 (@IRList.nil Nat) 0",
+            "def release_provider : IRByteProvidersV1 Nat := fun (_ : Nat) (_ : IRList IRScalar) (mem : IRByteMemoryV1) (host : Nat) => @IRByteImportResultV1.mk Nat (IROutcome.ret (@IRList.nil IRScalar)) mem host",
+            "def release_site : IRByteSiteV1 := IRByteSiteV1.mk 71 0 2 0 1 (@IRList.nil IRTy)",
+            "def release_context : IRByteContextV1 := IRByteContextV1.mk (IRModule.mk (@IRList.nil IRFunc) (@IRList.nil IRGlobal)) (@IRList.nil IRByteLayoutV1) (@IRList.nil IRByteSignatureV1) (@IRList.nil IRByteFunctionV1) (@IRList.cons IRByteSiteV1 release_site (@IRList.nil IRByteSiteV1))",
+            "def release_full_module : IRModule := IRModule.mk (@IRList.cons IRFunc (IRFunc.mk 71 (@IRList.nil Nat) 0 (@IRList.cons IRBlock (IRBlock.mk 0 (@IRList.nil Nat) (@IRList.cons IRNode (IRNode.mk (IRInst.release 0) (@IRList.nil Nat)) (@IRList.cons IRNode (IRNode.mk (IRInst.release 1) (@IRList.nil Nat)) (@IRList.nil IRNode)))) (@IRList.nil IRBlock))) (@IRList.nil IRFunc)) (@IRList.nil IRGlobal)",
+            "def release_full_context : IRByteContextV1 := IRByteContextV1.mk release_full_module (@IRList.nil IRByteLayoutV1) (@IRList.nil IRByteSignatureV1) (@IRList.nil IRByteFunctionV1) (@IRList.cons IRByteSiteV1 (IRByteSiteV1.mk 71 0 0 0 1 (@IRList.nil IRTy)) (@IRList.cons IRByteSiteV1 (IRByteSiteV1.mk 71 0 1 0 1 (@IRList.nil IRTy)) (@IRList.nil IRByteSiteV1)))",
+            "def release_full_machine : IRMachine := IRMachine.mk (@IRList.cons IRFrame (IRFrame.mk 71 0 0 (@IRList.nil IRBinding) (@IRList.nil Nat)) (@IRList.nil IRFrame)) (@IRList.nil IRMemSlot) 1",
+            "def release_missing_context : IRByteContextV1 := IRByteContextV1.mk (IRModule.mk (@IRList.nil IRFunc) (@IRList.nil IRGlobal)) (@IRList.nil IRByteLayoutV1) (@IRList.nil IRByteSignatureV1) (@IRList.nil IRByteFunctionV1) (@IRList.nil IRByteSiteV1)",
         ] { register(&mut spec, source); }
         for (name, actual, expected) in [
-            ("release_full_fetch_unmodelled", "ir_byte_step_v1 Nat release_full_context release_provider (IRByteConfigV1.running Nat release_full_machine release_world)", "IRByteConfigV1.halted Nat (IROutcome.unmodelled IRFault.width_bounded) release_world"),
-            ("release_fetched_unmodelled", "ir_byte_step_node_v1 Nat release_context release_provider release_machine release_world release_frame (IRNode.mk (IRInst.release 0) (IRList.nil Nat))", "IRByteConfigV1.halted Nat (IROutcome.unmodelled IRFault.width_bounded) release_world"),
-            ("release_pointer_one_also_unmodelled", "ir_byte_step_node_v1 Nat release_context release_provider release_machine release_world release_frame (IRNode.mk (IRInst.release 1) (IRList.nil Nat))", "IRByteConfigV1.halted Nat (IROutcome.unmodelled IRFault.width_bounded) release_world"),
-            ("release_missing_site_first", "ir_byte_step_node_v1 Nat release_missing_context release_provider release_machine release_world release_frame (IRNode.mk (IRInst.release 0) (IRList.cons Nat 7 (IRList.nil Nat)))", "IRByteConfigV1.halted Nat (IROutcome.stuck IRFault.fetch_past_end) release_world"),
-            ("release_bad_result_arity_first", "ir_byte_step_node_v1 Nat release_context release_provider release_machine release_world release_frame (IRNode.mk (IRInst.release 0) (IRList.cons Nat 7 (IRList.nil Nat)))", "IRByteConfigV1.halted Nat (IROutcome.type_error IRFault.bad_field) release_world"),
-            ("release_invalid_world_first", "ir_byte_step_v1 Nat release_context release_provider (IRByteConfigV1.running Nat release_machine release_invalid_world)", "IRByteConfigV1.halted Nat (IROutcome.type_error IRFault.bad_addr) release_invalid_world"),
+            ("release_full_fetch_unmodelled", "ir_byte_step_v1 Nat release_full_context release_provider (@IRByteConfigV1.running Nat release_full_machine release_world)", "@IRByteConfigV1.halted Nat (IROutcome.unmodelled IRFault.width_bounded) release_world"),
+            ("release_fetched_unmodelled", "ir_byte_step_node_v1 Nat release_context release_provider release_machine release_world release_frame (IRNode.mk (IRInst.release 0) (@IRList.nil Nat))", "@IRByteConfigV1.halted Nat (IROutcome.unmodelled IRFault.width_bounded) release_world"),
+            ("release_pointer_one_also_unmodelled", "ir_byte_step_node_v1 Nat release_context release_provider release_machine release_world release_frame (IRNode.mk (IRInst.release 1) (@IRList.nil Nat))", "@IRByteConfigV1.halted Nat (IROutcome.unmodelled IRFault.width_bounded) release_world"),
+            ("release_missing_site_first", "ir_byte_step_node_v1 Nat release_missing_context release_provider release_machine release_world release_frame (IRNode.mk (IRInst.release 0) (@IRList.cons Nat 7 (@IRList.nil Nat)))", "@IRByteConfigV1.halted Nat (IROutcome.stuck IRFault.fetch_past_end) release_world"),
+            ("release_bad_result_arity_first", "ir_byte_step_node_v1 Nat release_context release_provider release_machine release_world release_frame (IRNode.mk (IRInst.release 0) (@IRList.cons Nat 7 (@IRList.nil Nat)))", "@IRByteConfigV1.halted Nat (IROutcome.type_error IRFault.bad_field) release_world"),
+            ("release_invalid_world_first", "ir_byte_step_v1 Nat release_context release_provider (@IRByteConfigV1.running Nat release_machine release_invalid_world)", "@IRByteConfigV1.halted Nat (IROutcome.type_error IRFault.bad_addr) release_invalid_world"),
         ] {
-            register(&mut spec, &format!("def {name} : Eq (IRByteConfigV1 Nat) ({actual}) ({expected}) := Eq.refl (IRByteConfigV1 Nat) ({expected})"));
+            register(&mut spec, &format!("def {name} : @Eq (IRByteConfigV1 Nat) ({actual}) ({expected}) := @Eq.refl (IRByteConfigV1 Nat) ({expected})"));
             strict_roundtrip(&spec, name);
         }
         for (name, right) in [
-            ("release_not_pointer_fault", "IRByteConfigV1.halted Nat (IROutcome.type_error IRFault.not_ptr) release_world"),
-            ("release_not_running", "IRByteConfigV1.running Nat release_machine release_world"),
-            ("release_not_changed_world", "IRByteConfigV1.halted Nat (IROutcome.unmodelled IRFault.width_bounded) release_invalid_world"),
+            ("release_not_pointer_fault", "@IRByteConfigV1.halted Nat (IROutcome.type_error IRFault.not_ptr) release_world"),
+            ("release_not_running", "@IRByteConfigV1.running Nat release_machine release_world"),
+            ("release_not_changed_world", "@IRByteConfigV1.halted Nat (IROutcome.unmodelled IRFault.width_bounded) release_invalid_world"),
         ] {
-            let result = spec.add_recursive_def(&format!("def {name} : Eq (IRByteConfigV1 Nat) (ir_byte_exec_v1 Nat release_context release_provider release_machine release_world release_site (IRInst.release 0) (IRList.nil Nat)) ({right}) := Eq.refl (IRByteConfigV1 Nat) ({right})"), "Deliberately false Release result");
+            let result = spec.add_recursive_def(&format!("def {name} : @Eq (IRByteConfigV1 Nat) (ir_byte_exec_v1 Nat release_context release_provider release_machine release_world release_site (IRInst.release 0) (@IRList.nil Nat)) ({right}) := @Eq.refl (IRByteConfigV1 Nat) ({right})"), "Deliberately false Release result");
             let error = result.expect_err("wrong endpoint must refuse");
             assert!(matches!(&error, crate::spec::SpecError::ElabError(message) if message.contains("Type mismatch:")), "must be a genuine elaborator type mismatch: {error:?}");
             assert!(!clean_kernel::tc::declaration_budget_exhausted());

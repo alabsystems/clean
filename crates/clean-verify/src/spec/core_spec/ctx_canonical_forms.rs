@@ -86,8 +86,8 @@ impl Specification {
         // CtxLookup ctx i A holds iff the i-th entry of ctx is A.
         self.add_inductive(
             r"inductive CtxLookup : ListType KExpr → Nat → KExpr → Type
-| here : forall (A : KExpr) (rest : ListType KExpr), CtxLookup (ListType.cons KExpr A rest) Nat.zero A
-| there : forall (B : KExpr) (rest : ListType KExpr) (i : Nat) (A : KExpr), CtxLookup rest i A → CtxLookup (ListType.cons KExpr B rest) (Nat.succ i) A",
+| here : forall (A : KExpr) (rest : ListType KExpr), CtxLookup (@ListType.cons KExpr A rest) Nat.zero A
+| there : forall (B : KExpr) (rest : ListType KExpr) (i : Nat) (A : KExpr), CtxLookup rest i A → CtxLookup (@ListType.cons KExpr B rest) (Nat.succ i) A",
             "CtxLookup ctx i A: the i-th entry of the ListType KExpr context ctx is A (de Bruijn \
              lookup; here = index 0 at the head, there = shift into the tail). Context substrate \
              for the SEPARATE context-indexed syntax-directed judgment CtxTyping (object of \
@@ -103,10 +103,10 @@ impl Specification {
             r"inductive CtxTyping : ListType KExpr → KExpr → KExpr → Type
 | var : forall (ctx : ListType KExpr) (i : Nat) (A : KExpr), CtxLookup ctx i A → CtxTyping ctx (KExpr.bvar i) (lift_at A Nat.zero (Nat.succ i))
 | sort : forall (ctx : ListType KExpr) (n : Level), CtxTyping ctx (KExpr.sort n) (KExpr.sort (Level.succ n))
-| pi : forall (ctx : ListType KExpr) (A : KExpr) (B : KExpr) (n : Level) (m : Level), CtxTyping ctx A (KExpr.sort n) → CtxTyping (ListType.cons KExpr A ctx) B (KExpr.sort m) → CtxTyping ctx (KExpr.pi A B) (KExpr.sort (Level.imax n m))
-| lam : forall (ctx : ListType KExpr) (A : KExpr) (b : KExpr) (B : KExpr) (u : Level), CtxTyping ctx A (KExpr.sort u) → CtxTyping (ListType.cons KExpr A ctx) b B → CtxTyping ctx (KExpr.lam A b) (KExpr.pi A B)
+| pi : forall (ctx : ListType KExpr) (A : KExpr) (B : KExpr) (n : Level) (m : Level), CtxTyping ctx A (KExpr.sort n) → CtxTyping (@ListType.cons KExpr A ctx) B (KExpr.sort m) → CtxTyping ctx (KExpr.pi A B) (KExpr.sort (Level.imax n m))
+| lam : forall (ctx : ListType KExpr) (A : KExpr) (b : KExpr) (B : KExpr) (u : Level), CtxTyping ctx A (KExpr.sort u) → CtxTyping (@ListType.cons KExpr A ctx) b B → CtxTyping ctx (KExpr.lam A b) (KExpr.pi A B)
 | app : forall (ctx : ListType KExpr) (f : KExpr) (a : KExpr) (A : KExpr) (B : KExpr), CtxTyping ctx f (KExpr.pi A B) → CtxTyping ctx a A → CtxTyping ctx (KExpr.app f a) (instantiate B a)
-| let_ : forall (ctx : ListType KExpr) (ty : KExpr) (v : KExpr) (b : KExpr) (B : KExpr) (u : Level), CtxTyping ctx ty (KExpr.sort u) → CtxTyping ctx v ty → CtxTyping (ListType.cons KExpr ty ctx) b B → CtxTyping ctx (KExpr.let_ ty v b) (instantiate B v)",
+| let_ : forall (ctx : ListType KExpr) (ty : KExpr) (v : KExpr) (b : KExpr) (B : KExpr) (u : Level), CtxTyping ctx ty (KExpr.sort u) → CtxTyping ctx v ty → CtxTyping (@ListType.cons KExpr ty ctx) b B → CtxTyping ctx (KExpr.let_ ty v b) (instantiate B v)",
             "CtxTyping ctx e T: CONTEXT-INDEXED, SYNTAX-DIRECTED (conv-free) dependent typing \
              fragment — a NEW object of study, ported from \
              proofs/lean-aristotle/canonical_forms_pi.lean. Six rules: de Bruijn var (type \
@@ -166,7 +166,7 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (ctx : ListType KExpr) => ",
-                    "ListType.rec KExpr (fun (_ : ListType KExpr) => Type) ",
+                    "@ListType.rec KExpr (fun (_ : ListType KExpr) => Type) ",
                     "Nat ",
                     "(fun (_ : KExpr) (_ : ListType KExpr) (_ : Type) => Empty) ",
                     "ctx"
@@ -251,7 +251,7 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (ctx : ListType KExpr) (i : Nat) (A : KExpr) (hlk : CtxLookup ctx i A) => ",
-                    "CtxLookup.rec ",
+                    "@CtxLookup.rec ",
                     "(fun (c : ListType KExpr) (j : Nat) (X : KExpr) (_h : CtxLookup c j X) => ",
                     "ctx_is_nil c -> Empty) ",
                     "(fun (A0 : KExpr) (rest : ListType KExpr) (h : Empty) => h) ",
@@ -353,31 +353,31 @@ impl Specification {
             name: "ctx_canonical_forms_pi".to_string(),
             type_src: concat!(
                 "forall (e : KExpr) (A : KExpr) (B : KExpr), ",
-                "CtxTyping (ListType.nil KExpr) e (KExpr.pi A B) -> ",
+                "CtxTyping (@ListType.nil KExpr) e (KExpr.pi A B) -> ",
                 "is_normal_bd e -> IsLamShape e"
             )
             .to_string(),
             value_src: Some(
                 concat!(
                     "fun (e : KExpr) (A : KExpr) (B : KExpr) ",
-                    "(h : CtxTyping (ListType.nil KExpr) e (KExpr.pi A B)) ",
+                    "(h : CtxTyping (@ListType.nil KExpr) e (KExpr.pi A B)) ",
                     "(hn : is_normal_bd e) => ",
-                    "CanonAt.rec ",
+                    "@CanonAt.rec ",
                     "(fun (x : KExpr) (X : KExpr) (_c : CanonAt x X) => ",
-                    "Eq KExpr X (KExpr.pi A B) -> IsLamShape x) ",
+                    "@Eq KExpr X (KExpr.pi A B) -> IsLamShape x) ",
                     "(fun (A0 : KExpr) (b0 : KExpr) (P : KExpr) (Q : KExpr) ",
-                    "(_heq : Eq KExpr (KExpr.pi P Q) (KExpr.pi A B)) => ",
+                    "(_heq : @Eq KExpr (KExpr.pi P Q) (KExpr.pi A B)) => ",
                     "IsLamShape.intro A0 b0) ",
                     "(fun (n : Level) (m : Level) ",
-                    "(heq : Eq KExpr (KExpr.sort m) (KExpr.pi A B)) => ",
+                    "(heq : @Eq KExpr (KExpr.sort m) (KExpr.pi A B)) => ",
                     "sort_ne_pi m A B (IsLamShape (KExpr.sort n)) heq) ",
                     "(fun (A0 : KExpr) (B0 : KExpr) (m : Level) ",
-                    "(heq : Eq KExpr (KExpr.sort m) (KExpr.pi A B)) => ",
+                    "(heq : @Eq KExpr (KExpr.sort m) (KExpr.pi A B)) => ",
                     "sort_ne_pi m A B (IsLamShape (KExpr.pi A0 B0)) heq) ",
                     "e (KExpr.pi A B) ",
-                    "(ctx_typing_normal_canonical (ListType.nil KExpr) e (KExpr.pi A B) ",
+                    "(ctx_typing_normal_canonical (@ListType.nil KExpr) e (KExpr.pi A B) ",
                     "h Nat.zero hn) ",
-                    "(Eq.refl KExpr (KExpr.pi A B))"
+                    "(@Eq.refl KExpr (KExpr.pi A B))"
                 )
                 .to_string(),
             ),
@@ -424,19 +424,19 @@ impl Specification {
             name: "ctx_canonical_forms_pi_is_lam".to_string(),
             type_src: concat!(
                 "forall (e : KExpr) (A : KExpr) (B : KExpr), ",
-                "CtxTyping (ListType.nil KExpr) e (KExpr.pi A B) -> ",
-                "is_normal_bd e -> Eq Bool (kexpr_is_lam e) Bool.true"
+                "CtxTyping (@ListType.nil KExpr) e (KExpr.pi A B) -> ",
+                "is_normal_bd e -> @Eq Bool (kexpr_is_lam e) Bool.true"
             )
             .to_string(),
             value_src: Some(
                 concat!(
                     "fun (e : KExpr) (A : KExpr) (B : KExpr) ",
-                    "(h : CtxTyping (ListType.nil KExpr) e (KExpr.pi A B)) ",
+                    "(h : CtxTyping (@ListType.nil KExpr) e (KExpr.pi A B)) ",
                     "(hn : is_normal_bd e) => ",
-                    "IsLamShape.rec ",
+                    "@IsLamShape.rec ",
                     "(fun (x : KExpr) (_w : IsLamShape x) => ",
-                    "Eq Bool (kexpr_is_lam x) Bool.true) ",
-                    "(fun (A0 : KExpr) (b0 : KExpr) => Eq.refl Bool Bool.true) ",
+                    "@Eq Bool (kexpr_is_lam x) Bool.true) ",
+                    "(fun (A0 : KExpr) (b0 : KExpr) => @Eq.refl Bool Bool.true) ",
                     "e (ctx_canonical_forms_pi e A B h hn)"
                 )
                 .to_string(),
@@ -486,13 +486,13 @@ impl Specification {
 fn ctx_typing_normal_canonical_proof() -> String {
     concat!(
         "fun (ctx0 : ListType KExpr) (e0 : KExpr) (T0 : KExpr) (h0 : CtxTyping ctx0 e0 T0) => ",
-        "CtxTyping.rec ",
+        "@CtxTyping.rec ",
         "(fun (ctx : ListType KExpr) (x : KExpr) (X : KExpr) (_h : CtxTyping ctx x X) => ",
         "ctx_is_nil ctx -> is_normal_bd x -> CanonAt x X) ",
         // var ctx i A hlk — refuted: no lookup into the empty context.
         "(fun (ctx : ListType KExpr) (i : Nat) (A : KExpr) (hlk : CtxLookup ctx i A) ",
         "(hnil : ctx_is_nil ctx) (_hn : is_normal_bd (KExpr.bvar i)) => ",
-        "Empty.rec ",
+        "@Empty.rec ",
         "(fun (_ : Empty) => CanonAt (KExpr.bvar i) (lift_at A Nat.zero (Nat.succ i))) ",
         "(ctx_lookup_not_nil ctx i A hlk hnil)) ",
         // sort ctx n
@@ -502,18 +502,18 @@ fn ctx_typing_normal_canonical_proof() -> String {
         // pi ctx A B n m hA hB ihA ihB
         "(fun (ctx : ListType KExpr) (A : KExpr) (B : KExpr) (n : Level) (m : Level) ",
         "(_hA : CtxTyping ctx A (KExpr.sort n)) ",
-        "(_hB : CtxTyping (ListType.cons KExpr A ctx) B (KExpr.sort m)) ",
+        "(_hB : CtxTyping (@ListType.cons KExpr A ctx) B (KExpr.sort m)) ",
         "(_ihA : ctx_is_nil ctx -> is_normal_bd A -> CanonAt A (KExpr.sort n)) ",
-        "(_ihB : ctx_is_nil (ListType.cons KExpr A ctx) -> is_normal_bd B -> ",
+        "(_ihB : ctx_is_nil (@ListType.cons KExpr A ctx) -> is_normal_bd B -> ",
         "CanonAt B (KExpr.sort m)) ",
         "(_hnil : ctx_is_nil ctx) (_hn : is_normal_bd (KExpr.pi A B)) => ",
         "CanonAt.pi_sort A B (Level.imax n m)) ",
         // lam ctx A b B u hA hb ihA ihb
         "(fun (ctx : ListType KExpr) (A : KExpr) (b : KExpr) (B : KExpr) (u : Level) ",
         "(_hA : CtxTyping ctx A (KExpr.sort u)) ",
-        "(_hb : CtxTyping (ListType.cons KExpr A ctx) b B) ",
+        "(_hb : CtxTyping (@ListType.cons KExpr A ctx) b B) ",
         "(_ihA : ctx_is_nil ctx -> is_normal_bd A -> CanonAt A (KExpr.sort u)) ",
-        "(_ihb : ctx_is_nil (ListType.cons KExpr A ctx) -> is_normal_bd b -> CanonAt b B) ",
+        "(_ihb : ctx_is_nil (@ListType.cons KExpr A ctx) -> is_normal_bd b -> CanonAt b B) ",
         "(_hnil : ctx_is_nil ctx) (_hn : is_normal_bd (KExpr.lam A b)) => ",
         "CanonAt.lam_pi A b A B) ",
         // app ctx f a A B hf ha ihf iha — the head is normal (app_left
@@ -524,26 +524,26 @@ fn ctx_typing_normal_canonical_proof() -> String {
         "(ihf : ctx_is_nil ctx -> is_normal_bd f -> CanonAt f (KExpr.pi A B)) ",
         "(_iha : ctx_is_nil ctx -> is_normal_bd a -> CanonAt a A) ",
         "(hnil : ctx_is_nil ctx) (hn : is_normal_bd (KExpr.app f a)) => ",
-        "CanonAt.rec ",
+        "@CanonAt.rec ",
         "(fun (x : KExpr) (X : KExpr) (_c : CanonAt x X) => ",
-        "Eq KExpr X (KExpr.pi A B) -> is_normal_bd (KExpr.app x a) -> ",
+        "@Eq KExpr X (KExpr.pi A B) -> is_normal_bd (KExpr.app x a) -> ",
         "CanonAt (KExpr.app x a) (instantiate B a)) ",
         // lam_pi A0 b0 P Q — a beta redex at the head, killed by normality.
         "(fun (A0 : KExpr) (b0 : KExpr) (P : KExpr) (Q : KExpr) ",
-        "(_heq : Eq KExpr (KExpr.pi P Q) (KExpr.pi A B)) ",
+        "(_heq : @Eq KExpr (KExpr.pi P Q) (KExpr.pi A B)) ",
         "(hna : is_normal_bd (KExpr.app (KExpr.lam A0 b0) a)) => ",
-        "Empty.rec ",
+        "@Empty.rec ",
         "(fun (_ : Empty) => CanonAt (KExpr.app (KExpr.lam A0 b0) a) (instantiate B a)) ",
         "(hna (instantiate b0 a) (beta_reduces_bd.beta A0 b0 a))) ",
         // sort_sort n m — the type head is a Sort, not a Pi: sort_ne_pi.
-        "(fun (n : Level) (m : Level) (heq : Eq KExpr (KExpr.sort m) (KExpr.pi A B)) => ",
+        "(fun (n : Level) (m : Level) (heq : @Eq KExpr (KExpr.sort m) (KExpr.pi A B)) => ",
         "sort_ne_pi m A B ",
         "(is_normal_bd (KExpr.app (KExpr.sort n) a) -> ",
         "CanonAt (KExpr.app (KExpr.sort n) a) (instantiate B a)) ",
         "heq) ",
         // pi_sort A0 B0 m — same Sort-headed refutation.
         "(fun (A0 : KExpr) (B0 : KExpr) (m : Level) ",
-        "(heq : Eq KExpr (KExpr.sort m) (KExpr.pi A B)) => ",
+        "(heq : @Eq KExpr (KExpr.sort m) (KExpr.pi A B)) => ",
         "sort_ne_pi m A B ",
         "(is_normal_bd (KExpr.app (KExpr.pi A0 B0) a) -> ",
         "CanonAt (KExpr.app (KExpr.pi A0 B0) a) (instantiate B a)) ",
@@ -552,7 +552,7 @@ fn ctx_typing_normal_canonical_proof() -> String {
         "(ihf hnil ",
         "(fun (f' : KExpr) (hs : beta_reduces_bd f f') => ",
         "hn (KExpr.app f' a) (beta_reduces_bd.app_left f f' a hs))) ",
-        "(Eq.refl KExpr (KExpr.pi A B)) hn) ",
+        "(@Eq.refl KExpr (KExpr.pi A B)) hn) ",
         // let_ ctx ty v b B u hty hv hb ihty ihv ihb — a let_ is a zeta redex, so
         // it is never beta_reduces_bd-normal: fire beta_reduces_bd.zeta against the
         // normality hypothesis for Empty (CanonAt has no let_-headed constructor,
@@ -560,12 +560,12 @@ fn ctx_typing_normal_canonical_proof() -> String {
         "(fun (ctx : ListType KExpr) (ty : KExpr) (v : KExpr) (b : KExpr) (B : KExpr) (u : Level) ",
         "(_hty : CtxTyping ctx ty (KExpr.sort u)) ",
         "(_hv : CtxTyping ctx v ty) ",
-        "(_hb : CtxTyping (ListType.cons KExpr ty ctx) b B) ",
+        "(_hb : CtxTyping (@ListType.cons KExpr ty ctx) b B) ",
         "(_ihty : ctx_is_nil ctx -> is_normal_bd ty -> CanonAt ty (KExpr.sort u)) ",
         "(_ihv : ctx_is_nil ctx -> is_normal_bd v -> CanonAt v ty) ",
-        "(_ihb : ctx_is_nil (ListType.cons KExpr ty ctx) -> is_normal_bd b -> CanonAt b B) ",
+        "(_ihb : ctx_is_nil (@ListType.cons KExpr ty ctx) -> is_normal_bd b -> CanonAt b B) ",
         "(_hnil : ctx_is_nil ctx) (hn : is_normal_bd (KExpr.let_ ty v b)) => ",
-        "Empty.rec ",
+        "@Empty.rec ",
         "(fun (_ : Empty) => CanonAt (KExpr.let_ ty v b) (instantiate B v)) ",
         "(hn (instantiate b v) (beta_reduces_bd.zeta ty v b))) ",
         // indices + major

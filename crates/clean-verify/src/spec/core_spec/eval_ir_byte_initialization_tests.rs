@@ -43,29 +43,29 @@ fn list(ty: &str, values: &[&str]) -> String {
     values
         .iter()
         .rev()
-        .fold(format!("(IRList.nil {ty})"), |tail, value| {
-            format!("(IRList.cons {ty} {value} {tail})")
+        .fold(format!("(@IRList.nil {ty})"), |tail, value| {
+            format!("(@IRList.cons {ty} {value} {tail})")
         })
 }
 
-const ARGS: &str = "(IRList.cons IRScalar (IRScalar.ptr_ 16) (IRList.cons IRScalar (IRScalar.ptr_ 48) (IRList.nil IRScalar)))";
-const BINDINGS: &str = "(IRList.cons IRBinding (IRBinding.mk 31 (IRScalar.ptr_ 16)) (IRList.cons IRBinding (IRBinding.mk 7 (IRScalar.ptr_ 48)) (IRList.nil IRBinding)))";
-const INITIAL_FRAME: &str = "(IRFrame.mk 41 17 0 init_test_bindings (IRList.nil Nat))";
-const TRUE: &str = "(Eq.refl Bool Bool.true)";
+const ARGS: &str = "(@IRList.cons IRScalar (IRScalar.ptr_ 16) (@IRList.cons IRScalar (IRScalar.ptr_ 48) (@IRList.nil IRScalar)))";
+const BINDINGS: &str = "(@IRList.cons IRBinding (IRBinding.mk 31 (IRScalar.ptr_ 16)) (@IRList.cons IRBinding (IRBinding.mk 7 (IRScalar.ptr_ 48)) (@IRList.nil IRBinding)))";
+const INITIAL_FRAME: &str = "(IRFrame.mk 41 17 0 init_test_bindings (@IRList.nil Nat))";
+const TRUE: &str = "(@Eq.refl Bool Bool.true)";
 
 fn context_source(name: &str, imported: bool, vararg: bool, cc: u64, globals: &str) -> String {
     let params = list("Nat", &["31", "7"]);
     let parameter_types = list("IRTy", &["IRTy.ptr_", "IRTy.ptr_"]);
     let nodes = list(
         "IRNode",
-        &["(IRNode.mk (IRInst.ret (IRList.nil Nat)) (IRList.nil Nat))"],
+        &["(IRNode.mk (IRInst.ret (@IRList.nil Nat)) (@IRList.nil Nat))"],
     );
     let blocks = list("IRBlock", &[&format!("(IRBlock.mk 17 {params} {nodes})")]);
     let function = format!("(IRFunc.mk 41 {params} 17 {blocks})");
     let signature =
-        format!("(IRByteSignatureV1.mk 79 {parameter_types} (IRList.nil IRTy) Bool.{vararg})");
+        format!("(IRByteSignatureV1.mk 79 {parameter_types} (@IRList.nil IRTy) Bool.{vararg})");
     let binding = format!("(IRByteFunctionV1.mk 41 79 4096 {cc} Bool.{imported})");
-    let site = "(IRByteSiteV1.mk 41 17 0 0 0 (IRList.nil IRTy))";
+    let site = "(IRByteSiteV1.mk 41 17 0 0 0 (@IRList.nil IRTy))";
     format!(
         "def {name} : IRByteContextV1 := IRByteContextV1.mk
       (IRModule.mk {} {globals})
@@ -73,7 +73,7 @@ fn context_source(name: &str, imported: bool, vararg: bool, cc: u64, globals: &s
         list("IRFunc", &[&function]),
         list(
             "IRByteLayoutV1",
-            &["(IRByteLayoutV1.mk IRTy.ptr_ 8 8 (IRList.nil IRTy) (IRList.nil Nat))"]
+            &["(IRByteLayoutV1.mk IRTy.ptr_ 8 8 (@IRList.nil IRTy) (@IRList.nil Nat))"]
         ),
         list("IRByteSignatureV1", &[&signature]),
         list("IRByteFunctionV1", &[&binding]),
@@ -91,13 +91,13 @@ fn specification() -> Specification {
             false,
             false,
             0,
-            "(IRList.nil IRGlobal)",
+            "(@IRList.nil IRGlobal)",
         ),
     );
     let params = list("Nat", &["31", "7"]);
     let nodes = list(
         "IRNode",
-        &["(IRNode.mk (IRInst.ret (IRList.nil Nat)) (IRList.nil Nat))"],
+        &["(IRNode.mk (IRInst.ret (@IRList.nil Nat)) (@IRList.nil Nat))"],
     );
     let blocks = list("IRBlock", &[&format!("(IRBlock.mk 17 {params} {nodes})")]);
     add(
@@ -109,7 +109,7 @@ fn specification() -> Specification {
         &mut spec,
         "init_test_signature",
         &format!(
-            "def init_test_signature : IRByteSignatureV1 := IRByteSignatureV1.mk 79 {} (IRList.nil IRTy) Bool.false",
+            "def init_test_signature : IRByteSignatureV1 := IRByteSignatureV1.mk 79 {} (@IRList.nil IRTy) Bool.false",
             list("IRTy", &["IRTy.ptr_", "IRTy.ptr_"])
         ),
     );
@@ -151,29 +151,29 @@ fn specification() -> Specification {
 
 fn world(memory: &str, host: &str, owner: &str, next: &str) -> String {
     format!(
-        "(IRByteWorldV1.mk Nat {memory} {host} (IRList.cons Nat {owner} (IRList.nil Nat)) {next})"
+        "(@IRByteWorldV1.mk Nat {memory} {host} (@IRList.cons Nat {owner} (@IRList.nil Nat)) {next})"
     )
 }
 
 fn current(frame: &str, world: &str) -> String {
     format!(
-        "(IRByteConfigV1.running Nat (IRMachine.mk (IRList.cons IRFrame {frame} (IRList.nil IRFrame)) (IRList.nil IRMemSlot) 0) {world})"
+        "(@IRByteConfigV1.running Nat (IRMachine.mk (@IRList.cons IRFrame {frame} (@IRList.nil IRFrame)) (@IRList.nil IRMemSlot) 0) {world})"
     )
 }
 
 fn application() -> String {
     format!("ir_byte_init_current_v1 Nat init_test_context 41 init_test_args (init_test_memory bytes) host
       init_test_binding init_test_signature init_test_function
-      (Eq.refl (IRList IRGlobal) (IRList.nil IRGlobal))
-      (Eq.refl (IROption IRByteFunctionV1) (IROption.some IRByteFunctionV1 init_test_binding))
-      (Eq.refl (IROption IRByteSignatureV1) (IROption.some IRByteSignatureV1 init_test_signature))
-      (Eq.refl (IROption IRFunc) (IROption.some IRFunc init_test_function)) {TRUE} {TRUE}")
+      (@Eq.refl (IRList IRGlobal) (@IRList.nil IRGlobal))
+      (@Eq.refl (IROption IRByteFunctionV1) (@IROption.some IRByteFunctionV1 init_test_binding))
+      (@Eq.refl (IROption IRByteSignatureV1) (@IROption.some IRByteSignatureV1 init_test_signature))
+      (@Eq.refl (IROption IRFunc) (@IROption.some IRFunc init_test_function)) {TRUE} {TRUE}")
 }
 
 fn consumer(name: &str, expected: &str, proof: &str) -> String {
     format!(
         "def {name} (bytes : Nat -> IROption Nat) (host : Nat) :
-      Eq (IRByteConfigV1 Nat)
+      @Eq (IRByteConfigV1 Nat)
         (ir_byte_init_v1 Nat init_test_context 41 init_test_args (init_test_memory bytes) host)
         {expected} := {proof}"
     )
@@ -195,24 +195,24 @@ fn byte_initialization_preserves_nonempty_history_bytes_host_and_positional_inpu
         );
         add(&mut spec, "init_test_valid", &format!("def init_test_valid
           (bytes : Nat -> IROption Nat) (host : Nat) :
-          Eq Bool (ir_byte_world_valid_v1 Nat
-            (IRMachine.mk (IRList.cons IRFrame {INITIAL_FRAME} (IRList.nil IRFrame)) (IRList.nil IRMemSlot) 0) {w}) Bool.true :=
+          @Eq Bool (ir_byte_world_valid_v1 Nat
+            (IRMachine.mk (@IRList.cons IRFrame {INITIAL_FRAME} (@IRList.nil IRFrame)) (@IRList.nil IRMemSlot) 0) {w}) Bool.true :=
           ir_byte_init_current_valid_v1 Nat (init_test_memory bytes) host {INITIAL_FRAME} {TRUE}"));
         for (id, address) in [(31, 16), (7, 48)] {
             let name = format!("init_test_parameter_{id}");
             add(&mut spec, &name, &format!("def {name} (bytes : Nat -> IROption Nat) (host : Nat) :
-              IRByteConfigV1.rec Nat (fun (_ : IRByteConfigV1 Nat) => Prop)
-                (fun (machine : IRMachine) (_ : IRByteWorldV1 Nat) => Eq IRScalar (ir_getd machine {id}) (IRScalar.ptr_ {address}))
+              @IRByteConfigV1.rec Nat (fun (_ : IRByteConfigV1 Nat) => Prop)
+                (fun (machine : IRMachine) (_ : IRByteWorldV1 Nat) => @Eq IRScalar (ir_getd machine {id}) (IRScalar.ptr_ {address}))
                 (fun (_ : IROutcome) (_ : IRByteWorldV1 Nat) => False)
                 (ir_byte_init_v1 Nat init_test_context 41 init_test_args (init_test_memory bytes) host) :=
-              Eq.subst (IRByteConfigV1 Nat)
-                (fun (config : IRByteConfigV1 Nat) => IRByteConfigV1.rec Nat (fun (_ : IRByteConfigV1 Nat) => Prop)
-                  (fun (machine : IRMachine) (_ : IRByteWorldV1 Nat) => Eq IRScalar (ir_getd machine {id}) (IRScalar.ptr_ {address}))
+              @Eq.subst (IRByteConfigV1 Nat)
+                (fun (config : IRByteConfigV1 Nat) => @IRByteConfigV1.rec Nat (fun (_ : IRByteConfigV1 Nat) => Prop)
+                  (fun (machine : IRMachine) (_ : IRByteWorldV1 Nat) => @Eq IRScalar (ir_getd machine {id}) (IRScalar.ptr_ {address}))
                   (fun (_ : IROutcome) (_ : IRByteWorldV1 Nat) => False) config)
                 {} (ir_byte_init_v1 Nat init_test_context 41 init_test_args (init_test_memory bytes) host)
-                (Eq.symm (IRByteConfigV1 Nat)
+                (@Eq.symm (IRByteConfigV1 Nat)
                   (ir_byte_init_v1 Nat init_test_context 41 init_test_args (init_test_memory bytes) host) {}
-                  (init_test_success bytes host)) (Eq.refl IRScalar (IRScalar.ptr_ {address}))",
+                  (init_test_success bytes host)) (@Eq.refl IRScalar (IRScalar.ptr_ {address}))",
                 current(INITIAL_FRAME, &w), current(INITIAL_FRAME, &w)));
         }
     });
@@ -229,7 +229,7 @@ fn byte_initialization_rejects_changed_bindings_history_and_entry_endpoint() {
             "init_test_success",
             &consumer("init_test_success", &positive, &application()),
         );
-        let swapped = INITIAL_FRAME.replace("init_test_bindings", "(ir_bind_params (ir_func_params init_test_function) (IRList.cons IRScalar (IRScalar.ptr_ 48) (IRList.cons IRScalar (IRScalar.ptr_ 16) (IRList.nil IRScalar))) (IRList.nil IRBinding))");
+        let swapped = INITIAL_FRAME.replace("init_test_bindings", "(ir_bind_params (ir_func_params init_test_function) (@IRList.cons IRScalar (IRScalar.ptr_ 48) (@IRList.cons IRScalar (IRScalar.ptr_ 16) (@IRList.nil IRScalar))) (@IRList.nil IRBinding))");
         for (name, expected) in [
             ("init_wrong_arguments", current(&swapped, &w)),
             (
@@ -266,7 +266,7 @@ fn byte_initialization_rejects_changed_bindings_history_and_entry_endpoint() {
                 current(
                     INITIAL_FRAME,
                     &world(
-                        "(init_test_memory (fun (_ : Nat) => IROption.none Nat))",
+                        "(init_test_memory (fun (_ : Nat) => @IROption.none Nat))",
                         "host",
                         "8",
                         "9",
@@ -303,7 +303,7 @@ fn byte_initialization_actual_entry_checks_fail_with_retained_world() {
                 true,
                 false,
                 0,
-                "(IRList.nil IRGlobal)",
+                "(@IRList.nil IRGlobal)",
                 ARGS,
                 "(init_test_memory bytes)",
                 "bad_field",
@@ -313,7 +313,7 @@ fn byte_initialization_actual_entry_checks_fail_with_retained_world() {
                 false,
                 true,
                 0,
-                "(IRList.nil IRGlobal)",
+                "(@IRList.nil IRGlobal)",
                 ARGS,
                 "(init_test_memory bytes)",
                 "bad_field",
@@ -323,7 +323,7 @@ fn byte_initialization_actual_entry_checks_fail_with_retained_world() {
                 false,
                 false,
                 2,
-                "(IRList.nil IRGlobal)",
+                "(@IRList.nil IRGlobal)",
                 ARGS,
                 "(init_test_memory bytes)",
                 "bad_field",
@@ -343,8 +343,8 @@ fn byte_initialization_actual_entry_checks_fail_with_retained_world() {
                 false,
                 false,
                 0,
-                "(IRList.nil IRGlobal)",
-                "(IRList.cons IRScalar (IRScalar.ptr_ 16) (IRList.nil IRScalar))",
+                "(@IRList.nil IRGlobal)",
+                "(@IRList.cons IRScalar (IRScalar.ptr_ 16) (@IRList.nil IRScalar))",
                 "(init_test_memory bytes)",
                 "bad_field",
             ),
@@ -353,8 +353,8 @@ fn byte_initialization_actual_entry_checks_fail_with_retained_world() {
                 false,
                 false,
                 0,
-                "(IRList.nil IRGlobal)",
-                "(IRList.cons IRScalar (IRScalar.int_ 16) (IRList.cons IRScalar (IRScalar.ptr_ 48) (IRList.nil IRScalar)))",
+                "(@IRList.nil IRGlobal)",
+                "(@IRList.cons IRScalar (IRScalar.int_ 16) (@IRList.cons IRScalar (IRScalar.ptr_ 48) (@IRList.nil IRScalar)))",
                 "(init_test_memory bytes)",
                 "bad_field",
             ),
@@ -363,9 +363,9 @@ fn byte_initialization_actual_entry_checks_fail_with_retained_world() {
                 false,
                 false,
                 0,
-                "(IRList.nil IRGlobal)",
+                "(@IRList.nil IRGlobal)",
                 ARGS,
-                "(IRByteMemoryV1.mk (IRList.cons IRByteAllocationV1 (IRByteAllocationV1.mk 16 16 7 Bool.true) (IRList.nil IRByteAllocationV1)) bytes 128)",
+                "(IRByteMemoryV1.mk (@IRList.cons IRByteAllocationV1 (IRByteAllocationV1.mk 16 16 7 Bool.true) (@IRList.nil IRByteAllocationV1)) bytes 128)",
                 "bad_addr",
             ),
         ] {
@@ -377,17 +377,17 @@ fn byte_initialization_actual_entry_checks_fail_with_retained_world() {
             );
             let w = world(memory, "host", "8", "9");
             let expected =
-                format!("(IRByteConfigV1.halted Nat (IROutcome.type_error IRFault.{fault}) {w})");
+                format!("(@IRByteConfigV1.halted Nat (IROutcome.type_error IRFault.{fault}) {w})");
             add(&mut spec, name, &format!("def {name} (bytes : Nat -> IROption Nat) (host : Nat) :
-              Eq (IRByteConfigV1 Nat) (ir_byte_init_v1 Nat {ctx} 41 {args} {memory} host) {expected} :=
-              Eq.refl (IRByteConfigV1 Nat) {expected}"));
+              @Eq (IRByteConfigV1 Nat) (ir_byte_init_v1 Nat {ctx} 41 {args} {memory} host) {expected} :=
+              @Eq.refl (IRByteConfigV1 Nat) {expected}"));
             let refused = format!("{name}_cannot_succeed");
             reject(
                 &mut spec,
                 &refused,
                 &format!(
                     "def {refused} (bytes : Nat -> IROption Nat) (host : Nat) :
-              Eq (IRByteConfigV1 Nat) (ir_byte_init_v1 Nat {ctx} 41 {args} {memory} host) {} :=
+              @Eq (IRByteConfigV1 Nat) (ir_byte_init_v1 Nat {ctx} 41 {args} {memory} host) {} :=
               {name} bytes host",
                     current(INITIAL_FRAME, &w)
                 ),

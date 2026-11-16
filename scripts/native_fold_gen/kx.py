@@ -71,6 +71,14 @@ def parse_sx(s):
 def sx_str(sx):
     if isinstance(sx, str):
         return sx
+    # Old and current reflected scripts can spell these explicit headers with
+    # or without @. Print one explicit source spelling before the term mirror's
+    # ordinary exact equality checks compare the resulting level-source strings.
+    if sx and sx[0] in ('ListType.nil', '@ListType.nil', 'ListType.cons', '@ListType.cons'):
+        expected = 2 if sx[0].endswith('.nil') else 4
+        if len(sx) != expected:
+            raise ValueError('incomplete explicit ListType source spine: %s' % sx)
+        return '(@' + sx[0].lstrip('@') + ' ' + ' '.join(sx_str(x) for x in sx[1:]) + ')'
     return '(' + ' '.join(sx_str(x) for x in sx) + ')'
 
 
@@ -120,8 +128,8 @@ def parse(s):
 
 
 # ---------------------------------------------------------------- terms
-NIL_LV = '(ListType.nil Level)'
-LV1 = '(ListType.cons Level (Level.succ Level.zero) (ListType.nil Level))'
+NIL_LV = '(@ListType.nil Level)'
+LV1 = '(@ListType.cons Level (Level.succ Level.zero) (@ListType.nil Level))'
 
 
 def C(name, lv=NIL_LV):
@@ -297,17 +305,17 @@ class Conv:
 
 
 def refl(t):
-    return Conv(t, t, '(KernelAcceptsTcIn.cdp R tenv G %s %s (DefEqCDPIn.refl R %s))' % (pr(t), pr(t), pr(t)))
+    return Conv(t, t, '(@KernelAcceptsTcIn.cdp R tenv G %s %s (@DefEqCDPIn.refl R %s))' % (pr(t), pr(t), pr(t)))
 
 
 def symm(c):
-    return Conv(c.rhs, c.lhs, '(KernelAcceptsTcIn.symm R tenv G %s %s %s)' % (pr(c.lhs), pr(c.rhs), c.proof))
+    return Conv(c.rhs, c.lhs, '(@KernelAcceptsTcIn.symm R tenv G %s %s %s)' % (pr(c.lhs), pr(c.rhs), c.proof))
 
 
 def trans(c1, c2, check=True):
     if check and not eq(c1.rhs, c2.lhs):
         raise ValueError('trans mismatch:\n  %s\n  %s' % (pr(c1.rhs), pr(c2.lhs)))
-    return Conv(c1.lhs, c2.rhs, '(KernelAcceptsTcIn.trans R tenv G %s %s %s %s %s)' % (
+    return Conv(c1.lhs, c2.rhs, '(@KernelAcceptsTcIn.trans R tenv G %s %s %s %s %s)' % (
         pr(c1.lhs), pr(c1.rhs), pr(c2.rhs), c1.proof, c2.proof))
 
 
@@ -332,7 +340,7 @@ def app_r(f, ca):
 
 def appcong(cf, ca):
     return Conv(('app', cf.lhs, ca.lhs), ('app', cf.rhs, ca.rhs),
-                '(KernelAcceptsTcIn.app_cong R tenv G %s %s %s %s %s %s)' % (
+                '(@KernelAcceptsTcIn.app_cong R tenv G %s %s %s %s %s %s)' % (
                     pr(cf.lhs), pr(cf.rhs), pr(ca.lhs), pr(ca.rhs), cf.proof, ca.proof))
 
 
@@ -348,22 +356,22 @@ def at_arg(term, idx, c):
 
 
 def lit_zero():
-    return Conv(lit('Nat.zero'), C('Nat.zero'), '(KernelAcceptsTcIn.lit_zero R tenv G)')
+    return Conv(lit('Nat.zero'), C('Nat.zero'), '(@KernelAcceptsTcIn.lit_zero R tenv G)')
 
 
 def lit_succ(n):
     """literal (succ n) == Nat.succ (literal n)"""
     return Conv(lit('(Nat.succ %s)' % n), app(C('Nat.succ'), lit(n)),
-                '(KernelAcceptsTcIn.lit_succ R tenv G %s)' % n)
+                '(@KernelAcceptsTcIn.lit_succ R tenv G %s)' % n)
 
 
 def raw(e, e2, par):
-    return Conv(e, e2, '(KernelAcceptsTcIn.cdp R tenv G %s %s (DefEqCDPIn.raw R %s %s %s))' % (
+    return Conv(e, e2, '(@KernelAcceptsTcIn.cdp R tenv G %s %s (@DefEqCDPIn.raw R %s %s %s))' % (
         pr(e), pr(e2), pr(e), pr(e2), par))
 
 
 def par_refl(t):
-    return '(par_reduces_cdp.refl R %s)' % pr(t)
+    return '(@par_reduces_cdp.refl R %s)' % pr(t)
 
 
 def beta_par(e):
@@ -374,10 +382,10 @@ def beta_par(e):
     if f[0] == 'lam':
         A, b = f[1], f[2]
         e2 = inst(b, a)
-        return e2, '(par_reduces_cdp.beta R %s %s %s %s %s %s %s %s %s)' % (
+        return e2, '(@par_reduces_cdp.beta R %s %s %s %s %s %s %s %s %s)' % (
             pr(A), pr(A), pr(b), pr(b), pr(a), pr(a), par_refl(A), par_refl(b), par_refl(a))
     f2, pf = beta_par(f)
-    return ('app', f2, a), '(par_reduces_cdp.app R %s %s %s %s %s %s)' % (
+    return ('app', f2, a), '(@par_reduces_cdp.app R %s %s %s %s %s %s)' % (
         pr(e[1]), pr(f2), pr(a), pr(a), pf, par_refl(a))
 
 
@@ -405,7 +413,7 @@ def delta(e, name, body, hyp):
     head, args = spine(e)
     assert head[0] == 'const' and head[1] == 'kcre_name_@@%s@@' % name
     e2 = app(body, *args)
-    return Conv(e, e2, '(accepts_tc_delta R tenv G %s %s %s (Eq.refl (OptionType Name) (OptionType.some Name %s)) %s)' % (
+    return Conv(e, e2, '(accepts_tc_delta R tenv G %s %s %s (@Eq.refl (OptionType Name) (@OptionType.some Name %s)) %s)' % (
         pr(e), head[1], pr(body), head[1], hyp))
 
 
@@ -434,10 +442,10 @@ def iota(e, rec, level_str, rule_const_names):
     fields = margs[len(margs) - nf:] if nf else []
     r = app(rhs_i, *(args[:npre] + fields + args[npre + 1:]))
     proof = ('(accepts_tc_iota R tenv G %s %s %s %s %s %s %s '
-             '(Eq.refl (OptionType Name) (OptionType.some Name %s)) %s '
-             '(Eq.refl (OptionType KExpr) (OptionType.some KExpr %s)) '
-             '(Eq.refl (OptionType Name) (OptionType.some Name %s)) %s '
-             '(Eq.refl (OptionType KExpr) (OptionType.some KExpr %s)))') % (
+             '(@Eq.refl (OptionType Name) (@OptionType.some Name %s)) %s '
+             '(@Eq.refl (OptionType KExpr) (@OptionType.some KExpr %s)) '
+             '(@Eq.refl (OptionType Name) (@OptionType.some Name %s)) %s '
+             '(@Eq.refl (OptionType KExpr) (@OptionType.some KExpr %s)))') % (
         pr(e), head[1], rec.meta_atom, pr(major), cname, rule_const_names[ctor], pr(r),
         head[1], rec.hmeta, pr(major), cname, rec.hrules[ctor], pr(r))
     return Conv(e, r, proof)

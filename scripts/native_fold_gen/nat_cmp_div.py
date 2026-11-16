@@ -23,8 +23,8 @@ BODIES['Nat.ble'] = lam(NAT, lam(NAT, natrec_app(OUTER_M, lam(NAT, TRUE), CMP_SC
 
 
 def bool_lit_def():
-    add_def('def accepts_tc_bool_lit (v : Bool) : KExpr := Bool.rec (fun (_ : Bool) => KExpr) '
-            '(KExpr.const kcre_name_@@Bool.false@@ (ListType.nil Level)) (KExpr.const kcre_name_@@Bool.true@@ (ListType.nil Level)) v',
+    add_def('def accepts_tc_bool_lit (v : Bool) : KExpr := @Bool.rec (fun (_ : Bool) => KExpr) '
+            '(KExpr.const kcre_name_@@Bool.false@@ (@ListType.nil Level)) (KExpr.const kcre_name_@@Bool.true@@ (@ListType.nil Level)) v',
             'accepts_tc_bool_lit')
 
 
@@ -133,8 +133,8 @@ def gen_blt():
                '(kernel_accepts_tc_in_nat_ble_fold R tenv G (Nat.succ a) b %s hble)' % A_NATREC)
     whole = Conv(front.lhs, blit('(Nat.blt a b)'), trans(trans(front, step_succ), ble).proof)
     prem = (P_NATREC + ' ' + p_body('Nat.blt')
-            + ' (hble : Eq (OptionType KExpr) (kdef_value_at (red_def R) kcre_name_@@Nat.ble@@ '
-              '(ListType.nil Level)) (OptionType.some KExpr accepts_tc_nat_ble_body))')
+            + ' (hble : @Eq (OptionType KExpr) (kdef_value_at (red_def R) kcre_name_@@Nat.ble@@ '
+              '(@ListType.nil Level)) (@OptionType.some KExpr accepts_tc_nat_ble_body))')
     ty = 'forall %s (a : Nat) (b : Nat) %s, %s' % (HDR, prem, whole.ty())
     add_thm('kernel_accepts_tc_in_nat_blt_fold', ty,
             'fun %s (a : Nat) (b : Nat) %s => %s' % (HDR, prem, whole.proof))
@@ -165,7 +165,7 @@ def gen_select(name, ycase, yval_payload, params):
         return natrec_app(NATNAT, lit('xv'), ycase, lit(v))
 
     def meta(v):
-        return '(Nat.rec (fun (_ : Nat) => Nat) xv (fun (_ : Nat) (_ : Nat) => %s) %s)' % (yval_payload, v)
+        return '(@Nat.rec (fun (_ : Nat) => Nat) xv (fun (_ : Nat) (_ : Nat) => %s) %s)' % (yval_payload, v)
 
     def mot(v):
         return 'KernelAcceptsTcIn R tenv Bool.false G %s %s' % (pr(lhs(v)), pr(lit(meta(v))))
@@ -187,7 +187,7 @@ def gen_select(name, ycase, yval_payload, params):
     add_thm(name, ty, 'fun %s %s %s => %s' % (HDR, binders, P_NATREC, rec))
     return lambda xv, k, *extra: Conv(
         natrec_app(NATNAT, lit(xv), ycase if not extra else inst_payload(ycase, extra), lit(k)),
-        lit('(Nat.rec (fun (_ : Nat) => Nat) %s (fun (_ : Nat) (_ : Nat) => %s) %s)' % (
+        lit('(@Nat.rec (fun (_ : Nat) => Nat) %s (fun (_ : Nat) (_ : Nat) => %s) %s)' % (
             xv, yval_payload if not extra else extra[0], k)),
         '(%s R tenv G %s %s %s %s)' % (name, ' '.join(extra), xv, k, A_NATREC) if extra else
         '(%s R tenv G %s %s %s)' % (name, xv, k, A_NATREC))
@@ -334,25 +334,25 @@ def nat_term(n):
 def gen_env_and_instances():
     defenv = '(red_def kernel_core_red_env)'
     for op in [o for o in ORDER if o in TYPES and o in CLOSURE]:
-        defenv = '(DefEnv.addDef %s kcre_name_@@%s@@ (KDefSig.mk (KConstSig.mk (ListType.nil Name) %s) %s))' % (
+        defenv = '(DefEnv.addDef %s kcre_name_@@%s@@ (KDefSig.mk (KConstSig.mk (@ListType.nil Name) %s) %s))' % (
             defenv, op, pr(TYPES[op]), body_const(op))
     add_def('def accepts_tc_nat_fold_env : RedEnv := RedEnv.mk (red_rec kernel_core_red_env) %s (red_ind_ctor kernel_core_red_env)' % defenv,
             'accepts_tc_nat_fold_env')
     # the reflected core holds the specification's own three: its entries ARE the canonical bodies
     for op in REFLECTED_IN_CORE:
         add_thm('accepts_tc_nat_%s_body_reflected' % short(op),
-                'Eq (OptionType KExpr) (kdef_value_at (red_def kernel_core_red_env) kcre_name_@@%s@@ (ListType.nil Level)) (OptionType.some KExpr %s)' % (op, body_const(op)),
-                'Eq.refl (OptionType KExpr) (OptionType.some KExpr %s)' % body_const(op))
+                '@Eq (OptionType KExpr) (kdef_value_at (red_def kernel_core_red_env) kcre_name_@@%s@@ (@ListType.nil Level)) (@OptionType.some KExpr %s)' % (op, body_const(op)),
+                '@Eq.refl (OptionType KExpr) (@OptionType.some KExpr %s)' % body_const(op))
     env = 'accepts_tc_nat_fold_env'
-    refl_meta = '(Eq.refl (OptionType RecMeta) (OptionType.some RecMeta kcre_rec_meta_@@Nat.rec@@))'
-    refl_z = '(Eq.refl (OptionType RecRule) (OptionType.some RecRule accepts_tc_nat_rec_zero_rule))'
-    refl_s = '(Eq.refl (OptionType RecRule) (OptionType.some RecRule accepts_tc_nat_rec_succ_rule))'
+    refl_meta = '(@Eq.refl (OptionType RecMeta) (@OptionType.some RecMeta kcre_rec_meta_@@Nat.rec@@))'
+    refl_z = '(@Eq.refl (OptionType RecRule) (@OptionType.some RecRule accepts_tc_nat_rec_zero_rule))'
+    refl_s = '(@Eq.refl (OptionType RecRule) (@OptionType.some RecRule accepts_tc_nat_rec_succ_rule))'
     instances = [('Nat.add', (2, 3)), ('Nat.sub', (5, 2)), ('Nat.mul', (2, 3)), ('Nat.pow', (2, 3)),
                  ('Nat.shiftLeft', (3, 2)), ('Nat.beq', (2, 2)), ('Nat.ble', (3, 2)), ('Nat.div', (7, 2)),
                  ('Nat.mod', (7, 3)), ('Nat.pred', (4,))]
     for op, args in instances:
         prems = ' '.join([refl_meta, refl_z, refl_s] + [
-            '(Eq.refl (OptionType KExpr) (OptionType.some KExpr %s))' % body_const(o) for o in closure_sorted(op)])
+            '(@Eq.refl (OptionType KExpr) (@OptionType.some KExpr %s))' % body_const(o) for o in closure_sorted(op)])
         ns = [nat_term(a) for a in args]
         lhs = app(C(op), *[lit(n) for n in ns])
         rhs_payload = '(%s %s)' % (op, ' '.join(ns))

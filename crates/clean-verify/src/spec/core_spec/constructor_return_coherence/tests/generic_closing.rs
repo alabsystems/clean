@@ -8,7 +8,7 @@
 use super::super::{generic_closing as cohort, theorem};
 use super::{assert_absent, checks, run_with_stack, shared_spec};
 
-const FAMILY: &str = "(KExpr.const kcre_prod_type_name (ListType.nil Level))";
+const FAMILY: &str = "(KExpr.const kcre_prod_type_name (@ListType.nil Level))";
 const ONE: &str = "(Nat.succ Nat.zero)";
 
 fn named_return() -> String {
@@ -19,7 +19,7 @@ fn named_return() -> String {
 fn constructor_return_coherence_generic_closing_admitted_source() {
     run_with_stack(|| {
         let spec = shared_spec();
-        let found = "(Eq.refl (OptionType CtorDecl) (OptionType.some CtorDecl (CtorDecl.mk rpa_one rpa_ctor_ty)))";
+        let found = "(@Eq.refl (OptionType CtorDecl) (@OptionType.some CtorDecl (CtorDecl.mk rpa_one rpa_ctor_ty)))";
         let selected = format!("KEnv.empty Nat.zero rpa_two rpa_ind_ty rpa_ctors rpa_well_formed Nat.zero rpa_one rpa_ctor_ty {found}");
         let raw_closed = format!("(instantiate rpa_ctor_ty {FAMILY})");
         let named = "(gcc_named_return_spine kcre_prod_type_name rpa_four rpa_two)";
@@ -30,7 +30,7 @@ fn constructor_return_coherence_generic_closing_admitted_source() {
         checks::caller(
             spec,
             &format!("gcc_admitted_return_named {selected} kcre_prod_type_name"),
-            &format!("Eq KExpr (return_type {raw_closed}) {named}"),
+            &format!("@Eq KExpr (return_type {raw_closed}) {named}"),
         );
         checks::caller(
             spec,
@@ -40,34 +40,34 @@ fn constructor_return_coherence_generic_closing_admitted_source() {
         checks::caller(
             spec,
             &format!("gcc_close_return_spine kcre_prod_type_name rpa_four rpa_two (arc_admitted_selected_arity {selected})"),
-            &format!("Eq KExpr (instantiate_at (arc_return_spine rpa_four rpa_two) {FAMILY} rpa_four) {named}"),
+            &format!("@Eq KExpr (instantiate_at (arc_return_spine rpa_four rpa_two) {FAMILY} rpa_four) {named}"),
         );
         checks::caller(
             spec,
             "gcc_count_pi_close_const rpa_ctor_ty kcre_prod_type_name Nat.zero",
-            &format!("Eq Nat (count_pi {raw_closed}) (count_pi rpa_ctor_ty)"),
+            &format!("@Eq Nat (count_pi {raw_closed}) (count_pi rpa_ctor_ty)"),
         );
         checks::caller(
             spec,
             "gcc_return_type_close_self rpa_ctor_ty kcre_prod_type_name",
-            &format!("Eq KExpr (return_type {raw_closed}) (instantiate_at (return_type rpa_ctor_ty) {FAMILY} (count_pi rpa_ctor_ty))"),
+            &format!("@Eq KExpr (return_type {raw_closed}) (instantiate_at (return_type rpa_ctor_ty) {FAMILY} (count_pi rpa_ctor_ty))"),
         );
         for (value, ty) in [
             (
                 "gcc_prod_admitted_named",
-                format!("Eq KExpr (return_type {raw_closed}) {named}"),
+                format!("@Eq KExpr (return_type {raw_closed}) {named}"),
             ),
             (
                 "gcc_prod_source_named",
-                format!("Eq KExpr (return_type (kconst_type kcre_prod_mk_signature)) {named}"),
+                format!("@Eq KExpr (return_type (kconst_type kcre_prod_mk_signature)) {named}"),
             ),
             (
                 "gcc_prod_source_slots",
-                format!("Eq KExpr (return_type (kconst_type kcre_prod_mk_signature)) {slots}"),
+                format!("@Eq KExpr (return_type (kconst_type kcre_prod_mk_signature)) {slots}"),
             ),
             (
                 "gcc_prod_source_count",
-                "Eq Nat (count_pi (kconst_type kcre_prod_mk_signature)) rpa_four".to_string(),
+                "@Eq Nat (count_pi (kconst_type kcre_prod_mk_signature)) rpa_four".to_string(),
             ),
             (
                 "gcc_prod_closed_arity",
@@ -91,7 +91,7 @@ fn constructor_return_coherence_generic_closing_admitted_source() {
         checks::computes(
             spec,
             &format!("kapp_args {named}"),
-            "ListType.cons KExpr (KExpr.bvar rpa_three) (ListType.cons KExpr (KExpr.bvar rpa_two) (ListType.nil KExpr))",
+            "@ListType.cons KExpr (KExpr.bvar rpa_three) (@ListType.cons KExpr (KExpr.bvar rpa_two) (@ListType.nil KExpr))",
         );
     });
 }
@@ -115,17 +115,17 @@ fn constructor_return_coherence_generic_closing_underflow_boundary() {
         checks::caller(
             spec,
             "gcc_underflow_raw_guard_passes",
-            &format!("Eq Bool (return_args_wf_from Nat.zero {ONE} {raw}) Bool.true"),
+            &format!("@Eq Bool (return_args_wf_from Nat.zero {ONE} {raw}) Bool.true"),
         );
         checks::caller(
             spec,
             "gcc_underflow_full_guard_refuses",
-            &format!("Eq Bool (ctor_return_wf_b {ONE} {raw}) Bool.false"),
+            &format!("@Eq Bool (ctor_return_wf_b {ONE} {raw}) Bool.false"),
         );
         checks::caller(
             spec,
             "gcc_underflow_captures_parameter kcre_prod_type_name",
-            &format!("Eq KExpr {closed} {captured}"),
+            &format!("@Eq KExpr {closed} {captured}"),
         );
         checks::computes(spec, &closed, &captured);
         checks::computes(

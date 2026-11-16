@@ -70,7 +70,7 @@ impl ProofLibrary {
                     "(_hmatch : KernelStateMatchesSpec st) ",
                     "(_hadm : KernelInputAdmissible st e) ",
                     "(hcheck : KernelCheckAccepts st e T) => ",
-                    "KernelCheckAccepts.rec st e T ",
+                    "@KernelCheckAccepts.rec st e T ",
                     "(fun (_c : KernelCheckAccepts st e T) => CheckDecomp st e T) ",
                     "(fun (R : KExpr) ",
                     "(hpair : ProdType (KernelInferAccepts st e R) (KernelDefEqAccepts st R T)) ",

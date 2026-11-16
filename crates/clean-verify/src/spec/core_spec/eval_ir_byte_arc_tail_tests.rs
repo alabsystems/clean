@@ -9,7 +9,7 @@ use crate::spec::Specification;
 use clean_kernel::Name;
 
 const LIMIT: u128 = 1_u128 << 64;
-const NONE: &str = "IROption.none IRBuiltinNameAtomV1";
+const NONE: &str = "@IROption.none IRBuiltinNameAtomV1";
 const ROOTS: [&str; 8] = [
     "ir_byte_arc_tail_pointer_load_v1",
     "ir_byte_arc_tail_length_load_v1",
@@ -40,7 +40,7 @@ fn add(spec: &mut Specification, source: &str) {
 fn equality(spec: &mut Specification, name: &str, ty: &str, actual: &str, expected: &str) {
     add(
         spec,
-        &format!("def {name} : Eq ({ty}) ({actual}) ({expected}) := Eq.refl ({ty}) ({expected})"),
+        &format!("def {name} : @Eq ({ty}) ({actual}) ({expected}) := @Eq.refl ({ty}) ({expected})"),
     );
 }
 
@@ -61,11 +61,11 @@ fn context(pointer: bool, metadata_ty: &str) -> String {
     let layouts = rows
         .iter()
         .rev()
-        .fold("IRList.nil IRByteLayoutV1".to_owned(), |tail, row| {
-            format!("IRList.cons IRByteLayoutV1 ({row}) ({tail})")
+        .fold("@IRList.nil IRByteLayoutV1".to_owned(), |tail, row| {
+            format!("@IRList.cons IRByteLayoutV1 ({row}) ({tail})")
         });
-    format!("IRByteContextV1.mk (IRModule.mk (IRList.nil IRFunc) (IRList.nil IRGlobal))
-  ({layouts}) (IRList.nil IRByteSignatureV1) (IRList.nil IRByteFunctionV1) (IRList.nil IRByteSiteV1)")
+    format!("IRByteContextV1.mk (IRModule.mk (@IRList.nil IRFunc) (@IRList.nil IRGlobal))
+  ({layouts}) (@IRList.nil IRByteSignatureV1) (@IRList.nil IRByteFunctionV1) (@IRList.nil IRByteSiteV1)")
 }
 
 fn specification() -> Specification {
@@ -82,15 +82,15 @@ fn specification() -> Specification {
 }
 
 fn allocations(rows: &[(u128, u128, bool)]) -> String {
-    rows.iter().enumerate().rev().fold("IRList.nil IRByteAllocationV1".to_owned(), |tail, (owner, (base, size, live))| {
+    rows.iter().enumerate().rev().fold("@IRList.nil IRByteAllocationV1".to_owned(), |tail, (owner, (base, size, live))| {
         let live = if *live { "Bool.true" } else { "Bool.false" };
-        format!("IRList.cons IRByteAllocationV1 (IRByteAllocationV1.mk {base} {size} {owner} {live}) ({tail})")
+        format!("@IRList.cons IRByteAllocationV1 (IRByteAllocationV1.mk {base} {size} {owner} {live}) ({tail})")
     })
 }
 
 fn byte_map(bytes: &[(u128, u16)]) -> String {
-    let body = bytes.iter().rev().fold("IROption.none Nat".to_owned(), |tail, (address, byte)| {
-        format!("Bool.rec (fun (_ : Bool) => IROption Nat) ({tail}) (IROption.some Nat {byte}) (ir_nat_eqb address {address})")
+    let body = bytes.iter().rev().fold("@IROption.none Nat".to_owned(), |tail, (address, byte)| {
+        format!("@Bool.rec (fun (_ : Bool) => IROption Nat) ({tail}) (@IROption.some Nat {byte}) (ir_nat_eqb address {address})")
     });
     format!("fun (address : Nat) => {body}")
 }
@@ -140,7 +140,7 @@ fn observe(
 }
 
 fn atom(name: &str) -> String {
-    format!("IROption.some IRBuiltinNameAtomV1 IRBuiltinNameAtomV1.{name}_")
+    format!("@IROption.some IRBuiltinNameAtomV1 IRBuiltinNameAtomV1.{name}_")
 }
 
 #[test]
@@ -394,10 +394,10 @@ ir_byte_u64_rep_write_v1 (IRByteMemoryV1.mk arc_tail_witness_allocs
                 &mut spec,
                 &format!("def {prefix}_length_rep : ir_byte_u64_rep_v1 {prefix}_memory 72 {length} :=
 fun (i : Nat) (inside : Nat.lt i 8) =>
-  Eq.trans (IROption Nat)
+  @Eq.trans (IROption Nat)
     (ir_byte_mem_bytes_v1 {prefix}_memory (Nat.add 72 i))
     (ir_byte_write_word_v1 {prefix}_bytes 72 8 {length} (Nat.add 72 i))
-    (IROption.some Nat (Nat.mod (Nat.div {length} (ir_nat_pow2 (Nat.mul 8 i))) 256))
+    (@IROption.some Nat (Nat.mod (Nat.div {length} (ir_nat_pow2 (Nat.mul 8 i))) 256))
     (ir_byte_write_outside_v1 (ir_byte_write_word_v1 {prefix}_bytes 72 8 {length}) 64 8 256 (Nat.add 72 i)
       (ir_byte_range_after_v1 64 8 (Nat.add 72 i) (Nat.le_add_right 72 i)))
     (ir_byte_write_digit_v1 {prefix}_bytes 72 8 {length} i inside)"),
@@ -418,25 +418,25 @@ fun (i : Nat) (inside : Nat.lt i 8) =>
                 .iter()
                 .map(|(ty, size)| {
                     format!(
-                        "\n  (Eq.refl (IROption IRByteLayoutV1) (IROption.some IRByteLayoutV1 ({})))",
+                        "\n  (@Eq.refl (IROption IRByteLayoutV1) (@IROption.some IRByteLayoutV1 ({})))",
                         super::layout(ty, *size)
                     )
                 })
                 .collect::<String>();
             let byte_proofs = text
                 .iter()
-                .map(|byte| format!("\n  (Eq.refl (IROption Nat) (IROption.some Nat {byte}))"))
+                .map(|byte| format!("\n  (@Eq.refl (IROption Nat) (@IROption.some Nat {byte}))"))
                 .collect::<String>();
             add(
                 &mut spec,
                 &format!(
-                    "def {prefix} : Eq ({})
+                    "def {prefix} : @Eq ({})
   (ir_byte_arc_tail_observe_v1 arc_tail_test_ctx {prefix}_memory 64 0 8 5) ({}) :=
 ir_byte_arc_tail_{kind}_input_v1 arc_tail_test_ctx {prefix}_memory 64 0 8 255 5
   {bounds} {layouts}
-  (Eq.refl Bool Bool.true) (Eq.refl Bool Bool.true)
+  (@Eq.refl Bool Bool.true) (@Eq.refl Bool Bool.true)
   {prefix}_pointer_rep {prefix}_length_rep
-  (Eq.refl Bool Bool.true) (Eq.refl Bool Bool.true)
+  (@Eq.refl Bool Bool.true) (@Eq.refl Bool Bool.true)
   {byte_proofs}",
                     super::OPTION,
                     atom(kind)

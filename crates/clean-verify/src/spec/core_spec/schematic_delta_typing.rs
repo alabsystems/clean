@@ -55,12 +55,12 @@ delta_reduces_instL_supported (tec_def_body_supported tenv W)",
             "tec_defn_inst_typed",
             r"forall (tenv : KDeclEnv), RedEnvFaithful the_red_env -> TypingEnvCoherent tenv ->
 forall (n : Name) (defn : KDefSig),
-Eq (OptionType KDefSig) (kdef_for (red_def the_red_env) n) (OptionType.some KDefSig defn) ->
+@Eq (OptionType KDefSig) (kdef_for (red_def the_red_env) n) (@OptionType.some KDefSig defn) ->
 forall (us : ListType Level) (G : ListType KExpr),
 TypingCtxConv tenv G (kdef_inst_value defn us) (kconst_inst_type (kdef_signature defn) us)",
             r"fun (tenv : KDeclEnv) (hf : RedEnvFaithful the_red_env) (W : TypingEnvCoherent tenv)
 (n : Name) (defn : KDefSig)
-(get : Eq (OptionType KDefSig) (kdef_for (red_def the_red_env) n) (OptionType.some KDefSig defn))
+(get : @Eq (OptionType KDefSig) (kdef_for (red_def the_red_env) n) (@OptionType.some KDefSig defn))
 (us : ListType Level) (G : ListType KExpr) =>
 typingctxconv_closed_weaken_empty tenv hf W
   (kdef_inst_value defn us) (kconst_inst_type (kdef_signature defn) us)
@@ -73,7 +73,7 @@ typingctxconv_closed_weaken_empty tenv hf W
     (kconst_params (kdef_signature defn)) us
     (tec_delta_universe_closed tenv W (paramSubstN (kconst_params (kdef_signature defn)) us))
     (tec_iota_universe_closed tenv W (paramSubstN (kconst_params (kdef_signature defn)) us))
-    (ListType.nil KExpr) (kdef_value defn) (kconst_type (kdef_signature defn))
+    (@ListType.nil KExpr) (kdef_value defn) (kconst_type (kdef_signature defn))
     (tec_def_body_typed tenv W n defn get)) G",
             "One schematic empty-context body-typing derivation is instantiated by the proved TypingCtxConv universe-substitution theorem, then weakened using derived closedness. Shared signature parameters instantiate both body and type. Delta universe closure is derived from stored body support; iota closure remains explicit. No per-instance typing is assumed.",
         )?;
@@ -83,29 +83,29 @@ typingctxconv_closed_weaken_empty tenv hf W
             "tec_defval_typed",
             r"forall (tenv : KDeclEnv), RedEnvFaithful the_red_env -> TypingEnvCoherent tenv ->
 forall (n : Name) (us : ListType Level) (v : KExpr) (A : KExpr),
-Eq (OptionType KExpr) (kdef_value_at (red_def the_red_env) n us) (OptionType.some KExpr v) ->
-Eq (OptionType KExpr) (kdecl_type_at tenv n us) (OptionType.some KExpr A) ->
+@Eq (OptionType KExpr) (kdef_value_at (red_def the_red_env) n us) (@OptionType.some KExpr v) ->
+@Eq (OptionType KExpr) (kdecl_type_at tenv n us) (@OptionType.some KExpr A) ->
 forall (G : ListType KExpr), TypingCtxConv tenv G v A",
             r"fun (tenv : KDeclEnv) (hf : RedEnvFaithful the_red_env) (W : TypingEnvCoherent tenv)
 (n : Name) (us : ListType Level) (v : KExpr) (A : KExpr)
-(value_get : Eq (OptionType KExpr) (kdef_value_at (red_def the_red_env) n us) (OptionType.some KExpr v))
-(type_get : Eq (OptionType KExpr) (kdecl_type_at tenv n us) (OptionType.some KExpr A))
+(value_get : @Eq (OptionType KExpr) (kdef_value_at (red_def the_red_env) n us) (@OptionType.some KExpr v))
+(type_get : @Eq (OptionType KExpr) (kdecl_type_at tenv n us) (@OptionType.some KExpr A))
 (G : ListType KExpr) =>
 kdef_value_at_some_inv (red_def the_red_env) n us v value_get (TypingCtxConv tenv G v A)
   (fun (defn : KDefSig)
-    (get : Eq (OptionType KDefSig) (kdef_for (red_def the_red_env) n) (OptionType.some KDefSig defn))
+    (get : @Eq (OptionType KDefSig) (kdef_for (red_def the_red_env) n) (@OptionType.some KDefSig defn))
     (arity : kconst_arity (kdef_signature defn) us)
-    (value_eq : Eq KExpr v (kdef_inst_value defn us)) =>
-    Eq.substType KExpr (fun (value : KExpr) => TypingCtxConv tenv G value A)
-      (kdef_inst_value defn us) v (Eq.symm KExpr v (kdef_inst_value defn us) value_eq)
-      (Eq.substType KExpr (fun (ty : KExpr) => TypingCtxConv tenv G (kdef_inst_value defn us) ty)
+    (value_eq : @Eq KExpr v (kdef_inst_value defn us)) =>
+    @Eq.substType KExpr (fun (value : KExpr) => TypingCtxConv tenv G value A)
+      (kdef_inst_value defn us) v (@Eq.symm KExpr v (kdef_inst_value defn us) value_eq)
+      (@Eq.substType KExpr (fun (ty : KExpr) => TypingCtxConv tenv G (kdef_inst_value defn us) ty)
         (kconst_inst_type (kdef_signature defn) us) A
         (option_some_inj KExpr (kconst_inst_type (kdef_signature defn) us) A
-          (Eq.trans (OptionType KExpr)
-            (OptionType.some KExpr (kconst_inst_type (kdef_signature defn) us))
-            (kdecl_type_at tenv n us) (OptionType.some KExpr A)
-            (Eq.symm (OptionType KExpr) (kdecl_type_at tenv n us)
-              (OptionType.some KExpr (kconst_inst_type (kdef_signature defn) us))
+          (@Eq.trans (OptionType KExpr)
+            (@OptionType.some KExpr (kconst_inst_type (kdef_signature defn) us))
+            (kdecl_type_at tenv n us) (@OptionType.some KExpr A)
+            (@Eq.symm (OptionType KExpr) (kdecl_type_at tenv n us)
+              (@OptionType.some KExpr (kconst_inst_type (kdef_signature defn) us))
               (kdecl_type_at_intro tenv n (kdef_signature defn) us
                 (tec_def_signature tenv W n defn get) arity)) type_get))
         (tec_defn_inst_typed tenv hf W n defn get us G)))",

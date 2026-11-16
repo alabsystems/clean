@@ -37,7 +37,7 @@ fn equality(spec: &mut Specification, name: &str, ty: &str, actual: &str, expect
         spec,
         &format!(
             "def {name} (ctx : IRByteContextV1) :
-  Eq ({ty}) ({actual}) ({expected}) := Eq.refl ({ty}) ({expected})"
+  @Eq ({ty}) ({actual}) ({expected}) := @Eq.refl ({ty}) ({expected})"
         ),
     );
 }
@@ -97,7 +97,7 @@ fn byte_fat_nominal_kinds_metadata_and_word_bounds_are_checked() {
                 &format!("byte_fat_metadata_kind_{i}"),
                 "IROption IRTy",
                 &format!("ir_byte_fat_metadata_ty_v1 ({ty})"),
-                &format!("IROption.some IRTy ({mt})"),
+                &format!("@IROption.some IRTy ({mt})"),
             );
             for (j, (data, meta, expected)) in [
                 ("0", "0", "Bool.true"),
@@ -129,7 +129,7 @@ fn byte_fat_nominal_kinds_metadata_and_word_bounds_are_checked() {
             "byte_fat_legacy_has_no_kind",
             "IROption IRTy",
             "ir_byte_fat_metadata_ty_v1 (IRTy.fatptr_ (IRTy.uint_ 8))",
-            "IROption.none IRTy",
+            "@IROption.none IRTy",
         );
     });
 }
@@ -178,17 +178,17 @@ fn byte_fat_five_kinds_project_and_reconstruct_zero_ordinary_and_max_words() {
             &mut spec,
             "byte_fat_container_is_not_tail",
             "def byte_fat_container_is_not_tail (ctx : IRByteContextV1) :
-  Eq IRStepResult (ir_byte_ptrdata_eval_v1 ctx IRTy.containerlen_ (IRScalar.fat_ 16 5))
+  @Eq IRStepResult (ir_byte_ptrdata_eval_v1 ctx IRTy.containerlen_ (IRScalar.fat_ 16 5))
     (IRStepResult.value (IRScalar.ptr_ 32)) :=
-  Eq.refl IRStepResult (IRStepResult.value (IRScalar.ptr_ 32))",
+  @Eq.refl IRStepResult (IRStepResult.value (IRScalar.ptr_ 32))",
         );
         refuse_claim(
             &mut spec,
             "byte_fat_zero_is_not_ptr_zero",
             "def byte_fat_zero_is_not_ptr_zero (ctx : IRByteContextV1) :
-  Eq IRStepResult (ir_byte_ptrdata_eval_v1 ctx IRTy.containerlen_ (IRScalar.fat_ 0 5))
+  @Eq IRStepResult (ir_byte_ptrdata_eval_v1 ctx IRTy.containerlen_ (IRScalar.fat_ 0 5))
     (IRStepResult.value (IRScalar.ptr_ 0)) :=
-  Eq.refl IRStepResult (IRStepResult.value (IRScalar.ptr_ 0))",
+  @Eq.refl IRStepResult (IRStepResult.value (IRScalar.ptr_ 0))",
         );
     });
 }
@@ -371,7 +371,7 @@ fn byte_fat_thin_controls_and_legacy_family_refusals_are_explicit() {
                     &mut spec,
                     &format!(
                         "def byte_fat_unknown_{i}_{j} (ctx : IRByteContextV1) (value : IRScalar) :
-  Eq IRStepResult ({expression}) ir_width_fault := Eq.refl IRStepResult ir_width_fault"
+  @Eq IRStepResult ({expression}) ir_width_fault := @Eq.refl IRStepResult ir_width_fault"
                     ),
                 );
             }
@@ -410,9 +410,9 @@ fn byte_fat_memory_and_casts_remain_refused_without_granting_access() {
                 format!("ir_byte_store_v1 ctx ({ty}) (IRScalar.ptr_ 16) (IRScalar.fat_ 16 5) 8 Bool.false mem"),
             ].into_iter().enumerate() {
                 add(&mut spec, &format!("def byte_fat_memory_refused_{i}_{j}
-  (ctx : IRByteContextV1) (mem : IRByteMemoryV1) : Eq IRByteMemoryResultV1 ({expression})
+  (ctx : IRByteContextV1) (mem : IRByteMemoryV1) : @Eq IRByteMemoryResultV1 ({expression})
   (IRByteMemoryResultV1.fault (IROutcome.unmodelled IRFault.width_bounded) mem) :=
-  Eq.refl IRByteMemoryResultV1 (IRByteMemoryResultV1.fault (IROutcome.unmodelled IRFault.width_bounded) mem)"));
+  @Eq.refl IRByteMemoryResultV1 (IRByteMemoryResultV1.fault (IROutcome.unmodelled IRFault.width_bounded) mem)"));
             }
             for (j, op) in ["bitcast", "ptrtoptr", "transmute"].into_iter().enumerate() {
                 equality(
@@ -430,7 +430,7 @@ fn byte_fat_memory_and_casts_remain_refused_without_granting_access() {
             &mut spec,
             "byte_fat_empty_memory_has_no_access",
             "Bool",
-            "ir_byte_accessible_v1 (IRList.nil IRByteAllocationV1) 16 8 8",
+            "ir_byte_accessible_v1 (@IRList.nil IRByteAllocationV1) 16 8 8",
             "Bool.false",
         );
     });

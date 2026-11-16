@@ -180,7 +180,7 @@ fn test_ctx_canonical_statements_name_exact_judgment() {
     assert_eq!(
         goal.type_src,
         "forall (e : KExpr) (A : KExpr) (B : KExpr), \
-         CtxTyping (ListType.nil KExpr) e (KExpr.pi A B) -> \
+         CtxTyping (@ListType.nil KExpr) e (KExpr.pi A B) -> \
          is_normal_bd e -> IsLamShape e",
         "canonical forms must be pinned to CtxTyping at the empty context"
     );

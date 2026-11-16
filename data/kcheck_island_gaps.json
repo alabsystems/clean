@@ -1,0 +1,38 @@
+{
+  "schema": "clean.kcheck_island_gaps.v1",
+  "what_this_is": "Unit W2 of docs/plans/SELF_PROOF_EXECUTION_PLAN_2026-11-12.md (section 0 and lane W): what stops the adopted checker's Lean modules from being mounted as out-of-line island units and compiled by Trust. A row is a measured refusal with the record that shows it. It is a gap list, not a claim that anything is mounted.",
+  "measured_with": "trustc 0.13.0+g82bb867ed (rustc 1.101.0-dev, commit date 2026-11-07)",
+  "measured_at": "2026-11-15",
+  "record": "reports/self-proof-island-probe-2026-11-15/README.md",
+  "subject": "theories/cic_l/CICL/Level.lean",
+  "gaps": [
+    {
+      "id": "module-header-prelude",
+      "refusal": "Parse error: parser recovery produced raw declaration: unknown command `prelude`",
+      "needs": "an island unit that begins with a Lean module header is checked as a module",
+      "owner": "Trust (crates/trust-certify/src/clean_island.rs and the compiler door)",
+      "status": "open"
+    },
+    {
+      "id": "init-import-unresolved",
+      "refusal": "unresolved import `Init.Data.Nat.MinMax`: no Clean-native prelude provides it",
+      "needs": "the island environment serves pinned Lean Init modules from real .olean files, fail-closed (plan unit F5)",
+      "owner": "Trust, reusing Clean's module loader",
+      "status": "open"
+    },
+    {
+      "id": "init-lemma-absent",
+      "refusal": "`CICL.Level.imax_self` did not elaborate: Unknown identifier: max_eq_left",
+      "needs": "follows from init-import-unresolved",
+      "owner": "Trust",
+      "status": "open"
+    }
+  ],
+  "not_yet_measured": [
+    "an import of one mounted unit by another, by Lean module name: the probe stops before any cross-unit import",
+    "every module after the first: Clean's own elaborator refuses most of the closure (plan unit E4, reports/self-proof-elab/baseline.json), and a fix reaches islands only after Trust's pin of Clean moves and a Trust build is installed (plan unit F6)",
+    "lowering a mounted unit's executable definitions and calling them from the crate's Rust",
+    "a unit that declares a name the island environment already owns: an inductive re-declaration naming a subset of the owner's constructors was once silently accepted (scripts/model_islands.py records it, and that trustc 0.11.0+g20565c325 refuses it); the module-form environment must be shown to refuse it too",
+    "a statement Clean's elaborator reads differently from pinned Lean: the build-time pin comparison of unit W3 is what must catch it. The pins that exist (theories/kcheck_labelled/statement_pins.json, theories/kcheck_spec/statement_pins.json, minted by the clean-olean tests from the Lean-built .olean) are SHA-256 over the bincode bytes of the kernel term, so they compare byte for byte: whether Clean's elaborator reproduces those bytes for even one theorem is unmeasured, and a difference in a binder name, binder annotation or generated universe name would refuse an honest unit. W3 has to measure that first, and where the bytes differ compare by the kernel's definitional equality against the pinned term itself, which then has to be committed beside its digest"
+  ]
+}

@@ -18,17 +18,19 @@ const ONE: &str = "(Nat.succ Nat.zero)";
 const KDTY: &str = "(Sk.kd Sk.ty)";
 /// R17's `DEADCONST` — the real inert reflected constant its `konst` witness
 /// is built at. Re-declared, not imported, per this file's no-imports rule.
-const DEADCONST: &str = "(KExpr.const fixture_def_env_name (ListType.nil Level))";
+const DEADCONST: &str = "(KExpr.const fixture_def_env_name (@ListType.nil Level))";
 
 /// R10/R17's first inertness premise, at the constant `n`.
 fn defval_none(n: &str) -> String {
-    format!("Eq (OptionType KExpr) (defval_for (red_def the_red_env) {n}) (OptionType.none KExpr)")
+    format!(
+        "@Eq (OptionType KExpr) (defval_for (red_def the_red_env) {n}) (@OptionType.none KExpr)"
+    )
 }
 
 /// R10/R17's second inertness premise, at the constant `n`.
 fn recmeta_none(n: &str) -> String {
     format!(
-        "Eq (OptionType RecMeta) (recmeta_for (red_rec the_red_env) {n}) (OptionType.none RecMeta)"
+        "@Eq (OptionType RecMeta) (recmeta_for (red_rec the_red_env) {n}) (@OptionType.none RecMeta)"
     )
 }
 
@@ -48,7 +50,7 @@ fn recmeta_none(n: &str) -> String {
 /// `sval`, and `r14_sval_wk_lift_var` finishes. Three steps, no new cast lemma,
 /// and no `xval`-side transport machinery at all.
 pub(super) fn ty_xval_wkc_lift_var() -> String {
-    format!("forall (c : Nat) (i : Nat) (t : Sk) (D : Nat -> Sk) (r : VEnvD (skins c t D)), Eq (VD (D i)) (xval (skins c t D) (lift_at (KExpr.bvar i) c {ONE}) (D i) (r17_wkc_lift_var c i t D) r) (venvLiftD c t D r i)")
+    format!("forall (c : Nat) (i : Nat) (t : Sk) (D : Nat -> Sk) (r : VEnvD (skins c t D)), @Eq (VD (D i)) (xval (skins c t D) (lift_at (KExpr.bvar i) c {ONE}) (D i) (r17_wkc_lift_var c i t D) r) (venvLiftD c t D r i)")
 }
 
 pub(super) fn val_xval_wkc_lift_var() -> String {
@@ -58,7 +60,7 @@ pub(super) fn val_xval_wkc_lift_var() -> String {
     let a = format!("(xval {ek} {le} (D i) (r17_wkc_lift_var c i t D) r)");
     let b = format!("(xval {ek} {le} (D i) (r17_wk_wkc {ek} {le} (D i) {wk_var}) r)");
     let c = format!("(sval {ek} {le} (D i) {wk_var} r)");
-    format!("fun (c : Nat) (i : Nat) (t : Sk) (D : Nat -> Sk) (r : VEnvD {ek}) => Eq.trans (VD (D i)) {a} {b} (venvLiftD c t D r i) (r17_xval_irrel {ek} {le} (D i) (r17_wkc_lift_var c i t D) (r17_wk_wkc {ek} {le} (D i) {wk_var}) r) (Eq.trans (VD (D i)) {b} {c} (venvLiftD c t D r i) (r18_xval_sval {ek} {le} (D i) {wk_var} r) (r14_sval_wk_lift_var c i t D r))")
+    format!("fun (c : Nat) (i : Nat) (t : Sk) (D : Nat -> Sk) (r : VEnvD {ek}) => @Eq.trans (VD (D i)) {a} {b} (venvLiftD c t D r i) (r17_xval_irrel {ek} {le} (D i) (r17_wkc_lift_var c i t D) (r17_wk_wkc {ek} {le} (D i) {wk_var}) r) (@Eq.trans (VD (D i)) {b} {c} (venvLiftD c t D r i) (r18_xval_sval {ek} {le} (D i) {wk_var} r) (r14_sval_wk_lift_var c i t D r))")
 }
 
 // ================================================================
@@ -73,7 +75,7 @@ pub(super) fn val_xval_wkc_lift_var() -> String {
 /// embedding, so there is nothing left scoping the theorem to the image of
 /// `r17_wk_wkc`.
 pub(super) fn ty_xval_lift_native() -> String {
-    format!("forall (D : Nat -> Sk) (e : KExpr) (s : Sk) (h : WKC D e s) (k : Nat) (ins : Sk) (r : VEnvD (skins k ins D)), Eq (VD s) (xval (skins k ins D) (lift_at e k {ONE}) s (wkc_lift D e s h k ins) r) (xval D e s h (venvLiftD k ins D r))")
+    format!("forall (D : Nat -> Sk) (e : KExpr) (s : Sk) (h : WKC D e s) (k : Nat) (ins : Sk) (r : VEnvD (skins k ins D)), @Eq (VD s) (xval (skins k ins D) (lift_at e k {ONE}) s (wkc_lift D e s h k ins) r) (xval D e s h (venvLiftD k ins D r))")
 }
 
 /// The native proof: `WKC.rec` at seven arms.
@@ -103,33 +105,33 @@ pub(super) fn val_xval_lift_native() -> String {
     let ek = "(skins qk qins qD)";
     let rl = "(venvLiftD qk qins qD qr)";
 
-    let motive = format!("(fun (qD : Nat -> Sk) (qe : KExpr) (qs : Sk) (qh : WKC qD qe qs) => forall (qk : Nat) (qins : Sk) (qr : VEnvD {ek}), Eq (VD qs) (xval {ek} (lift_at qe qk {ONE}) qs (wkc_lift qD qe qs qh qk qins) qr) (xval qD qe qs qh {rl}))");
+    let motive = format!("(fun (qD : Nat -> Sk) (qe : KExpr) (qs : Sk) (qh : WKC qD qe qs) => forall (qk : Nat) (qins : Sk) (qr : VEnvD {ek}), @Eq (VD qs) (xval {ek} (lift_at qe qk {ONE}) qs (wkc_lift qD qe qs qh qk qins) qr) (xval qD qe qs qh {rl}))");
 
     let m_var = format!("(fun (qD : Nat -> Sk) (qi : Nat) (qk : Nat) (qins : Sk) (qr : VEnvD {ek}) => r19_xval_wkc_lift_var qk qi qins qD qr)");
-    let m_sort = format!("(fun (qD : Nat -> Sk) (qn : Level) (qk : Nat) (qins : Sk) (qr : VEnvD {ek}) => Eq.refl (VD {KDTY}) (fun (qe2 : KExpr) => whnf_acc qe2))");
+    let m_sort = format!("(fun (qD : Nat -> Sk) (qn : Level) (qk : Nat) (qins : Sk) (qr : VEnvD {ek}) => @Eq.refl (VD {KDTY}) (fun (qe2 : KExpr) => whnf_acc qe2))");
 
     // The annotation hypothesis, shared by `pi` and `lam`.
     let db = "(skcons (domSk qsA) qD)";
-    let ih_a = format!("(qihA : forall (qk : Nat) (qins : Sk) (qr : VEnvD {ek}), Eq (VD qsA) (xval {ek} (lift_at qA qk {ONE}) qsA (wkc_lift qD qA qsA qhA qk qins) qr) (xval qD qA qsA qhA {rl}))");
+    let ih_a = format!("(qihA : forall (qk : Nat) (qins : Sk) (qr : VEnvD {ek}), @Eq (VD qsA) (xval {ek} (lift_at qA qk {ONE}) qsA (wkc_lift qD qA qsA qhA qk qins) qr) (xval qD qA qsA qhA {rl}))");
     let p_va = format!("(xval {ek} (lift_at qA qk {ONE}) qsA (wkc_lift qD qA qsA qhA qk qins) qr)");
     let p_va2 = format!("(xval qD qA qsA qhA {rl})");
 
     // --- pi ---
     let ekb = format!("(skins (Nat.succ qk) qins {db})");
-    let ih_pb = format!("(qihB : forall (qk : Nat) (qins : Sk) (qr : VEnvD (skins qk qins {db})), Eq (VD qsB) (xval (skins qk qins {db}) (lift_at qB qk {ONE}) qsB (wkc_lift {db} qB qsB qhB qk qins) qr) (xval {db} qB qsB qhB (venvLiftD qk qins {db} qr)))");
+    let ih_pb = format!("(qihB : forall (qk : Nat) (qins : Sk) (qr : VEnvD (skins qk qins {db})), @Eq (VD qsB) (xval (skins qk qins {db}) (lift_at qB qk {ONE}) qsB (wkc_lift {db} qB qsB qhB qk qins) qr) (xval {db} qB qsB qhB (venvLiftD qk qins {db} qr)))");
     let jb = "(junkD (domSk qsA))";
     let yb = format!("(vconsD (domSk qsA) {ek} {jb} qr)");
     let p_vb = format!("(xval {ekb} (lift_at qB (Nat.succ qk) {ONE}) qsB (wkc_lift {db} qB qsB qhB (Nat.succ qk) qins) {yb})");
     let p_mid = format!("(xval {db} qB qsB qhB (venvLiftD (Nat.succ qk) qins {db} {yb}))");
     let p_vb2 = format!("(xval {db} qB qsB qhB (vconsD (domSk qsA) qD {jb} {rl}))");
-    let p_cong = format!("(Eq.cong (VEnvD {db}) (VD qsB) (fun (qrr : VEnvD {db}) => xval {db} qB qsB qhB qrr) (venvLiftD (Nat.succ qk) qins {db} {yb}) (vconsD (domSk qsA) qD {jb} {rl}) (r14_venvLift_vcons qk qins (domSk qsA) qD {jb} qr))");
+    let p_cong = format!("(@Eq.cong (VEnvD {db}) (VD qsB) (fun (qrr : VEnvD {db}) => xval {db} qB qsB qhB qrr) (venvLiftD (Nat.succ qk) qins {db} {yb}) (vconsD (domSk qsA) qD {jb} {rl}) (r14_venvLift_vcons qk qins (domSk qsA) qD {jb} qr))");
     let p_hb = format!(
-        "(Eq.trans (VD qsB) {p_vb} {p_mid} {p_vb2} (qihB (Nat.succ qk) qins {yb}) {p_cong})"
+        "(@Eq.trans (VD qsB) {p_vb} {p_mid} {p_vb2} (qihB (Nat.succ qk) qins {yb}) {p_cong})"
     );
     let m_pi = format!("(fun (qD : Nat -> Sk) (qA : KExpr) (qB : KExpr) (qsA : Sk) (qsB : Sk) (qhA : WKC qD qA qsA) (qhB : WKC {db} qB qsB) {ih_a} {ih_pb} (qk : Nat) (qins : Sk) (qr : VEnvD {ek}) => r14_sval_pi_congr qsA qsB {p_va} {p_va2} {p_vb} {p_vb2} (qihA qk qins qr) {p_hb})");
 
     // --- lam ---
-    let ih_lb = format!("(qihb : forall (qk : Nat) (qins : Sk) (qr : VEnvD (skins qk qins {db})), Eq (VD qc) (xval (skins qk qins {db}) (lift_at qb qk {ONE}) qc (wkc_lift {db} qb qc qhb qk qins) qr) (xval {db} qb qc qhb (venvLiftD qk qins {db} qr)))");
+    let ih_lb = format!("(qihb : forall (qk : Nat) (qins : Sk) (qr : VEnvD (skins qk qins {db})), @Eq (VD qc) (xval (skins qk qins {db}) (lift_at qb qk {ONE}) qc (wkc_lift {db} qb qc qhb qk qins) qr) (xval {db} qb qc qhb (venvLiftD qk qins {db} qr)))");
     let lam_t = "(KExpr.lam qA qb)";
     let lam_s = "(Sk.arr (domSk qsA) qc)";
     let lam_d = "(WKC.lam qD qA qb qsA qc qhA qhb)";
@@ -139,14 +141,14 @@ pub(super) fn val_xval_lift_native() -> String {
     let l_x1 = format!("(xval {ekb} (lift_at qb (Nat.succ qk) {ONE}) qc (wkc_lift {db} qb qc qhb (Nat.succ qk) qins) {yx})");
     let l_x2 = format!("(xval {db} qb qc qhb (venvLiftD (Nat.succ qk) qins {db} {yx}))");
     let l_x3 = format!("(xval {db} qb qc qhb (vconsD (domSk qsA) qD qx {rl}))");
-    let l_cong = format!("(Eq.cong (VEnvD {db}) (VD qc) (fun (qrr : VEnvD {db}) => xval {db} qb qc qhb qrr) (venvLiftD (Nat.succ qk) qins {db} {yx}) (vconsD (domSk qsA) qD qx {rl}) (r14_venvLift_vcons qk qins (domSk qsA) qD qx qr))");
-    let l_point = format!("(fun (qx : VD (domSk qsA)) => Eq.trans (VD qc) {l_x1} {l_x2} {l_x3} (qihb (Nat.succ qk) qins {yx}) {l_cong})");
+    let l_cong = format!("(@Eq.cong (VEnvD {db}) (VD qc) (fun (qrr : VEnvD {db}) => xval {db} qb qc qhb qrr) (venvLiftD (Nat.succ qk) qins {db} {yx}) (vconsD (domSk qsA) qD qx {rl}) (r14_venvLift_vcons qk qins (domSk qsA) qD qx qr))");
+    let l_point = format!("(fun (qx : VD (domSk qsA)) => @Eq.trans (VD qc) {l_x1} {l_x2} {l_x3} (qihb (Nat.succ qk) qins {yx}) {l_cong})");
     let m_lam = format!("(fun (qD : Nat -> Sk) (qA : KExpr) (qb : KExpr) (qsA : Sk) (qc : Sk) (qhA : WKC qD qA qsA) (qhb : WKC {db} qb qc) {ih_a} {ih_lb} (qk : Nat) (qins : Sk) (qr : VEnvD {ek}) => r13_vd_arr_funext (domSk qsA) qc {l_f} {l_g} {l_point})");
 
     // --- app ---
     let arr = "(Sk.arr qd qcc)";
-    let ih_f = format!("(qihf : forall (qk : Nat) (qins : Sk) (qr : VEnvD {ek}), Eq (VD {arr}) (xval {ek} (lift_at qf qk {ONE}) {arr} (wkc_lift qD qf {arr} qhf qk qins) qr) (xval qD qf {arr} qhf {rl}))");
-    let ih_ar = format!("(qiha : forall (qk : Nat) (qins : Sk) (qr : VEnvD {ek}), Eq (VD qd) (xval {ek} (lift_at qa qk {ONE}) qd (wkc_lift qD qa qd qha qk qins) qr) (xval qD qa qd qha {rl}))");
+    let ih_f = format!("(qihf : forall (qk : Nat) (qins : Sk) (qr : VEnvD {ek}), @Eq (VD {arr}) (xval {ek} (lift_at qf qk {ONE}) {arr} (wkc_lift qD qf {arr} qhf qk qins) qr) (xval qD qf {arr} qhf {rl}))");
+    let ih_ar = format!("(qiha : forall (qk : Nat) (qins : Sk) (qr : VEnvD {ek}), @Eq (VD qd) (xval {ek} (lift_at qa qk {ONE}) qd (wkc_lift qD qa qd qha qk qins) qr) (xval qD qa qd qha {rl}))");
     let a_f =
         format!("(xval {ek} (lift_at qf qk {ONE}) {arr} (wkc_lift qD qf {arr} qhf qk qins) qr)");
     let a_f2 = format!("(xval qD qf {arr} qhf {rl})");
@@ -156,7 +158,7 @@ pub(super) fn val_xval_lift_native() -> String {
 
     // --- konst ---
     let m_konst = format!(
-        "(fun (qD : Nat -> Sk) (qn : Name) (qus : ListType Level) (qhd : {}) (qhr : {}) (qk : Nat) (qins : Sk) (qr : VEnvD {ek}) => Eq.refl (VD Sk.ty) (fun (qe2 : KExpr) => whnf_acc qe2))",
+        "(fun (qD : Nat -> Sk) (qn : Name) (qus : ListType Level) (qhd : {}) (qhr : {}) (qk : Nat) (qins : Sk) (qr : VEnvD {ek}) => @Eq.refl (VD Sk.ty) (fun (qe2 : KExpr) => whnf_acc qe2))",
         defval_none("qn"),
         recmeta_none("qn")
     );
@@ -164,9 +166,9 @@ pub(super) fn val_xval_lift_native() -> String {
     // --- let_ ---
     let dbl = "(skcons qsv qD)";
     let ekbl = format!("(skins (Nat.succ qk) qins {dbl})");
-    let ih_t = format!("(qiht : forall (qk : Nat) (qins : Sk) (qr : VEnvD {ek}), Eq (VD qst) (xval {ek} (lift_at qtt qk {ONE}) qst (wkc_lift qD qtt qst qht qk qins) qr) (xval qD qtt qst qht {rl}))");
-    let ih_v = format!("(qihv : forall (qk : Nat) (qins : Sk) (qr : VEnvD {ek}), Eq (VD qsv) (xval {ek} (lift_at qv qk {ONE}) qsv (wkc_lift qD qv qsv qhv qk qins) qr) (xval qD qv qsv qhv {rl}))");
-    let ih_bl = format!("(qihb : forall (qk : Nat) (qins : Sk) (qr : VEnvD (skins qk qins {dbl})), Eq (VD qc) (xval (skins qk qins {dbl}) (lift_at qb qk {ONE}) qc (wkc_lift {dbl} qb qc qhb qk qins) qr) (xval {dbl} qb qc qhb (venvLiftD qk qins {dbl} qr)))");
+    let ih_t = format!("(qiht : forall (qk : Nat) (qins : Sk) (qr : VEnvD {ek}), @Eq (VD qst) (xval {ek} (lift_at qtt qk {ONE}) qst (wkc_lift qD qtt qst qht qk qins) qr) (xval qD qtt qst qht {rl}))");
+    let ih_v = format!("(qihv : forall (qk : Nat) (qins : Sk) (qr : VEnvD {ek}), @Eq (VD qsv) (xval {ek} (lift_at qv qk {ONE}) qsv (wkc_lift qD qv qsv qhv qk qins) qr) (xval qD qv qsv qhv {rl}))");
+    let ih_bl = format!("(qihb : forall (qk : Nat) (qins : Sk) (qr : VEnvD (skins qk qins {dbl})), @Eq (VD qc) (xval (skins qk qins {dbl}) (lift_at qb qk {ONE}) qc (wkc_lift {dbl} qb qc qhb qk qins) qr) (xval {dbl} qb qc qhb (venvLiftD qk qins {dbl} qr)))");
     let xv_l = format!("(xval {ek} (lift_at qv qk {ONE}) qsv (wkc_lift qD qv qsv qhv qk qins) qr)");
     let xv_r = format!("(xval qD qv qsv qhv {rl})");
     let yv = format!("(vconsD qsv {ek} {xv_l} qr)");
@@ -174,11 +176,11 @@ pub(super) fn val_xval_lift_native() -> String {
     let t2 = format!("(xval {dbl} qb qc qhb (venvLiftD (Nat.succ qk) qins {dbl} {yv}))");
     let t3 = format!("(xval {dbl} qb qc qhb (vconsD qsv qD {xv_l} {rl}))");
     let t4 = format!("(xval {dbl} qb qc qhb (vconsD qsv qD {xv_r} {rl}))");
-    let s23 = format!("(Eq.cong (VEnvD {dbl}) (VD qc) (fun (qrr : VEnvD {dbl}) => xval {dbl} qb qc qhb qrr) (venvLiftD (Nat.succ qk) qins {dbl} {yv}) (vconsD qsv qD {xv_l} {rl}) (r14_venvLift_vcons qk qins qsv qD {xv_l} qr))");
-    let s34 = format!("(Eq.cong (VD qsv) (VD qc) (fun (qw : VD qsv) => xval {dbl} qb qc qhb (vconsD qsv qD qw {rl})) {xv_l} {xv_r} (qihv qk qins qr))");
-    let m_let = format!("(fun (qD : Nat -> Sk) (qtt : KExpr) (qv : KExpr) (qb : KExpr) (qst : Sk) (qsv : Sk) (qc : Sk) (qht : WKC qD qtt qst) (qhv : WKC qD qv qsv) (qhb : WKC {dbl} qb qc) {ih_t} {ih_v} {ih_bl} (qk : Nat) (qins : Sk) (qr : VEnvD {ek}) => Eq.trans (VD qc) {t1} {t3} {t4} (Eq.trans (VD qc) {t1} {t2} {t3} (qihb (Nat.succ qk) qins {yv}) {s23}) {s34})");
+    let s23 = format!("(@Eq.cong (VEnvD {dbl}) (VD qc) (fun (qrr : VEnvD {dbl}) => xval {dbl} qb qc qhb qrr) (venvLiftD (Nat.succ qk) qins {dbl} {yv}) (vconsD qsv qD {xv_l} {rl}) (r14_venvLift_vcons qk qins qsv qD {xv_l} qr))");
+    let s34 = format!("(@Eq.cong (VD qsv) (VD qc) (fun (qw : VD qsv) => xval {dbl} qb qc qhb (vconsD qsv qD qw {rl})) {xv_l} {xv_r} (qihv qk qins qr))");
+    let m_let = format!("(fun (qD : Nat -> Sk) (qtt : KExpr) (qv : KExpr) (qb : KExpr) (qst : Sk) (qsv : Sk) (qc : Sk) (qht : WKC qD qtt qst) (qhv : WKC qD qv qsv) (qhb : WKC {dbl} qb qc) {ih_t} {ih_v} {ih_bl} (qk : Nat) (qins : Sk) (qr : VEnvD {ek}) => @Eq.trans (VD qc) {t1} {t3} {t4} (@Eq.trans (VD qc) {t1} {t2} {t3} (qihb (Nat.succ qk) qins {yv}) {s23}) {s34})");
 
-    format!("fun (D : Nat -> Sk) (e : KExpr) (s : Sk) (h : WKC D e s) => WKC.rec {motive} {m_var} {m_sort} {m_pi} {m_lam} {m_app} {m_konst} {m_let} D e s h")
+    format!("fun (D : Nat -> Sk) (e : KExpr) (s : Sk) (h : WKC D e s) => @WKC.rec {motive} {m_var} {m_sort} {m_pi} {m_lam} {m_app} {m_konst} {m_let} D e s h")
 }
 
 // ================================================================
@@ -196,7 +198,7 @@ pub(super) fn val_xval_lift_native() -> String {
 /// `r17_wk_wkc D e s h` produces R18's statement on the nose, so the check is
 /// that the kernel accepts the transported theorem's TYPE with the native
 /// theorem's VALUE.
-pub(super) const TY_NATIVE_EXTENDS: &str = "forall (D : Nat -> Sk) (e : KExpr) (s : Sk) (h : WK D e s) (k : Nat) (ins : Sk) (r : VEnvD (skins k ins D)), Eq (VD s) (xval (skins k ins D) (lift_at e k (Nat.succ Nat.zero)) s (wkc_lift D e s (r17_wk_wkc D e s h) k ins) r) (xval D e s (r17_wk_wkc D e s h) (venvLiftD k ins D r))";
+pub(super) const TY_NATIVE_EXTENDS: &str = "forall (D : Nat -> Sk) (e : KExpr) (s : Sk) (h : WK D e s) (k : Nat) (ins : Sk) (r : VEnvD (skins k ins D)), @Eq (VD s) (xval (skins k ins D) (lift_at e k (Nat.succ Nat.zero)) s (wkc_lift D e s (r17_wk_wkc D e s h) k ins) r) (xval D e s (r17_wk_wkc D e s h) (venvLiftD k ins D r))";
 
 pub(super) const VAL_NATIVE_EXTENDS: &str = "fun (D : Nat -> Sk) (e : KExpr) (s : Sk) (h : WK D e s) (k : Nat) (ins : Sk) (r : VEnvD (skins k ins D)) => r19_xval_lift D e s (r17_wk_wkc D e s h) k ins r";
 
@@ -209,7 +211,7 @@ pub(super) const VAL_NATIVE_EXTENDS: &str = "fun (D : Nat -> Sk) (e : KExpr) (s 
 /// that `r18_xval_lift` has no instance of at all.
 pub(super) fn ty_lift_reaches_konst() -> String {
     let ek = format!("(skins Nat.zero {KDTY} r12_piEnv)");
-    format!("Eq (VD Sk.ty) (xval {ek} (lift_at {DEADCONST} Nat.zero {ONE}) Sk.ty (wkc_lift r12_piEnv {DEADCONST} Sk.ty r17_konst_witness Nat.zero {KDTY}) (r12_junkEnv {ek})) (xval r12_piEnv {DEADCONST} Sk.ty r17_konst_witness (venvLiftD Nat.zero {KDTY} r12_piEnv (r12_junkEnv {ek})))")
+    format!("@Eq (VD Sk.ty) (xval {ek} (lift_at {DEADCONST} Nat.zero {ONE}) Sk.ty (wkc_lift r12_piEnv {DEADCONST} Sk.ty r17_konst_witness Nat.zero {KDTY}) (r12_junkEnv {ek})) (xval r12_piEnv {DEADCONST} Sk.ty r17_konst_witness (venvLiftD Nat.zero {KDTY} r12_piEnv (r12_junkEnv {ek})))")
 }
 
 pub(super) fn val_lift_reaches_konst() -> String {
@@ -219,7 +221,7 @@ pub(super) fn val_lift_reaches_konst() -> String {
 /// **`r19_lift_reaches_let`** — the same at R17's `let_` witness.
 pub(super) fn ty_lift_reaches_let() -> String {
     let ek = format!("(skins Nat.zero {KDTY} r12_betaEnv)");
-    format!("Eq (VD {KDTY}) (xval {ek} (lift_at r17_letTerm Nat.zero {ONE}) {KDTY} (wkc_lift r12_betaEnv r17_letTerm {KDTY} r17_let_witness Nat.zero {KDTY}) (r12_junkEnv {ek})) (xval r12_betaEnv r17_letTerm {KDTY} r17_let_witness (venvLiftD Nat.zero {KDTY} r12_betaEnv (r12_junkEnv {ek})))")
+    format!("@Eq (VD {KDTY}) (xval {ek} (lift_at r17_letTerm Nat.zero {ONE}) {KDTY} (wkc_lift r12_betaEnv r17_letTerm {KDTY} r17_let_witness Nat.zero {KDTY}) (r12_junkEnv {ek})) (xval r12_betaEnv r17_letTerm {KDTY} r17_let_witness (venvLiftD Nat.zero {KDTY} r12_betaEnv (r12_junkEnv {ek})))")
 }
 
 pub(super) fn val_lift_reaches_let() -> String {
@@ -236,7 +238,7 @@ pub(super) fn val_lift_reaches_let() -> String {
 #[cfg(test)]
 pub(super) fn probe_native_refl() -> String {
     format!(
-        "def r19_native_refl_probe : {} := fun (D : Nat -> Sk) (e : KExpr) (s : Sk) (h : WKC D e s) (k : Nat) (ins : Sk) (r : VEnvD (skins k ins D)) => Eq.refl (VD s) (xval (skins k ins D) (lift_at e k {ONE}) s (wkc_lift D e s h k ins) r)",
+        "def r19_native_refl_probe : {} := fun (D : Nat -> Sk) (e : KExpr) (s : Sk) (h : WKC D e s) (k : Nat) (ins : Sk) (r : VEnvD (skins k ins D)) => @Eq.refl (VD s) (xval (skins k ins D) (lift_at e k {ONE}) s (wkc_lift D e s h k ins) r)",
         ty_xval_lift_native()
     )
 }
@@ -248,7 +250,7 @@ pub(super) fn probe_native_refl() -> String {
 /// succeeding by universe or shape accident.
 #[cfg(test)]
 pub(super) fn probe_konst_arm_wrong_shape() -> String {
-    "def r19_konst_arm_shape_probe : forall (D : Nat -> Sk) (n : Name) (us : ListType Level), Eq (VD (Sk.arr Sk.ty Sk.ty)) (fun (qe2 : KExpr) => whnf_acc qe2) (fun (qe2 : KExpr) => whnf_acc qe2) := fun (D : Nat -> Sk) (n : Name) (us : ListType Level) => Eq.refl (VD (Sk.arr Sk.ty Sk.ty)) (fun (qe2 : KExpr) => whnf_acc qe2)".to_string()
+    "def r19_konst_arm_shape_probe : forall (D : Nat -> Sk) (n : Name) (us : ListType Level), @Eq (VD (Sk.arr Sk.ty Sk.ty)) (fun (qe2 : KExpr) => whnf_acc qe2) (fun (qe2 : KExpr) => whnf_acc qe2) := fun (D : Nat -> Sk) (n : Name) (us : ListType Level) => @Eq.refl (VD (Sk.arr Sk.ty Sk.ty)) (fun (qe2 : KExpr) => whnf_acc qe2)".to_string()
 }
 
 // ================================================================

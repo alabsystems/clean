@@ -238,10 +238,10 @@ impl TypeCheckerSpec {
                             // whose guard yields a reflexive DefEqJoinable; admissibility
                             // guard = infer_result_self_admissible (inferred type of a
                             // closed input is itself closed).
-                            "KernelCheckAccepts.mk st e T T ",
-                            "(ProdType.mk (KernelInferAccepts st e T) (KernelDefEqAccepts st T T) ",
+                            "@KernelCheckAccepts.mk st e T T ",
+                            "(@ProdType.mk (KernelInferAccepts st e T) (KernelDefEqAccepts st T T) ",
                             "hinfer ",
-                            "(KernelDefEqAccepts.mk st T T ",
+                            "(@KernelDefEqAccepts.mk st T T ",
                             "(fun (henv : KernelStateEnvValid st) (hctx : KernelStateLocalCtxWellFormed st) ",
                             "(hbadm : KernelBinaryInputAdmissible st T T) => ",
                             "DefEqJoinable.mk T T T T (DefEq.refl T) (DefEq.refl T) (DefEq.refl T)))) ",
@@ -294,7 +294,7 @@ impl TypeCheckerSpec {
                             "(_hmatch : KernelStateMatchesSpec st) ",
                             "(_hadm : KernelInputAdmissible st e) ",
                             "(hcheck : KernelCheckAccepts st e T) => ",
-                            "KernelCheckAccepts.rec st e T ",
+                            "@KernelCheckAccepts.rec st e T ",
                             "(fun (_c : KernelCheckAccepts st e T) => CheckDecomp st e T) ",
                             "(fun (R : KExpr) ",
                             "(hpair : ProdType (KernelInferAccepts st e R) (KernelDefEqAccepts st R T)) ",

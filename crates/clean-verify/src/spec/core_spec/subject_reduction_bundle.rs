@@ -81,7 +81,7 @@ use crate::spec::Specification;
 /// Constructor discrimination for the literal cases of typing inversion.
 /// This uses syntactic equality only, not an assumption about conversion.
 const SRB_KEXPR_IS_LIT: &str = concat!(
-    "(KExpr.rec (fun (_ : KExpr) => Type) ",
+    "(@KExpr.rec (fun (_ : KExpr) => Type) ",
     "(fun (_ : Level) => Empty) ",
     "(fun (_ : Nat) => Empty) ",
     "(fun (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) => Empty) ",
@@ -112,9 +112,9 @@ fn literal_generation_arms(binders: &str, subject: &str, kont: impl Fn(&str) -> 
         let k = kont(ty);
         format!(
             "(fun (G : ListType KExpr) (n : Nat) {binders} \
-             (heq : Eq KExpr ({literal} n) {subject}) \
+             (heq : @Eq KExpr ({literal} n) {subject}) \
              (R : Type) (_k : {k}) => Empty.rec (fun (_ : Empty) => R) \
-             (Eq.substType KExpr {SRB_KEXPR_IS_LIT} \
+             (@Eq.substType KExpr {SRB_KEXPR_IS_LIT} \
              ({literal} n) {subject} heq Nat.zero))"
         )
     })
@@ -127,17 +127,17 @@ fn literal_generation_arms(binders: &str, subject: &str, kont: impl Fn(&str) -> 
 /// not axioms or claims of a production admission witness.
 const TEC_FIELDS: [&str; 10] = [
     // Stored constant types are closed and use their declared universe names.
-    "forall (n : Name) (sig : KConstSig), Eq (OptionType KConstSig) (tenv n) (OptionType.some KConstSig sig) -> is_closed_at (kconst_type sig) Nat.zero",
-    "forall (n : Name) (sig : KConstSig), Eq (OptionType KConstSig) (tenv n) (OptionType.some KConstSig sig) -> KExprParamSupport (kconst_params sig) (kconst_type sig)",
+    "forall (n : Name) (sig : KConstSig), @Eq (OptionType KConstSig) (tenv n) (@OptionType.some KConstSig sig) -> is_closed_at (kconst_type sig) Nat.zero",
+    "forall (n : Name) (sig : KConstSig), @Eq (OptionType KConstSig) (tenv n) (@OptionType.some KConstSig sig) -> KExprParamSupport (kconst_params sig) (kconst_type sig)",
     // Existing operational parallel-substitution obligations.
     "forall (e : KExpr) (e' : KExpr), delta_reduces e e' -> forall (s : Nat -> KExpr), DefEq (psubst s e) (psubst s e')",
     "forall (e : KExpr) (e' : KExpr), iota_reduces e e' -> forall (s : Nat -> KExpr), DefEq (psubst s e) (psubst s e')",
     // One source-matched definition signature and one schematic body judgment.
-    "forall (n : Name) (defn : KDefSig), Eq (OptionType KDefSig) (kdef_for (red_def the_red_env) n) (OptionType.some KDefSig defn) -> Eq (OptionType KConstSig) (tenv n) (OptionType.some KConstSig (kdef_signature defn))",
-    "forall (n : Name) (defn : KDefSig), Eq (OptionType KDefSig) (kdef_for (red_def the_red_env) n) (OptionType.some KDefSig defn) -> is_closed_at (kdef_value defn) Nat.zero",
-    "forall (n : Name) (defn : KDefSig), Eq (OptionType KDefSig) (kdef_for (red_def the_red_env) n) (OptionType.some KDefSig defn) -> TypingCtxConv tenv (ListType.nil KExpr) (kdef_value defn) (kconst_type (kdef_signature defn))",
+    "forall (n : Name) (defn : KDefSig), @Eq (OptionType KDefSig) (kdef_for (red_def the_red_env) n) (@OptionType.some KDefSig defn) -> @Eq (OptionType KConstSig) (tenv n) (@OptionType.some KConstSig (kdef_signature defn))",
+    "forall (n : Name) (defn : KDefSig), @Eq (OptionType KDefSig) (kdef_for (red_def the_red_env) n) (@OptionType.some KDefSig defn) -> is_closed_at (kdef_value defn) Nat.zero",
+    "forall (n : Name) (defn : KDefSig), @Eq (OptionType KDefSig) (kdef_for (red_def the_red_env) n) (@OptionType.some KDefSig defn) -> TypingCtxConv tenv (@ListType.nil KExpr) (kdef_value defn) (kconst_type (kdef_signature defn))",
     // Body support derives operational delta universe closure by fusion.
-    "forall (n : Name) (defn : KDefSig), Eq (OptionType KDefSig) (kdef_for (red_def the_red_env) n) (OptionType.some KDefSig defn) -> KExprParamSupport (kconst_params (kdef_signature defn)) (kdef_value defn)",
+    "forall (n : Name) (defn : KDefSig), @Eq (OptionType KDefSig) (kdef_for (red_def the_red_env) n) (@OptionType.some KDefSig defn) -> KExprParamSupport (kconst_params (kdef_signature defn)) (kdef_value defn)",
     // Iota universe closure is still a separate operational obligation.
     "forall (s : Name -> Level) (e : KExpr) (e' : KExpr), iota_reduces e e' -> iota_reduces (instL s e) (instL s e')",
     // Iota typing remains an explicit, separately justified invariant.
@@ -163,7 +163,7 @@ const TEC_PROJ_NAMES: [&str; 10] = [
 /// discrimination lane registers only the app/lam/pi pairings —
 /// `let_ne_app`/`app_ne_let` etc. in `expr_model_discrimination_let.rs`).
 const SRB_KEXPR_NOT_LET: &str = concat!(
-    "(KExpr.rec (fun (_ : KExpr) => Type) ",
+    "(@KExpr.rec (fun (_ : KExpr) => Type) ",
     "(fun (_ : Level) => Nat) ",
     "(fun (_ : Nat) => Nat) ",
     "(fun (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) => Nat) ",
@@ -179,7 +179,7 @@ const SRB_KEXPR_NOT_LET: &str = concat!(
 /// refute `TypingCtxConv tenv G (KExpr.proj ..) T` by inversion (TypingCtxConv
 /// has no proj rule — proj is outside the declarative typing fragment).
 const SRB_KEXPR_NOT_PROJ: &str = concat!(
-    "(KExpr.rec (fun (_ : KExpr) => Type) ",
+    "(@KExpr.rec (fun (_ : KExpr) => Type) ",
     "(fun (_ : Level) => Nat) ",
     "(fun (_ : Nat) => Nat) ",
     "(fun (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) => Nat) ",
@@ -241,7 +241,7 @@ impl Specification {
                 type_src: format!("forall (tenv : KDeclEnv), TypingEnvCoherent tenv -> {field}"),
                 value_src: Some(format!(
                     "fun (tenv : KDeclEnv) (w : TypingEnvCoherent tenv) => \
-                     TypingEnvCoherent.rec tenv \
+                     @TypingEnvCoherent.rec tenv \
                      (fun (_ : TypingEnvCoherent tenv) => {field}) \
                      (fun {binders} => a{n}) w"
                 )),
@@ -262,11 +262,11 @@ impl Specification {
             })?;
         }
         self.add_recursive_def(
-            "def tec_tenv_psubst_closed (tenv : KDeclEnv) (W : TypingEnvCoherent tenv) (n : Name) (us : ListType Level) (A : KExpr) (h : Eq (OptionType KExpr) (kdecl_type_at tenv n us) (OptionType.some KExpr A)) (s : Nat -> KExpr) : Eq KExpr (psubst s A) A := kdecl_type_at_psubst_closed tenv n us A (tec_tenv_closed tenv W n) h s",
+            "def tec_tenv_psubst_closed (tenv : KDeclEnv) (W : TypingEnvCoherent tenv) (n : Name) (us : ListType Level) (A : KExpr) (h : @Eq (OptionType KExpr) (kdecl_type_at tenv n us) (@OptionType.some KExpr A)) (s : Nat -> KExpr) : @Eq KExpr (psubst s A) A := kdecl_type_at_psubst_closed tenv n us A (tec_tenv_closed tenv W n) h s",
             "Derive parallel-substitution invariance of an actual instantiated lookup result from schematic stored-type closedness.",
         )?;
         self.add_recursive_def(
-            "def tec_tenv_lift_closed (tenv : KDeclEnv) (W : TypingEnvCoherent tenv) (n : Name) (us : ListType Level) (A : KExpr) (h : Eq (OptionType KExpr) (kdecl_type_at tenv n us) (OptionType.some KExpr A)) (c : Nat) (k : Nat) : Eq KExpr (lift_at A c k) A := kdecl_type_at_lift_closed tenv n us A (tec_tenv_closed tenv W n) h c k",
+            "def tec_tenv_lift_closed (tenv : KDeclEnv) (W : TypingEnvCoherent tenv) (n : Name) (us : ListType Level) (A : KExpr) (h : @Eq (OptionType KExpr) (kdecl_type_at tenv n us) (@OptionType.some KExpr A)) (c : Nat) (k : Nat) : @Eq KExpr (lift_at A c k) A := kdecl_type_at_lift_closed tenv n us A (tec_tenv_closed tenv W n) h c k",
             "Derive lifting invariance of an actual instantiated lookup result from schematic stored-type closedness.",
         )?;
         Ok(())
@@ -278,7 +278,7 @@ impl Specification {
         // fresh context entry at cutoff c (i+1 if c <= i, else i). Same
         // Nat.rec-on-(c - i) shape as lift_bvar_at, so the two compute in step.
         self.add_recursive_def(
-            "def wkpos (i : Nat) (c : Nat) : Nat := Nat.rec (fun (_ : Nat) => Nat) \
+            "def wkpos (i : Nat) (c : Nat) : Nat := @Nat.rec (fun (_ : Nat) => Nat) \
              (Nat.succ i) (fun (_ : Nat) (_ : Nat) => i) (Nat.sub c i)",
             "Position of de Bruijn variable i after inserting a context entry at cutoff c \
              (mirror `wkpos`). Nat.rec on (c - i), the lift_bvar_at discriminator shape. \
@@ -288,11 +288,11 @@ impl Specification {
         // wkpos_zero: wkpos i 0 = succ i (insertion at the head shifts all).
         self.add_definition(SpecDefinition {
             name: "wkpos_zero".to_string(),
-            type_src: "forall (i : Nat), Eq Nat (wkpos i Nat.zero) (Nat.succ i)".to_string(),
+            type_src: "forall (i : Nat), @Eq Nat (wkpos i Nat.zero) (Nat.succ i)".to_string(),
             value_src: Some(
                 concat!(
-                    "fun (i : Nat) => Eq.cong Nat Nat ",
-                    "(fun (n : Nat) => Nat.rec (fun (_ : Nat) => Nat) (Nat.succ i) ",
+                    "fun (i : Nat) => @Eq.cong Nat Nat ",
+                    "(fun (n : Nat) => @Nat.rec (fun (_ : Nat) => Nat) (Nat.succ i) ",
                     "(fun (_ : Nat) (_ : Nat) => i) n) ",
                     "(Nat.sub Nat.zero i) Nat.zero (nat_sub_zero_left i)",
                 )
@@ -318,28 +318,28 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "wkpos_rec_succ".to_string(),
             type_src: concat!(
-                "forall (j : Nat) (n : Nat), Eq Nat ",
-                "(Nat.rec (fun (_ : Nat) => Nat) (Nat.succ (Nat.succ j)) ",
+                "forall (j : Nat) (n : Nat), @Eq Nat ",
+                "(@Nat.rec (fun (_ : Nat) => Nat) (Nat.succ (Nat.succ j)) ",
                 "(fun (_ : Nat) (_ : Nat) => Nat.succ j) n) ",
-                "(Nat.succ (Nat.rec (fun (_ : Nat) => Nat) (Nat.succ j) ",
+                "(Nat.succ (@Nat.rec (fun (_ : Nat) => Nat) (Nat.succ j) ",
                 "(fun (_ : Nat) (_ : Nat) => j) n))",
             )
             .to_string(),
             value_src: Some(
                 concat!(
-                    "fun (j : Nat) (n : Nat) => Nat.rec ",
-                    "(fun (m : Nat) => Eq Nat ",
-                    "(Nat.rec (fun (_ : Nat) => Nat) (Nat.succ (Nat.succ j)) ",
+                    "fun (j : Nat) (n : Nat) => @Nat.rec ",
+                    "(fun (m : Nat) => @Eq Nat ",
+                    "(@Nat.rec (fun (_ : Nat) => Nat) (Nat.succ (Nat.succ j)) ",
                     "(fun (_ : Nat) (_ : Nat) => Nat.succ j) m) ",
-                    "(Nat.succ (Nat.rec (fun (_ : Nat) => Nat) (Nat.succ j) ",
+                    "(Nat.succ (@Nat.rec (fun (_ : Nat) => Nat) (Nat.succ j) ",
                     "(fun (_ : Nat) (_ : Nat) => j) m))) ",
-                    "(Eq.refl Nat (Nat.succ (Nat.succ j))) ",
-                    "(fun (k : Nat) (_ : Eq Nat ",
-                    "(Nat.rec (fun (_ : Nat) => Nat) (Nat.succ (Nat.succ j)) ",
+                    "(@Eq.refl Nat (Nat.succ (Nat.succ j))) ",
+                    "(fun (k : Nat) (_ : @Eq Nat ",
+                    "(@Nat.rec (fun (_ : Nat) => Nat) (Nat.succ (Nat.succ j)) ",
                     "(fun (_ : Nat) (_ : Nat) => Nat.succ j) k) ",
-                    "(Nat.succ (Nat.rec (fun (_ : Nat) => Nat) (Nat.succ j) ",
+                    "(Nat.succ (@Nat.rec (fun (_ : Nat) => Nat) (Nat.succ j) ",
                     "(fun (_ : Nat) (_ : Nat) => j) k))) => ",
-                    "Eq.refl Nat (Nat.succ j)) ",
+                    "@Eq.refl Nat (Nat.succ j)) ",
                     "n",
                 )
                 .to_string(),
@@ -362,18 +362,18 @@ impl Specification {
             name: "wkpos_succ_succ".to_string(),
             type_src: concat!(
                 "forall (j : Nat) (c : Nat), ",
-                "Eq Nat (wkpos (Nat.succ j) (Nat.succ c)) (Nat.succ (wkpos j c))",
+                "@Eq Nat (wkpos (Nat.succ j) (Nat.succ c)) (Nat.succ (wkpos j c))",
             )
             .to_string(),
             value_src: Some(
                 concat!(
-                    "fun (j : Nat) (c : Nat) => Eq.trans Nat ",
+                    "fun (j : Nat) (c : Nat) => @Eq.trans Nat ",
                     "(wkpos (Nat.succ j) (Nat.succ c)) ",
-                    "(Nat.rec (fun (_ : Nat) => Nat) (Nat.succ (Nat.succ j)) ",
+                    "(@Nat.rec (fun (_ : Nat) => Nat) (Nat.succ (Nat.succ j)) ",
                     "(fun (_ : Nat) (_ : Nat) => Nat.succ j) (Nat.sub c j)) ",
                     "(Nat.succ (wkpos j c)) ",
-                    "(Eq.cong Nat Nat ",
-                    "(fun (n : Nat) => Nat.rec (fun (_ : Nat) => Nat) (Nat.succ (Nat.succ j)) ",
+                    "(@Eq.cong Nat Nat ",
+                    "(fun (n : Nat) => @Nat.rec (fun (_ : Nat) => Nat) (Nat.succ (Nat.succ j)) ",
                     "(fun (_ : Nat) (_ : Nat) => Nat.succ j) n) ",
                     "(Nat.sub (Nat.succ c) (Nat.succ j)) (Nat.sub c j) ",
                     "(nat_sub_succ_succ c j)) ",
@@ -402,30 +402,30 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "lift_bvar_wkpos_rec".to_string(),
             type_src: concat!(
-                "forall (i : Nat) (n : Nat), Eq KExpr ",
-                "(Nat.rec (fun (_ : Nat) => KExpr) (KExpr.bvar (Nat.add i (Nat.succ Nat.zero))) ",
+                "forall (i : Nat) (n : Nat), @Eq KExpr ",
+                "(@Nat.rec (fun (_ : Nat) => KExpr) (KExpr.bvar (Nat.add i (Nat.succ Nat.zero))) ",
                 "(fun (_ : Nat) (_ : KExpr) => KExpr.bvar i) n) ",
-                "(KExpr.bvar (Nat.rec (fun (_ : Nat) => Nat) (Nat.succ i) ",
+                "(KExpr.bvar (@Nat.rec (fun (_ : Nat) => Nat) (Nat.succ i) ",
                 "(fun (_ : Nat) (_ : Nat) => i) n))",
             )
             .to_string(),
             value_src: Some(
                 concat!(
-                    "fun (i : Nat) (n : Nat) => Nat.rec ",
-                    "(fun (m : Nat) => Eq KExpr ",
-                    "(Nat.rec (fun (_ : Nat) => KExpr) ",
+                    "fun (i : Nat) (n : Nat) => @Nat.rec ",
+                    "(fun (m : Nat) => @Eq KExpr ",
+                    "(@Nat.rec (fun (_ : Nat) => KExpr) ",
                     "(KExpr.bvar (Nat.add i (Nat.succ Nat.zero))) ",
                     "(fun (_ : Nat) (_ : KExpr) => KExpr.bvar i) m) ",
-                    "(KExpr.bvar (Nat.rec (fun (_ : Nat) => Nat) (Nat.succ i) ",
+                    "(KExpr.bvar (@Nat.rec (fun (_ : Nat) => Nat) (Nat.succ i) ",
                     "(fun (_ : Nat) (_ : Nat) => i) m))) ",
-                    "(Eq.refl KExpr (KExpr.bvar (Nat.succ i))) ",
-                    "(fun (k : Nat) (_ : Eq KExpr ",
-                    "(Nat.rec (fun (_ : Nat) => KExpr) ",
+                    "(@Eq.refl KExpr (KExpr.bvar (Nat.succ i))) ",
+                    "(fun (k : Nat) (_ : @Eq KExpr ",
+                    "(@Nat.rec (fun (_ : Nat) => KExpr) ",
                     "(KExpr.bvar (Nat.add i (Nat.succ Nat.zero))) ",
                     "(fun (_ : Nat) (_ : KExpr) => KExpr.bvar i) k) ",
-                    "(KExpr.bvar (Nat.rec (fun (_ : Nat) => Nat) (Nat.succ i) ",
+                    "(KExpr.bvar (@Nat.rec (fun (_ : Nat) => Nat) (Nat.succ i) ",
                     "(fun (_ : Nat) (_ : Nat) => i) k))) => ",
-                    "Eq.refl KExpr (KExpr.bvar i)) ",
+                    "@Eq.refl KExpr (KExpr.bvar i)) ",
                     "n",
                 )
                 .to_string(),
@@ -448,7 +448,7 @@ impl Specification {
             name: "lift_at_bvar_wkpos".to_string(),
             type_src: concat!(
                 "forall (i : Nat) (c : Nat), ",
-                "Eq KExpr (lift_at (KExpr.bvar i) c (Nat.succ Nat.zero)) ",
+                "@Eq KExpr (lift_at (KExpr.bvar i) c (Nat.succ Nat.zero)) ",
                 "(KExpr.bvar (wkpos i c))",
             )
             .to_string(),
@@ -478,7 +478,7 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "lift_exchange_zero".to_string(),
             type_src: concat!(
-                "forall (X : KExpr) (c : Nat), Eq KExpr ",
+                "forall (X : KExpr) (c : Nat), @Eq KExpr ",
                 "(lift_at (lift_at X c (Nat.succ Nat.zero)) Nat.zero (Nat.succ Nat.zero)) ",
                 "(lift_at (lift_at X Nat.zero (Nat.succ Nat.zero)) (Nat.succ c) ",
                 "(Nat.succ Nat.zero))",
@@ -487,27 +487,27 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (X : KExpr) (c : Nat) => ",
-                    "Eq.subst Nat ",
-                    "(fun (z : Nat) => Eq KExpr ",
+                    "@Eq.subst Nat ",
+                    "(fun (z : Nat) => @Eq KExpr ",
                     "(lift_at (lift_at X c (Nat.succ Nat.zero)) Nat.zero (Nat.succ Nat.zero)) ",
                     "(lift_at (lift_at X Nat.zero (Nat.succ Nat.zero)) z (Nat.succ Nat.zero))) ",
                     "(Nat.add Nat.zero (Nat.add (Nat.succ Nat.zero) c)) (Nat.succ c) ",
                     // t2 : add 0 (add 1 c) = succ c
-                    "(Eq.trans Nat ",
+                    "(@Eq.trans Nat ",
                     "(Nat.add Nat.zero (Nat.add (Nat.succ Nat.zero) c)) ",
                     "(Nat.add (Nat.succ Nat.zero) c) ",
                     "(Nat.succ c) ",
                     "(nat_zero_add (Nat.add (Nat.succ Nat.zero) c)) ",
-                    "(Eq.trans Nat ",
+                    "(@Eq.trans Nat ",
                     "(Nat.add (Nat.succ Nat.zero) c) ",
                     "(Nat.succ (Nat.add Nat.zero c)) ",
                     "(Nat.succ c) ",
                     "(nat_succ_add Nat.zero c) ",
-                    "(Eq.cong Nat Nat (fun (z : Nat) => Nat.succ z) ",
+                    "(@Eq.cong Nat Nat (fun (z : Nat) => Nat.succ z) ",
                     "(Nat.add Nat.zero c) c (nat_zero_add c)))) ",
                     // h1 : exchange with the LHS cutoff already rewritten to c
-                    "(Eq.subst Nat ",
-                    "(fun (z : Nat) => Eq KExpr ",
+                    "(@Eq.subst Nat ",
+                    "(fun (z : Nat) => @Eq KExpr ",
                     "(lift_at (lift_at X z (Nat.succ Nat.zero)) Nat.zero (Nat.succ Nat.zero)) ",
                     "(lift_at (lift_at X Nat.zero (Nat.succ Nat.zero)) ",
                     "(Nat.add Nat.zero (Nat.add (Nat.succ Nat.zero) c)) (Nat.succ Nat.zero))) ",
@@ -541,7 +541,7 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "lift_instantiate_zero".to_string(),
             type_src: concat!(
-                "forall (B : KExpr) (a : KExpr) (c : Nat), Eq KExpr ",
+                "forall (B : KExpr) (a : KExpr) (c : Nat), @Eq KExpr ",
                 "(lift_at (instantiate B a) c (Nat.succ Nat.zero)) ",
                 "(instantiate (lift_at B (Nat.succ c) (Nat.succ Nat.zero)) ",
                 "(lift_at a c (Nat.succ Nat.zero)))",
@@ -550,8 +550,8 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (B : KExpr) (a : KExpr) (c : Nat) => ",
-                    "Eq.subst Nat ",
-                    "(fun (z : Nat) => Eq KExpr ",
+                    "@Eq.subst Nat ",
+                    "(fun (z : Nat) => @Eq KExpr ",
                     "(lift_at (instantiate B a) z (Nat.succ Nat.zero)) ",
                     "(instantiate (lift_at B (Nat.succ z) (Nat.succ Nat.zero)) ",
                     "(lift_at a c (Nat.succ Nat.zero)))) ",
@@ -588,11 +588,11 @@ impl Specification {
             concat!(
                 "inductive CtxWk (C : KExpr) : Nat -> ListType KExpr -> ListType KExpr -> Type\n",
                 "| zero : forall (G : ListType KExpr), ",
-                "CtxWk C Nat.zero G (ListType.cons KExpr C G)\n",
+                "CtxWk C Nat.zero G (@ListType.cons KExpr C G)\n",
                 "| succ : forall (c : Nat) (A : KExpr) (G : ListType KExpr) ",
                 "(G2 : ListType KExpr), CtxWk C c G G2 -> ",
-                "CtxWk C (Nat.succ c) (ListType.cons KExpr A G) ",
-                "(ListType.cons KExpr (lift_at A c (Nat.succ Nat.zero)) G2)"
+                "CtxWk C (Nat.succ c) (@ListType.cons KExpr A G) ",
+                "(@ListType.cons KExpr (lift_at A c (Nat.succ Nat.zero)) G2)"
             ),
             "Context weakening relation (mirror CtxWk): G2 is G with entry C inserted at cutoff \
              c; entries above the cut carry lifted types. Subject-reduction bundle.",
@@ -606,11 +606,11 @@ impl Specification {
                 "forall (C : KExpr) (c : Nat) (G : ListType KExpr) (G2 : ListType KExpr), ",
                 "CtxWk C c G G2 -> ",
                 "forall (i : Nat) (A : KExpr), ",
-                "Eq (OptionType KExpr) (ctx_lookup G i) (OptionType.some KExpr A) -> ",
+                "@Eq (OptionType KExpr) (ctx_lookup G i) (@OptionType.some KExpr A) -> ",
                 "forall (R : Type), ",
                 "(forall (A2 : KExpr), ",
-                "Eq (OptionType KExpr) (ctx_lookup G2 (wkpos i c)) (OptionType.some KExpr A2) -> ",
-                "Eq KExpr (lift_at A2 Nat.zero (Nat.succ (wkpos i c))) ",
+                "@Eq (OptionType KExpr) (ctx_lookup G2 (wkpos i c)) (@OptionType.some KExpr A2) -> ",
+                "@Eq KExpr (lift_at A2 Nat.zero (Nat.succ (wkpos i c))) ",
                 "(lift_at (lift_at A Nat.zero (Nat.succ i)) c (Nat.succ Nat.zero)) -> R) ",
                 "-> R",
             )
@@ -692,7 +692,7 @@ impl Specification {
                 "forall (G : ListType KExpr) (e : KExpr) (T : KExpr), ",
                 "TypingCtxConv tenv G e T -> ",
                 "forall (C : KExpr), ",
-                "TypingCtxConv tenv (ListType.cons KExpr C G) ",
+                "TypingCtxConv tenv (@ListType.cons KExpr C G) ",
                 "(lift_at e Nat.zero (Nat.succ Nat.zero)) ",
                 "(lift_at T Nat.zero (Nat.succ Nat.zero))",
             )
@@ -705,7 +705,7 @@ impl Specification {
                     "(G : ListType KExpr) (e : KExpr) (T : KExpr) ",
                     "(h : TypingCtxConv tenv G e T) (C : KExpr) => ",
                     "weaken_gen tenv hf W C G e T h Nat.zero ",
-                    "(ListType.cons KExpr C G) (CtxWk.zero C G)",
+                    "(@ListType.cons KExpr C G) (@CtxWk.zero C G)",
                 )
                 .to_string(),
             ),
@@ -789,7 +789,7 @@ impl Specification {
             "def SubstTyping (tenv : KDeclEnv) (G2 : ListType KExpr) \
              (s : Nat -> KExpr) (G : ListType KExpr) : Type := \
              forall (i : Nat) (A : KExpr), \
-             Eq (OptionType KExpr) (ctx_lookup G i) (OptionType.some KExpr A) -> \
+             @Eq (OptionType KExpr) (ctx_lookup G i) (@OptionType.some KExpr A) -> \
              TypingCtxConv tenv G2 (s i) (psubst s (lift_at A Nat.zero (Nat.succ i)))",
             "s is a well-typed substitution G -> G2: every variable is sent to a term of the \
              s-image of the type the var rule assigns it (mirror SubstTyping). \
@@ -808,15 +808,15 @@ impl Specification {
                 concat!(
                     "fun (tenv : KDeclEnv) (G : ListType KExpr) ",
                     "(i : Nat) (A : KExpr) ",
-                    "(hA : Eq (OptionType KExpr) (ctx_lookup G i) (OptionType.some KExpr A)) => ",
-                    "Eq.substType KExpr ",
+                    "(hA : @Eq (OptionType KExpr) (ctx_lookup G i) (@OptionType.some KExpr A)) => ",
+                    "@Eq.substType KExpr ",
                     "(fun (z : KExpr) => TypingCtxConv tenv G (KExpr.bvar i) z) ",
                     "(lift_at A Nat.zero (Nat.succ i)) ",
                     "(psubst idsubst (lift_at A Nat.zero (Nat.succ i))) ",
-                    "(Eq.symm KExpr (psubst idsubst (lift_at A Nat.zero (Nat.succ i))) ",
+                    "(@Eq.symm KExpr (psubst idsubst (lift_at A Nat.zero (Nat.succ i))) ",
                     "(lift_at A Nat.zero (Nat.succ i)) ",
                     "(psubst_id (lift_at A Nat.zero (Nat.succ i)))) ",
-                    "(TypingCtxConv.var tenv G i A hA)",
+                    "(@TypingCtxConv.var tenv G i A hA)",
                 )
                 .to_string(),
             ),
@@ -849,8 +849,8 @@ impl Specification {
                 "forall (G : ListType KExpr) (G2 : ListType KExpr) (s : Nat -> KExpr), ",
                 "SubstTyping tenv G2 s G -> ",
                 "forall (A : KExpr), ",
-                "SubstTyping tenv (ListType.cons KExpr (psubst s A) G2) (up s) ",
-                "(ListType.cons KExpr A G)",
+                "SubstTyping tenv (@ListType.cons KExpr (psubst s A) G2) (up s) ",
+                "(@ListType.cons KExpr A G)",
             )
             .to_string(),
             value_src: Some(subst_typing_up_value()),
@@ -884,7 +884,7 @@ impl Specification {
                 "(a : KExpr) (A : KExpr), ",
                 "SubstTyping tenv G2 s G -> ",
                 "TypingCtxConv tenv G2 a (psubst s A) -> ",
-                "SubstTyping tenv G2 (scons a s) (ListType.cons KExpr A G)",
+                "SubstTyping tenv G2 (scons a s) (@ListType.cons KExpr A G)",
             )
             .to_string(),
             value_src: Some(subst_typing_scons_value()),
@@ -957,7 +957,7 @@ impl Specification {
                 "RedEnvFaithful the_red_env -> ",
                 "TypingEnvCoherent tenv -> ",
                 "forall (G : ListType KExpr) (A : KExpr) (b : KExpr) (B : KExpr) (a : KExpr), ",
-                "TypingCtxConv tenv (ListType.cons KExpr A G) b B -> ",
+                "TypingCtxConv tenv (@ListType.cons KExpr A G) b B -> ",
                 "TypingCtxConv tenv G a A -> ",
                 "TypingCtxConv tenv G (instantiate b a) (instantiate B a)",
             )
@@ -968,25 +968,25 @@ impl Specification {
                     "(hf : RedEnvFaithful the_red_env) ",
                     "(W : TypingEnvCoherent tenv) ",
                     "(G : ListType KExpr) (A : KExpr) (b : KExpr) (B : KExpr) (a : KExpr) ",
-                    "(hb : TypingCtxConv tenv (ListType.cons KExpr A G) b B) ",
+                    "(hb : TypingCtxConv tenv (@ListType.cons KExpr A G) b B) ",
                     "(ha : TypingCtxConv tenv G a A) => ",
-                    "Eq.substType KExpr ",
+                    "@Eq.substType KExpr ",
                     "(fun (z : KExpr) => TypingCtxConv tenv G z (instantiate B a)) ",
                     "(psubst (scons a idsubst) b) (instantiate b a) ",
-                    "(Eq.symm KExpr (instantiate b a) (psubst (scons a idsubst) b) ",
+                    "(@Eq.symm KExpr (instantiate b a) (psubst (scons a idsubst) b) ",
                     "(instantiate_eq_psubst b a)) ",
-                    "(Eq.substType KExpr ",
+                    "(@Eq.substType KExpr ",
                     "(fun (z : KExpr) => TypingCtxConv tenv G (psubst (scons a idsubst) b) z) ",
                     "(psubst (scons a idsubst) B) (instantiate B a) ",
-                    "(Eq.symm KExpr (instantiate B a) (psubst (scons a idsubst) B) ",
+                    "(@Eq.symm KExpr (instantiate B a) (psubst (scons a idsubst) B) ",
                     "(instantiate_eq_psubst B a)) ",
-                    "(substitution_general tenv hf W (ListType.cons KExpr A G) b B hb G ",
+                    "(substitution_general tenv hf W (@ListType.cons KExpr A G) b B hb G ",
                     "(scons a idsubst) ",
                     "(subst_typing_scons tenv G G idsubst a A (subst_typing_id tenv G) ",
-                    "(Eq.substType KExpr ",
+                    "(@Eq.substType KExpr ",
                     "(fun (z : KExpr) => TypingCtxConv tenv G a z) ",
                     "A (psubst idsubst A) ",
-                    "(Eq.symm KExpr (psubst idsubst A) A (psubst_id A)) ",
+                    "(@Eq.symm KExpr (psubst idsubst A) A (psubst_id A)) ",
                     "ha))))",
                 )
                 .to_string(),
@@ -1020,10 +1020,10 @@ impl Specification {
         self.add_inductive(
             concat!(
                 "inductive CtxDefEq : ListType KExpr -> ListType KExpr -> Type\n",
-                "| nil : CtxDefEq (ListType.nil KExpr) (ListType.nil KExpr)\n",
+                "| nil : CtxDefEq (@ListType.nil KExpr) (@ListType.nil KExpr)\n",
                 "| cons : forall (A : KExpr) (A2 : KExpr) (G : ListType KExpr) ",
                 "(G2 : ListType KExpr), DefEq A A2 -> CtxDefEq G G2 -> ",
-                "CtxDefEq (ListType.cons KExpr A G) (ListType.cons KExpr A2 G2)"
+                "CtxDefEq (@ListType.cons KExpr A G) (@ListType.cons KExpr A2 G2)"
             ),
             "Pointwise DefEq of typing contexts (mirror CtxDefEq) — the transport relation for \
              the congruence arms that reduce a binder's domain annotation. Subject-reduction \
@@ -1036,7 +1036,7 @@ impl Specification {
             type_src: "forall (G : ListType KExpr), CtxDefEq G G".to_string(),
             value_src: Some(
                 concat!(
-                    "fun (G : ListType KExpr) => ListType.rec KExpr ",
+                    "fun (G : ListType KExpr) => @ListType.rec KExpr ",
                     "(fun (g : ListType KExpr) => CtxDefEq g g) ",
                     "CtxDefEq.nil ",
                     "(fun (a : KExpr) (rest : ListType KExpr) (ihr : CtxDefEq rest rest) => ",
@@ -1066,10 +1066,10 @@ impl Specification {
             type_src: concat!(
                 "forall (G : ListType KExpr) (G2 : ListType KExpr), CtxDefEq G G2 -> ",
                 "forall (i : Nat) (A : KExpr), ",
-                "Eq (OptionType KExpr) (ctx_lookup G i) (OptionType.some KExpr A) -> ",
+                "@Eq (OptionType KExpr) (ctx_lookup G i) (@OptionType.some KExpr A) -> ",
                 "forall (R : Type), ",
                 "(forall (A2 : KExpr), ",
-                "Eq (OptionType KExpr) (ctx_lookup G2 i) (OptionType.some KExpr A2) -> ",
+                "@Eq (OptionType KExpr) (ctx_lookup G2 i) (@OptionType.some KExpr A2) -> ",
                 "DefEq A A2 -> R) -> R",
             )
             .to_string(),
@@ -1212,7 +1212,7 @@ impl Specification {
             self.add_recursive_def(
                 &format!(
                     "def {name} (e : KExpr) (d : KExpr) : KExpr := \
-                     KExpr.rec (fun (_ : KExpr) => KExpr) {arms} e"
+                     @KExpr.rec (fun (_ : KExpr) => KExpr) {arms} e"
                 ),
                 &format!("{doc} (default d off-shape). Subject-reduction bundle."),
             )?;
@@ -1270,7 +1270,7 @@ impl Specification {
                 "forall (R : Type), ",
                 "(forall (B : KExpr) (u : Level), ",
                 "TypingCtxConv tenv G A (KExpr.sort u) -> ",
-                "TypingCtxConv tenv (ListType.cons KExpr A G) b B -> ",
+                "TypingCtxConv tenv (@ListType.cons KExpr A G) b B -> ",
                 "DefEq (KExpr.pi A B) T -> R) -> R",
             )
             .to_string(),
@@ -1310,7 +1310,7 @@ impl Specification {
                 "forall (R : Type), ",
                 "(forall (n : Level) (m : Level), ",
                 "TypingCtxConv tenv G A (KExpr.sort n) -> ",
-                "TypingCtxConv tenv (ListType.cons KExpr A G) B (KExpr.sort m) -> ",
+                "TypingCtxConv tenv (@ListType.cons KExpr A G) B (KExpr.sort m) -> ",
                 "DefEq (KExpr.sort (Level.imax n m)) T -> R) -> R",
             )
             .to_string(),
@@ -1368,13 +1368,13 @@ impl Specification {
                 name: name.to_string(),
                 type_src: format!(
                     "forall {binders} (R : Type), \
-                     Eq KExpr {lhs} (KExpr.let_ ty val body) -> R"
+                     @Eq KExpr {lhs} (KExpr.let_ ty val body) -> R"
                 ),
                 value_src: Some(format!(
                     "fun {binders} (R : Type) \
-                     (h : Eq KExpr {lhs} (KExpr.let_ ty val body)) => \
+                     (h : @Eq KExpr {lhs} (KExpr.let_ ty val body)) => \
                      Empty.rec (fun (_ : Empty) => R) \
-                     (Eq.substType KExpr {discr} {lhs} (KExpr.let_ ty val body) h Nat.zero)",
+                     (@Eq.substType KExpr {discr} {lhs} (KExpr.let_ ty val body) h Nat.zero)",
                     discr = SRB_KEXPR_NOT_LET,
                 )),
                 is_axiom: false,
@@ -1405,7 +1405,7 @@ impl Specification {
                 "(forall (Bg : KExpr) (ug : Level), ",
                 "TypingCtxConv tenv G ty (KExpr.sort ug) -> ",
                 "TypingCtxConv tenv G v ty -> ",
-                "TypingCtxConv tenv (ListType.cons KExpr ty G) b Bg -> ",
+                "TypingCtxConv tenv (@ListType.cons KExpr ty G) b Bg -> ",
                 "DefEq (instantiate Bg v) T -> R) -> R",
             )
             .to_string(),
@@ -1452,26 +1452,26 @@ impl Specification {
             name: "opt_case_type".to_string(),
             type_src: concat!(
                 "forall (T : Type) (o : OptionType T) (C : Type), ",
-                "(Eq (OptionType T) o (OptionType.none T) -> C) -> ",
-                "(forall (x : T), Eq (OptionType T) o (OptionType.some T x) -> C) -> C",
+                "(@Eq (OptionType T) o (@OptionType.none T) -> C) -> ",
+                "(forall (x : T), @Eq (OptionType T) o (@OptionType.some T x) -> C) -> C",
             )
             .to_string(),
             value_src: Some(
                 concat!(
                     "fun (T : Type) (o : OptionType T) (C : Type) => ",
-                    "OptionType.rec T ",
+                    "@OptionType.rec T ",
                     "(fun (o2 : OptionType T) => ",
-                    "(Eq (OptionType T) o2 (OptionType.none T) -> C) -> ",
-                    "(forall (x : T), Eq (OptionType T) o2 (OptionType.some T x) -> C) -> C) ",
-                    "(fun (kn : Eq (OptionType T) (OptionType.none T) (OptionType.none T) -> C) ",
+                    "(@Eq (OptionType T) o2 (@OptionType.none T) -> C) -> ",
+                    "(forall (x : T), @Eq (OptionType T) o2 (@OptionType.some T x) -> C) -> C) ",
+                    "(fun (kn : @Eq (OptionType T) (@OptionType.none T) (@OptionType.none T) -> C) ",
                     "(_ks : forall (x : T), ",
-                    "Eq (OptionType T) (OptionType.none T) (OptionType.some T x) -> C) => ",
-                    "kn (Eq.refl (OptionType T) (OptionType.none T))) ",
+                    "@Eq (OptionType T) (@OptionType.none T) (@OptionType.some T x) -> C) => ",
+                    "kn (@Eq.refl (OptionType T) (@OptionType.none T))) ",
                     "(fun (x : T) ",
-                    "(_kn : Eq (OptionType T) (OptionType.some T x) (OptionType.none T) -> C) ",
+                    "(_kn : @Eq (OptionType T) (@OptionType.some T x) (@OptionType.none T) -> C) ",
                     "(ks : forall (y : T), ",
-                    "Eq (OptionType T) (OptionType.some T x) (OptionType.some T y) -> C) => ",
-                    "ks x (Eq.refl (OptionType T) (OptionType.some T x))) ",
+                    "@Eq (OptionType T) (@OptionType.some T x) (@OptionType.some T y) -> C) => ",
+                    "ks x (@Eq.refl (OptionType T) (@OptionType.some T x))) ",
                     "o",
                 )
                 .to_string(),
@@ -1737,7 +1737,7 @@ impl Specification {
                     "(wr : RecEnvWellformed (red_rec the_red_env)) ",
                     "(G : ListType KExpr) (e : KExpr) (e' : KExpr) (T : KExpr) ",
                     "(h : TypingCtxConv tenv G e T) (hs : whnf_step e e') => ",
-                    "whnf_step.rec e e' ",
+                    "@whnf_step.rec e e' ",
                     "(subject_reduction_ctx_motive e e') ",
                     "(fun (hb : beta_reduces e e') => ",
                     "fun (tenv2 : KDeclEnv) ",
@@ -1794,65 +1794,65 @@ fn ctx_def_eq_lookup_value() -> String {
     let kont = |g2: &str, i: &str, a: &str| {
         format!(
             "(forall (A2 : KExpr), \
-             Eq (OptionType KExpr) (ctx_lookup {g2} {i}) (OptionType.some KExpr A2) -> \
+             @Eq (OptionType KExpr) (ctx_lookup {g2} {i}) (@OptionType.some KExpr A2) -> \
              DefEq {a} A2 -> R)"
         )
     };
     let motive = format!(
         "(fun (G : ListType KExpr) (G2 : ListType KExpr) (_ : CtxDefEq G G2) => \
          forall (i : Nat) (A : KExpr), \
-         Eq (OptionType KExpr) (ctx_lookup G i) (OptionType.some KExpr A) -> \
+         @Eq (OptionType KExpr) (ctx_lookup G i) (@OptionType.some KExpr A) -> \
          forall (R : Type), {k} -> R)",
         k = kont("G2", "i", "A")
     );
     let nil_arm = format!(
         "(fun (i : Nat) (A : KExpr) \
-         (hlk : Eq (OptionType KExpr) (ctx_lookup (ListType.nil KExpr) i) \
-         (OptionType.some KExpr A)) \
+         (hlk : @Eq (OptionType KExpr) (ctx_lookup (@ListType.nil KExpr) i) \
+         (@OptionType.some KExpr A)) \
          (R : Type) (_k : {k}) => \
          option_none_ne_some_type KExpr A R hlk)",
-        k = kont("(ListType.nil KExpr)", "i", "A")
+        k = kont("(@ListType.nil KExpr)", "i", "A")
     );
     let cons_zero = format!(
         "(fun (A : KExpr) \
-         (hlk : Eq (OptionType KExpr) (ctx_lookup (ListType.cons KExpr A0 G) Nat.zero) \
-         (OptionType.some KExpr A)) \
+         (hlk : @Eq (OptionType KExpr) (ctx_lookup (@ListType.cons KExpr A0 G) Nat.zero) \
+         (@OptionType.some KExpr A)) \
          (R : Type) (k : {k}) => \
-         k A02 (Eq.refl (OptionType KExpr) (OptionType.some KExpr A02)) \
-         (Eq.substType KExpr (fun (X : KExpr) => DefEq X A02) A0 A \
+         k A02 (@Eq.refl (OptionType KExpr) (@OptionType.some KExpr A02)) \
+         (@Eq.substType KExpr (fun (X : KExpr) => DefEq X A02) A0 A \
          (option_some_inj KExpr A0 A hlk) hd))",
-        k = kont("(ListType.cons KExpr A02 G2)", "Nat.zero", "A")
+        k = kont("(@ListType.cons KExpr A02 G2)", "Nat.zero", "A")
     );
     let cons_succ = format!(
         "(fun (j : Nat) (_ihm : forall (A : KExpr), \
-         Eq (OptionType KExpr) (ctx_lookup (ListType.cons KExpr A0 G) j) \
-         (OptionType.some KExpr A) -> forall (R : Type), {kj} -> R) \
+         @Eq (OptionType KExpr) (ctx_lookup (@ListType.cons KExpr A0 G) j) \
+         (@OptionType.some KExpr A) -> forall (R : Type), {kj} -> R) \
          (A : KExpr) \
-         (hlk : Eq (OptionType KExpr) (ctx_lookup (ListType.cons KExpr A0 G) (Nat.succ j)) \
-         (OptionType.some KExpr A)) \
+         (hlk : @Eq (OptionType KExpr) (ctx_lookup (@ListType.cons KExpr A0 G) (Nat.succ j)) \
+         (@OptionType.some KExpr A)) \
          (R : Type) (k : {ks}) => \
          ihc j A hlk R k)",
-        kj = kont("(ListType.cons KExpr A02 G2)", "j", "A"),
-        ks = kont("(ListType.cons KExpr A02 G2)", "(Nat.succ j)", "A")
+        kj = kont("(@ListType.cons KExpr A02 G2)", "j", "A"),
+        ks = kont("(@ListType.cons KExpr A02 G2)", "(Nat.succ j)", "A")
     );
     let cons_arm = format!(
         "(fun (A0 : KExpr) (A02 : KExpr) (G : ListType KExpr) (G2 : ListType KExpr) \
          (hd : DefEq A0 A02) (_hctx : CtxDefEq G G2) \
          (ihc : forall (i : Nat) (A : KExpr), \
-         Eq (OptionType KExpr) (ctx_lookup G i) (OptionType.some KExpr A) -> \
+         @Eq (OptionType KExpr) (ctx_lookup G i) (@OptionType.some KExpr A) -> \
          forall (R : Type), {ki} -> R) => \
-         fun (i : Nat) => Nat.rec \
+         fun (i : Nat) => @Nat.rec \
          (fun (m : Nat) => forall (A : KExpr), \
-         Eq (OptionType KExpr) (ctx_lookup (ListType.cons KExpr A0 G) m) \
-         (OptionType.some KExpr A) -> \
+         @Eq (OptionType KExpr) (ctx_lookup (@ListType.cons KExpr A0 G) m) \
+         (@OptionType.some KExpr A) -> \
          forall (R : Type), {km} -> R) \
          {cons_zero} {cons_succ} i)",
         ki = kont("G2", "i", "A"),
-        km = kont("(ListType.cons KExpr A02 G2)", "m", "A")
+        km = kont("(@ListType.cons KExpr A02 G2)", "m", "A")
     );
     format!(
         "fun (G0 : ListType KExpr) (G20 : ListType KExpr) (hctx0 : CtxDefEq G0 G20) => \
-         CtxDefEq.rec {motive} {nil_arm} {cons_arm} G0 G20 hctx0"
+         @CtxDefEq.rec {motive} {nil_arm} {cons_arm} G0 G20 hctx0"
     )
 }
 
@@ -1863,47 +1863,47 @@ fn ctx_conv_value() -> String {
         format!(
             "(fun (G : ListType KExpr) (n : Nat) \
              (G2 : ListType KExpr) (_hctx : CtxDefEq G G2) => \
-             TypingCtxConv.{rule} tenv G2 n)"
+             @TypingCtxConv.{rule} tenv G2 n)"
         )
     });
     let motive = "(fun (G : ListType KExpr) (e : KExpr) (T : KExpr) \
          (_ : TypingCtxConv tenv G e T) => \
          forall (G2 : ListType KExpr), CtxDefEq G G2 -> TypingCtxConv tenv G2 e T)";
     let var_arm = "(fun (G : ListType KExpr) (i : Nat) (A : KExpr) \
-         (hlk : Eq (OptionType KExpr) (ctx_lookup G i) (OptionType.some KExpr A)) \
+         (hlk : @Eq (OptionType KExpr) (ctx_lookup G i) (@OptionType.some KExpr A)) \
          (G2 : ListType KExpr) (hctx : CtxDefEq G G2) => \
          ctx_def_eq_lookup G G2 hctx i A hlk \
          (TypingCtxConv tenv G2 (KExpr.bvar i) (lift_at A Nat.zero (Nat.succ i))) \
          (fun (A2 : KExpr) \
-         (hlk2 : Eq (OptionType KExpr) (ctx_lookup G2 i) (OptionType.some KExpr A2)) \
+         (hlk2 : @Eq (OptionType KExpr) (ctx_lookup G2 i) (@OptionType.some KExpr A2)) \
          (hd : DefEq A A2) => \
-         TypingCtxConv.conv tenv G2 (KExpr.bvar i) \
+         @TypingCtxConv.conv tenv G2 (KExpr.bvar i) \
          (lift_at A2 Nat.zero (Nat.succ i)) (lift_at A Nat.zero (Nat.succ i)) \
-         (TypingCtxConv.var tenv G2 i A2 hlk2) \
+         (@TypingCtxConv.var tenv G2 i A2 hlk2) \
          (def_eq_respects_lift_at_gen A2 A (Nat.succ i) hf (DefEq.symm A A2 hd) Nat.zero)))";
     let sort_arm = "(fun (G : ListType KExpr) (n : Level) \
-         (G2 : ListType KExpr) (_hctx : CtxDefEq G G2) => TypingCtxConv.sort tenv G2 n)";
+         (G2 : ListType KExpr) (_hctx : CtxDefEq G G2) => @TypingCtxConv.sort tenv G2 n)";
     let pi_arm = "(fun (G : ListType KExpr) (A : KExpr) (B : KExpr) (n : Level) (m : Level) \
          (_hA : TypingCtxConv tenv G A (KExpr.sort n)) \
-         (_hB : TypingCtxConv tenv (ListType.cons KExpr A G) B (KExpr.sort m)) \
+         (_hB : TypingCtxConv tenv (@ListType.cons KExpr A G) B (KExpr.sort m)) \
          (ihA : forall (G2 : ListType KExpr), CtxDefEq G G2 -> \
          TypingCtxConv tenv G2 A (KExpr.sort n)) \
-         (ihB : forall (G2 : ListType KExpr), CtxDefEq (ListType.cons KExpr A G) G2 -> \
+         (ihB : forall (G2 : ListType KExpr), CtxDefEq (@ListType.cons KExpr A G) G2 -> \
          TypingCtxConv tenv G2 B (KExpr.sort m)) \
          (G2 : ListType KExpr) (hctx : CtxDefEq G G2) => \
-         TypingCtxConv.pi tenv G2 A B n m (ihA G2 hctx) \
-         (ihB (ListType.cons KExpr A G2) \
+         @TypingCtxConv.pi tenv G2 A B n m (ihA G2 hctx) \
+         (ihB (@ListType.cons KExpr A G2) \
          (CtxDefEq.cons A A G G2 (DefEq.refl A) hctx)))";
     let lam_arm = "(fun (G : ListType KExpr) (A : KExpr) (b : KExpr) (B : KExpr) (u : Level) \
          (_hA : TypingCtxConv tenv G A (KExpr.sort u)) \
-         (_hb : TypingCtxConv tenv (ListType.cons KExpr A G) b B) \
+         (_hb : TypingCtxConv tenv (@ListType.cons KExpr A G) b B) \
          (ihA : forall (G2 : ListType KExpr), CtxDefEq G G2 -> \
          TypingCtxConv tenv G2 A (KExpr.sort u)) \
-         (ihb : forall (G2 : ListType KExpr), CtxDefEq (ListType.cons KExpr A G) G2 -> \
+         (ihb : forall (G2 : ListType KExpr), CtxDefEq (@ListType.cons KExpr A G) G2 -> \
          TypingCtxConv tenv G2 b B) \
          (G2 : ListType KExpr) (hctx : CtxDefEq G G2) => \
-         TypingCtxConv.lam tenv G2 A b B u (ihA G2 hctx) \
-         (ihb (ListType.cons KExpr A G2) \
+         @TypingCtxConv.lam tenv G2 A b B u (ihA G2 hctx) \
+         (ihb (@ListType.cons KExpr A G2) \
          (CtxDefEq.cons A A G G2 (DefEq.refl A) hctx)))";
     let app_arm = "(fun (G : ListType KExpr) (f : KExpr) (a : KExpr) (A : KExpr) (B : KExpr) \
          (_hf : TypingCtxConv tenv G f (KExpr.pi A B)) \
@@ -1913,38 +1913,38 @@ fn ctx_conv_value() -> String {
          (iha : forall (G2 : ListType KExpr), CtxDefEq G G2 -> \
          TypingCtxConv tenv G2 a A) \
          (G2 : ListType KExpr) (hctx : CtxDefEq G G2) => \
-         TypingCtxConv.app tenv G2 f a A B (ihf G2 hctx) (iha G2 hctx))";
+         @TypingCtxConv.app tenv G2 f a A B (ihf G2 hctx) (iha G2 hctx))";
     let const_arm = "(fun (G : ListType KExpr) (n : Name) (us : ListType Level) (A : KExpr) \
-         (hA : Eq (OptionType KExpr) (kdecl_type_at tenv n us) (OptionType.some KExpr A)) \
+         (hA : @Eq (OptionType KExpr) (kdecl_type_at tenv n us) (@OptionType.some KExpr A)) \
          (G2 : ListType KExpr) (_hctx : CtxDefEq G G2) => \
-         TypingCtxConv.const tenv G2 n us A hA)";
+         @TypingCtxConv.const tenv G2 n us A hA)";
     let conv_arm = "(fun (G : ListType KExpr) (e : KExpr) (A : KExpr) (B : KExpr) \
          (_h1 : TypingCtxConv tenv G e A) (hd : DefEq A B) \
          (ih1 : forall (G2 : ListType KExpr), CtxDefEq G G2 -> \
          TypingCtxConv tenv G2 e A) \
          (G2 : ListType KExpr) (hctx : CtxDefEq G G2) => \
-         TypingCtxConv.conv tenv G2 e A B (ih1 G2 hctx) hd)";
+         @TypingCtxConv.conv tenv G2 e A B (ih1 G2 hctx) hd)";
     let let_arm = "(fun (G : ListType KExpr) (ty : KExpr) (v : KExpr) (b : KExpr) \
          (B : KExpr) (u : Level) \
          (_hty : TypingCtxConv tenv G ty (KExpr.sort u)) \
          (_hv : TypingCtxConv tenv G v ty) \
-         (_hb : TypingCtxConv tenv (ListType.cons KExpr ty G) b B) \
+         (_hb : TypingCtxConv tenv (@ListType.cons KExpr ty G) b B) \
          (ihty : forall (G2 : ListType KExpr), CtxDefEq G G2 -> \
          TypingCtxConv tenv G2 ty (KExpr.sort u)) \
          (ihv : forall (G2 : ListType KExpr), CtxDefEq G G2 -> \
          TypingCtxConv tenv G2 v ty) \
-         (ihb : forall (G2 : ListType KExpr), CtxDefEq (ListType.cons KExpr ty G) G2 -> \
+         (ihb : forall (G2 : ListType KExpr), CtxDefEq (@ListType.cons KExpr ty G) G2 -> \
          TypingCtxConv tenv G2 b B) \
          (G2 : ListType KExpr) (hctx : CtxDefEq G G2) => \
-         TypingCtxConv.let_ tenv G2 ty v b B u (ihty G2 hctx) (ihv G2 hctx) \
-         (ihb (ListType.cons KExpr ty G2) \
+         @TypingCtxConv.let_ tenv G2 ty v b B u (ihty G2 hctx) (ihv G2 hctx) \
+         (ihb (@ListType.cons KExpr ty G2) \
          (CtxDefEq.cons ty ty G G2 (DefEq.refl ty) hctx)))";
     format!(
         "fun (tenv : KDeclEnv) \
          (hf : RedEnvFaithful the_red_env) \
          (G0 : ListType KExpr) (G20 : ListType KExpr) (e0 : KExpr) (T0 : KExpr) \
          (h0 : TypingCtxConv tenv G0 e0 T0) (hctx0 : CtxDefEq G0 G20) => \
-         TypingCtxConv.rec tenv {motive} \
+         @TypingCtxConv.rec tenv {motive} \
          {var_arm} {sort_arm} {pi_arm} {lam_arm} {app_arm} {const_arm} {conv_arm} \
          {let_arm} \
          {literal_arms} G0 e0 T0 h0 G20 hctx0"
@@ -1972,78 +1972,78 @@ fn ctx_app_gen_value() -> String {
     let motive = format!(
         "(fun (G : ListType KExpr) (e : KExpr) (T : KExpr) \
          (_ : TypingCtxConv tenv G e T) => \
-         forall (f0 : KExpr) (a0 : KExpr), Eq KExpr e (KExpr.app f0 a0) -> \
+         forall (f0 : KExpr) (a0 : KExpr), @Eq KExpr e (KExpr.app f0 a0) -> \
          forall (R : Type), {k} -> R)",
         k = kont("f0", "a0", "T")
     );
     let var_arm = format!(
         "(fun (G : ListType KExpr) (i : Nat) (A : KExpr) \
-         (_hlk : Eq (OptionType KExpr) (ctx_lookup G i) (OptionType.some KExpr A)) \
-         (f0 : KExpr) (a0 : KExpr) (heq : Eq KExpr (KExpr.bvar i) (KExpr.app f0 a0)) \
+         (_hlk : @Eq (OptionType KExpr) (ctx_lookup G i) (@OptionType.some KExpr A)) \
+         (f0 : KExpr) (a0 : KExpr) (heq : @Eq KExpr (KExpr.bvar i) (KExpr.app f0 a0)) \
          (R : Type) (_k : {k}) => \
          app_ne_bvar f0 a0 i R \
-         (Eq.symm KExpr (KExpr.bvar i) (KExpr.app f0 a0) heq))",
+         (@Eq.symm KExpr (KExpr.bvar i) (KExpr.app f0 a0) heq))",
         k = kont("f0", "a0", "(lift_at A Nat.zero (Nat.succ i))")
     );
     let sort_arm = format!(
         "(fun (G : ListType KExpr) (n : Level) \
-         (f0 : KExpr) (a0 : KExpr) (heq : Eq KExpr (KExpr.sort n) (KExpr.app f0 a0)) \
+         (f0 : KExpr) (a0 : KExpr) (heq : @Eq KExpr (KExpr.sort n) (KExpr.app f0 a0)) \
          (R : Type) (_k : {k}) => sort_ne_app n f0 a0 R heq)",
         k = kont("f0", "a0", "(KExpr.sort (Level.succ n))")
     );
     let pi_arm = format!(
         "(fun (G : ListType KExpr) (A : KExpr) (B : KExpr) (n : Level) (m : Level) \
          (_hA : TypingCtxConv tenv G A (KExpr.sort n)) \
-         (_hB : TypingCtxConv tenv (ListType.cons KExpr A G) B (KExpr.sort m)) \
-         (_ihA : forall (f0 : KExpr) (a0 : KExpr), Eq KExpr A (KExpr.app f0 a0) -> \
+         (_hB : TypingCtxConv tenv (@ListType.cons KExpr A G) B (KExpr.sort m)) \
+         (_ihA : forall (f0 : KExpr) (a0 : KExpr), @Eq KExpr A (KExpr.app f0 a0) -> \
          forall (R : Type), {kA} -> R) \
-         (_ihB : forall (f0 : KExpr) (a0 : KExpr), Eq KExpr B (KExpr.app f0 a0) -> \
+         (_ihB : forall (f0 : KExpr) (a0 : KExpr), @Eq KExpr B (KExpr.app f0 a0) -> \
          forall (R : Type), {kB} -> R) \
          (f0 : KExpr) (a0 : KExpr) \
-         (heq : Eq KExpr (KExpr.pi A B) (KExpr.app f0 a0)) \
+         (heq : @Eq KExpr (KExpr.pi A B) (KExpr.app f0 a0)) \
          (R : Type) (_k : {kt}) => pi_ne_app A B f0 a0 R heq)",
         kA = kont_ctx_app_inner("f0", "a0", "(KExpr.sort n)", "G"),
-        kB = kont_ctx_app_inner("f0", "a0", "(KExpr.sort m)", "(ListType.cons KExpr A G)"),
+        kB = kont_ctx_app_inner("f0", "a0", "(KExpr.sort m)", "(@ListType.cons KExpr A G)"),
         kt = kont("f0", "a0", "(KExpr.sort (Level.imax n m))")
     );
     let lam_arm = format!(
         "(fun (G : ListType KExpr) (A : KExpr) (b : KExpr) (B : KExpr) (u : Level) \
          (_hA : TypingCtxConv tenv G A (KExpr.sort u)) \
-         (_hb : TypingCtxConv tenv (ListType.cons KExpr A G) b B) \
-         (_ihA : forall (f0 : KExpr) (a0 : KExpr), Eq KExpr A (KExpr.app f0 a0) -> \
+         (_hb : TypingCtxConv tenv (@ListType.cons KExpr A G) b B) \
+         (_ihA : forall (f0 : KExpr) (a0 : KExpr), @Eq KExpr A (KExpr.app f0 a0) -> \
          forall (R : Type), {kA} -> R) \
-         (_ihb : forall (f0 : KExpr) (a0 : KExpr), Eq KExpr b (KExpr.app f0 a0) -> \
+         (_ihb : forall (f0 : KExpr) (a0 : KExpr), @Eq KExpr b (KExpr.app f0 a0) -> \
          forall (R : Type), {kb} -> R) \
          (f0 : KExpr) (a0 : KExpr) \
-         (heq : Eq KExpr (KExpr.lam A b) (KExpr.app f0 a0)) \
+         (heq : @Eq KExpr (KExpr.lam A b) (KExpr.app f0 a0)) \
          (R : Type) (_k : {kt}) => lam_ne_app A b f0 a0 R heq)",
         kA = kont_ctx_app_inner("f0", "a0", "(KExpr.sort u)", "G"),
-        kb = kont_ctx_app_inner("f0", "a0", "B", "(ListType.cons KExpr A G)"),
+        kb = kont_ctx_app_inner("f0", "a0", "B", "(@ListType.cons KExpr A G)"),
         kt = kont("f0", "a0", "(KExpr.pi A B)")
     );
     let app_arm = format!(
         "(fun (G : ListType KExpr) (f : KExpr) (a : KExpr) (A : KExpr) (B : KExpr) \
          (hfp : TypingCtxConv tenv G f (KExpr.pi A B)) \
          (hap : TypingCtxConv tenv G a A) \
-         (_ihf : forall (f0 : KExpr) (a0 : KExpr), Eq KExpr f (KExpr.app f0 a0) -> \
+         (_ihf : forall (f0 : KExpr) (a0 : KExpr), @Eq KExpr f (KExpr.app f0 a0) -> \
          forall (R : Type), {kf} -> R) \
-         (_iha : forall (f0 : KExpr) (a0 : KExpr), Eq KExpr a (KExpr.app f0 a0) -> \
+         (_iha : forall (f0 : KExpr) (a0 : KExpr), @Eq KExpr a (KExpr.app f0 a0) -> \
          forall (R : Type), {ka} -> R) \
          (f0 : KExpr) (a0 : KExpr) \
-         (heq : Eq KExpr (KExpr.app f a) (KExpr.app f0 a0)) \
+         (heq : @Eq KExpr (KExpr.app f a) (KExpr.app f0 a0)) \
          (R : Type) (k : {kt}) => \
          k A B \
-         (Eq.substType KExpr \
+         (@Eq.substType KExpr \
          (fun (x : KExpr) => TypingCtxConv tenv G x (KExpr.pi A B)) f f0 \
-         (Eq.cong KExpr KExpr (fun (x : KExpr) => srb_app_fn x f) \
+         (@Eq.cong KExpr KExpr (fun (x : KExpr) => srb_app_fn x f) \
          (KExpr.app f a) (KExpr.app f0 a0) heq) hfp) \
-         (Eq.substType KExpr \
+         (@Eq.substType KExpr \
          (fun (x : KExpr) => TypingCtxConv tenv G x A) a a0 \
-         (Eq.cong KExpr KExpr (fun (x : KExpr) => srb_app_arg x a) \
+         (@Eq.cong KExpr KExpr (fun (x : KExpr) => srb_app_arg x a) \
          (KExpr.app f a) (KExpr.app f0 a0) heq) hap) \
-         (Eq.substType KExpr \
+         (@Eq.substType KExpr \
          (fun (x : KExpr) => DefEq (instantiate B x) (instantiate B a)) a a0 \
-         (Eq.cong KExpr KExpr (fun (x : KExpr) => srb_app_arg x a) \
+         (@Eq.cong KExpr KExpr (fun (x : KExpr) => srb_app_arg x a) \
          (KExpr.app f a) (KExpr.app f0 a0) heq) \
          (DefEq.refl (instantiate B a))))",
         kf = kont_ctx_app_inner("f0", "a0", "(KExpr.pi A B)", "G"),
@@ -2052,18 +2052,18 @@ fn ctx_app_gen_value() -> String {
     );
     let const_arm = format!(
         "(fun (G : ListType KExpr) (n : Name) (us : ListType Level) (A : KExpr) \
-         (_hA : Eq (OptionType KExpr) (kdecl_type_at tenv n us) (OptionType.some KExpr A)) \
+         (_hA : @Eq (OptionType KExpr) (kdecl_type_at tenv n us) (@OptionType.some KExpr A)) \
          (f0 : KExpr) (a0 : KExpr) \
-         (heq : Eq KExpr (KExpr.const n us) (KExpr.app f0 a0)) \
+         (heq : @Eq KExpr (KExpr.const n us) (KExpr.app f0 a0)) \
          (R : Type) (_k : {kt}) => const_ne_app n us f0 a0 R heq)",
         kt = kont("f0", "a0", "A")
     );
     let conv_arm = format!(
         "(fun (G : ListType KExpr) (e : KExpr) (A : KExpr) (B : KExpr) \
          (_h1 : TypingCtxConv tenv G e A) (hd : DefEq A B) \
-         (ih1 : forall (f0 : KExpr) (a0 : KExpr), Eq KExpr e (KExpr.app f0 a0) -> \
+         (ih1 : forall (f0 : KExpr) (a0 : KExpr), @Eq KExpr e (KExpr.app f0 a0) -> \
          forall (R : Type), {kA} -> R) \
-         (f0 : KExpr) (a0 : KExpr) (heq : Eq KExpr e (KExpr.app f0 a0)) \
+         (f0 : KExpr) (a0 : KExpr) (heq : @Eq KExpr e (KExpr.app f0 a0)) \
          (R : Type) (k : {kB}) => \
          ih1 f0 a0 heq R \
          (fun (A2 : KExpr) (B2 : KExpr) \
@@ -2079,29 +2079,29 @@ fn ctx_app_gen_value() -> String {
          (B : KExpr) (u : Level) \
          (_hty : TypingCtxConv tenv G ty (KExpr.sort u)) \
          (_hv : TypingCtxConv tenv G v ty) \
-         (_hb : TypingCtxConv tenv (ListType.cons KExpr ty G) b B) \
-         (_ihty : forall (f0 : KExpr) (a0 : KExpr), Eq KExpr ty (KExpr.app f0 a0) -> \
+         (_hb : TypingCtxConv tenv (@ListType.cons KExpr ty G) b B) \
+         (_ihty : forall (f0 : KExpr) (a0 : KExpr), @Eq KExpr ty (KExpr.app f0 a0) -> \
          forall (R : Type), {kty} -> R) \
-         (_ihv : forall (f0 : KExpr) (a0 : KExpr), Eq KExpr v (KExpr.app f0 a0) -> \
+         (_ihv : forall (f0 : KExpr) (a0 : KExpr), @Eq KExpr v (KExpr.app f0 a0) -> \
          forall (R : Type), {kv} -> R) \
-         (_ihb : forall (f0 : KExpr) (a0 : KExpr), Eq KExpr b (KExpr.app f0 a0) -> \
+         (_ihb : forall (f0 : KExpr) (a0 : KExpr), @Eq KExpr b (KExpr.app f0 a0) -> \
          forall (R : Type), {kb} -> R) \
          (f0 : KExpr) (a0 : KExpr) \
-         (heq : Eq KExpr (KExpr.let_ ty v b) (KExpr.app f0 a0)) \
+         (heq : @Eq KExpr (KExpr.let_ ty v b) (KExpr.app f0 a0)) \
          (R : Type) (_k : {kt}) => let_ne_app ty v b f0 a0 R heq)",
         kty = kont_ctx_app_inner("f0", "a0", "(KExpr.sort u)", "G"),
         kv = kont_ctx_app_inner("f0", "a0", "ty", "G"),
-        kb = kont_ctx_app_inner("f0", "a0", "B", "(ListType.cons KExpr ty G)"),
+        kb = kont_ctx_app_inner("f0", "a0", "B", "(@ListType.cons KExpr ty G)"),
         kt = kont("f0", "a0", "(instantiate B v)")
     );
     format!(
         "fun (tenv : KDeclEnv) \
          (G : ListType KExpr) (f : KExpr) (a : KExpr) (T : KExpr) \
          (h : TypingCtxConv tenv G (KExpr.app f a) T) => \
-         TypingCtxConv.rec tenv {motive} \
+         @TypingCtxConv.rec tenv {motive} \
          {var_arm} {sort_arm} {pi_arm} {lam_arm} {app_arm} {const_arm} {conv_arm} \
          {let_arm} \
-         {literal_arms} G (KExpr.app f a) T h f a (Eq.refl KExpr (KExpr.app f a))"
+         {literal_arms} G (KExpr.app f a) T h f a (@Eq.refl KExpr (KExpr.app f a))"
     )
 }
 
@@ -2124,7 +2124,7 @@ fn ctx_lam_gen_value() -> String {
         format!(
             "(forall (Bg : KExpr) (ug : Level), \
              TypingCtxConv tenv {g} {a0} (KExpr.sort ug) -> \
-             TypingCtxConv tenv (ListType.cons KExpr {a0} {g}) {b0} Bg -> \
+             TypingCtxConv tenv (@ListType.cons KExpr {a0} {g}) {b0} Bg -> \
              DefEq (KExpr.pi {a0} Bg) {t} -> R)"
         )
     };
@@ -2135,83 +2135,83 @@ fn ctx_lam_gen_value() -> String {
     let motive = format!(
         "(fun (G : ListType KExpr) (e : KExpr) (T : KExpr) \
          (_ : TypingCtxConv tenv G e T) => \
-         forall (A0 : KExpr) (b0 : KExpr), Eq KExpr e (KExpr.lam A0 b0) -> \
+         forall (A0 : KExpr) (b0 : KExpr), @Eq KExpr e (KExpr.lam A0 b0) -> \
          forall (R : Type), {k} -> R)",
         k = kont("A0", "b0", "T", "G")
     );
     let var_arm = format!(
         "(fun (G : ListType KExpr) (i : Nat) (A : KExpr) \
-         (_hlk : Eq (OptionType KExpr) (ctx_lookup G i) (OptionType.some KExpr A)) \
-         (A0 : KExpr) (b0 : KExpr) (heq : Eq KExpr (KExpr.bvar i) (KExpr.lam A0 b0)) \
+         (_hlk : @Eq (OptionType KExpr) (ctx_lookup G i) (@OptionType.some KExpr A)) \
+         (A0 : KExpr) (b0 : KExpr) (heq : @Eq KExpr (KExpr.bvar i) (KExpr.lam A0 b0)) \
          (R : Type) (_k : {k}) => \
          lam_ne_bvar A0 b0 i R \
-         (Eq.symm KExpr (KExpr.bvar i) (KExpr.lam A0 b0) heq))",
+         (@Eq.symm KExpr (KExpr.bvar i) (KExpr.lam A0 b0) heq))",
         k = kont("A0", "b0", "(lift_at A Nat.zero (Nat.succ i))", "G")
     );
     let sort_arm = format!(
         "(fun (G : ListType KExpr) (n : Level) \
-         (A0 : KExpr) (b0 : KExpr) (heq : Eq KExpr (KExpr.sort n) (KExpr.lam A0 b0)) \
+         (A0 : KExpr) (b0 : KExpr) (heq : @Eq KExpr (KExpr.sort n) (KExpr.lam A0 b0)) \
          (R : Type) (_k : {k}) => sort_ne_lam n A0 b0 R heq)",
         k = kont("A0", "b0", "(KExpr.sort (Level.succ n))", "G")
     );
     let pi_arm = format!(
         "(fun (G : ListType KExpr) (A : KExpr) (B : KExpr) (n : Level) (m : Level) \
          (_hA : TypingCtxConv tenv G A (KExpr.sort n)) \
-         (_hB : TypingCtxConv tenv (ListType.cons KExpr A G) B (KExpr.sort m)) \
-         (_ihA : forall (A0 : KExpr) (b0 : KExpr), Eq KExpr A (KExpr.lam A0 b0) -> \
+         (_hB : TypingCtxConv tenv (@ListType.cons KExpr A G) B (KExpr.sort m)) \
+         (_ihA : forall (A0 : KExpr) (b0 : KExpr), @Eq KExpr A (KExpr.lam A0 b0) -> \
          forall (R : Type), {kA} -> R) \
-         (_ihB : forall (A0 : KExpr) (b0 : KExpr), Eq KExpr B (KExpr.lam A0 b0) -> \
+         (_ihB : forall (A0 : KExpr) (b0 : KExpr), @Eq KExpr B (KExpr.lam A0 b0) -> \
          forall (R : Type), {kB} -> R) \
          (A0 : KExpr) (b0 : KExpr) \
-         (heq : Eq KExpr (KExpr.pi A B) (KExpr.lam A0 b0)) \
+         (heq : @Eq KExpr (KExpr.pi A B) (KExpr.lam A0 b0)) \
          (R : Type) (_k : {kt}) => pi_ne_lam A B A0 b0 R heq)",
         kA = kont("A0", "b0", "(KExpr.sort n)", "G"),
-        kB = kont("A0", "b0", "(KExpr.sort m)", "(ListType.cons KExpr A G)"),
+        kB = kont("A0", "b0", "(KExpr.sort m)", "(@ListType.cons KExpr A G)"),
         kt = kont("A0", "b0", "(KExpr.sort (Level.imax n m))", "G")
     );
     let lam_arm = format!(
         "(fun (G : ListType KExpr) (A : KExpr) (b : KExpr) (B : KExpr) (u : Level) \
          (hA : TypingCtxConv tenv G A (KExpr.sort u)) \
-         (hb : TypingCtxConv tenv (ListType.cons KExpr A G) b B) \
-         (_ihA : forall (A0 : KExpr) (b0 : KExpr), Eq KExpr A (KExpr.lam A0 b0) -> \
+         (hb : TypingCtxConv tenv (@ListType.cons KExpr A G) b B) \
+         (_ihA : forall (A0 : KExpr) (b0 : KExpr), @Eq KExpr A (KExpr.lam A0 b0) -> \
          forall (R : Type), {kA} -> R) \
-         (_ihb : forall (A0 : KExpr) (b0 : KExpr), Eq KExpr b (KExpr.lam A0 b0) -> \
+         (_ihb : forall (A0 : KExpr) (b0 : KExpr), @Eq KExpr b (KExpr.lam A0 b0) -> \
          forall (R : Type), {kb} -> R) \
          (A0 : KExpr) (b0 : KExpr) \
-         (heq : Eq KExpr (KExpr.lam A b) (KExpr.lam A0 b0)) \
+         (heq : @Eq KExpr (KExpr.lam A b) (KExpr.lam A0 b0)) \
          (R : Type) (k : {kt}) => \
          k B u \
-         (Eq.substType KExpr \
+         (@Eq.substType KExpr \
          (fun (x : KExpr) => TypingCtxConv tenv G x (KExpr.sort u)) A A0 \
-         (Eq.cong KExpr KExpr (fun (x : KExpr) => srb_lam_ty x A) \
+         (@Eq.cong KExpr KExpr (fun (x : KExpr) => srb_lam_ty x A) \
          (KExpr.lam A b) (KExpr.lam A0 b0) heq) hA) \
-         (Eq.substType KExpr \
-         (fun (x : KExpr) => TypingCtxConv tenv (ListType.cons KExpr x G) b0 B) A A0 \
-         (Eq.cong KExpr KExpr (fun (x : KExpr) => srb_lam_ty x A) \
+         (@Eq.substType KExpr \
+         (fun (x : KExpr) => TypingCtxConv tenv (@ListType.cons KExpr x G) b0 B) A A0 \
+         (@Eq.cong KExpr KExpr (fun (x : KExpr) => srb_lam_ty x A) \
          (KExpr.lam A b) (KExpr.lam A0 b0) heq) \
-         (Eq.substType KExpr \
-         (fun (y : KExpr) => TypingCtxConv tenv (ListType.cons KExpr A G) y B) b b0 \
-         (Eq.cong KExpr KExpr (fun (y : KExpr) => srb_lam_body y b) \
+         (@Eq.substType KExpr \
+         (fun (y : KExpr) => TypingCtxConv tenv (@ListType.cons KExpr A G) y B) b b0 \
+         (@Eq.cong KExpr KExpr (fun (y : KExpr) => srb_lam_body y b) \
          (KExpr.lam A b) (KExpr.lam A0 b0) heq) hb)) \
-         (Eq.substType KExpr \
+         (@Eq.substType KExpr \
          (fun (x : KExpr) => DefEq (KExpr.pi x B) (KExpr.pi A B)) A A0 \
-         (Eq.cong KExpr KExpr (fun (x : KExpr) => srb_lam_ty x A) \
+         (@Eq.cong KExpr KExpr (fun (x : KExpr) => srb_lam_ty x A) \
          (KExpr.lam A b) (KExpr.lam A0 b0) heq) \
          (DefEq.refl (KExpr.pi A B))))",
         kA = kont("A0", "b0", "(KExpr.sort u)", "G"),
-        kb = kont("A0", "b0", "B", "(ListType.cons KExpr A G)"),
+        kb = kont("A0", "b0", "B", "(@ListType.cons KExpr A G)"),
         kt = kont("A0", "b0", "(KExpr.pi A B)", "G")
     );
     let app_arm = format!(
         "(fun (G : ListType KExpr) (f : KExpr) (a : KExpr) (A : KExpr) (B : KExpr) \
          (_hf : TypingCtxConv tenv G f (KExpr.pi A B)) \
          (_ha : TypingCtxConv tenv G a A) \
-         (_ihf : forall (A0 : KExpr) (b0 : KExpr), Eq KExpr f (KExpr.lam A0 b0) -> \
+         (_ihf : forall (A0 : KExpr) (b0 : KExpr), @Eq KExpr f (KExpr.lam A0 b0) -> \
          forall (R : Type), {kf} -> R) \
-         (_iha : forall (A0 : KExpr) (b0 : KExpr), Eq KExpr a (KExpr.lam A0 b0) -> \
+         (_iha : forall (A0 : KExpr) (b0 : KExpr), @Eq KExpr a (KExpr.lam A0 b0) -> \
          forall (R : Type), {ka} -> R) \
          (A0 : KExpr) (b0 : KExpr) \
-         (heq : Eq KExpr (KExpr.app f a) (KExpr.lam A0 b0)) \
+         (heq : @Eq KExpr (KExpr.app f a) (KExpr.lam A0 b0)) \
          (R : Type) (_k : {kt}) => app_ne_lam f a A0 b0 R heq)",
         kf = kont("A0", "b0", "(KExpr.pi A B)", "G"),
         ka = kont("A0", "b0", "A", "G"),
@@ -2219,23 +2219,23 @@ fn ctx_lam_gen_value() -> String {
     );
     let const_arm = format!(
         "(fun (G : ListType KExpr) (n : Name) (us : ListType Level) (A : KExpr) \
-         (_hA : Eq (OptionType KExpr) (kdecl_type_at tenv n us) (OptionType.some KExpr A)) \
+         (_hA : @Eq (OptionType KExpr) (kdecl_type_at tenv n us) (@OptionType.some KExpr A)) \
          (A0 : KExpr) (b0 : KExpr) \
-         (heq : Eq KExpr (KExpr.const n us) (KExpr.lam A0 b0)) \
+         (heq : @Eq KExpr (KExpr.const n us) (KExpr.lam A0 b0)) \
          (R : Type) (_k : {kt}) => const_ne_lam n us A0 b0 R heq)",
         kt = kont("A0", "b0", "A", "G")
     );
     let conv_arm = format!(
         "(fun (G : ListType KExpr) (e : KExpr) (A : KExpr) (B : KExpr) \
          (_h1 : TypingCtxConv tenv G e A) (hd : DefEq A B) \
-         (ih1 : forall (A0 : KExpr) (b0 : KExpr), Eq KExpr e (KExpr.lam A0 b0) -> \
+         (ih1 : forall (A0 : KExpr) (b0 : KExpr), @Eq KExpr e (KExpr.lam A0 b0) -> \
          forall (R : Type), {kA} -> R) \
-         (A0 : KExpr) (b0 : KExpr) (heq : Eq KExpr e (KExpr.lam A0 b0)) \
+         (A0 : KExpr) (b0 : KExpr) (heq : @Eq KExpr e (KExpr.lam A0 b0)) \
          (R : Type) (k : {kB}) => \
          ih1 A0 b0 heq R \
          (fun (B2 : KExpr) (u2 : Level) \
          (h1 : TypingCtxConv tenv G A0 (KExpr.sort u2)) \
-         (h2 : TypingCtxConv tenv (ListType.cons KExpr A0 G) b0 B2) \
+         (h2 : TypingCtxConv tenv (@ListType.cons KExpr A0 G) b0 B2) \
          (hd2 : DefEq (KExpr.pi A0 B2) A) => \
          k B2 u2 h1 h2 (DefEq.trans (KExpr.pi A0 B2) A B hd2 hd)))",
         kA = kont("A0", "b0", "A", "G"),
@@ -2246,29 +2246,29 @@ fn ctx_lam_gen_value() -> String {
          (B : KExpr) (u : Level) \
          (_hty : TypingCtxConv tenv G ty (KExpr.sort u)) \
          (_hv : TypingCtxConv tenv G v ty) \
-         (_hlb : TypingCtxConv tenv (ListType.cons KExpr ty G) lb B) \
-         (_ihty : forall (A0 : KExpr) (b0 : KExpr), Eq KExpr ty (KExpr.lam A0 b0) -> \
+         (_hlb : TypingCtxConv tenv (@ListType.cons KExpr ty G) lb B) \
+         (_ihty : forall (A0 : KExpr) (b0 : KExpr), @Eq KExpr ty (KExpr.lam A0 b0) -> \
          forall (R : Type), {kty} -> R) \
-         (_ihv : forall (A0 : KExpr) (b0 : KExpr), Eq KExpr v (KExpr.lam A0 b0) -> \
+         (_ihv : forall (A0 : KExpr) (b0 : KExpr), @Eq KExpr v (KExpr.lam A0 b0) -> \
          forall (R : Type), {kv} -> R) \
-         (_ihlb : forall (A0 : KExpr) (b0 : KExpr), Eq KExpr lb (KExpr.lam A0 b0) -> \
+         (_ihlb : forall (A0 : KExpr) (b0 : KExpr), @Eq KExpr lb (KExpr.lam A0 b0) -> \
          forall (R : Type), {klb} -> R) \
          (A0 : KExpr) (b0 : KExpr) \
-         (heq : Eq KExpr (KExpr.let_ ty v lb) (KExpr.lam A0 b0)) \
+         (heq : @Eq KExpr (KExpr.let_ ty v lb) (KExpr.lam A0 b0)) \
          (R : Type) (_k : {kt}) => let_ne_lam ty v lb A0 b0 R heq)",
         kty = kont("A0", "b0", "(KExpr.sort u)", "G"),
         kv = kont("A0", "b0", "ty", "G"),
-        klb = kont("A0", "b0", "B", "(ListType.cons KExpr ty G)"),
+        klb = kont("A0", "b0", "B", "(@ListType.cons KExpr ty G)"),
         kt = kont("A0", "b0", "(instantiate B v)", "G")
     );
     format!(
         "fun (tenv : KDeclEnv) \
          (G : ListType KExpr) (A : KExpr) (b : KExpr) (T : KExpr) \
          (h : TypingCtxConv tenv G (KExpr.lam A b) T) => \
-         TypingCtxConv.rec tenv {motive} \
+         @TypingCtxConv.rec tenv {motive} \
          {var_arm} {sort_arm} {pi_arm} {lam_arm} {app_arm} {const_arm} {conv_arm} \
          {let_arm} \
-         {literal_arms} G (KExpr.lam A b) T h A b (Eq.refl KExpr (KExpr.lam A b))"
+         {literal_arms} G (KExpr.lam A b) T h A b (@Eq.refl KExpr (KExpr.lam A b))"
     )
 }
 
@@ -2279,7 +2279,7 @@ fn ctx_pi_gen_value() -> String {
         format!(
             "(forall (ng : Level) (mg : Level), \
              TypingCtxConv tenv {g} {a0} (KExpr.sort ng) -> \
-             TypingCtxConv tenv (ListType.cons KExpr {a0} {g}) {b0} (KExpr.sort mg) -> \
+             TypingCtxConv tenv (@ListType.cons KExpr {a0} {g}) {b0} (KExpr.sort mg) -> \
              DefEq (KExpr.sort (Level.imax ng mg)) {t} -> R)"
         )
     };
@@ -2290,81 +2290,81 @@ fn ctx_pi_gen_value() -> String {
     let motive = format!(
         "(fun (G : ListType KExpr) (e : KExpr) (T : KExpr) \
          (_ : TypingCtxConv tenv G e T) => \
-         forall (A0 : KExpr) (B0 : KExpr), Eq KExpr e (KExpr.pi A0 B0) -> \
+         forall (A0 : KExpr) (B0 : KExpr), @Eq KExpr e (KExpr.pi A0 B0) -> \
          forall (R : Type), {k} -> R)",
         k = kont("A0", "B0", "T", "G")
     );
     let var_arm = format!(
         "(fun (G : ListType KExpr) (i : Nat) (A : KExpr) \
-         (_hlk : Eq (OptionType KExpr) (ctx_lookup G i) (OptionType.some KExpr A)) \
-         (A0 : KExpr) (B0 : KExpr) (heq : Eq KExpr (KExpr.bvar i) (KExpr.pi A0 B0)) \
+         (_hlk : @Eq (OptionType KExpr) (ctx_lookup G i) (@OptionType.some KExpr A)) \
+         (A0 : KExpr) (B0 : KExpr) (heq : @Eq KExpr (KExpr.bvar i) (KExpr.pi A0 B0)) \
          (R : Type) (_k : {k}) => \
          pi_ne_bvar A0 B0 i R \
-         (Eq.symm KExpr (KExpr.bvar i) (KExpr.pi A0 B0) heq))",
+         (@Eq.symm KExpr (KExpr.bvar i) (KExpr.pi A0 B0) heq))",
         k = kont("A0", "B0", "(lift_at A Nat.zero (Nat.succ i))", "G")
     );
     let sort_arm = format!(
         "(fun (G : ListType KExpr) (n : Level) \
-         (A0 : KExpr) (B0 : KExpr) (heq : Eq KExpr (KExpr.sort n) (KExpr.pi A0 B0)) \
+         (A0 : KExpr) (B0 : KExpr) (heq : @Eq KExpr (KExpr.sort n) (KExpr.pi A0 B0)) \
          (R : Type) (_k : {k}) => sort_ne_pi n A0 B0 R heq)",
         k = kont("A0", "B0", "(KExpr.sort (Level.succ n))", "G")
     );
     let pi_arm = format!(
         "(fun (G : ListType KExpr) (A : KExpr) (B : KExpr) (n : Level) (m : Level) \
          (hA : TypingCtxConv tenv G A (KExpr.sort n)) \
-         (hB : TypingCtxConv tenv (ListType.cons KExpr A G) B (KExpr.sort m)) \
-         (_ihA : forall (A0 : KExpr) (B0 : KExpr), Eq KExpr A (KExpr.pi A0 B0) -> \
+         (hB : TypingCtxConv tenv (@ListType.cons KExpr A G) B (KExpr.sort m)) \
+         (_ihA : forall (A0 : KExpr) (B0 : KExpr), @Eq KExpr A (KExpr.pi A0 B0) -> \
          forall (R : Type), {kA} -> R) \
-         (_ihB : forall (A0 : KExpr) (B0 : KExpr), Eq KExpr B (KExpr.pi A0 B0) -> \
+         (_ihB : forall (A0 : KExpr) (B0 : KExpr), @Eq KExpr B (KExpr.pi A0 B0) -> \
          forall (R : Type), {kB} -> R) \
          (A0 : KExpr) (B0 : KExpr) \
-         (heq : Eq KExpr (KExpr.pi A B) (KExpr.pi A0 B0)) \
+         (heq : @Eq KExpr (KExpr.pi A B) (KExpr.pi A0 B0)) \
          (R : Type) (k : {kt}) => \
          k n m \
-         (Eq.substType KExpr \
+         (@Eq.substType KExpr \
          (fun (x : KExpr) => TypingCtxConv tenv G x (KExpr.sort n)) A A0 \
-         (Eq.cong KExpr KExpr (fun (x : KExpr) => srb_pi_dom x A) \
+         (@Eq.cong KExpr KExpr (fun (x : KExpr) => srb_pi_dom x A) \
          (KExpr.pi A B) (KExpr.pi A0 B0) heq) hA) \
-         (Eq.substType KExpr \
-         (fun (x : KExpr) => TypingCtxConv tenv (ListType.cons KExpr x G) B0 \
+         (@Eq.substType KExpr \
+         (fun (x : KExpr) => TypingCtxConv tenv (@ListType.cons KExpr x G) B0 \
          (KExpr.sort m)) A A0 \
-         (Eq.cong KExpr KExpr (fun (x : KExpr) => srb_pi_dom x A) \
+         (@Eq.cong KExpr KExpr (fun (x : KExpr) => srb_pi_dom x A) \
          (KExpr.pi A B) (KExpr.pi A0 B0) heq) \
-         (Eq.substType KExpr \
-         (fun (y : KExpr) => TypingCtxConv tenv (ListType.cons KExpr A G) y \
+         (@Eq.substType KExpr \
+         (fun (y : KExpr) => TypingCtxConv tenv (@ListType.cons KExpr A G) y \
          (KExpr.sort m)) B B0 \
-         (Eq.cong KExpr KExpr (fun (y : KExpr) => srb_pi_cod y B) \
+         (@Eq.cong KExpr KExpr (fun (y : KExpr) => srb_pi_cod y B) \
          (KExpr.pi A B) (KExpr.pi A0 B0) heq) hB)) \
          (DefEq.refl (KExpr.sort (Level.imax n m))))",
         kA = kont("A0", "B0", "(KExpr.sort n)", "G"),
-        kB = kont("A0", "B0", "(KExpr.sort m)", "(ListType.cons KExpr A G)"),
+        kB = kont("A0", "B0", "(KExpr.sort m)", "(@ListType.cons KExpr A G)"),
         kt = kont("A0", "B0", "(KExpr.sort (Level.imax n m))", "G")
     );
     let lam_arm = format!(
         "(fun (G : ListType KExpr) (A : KExpr) (b : KExpr) (B : KExpr) (u : Level) \
          (_hA : TypingCtxConv tenv G A (KExpr.sort u)) \
-         (_hb : TypingCtxConv tenv (ListType.cons KExpr A G) b B) \
-         (_ihA : forall (A0 : KExpr) (B0 : KExpr), Eq KExpr A (KExpr.pi A0 B0) -> \
+         (_hb : TypingCtxConv tenv (@ListType.cons KExpr A G) b B) \
+         (_ihA : forall (A0 : KExpr) (B0 : KExpr), @Eq KExpr A (KExpr.pi A0 B0) -> \
          forall (R : Type), {kA} -> R) \
-         (_ihb : forall (A0 : KExpr) (B0 : KExpr), Eq KExpr b (KExpr.pi A0 B0) -> \
+         (_ihb : forall (A0 : KExpr) (B0 : KExpr), @Eq KExpr b (KExpr.pi A0 B0) -> \
          forall (R : Type), {kb} -> R) \
          (A0 : KExpr) (B0 : KExpr) \
-         (heq : Eq KExpr (KExpr.lam A b) (KExpr.pi A0 B0)) \
+         (heq : @Eq KExpr (KExpr.lam A b) (KExpr.pi A0 B0)) \
          (R : Type) (_k : {kt}) => lam_ne_pi A b A0 B0 R heq)",
         kA = kont("A0", "B0", "(KExpr.sort u)", "G"),
-        kb = kont("A0", "B0", "B", "(ListType.cons KExpr A G)"),
+        kb = kont("A0", "B0", "B", "(@ListType.cons KExpr A G)"),
         kt = kont("A0", "B0", "(KExpr.pi A B)", "G")
     );
     let app_arm = format!(
         "(fun (G : ListType KExpr) (f : KExpr) (a : KExpr) (A : KExpr) (B : KExpr) \
          (_hf : TypingCtxConv tenv G f (KExpr.pi A B)) \
          (_ha : TypingCtxConv tenv G a A) \
-         (_ihf : forall (A0 : KExpr) (B0 : KExpr), Eq KExpr f (KExpr.pi A0 B0) -> \
+         (_ihf : forall (A0 : KExpr) (B0 : KExpr), @Eq KExpr f (KExpr.pi A0 B0) -> \
          forall (R : Type), {kf} -> R) \
-         (_iha : forall (A0 : KExpr) (B0 : KExpr), Eq KExpr a (KExpr.pi A0 B0) -> \
+         (_iha : forall (A0 : KExpr) (B0 : KExpr), @Eq KExpr a (KExpr.pi A0 B0) -> \
          forall (R : Type), {ka} -> R) \
          (A0 : KExpr) (B0 : KExpr) \
-         (heq : Eq KExpr (KExpr.app f a) (KExpr.pi A0 B0)) \
+         (heq : @Eq KExpr (KExpr.app f a) (KExpr.pi A0 B0)) \
          (R : Type) (_k : {kt}) => app_ne_pi f a A0 B0 R heq)",
         kf = kont("A0", "B0", "(KExpr.pi A B)", "G"),
         ka = kont("A0", "B0", "A", "G"),
@@ -2372,23 +2372,23 @@ fn ctx_pi_gen_value() -> String {
     );
     let const_arm = format!(
         "(fun (G : ListType KExpr) (n : Name) (us : ListType Level) (A : KExpr) \
-         (_hA : Eq (OptionType KExpr) (kdecl_type_at tenv n us) (OptionType.some KExpr A)) \
+         (_hA : @Eq (OptionType KExpr) (kdecl_type_at tenv n us) (@OptionType.some KExpr A)) \
          (A0 : KExpr) (B0 : KExpr) \
-         (heq : Eq KExpr (KExpr.const n us) (KExpr.pi A0 B0)) \
+         (heq : @Eq KExpr (KExpr.const n us) (KExpr.pi A0 B0)) \
          (R : Type) (_k : {kt}) => const_ne_pi n us A0 B0 R heq)",
         kt = kont("A0", "B0", "A", "G")
     );
     let conv_arm = format!(
         "(fun (G : ListType KExpr) (e : KExpr) (A : KExpr) (B : KExpr) \
          (_h1 : TypingCtxConv tenv G e A) (hd : DefEq A B) \
-         (ih1 : forall (A0 : KExpr) (B0 : KExpr), Eq KExpr e (KExpr.pi A0 B0) -> \
+         (ih1 : forall (A0 : KExpr) (B0 : KExpr), @Eq KExpr e (KExpr.pi A0 B0) -> \
          forall (R : Type), {kA} -> R) \
-         (A0 : KExpr) (B0 : KExpr) (heq : Eq KExpr e (KExpr.pi A0 B0)) \
+         (A0 : KExpr) (B0 : KExpr) (heq : @Eq KExpr e (KExpr.pi A0 B0)) \
          (R : Type) (k : {kB}) => \
          ih1 A0 B0 heq R \
          (fun (n2 : Level) (m2 : Level) \
          (h1 : TypingCtxConv tenv G A0 (KExpr.sort n2)) \
-         (h2 : TypingCtxConv tenv (ListType.cons KExpr A0 G) B0 (KExpr.sort m2)) \
+         (h2 : TypingCtxConv tenv (@ListType.cons KExpr A0 G) B0 (KExpr.sort m2)) \
          (hd2 : DefEq (KExpr.sort (Level.imax n2 m2)) A) => \
          k n2 m2 h1 h2 (DefEq.trans (KExpr.sort (Level.imax n2 m2)) A B hd2 hd)))",
         kA = kont("A0", "B0", "A", "G"),
@@ -2399,29 +2399,29 @@ fn ctx_pi_gen_value() -> String {
          (Bl : KExpr) (u : Level) \
          (_hty : TypingCtxConv tenv G ty (KExpr.sort u)) \
          (_hv : TypingCtxConv tenv G v ty) \
-         (_hb : TypingCtxConv tenv (ListType.cons KExpr ty G) b Bl) \
-         (_ihty : forall (A0 : KExpr) (B0 : KExpr), Eq KExpr ty (KExpr.pi A0 B0) -> \
+         (_hb : TypingCtxConv tenv (@ListType.cons KExpr ty G) b Bl) \
+         (_ihty : forall (A0 : KExpr) (B0 : KExpr), @Eq KExpr ty (KExpr.pi A0 B0) -> \
          forall (R : Type), {kty} -> R) \
-         (_ihv : forall (A0 : KExpr) (B0 : KExpr), Eq KExpr v (KExpr.pi A0 B0) -> \
+         (_ihv : forall (A0 : KExpr) (B0 : KExpr), @Eq KExpr v (KExpr.pi A0 B0) -> \
          forall (R : Type), {kv} -> R) \
-         (_ihb : forall (A0 : KExpr) (B0 : KExpr), Eq KExpr b (KExpr.pi A0 B0) -> \
+         (_ihb : forall (A0 : KExpr) (B0 : KExpr), @Eq KExpr b (KExpr.pi A0 B0) -> \
          forall (R : Type), {kb} -> R) \
          (A0 : KExpr) (B0 : KExpr) \
-         (heq : Eq KExpr (KExpr.let_ ty v b) (KExpr.pi A0 B0)) \
+         (heq : @Eq KExpr (KExpr.let_ ty v b) (KExpr.pi A0 B0)) \
          (R : Type) (_k : {kt}) => let_ne_pi ty v b A0 B0 R heq)",
         kty = kont("A0", "B0", "(KExpr.sort u)", "G"),
         kv = kont("A0", "B0", "ty", "G"),
-        kb = kont("A0", "B0", "Bl", "(ListType.cons KExpr ty G)"),
+        kb = kont("A0", "B0", "Bl", "(@ListType.cons KExpr ty G)"),
         kt = kont("A0", "B0", "(instantiate Bl v)", "G")
     );
     format!(
         "fun (tenv : KDeclEnv) \
          (G : ListType KExpr) (A : KExpr) (B : KExpr) (T : KExpr) \
          (h : TypingCtxConv tenv G (KExpr.pi A B) T) => \
-         TypingCtxConv.rec tenv {motive} \
+         @TypingCtxConv.rec tenv {motive} \
          {var_arm} {sort_arm} {pi_arm} {lam_arm} {app_arm} {const_arm} {conv_arm} \
          {let_arm} \
-         {literal_arms} G (KExpr.pi A B) T h A B (Eq.refl KExpr (KExpr.pi A B))"
+         {literal_arms} G (KExpr.pi A B) T h A B (@Eq.refl KExpr (KExpr.pi A B))"
     )
 }
 
@@ -2436,7 +2436,7 @@ fn ctx_let_gen_value() -> String {
             "(forall (Bg : KExpr) (ug : Level), \
              TypingCtxConv tenv {g} {ty0} (KExpr.sort ug) -> \
              TypingCtxConv tenv {g} {v0} {ty0} -> \
-             TypingCtxConv tenv (ListType.cons KExpr {ty0} {g}) {b0} Bg -> \
+             TypingCtxConv tenv (@ListType.cons KExpr {ty0} {g}) {b0} Bg -> \
              DefEq (instantiate Bg {v0}) {t} -> R)"
         )
     };
@@ -2449,35 +2449,35 @@ fn ctx_let_gen_value() -> String {
         "(fun (G : ListType KExpr) (e : KExpr) (T : KExpr) \
          (_ : TypingCtxConv tenv G e T) => \
          forall (ty0 : KExpr) (v0 : KExpr) (b0 : KExpr), \
-         Eq KExpr e (KExpr.let_ ty0 v0 b0) -> \
+         @Eq KExpr e (KExpr.let_ ty0 v0 b0) -> \
          forall (R : Type), {k} -> R)",
         k = kont("ty0", "v0", "b0", "T", "G")
     );
     let var_arm = format!(
         "(fun (G : ListType KExpr) (i : Nat) (A : KExpr) \
-         (_hlk : Eq (OptionType KExpr) (ctx_lookup G i) (OptionType.some KExpr A)) \
+         (_hlk : @Eq (OptionType KExpr) (ctx_lookup G i) (@OptionType.some KExpr A)) \
          (ty0 : KExpr) (v0 : KExpr) (b0 : KExpr) \
-         (heq : Eq KExpr (KExpr.bvar i) (KExpr.let_ ty0 v0 b0)) \
+         (heq : @Eq KExpr (KExpr.bvar i) (KExpr.let_ ty0 v0 b0)) \
          (R : Type) (_k : {k}) => srb_bvar_ne_let i ty0 v0 b0 R heq)",
         k = kont("ty0", "v0", "b0", "(lift_at A Nat.zero (Nat.succ i))", "G")
     );
     let sort_arm = format!(
         "(fun (G : ListType KExpr) (n : Level) \
          (ty0 : KExpr) (v0 : KExpr) (b0 : KExpr) \
-         (heq : Eq KExpr (KExpr.sort n) (KExpr.let_ ty0 v0 b0)) \
+         (heq : @Eq KExpr (KExpr.sort n) (KExpr.let_ ty0 v0 b0)) \
          (R : Type) (_k : {k}) => srb_sort_ne_let n ty0 v0 b0 R heq)",
         k = kont("ty0", "v0", "b0", "(KExpr.sort (Level.succ n))", "G")
     );
     let pi_arm = format!(
         "(fun (G : ListType KExpr) (A : KExpr) (B : KExpr) (n : Level) (m : Level) \
          (_hA : TypingCtxConv tenv G A (KExpr.sort n)) \
-         (_hB : TypingCtxConv tenv (ListType.cons KExpr A G) B (KExpr.sort m)) \
+         (_hB : TypingCtxConv tenv (@ListType.cons KExpr A G) B (KExpr.sort m)) \
          (_ihA : forall (ty0 : KExpr) (v0 : KExpr) (b0 : KExpr), \
-         Eq KExpr A (KExpr.let_ ty0 v0 b0) -> forall (R : Type), {kA} -> R) \
+         @Eq KExpr A (KExpr.let_ ty0 v0 b0) -> forall (R : Type), {kA} -> R) \
          (_ihB : forall (ty0 : KExpr) (v0 : KExpr) (b0 : KExpr), \
-         Eq KExpr B (KExpr.let_ ty0 v0 b0) -> forall (R : Type), {kB} -> R) \
+         @Eq KExpr B (KExpr.let_ ty0 v0 b0) -> forall (R : Type), {kB} -> R) \
          (ty0 : KExpr) (v0 : KExpr) (b0 : KExpr) \
-         (heq : Eq KExpr (KExpr.pi A B) (KExpr.let_ ty0 v0 b0)) \
+         (heq : @Eq KExpr (KExpr.pi A B) (KExpr.let_ ty0 v0 b0)) \
          (R : Type) (_k : {kt}) => pi_ne_let A B ty0 v0 b0 R heq)",
         kA = kont("ty0", "v0", "b0", "(KExpr.sort n)", "G"),
         kB = kont(
@@ -2485,23 +2485,23 @@ fn ctx_let_gen_value() -> String {
             "v0",
             "b0",
             "(KExpr.sort m)",
-            "(ListType.cons KExpr A G)"
+            "(@ListType.cons KExpr A G)"
         ),
         kt = kont("ty0", "v0", "b0", "(KExpr.sort (Level.imax n m))", "G")
     );
     let lam_arm = format!(
         "(fun (G : ListType KExpr) (A : KExpr) (b : KExpr) (B : KExpr) (u : Level) \
          (_hA : TypingCtxConv tenv G A (KExpr.sort u)) \
-         (_hb : TypingCtxConv tenv (ListType.cons KExpr A G) b B) \
+         (_hb : TypingCtxConv tenv (@ListType.cons KExpr A G) b B) \
          (_ihA : forall (ty0 : KExpr) (v0 : KExpr) (b0 : KExpr), \
-         Eq KExpr A (KExpr.let_ ty0 v0 b0) -> forall (R : Type), {kA} -> R) \
+         @Eq KExpr A (KExpr.let_ ty0 v0 b0) -> forall (R : Type), {kA} -> R) \
          (_ihb : forall (ty0 : KExpr) (v0 : KExpr) (b0 : KExpr), \
-         Eq KExpr b (KExpr.let_ ty0 v0 b0) -> forall (R : Type), {kb} -> R) \
+         @Eq KExpr b (KExpr.let_ ty0 v0 b0) -> forall (R : Type), {kb} -> R) \
          (ty0 : KExpr) (v0 : KExpr) (b0 : KExpr) \
-         (heq : Eq KExpr (KExpr.lam A b) (KExpr.let_ ty0 v0 b0)) \
+         (heq : @Eq KExpr (KExpr.lam A b) (KExpr.let_ ty0 v0 b0)) \
          (R : Type) (_k : {kt}) => lam_ne_let A b ty0 v0 b0 R heq)",
         kA = kont("ty0", "v0", "b0", "(KExpr.sort u)", "G"),
-        kb = kont("ty0", "v0", "b0", "B", "(ListType.cons KExpr A G)"),
+        kb = kont("ty0", "v0", "b0", "B", "(@ListType.cons KExpr A G)"),
         kt = kont("ty0", "v0", "b0", "(KExpr.pi A B)", "G")
     );
     let app_arm = format!(
@@ -2509,11 +2509,11 @@ fn ctx_let_gen_value() -> String {
          (_hf : TypingCtxConv tenv G f (KExpr.pi A B)) \
          (_ha : TypingCtxConv tenv G a A) \
          (_ihf : forall (ty0 : KExpr) (v0 : KExpr) (b0 : KExpr), \
-         Eq KExpr f (KExpr.let_ ty0 v0 b0) -> forall (R : Type), {kf} -> R) \
+         @Eq KExpr f (KExpr.let_ ty0 v0 b0) -> forall (R : Type), {kf} -> R) \
          (_iha : forall (ty0 : KExpr) (v0 : KExpr) (b0 : KExpr), \
-         Eq KExpr a (KExpr.let_ ty0 v0 b0) -> forall (R : Type), {ka} -> R) \
+         @Eq KExpr a (KExpr.let_ ty0 v0 b0) -> forall (R : Type), {ka} -> R) \
          (ty0 : KExpr) (v0 : KExpr) (b0 : KExpr) \
-         (heq : Eq KExpr (KExpr.app f a) (KExpr.let_ ty0 v0 b0)) \
+         (heq : @Eq KExpr (KExpr.app f a) (KExpr.let_ ty0 v0 b0)) \
          (R : Type) (_k : {kt}) => app_ne_let f a ty0 v0 b0 R heq)",
         kf = kont("ty0", "v0", "b0", "(KExpr.pi A B)", "G"),
         ka = kont("ty0", "v0", "b0", "A", "G"),
@@ -2521,9 +2521,9 @@ fn ctx_let_gen_value() -> String {
     );
     let const_arm = format!(
         "(fun (G : ListType KExpr) (n : Name) (us : ListType Level) (A : KExpr) \
-         (_hA : Eq (OptionType KExpr) (kdecl_type_at tenv n us) (OptionType.some KExpr A)) \
+         (_hA : @Eq (OptionType KExpr) (kdecl_type_at tenv n us) (@OptionType.some KExpr A)) \
          (ty0 : KExpr) (v0 : KExpr) (b0 : KExpr) \
-         (heq : Eq KExpr (KExpr.const n us) (KExpr.let_ ty0 v0 b0)) \
+         (heq : @Eq KExpr (KExpr.const n us) (KExpr.let_ ty0 v0 b0)) \
          (R : Type) (_k : {kt}) => srb_const_ne_let n us ty0 v0 b0 R heq)",
         kt = kont("ty0", "v0", "b0", "A", "G")
     );
@@ -2531,15 +2531,15 @@ fn ctx_let_gen_value() -> String {
         "(fun (G : ListType KExpr) (e : KExpr) (A : KExpr) (B : KExpr) \
          (_h1 : TypingCtxConv tenv G e A) (hd : DefEq A B) \
          (ih1 : forall (ty0 : KExpr) (v0 : KExpr) (b0 : KExpr), \
-         Eq KExpr e (KExpr.let_ ty0 v0 b0) -> forall (R : Type), {kA} -> R) \
+         @Eq KExpr e (KExpr.let_ ty0 v0 b0) -> forall (R : Type), {kA} -> R) \
          (ty0 : KExpr) (v0 : KExpr) (b0 : KExpr) \
-         (heq : Eq KExpr e (KExpr.let_ ty0 v0 b0)) \
+         (heq : @Eq KExpr e (KExpr.let_ ty0 v0 b0)) \
          (R : Type) (k : {kB}) => \
          ih1 ty0 v0 b0 heq R \
          (fun (B2 : KExpr) (u2 : Level) \
          (h1 : TypingCtxConv tenv G ty0 (KExpr.sort u2)) \
          (h2 : TypingCtxConv tenv G v0 ty0) \
-         (h3 : TypingCtxConv tenv (ListType.cons KExpr ty0 G) b0 B2) \
+         (h3 : TypingCtxConv tenv (@ListType.cons KExpr ty0 G) b0 B2) \
          (hd2 : DefEq (instantiate B2 v0) A) => \
          k B2 u2 h1 h2 h3 (DefEq.trans (instantiate B2 v0) A B hd2 hd)))",
         kA = kont("ty0", "v0", "b0", "A", "G"),
@@ -2550,49 +2550,49 @@ fn ctx_let_gen_value() -> String {
          (B : KExpr) (u : Level) \
          (hty : TypingCtxConv tenv G ty (KExpr.sort u)) \
          (hv : TypingCtxConv tenv G v ty) \
-         (hb : TypingCtxConv tenv (ListType.cons KExpr ty G) b B) \
+         (hb : TypingCtxConv tenv (@ListType.cons KExpr ty G) b B) \
          (_ihty : forall (ty0 : KExpr) (v0 : KExpr) (b0 : KExpr), \
-         Eq KExpr ty (KExpr.let_ ty0 v0 b0) -> forall (R : Type), {kty} -> R) \
+         @Eq KExpr ty (KExpr.let_ ty0 v0 b0) -> forall (R : Type), {kty} -> R) \
          (_ihv : forall (ty0 : KExpr) (v0 : KExpr) (b0 : KExpr), \
-         Eq KExpr v (KExpr.let_ ty0 v0 b0) -> forall (R : Type), {kv} -> R) \
+         @Eq KExpr v (KExpr.let_ ty0 v0 b0) -> forall (R : Type), {kv} -> R) \
          (_ihb : forall (ty0 : KExpr) (v0 : KExpr) (b0 : KExpr), \
-         Eq KExpr b (KExpr.let_ ty0 v0 b0) -> forall (R : Type), {kb} -> R) \
+         @Eq KExpr b (KExpr.let_ ty0 v0 b0) -> forall (R : Type), {kb} -> R) \
          (ty0 : KExpr) (v0 : KExpr) (b0 : KExpr) \
-         (heq : Eq KExpr (KExpr.let_ ty v b) (KExpr.let_ ty0 v0 b0)) \
+         (heq : @Eq KExpr (KExpr.let_ ty v b) (KExpr.let_ ty0 v0 b0)) \
          (R : Type) (k : {kt}) => \
          k B u \
-         (Eq.substType KExpr \
+         (@Eq.substType KExpr \
          (fun (x : KExpr) => TypingCtxConv tenv G x (KExpr.sort u)) ty ty0 \
          (let_inj_fst ty v b ty0 v0 b0 heq) hty) \
-         (Eq.substType KExpr \
+         (@Eq.substType KExpr \
          (fun (x : KExpr) => TypingCtxConv tenv G v0 x) ty ty0 \
          (let_inj_fst ty v b ty0 v0 b0 heq) \
-         (Eq.substType KExpr \
+         (@Eq.substType KExpr \
          (fun (y : KExpr) => TypingCtxConv tenv G y ty) v v0 \
          (let_inj_snd ty v b ty0 v0 b0 heq) hv)) \
-         (Eq.substType KExpr \
-         (fun (x : KExpr) => TypingCtxConv tenv (ListType.cons KExpr x G) b0 B) ty ty0 \
+         (@Eq.substType KExpr \
+         (fun (x : KExpr) => TypingCtxConv tenv (@ListType.cons KExpr x G) b0 B) ty ty0 \
          (let_inj_fst ty v b ty0 v0 b0 heq) \
-         (Eq.substType KExpr \
-         (fun (y : KExpr) => TypingCtxConv tenv (ListType.cons KExpr ty G) y B) b b0 \
+         (@Eq.substType KExpr \
+         (fun (y : KExpr) => TypingCtxConv tenv (@ListType.cons KExpr ty G) y B) b b0 \
          (let_inj_thd ty v b ty0 v0 b0 heq) hb)) \
-         (Eq.substType KExpr \
+         (@Eq.substType KExpr \
          (fun (x : KExpr) => DefEq (instantiate B x) (instantiate B v)) v v0 \
          (let_inj_snd ty v b ty0 v0 b0 heq) \
          (DefEq.refl (instantiate B v))))",
         kty = kont("ty0", "v0", "b0", "(KExpr.sort u)", "G"),
         kv = kont("ty0", "v0", "b0", "ty", "G"),
-        kb = kont("ty0", "v0", "b0", "B", "(ListType.cons KExpr ty G)"),
+        kb = kont("ty0", "v0", "b0", "B", "(@ListType.cons KExpr ty G)"),
         kt = kont("ty0", "v0", "b0", "(instantiate B v)", "G")
     );
     format!(
         "fun (tenv : KDeclEnv) \
          (G : ListType KExpr) (ty : KExpr) (v : KExpr) (b : KExpr) (T : KExpr) \
          (h : TypingCtxConv tenv G (KExpr.let_ ty v b) T) => \
-         TypingCtxConv.rec tenv {motive} \
+         @TypingCtxConv.rec tenv {motive} \
          {var_arm} {sort_arm} {pi_arm} {lam_arm} {app_arm} {const_arm} {conv_arm} \
          {let_arm} \
-         {literal_arms} G (KExpr.let_ ty v b) T h ty v b (Eq.refl KExpr (KExpr.let_ ty v b))"
+         {literal_arms} G (KExpr.let_ ty v b) T h ty v b (@Eq.refl KExpr (KExpr.let_ ty v b))"
     )
 }
 
@@ -2616,7 +2616,7 @@ fn delta_preserves_typing_ctx_value() -> String {
     // Off-shape heads: delta_reduct computes to none — absurd.
     let var_arm = format!(
         "(fun (G : ListType KExpr) (i : Nat) (A : KExpr) \
-         (_hlk : Eq (OptionType KExpr) (ctx_lookup G i) (OptionType.some KExpr A)) \
+         (_hlk : @Eq (OptionType KExpr) (ctx_lookup G i) (@OptionType.some KExpr A)) \
          (e2 : KExpr) (hs : delta_step {env} (KExpr.bvar i) e2) => \
          option_none_ne_some_type KExpr e2 \
          (TypingCtxConv tenv G e2 (lift_at A Nat.zero (Nat.succ i))) hs)"
@@ -2630,11 +2630,11 @@ fn delta_preserves_typing_ctx_value() -> String {
     let pi_arm = format!(
         "(fun (G : ListType KExpr) (A : KExpr) (B : KExpr) (n : Level) (m : Level) \
          (_hA : TypingCtxConv tenv G A (KExpr.sort n)) \
-         (_hB : TypingCtxConv tenv (ListType.cons KExpr A G) B (KExpr.sort m)) \
+         (_hB : TypingCtxConv tenv (@ListType.cons KExpr A G) B (KExpr.sort m)) \
          (_ihA : forall (e2 : KExpr), delta_step {env} A e2 -> \
          TypingCtxConv tenv G e2 (KExpr.sort n)) \
          (_ihB : forall (e2 : KExpr), delta_step {env} B e2 -> \
-         TypingCtxConv tenv (ListType.cons KExpr A G) e2 (KExpr.sort m)) \
+         TypingCtxConv tenv (@ListType.cons KExpr A G) e2 (KExpr.sort m)) \
          (e2 : KExpr) (hs : delta_step {env} (KExpr.pi A B) e2) => \
          option_none_ne_some_type KExpr e2 \
          (TypingCtxConv tenv G e2 (KExpr.sort (Level.imax n m))) hs)"
@@ -2642,11 +2642,11 @@ fn delta_preserves_typing_ctx_value() -> String {
     let lam_arm = format!(
         "(fun (G : ListType KExpr) (A : KExpr) (b : KExpr) (B : KExpr) (u : Level) \
          (_hA : TypingCtxConv tenv G A (KExpr.sort u)) \
-         (_hb : TypingCtxConv tenv (ListType.cons KExpr A G) b B) \
+         (_hb : TypingCtxConv tenv (@ListType.cons KExpr A G) b B) \
          (_ihA : forall (e2 : KExpr), delta_step {env} A e2 -> \
          TypingCtxConv tenv G e2 (KExpr.sort u)) \
          (_ihb : forall (e2 : KExpr), delta_step {env} b e2 -> \
-         TypingCtxConv tenv (ListType.cons KExpr A G) e2 B) \
+         TypingCtxConv tenv (@ListType.cons KExpr A G) e2 B) \
          (e2 : KExpr) (hs : delta_step {env} (KExpr.lam A b) e2) => \
          option_none_ne_some_type KExpr e2 \
          (TypingCtxConv tenv G e2 (KExpr.pi A B)) hs)"
@@ -2663,39 +2663,39 @@ fn delta_preserves_typing_ctx_value() -> String {
          delta_step_app_inv_type {env} f a e2 \
          (TypingCtxConv tenv G e2 (instantiate B a)) hs \
          (fun (f0 : KExpr) (hsf : delta_step {env} f f0) \
-         (heq : Eq KExpr e2 (KExpr.app f0 a)) => \
-         Eq.substType KExpr \
+         (heq : @Eq KExpr e2 (KExpr.app f0 a)) => \
+         @Eq.substType KExpr \
          (fun (z : KExpr) => TypingCtxConv tenv G z (instantiate B a)) \
          (KExpr.app f0 a) e2 \
-         (Eq.symm KExpr e2 (KExpr.app f0 a) heq) \
-         (TypingCtxConv.app tenv G f0 a A B (ihf f0 hsf) ha)))"
+         (@Eq.symm KExpr e2 (KExpr.app f0 a) heq) \
+         (@TypingCtxConv.app tenv G f0 a A B (ihf f0 hsf) ha)))"
     );
     // const head: resolve the lookup with opt_case_type; the some-case feeds
     // derived instantiated body typing from the stored schematic derivation.
-    let bind_body = "(fun (val : KExpr) => OptionType.some KExpr \
+    let bind_body = "(fun (val : KExpr) => @OptionType.some KExpr \
          (apply_spine (kapp_args (KExpr.const n us)) val))"
         .to_string();
     let const_arm = format!(
         "(fun (G : ListType KExpr) (n : Name) (us : ListType Level) (A : KExpr) \
-         (hA : Eq (OptionType KExpr) (kdecl_type_at tenv n us) (OptionType.some KExpr A)) \
+         (hA : @Eq (OptionType KExpr) (kdecl_type_at tenv n us) (@OptionType.some KExpr A)) \
          (e2 : KExpr) (hs : delta_step {env} (KExpr.const n us) e2) => \
          opt_case_type KExpr (kdef_value_at {env} n us) (TypingCtxConv tenv G e2 A) \
-         (fun (hnone : Eq (OptionType KExpr) (kdef_value_at {env} n us) (OptionType.none KExpr)) => \
+         (fun (hnone : @Eq (OptionType KExpr) (kdef_value_at {env} n us) (@OptionType.none KExpr)) => \
          option_none_ne_some_type KExpr e2 (TypingCtxConv tenv G e2 A) \
-         (Eq.subst (OptionType KExpr) \
-         (fun (o : OptionType KExpr) => Eq (OptionType KExpr) \
+         (@Eq.subst (OptionType KExpr) \
+         (fun (o : OptionType KExpr) => @Eq (OptionType KExpr) \
          (opt_bind KExpr KExpr o {bind_body}) \
-         (OptionType.some KExpr e2)) \
-         (kdef_value_at {env} n us) (OptionType.none KExpr) hnone hs)) \
+         (@OptionType.some KExpr e2)) \
+         (kdef_value_at {env} n us) (@OptionType.none KExpr) hnone hs)) \
          (fun (v : KExpr) \
-         (hsome : Eq (OptionType KExpr) (kdef_value_at {env} n us) (OptionType.some KExpr v)) => \
-         Eq.substType KExpr (fun (z : KExpr) => TypingCtxConv tenv G z A) v e2 \
+         (hsome : @Eq (OptionType KExpr) (kdef_value_at {env} n us) (@OptionType.some KExpr v)) => \
+         @Eq.substType KExpr (fun (z : KExpr) => TypingCtxConv tenv G z A) v e2 \
          (option_some_inj KExpr v e2 \
-         (Eq.subst (OptionType KExpr) \
-         (fun (o : OptionType KExpr) => Eq (OptionType KExpr) \
+         (@Eq.subst (OptionType KExpr) \
+         (fun (o : OptionType KExpr) => @Eq (OptionType KExpr) \
          (opt_bind KExpr KExpr o {bind_body}) \
-         (OptionType.some KExpr e2)) \
-         (kdef_value_at {env} n us) (OptionType.some KExpr v) hsome hs)) \
+         (@OptionType.some KExpr e2)) \
+         (kdef_value_at {env} n us) (@OptionType.some KExpr v) hsome hs)) \
          (tec_defval_typed tenv hf W n us v A hsome hA G)))"
     );
     let conv_arm = format!(
@@ -2704,7 +2704,7 @@ fn delta_preserves_typing_ctx_value() -> String {
          (ih1 : forall (e2 : KExpr), delta_step {env} e e2 -> \
          TypingCtxConv tenv G e2 A) \
          (e2 : KExpr) (hs : delta_step {env} e e2) => \
-         TypingCtxConv.conv tenv G e2 A B (ih1 e2 hs) hd)"
+         @TypingCtxConv.conv tenv G e2 A B (ih1 e2 hs) hd)"
     );
     // let_ head: a let is its own spine head, never a const head —
     // delta_reduct computes to none, absurd (same shape as the lam arm).
@@ -2713,13 +2713,13 @@ fn delta_preserves_typing_ctx_value() -> String {
          (B : KExpr) (u : Level) \
          (_hty : TypingCtxConv tenv G ty (KExpr.sort u)) \
          (_hv : TypingCtxConv tenv G v ty) \
-         (_hb : TypingCtxConv tenv (ListType.cons KExpr ty G) b B) \
+         (_hb : TypingCtxConv tenv (@ListType.cons KExpr ty G) b B) \
          (_ihty : forall (e2 : KExpr), delta_step {env} ty e2 -> \
          TypingCtxConv tenv G e2 (KExpr.sort u)) \
          (_ihv : forall (e2 : KExpr), delta_step {env} v e2 -> \
          TypingCtxConv tenv G e2 ty) \
          (_ihb : forall (e2 : KExpr), delta_step {env} b e2 -> \
-         TypingCtxConv tenv (ListType.cons KExpr ty G) e2 B) \
+         TypingCtxConv tenv (@ListType.cons KExpr ty G) e2 B) \
          (e2 : KExpr) (hs : delta_step {env} (KExpr.let_ ty v b) e2) => \
          option_none_ne_some_type KExpr e2 \
          (TypingCtxConv tenv G e2 (instantiate B v)) hs)"
@@ -2731,7 +2731,7 @@ fn delta_preserves_typing_ctx_value() -> String {
          (G0 : ListType KExpr) (e0 : KExpr) (T0 : KExpr) \
          (h0 : TypingCtxConv tenv G0 e0 T0) \
          (e02 : KExpr) (hr : delta_reduces e0 e02) => \
-         TypingCtxConv.rec tenv {motive} \
+         @TypingCtxConv.rec tenv {motive} \
          {var_arm} {sort_arm} {pi_arm} {lam_arm} {app_arm} {const_arm} {conv_arm} \
          {let_arm} \
          {literal_arms} G0 e0 T0 h0 e02 (delta_reduces_to_step e0 e02 hr)"
@@ -2758,11 +2758,11 @@ fn srb_beta_redex_preserves_value() -> String {
      (TypingCtxConv tenv G (instantiate b a) T) \
      (fun (B1 : KExpr) (u : Level) \
      (_hAsort : TypingCtxConv tenv G A (KExpr.sort u)) \
-     (hbody : TypingCtxConv tenv (ListType.cons KExpr A G) b B1) \
+     (hbody : TypingCtxConv tenv (@ListType.cons KExpr A G) b B1) \
      (hdefpi : DefEq (KExpr.pi A B1) (KExpr.pi A0 B0)) => \
-     TypingCtxConv.conv tenv G (instantiate b a) (instantiate B1 a) T \
+     @TypingCtxConv.conv tenv G (instantiate b a) (instantiate B1 a) T \
      (substitution_typing_ctx tenv hf W G A b B1 a hbody \
-     (TypingCtxConv.conv tenv G a A0 A harg \
+     (@TypingCtxConv.conv tenv G a A0 A harg \
      (DefEq.symm A A0 (pi_injectivity_def_eq_dom hf A A0 B1 B0 hdefpi)))) \
      (DefEq.trans (instantiate B1 a) (instantiate B0 a) T \
      (def_eq_respects_subst_at B1 B0 a Nat.zero wd wr \
@@ -2796,8 +2796,8 @@ fn beta_reduces_preserves_typing_ctx_value() -> String {
          (hfp : TypingCtxConv tenv G f (KExpr.pi A B)) \
          (hap : TypingCtxConv tenv G a A) \
          (hdefT : DefEq (instantiate B a) T) => \
-         TypingCtxConv.conv tenv G (KExpr.app f2 a) (instantiate B a) T \
-         (TypingCtxConv.app tenv G f2 a A B (ih G (KExpr.pi A B) hfp) hap) \
+         @TypingCtxConv.conv tenv G (KExpr.app f2 a) (instantiate B a) T \
+         (@TypingCtxConv.app tenv G f2 a A B (ih G (KExpr.pi A B) hfp) hap) \
          hdefT))",
         g = goal("(KExpr.app f2 a)")
     );
@@ -2812,8 +2812,8 @@ fn beta_reduces_preserves_typing_ctx_value() -> String {
          (hfp : TypingCtxConv tenv G f (KExpr.pi A B)) \
          (hap : TypingCtxConv tenv G a A) \
          (hdefT : DefEq (instantiate B a) T) => \
-         TypingCtxConv.conv tenv G (KExpr.app f a2) (instantiate B a2) T \
-         (TypingCtxConv.app tenv G f a2 A B hfp (ih G A hap)) \
+         @TypingCtxConv.conv tenv G (KExpr.app f a2) (instantiate B a2) T \
+         (@TypingCtxConv.app tenv G f a2 A B hfp (ih G A hap)) \
          (DefEq.trans (instantiate B a2) (instantiate B a) T \
          (def_eq_instantiate_arg_congr B a2 a hf \
          (DefEq.symm a a2 (beta_reduces_preserves_def_eq a a2 hs))) \
@@ -2829,11 +2829,11 @@ fn beta_reduces_preserves_typing_ctx_value() -> String {
          ctx_lam_gen tenv G ty body T h {g} \
          (fun (B : KExpr) (u : Level) \
          (hAsort : TypingCtxConv tenv G ty (KExpr.sort u)) \
-         (hbody : TypingCtxConv tenv (ListType.cons KExpr ty G) body B) \
+         (hbody : TypingCtxConv tenv (@ListType.cons KExpr ty G) body B) \
          (hdefpi : DefEq (KExpr.pi ty B) T) => \
-         TypingCtxConv.conv tenv G (KExpr.lam ty2 body) (KExpr.pi ty2 B) T \
-         (TypingCtxConv.lam tenv G ty2 body B u (ih G (KExpr.sort u) hAsort) \
-         (ctx_conv tenv hf (ListType.cons KExpr ty G) (ListType.cons KExpr ty2 G) \
+         @TypingCtxConv.conv tenv G (KExpr.lam ty2 body) (KExpr.pi ty2 B) T \
+         (@TypingCtxConv.lam tenv G ty2 body B u (ih G (KExpr.sort u) hAsort) \
+         (ctx_conv tenv hf (@ListType.cons KExpr ty G) (@ListType.cons KExpr ty2 G) \
          body B hbody \
          (CtxDefEq.cons ty ty2 G G \
          (beta_reduces_preserves_def_eq ty ty2 hs) (ctx_def_eq_refl G)))) \
@@ -2853,11 +2853,11 @@ fn beta_reduces_preserves_typing_ctx_value() -> String {
          ctx_lam_gen tenv G ty body T h {g} \
          (fun (B : KExpr) (u : Level) \
          (hAsort : TypingCtxConv tenv G ty (KExpr.sort u)) \
-         (hbody : TypingCtxConv tenv (ListType.cons KExpr ty G) body B) \
+         (hbody : TypingCtxConv tenv (@ListType.cons KExpr ty G) body B) \
          (hdefpi : DefEq (KExpr.pi ty B) T) => \
-         TypingCtxConv.conv tenv G (KExpr.lam ty body2) (KExpr.pi ty B) T \
-         (TypingCtxConv.lam tenv G ty body2 B u hAsort \
-         (ih (ListType.cons KExpr ty G) B hbody)) \
+         @TypingCtxConv.conv tenv G (KExpr.lam ty body2) (KExpr.pi ty B) T \
+         (@TypingCtxConv.lam tenv G ty body2 B u hAsort \
+         (ih (@ListType.cons KExpr ty G) B hbody)) \
          hdefpi))",
         g = goal("(KExpr.lam ty body2)")
     );
@@ -2872,12 +2872,12 @@ fn beta_reduces_preserves_typing_ctx_value() -> String {
          (TypingCtxConv tenv G ({alias} dom2 body) T) \
          (fun (n : Level) (m : Level) \
          (hdomsort : TypingCtxConv tenv G dom (KExpr.sort n)) \
-         (hbody : TypingCtxConv tenv (ListType.cons KExpr dom G) body (KExpr.sort m)) \
+         (hbody : TypingCtxConv tenv (@ListType.cons KExpr dom G) body (KExpr.sort m)) \
          (hdefsort : DefEq (KExpr.sort (Level.imax n m)) T) => \
-         TypingCtxConv.conv tenv G (KExpr.pi dom2 body) \
+         @TypingCtxConv.conv tenv G (KExpr.pi dom2 body) \
          (KExpr.sort (Level.imax n m)) T \
-         (TypingCtxConv.pi tenv G dom2 body n m (ih G (KExpr.sort n) hdomsort) \
-         (ctx_conv tenv hf (ListType.cons KExpr dom G) (ListType.cons KExpr dom2 G) \
+         (@TypingCtxConv.pi tenv G dom2 body n m (ih G (KExpr.sort n) hdomsort) \
+         (ctx_conv tenv hf (@ListType.cons KExpr dom G) (@ListType.cons KExpr dom2 G) \
          body (KExpr.sort m) hbody \
          (CtxDefEq.cons dom dom2 G G \
          (beta_reduces_preserves_def_eq dom dom2 hs) (ctx_def_eq_refl G)))) \
@@ -2895,12 +2895,12 @@ fn beta_reduces_preserves_typing_ctx_value() -> String {
          (TypingCtxConv tenv G ({alias} dom body2) T) \
          (fun (n : Level) (m : Level) \
          (hdomsort : TypingCtxConv tenv G dom (KExpr.sort n)) \
-         (hbody : TypingCtxConv tenv (ListType.cons KExpr dom G) body (KExpr.sort m)) \
+         (hbody : TypingCtxConv tenv (@ListType.cons KExpr dom G) body (KExpr.sort m)) \
          (hdefsort : DefEq (KExpr.sort (Level.imax n m)) T) => \
-         TypingCtxConv.conv tenv G (KExpr.pi dom body2) \
+         @TypingCtxConv.conv tenv G (KExpr.pi dom body2) \
          (KExpr.sort (Level.imax n m)) T \
-         (TypingCtxConv.pi tenv G dom body2 n m hdomsort \
-         (ih (ListType.cons KExpr dom G) (KExpr.sort m) hbody)) \
+         (@TypingCtxConv.pi tenv G dom body2 n m hdomsort \
+         (ih (@ListType.cons KExpr dom G) (KExpr.sort m) hbody)) \
          hdefsort))"
         )
     };
@@ -2921,9 +2921,9 @@ fn beta_reduces_preserves_typing_ctx_value() -> String {
          (fun (B : KExpr) (u : Level) \
          (_hty : TypingCtxConv tenv G ty (KExpr.sort u)) \
          (hval : TypingCtxConv tenv G val ty) \
-         (hbody : TypingCtxConv tenv (ListType.cons KExpr ty G) body B) \
+         (hbody : TypingCtxConv tenv (@ListType.cons KExpr ty G) body B) \
          (hdefT : DefEq (instantiate B val) T) => \
-         TypingCtxConv.conv tenv G (instantiate body val) (instantiate B val) T \
+         @TypingCtxConv.conv tenv G (instantiate body val) (instantiate B val) T \
          (substitution_typing_ctx tenv hf W G ty body B val hbody hval) \
          hdefT))",
         g = goal("(instantiate body val)")
@@ -2942,14 +2942,14 @@ fn beta_reduces_preserves_typing_ctx_value() -> String {
          (fun (B : KExpr) (u : Level) \
          (hty : TypingCtxConv tenv G ty (KExpr.sort u)) \
          (hval : TypingCtxConv tenv G val ty) \
-         (hbody : TypingCtxConv tenv (ListType.cons KExpr ty G) body B) \
+         (hbody : TypingCtxConv tenv (@ListType.cons KExpr ty G) body B) \
          (hdefT : DefEq (instantiate B val) T) => \
-         TypingCtxConv.conv tenv G (KExpr.let_ ty2 val body) (instantiate B val) T \
-         (TypingCtxConv.let_ tenv G ty2 val body B u \
+         @TypingCtxConv.conv tenv G (KExpr.let_ ty2 val body) (instantiate B val) T \
+         (@TypingCtxConv.let_ tenv G ty2 val body B u \
          (ih G (KExpr.sort u) hty) \
-         (TypingCtxConv.conv tenv G val ty ty2 hval \
+         (@TypingCtxConv.conv tenv G val ty ty2 hval \
          (beta_reduces_preserves_def_eq ty ty2 hs)) \
-         (ctx_conv tenv hf (ListType.cons KExpr ty G) (ListType.cons KExpr ty2 G) \
+         (ctx_conv tenv hf (@ListType.cons KExpr ty G) (@ListType.cons KExpr ty2 G) \
          body B hbody \
          (CtxDefEq.cons ty ty2 G G \
          (beta_reduces_preserves_def_eq ty ty2 hs) (ctx_def_eq_refl G)))) \
@@ -2969,10 +2969,10 @@ fn beta_reduces_preserves_typing_ctx_value() -> String {
          (fun (B : KExpr) (u : Level) \
          (hty : TypingCtxConv tenv G ty (KExpr.sort u)) \
          (hval : TypingCtxConv tenv G val ty) \
-         (hbody : TypingCtxConv tenv (ListType.cons KExpr ty G) body B) \
+         (hbody : TypingCtxConv tenv (@ListType.cons KExpr ty G) body B) \
          (hdefT : DefEq (instantiate B val) T) => \
-         TypingCtxConv.conv tenv G (KExpr.let_ ty val2 body) (instantiate B val2) T \
-         (TypingCtxConv.let_ tenv G ty val2 body B u hty (ih G ty hval) hbody) \
+         @TypingCtxConv.conv tenv G (KExpr.let_ ty val2 body) (instantiate B val2) T \
+         (@TypingCtxConv.let_ tenv G ty val2 body B u hty (ih G ty hval) hbody) \
          (DefEq.trans (instantiate B val2) (instantiate B val) T \
          (def_eq_instantiate_arg_congr B val2 val hf \
          (DefEq.symm val val2 (beta_reduces_preserves_def_eq val val2 hs))) \
@@ -2991,11 +2991,11 @@ fn beta_reduces_preserves_typing_ctx_value() -> String {
          (fun (B : KExpr) (u : Level) \
          (hty : TypingCtxConv tenv G ty (KExpr.sort u)) \
          (hval : TypingCtxConv tenv G val ty) \
-         (hbody : TypingCtxConv tenv (ListType.cons KExpr ty G) body B) \
+         (hbody : TypingCtxConv tenv (@ListType.cons KExpr ty G) body B) \
          (hdefT : DefEq (instantiate B val) T) => \
-         TypingCtxConv.conv tenv G (KExpr.let_ ty val body2) (instantiate B val) T \
-         (TypingCtxConv.let_ tenv G ty val body2 B u hty hval \
-         (ih (ListType.cons KExpr ty G) B hbody)) \
+         @TypingCtxConv.conv tenv G (KExpr.let_ ty val body2) (instantiate B val) T \
+         (@TypingCtxConv.let_ tenv G ty val body2 B u hty hval \
+         (ih (@ListType.cons KExpr ty G) B hbody)) \
          hdefT))",
         g = goal("(KExpr.let_ ty val body2)")
     );
@@ -3023,7 +3023,7 @@ fn beta_reduces_preserves_typing_ctx_value() -> String {
          (wd : DefEnvWellformed the_red_env) \
          (wr : RecEnvWellformed (red_rec the_red_env)) \
          (e0 : KExpr) (e02 : KExpr) (hbr : beta_reduces e0 e02) => \
-         beta_reduces.rec {motive} \
+         @beta_reduces.rec {motive} \
          {beta_arm} {app_left_arm} {app_right_arm} {lam_ty_arm} {lam_body_arm} \
          {pi_dom_arm} {pi_cod_arm} {forall_dom_arm} {forall_cod_arm} \
          {zeta_arm} {let_ty_arm} {let_val_arm} {let_body_arm} {iota_arm} {proj_arm} \
@@ -3040,9 +3040,9 @@ fn ctx_proj_absurd_value() -> String {
     let literal_arms = literal_typing_arms(|literal, _, _| {
         format!(
             "(fun (G0 : ListType KExpr) (n : Nat) \
-             (eq : Eq KExpr ({literal} n) (KExpr.proj s i sub)) => \
+             (eq : @Eq KExpr ({literal} n) (KExpr.proj s i sub)) => \
              Empty.rec (fun (_ : Empty) => C) \
-             (Eq.substType KExpr {SRB_KEXPR_IS_LIT} \
+             (@Eq.substType KExpr {SRB_KEXPR_IS_LIT} \
              ({literal} n) (KExpr.proj s i sub) eq Nat.zero))"
         )
     });
@@ -3050,62 +3050,62 @@ fn ctx_proj_absurd_value() -> String {
         "fun (tenv : KDeclEnv) (s : Name) (i : Nat) (sub : KExpr) \
          (G : ListType KExpr) (T : KExpr) (C : Type) \
          (h : TypingCtxConv tenv G (KExpr.proj s i sub) T) => \
-         TypingCtxConv.rec tenv \
+         @TypingCtxConv.rec tenv \
          (fun (G0 : ListType KExpr) (e0 : KExpr) (T0 : KExpr) (_ : TypingCtxConv tenv G0 e0 T0) => \
-         Eq KExpr e0 (KExpr.proj s i sub) -> C) \
+         @Eq KExpr e0 (KExpr.proj s i sub) -> C) \
          (fun (G0 : ListType KExpr) (i0 : Nat) (A : KExpr) \
-         (_hlk : Eq (OptionType KExpr) (ctx_lookup G0 i0) (OptionType.some KExpr A)) \
-         (eq : Eq KExpr (KExpr.bvar i0) (KExpr.proj s i sub)) => \
+         (_hlk : @Eq (OptionType KExpr) (ctx_lookup G0 i0) (@OptionType.some KExpr A)) \
+         (eq : @Eq KExpr (KExpr.bvar i0) (KExpr.proj s i sub)) => \
          Empty.rec (fun (_ : Empty) => C) \
-         (Eq.substType KExpr {discr} (KExpr.bvar i0) (KExpr.proj s i sub) eq Nat.zero)) \
+         (@Eq.substType KExpr {discr} (KExpr.bvar i0) (KExpr.proj s i sub) eq Nat.zero)) \
          (fun (G0 : ListType KExpr) (n : Level) \
-         (eq : Eq KExpr (KExpr.sort n) (KExpr.proj s i sub)) => \
+         (eq : @Eq KExpr (KExpr.sort n) (KExpr.proj s i sub)) => \
          Empty.rec (fun (_ : Empty) => C) \
-         (Eq.substType KExpr {discr} (KExpr.sort n) (KExpr.proj s i sub) eq Nat.zero)) \
+         (@Eq.substType KExpr {discr} (KExpr.sort n) (KExpr.proj s i sub) eq Nat.zero)) \
          (fun (G0 : ListType KExpr) (A : KExpr) (B : KExpr) (n : Level) (m : Level) \
          (_hA : TypingCtxConv tenv G0 A (KExpr.sort n)) \
-         (_hB : TypingCtxConv tenv (ListType.cons KExpr A G0) B (KExpr.sort m)) \
-         (_ihA : Eq KExpr A (KExpr.proj s i sub) -> C) \
-         (_ihB : Eq KExpr B (KExpr.proj s i sub) -> C) \
-         (eq : Eq KExpr (KExpr.pi A B) (KExpr.proj s i sub)) => \
+         (_hB : TypingCtxConv tenv (@ListType.cons KExpr A G0) B (KExpr.sort m)) \
+         (_ihA : @Eq KExpr A (KExpr.proj s i sub) -> C) \
+         (_ihB : @Eq KExpr B (KExpr.proj s i sub) -> C) \
+         (eq : @Eq KExpr (KExpr.pi A B) (KExpr.proj s i sub)) => \
          Empty.rec (fun (_ : Empty) => C) \
-         (Eq.substType KExpr {discr} (KExpr.pi A B) (KExpr.proj s i sub) eq Nat.zero)) \
+         (@Eq.substType KExpr {discr} (KExpr.pi A B) (KExpr.proj s i sub) eq Nat.zero)) \
          (fun (G0 : ListType KExpr) (A : KExpr) (b : KExpr) (B : KExpr) (u : Level) \
          (_hA : TypingCtxConv tenv G0 A (KExpr.sort u)) \
-         (_hb : TypingCtxConv tenv (ListType.cons KExpr A G0) b B) \
-         (_ihA : Eq KExpr A (KExpr.proj s i sub) -> C) \
-         (_ihb : Eq KExpr b (KExpr.proj s i sub) -> C) \
-         (eq : Eq KExpr (KExpr.lam A b) (KExpr.proj s i sub)) => \
+         (_hb : TypingCtxConv tenv (@ListType.cons KExpr A G0) b B) \
+         (_ihA : @Eq KExpr A (KExpr.proj s i sub) -> C) \
+         (_ihb : @Eq KExpr b (KExpr.proj s i sub) -> C) \
+         (eq : @Eq KExpr (KExpr.lam A b) (KExpr.proj s i sub)) => \
          Empty.rec (fun (_ : Empty) => C) \
-         (Eq.substType KExpr {discr} (KExpr.lam A b) (KExpr.proj s i sub) eq Nat.zero)) \
+         (@Eq.substType KExpr {discr} (KExpr.lam A b) (KExpr.proj s i sub) eq Nat.zero)) \
          (fun (G0 : ListType KExpr) (f : KExpr) (a : KExpr) (A : KExpr) (B : KExpr) \
          (_hf : TypingCtxConv tenv G0 f (KExpr.pi A B)) \
          (_ha : TypingCtxConv tenv G0 a A) \
-         (_ihf : Eq KExpr f (KExpr.proj s i sub) -> C) \
-         (_iha : Eq KExpr a (KExpr.proj s i sub) -> C) \
-         (eq : Eq KExpr (KExpr.app f a) (KExpr.proj s i sub)) => \
+         (_ihf : @Eq KExpr f (KExpr.proj s i sub) -> C) \
+         (_iha : @Eq KExpr a (KExpr.proj s i sub) -> C) \
+         (eq : @Eq KExpr (KExpr.app f a) (KExpr.proj s i sub)) => \
          Empty.rec (fun (_ : Empty) => C) \
-         (Eq.substType KExpr {discr} (KExpr.app f a) (KExpr.proj s i sub) eq Nat.zero)) \
+         (@Eq.substType KExpr {discr} (KExpr.app f a) (KExpr.proj s i sub) eq Nat.zero)) \
          (fun (G0 : ListType KExpr) (n : Name) (us : ListType Level) (A : KExpr) \
-         (_hc : Eq (OptionType KExpr) (kdecl_type_at tenv n us) (OptionType.some KExpr A)) \
-         (eq : Eq KExpr (KExpr.const n us) (KExpr.proj s i sub)) => \
+         (_hc : @Eq (OptionType KExpr) (kdecl_type_at tenv n us) (@OptionType.some KExpr A)) \
+         (eq : @Eq KExpr (KExpr.const n us) (KExpr.proj s i sub)) => \
          Empty.rec (fun (_ : Empty) => C) \
-         (Eq.substType KExpr {discr} (KExpr.const n us) (KExpr.proj s i sub) eq Nat.zero)) \
+         (@Eq.substType KExpr {discr} (KExpr.const n us) (KExpr.proj s i sub) eq Nat.zero)) \
          (fun (G0 : ListType KExpr) (e : KExpr) (A : KExpr) (B : KExpr) \
          (_hd : TypingCtxConv tenv G0 e A) (_hdefeq : DefEq A B) \
-         (ih : Eq KExpr e (KExpr.proj s i sub) -> C) \
-         (eq : Eq KExpr e (KExpr.proj s i sub)) => ih eq) \
+         (ih : @Eq KExpr e (KExpr.proj s i sub) -> C) \
+         (eq : @Eq KExpr e (KExpr.proj s i sub)) => ih eq) \
          (fun (G0 : ListType KExpr) (ty : KExpr) (v : KExpr) (b : KExpr) (B : KExpr) (u : Level) \
          (_hty : TypingCtxConv tenv G0 ty (KExpr.sort u)) \
          (_hv : TypingCtxConv tenv G0 v ty) \
-         (_hb : TypingCtxConv tenv (ListType.cons KExpr ty G0) b B) \
-         (_ihty : Eq KExpr ty (KExpr.proj s i sub) -> C) \
-         (_ihv : Eq KExpr v (KExpr.proj s i sub) -> C) \
-         (_ihb : Eq KExpr b (KExpr.proj s i sub) -> C) \
-         (eq : Eq KExpr (KExpr.let_ ty v b) (KExpr.proj s i sub)) => \
+         (_hb : TypingCtxConv tenv (@ListType.cons KExpr ty G0) b B) \
+         (_ihty : @Eq KExpr ty (KExpr.proj s i sub) -> C) \
+         (_ihv : @Eq KExpr v (KExpr.proj s i sub) -> C) \
+         (_ihb : @Eq KExpr b (KExpr.proj s i sub) -> C) \
+         (eq : @Eq KExpr (KExpr.let_ ty v b) (KExpr.proj s i sub)) => \
          Empty.rec (fun (_ : Empty) => C) \
-         (Eq.substType KExpr {discr} (KExpr.let_ ty v b) (KExpr.proj s i sub) eq Nat.zero)) \
-         {literal_arms} G (KExpr.proj s i sub) T h (Eq.refl KExpr (KExpr.proj s i sub))",
+         (@Eq.substType KExpr {discr} (KExpr.let_ ty v b) (KExpr.proj s i sub) eq Nat.zero)) \
+         {literal_arms} G (KExpr.proj s i sub) T h (@Eq.refl KExpr (KExpr.proj s i sub))",
         discr = SRB_KEXPR_NOT_PROJ
     )
 }
@@ -3125,7 +3125,7 @@ fn def_eq_psubst_value() -> String {
          (hip : forall (e : KExpr) (e' : KExpr), iota_reduces e e' -> \
          forall (s : Nat -> KExpr), DefEq (psubst s e) (psubst s e')) \
          (A : KExpr) (B : KExpr) (h : DefEq A B) => \
-         DefEq.rec \
+         @DefEq.rec \
          (fun (a : KExpr) (b : KExpr) (_h : DefEq a b) => \
          forall (s : Nat -> KExpr), DefEq (psubst s a) (psubst s b)) \
          (fun (a : KExpr) (s : Nat -> KExpr) => DefEq.refl (psubst s a)) \
@@ -3135,12 +3135,12 @@ fn def_eq_psubst_value() -> String {
          (ih1 : {ih_ab}) (ih2 : {ih_bc}) (s : Nat -> KExpr) => \
          DefEq.trans (psubst s a) (psubst s b) (psubst s c) (ih1 s) (ih2 s)) \
          (fun (A0 : KExpr) (b : KExpr) (a : KExpr) (s : Nat -> KExpr) => \
-         Eq.substType KExpr \
+         @Eq.substType KExpr \
          (fun (z : KExpr) => DefEq (KExpr.app (KExpr.lam (psubst s A0) (psubst (up s) b)) \
          (psubst s a)) z) \
          (instantiate (psubst (up s) b) (psubst s a)) \
          (psubst s (instantiate b a)) \
-         (Eq.symm KExpr (psubst s (instantiate b a)) \
+         (@Eq.symm KExpr (psubst s (instantiate b a)) \
          (instantiate (psubst (up s) b) (psubst s a)) \
          (psubst_instantiate b a s)) \
          (DefEq.beta (psubst s A0) (psubst (up s) b) (psubst s a))) \
@@ -3164,12 +3164,12 @@ fn def_eq_psubst_value() -> String {
          (fun (e : KExpr) (e' : KExpr) (hi : iota_reduces e e') (s : Nat -> KExpr) => \
          hip e e' hi s) \
          (fun (ty : KExpr) (v : KExpr) (b : KExpr) (s : Nat -> KExpr) => \
-         Eq.substType KExpr \
+         @Eq.substType KExpr \
          (fun (z : KExpr) => DefEq (KExpr.let_ (psubst s ty) (psubst s v) \
          (psubst (up s) b)) z) \
          (instantiate (psubst (up s) b) (psubst s v)) \
          (psubst s (instantiate b v)) \
-         (Eq.symm KExpr (psubst s (instantiate b v)) \
+         (@Eq.symm KExpr (psubst s (instantiate b v)) \
          (instantiate (psubst (up s) b) (psubst s v)) \
          (psubst_instantiate b v s)) \
          (DefEq.zeta (psubst s ty) (psubst s v) (psubst (up s) b))) \
@@ -3182,16 +3182,16 @@ fn def_eq_psubst_value() -> String {
          (ihty s) (ihv s) (ihb (up s))) \
          (fun (sn : Name) (i : Nat) (sub : KExpr) (sub' : KExpr) \
          (_hsub : DefEq sub sub') (ihsub : {ih_ss}) (s : Nat -> KExpr) => \
-         Eq.substType KExpr \
+         @Eq.substType KExpr \
          (fun (z : KExpr) => DefEq (KExpr.proj sn i (psubst s sub)) z) \
          (KExpr.proj sn i (psubst s sub')) \
          (psubst s (KExpr.proj sn i sub')) \
-         (Eq.symm KExpr (psubst s (KExpr.proj sn i sub')) \
+         (@Eq.symm KExpr (psubst s (KExpr.proj sn i sub')) \
          (KExpr.proj sn i (psubst s sub')) (psubst_proj s sn i sub')) \
-         (Eq.substType KExpr \
+         (@Eq.substType KExpr \
          (fun (z : KExpr) => DefEq z (KExpr.proj sn i (psubst s sub'))) \
          (KExpr.proj sn i (psubst s sub)) (psubst s (KExpr.proj sn i sub)) \
-         (Eq.symm KExpr (psubst s (KExpr.proj sn i sub)) \
+         (@Eq.symm KExpr (psubst s (KExpr.proj sn i sub)) \
          (KExpr.proj sn i (psubst s sub)) (psubst_proj s sn i sub)) \
          (DefEq.proj_cong sn i (psubst s sub) (psubst s sub') (ihsub s)))) \
          A B h",
@@ -3219,54 +3219,54 @@ fn subst_typing_up_value() -> String {
          (W : TypingEnvCoherent tenv) \
          (G : ListType KExpr) (G2 : ListType KExpr) (s : Nat -> KExpr) \
          (hs : SubstTyping tenv G2 s G) (A : KExpr) (i : Nat) => \
-         Nat.rec \
+         @Nat.rec \
          (fun (m : Nat) => forall (A2 : KExpr), \
-         Eq (OptionType KExpr) (ctx_lookup (ListType.cons KExpr A G) m) \
-         (OptionType.some KExpr A2) -> \
-         TypingCtxConv tenv (ListType.cons KExpr (psubst s A) G2) (up s m) \
+         @Eq (OptionType KExpr) (ctx_lookup (@ListType.cons KExpr A G) m) \
+         (@OptionType.some KExpr A2) -> \
+         TypingCtxConv tenv (@ListType.cons KExpr (psubst s A) G2) (up s m) \
          (psubst (up s) (lift_at A2 Nat.zero (Nat.succ m)))) \
          (fun (A2 : KExpr) \
-         (hlk : Eq (OptionType KExpr) (ctx_lookup (ListType.cons KExpr A G) Nat.zero) \
-         (OptionType.some KExpr A2)) => \
-         Eq.substType KExpr \
-         (fun (X : KExpr) => TypingCtxConv tenv (ListType.cons KExpr (psubst s A) G2) \
+         (hlk : @Eq (OptionType KExpr) (ctx_lookup (@ListType.cons KExpr A G) Nat.zero) \
+         (@OptionType.some KExpr A2)) => \
+         @Eq.substType KExpr \
+         (fun (X : KExpr) => TypingCtxConv tenv (@ListType.cons KExpr (psubst s A) G2) \
          (up s Nat.zero) (psubst (up s) (lift_at X Nat.zero {s0}))) \
          A A2 (option_some_inj KExpr A A2 hlk) \
-         (Eq.substType KExpr \
-         (fun (z : KExpr) => TypingCtxConv tenv (ListType.cons KExpr (psubst s A) G2) \
+         (@Eq.substType KExpr \
+         (fun (z : KExpr) => TypingCtxConv tenv (@ListType.cons KExpr (psubst s A) G2) \
          (KExpr.bvar Nat.zero) z) \
          (lift_at (psubst s A) Nat.zero {s0}) \
          (psubst (up s) (lift_at A Nat.zero {s0})) \
-         (Eq.symm KExpr (psubst (up s) (lift_at A Nat.zero {s0})) \
+         (@Eq.symm KExpr (psubst (up s) (lift_at A Nat.zero {s0})) \
          (lift_at (psubst s A) Nat.zero {s0}) \
          (psubst_up_lift A s)) \
-         (TypingCtxConv.var tenv (ListType.cons KExpr (psubst s A) G2) Nat.zero \
+         (@TypingCtxConv.var tenv (@ListType.cons KExpr (psubst s A) G2) Nat.zero \
          (psubst s A) \
-         (Eq.refl (OptionType KExpr) (OptionType.some KExpr (psubst s A)))))) \
+         (@Eq.refl (OptionType KExpr) (@OptionType.some KExpr (psubst s A)))))) \
          (fun (j : Nat) (_ih : forall (A2 : KExpr), \
-         Eq (OptionType KExpr) (ctx_lookup (ListType.cons KExpr A G) j) \
-         (OptionType.some KExpr A2) -> \
-         TypingCtxConv tenv (ListType.cons KExpr (psubst s A) G2) (up s j) \
+         @Eq (OptionType KExpr) (ctx_lookup (@ListType.cons KExpr A G) j) \
+         (@OptionType.some KExpr A2) -> \
+         TypingCtxConv tenv (@ListType.cons KExpr (psubst s A) G2) (up s j) \
          (psubst (up s) (lift_at A2 Nat.zero (Nat.succ j)))) \
          (A2 : KExpr) \
-         (hlk : Eq (OptionType KExpr) (ctx_lookup (ListType.cons KExpr A G) (Nat.succ j)) \
-         (OptionType.some KExpr A2)) => \
-         Eq.substType KExpr \
-         (fun (z : KExpr) => TypingCtxConv tenv (ListType.cons KExpr (psubst s A) G2) \
+         (hlk : @Eq (OptionType KExpr) (ctx_lookup (@ListType.cons KExpr A G) (Nat.succ j)) \
+         (@OptionType.some KExpr A2)) => \
+         @Eq.substType KExpr \
+         (fun (z : KExpr) => TypingCtxConv tenv (@ListType.cons KExpr (psubst s A) G2) \
          (up s (Nat.succ j)) z) \
          (lift_at (psubst s (lift_at A2 Nat.zero (Nat.succ j))) Nat.zero {s0}) \
          (psubst (up s) (lift_at A2 Nat.zero (Nat.succ (Nat.succ j)))) \
-         (Eq.symm KExpr \
+         (@Eq.symm KExpr \
          (psubst (up s) (lift_at A2 Nat.zero (Nat.succ (Nat.succ j)))) \
          (lift_at (psubst s (lift_at A2 Nat.zero (Nat.succ j))) Nat.zero {s0}) \
-         (Eq.trans KExpr \
+         (@Eq.trans KExpr \
          (psubst (up s) (lift_at A2 Nat.zero (Nat.succ (Nat.succ j)))) \
          (psubst (up s) (lift_at (lift_at A2 Nat.zero (Nat.succ j)) Nat.zero {s0})) \
          (lift_at (psubst s (lift_at A2 Nat.zero (Nat.succ j))) Nat.zero {s0}) \
-         (Eq.cong KExpr KExpr (fun (x : KExpr) => psubst (up s) x) \
+         (@Eq.cong KExpr KExpr (fun (x : KExpr) => psubst (up s) x) \
          (lift_at A2 Nat.zero (Nat.succ (Nat.succ j))) \
          (lift_at (lift_at A2 Nat.zero (Nat.succ j)) Nat.zero {s0}) \
-         (Eq.symm KExpr \
+         (@Eq.symm KExpr \
          (lift_at (lift_at A2 Nat.zero (Nat.succ j)) Nat.zero {s0}) \
          (lift_at A2 Nat.zero (Nat.succ (Nat.succ j))) \
          (lift_at_compose A2 Nat.zero (Nat.succ j) {s0}))) \
@@ -3287,49 +3287,49 @@ fn subst_typing_scons_value() -> String {
          (a : KExpr) (A : KExpr) \
          (hs : SubstTyping tenv G2 s G) \
          (ha : TypingCtxConv tenv G2 a (psubst s A)) (i : Nat) => \
-         Nat.rec \
+         @Nat.rec \
          (fun (m : Nat) => forall (A2 : KExpr), \
-         Eq (OptionType KExpr) (ctx_lookup (ListType.cons KExpr A G) m) \
-         (OptionType.some KExpr A2) -> \
+         @Eq (OptionType KExpr) (ctx_lookup (@ListType.cons KExpr A G) m) \
+         (@OptionType.some KExpr A2) -> \
          TypingCtxConv tenv G2 (scons a s m) \
          (psubst (scons a s) (lift_at A2 Nat.zero (Nat.succ m)))) \
          (fun (A2 : KExpr) \
-         (hlk : Eq (OptionType KExpr) (ctx_lookup (ListType.cons KExpr A G) Nat.zero) \
-         (OptionType.some KExpr A2)) => \
-         Eq.substType KExpr \
+         (hlk : @Eq (OptionType KExpr) (ctx_lookup (@ListType.cons KExpr A G) Nat.zero) \
+         (@OptionType.some KExpr A2)) => \
+         @Eq.substType KExpr \
          (fun (X : KExpr) => TypingCtxConv tenv G2 (scons a s Nat.zero) \
          (psubst (scons a s) (lift_at X Nat.zero {s0}))) \
          A A2 (option_some_inj KExpr A A2 hlk) \
-         (Eq.substType KExpr \
+         (@Eq.substType KExpr \
          (fun (z : KExpr) => TypingCtxConv tenv G2 a z) \
          (psubst s A) \
          (psubst (scons a s) (lift_at A Nat.zero {s0})) \
-         (Eq.symm KExpr (psubst (scons a s) (lift_at A Nat.zero {s0})) (psubst s A) \
+         (@Eq.symm KExpr (psubst (scons a s) (lift_at A Nat.zero {s0})) (psubst s A) \
          (psubst_cancel A a s)) \
          ha)) \
          (fun (j : Nat) (_ih : forall (A2 : KExpr), \
-         Eq (OptionType KExpr) (ctx_lookup (ListType.cons KExpr A G) j) \
-         (OptionType.some KExpr A2) -> \
+         @Eq (OptionType KExpr) (ctx_lookup (@ListType.cons KExpr A G) j) \
+         (@OptionType.some KExpr A2) -> \
          TypingCtxConv tenv G2 (scons a s j) \
          (psubst (scons a s) (lift_at A2 Nat.zero (Nat.succ j)))) \
          (A2 : KExpr) \
-         (hlk : Eq (OptionType KExpr) (ctx_lookup (ListType.cons KExpr A G) (Nat.succ j)) \
-         (OptionType.some KExpr A2)) => \
-         Eq.substType KExpr \
+         (hlk : @Eq (OptionType KExpr) (ctx_lookup (@ListType.cons KExpr A G) (Nat.succ j)) \
+         (@OptionType.some KExpr A2)) => \
+         @Eq.substType KExpr \
          (fun (z : KExpr) => TypingCtxConv tenv G2 (scons a s (Nat.succ j)) z) \
          (psubst s (lift_at A2 Nat.zero (Nat.succ j))) \
          (psubst (scons a s) (lift_at A2 Nat.zero (Nat.succ (Nat.succ j)))) \
-         (Eq.symm KExpr \
+         (@Eq.symm KExpr \
          (psubst (scons a s) (lift_at A2 Nat.zero (Nat.succ (Nat.succ j)))) \
          (psubst s (lift_at A2 Nat.zero (Nat.succ j))) \
-         (Eq.trans KExpr \
+         (@Eq.trans KExpr \
          (psubst (scons a s) (lift_at A2 Nat.zero (Nat.succ (Nat.succ j)))) \
          (psubst (scons a s) (lift_at (lift_at A2 Nat.zero (Nat.succ j)) Nat.zero {s0})) \
          (psubst s (lift_at A2 Nat.zero (Nat.succ j))) \
-         (Eq.cong KExpr KExpr (fun (x : KExpr) => psubst (scons a s) x) \
+         (@Eq.cong KExpr KExpr (fun (x : KExpr) => psubst (scons a s) x) \
          (lift_at A2 Nat.zero (Nat.succ (Nat.succ j))) \
          (lift_at (lift_at A2 Nat.zero (Nat.succ j)) Nat.zero {s0}) \
-         (Eq.symm KExpr \
+         (@Eq.symm KExpr \
          (lift_at (lift_at A2 Nat.zero (Nat.succ j)) Nat.zero {s0}) \
          (lift_at A2 Nat.zero (Nat.succ (Nat.succ j))) \
          (lift_at_compose A2 Nat.zero (Nat.succ j) {s0}))) \
@@ -3346,7 +3346,7 @@ fn substitution_general_value() -> String {
         format!(
             "(fun (G : ListType KExpr) (n : Nat) \
              (G2 : ListType KExpr) (s : Nat -> KExpr) \
-             (_hs : SubstTyping tenv G2 s G) => TypingCtxConv.{rule} tenv G2 n)"
+             (_hs : SubstTyping tenv G2 s G) => @TypingCtxConv.{rule} tenv G2 n)"
         )
     });
     let motive = "(fun (G : ListType KExpr) (e : KExpr) (T : KExpr) \
@@ -3355,40 +3355,40 @@ fn substitution_general_value() -> String {
          TypingCtxConv tenv G2 (psubst s e) (psubst s T))";
 
     let var_arm = "(fun (G : ListType KExpr) (i : Nat) (A : KExpr) \
-         (hlk : Eq (OptionType KExpr) (ctx_lookup G i) (OptionType.some KExpr A)) \
+         (hlk : @Eq (OptionType KExpr) (ctx_lookup G i) (@OptionType.some KExpr A)) \
          (G2 : ListType KExpr) (s : Nat -> KExpr) (hs : SubstTyping tenv G2 s G) => \
          hs i A hlk)";
 
     let sort_arm = "(fun (G : ListType KExpr) (n : Level) \
          (G2 : ListType KExpr) (s : Nat -> KExpr) (_hs : SubstTyping tenv G2 s G) => \
-         TypingCtxConv.sort tenv G2 n)";
+         @TypingCtxConv.sort tenv G2 n)";
 
     let pi_arm = "(fun (G : ListType KExpr) (A : KExpr) (B : KExpr) (n : Level) (m : Level) \
          (_hA : TypingCtxConv tenv G A (KExpr.sort n)) \
-         (_hB : TypingCtxConv tenv (ListType.cons KExpr A G) B (KExpr.sort m)) \
+         (_hB : TypingCtxConv tenv (@ListType.cons KExpr A G) B (KExpr.sort m)) \
          (ihA : forall (G2 : ListType KExpr) (s : Nat -> KExpr), SubstTyping tenv G2 s G -> \
          TypingCtxConv tenv G2 (psubst s A) (psubst s (KExpr.sort n))) \
          (ihB : forall (G2 : ListType KExpr) (s : Nat -> KExpr), \
-         SubstTyping tenv G2 s (ListType.cons KExpr A G) -> \
+         SubstTyping tenv G2 s (@ListType.cons KExpr A G) -> \
          TypingCtxConv tenv G2 (psubst s B) (psubst s (KExpr.sort m))) \
          (G2 : ListType KExpr) (s : Nat -> KExpr) (hs : SubstTyping tenv G2 s G) => \
-         TypingCtxConv.pi tenv G2 (psubst s A) (psubst (up s) B) n m \
+         @TypingCtxConv.pi tenv G2 (psubst s A) (psubst (up s) B) n m \
          (ihA G2 s hs) \
-         (ihB (ListType.cons KExpr (psubst s A) G2) (up s) \
+         (ihB (@ListType.cons KExpr (psubst s A) G2) (up s) \
          (subst_typing_up tenv hf W G G2 s hs A)))";
 
     let lam_arm = "(fun (G : ListType KExpr) (A : KExpr) (b : KExpr) (B : KExpr) (u : Level) \
          (_hA : TypingCtxConv tenv G A (KExpr.sort u)) \
-         (_hb : TypingCtxConv tenv (ListType.cons KExpr A G) b B) \
+         (_hb : TypingCtxConv tenv (@ListType.cons KExpr A G) b B) \
          (ihA : forall (G2 : ListType KExpr) (s : Nat -> KExpr), SubstTyping tenv G2 s G -> \
          TypingCtxConv tenv G2 (psubst s A) (psubst s (KExpr.sort u))) \
          (ihb : forall (G2 : ListType KExpr) (s : Nat -> KExpr), \
-         SubstTyping tenv G2 s (ListType.cons KExpr A G) -> \
+         SubstTyping tenv G2 s (@ListType.cons KExpr A G) -> \
          TypingCtxConv tenv G2 (psubst s b) (psubst s B)) \
          (G2 : ListType KExpr) (s : Nat -> KExpr) (hs : SubstTyping tenv G2 s G) => \
-         TypingCtxConv.lam tenv G2 (psubst s A) (psubst (up s) b) (psubst (up s) B) u \
+         @TypingCtxConv.lam tenv G2 (psubst s A) (psubst (up s) b) (psubst (up s) B) u \
          (ihA G2 s hs) \
-         (ihb (ListType.cons KExpr (psubst s A) G2) (up s) \
+         (ihb (@ListType.cons KExpr (psubst s A) G2) (up s) \
          (subst_typing_up tenv hf W G G2 s hs A)))";
 
     let app_arm = "(fun (G : ListType KExpr) (f : KExpr) (a : KExpr) (A : KExpr) (B : KExpr) \
@@ -3399,32 +3399,32 @@ fn substitution_general_value() -> String {
          (iha : forall (G2 : ListType KExpr) (s : Nat -> KExpr), SubstTyping tenv G2 s G -> \
          TypingCtxConv tenv G2 (psubst s a) (psubst s A)) \
          (G2 : ListType KExpr) (s : Nat -> KExpr) (hs : SubstTyping tenv G2 s G) => \
-         Eq.substType KExpr \
+         @Eq.substType KExpr \
          (fun (z : KExpr) => TypingCtxConv tenv G2 \
          (KExpr.app (psubst s f) (psubst s a)) z) \
          (instantiate (psubst (up s) B) (psubst s a)) \
          (psubst s (instantiate B a)) \
-         (Eq.symm KExpr (psubst s (instantiate B a)) \
+         (@Eq.symm KExpr (psubst s (instantiate B a)) \
          (instantiate (psubst (up s) B) (psubst s a)) \
          (psubst_instantiate B a s)) \
-         (TypingCtxConv.app tenv G2 (psubst s f) (psubst s a) (psubst s A) \
+         (@TypingCtxConv.app tenv G2 (psubst s f) (psubst s a) (psubst s A) \
          (psubst (up s) B) (ihf G2 s hs) (iha G2 s hs)))";
 
     let const_arm = "(fun (G : ListType KExpr) (n : Name) (us : ListType Level) (A : KExpr) \
-         (hA : Eq (OptionType KExpr) (kdecl_type_at tenv n us) (OptionType.some KExpr A)) \
+         (hA : @Eq (OptionType KExpr) (kdecl_type_at tenv n us) (@OptionType.some KExpr A)) \
          (G2 : ListType KExpr) (s : Nat -> KExpr) (_hs : SubstTyping tenv G2 s G) => \
-         Eq.substType KExpr \
+         @Eq.substType KExpr \
          (fun (z : KExpr) => TypingCtxConv tenv G2 (KExpr.const n us) z) \
          A (psubst s A) \
-         (Eq.symm KExpr (psubst s A) A (tec_tenv_psubst_closed tenv W n us A hA s)) \
-         (TypingCtxConv.const tenv G2 n us A hA))";
+         (@Eq.symm KExpr (psubst s A) A (tec_tenv_psubst_closed tenv W n us A hA s)) \
+         (@TypingCtxConv.const tenv G2 n us A hA))";
 
     let conv_arm = "(fun (G : ListType KExpr) (e : KExpr) (A : KExpr) (B : KExpr) \
          (_h1 : TypingCtxConv tenv G e A) (hd : DefEq A B) \
          (ih1 : forall (G2 : ListType KExpr) (s : Nat -> KExpr), SubstTyping tenv G2 s G -> \
          TypingCtxConv tenv G2 (psubst s e) (psubst s A)) \
          (G2 : ListType KExpr) (s : Nat -> KExpr) (hs : SubstTyping tenv G2 s G) => \
-         TypingCtxConv.conv tenv G2 (psubst s e) (psubst s A) (psubst s B) \
+         @TypingCtxConv.conv tenv G2 (psubst s e) (psubst s A) (psubst s B) \
          (ih1 G2 s hs) \
          (def_eq_psubst (tec_delta_psubst tenv W) (tec_iota_psubst tenv W) A B hd s))";
 
@@ -3435,27 +3435,27 @@ fn substitution_general_value() -> String {
          (B : KExpr) (u : Level) \
          (_hty : TypingCtxConv tenv G ty (KExpr.sort u)) \
          (_hv : TypingCtxConv tenv G v ty) \
-         (_hb : TypingCtxConv tenv (ListType.cons KExpr ty G) b B) \
+         (_hb : TypingCtxConv tenv (@ListType.cons KExpr ty G) b B) \
          (ihty : forall (G2 : ListType KExpr) (s : Nat -> KExpr), SubstTyping tenv G2 s G -> \
          TypingCtxConv tenv G2 (psubst s ty) (psubst s (KExpr.sort u))) \
          (ihv : forall (G2 : ListType KExpr) (s : Nat -> KExpr), SubstTyping tenv G2 s G -> \
          TypingCtxConv tenv G2 (psubst s v) (psubst s ty)) \
          (ihb : forall (G2 : ListType KExpr) (s : Nat -> KExpr), \
-         SubstTyping tenv G2 s (ListType.cons KExpr ty G) -> \
+         SubstTyping tenv G2 s (@ListType.cons KExpr ty G) -> \
          TypingCtxConv tenv G2 (psubst s b) (psubst s B)) \
          (G2 : ListType KExpr) (s : Nat -> KExpr) (hs : SubstTyping tenv G2 s G) => \
-         Eq.substType KExpr \
+         @Eq.substType KExpr \
          (fun (z : KExpr) => TypingCtxConv tenv G2 \
          (KExpr.let_ (psubst s ty) (psubst s v) (psubst (up s) b)) z) \
          (instantiate (psubst (up s) B) (psubst s v)) \
          (psubst s (instantiate B v)) \
-         (Eq.symm KExpr (psubst s (instantiate B v)) \
+         (@Eq.symm KExpr (psubst s (instantiate B v)) \
          (instantiate (psubst (up s) B) (psubst s v)) \
          (psubst_instantiate B v s)) \
-         (TypingCtxConv.let_ tenv G2 (psubst s ty) (psubst s v) (psubst (up s) b) \
+         (@TypingCtxConv.let_ tenv G2 (psubst s ty) (psubst s v) (psubst (up s) b) \
          (psubst (up s) B) u \
          (ihty G2 s hs) (ihv G2 s hs) \
-         (ihb (ListType.cons KExpr (psubst s ty) G2) (up s) \
+         (ihb (@ListType.cons KExpr (psubst s ty) G2) (up s) \
          (subst_typing_up tenv hf W G G2 s hs ty))))";
 
     format!(
@@ -3464,7 +3464,7 @@ fn substitution_general_value() -> String {
          (W : TypingEnvCoherent tenv) \
          (G0 : ListType KExpr) (b0 : KExpr) (B0 : KExpr) \
          (h0 : TypingCtxConv tenv G0 b0 B0) => \
-         TypingCtxConv.rec tenv {motive} \
+         @TypingCtxConv.rec tenv {motive} \
          {var_arm} {sort_arm} {pi_arm} {lam_arm} {app_arm} {const_arm} {conv_arm} \
          {let_arm} \
          {literal_arms} G0 b0 B0 h0"
@@ -3480,8 +3480,8 @@ fn ctx_wk_lookup_value() -> String {
     let kont = |g2: &str, pos: &str, a: &str, i: &str, c: &str| {
         format!(
             "(forall (A2 : KExpr), \
-             Eq (OptionType KExpr) (ctx_lookup {g2} {pos}) (OptionType.some KExpr A2) -> \
-             Eq KExpr (lift_at A2 Nat.zero (Nat.succ {pos})) \
+             @Eq (OptionType KExpr) (ctx_lookup {g2} {pos}) (@OptionType.some KExpr A2) -> \
+             @Eq KExpr (lift_at A2 Nat.zero (Nat.succ {pos})) \
              (lift_at (lift_at {a} Nat.zero (Nat.succ {i})) {c} {s0}) -> R)"
         )
     };
@@ -3489,7 +3489,7 @@ fn ctx_wk_lookup_value() -> String {
     let motive = format!(
         "(fun (c : Nat) (G : ListType KExpr) (G2 : ListType KExpr) (_ : CtxWk C c G G2) => \
          forall (i : Nat) (A : KExpr), \
-         Eq (OptionType KExpr) (ctx_lookup G i) (OptionType.some KExpr A) -> \
+         @Eq (OptionType KExpr) (ctx_lookup G i) (@OptionType.some KExpr A) -> \
          forall (R : Type), {k} -> R)",
         k = kont("G2", "(wkpos i c)", "A", "i", "c")
     );
@@ -3497,25 +3497,25 @@ fn ctx_wk_lookup_value() -> String {
     // zero arm: G2 = cons C G, c = 0, wkpos i 0 = succ i.
     let zero_arm = format!(
         "(fun (G : ListType KExpr) (i : Nat) (A : KExpr) \
-         (hlk : Eq (OptionType KExpr) (ctx_lookup G i) (OptionType.some KExpr A)) \
+         (hlk : @Eq (OptionType KExpr) (ctx_lookup G i) (@OptionType.some KExpr A)) \
          (R : Type) \
          (k : {k}) => \
          k A \
-         (Eq.subst Nat (fun (p : Nat) => Eq (OptionType KExpr) \
-         (ctx_lookup (ListType.cons KExpr C G) p) (OptionType.some KExpr A)) \
+         (@Eq.subst Nat (fun (p : Nat) => @Eq (OptionType KExpr) \
+         (ctx_lookup (@ListType.cons KExpr C G) p) (@OptionType.some KExpr A)) \
          (Nat.succ i) (wkpos i Nat.zero) \
-         (Eq.symm Nat (wkpos i Nat.zero) (Nat.succ i) (wkpos_zero i)) hlk) \
-         (Eq.subst Nat (fun (p : Nat) => Eq KExpr \
+         (@Eq.symm Nat (wkpos i Nat.zero) (Nat.succ i) (wkpos_zero i)) hlk) \
+         (@Eq.subst Nat (fun (p : Nat) => @Eq KExpr \
          (lift_at A Nat.zero (Nat.succ p)) \
          (lift_at (lift_at A Nat.zero (Nat.succ i)) Nat.zero {s0})) \
          (Nat.succ i) (wkpos i Nat.zero) \
-         (Eq.symm Nat (wkpos i Nat.zero) (Nat.succ i) (wkpos_zero i)) \
-         (Eq.symm KExpr \
+         (@Eq.symm Nat (wkpos i Nat.zero) (Nat.succ i) (wkpos_zero i)) \
+         (@Eq.symm KExpr \
          (lift_at (lift_at A Nat.zero (Nat.succ i)) Nat.zero {s0}) \
          (lift_at A Nat.zero (Nat.succ (Nat.succ i))) \
          (lift_at_compose A Nat.zero (Nat.succ i) {s0}))))",
         k = kont(
-            "(ListType.cons KExpr C G)",
+            "(@ListType.cons KExpr C G)",
             "(wkpos i Nat.zero)",
             "A",
             "i",
@@ -3527,19 +3527,19 @@ fn ctx_wk_lookup_value() -> String {
     // wkpos 0 (succ c) computes to 0; A = A0 by option injectivity.
     let succ_zero_case = format!(
         "(fun (A : KExpr) \
-         (hlk : Eq (OptionType KExpr) (ctx_lookup (ListType.cons KExpr A0 G) Nat.zero) \
-         (OptionType.some KExpr A)) \
+         (hlk : @Eq (OptionType KExpr) (ctx_lookup (@ListType.cons KExpr A0 G) Nat.zero) \
+         (@OptionType.some KExpr A)) \
          (R : Type) \
          (k : {k}) => \
          k (lift_at A0 c {s0}) \
-         (Eq.refl (OptionType KExpr) (OptionType.some KExpr (lift_at A0 c {s0}))) \
-         (Eq.subst KExpr (fun (X : KExpr) => Eq KExpr \
+         (@Eq.refl (OptionType KExpr) (@OptionType.some KExpr (lift_at A0 c {s0}))) \
+         (@Eq.subst KExpr (fun (X : KExpr) => @Eq KExpr \
          (lift_at (lift_at A0 c {s0}) Nat.zero {s0}) \
          (lift_at (lift_at X Nat.zero {s0}) (Nat.succ c) {s0})) \
          A0 A (option_some_inj KExpr A0 A hlk) \
          (lift_exchange_zero A0 c)))",
         k = kont(
-            "(ListType.cons KExpr (lift_at A0 c (Nat.succ Nat.zero)) G2)",
+            "(@ListType.cons KExpr (lift_at A0 c (Nat.succ Nat.zero)) G2)",
             "(wkpos Nat.zero (Nat.succ c))",
             "A",
             "Nat.zero",
@@ -3550,65 +3550,65 @@ fn ctx_wk_lookup_value() -> String {
     // succ arm inner succ case (i = succ j): recurse via the CtxWk IH.
     let succ_succ_case = format!(
         "(fun (j : Nat) (_ihm : forall (A : KExpr), \
-         Eq (OptionType KExpr) (ctx_lookup (ListType.cons KExpr A0 G) j) \
-         (OptionType.some KExpr A) -> forall (R : Type), {kj_prev} -> R) \
+         @Eq (OptionType KExpr) (ctx_lookup (@ListType.cons KExpr A0 G) j) \
+         (@OptionType.some KExpr A) -> forall (R : Type), {kj_prev} -> R) \
          (A : KExpr) \
-         (hlk : Eq (OptionType KExpr) (ctx_lookup (ListType.cons KExpr A0 G) (Nat.succ j)) \
-         (OptionType.some KExpr A)) \
+         (hlk : @Eq (OptionType KExpr) (ctx_lookup (@ListType.cons KExpr A0 G) (Nat.succ j)) \
+         (@OptionType.some KExpr A)) \
          (R : Type) \
          (k : {ks}) => \
          ih j A hlk R \
          (fun (A2 : KExpr) \
-         (hlk2 : Eq (OptionType KExpr) (ctx_lookup G2 (wkpos j c)) \
-         (OptionType.some KExpr A2)) \
-         (heq : Eq KExpr (lift_at A2 Nat.zero (Nat.succ (wkpos j c))) \
+         (hlk2 : @Eq (OptionType KExpr) (ctx_lookup G2 (wkpos j c)) \
+         (@OptionType.some KExpr A2)) \
+         (heq : @Eq KExpr (lift_at A2 Nat.zero (Nat.succ (wkpos j c))) \
          (lift_at (lift_at A Nat.zero (Nat.succ j)) c {s0})) => \
          k A2 \
-         (Eq.subst Nat (fun (p : Nat) => Eq (OptionType KExpr) \
-         (ctx_lookup (ListType.cons KExpr (lift_at A0 c {s0}) G2) p) \
-         (OptionType.some KExpr A2)) \
+         (@Eq.subst Nat (fun (p : Nat) => @Eq (OptionType KExpr) \
+         (ctx_lookup (@ListType.cons KExpr (lift_at A0 c {s0}) G2) p) \
+         (@OptionType.some KExpr A2)) \
          (Nat.succ (wkpos j c)) (wkpos (Nat.succ j) (Nat.succ c)) \
-         (Eq.symm Nat (wkpos (Nat.succ j) (Nat.succ c)) (Nat.succ (wkpos j c)) \
+         (@Eq.symm Nat (wkpos (Nat.succ j) (Nat.succ c)) (Nat.succ (wkpos j c)) \
          (wkpos_succ_succ j c)) hlk2) \
-         (Eq.subst Nat (fun (p : Nat) => Eq KExpr \
+         (@Eq.subst Nat (fun (p : Nat) => @Eq KExpr \
          (lift_at A2 Nat.zero (Nat.succ p)) \
          (lift_at (lift_at A Nat.zero (Nat.succ (Nat.succ j))) (Nat.succ c) {s0})) \
          (Nat.succ (wkpos j c)) (wkpos (Nat.succ j) (Nat.succ c)) \
-         (Eq.symm Nat (wkpos (Nat.succ j) (Nat.succ c)) (Nat.succ (wkpos j c)) \
+         (@Eq.symm Nat (wkpos (Nat.succ j) (Nat.succ c)) (Nat.succ (wkpos j c)) \
          (wkpos_succ_succ j c)) \
-         (Eq.trans KExpr \
+         (@Eq.trans KExpr \
          (lift_at A2 Nat.zero (Nat.succ (Nat.succ (wkpos j c)))) \
          (lift_at (lift_at A2 Nat.zero (Nat.succ (wkpos j c))) Nat.zero {s0}) \
          (lift_at (lift_at A Nat.zero (Nat.succ (Nat.succ j))) (Nat.succ c) {s0}) \
-         (Eq.symm KExpr \
+         (@Eq.symm KExpr \
          (lift_at (lift_at A2 Nat.zero (Nat.succ (wkpos j c))) Nat.zero {s0}) \
          (lift_at A2 Nat.zero (Nat.succ (Nat.succ (wkpos j c)))) \
          (lift_at_compose A2 Nat.zero (Nat.succ (wkpos j c)) {s0})) \
-         (Eq.trans KExpr \
+         (@Eq.trans KExpr \
          (lift_at (lift_at A2 Nat.zero (Nat.succ (wkpos j c))) Nat.zero {s0}) \
          (lift_at (lift_at (lift_at A Nat.zero (Nat.succ j)) c {s0}) Nat.zero {s0}) \
          (lift_at (lift_at A Nat.zero (Nat.succ (Nat.succ j))) (Nat.succ c) {s0}) \
-         (Eq.cong KExpr KExpr (fun (x : KExpr) => lift_at x Nat.zero {s0}) \
+         (@Eq.cong KExpr KExpr (fun (x : KExpr) => lift_at x Nat.zero {s0}) \
          (lift_at A2 Nat.zero (Nat.succ (wkpos j c))) \
          (lift_at (lift_at A Nat.zero (Nat.succ j)) c {s0}) heq) \
-         (Eq.trans KExpr \
+         (@Eq.trans KExpr \
          (lift_at (lift_at (lift_at A Nat.zero (Nat.succ j)) c {s0}) Nat.zero {s0}) \
          (lift_at (lift_at (lift_at A Nat.zero (Nat.succ j)) Nat.zero {s0}) (Nat.succ c) {s0}) \
          (lift_at (lift_at A Nat.zero (Nat.succ (Nat.succ j))) (Nat.succ c) {s0}) \
          (lift_exchange_zero (lift_at A Nat.zero (Nat.succ j)) c) \
-         (Eq.cong KExpr KExpr (fun (x : KExpr) => lift_at x (Nat.succ c) {s0}) \
+         (@Eq.cong KExpr KExpr (fun (x : KExpr) => lift_at x (Nat.succ c) {s0}) \
          (lift_at (lift_at A Nat.zero (Nat.succ j)) Nat.zero {s0}) \
          (lift_at A Nat.zero (Nat.succ (Nat.succ j))) \
          (lift_at_compose A Nat.zero (Nat.succ j) {s0}))))))))",
         kj_prev = kont(
-            "(ListType.cons KExpr (lift_at A0 c (Nat.succ Nat.zero)) G2)",
+            "(@ListType.cons KExpr (lift_at A0 c (Nat.succ Nat.zero)) G2)",
             "(wkpos j (Nat.succ c))",
             "A",
             "j",
             "(Nat.succ c)"
         ),
         ks = kont(
-            "(ListType.cons KExpr (lift_at A0 c (Nat.succ Nat.zero)) G2)",
+            "(@ListType.cons KExpr (lift_at A0 c (Nat.succ Nat.zero)) G2)",
             "(wkpos (Nat.succ j) (Nat.succ c))",
             "A",
             "(Nat.succ j)",
@@ -3621,19 +3621,19 @@ fn ctx_wk_lookup_value() -> String {
         "(fun (c : Nat) (A0 : KExpr) (G : ListType KExpr) (G2 : ListType KExpr) \
          (_hwk : CtxWk C c G G2) \
          (ih : forall (i : Nat) (A : KExpr), \
-         Eq (OptionType KExpr) (ctx_lookup G i) (OptionType.some KExpr A) -> \
+         @Eq (OptionType KExpr) (ctx_lookup G i) (@OptionType.some KExpr A) -> \
          forall (R : Type), {kih} -> R) => \
-         fun (i : Nat) => Nat.rec \
+         fun (i : Nat) => @Nat.rec \
          (fun (m : Nat) => forall (A : KExpr), \
-         Eq (OptionType KExpr) (ctx_lookup (ListType.cons KExpr A0 G) m) \
-         (OptionType.some KExpr A) -> \
+         @Eq (OptionType KExpr) (ctx_lookup (@ListType.cons KExpr A0 G) m) \
+         (@OptionType.some KExpr A) -> \
          forall (R : Type), {km} -> R) \
          {succ_zero_case} \
          {succ_succ_case} \
          i)",
         kih = kont("G2", "(wkpos i c)", "A", "i", "c"),
         km = kont(
-            "(ListType.cons KExpr (lift_at A0 c (Nat.succ Nat.zero)) G2)",
+            "(@ListType.cons KExpr (lift_at A0 c (Nat.succ Nat.zero)) G2)",
             "(wkpos m (Nat.succ c))",
             "A",
             "m",
@@ -3644,7 +3644,7 @@ fn ctx_wk_lookup_value() -> String {
     format!(
         "fun (C : KExpr) (c0 : Nat) (G0 : ListType KExpr) (G20 : ListType KExpr) \
          (hwk0 : CtxWk C c0 G0 G20) => \
-         CtxWk.rec C {motive} {zero_arm} {succ_arm} c0 G0 G20 hwk0"
+         @CtxWk.rec C {motive} {zero_arm} {succ_arm} c0 G0 G20 hwk0"
     )
 }
 
@@ -3655,7 +3655,7 @@ fn weaken_gen_value() -> String {
         format!(
             "(fun (G : ListType KExpr) (n : Nat) (c : Nat) \
              (G2 : ListType KExpr) (_hwk : CtxWk C c G G2) => \
-             TypingCtxConv.{rule} tenv G2 n)"
+             @TypingCtxConv.{rule} tenv G2 n)"
         )
     });
     let s0 = "(Nat.succ Nat.zero)";
@@ -3669,66 +3669,66 @@ fn weaken_gen_value() -> String {
     // var arm: transport the looked-up entry across the weakening.
     let var_arm = format!(
         "(fun (G : ListType KExpr) (i : Nat) (A : KExpr) \
-         (hlk : Eq (OptionType KExpr) (ctx_lookup G i) (OptionType.some KExpr A)) \
+         (hlk : @Eq (OptionType KExpr) (ctx_lookup G i) (@OptionType.some KExpr A)) \
          (c : Nat) (G2 : ListType KExpr) (hwk : CtxWk C c G G2) => \
          ctx_wk_lookup C c G G2 hwk i A hlk \
          (TypingCtxConv tenv G2 (lift_at (KExpr.bvar i) c {s0}) \
          (lift_at (lift_at A Nat.zero (Nat.succ i)) c {s0})) \
          (fun (A2 : KExpr) \
-         (hlk2 : Eq (OptionType KExpr) (ctx_lookup G2 (wkpos i c)) \
-         (OptionType.some KExpr A2)) \
-         (heq : Eq KExpr (lift_at A2 Nat.zero (Nat.succ (wkpos i c))) \
+         (hlk2 : @Eq (OptionType KExpr) (ctx_lookup G2 (wkpos i c)) \
+         (@OptionType.some KExpr A2)) \
+         (heq : @Eq KExpr (lift_at A2 Nat.zero (Nat.succ (wkpos i c))) \
          (lift_at (lift_at A Nat.zero (Nat.succ i)) c {s0})) => \
-         Eq.substType KExpr \
+         @Eq.substType KExpr \
          (fun (x : KExpr) => TypingCtxConv tenv G2 x \
          (lift_at (lift_at A Nat.zero (Nat.succ i)) c {s0})) \
          (KExpr.bvar (wkpos i c)) (lift_at (KExpr.bvar i) c {s0}) \
-         (Eq.symm KExpr (lift_at (KExpr.bvar i) c {s0}) (KExpr.bvar (wkpos i c)) \
+         (@Eq.symm KExpr (lift_at (KExpr.bvar i) c {s0}) (KExpr.bvar (wkpos i c)) \
          (lift_at_bvar_wkpos i c)) \
-         (Eq.substType KExpr \
+         (@Eq.substType KExpr \
          (fun (T : KExpr) => TypingCtxConv tenv G2 (KExpr.bvar (wkpos i c)) T) \
          (lift_at A2 Nat.zero (Nat.succ (wkpos i c))) \
          (lift_at (lift_at A Nat.zero (Nat.succ i)) c {s0}) \
          heq \
-         (TypingCtxConv.var tenv G2 (wkpos i c) A2 hlk2))))"
+         (@TypingCtxConv.var tenv G2 (wkpos i c) A2 hlk2))))"
     );
 
     let sort_arm = "(fun (G : ListType KExpr) (n : Level) \
          (c : Nat) (G2 : ListType KExpr) (_hwk : CtxWk C c G G2) => \
-         TypingCtxConv.sort tenv G2 n)"
+         @TypingCtxConv.sort tenv G2 n)"
         .to_string();
 
     let pi_arm = format!(
         "(fun (G : ListType KExpr) (A : KExpr) (B : KExpr) (n : Level) (m : Level) \
          (_hA : TypingCtxConv tenv G A (KExpr.sort n)) \
-         (_hB : TypingCtxConv tenv (ListType.cons KExpr A G) B (KExpr.sort m)) \
+         (_hB : TypingCtxConv tenv (@ListType.cons KExpr A G) B (KExpr.sort m)) \
          (ihA : forall (c : Nat) (G2 : ListType KExpr), CtxWk C c G G2 -> \
          TypingCtxConv tenv G2 (lift_at A c {s0}) (lift_at (KExpr.sort n) c {s0})) \
          (ihB : forall (c : Nat) (G2 : ListType KExpr), \
-         CtxWk C c (ListType.cons KExpr A G) G2 -> \
+         CtxWk C c (@ListType.cons KExpr A G) G2 -> \
          TypingCtxConv tenv G2 (lift_at B c {s0}) (lift_at (KExpr.sort m) c {s0})) \
          (c : Nat) (G2 : ListType KExpr) (hwk : CtxWk C c G G2) => \
-         TypingCtxConv.pi tenv G2 (lift_at A c {s0}) (lift_at B (Nat.succ c) {s0}) n m \
+         @TypingCtxConv.pi tenv G2 (lift_at A c {s0}) (lift_at B (Nat.succ c) {s0}) n m \
          (ihA c G2 hwk) \
-         (ihB (Nat.succ c) (ListType.cons KExpr (lift_at A c {s0}) G2) \
-         (CtxWk.succ C c A G G2 hwk)))"
+         (ihB (Nat.succ c) (@ListType.cons KExpr (lift_at A c {s0}) G2) \
+         (@CtxWk.succ C c A G G2 hwk)))"
     );
 
     let lam_arm = format!(
         "(fun (G : ListType KExpr) (A : KExpr) (b : KExpr) (B : KExpr) (u : Level) \
          (_hA : TypingCtxConv tenv G A (KExpr.sort u)) \
-         (_hb : TypingCtxConv tenv (ListType.cons KExpr A G) b B) \
+         (_hb : TypingCtxConv tenv (@ListType.cons KExpr A G) b B) \
          (ihA : forall (c : Nat) (G2 : ListType KExpr), CtxWk C c G G2 -> \
          TypingCtxConv tenv G2 (lift_at A c {s0}) (lift_at (KExpr.sort u) c {s0})) \
          (ihb : forall (c : Nat) (G2 : ListType KExpr), \
-         CtxWk C c (ListType.cons KExpr A G) G2 -> \
+         CtxWk C c (@ListType.cons KExpr A G) G2 -> \
          TypingCtxConv tenv G2 (lift_at b c {s0}) (lift_at B c {s0})) \
          (c : Nat) (G2 : ListType KExpr) (hwk : CtxWk C c G G2) => \
-         TypingCtxConv.lam tenv G2 (lift_at A c {s0}) (lift_at b (Nat.succ c) {s0}) \
+         @TypingCtxConv.lam tenv G2 (lift_at A c {s0}) (lift_at b (Nat.succ c) {s0}) \
          (lift_at B (Nat.succ c) {s0}) u \
          (ihA c G2 hwk) \
-         (ihb (Nat.succ c) (ListType.cons KExpr (lift_at A c {s0}) G2) \
-         (CtxWk.succ C c A G G2 hwk)))"
+         (ihb (Nat.succ c) (@ListType.cons KExpr (lift_at A c {s0}) G2) \
+         (@CtxWk.succ C c A G G2 hwk)))"
     );
 
     let app_arm = format!(
@@ -3740,30 +3740,30 @@ fn weaken_gen_value() -> String {
          (iha : forall (c : Nat) (G2 : ListType KExpr), CtxWk C c G G2 -> \
          TypingCtxConv tenv G2 (lift_at a c {s0}) (lift_at A c {s0})) \
          (c : Nat) (G2 : ListType KExpr) (hwk : CtxWk C c G G2) => \
-         Eq.substType KExpr \
+         @Eq.substType KExpr \
          (fun (T : KExpr) => TypingCtxConv tenv G2 \
          (KExpr.app (lift_at f c {s0}) (lift_at a c {s0})) T) \
          (instantiate (lift_at B (Nat.succ c) {s0}) (lift_at a c {s0})) \
          (lift_at (instantiate B a) c {s0}) \
-         (Eq.symm KExpr \
+         (@Eq.symm KExpr \
          (lift_at (instantiate B a) c {s0}) \
          (instantiate (lift_at B (Nat.succ c) {s0}) (lift_at a c {s0})) \
          (lift_instantiate_zero B a c)) \
-         (TypingCtxConv.app tenv G2 (lift_at f c {s0}) (lift_at a c {s0}) \
+         (@TypingCtxConv.app tenv G2 (lift_at f c {s0}) (lift_at a c {s0}) \
          (lift_at A c {s0}) (lift_at B (Nat.succ c) {s0}) \
          (ihf c G2 hwk) (iha c G2 hwk)))"
     );
 
     let const_arm = format!(
         "(fun (G : ListType KExpr) (n : Name) (us : ListType Level) (A : KExpr) \
-         (hA : Eq (OptionType KExpr) (kdecl_type_at tenv n us) (OptionType.some KExpr A)) \
+         (hA : @Eq (OptionType KExpr) (kdecl_type_at tenv n us) (@OptionType.some KExpr A)) \
          (c : Nat) (G2 : ListType KExpr) (_hwk : CtxWk C c G G2) => \
-         Eq.substType KExpr \
+         @Eq.substType KExpr \
          (fun (T : KExpr) => TypingCtxConv tenv G2 (KExpr.const n us) T) \
          A (lift_at A c {s0}) \
-         (Eq.symm KExpr (lift_at A c {s0}) A \
+         (@Eq.symm KExpr (lift_at A c {s0}) A \
          (tec_tenv_lift_closed tenv W n us A hA c {s0})) \
-         (TypingCtxConv.const tenv G2 n us A hA))"
+         (@TypingCtxConv.const tenv G2 n us A hA))"
     );
 
     let conv_arm = format!(
@@ -3772,7 +3772,7 @@ fn weaken_gen_value() -> String {
          (ih1 : forall (c : Nat) (G2 : ListType KExpr), CtxWk C c G G2 -> \
          TypingCtxConv tenv G2 (lift_at e c {s0}) (lift_at A c {s0})) \
          (c : Nat) (G2 : ListType KExpr) (hwk : CtxWk C c G G2) => \
-         TypingCtxConv.conv tenv G2 (lift_at e c {s0}) (lift_at A c {s0}) \
+         @TypingCtxConv.conv tenv G2 (lift_at e c {s0}) (lift_at A c {s0}) \
          (lift_at B c {s0}) \
          (ih1 c G2 hwk) \
          (def_eq_respects_lift_at_gen A B {s0} hf hd c))"
@@ -3786,30 +3786,30 @@ fn weaken_gen_value() -> String {
          (B : KExpr) (u : Level) \
          (_hty : TypingCtxConv tenv G ty (KExpr.sort u)) \
          (_hv : TypingCtxConv tenv G v ty) \
-         (_hb : TypingCtxConv tenv (ListType.cons KExpr ty G) b B) \
+         (_hb : TypingCtxConv tenv (@ListType.cons KExpr ty G) b B) \
          (ihty : forall (c : Nat) (G2 : ListType KExpr), CtxWk C c G G2 -> \
          TypingCtxConv tenv G2 (lift_at ty c {s0}) (lift_at (KExpr.sort u) c {s0})) \
          (ihv : forall (c : Nat) (G2 : ListType KExpr), CtxWk C c G G2 -> \
          TypingCtxConv tenv G2 (lift_at v c {s0}) (lift_at ty c {s0})) \
          (ihb : forall (c : Nat) (G2 : ListType KExpr), \
-         CtxWk C c (ListType.cons KExpr ty G) G2 -> \
+         CtxWk C c (@ListType.cons KExpr ty G) G2 -> \
          TypingCtxConv tenv G2 (lift_at b c {s0}) (lift_at B c {s0})) \
          (c : Nat) (G2 : ListType KExpr) (hwk : CtxWk C c G G2) => \
-         Eq.substType KExpr \
+         @Eq.substType KExpr \
          (fun (T : KExpr) => TypingCtxConv tenv G2 \
          (KExpr.let_ (lift_at ty c {s0}) (lift_at v c {s0}) \
          (lift_at b (Nat.succ c) {s0})) T) \
          (instantiate (lift_at B (Nat.succ c) {s0}) (lift_at v c {s0})) \
          (lift_at (instantiate B v) c {s0}) \
-         (Eq.symm KExpr \
+         (@Eq.symm KExpr \
          (lift_at (instantiate B v) c {s0}) \
          (instantiate (lift_at B (Nat.succ c) {s0}) (lift_at v c {s0})) \
          (lift_instantiate_zero B v c)) \
-         (TypingCtxConv.let_ tenv G2 (lift_at ty c {s0}) (lift_at v c {s0}) \
+         (@TypingCtxConv.let_ tenv G2 (lift_at ty c {s0}) (lift_at v c {s0}) \
          (lift_at b (Nat.succ c) {s0}) (lift_at B (Nat.succ c) {s0}) u \
          (ihty c G2 hwk) (ihv c G2 hwk) \
-         (ihb (Nat.succ c) (ListType.cons KExpr (lift_at ty c {s0}) G2) \
-         (CtxWk.succ C c ty G G2 hwk))))"
+         (ihb (Nat.succ c) (@ListType.cons KExpr (lift_at ty c {s0}) G2) \
+         (@CtxWk.succ C c ty G G2 hwk))))"
     );
 
     format!(
@@ -3818,7 +3818,7 @@ fn weaken_gen_value() -> String {
          (W : TypingEnvCoherent tenv) \
          (C : KExpr) (G0 : ListType KExpr) (e0 : KExpr) (T0 : KExpr) \
          (h0 : TypingCtxConv tenv G0 e0 T0) => \
-         TypingCtxConv.rec tenv {motive} \
+         @TypingCtxConv.rec tenv {motive} \
          {var_arm} {sort_arm} {pi_arm} {lam_arm} {app_arm} {const_arm} {conv_arm} \
          {let_arm} \
          {literal_arms} G0 e0 T0 h0"

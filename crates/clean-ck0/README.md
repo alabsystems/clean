@@ -47,6 +47,22 @@ require exact structural equality. Decision caches own node identities and key
 open terms by the transitively needed suffix of context types. They are cleared
 between outer decisions, so answers never cross environment changes.
 
+Conversion follows the pinned kernel's pair-directed definition-height strategy,
+delays expensive projections until their subjects can be compared, and retries
+applied projections before final application congruence. Core head reduction can
+perform checked iota inside cheap projection subjects. Native folds retain their
+canonical-definition licenses and stop after a nonliteral first operand. Internal
+type queries on already checked terms have a separate context-keyed cache; they
+cannot satisfy full checking. Public inference and conversion never assume this
+precondition. Every application argument and incoming declaration still checks.
+
+`DEFAULT_DECISION_STEPS = 2,097,152` is a finite measured resource allowance;
+exhaustion refuses. The reduction-frame bound stays 512 and the reduct/validation
+depth stays 1,024. The Init residual report
+records its derivation and complete subject/control results. Source changes
+invalidate the Q6 lineage capture until that lane re-captures it canonically;
+they do not promote the historical genesis manifest.
+
 Statement pins keep the existing v1 encoding. Target mode first measures its
 expanded encoding over the DAG and refuses above 1 MiB; whole-export checking
 has no expanded-tree requirement. Pinned subjects need at most 814,899 bytes.
@@ -57,8 +73,11 @@ The part 2 boundary preserves public signatures and keeps primitive recursors
 out of plain Const. Legitimate admitted inductives such as Nat.le.below are
 distinguished from primitive eliminators.
 It lowers only admitted primitive recursors to ElimRef, checking the full supplied
-level vector. Checked opaque/theorem helpers with reserved suffixes use private transparent forwarding aliases to the original opaque constant; the body stays opaque. Checked ordinary casesOn/recOn definitions are inlined under bounded
-expansion before that gate; they are not renamed into primitive recursors.
+level vector. Checked ordinary helpers with reserved suffixes use private forwarding aliases
+to the original checked declaration. Opacity and definition-height scheduling
+are preserved. Bodies are bounded and checked separately at admission; helper
+references keep their names and sharing for lazy conversion. No alias becomes
+a primitive recursor or obtains an iota rule.
 The internal iota RHSs use dummy lambda domains, so the reader independently
 reconstructs their real domains from the derived recursor and constructor
 telescopes before structural comparison. Only binder annotations are ignored;

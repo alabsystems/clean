@@ -69,6 +69,32 @@ pub struct PipelineArtifacts {
     pub(crate) nat_handles: bool,
 }
 
+/// DATA returned by one complete maintained TrustIR pipeline invocation.
+///
+/// This is the exact artifact record from the full invocation. Its boxed IR
+/// directly emits `module`; mono/optimized fields retain the maintained
+/// pipeline's prefix-replay observations. The accessor repeats no full run.
+/// Existing IR, ownership, emission and TV refusals apply.
+/// These public data fields are not a source, runtime, ABI or artifact token.
+#[cfg(feature = "trust-ir-backend")]
+#[derive(Debug, Clone)]
+pub struct TrustIrPipelineData {
+    /// Every actual maintained stage, including all boxed/lifted declarations.
+    pub artifacts: PipelineArtifacts,
+    /// Final emitted module, including the existing TV pass's mutations.
+    pub module: trust_ir::Module,
+    /// The actual full-entry TV outcome; no record is synthesized by the accessor.
+    pub tv_report: crate::emit_trust_ir_tv::TvMintReport,
+    /// Actual emitter-synthesized native wrappers from this invocation only.
+    /// DATA, never an extern owner, semantic certificate or codegen token.
+    pub native_arithmetic_supplies: Vec<crate::emit_trust_ir::NativeArithmeticSupplyData>,
+    /// Actual function-value and boxed-call associations from that same emitter.
+    pub native_arithmetic_uses: Vec<crate::emit_trust_ir::NativeArithmeticUseData>,
+}
+
+#[cfg(all(test, feature = "trust-ir-backend"))]
+mod transport_tests;
+
 impl PipelineArtifacts {
     /// Emit C from the boxed IR produced by this pipeline.
     pub fn emit_c(&self, config: CEmitConfig) -> Result<String, PipelineError> {
@@ -91,11 +117,43 @@ impl PipelineArtifacts {
         &self,
         config: &crate::emit_trust_ir::TrustIrConfig,
     ) -> Result<trust_ir::Module, crate::emit_trust_ir::TrustIrError> {
-        let module = crate::emit_trust_ir::emit_trust_ir_with_config(&self.boxed_ir_decls, config)?;
+        self.emit_trust_ir_with_supply_data(config)
+            .map(|data| data.module)
+    }
+
+    /// The same ordinary emission and entry guards, retaining actual native
+    /// wrapper inputs/identities as untrusted producer DATA. No proof token.
+    #[cfg(feature = "trust-ir-backend")]
+    pub fn emit_trust_ir_with_supply_data(
+        &self,
+        config: &crate::emit_trust_ir::TrustIrConfig,
+    ) -> Result<crate::emit_trust_ir::TrustIrEmissionData, crate::emit_trust_ir::TrustIrError> {
+        self.emit_trust_ir_with_supply_data_recording(config, None)
+    }
+
+    #[cfg(feature = "trust-ir-backend")]
+    fn emit_trust_ir_with_supply_data_recording(
+        &self,
+        config: &crate::emit_trust_ir::TrustIrConfig,
+        observation: Option<&crate::primitive_uses::ObservationFrame>,
+    ) -> Result<crate::emit_trust_ir::TrustIrEmissionData, crate::emit_trust_ir::TrustIrError> {
+        let data = match observation {
+            Some(_) => crate::emit_trust_ir::emit_trust_ir_recording_data(
+                &self.boxed_ir_decls,
+                config,
+                observation,
+            )?,
+            None => {
+                crate::emit_trust_ir::emit_trust_ir_with_supply_data(&self.boxed_ir_decls, config)?
+            }
+        };
         if config.runtime_lowering == crate::emit_trust_ir::RuntimeLowering::ExternCalls {
-            crate::boxing::entry_check::check_generated_uint32_entries(&module, &self.ir_decls)?;
+            crate::boxing::entry_check::check_generated_uint32_entries(
+                &data.module,
+                &self.ir_decls,
+            )?;
         }
-        Ok(module)
+        Ok(data)
     }
 }
 
@@ -216,6 +274,18 @@ fn compile_lcnf_decls_inner(
     meaning: CodeMeaning,
     closure: Option<&crate::RuntimeBindingClosure>,
 ) -> Result<PipelineArtifacts, PipelineError> {
+    compile_lcnf_decls_recording(decls, env, config, rc_repair, meaning, closure, None)
+}
+
+pub(crate) fn compile_lcnf_decls_recording(
+    decls: &[Decl],
+    env: &Environment,
+    config: &PipelineConfig,
+    rc_repair: RcRepairMode,
+    meaning: CodeMeaning,
+    closure: Option<&crate::RuntimeBindingClosure>,
+    observation: Option<&crate::primitive_uses::ObservationFrame>,
+) -> Result<PipelineArtifacts, PipelineError> {
     match closure {
         Some(closure) => closure.declarations(env, decls)?,
         None => crate::implemented_by::refuse_order_for(env, meaning)?,
@@ -224,22 +294,35 @@ fn compile_lcnf_decls_inner(
     verify_extern_decls(decls)?;
 
     // Build the PassManager with all L5CNF passes registered
-    let manager = PassManager::default_pipeline_with_config(&config.opt, &config.rc);
+    let manager = |role| {
+        PassManager::default_pipeline_recording(
+            &config.opt,
+            &config.rc,
+            observation.map(|frame| frame.role(role)),
+        )
+    };
+    let manager_base = manager(crate::primitive_uses::InvocationRole::PrefixReplay(
+        Phase::Base,
+    ));
+    let manager_mono = manager(crate::primitive_uses::InvocationRole::PrefixReplay(
+        Phase::Mono,
+    ));
+    let manager_full = manager(crate::primitive_uses::InvocationRole::Consumed);
 
     // Run Base phase (lambda_lift + to_mono) — captures mono snapshot
-    let mono_decls = manager.run_batch_until_phase(decls, env, Phase::Base)?;
+    let mono_decls = manager_base.run_batch_until_phase(decls, env, Phase::Base)?;
     if let Some(closure) = closure {
         closure.transformed_declarations(env, &mono_decls)?;
     }
 
     // Run through Mono phase (optimize) — captures optimized snapshot
-    let optimized_decls = manager.run_batch_until_phase(decls, env, Phase::Mono)?;
+    let optimized_decls = manager_mono.run_batch_until_phase(decls, env, Phase::Mono)?;
     if let Some(closure) = closure {
         closure.transformed_declarations(env, &optimized_decls)?;
     }
 
     // Run through Impure phase (RC) — captures RC snapshot
-    let rc_decls = manager.run_batch(decls, env)?;
+    let rc_decls = manager_full.run_batch(decls, env)?;
     if let Some(closure) = closure {
         closure.transformed_declarations(env, &rc_decls)?;
     }
@@ -254,6 +337,17 @@ fn compile_lcnf_decls_inner(
     if let Some(closure) = closure {
         closure.ir_declarations(env, &ir_decls)?;
     }
+    let observed_ir =
+        observation.and_then(|frame| frame.ir_declarations("to_ir actual output", &ir_decls));
+    if let Some(frame) = observation {
+        let before = frame.declarations("to_ir actual input", &rc_decls);
+        frame.decision(
+            "to_ir",
+            before,
+            observed_ir.clone(),
+            "actual full invocation lowering",
+        );
+    }
     let boxed_ir_decls =
         crate::boxing::explicit_boxing_with_kernel_env(&ir_decls, env, &config.boxing);
     let boxed_ir_decls = match rc_repair {
@@ -264,6 +358,19 @@ fn compile_lcnf_decls_inner(
 
     if let Some(closure) = closure {
         closure.ir_declarations(env, &boxed_ir_decls)?;
+    }
+    if let Some(frame) = observation {
+        let after = frame.ir_declarations("boxing and RC repair actual output", &boxed_ir_decls);
+        frame.decision(
+            "boxing and RC repair",
+            observed_ir,
+            after,
+            "actual boxing and repaired output; inner uninstrumented dispatch stays unobserved",
+        );
+        frame.gap(crate::primitive_uses::ObservationGap::Unobserved {
+            owner: "boxing inner decisions",
+            reason: "stage artifacts retained; inner choices not yet instrumented",
+        });
     }
     verify_recursor_calls_certifiable(&boxed_ir_decls, env)?;
     verify_rc_linearity(&boxed_ir_decls)?;
@@ -636,6 +743,26 @@ pub fn compile_lcnf_to_trust_ir_in_runtime_closure(
     .map(|(module, _)| module)
 }
 
+/// Retain the actual stage DATA and TV report from the same full invocation.
+/// Every ordinary full-entry guard and refusal remains in the common path.
+#[cfg(feature = "trust-ir-backend")]
+pub fn compile_lcnf_to_trust_ir_in_runtime_closure_with_artifacts(
+    decls: &[Decl],
+    env: &Environment,
+    pipeline_config: &PipelineConfig,
+    emit_config: &crate::emit_trust_ir::TrustIrConfig,
+    closure: &crate::RuntimeBindingClosure,
+) -> Result<TrustIrPipelineData, PipelineError> {
+    compile_lcnf_to_trust_ir_ordered_data(
+        decls,
+        env,
+        pipeline_config,
+        emit_config,
+        CodeMeaning::LeanCompiled,
+        Some(closure),
+    )
+}
+
 #[cfg(feature = "trust-ir-backend")]
 fn compile_lcnf_to_trust_ir_ordered(
     decls: &[Decl],
@@ -645,18 +772,84 @@ fn compile_lcnf_to_trust_ir_ordered(
     meaning: CodeMeaning,
     closure: Option<&crate::RuntimeBindingClosure>,
 ) -> Result<(trust_ir::Module, crate::emit_trust_ir_tv::TvMintReport), PipelineError> {
-    let artifacts = match closure {
-        Some(closure) => {
-            compile_lcnf_decls_in_runtime_closure(decls, env, pipeline_config, closure)?
-        }
-        None => compile_lcnf_decls_for(decls, env, pipeline_config, meaning)?,
-    };
+    let data = compile_lcnf_to_trust_ir_ordered_data(
+        decls,
+        env,
+        pipeline_config,
+        emit_config,
+        meaning,
+        closure,
+    )?;
+    Ok((data.module, data.tv_report))
+}
+
+#[cfg(feature = "trust-ir-backend")]
+pub(crate) fn compile_lcnf_to_trust_ir_ordered_data(
+    decls: &[Decl],
+    env: &Environment,
+    pipeline_config: &PipelineConfig,
+    emit_config: &crate::emit_trust_ir::TrustIrConfig,
+    meaning: CodeMeaning,
+    closure: Option<&crate::RuntimeBindingClosure>,
+) -> Result<TrustIrPipelineData, PipelineError> {
+    compile_lcnf_to_trust_ir_recording(
+        decls,
+        env,
+        pipeline_config,
+        emit_config,
+        meaning,
+        closure,
+        None,
+    )
+}
+
+#[cfg(feature = "trust-ir-backend")]
+pub(crate) fn compile_lcnf_to_trust_ir_recording(
+    decls: &[Decl],
+    env: &Environment,
+    pipeline_config: &PipelineConfig,
+    emit_config: &crate::emit_trust_ir::TrustIrConfig,
+    meaning: CodeMeaning,
+    closure: Option<&crate::RuntimeBindingClosure>,
+    observation: Option<&crate::primitive_uses::ObservationFrame>,
+) -> Result<TrustIrPipelineData, PipelineError> {
+    let artifacts = compile_lcnf_decls_recording(
+        decls,
+        env,
+        pipeline_config,
+        RcRepairMode::Enabled,
+        meaning,
+        closure,
+        observation,
+    )?;
     // The L5IR checker, as the C and Rust lanes run it (`check_ir`): a shape
     // it refuses (e.g. a constructor the runtime header cannot hold) is
     // refused here at build time, never emitted for a runtime panic to catch.
     crate::ir_checker::check_decls(&artifacts.boxed_ir_decls)?;
-    let module = artifacts.emit_trust_ir(emit_config)?;
-    certify_trust_ir(module, decls, env, emit_config)
+    let emitted = artifacts.emit_trust_ir_with_supply_data_recording(emit_config, observation)?;
+    let pre_tv = observation.and_then(|frame| {
+        frame.module(
+            "actual module before translation validation",
+            &emitted.module,
+        )
+    });
+    let (module, tv_report) = certify_trust_ir(emitted.module, decls, env, emit_config)?;
+    if let Some(frame) = observation {
+        let after = frame.module("actual module after translation validation", &module);
+        frame.decision(
+            "translation validation",
+            pre_tv,
+            after,
+            "actual module mutation; ordinary licensing unchanged",
+        );
+    }
+    Ok(TrustIrPipelineData {
+        artifacts,
+        module,
+        tv_report,
+        native_arithmetic_supplies: emitted.native_arithmetic_supplies,
+        native_arithmetic_uses: emitted.native_arithmetic_uses,
+    })
 }
 
 /// [`compile_lcnf_to_trust_ir_with_report`] with typed BOUNDARY carriers for

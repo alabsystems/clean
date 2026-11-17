@@ -62,13 +62,13 @@ impl ProofLibrary {
                 "fun (n : Nat) (trail : TrailOp n) => \
                  @TrailOp.rec n \
                    (fun (t : TrailOp n) => TrailConsistent n t) \
-                   (TrailConsistent.empty n) \
+                   (@TrailConsistent.empty n) \
                    (fun (var : Nat) (prev : TrailOp n) (ih : TrailConsistent n prev) => \
-                     TrailConsistent.decide n var prev ih) \
+                     @TrailConsistent.decide n var prev ih) \
                    (fun (var : Nat) (reason : Nat) (prev : TrailOp n) (ih : TrailConsistent n prev) => \
-                     TrailConsistent.propagate n var reason prev ih) \
+                     @TrailConsistent.propagate n var reason prev ih) \
                    (fun (level : Nat) (prev : TrailOp n) (ih : TrailConsistent n prev) => \
-                     TrailConsistent.backtrack n level prev ih) \
+                     @TrailConsistent.backtrack n level prev ih) \
                    trail",
                 "S01 Trail consistency: each variable assigned at most once. \
                  Proof by induction on TrailOp using TrailOp.rec. \
@@ -100,13 +100,13 @@ impl ProofLibrary {
                 "fun (nc : Nat) (ops : WatchOp nc) => \
                  @WatchOp.rec nc \
                    (fun (w : WatchOp nc) => WatchInvariant nc w) \
-                   (WatchInvariant.init nc) \
+                   (@WatchInvariant.init nc) \
                    (fun (clause_idx : Nat) (old_watch : Nat) (new_watch : Nat) \
                         (prev : WatchOp nc) (ih : WatchInvariant nc prev) => \
-                     WatchInvariant.update nc clause_idx old_watch new_watch prev ih) \
+                     @WatchInvariant.update nc clause_idx old_watch new_watch prev ih) \
                    (fun (clause_idx : Nat) (unit_lit : Nat) \
                         (prev : WatchOp nc) (ih : WatchInvariant nc prev) => \
-                     WatchInvariant.propagate nc clause_idx unit_lit prev ih) \
+                     @WatchInvariant.propagate nc clause_idx unit_lit prev ih) \
                    ops",
                 "S02 Two-watched-literal invariant: for each non-satisfied clause, \
                  watch pointers point to two distinct unassigned literals. \
@@ -141,10 +141,10 @@ impl ProofLibrary {
                 "fun (db_size : Nat) (deriv : ResolutionStep db_size) => \
                  @ResolutionStep.rec db_size \
                    (fun (d : ResolutionStep db_size) => ResolutionSound db_size d) \
-                   (fun (idx : Nat) => ResolutionSound.axiom_clause db_size idx) \
+                   (fun (idx : Nat) => @ResolutionSound.axiom_clause db_size idx) \
                    (fun (pivot : Nat) (left : ResolutionStep db_size) (right : ResolutionStep db_size) \
                         (ih_left : ResolutionSound db_size left) (ih_right : ResolutionSound db_size right) => \
-                     ResolutionSound.resolve db_size pivot left right ih_left ih_right) \
+                     @ResolutionSound.resolve db_size pivot left right ih_left ih_right) \
                    deriv",
                 "S03 Learned clause soundness: every learned clause is a logical \
                  consequence of the original clause database, derived by resolution. \
@@ -178,13 +178,13 @@ impl ProofLibrary {
                 "fun (n : Nat) (ops : BacktrackOp n) => \
                  @BacktrackOp.rec n \
                    (fun (b : BacktrackOp n) => BacktrackValid n b) \
-                   (fun (level : Nat) => BacktrackValid.current n level) \
+                   (fun (level : Nat) => @BacktrackValid.current n level) \
                    (fun (var : Nat) (var_level : Nat) \
                         (prev : BacktrackOp n) (ih : BacktrackValid n prev) => \
-                     BacktrackValid.pop n var var_level prev ih) \
+                     @BacktrackValid.pop n var var_level prev ih) \
                    (fun (target_level : Nat) \
                         (prev : BacktrackOp n) (ih : BacktrackValid n prev) => \
-                     BacktrackValid.done n target_level prev ih) \
+                     @BacktrackValid.done n target_level prev ih) \
                    ops",
                 "S04 Backtrack correctness: after backjumping to level d, the trail \
                  is a valid prefix with all assignments at level <= d. \
@@ -218,13 +218,13 @@ impl ProofLibrary {
                 "fun (n : Nat) (steps : BCPStep n) => \
                  @BCPStep.rec n \
                    (fun (s : BCPStep n) => BCPComplete n s) \
-                   (BCPComplete.fixpoint n) \
+                   (@BCPComplete.fixpoint n) \
                    (fun (clause_idx : Nat) (lit : Nat) \
                         (prev : BCPStep n) (ih : BCPComplete n prev) => \
-                     BCPComplete.unit n clause_idx lit prev ih) \
+                     @BCPComplete.unit n clause_idx lit prev ih) \
                    (fun (clause_idx : Nat) \
                         (prev : BCPStep n) (ih : BCPComplete n prev) => \
-                     BCPComplete.skip n clause_idx prev ih) \
+                     @BCPComplete.skip n clause_idx prev ih) \
                    steps",
                 "S05 Propagation completeness: BCP finds all unit-implied literals. \
                  Proof by induction on BCPStep using BCPStep.rec. \
@@ -260,13 +260,13 @@ impl ProofLibrary {
                 "fun (bound : Nat) (steps : CDCLStep bound) => \
                  @CDCLStep.rec bound \
                    (fun (s : CDCLStep bound) => CDCLTerminates bound s) \
-                   (CDCLTerminates.sat bound) \
-                   (CDCLTerminates.unsat bound) \
+                   (@CDCLTerminates.sat bound) \
+                   (@CDCLTerminates.unsat bound) \
                    (fun (clause_id : Nat) \
                         (prev : CDCLStep bound) (ih : CDCLTerminates bound prev) => \
-                     CDCLTerminates.learn bound clause_id prev ih) \
+                     @CDCLTerminates.learn bound clause_id prev ih) \
                    (fun (prev : CDCLStep bound) (ih : CDCLTerminates bound prev) => \
-                     CDCLTerminates.restart bound prev ih) \
+                     @CDCLTerminates.restart bound prev ih) \
                    steps",
                 "S06 Termination: CDCL terminates in finitely many steps. \
                  Proof by well-founded induction on CDCLStep using CDCLStep.rec. \

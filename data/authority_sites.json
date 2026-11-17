@@ -353,26 +353,26 @@
   ],
   "summary": {
    "sites_by_role": {
-    "call": 49,
-    "construct": 243,
-    "def": 61,
+    "call": 53,
+    "construct": 239,
+    "def": 58,
     "import": 15,
-    "mention": 16,
-    "read": 198
+    "mention": 12,
+    "read": 201
    },
    "occurrences_by_role": {
-    "call": 50,
-    "construct": 306,
-    "def": 64,
+    "call": 54,
+    "construct": 302,
+    "def": 63,
     "import": 15,
-    "mention": 23,
-    "read": 228
+    "mention": 20,
+    "read": 231
    },
    "classified_sites_by_class": {
     "mint": 97,
-    "relabel": 98,
-    "root": 50,
-    "threshold": 47
+    "relabel": 93,
+    "root": 52,
+    "threshold": 50
    },
    "mint_sites_by_checker": {
     "clean-kernel/add_decl/Extended": 7,
@@ -583,8 +583,8 @@
     "role": "construct",
     "count": 2,
     "lines": [
-     106,
-     145
+     104,
+     143
     ],
     "class": "threshold",
     "mints": "the confidence an example's probe filters and asserts on",
@@ -1405,7 +1405,7 @@
     "role": "construct",
     "count": 1,
     "lines": [
-     1635
+     1640
     ],
     "class": "mint",
     "mints": "ProofQuality::AxiomDependent {axiom_count, axioms}",
@@ -1429,7 +1429,7 @@
     "role": "read",
     "count": 1,
     "lines": [
-     1663
+     1668
     ]
    },
    {
@@ -1735,7 +1735,7 @@
     "role": "def",
     "count": 1,
     "lines": [
-     3891
+     3912
     ]
    },
    {
@@ -1936,7 +1936,7 @@
     "role": "construct",
     "count": 1,
     "lines": [
-     920
+     958
     ],
     "class": "mint",
     "mints": "clean_kernel::ReferenceAccepted, the fenced entry's acceptance token (theory id, env digest, declaration digest)",
@@ -1980,13 +1980,15 @@
     "family": "root",
     "token": "ReferenceAccepted",
     "role": "mention",
-    "count": 5,
+    "count": 7,
     "lines": [
      661,
-     741,
-     797,
-     883,
-     919
+     673,
+     681,
+     779,
+     835,
+     921,
+     957
     ]
    },
    {
@@ -2010,7 +2012,7 @@
     "role": "def",
     "count": 1,
     "lines": [
-     738
+     776
     ]
    },
    {
@@ -2022,7 +2024,7 @@
     "role": "def",
     "count": 1,
     "lines": [
-     797
+     835
     ]
    },
    {
@@ -2034,7 +2036,7 @@
     "role": "def",
     "count": 1,
     "lines": [
-     879
+     917
     ]
    },
    {
@@ -2514,7 +2516,7 @@
     "role": "import",
     "count": 1,
     "lines": [
-     89
+     100
     ]
    },
    {
@@ -2526,7 +2528,7 @@
     "role": "call",
     "count": 1,
     "lines": [
-     612
+     673
     ],
     "class": "relabel",
     "mints": "the baseline kernel-verified.json read for the regression gate",
@@ -2540,29 +2542,28 @@
     "reach": "user"
    },
    {
-    "id": "clean:crates/clean-mathverse/src/bin/mathverse_shard/coq_import_command.rs#run_coq_import_library_with_context#KernelVerifiedManifest::from_report#call",
+    "id": "clean:crates/clean-mathverse/src/bin/mathverse_shard/coq_import_command.rs#run_coq_import_library_with_context#KernelVerifiedManifest::from_incremental_report#call",
     "file": "crates/clean-mathverse/src/bin/mathverse_shard/coq_import_command.rs",
     "symbol": "run_coq_import_library_with_context",
     "family": "root",
-    "token": "KernelVerifiedManifest::from_report",
+    "token": "KernelVerifiedManifest::from_incremental_report",
     "role": "call",
     "count": 1,
     "lines": [
-     439
+     468
     ],
     "class": "relabel",
-    "mints": "the kernel-verified.json manifest of a Coq library import (then stamped into the shards)",
+    "mints": "the development kernel-verified.json the Coq lane writes (P6 slice 1a: development tier, which confers no label (P2 clause 1); nothing is stamped from it)",
     "checker": {
      "kind": "inherits",
-     "detail": "The function calls no kernel entry. It calls verify_corpus_incremental_with_env_policy(&library, prelude, policy) (line 421) and passes the returned local `report` to KernelVerifiedManifest::from_report (439), which copies report.kernel_verified and report.kernel_verified_names verbatim (kernel_verified_manifest.rs:139-163). stamp_shard_dir_kernel_verified (451) then stamps from that manifest. The per-constant verdicts are minted inside verify::incremental (try_add_constant and the kernel_verified_names.push producer rows of run_incremental_over_reader_bounded). The environment is with_prelude_for_import or upstream, with set_cumulative(true) and no theory set."
+     "detail": "copies report.kernel_verified_names into accepted_names under a DevelopmentRun identity (cumulative profile over the measured import-prelude or upstream base, entry incremental-replay); the verdicts are minted in verify::incremental by verify_corpus_incremental_with_env_policy"
     },
     "evidence_tokens": [
      "verify_corpus_incremental_with_env_policy"
     ],
-    "reach": "user",
-    "reach_detail": "mathverse_shard coq-import verb (run_coq_import_root at line 912). Trust does not link clean-mathverse at the pin.",
     "kcheck_rung": null,
-    "rung_note": "carries a label minted elsewhere: the incremental verifier's per-constant KernelVerified verdicts"
+    "rung_note": "carries a label minted elsewhere; development tier under P6, so it confers none",
+    "reach": "user"
    },
    {
     "id": "clean:crates/clean-mathverse/src/bin/mathverse_shard/coq_import_command.rs#soundness_floor_breaches#ImportConfidence::KernelVerified#construct",
@@ -2573,7 +2574,7 @@
     "role": "construct",
     "count": 1,
     "lines": [
-     261
+     280
     ],
     "class": "threshold",
     "mints": "the confidence a soundness-floor scan looks for",
@@ -2607,7 +2608,7 @@
     "role": "import",
     "count": 1,
     "lines": [
-     28
+     29
     ]
    },
    {
@@ -2619,7 +2620,7 @@
     "role": "call",
     "count": 1,
     "lines": [
-     524
+     564
     ],
     "class": "relabel",
     "mints": "the merged kernel-verified.json of a sharded run",
@@ -2641,7 +2642,7 @@
     "role": "call",
     "count": 1,
     "lines": [
-     533
+     579
     ],
     "class": "relabel",
     "mints": "the merged kernel-verified.json of a sharded run",
@@ -2663,7 +2664,7 @@
     "role": "call",
     "count": 1,
     "lines": [
-     354
+     383
     ],
     "class": "relabel",
     "mints": "a resumable sidecar read back",
@@ -2685,42 +2686,29 @@
     "role": "import",
     "count": 1,
     "lines": [
-     30
+     19
     ]
    },
    {
-    "id": "clean:crates/clean-mathverse/src/bin/mathverse_shard/stamp_command.rs#<module>#KernelVerifiedManifest#mention",
-    "file": "crates/clean-mathverse/src/bin/mathverse_shard/stamp_command.rs",
-    "symbol": "<module>",
-    "family": "root",
-    "token": "KernelVerifiedManifest",
-    "role": "mention",
-    "count": 2,
-    "lines": [
-     130,
-     155
-    ]
-   },
-   {
-    "id": "clean:crates/clean-mathverse/src/bin/mathverse_shard/stamp_command.rs#run_stamp#KernelVerifiedManifest::from_file#call",
+    "id": "clean:crates/clean-mathverse/src/bin/mathverse_shard/stamp_command.rs#run_stamp#KernelVerifiedManifest::refuse_grant#call",
     "file": "crates/clean-mathverse/src/bin/mathverse_shard/stamp_command.rs",
     "symbol": "run_stamp",
     "family": "root",
-    "token": "KernelVerifiedManifest::from_file",
+    "token": "KernelVerifiedManifest::refuse_grant",
     "role": "call",
     "count": 1,
     "lines": [
-     97
+     84
     ],
-    "class": "relabel",
-    "mints": "the manifest a stamp run applies",
+    "class": "threshold",
+    "mints": "the refusal `mathverse_shard stamp` returns for every manifest",
     "checker": {
-     "kind": "inherits",
-     "detail": "reads kernel-verified.json; the stamp inherits it"
+     "kind": "not-a-mint",
+     "detail": "reads the manifest only to refuse it (its own validation refusal, else DevelopmentTier); no header is written"
     },
     "evidence_tokens": [],
     "kcheck_rung": null,
-    "rung_note": "carries a label minted elsewhere; it follows its source",
+    "rung_note": "a refusal: nothing is accepted at this site",
     "reach": "user"
    },
    {
@@ -2782,7 +2770,7 @@
     "role": "construct",
     "count": 1,
     "lines": [
-     77
+     95
     ],
     "class": "root",
     "mints": "the environment and theory of `mathverse_shard verify-corpus`",
@@ -2807,34 +2795,30 @@
     "role": "import",
     "count": 1,
     "lines": [
-     30
+     32
     ]
    },
    {
-    "id": "clean:crates/clean-mathverse/src/bin/mathverse_shard/verify_corpus_commands.rs#cmd_verify_corpus#KernelVerifiedManifest::from_report#call",
+    "id": "clean:crates/clean-mathverse/src/bin/mathverse_shard/verify_corpus_commands.rs#cmd_verify_corpus#KernelVerifiedManifest::from_incremental_report#call",
     "file": "crates/clean-mathverse/src/bin/mathverse_shard/verify_corpus_commands.rs",
     "symbol": "cmd_verify_corpus",
     "family": "root",
-    "token": "KernelVerifiedManifest::from_report",
+    "token": "KernelVerifiedManifest::from_incremental_report",
     "role": "call",
     "count": 1,
     "lines": [
-     215
+     268
     ],
     "class": "relabel",
-    "mints": "the kernel-verified.json manifest of a corpus verify (--emit-verified)",
+    "mints": "the development kernel-verified.json `verify-kernel --corpus --emit-verified` writes (P6 slice 1a: development tier, which confers no label (P2 clause 1); nothing is stamped from it)",
     "checker": {
      "kind": "inherits",
-     "detail": "The function calls no listed kernel entry. for_lean_replay at 76 builds a base and checks nothing; it has its own root row. The local `report` comes from verify_corpus_incremental_repaired_bounded (93/107) or verify_corpus_incremental_with_env (115), and KernelVerifiedManifest::from_report (215) copies its kernel_verified count and names verbatim. The verdicts are minted inside verify::incremental. The base is for_lean_replay plus KernelTheory::Lean only for an all-.olean corpus, otherwise try_with_prelude_for_import (Extended)."
+     "detail": "copies the corpus report's accepted names under a DevelopmentRun identity (lean-replay or import-prelude base measured before the run); the verdicts are minted in verify::incremental"
     },
-    "evidence_tokens": [
-     "verify_corpus_incremental_with_env",
-     "verify_corpus_incremental_repaired_bounded"
-    ],
-    "reach": "user",
-    "reach_detail": "mathverse_shard verify-kernel --corpus (verify_commands.rs:30). Trust does not link clean-mathverse at the pin.",
+    "evidence_tokens": [],
     "kcheck_rung": null,
-    "rung_note": "carries a label minted elsewhere: the incremental verifier's per-constant KernelVerified verdicts"
+    "rung_note": "carries a label minted elsewhere; development tier under P6, so it confers none",
+    "reach": "user"
    },
    {
     "id": "clean:crates/clean-mathverse/src/bin/mathverse_shard/verify_corpus_commands.rs#cmd_verify_corpus#for_lean_replay#call",
@@ -2845,7 +2829,7 @@
     "role": "call",
     "count": 1,
     "lines": [
-     76
+     94
     ],
     "class": "root",
     "mints": "the environment and theory of `mathverse_shard verify-corpus`",
@@ -3124,7 +3108,7 @@
     "role": "import",
     "count": 1,
     "lines": [
-     33
+     39
     ]
    },
    {
@@ -3136,8 +3120,8 @@
     "role": "call",
     "count": 2,
     "lines": [
-     366,
-     367
+     395,
+     396
     ],
     "class": "relabel",
     "mints": "a manifest read by a guardrail command",
@@ -3159,7 +3143,7 @@
     "role": "call",
     "count": 1,
     "lines": [
-     421
+     465
     ],
     "class": "relabel",
     "mints": "a manifest read by a guardrail command",
@@ -3181,7 +3165,7 @@
     "role": "call",
     "count": 1,
     "lines": [
-     257
+     261
     ],
     "class": "root",
     "mints": "the base environment of the parallel verifier (verify-batch --full-validation)",
@@ -3206,7 +3190,7 @@
     "role": "call",
     "count": 1,
     "lines": [
-     469
+     473
     ],
     "class": "root",
     "mints": "the base environment of the parallel verifier (verify-batch --full-validation)",
@@ -3231,8 +3215,8 @@
     "role": "construct",
     "count": 2,
     "lines": [
-     990,
-     1018
+     994,
+     1022
     ],
     "class": "root",
     "mints": "the theory of the parallel verifier's workers",
@@ -3255,7 +3239,7 @@
     "role": "construct",
     "count": 1,
     "lines": [
-     1205
+     1213
     ],
     "class": "relabel",
     "mints": "Run-level tally of heuristic-minted KernelVerified headers (the soundness-floor counter that must stay 0)",
@@ -3278,7 +3262,7 @@
     "role": "construct",
     "count": 1,
     "lines": [
-     1192
+     1200
     ],
     "class": "relabel",
     "mints": "Run-level IncrementalVerifyReport.kernel_verified count",
@@ -3301,7 +3285,7 @@
     "role": "construct",
     "count": 1,
     "lines": [
-     1200
+     1208
     ],
     "class": "relabel",
     "mints": "Run-level list of KernelVerified constant names",
@@ -3428,7 +3412,7 @@
     "role": "import",
     "count": 1,
     "lines": [
-     54
+     53
     ]
    },
    {
@@ -3440,7 +3424,7 @@
     "role": "construct",
     "count": 1,
     "lines": [
-     772
+     778
     ],
     "class": "root",
     "mints": "the environment and theory of `mathverse stamp-verified`",
@@ -3457,30 +3441,29 @@
     "reach": "user"
    },
    {
-    "id": "clean:crates/clean-mathverse/src/cli/stamp_verified_dispatch.rs#cmd_stamp_verified#KernelVerifiedManifest::from_report#call",
+    "id": "clean:crates/clean-mathverse/src/cli/stamp_verified_dispatch.rs#cmd_stamp_verified#KernelVerifiedManifest::from_incremental_report#call",
     "file": "crates/clean-mathverse/src/cli/stamp_verified_dispatch.rs",
     "symbol": "cmd_stamp_verified",
     "family": "root",
-    "token": "KernelVerifiedManifest::from_report",
+    "token": "KernelVerifiedManifest::from_incremental_report",
     "role": "call",
     "count": 1,
     "lines": [
-     881
+     915
     ],
     "class": "relabel",
-    "mints": "the kernel-verified.json manifest `stamp-verified` writes and stamps shards from",
+    "mints": "the development kernel-verified.json `stamp-verified` writes (P6 slice 1a: development tier, which confers no label (P2 clause 1); nothing is stamped from it)",
     "checker": {
      "kind": "inherits",
-     "detail": "The function calls no listed kernel entry. It builds the base (for_lean_replay at 750, or a load_targets_closure environment) and sets KernelTheory::Lean (772); those are root rows. The destructured `report` comes from single_pass_verify_streaming (814) or stamp_merged_convert_and_verify (826). KernelVerifiedManifest::from_report (881) copies report.kernel_verified_names, and stamp_shard_dir_kernel_verified (914) stamps them. The verdicts are minted in those verify helpers and verify::incremental."
+     "detail": "The function calls no listed kernel entry. The destructured `report` comes from single_pass_verify_streaming or stamp_merged_convert_and_verify; KernelVerifiedManifest::from_incremental_report copies report.kernel_verified_names into accepted_names under a DevelopmentRun identity. No header is stamped (the stamp call was deleted). The verdicts are minted in those verify helpers and verify::incremental."
     },
     "evidence_tokens": [
      "single_pass_verify_streaming",
      "stamp_merged_convert_and_verify"
     ],
-    "reach": "user",
-    "reach_detail": "clean-mathverse CLI MathverseCommands::StampVerified (cli/mod.rs:1832). Trust does not link clean-mathverse at the pin.",
     "kcheck_rung": null,
-    "rung_note": "carries a label minted elsewhere: the streaming or merged verifier's per-constant KernelVerified verdicts"
+    "rung_note": "carries a label minted elsewhere; development tier under P6, so it confers none",
+    "reach": "user"
    },
    {
     "id": "clean:crates/clean-mathverse/src/cli/stamp_verified_dispatch.rs#cmd_stamp_verified#for_lean_replay#call",
@@ -3491,7 +3474,7 @@
     "role": "call",
     "count": 1,
     "lines": [
-     750
+     756
     ],
     "class": "root",
     "mints": "the environment and theory of `mathverse stamp-verified`",
@@ -3508,29 +3491,28 @@
     "reach": "user"
    },
    {
-    "id": "clean:crates/clean-mathverse/src/cli/stamp_verified_dispatch.rs#cmd_stamp_verified_parallel#KernelVerifiedManifest::from_report#call",
+    "id": "clean:crates/clean-mathverse/src/cli/stamp_verified_dispatch.rs#cmd_stamp_verified_parallel#KernelVerifiedManifest::from_parallel_report#call",
     "file": "crates/clean-mathverse/src/cli/stamp_verified_dispatch.rs",
     "symbol": "cmd_stamp_verified_parallel",
     "family": "root",
-    "token": "KernelVerifiedManifest::from_report",
+    "token": "KernelVerifiedManifest::from_parallel_report",
     "role": "call",
     "count": 1,
     "lines": [
-     1256
+     1277
     ],
     "class": "relabel",
-    "mints": "the kernel-verified.json manifest of the parallel `stamp-verified`",
+    "mints": "the development kernel-verified.json `stamp-verified --parallel` writes (P6 slice 1a: development tier, which confers no label (P2 clause 1); nothing is stamped from it)",
     "checker": {
      "kind": "inherits",
-     "detail": "The function calls no listed kernel entry. The earlier tokens were a path segment (`parallel_verify` in crate::cli::parallel_verify::...) and a destructured field (`report`). The report comes from crate::cli::parallel_verify::parallel_convert_and_verify (1196), whose workers re-check, and KernelVerifiedManifest::from_report (1256) copies report.kernel_verified_names verbatim before stamp_shard_dir_kernel_verified (1262). The verdicts are minted in parallel_verify / parallel_verify_replay (check_value_bearing producer rows)."
+     "detail": "The report comes from crate::cli::parallel_verify::parallel_convert_and_verify, whose workers re-check; from_parallel_report copies report.kernel_verified_names verbatim under a DevelopmentRun identity (entry parallel-readonly-replay). No header is stamped. The verdicts are minted in parallel_verify / parallel_verify_replay."
     },
     "evidence_tokens": [
      "parallel_convert_and_verify"
     ],
-    "reach": "user",
-    "reach_detail": "stamp-verified --parallel (dispatched from cmd_stamp_verified at 644). Trust does not link clean-mathverse at the pin.",
     "kcheck_rung": null,
-    "rung_note": "carries a label minted elsewhere: the parallel verifier's per-constant KernelVerified verdicts"
+    "rung_note": "carries a label minted elsewhere; development tier under P6, so it confers none",
+    "reach": "user"
    },
    {
     "id": "clean:crates/clean-mathverse/src/cli/stamp_verified_dispatch.rs#merge_incremental_report#kernel_verified+=#construct",
@@ -3541,7 +3523,7 @@
     "role": "construct",
     "count": 1,
     "lines": [
-     1692
+     1712
     ],
     "class": "relabel",
     "mints": "Accumulated IncrementalVerifyReport.kernel_verified across modules",
@@ -3564,7 +3546,7 @@
     "role": "construct",
     "count": 1,
     "lines": [
-     1707
+     1727
     ],
     "class": "relabel",
     "mints": "Accumulated KernelVerified name list across modules",
@@ -3587,7 +3569,7 @@
     "role": "construct",
     "count": 1,
     "lines": [
-     1522
+     1542
     ],
     "class": "relabel",
     "mints": "Tally of heuristic-minted KernelVerified headers across converted modules (soundness floor, must be 0)",
@@ -3610,7 +3592,7 @@
     "role": "construct",
     "count": 1,
     "lines": [
-     1612
+     1632
     ],
     "class": "relabel",
     "mints": "Tally of heuristic-minted KernelVerified headers (soundness floor, must be 0) on the legacy merged path",
@@ -3719,18 +3701,6 @@
     "kcheck_rung": 2,
     "reach": "user",
     "first_risk_note": "a gate report passing is recorded as KernelVerified"
-   },
-   {
-    "id": "clean:crates/clean-mathverse/src/error.rs#enum MathverseError#KernelVerifiedStampMismatch#def",
-    "file": "crates/clean-mathverse/src/error.rs",
-    "symbol": "enum MathverseError",
-    "family": "label",
-    "token": "KernelVerifiedStampMismatch",
-    "role": "def",
-    "count": 1,
-    "lines": [
-     110
-    ]
    },
    {
     "id": "clean:crates/clean-mathverse/src/export/alpha.rs#trust_gate_allows#ImportConfidence::KernelVerified#read",
@@ -4756,7 +4726,7 @@
     "role": "construct",
     "count": 1,
     "lines": [
-     491
+     489
     ],
     "class": "mint",
     "mints": "ImportConfidence::KernelVerified on a stored shard header for an .olean constant named in a caller-supplied verified set",
@@ -4778,8 +4748,8 @@
     "role": "read",
     "count": 2,
     "lines": [
-     549,
-     555
+     547,
+     553
     ]
    },
    {
@@ -4791,8 +4761,8 @@
     "role": "read",
     "count": 2,
     "lines": [
-     550,
-     555
+     548,
+     553
     ]
    },
    {
@@ -4804,7 +4774,7 @@
     "role": "construct",
     "count": 1,
     "lines": [
-     556
+     554
     ],
     "class": "mint",
     "mints": "ImportStats::kernel_verified, counting every constant whose confidence is KernelVerified OR SourceVerified",
@@ -4827,7 +4797,7 @@
     "role": "construct",
     "count": 1,
     "lines": [
-     552
+     550
     ],
     "class": "relabel",
     "mints": "ImportStats::kernel_verified_from_tc, the count of constants upgraded to KernelVerified from Axiomatized or Unverified",
@@ -4850,7 +4820,7 @@
     "role": "read",
     "count": 1,
     "lines": [
-     979
+     977
     ]
    },
    {
@@ -4862,7 +4832,7 @@
     "role": "construct",
     "count": 1,
     "lines": [
-     926
+     924
     ],
     "class": "mint",
     "mints": "ImportConfidence::SourceVerified on a Lean .olean constant",
@@ -4885,7 +4855,7 @@
     "role": "read",
     "count": 1,
     "lines": [
-     979
+     977
     ]
    },
    {
@@ -4897,7 +4867,7 @@
     "role": "construct",
     "count": 1,
     "lines": [
-     980
+     978
     ],
     "class": "mint",
     "mints": "ImportStats::kernel_verified, counting constants whose confidence is SourceVerified (KernelVerified is unreachable here)",
@@ -4989,9 +4959,9 @@
     "role": "construct",
     "count": 3,
     "lines": [
-     484,
-     490,
-     492
+     481,
+     487,
+     489
     ],
     "class": "mint",
     "mints": "ImportConfidence::SourceVerified on a Lean .olean constant",
@@ -5014,7 +4984,7 @@
     "role": "construct",
     "count": 1,
     "lines": [
-     129
+     126
     ],
     "class": "mint",
     "mints": "ImportConfidence::KernelVerified on a stored shard header for an .olean constant named in a caller-supplied verified set",
@@ -5036,8 +5006,8 @@
     "role": "read",
     "count": 2,
     "lines": [
-     206,
-     212
+     203,
+     209
     ]
    },
    {
@@ -5049,8 +5019,8 @@
     "role": "read",
     "count": 2,
     "lines": [
-     207,
-     212
+     204,
+     209
     ]
    },
    {
@@ -5062,7 +5032,7 @@
     "role": "construct",
     "count": 1,
     "lines": [
-     213
+     210
     ],
     "class": "mint",
     "mints": "ImportStats::kernel_verified, counting every constant whose confidence is KernelVerified OR SourceVerified",
@@ -5085,7 +5055,7 @@
     "role": "construct",
     "count": 1,
     "lines": [
-     209
+     206
     ],
     "class": "relabel",
     "mints": "ImportStats::kernel_verified_from_tc, the count of constants upgraded to KernelVerified from Axiomatized or Unverified",
@@ -5268,40 +5238,6 @@
     "kcheck_rung": 2
    },
    {
-    "id": "clean:crates/clean-mathverse/src/library.rs#<module>#KernelVerifiedManifest#mention",
-    "file": "crates/clean-mathverse/src/library.rs",
-    "symbol": "<module>",
-    "family": "root",
-    "token": "KernelVerifiedManifest",
-    "role": "mention",
-    "count": 1,
-    "lines": [
-     1023
-    ]
-   },
-   {
-    "id": "clean:crates/clean-mathverse/src/library.rs#MathverseLibrary::apply_kernel_verified_manifest#ImportConfidence::KernelVerified#construct",
-    "file": "crates/clean-mathverse/src/library.rs",
-    "symbol": "MathverseLibrary::apply_kernel_verified_manifest",
-    "family": "label",
-    "token": "ImportConfidence::KernelVerified",
-    "role": "construct",
-    "count": 1,
-    "lines": [
-     367
-    ],
-    "class": "relabel",
-    "mints": "ImportConfidence::KernelVerified on a stored shard header applied from a kernel-verified.json manifest",
-    "checker": {
-     "kind": "inherits",
-     "detail": "the manifest a verify run minted decides; this function checks only names and fingerprints"
-    },
-    "evidence_tokens": [],
-    "kcheck_rung": null,
-    "rung_note": "carries a label minted elsewhere; it follows its source",
-    "reach": "user"
-   },
-   {
     "id": "clean:crates/clean-mathverse/src/library.rs#MathverseLibrary::submit_proven#ImportConfidence::KernelVerified#construct",
     "file": "crates/clean-mathverse/src/library.rs",
     "symbol": "MathverseLibrary::submit_proven",
@@ -5310,7 +5246,7 @@
     "role": "construct",
     "count": 1,
     "lines": [
-     1396
+     1251
     ],
     "class": "mint",
     "mints": "ImportConfidence::KernelVerified on a stored shard header for a declaration submitted as proven",
@@ -5335,7 +5271,7 @@
     "role": "call",
     "count": 1,
     "lines": [
-     1376
+     1231
     ],
     "class": "root",
     "mints": "Selects an empty fenced checking environment",
@@ -5359,7 +5295,7 @@
     "role": "call",
     "count": 1,
     "lines": [
-     1379
+     1234
     ],
     "class": "root",
     "mints": "Admits the submitted theorem before its library header is written",
@@ -5383,7 +5319,7 @@
     "role": "construct",
     "count": 1,
     "lines": [
-     1086
+     941
     ],
     "class": "threshold",
     "mints": "the confidence a count looks for",
@@ -5395,18 +5331,6 @@
     "kcheck_rung": null,
     "rung_note": "a policy value or comparison operand; nothing to flip",
     "reach": "user"
-   },
-   {
-    "id": "clean:crates/clean-mathverse/src/library.rs#impl MathverseLibrary#KernelVerifiedManifest#mention",
-    "file": "crates/clean-mathverse/src/library.rs",
-    "symbol": "impl MathverseLibrary",
-    "family": "root",
-    "token": "KernelVerifiedManifest",
-    "role": "mention",
-    "count": 1,
-    "lines": [
-     365
-    ]
    },
    {
     "id": "clean:crates/clean-mathverse/src/math_map/ingest.rs#trust_level_from_name#TrustLevel::AxiomDependent#construct",
@@ -6078,91 +6002,47 @@
     "first_risk_note": "Overstates: the label (and ATP_CERT profile) say a certificate was replayed, but the site only trusts the session XML's proved=\"true\" attribute plus a prover-name classification."
    },
    {
-    "id": "clean:crates/clean-mathverse/src/release.rs#assert_kernel_verified_stamp#KernelVerifiedManifest::from_file#call",
+    "id": "clean:crates/clean-mathverse/src/release.rs#assert_no_kernel_verified_manifest#KernelVerifiedManifest::refuse_grant#call",
     "file": "crates/clean-mathverse/src/release.rs",
-    "symbol": "assert_kernel_verified_stamp",
+    "symbol": "assert_no_kernel_verified_manifest",
     "family": "root",
-    "token": "KernelVerifiedManifest::from_file",
+    "token": "KernelVerifiedManifest::refuse_grant",
     "role": "call",
     "count": 1,
     "lines": [
-     638
-    ],
-    "class": "relabel",
-    "mints": "the stamp manifest a release is checked against",
-    "checker": {
-     "kind": "inherits",
-     "detail": "reads kernel-verified.json"
-    },
-    "evidence_tokens": [],
-    "kcheck_rung": null,
-    "rung_note": "carries a label minted elsewhere; it follows its source",
-    "reach": "user"
-   },
-   {
-    "id": "clean:crates/clean-mathverse/src/release.rs#assert_kernel_verified_stamp#MathverseError::KernelVerifiedStampMismatch#construct",
-    "file": "crates/clean-mathverse/src/release.rs",
-    "symbol": "assert_kernel_verified_stamp",
-    "family": "label",
-    "token": "MathverseError::KernelVerifiedStampMismatch",
-    "role": "construct",
-    "count": 1,
-    "lines": [
-     643
+     613
     ],
     "class": "threshold",
-    "mints": "an error variant raised on a stamp mismatch",
+    "mints": "the refusal verify_release and packaging return for a kernel-verified.json in a release directory",
     "checker": {
      "kind": "not-a-mint",
-     "detail": "an error value; the name matches the vocabulary"
+     "detail": "a manifest present in a release or shard directory is refused (schema-1 or identity-less by its validation, else as development tier)"
     },
     "evidence_tokens": [],
     "kcheck_rung": null,
-    "rung_note": "a policy value or comparison operand; nothing to flip",
+    "rung_note": "a refusal: nothing is accepted at this site",
     "reach": "user"
    },
    {
-    "id": "clean:crates/clean-mathverse/src/release.rs#package_release_with_stamp#KernelVerifiedManifest::from_file#call",
+    "id": "clean:crates/clean-mathverse/src/release.rs#package_release_with_stamp#KernelVerifiedManifest::refuse_grant#call",
     "file": "crates/clean-mathverse/src/release.rs",
     "symbol": "package_release_with_stamp",
     "family": "root",
-    "token": "KernelVerifiedManifest::from_file",
+    "token": "KernelVerifiedManifest::refuse_grant",
     "role": "call",
     "count": 1,
     "lines": [
-     269
-    ],
-    "class": "relabel",
-    "mints": "the stamp manifest a release is checked against",
-    "checker": {
-     "kind": "inherits",
-     "detail": "reads kernel-verified.json"
-    },
-    "evidence_tokens": [],
-    "kcheck_rung": null,
-    "rung_note": "carries a label minted elsewhere; it follows its source",
-    "reach": "user"
-   },
-   {
-    "id": "clean:crates/clean-mathverse/src/release.rs#package_release_with_stamp#MathverseError::KernelVerifiedStampMismatch#construct",
-    "file": "crates/clean-mathverse/src/release.rs",
-    "symbol": "package_release_with_stamp",
-    "family": "label",
-    "token": "MathverseError::KernelVerifiedStampMismatch",
-    "role": "construct",
-    "count": 1,
-    "lines": [
-     282
+     260
     ],
     "class": "threshold",
-    "mints": "an error variant raised on a stamp mismatch",
+    "mints": "the refusal packaging returns for a manifest named for a release stamp",
     "checker": {
      "kind": "not-a-mint",
-     "detail": "an error value; the name matches the vocabulary"
+     "detail": "a named manifest is refused before anything is packaged; nothing is stamped"
     },
     "evidence_tokens": [],
     "kcheck_rung": null,
-    "rung_note": "a policy value or comparison operand; nothing to flip",
+    "rung_note": "a refusal: nothing is accepted at this site",
     "reach": "user"
    },
    {
@@ -6186,7 +6066,7 @@
     "role": "mention",
     "count": 1,
     "lines": [
-     197
+     198
     ]
    },
    {
@@ -6198,7 +6078,7 @@
     "role": "call",
     "count": 1,
     "lines": [
-     198
+     199
     ],
     "class": "relabel",
     "mints": "accepted names read from a manifest",
@@ -6232,28 +6112,6 @@
     "kcheck_rung": 2,
     "reach": "user",
     "first_risk_note": "a header constructor that stamps KernelVerified"
-   },
-   {
-    "id": "clean:crates/clean-mathverse/src/shard.rs#ShardWriter::stamp_kernel_verified#ImportConfidence::KernelVerified#construct",
-    "file": "crates/clean-mathverse/src/shard.rs",
-    "symbol": "ShardWriter::stamp_kernel_verified",
-    "family": "label",
-    "token": "ImportConfidence::KernelVerified",
-    "role": "construct",
-    "count": 1,
-    "lines": [
-     981
-    ],
-    "class": "relabel",
-    "mints": "ImportConfidence::KernelVerified on a stored shard header stamped from a name set",
-    "checker": {
-     "kind": "inherits",
-     "detail": "stamps the names a kernel-verified manifest lists (stamp-verified / stamp); the manifest decides"
-    },
-    "evidence_tokens": [],
-    "kcheck_rung": null,
-    "rung_note": "carries a label minted elsewhere; it follows its source",
-    "reach": "user"
    },
    {
     "id": "clean:crates/clean-mathverse/src/shard_verify/cake_gate.rs#CakeGateViolation::name#Self::AxiomDependent#read",
@@ -9383,22 +9241,92 @@
     "family": "root",
     "token": "KernelVerifiedManifest",
     "role": "def",
-    "count": 2,
+    "count": 4,
     "lines": [
-     86,
-     136
+     111,
+     178,
+     203,
+     240
     ]
    },
    {
-    "id": "clean:crates/clean-mathverse/src/verify/kernel_verified_manifest.rs#impl KernelVerifiedManifest#KernelVerifiedManifest#mention",
+    "id": "clean:crates/clean-mathverse/src/verify/kernel_verified_manifest.rs#RegressionReference::read#KernelVerifiedManifest::from_value#call",
     "file": "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs",
-    "symbol": "impl KernelVerifiedManifest",
+    "symbol": "RegressionReference::read",
     "family": "root",
-    "token": "KernelVerifiedManifest",
-    "role": "mention",
+    "token": "KernelVerifiedManifest::from_value",
+    "role": "call",
     "count": 1,
     "lines": [
-     228
+     657
+    ],
+    "class": "threshold",
+    "mints": "a regression reference: a baseline's names read as comparison operands for the Coq gate's superset diff",
+    "checker": {
+     "kind": "not-a-mint",
+     "detail": "validates a schema-2 baseline (or reads a schema-1 one's names inside its dated window) and grants nothing: the names only decide whether a fresh run regressed"
+    },
+    "evidence_tokens": [],
+    "kcheck_rung": null,
+    "rung_note": "a refusal: nothing is accepted at this site",
+    "reach": "user"
+   },
+   {
+    "id": "clean:crates/clean-mathverse/src/verify/kernel_verified_manifest/identity.rs#BaseEnvironment::lean_replay#for_lean_replay#call",
+    "file": "crates/clean-mathverse/src/verify/kernel_verified_manifest/identity.rs",
+    "symbol": "BaseEnvironment::lean_replay",
+    "family": "root",
+    "token": "for_lean_replay",
+    "role": "call",
+    "count": 1,
+    "lines": [
+     226
+    ],
+    "class": "threshold",
+    "mints": "the measured digest of the for_lean_replay base, recorded in a development identity",
+    "checker": {
+     "kind": "not-a-mint",
+     "detail": "builds Environment::for_lean_replay only to measure its constants and content digest; no declaration is checked in it"
+    },
+    "evidence_tokens": [],
+    "kcheck_rung": null,
+    "rung_note": "a recorded value: nothing is accepted at this site",
+    "reach": "user"
+   },
+   {
+    "id": "clean:crates/clean-mathverse/src/verify/kernel_verified_manifest/identity.rs#KernelTheoryName::of#KernelTheory::Extended#read",
+    "file": "crates/clean-mathverse/src/verify/kernel_verified_manifest/identity.rs",
+    "symbol": "KernelTheoryName::of",
+    "family": "root",
+    "token": "KernelTheory::Extended",
+    "role": "read",
+    "count": 1,
+    "lines": [
+     172
+    ]
+   },
+   {
+    "id": "clean:crates/clean-mathverse/src/verify/kernel_verified_manifest/identity.rs#KernelTheoryName::of#KernelTheory::Lean#read",
+    "file": "crates/clean-mathverse/src/verify/kernel_verified_manifest/identity.rs",
+    "symbol": "KernelTheoryName::of",
+    "family": "root",
+    "token": "KernelTheory::Lean",
+    "role": "read",
+    "count": 1,
+    "lines": [
+     173
+    ]
+   },
+   {
+    "id": "clean:crates/clean-mathverse/src/verify/kernel_verified_manifest/identity.rs#KernelTheoryName::of#KernelTheory::LeanReference#read",
+    "file": "crates/clean-mathverse/src/verify/kernel_verified_manifest/identity.rs",
+    "symbol": "KernelTheoryName::of",
+    "family": "root",
+    "token": "KernelTheory::LeanReference",
+    "role": "read",
+    "count": 1,
+    "lines": [
+     174
     ]
    },
    {
@@ -9410,29 +9338,29 @@
     "role": "import",
     "count": 1,
     "lines": [
-     51
+     53
     ]
    },
    {
-    "id": "clean:crates/clean-mathverse/src/verify/sharded.rs#ModuleVerifyResult::to_manifest#KernelVerifiedManifest::from_worker_parts#call",
+    "id": "clean:crates/clean-mathverse/src/verify/sharded.rs#ModuleVerifyResult::to_manifest#KernelVerifiedManifest::from_sharded_worker#call",
     "file": "crates/clean-mathverse/src/verify/sharded.rs",
     "symbol": "ModuleVerifyResult::to_manifest",
     "family": "root",
-    "token": "KernelVerifiedManifest::from_worker_parts",
+    "token": "KernelVerifiedManifest::from_sharded_worker",
     "role": "call",
     "count": 1,
     "lines": [
-     194
+     226
     ],
     "class": "relabel",
-    "mints": "a per-module manifest packed from the worker's result",
+    "mints": "a per-module development manifest packed from the worker's result (P6 slice 1a: development tier, which confers no label (P2 clause 1); nothing is stamped from it)",
     "checker": {
      "kind": "inherits",
-     "detail": "packs the verdicts verify_module produced"
+     "detail": "packs the verdicts verify_module produced under a DevelopmentRun identity (entry sharded-const-typecheck, imports trusted)"
     },
     "evidence_tokens": [],
     "kcheck_rung": null,
-    "rung_note": "carries a label minted elsewhere; it follows its source",
+    "rung_note": "carries a label minted elsewhere; development tier under P6, so it confers none",
     "reach": "user"
    },
    {
@@ -9444,7 +9372,7 @@
     "role": "mention",
     "count": 1,
     "lines": [
-     193
+     212
     ]
    },
    {
@@ -9456,7 +9384,7 @@
     "role": "read",
     "count": 1,
     "lines": [
-     550
+     584
     ]
    },
    {
@@ -9468,7 +9396,7 @@
     "role": "construct",
     "count": 1,
     "lines": [
-     431
+     464
     ],
     "class": "root",
     "mints": "the environment and theory of the sharded verifier's worker",
@@ -9493,7 +9421,7 @@
     "role": "call",
     "count": 1,
     "lines": [
-     352
+     385
     ],
     "class": "root",
     "mints": "the environment and theory of the sharded verifier's worker",
@@ -9518,8 +9446,8 @@
     "role": "construct",
     "count": 2,
     "lines": [
-     551,
-     552
+     585,
+     586
     ],
     "class": "mint",
     "mints": "the sharded worker's per-module and per-class kernel_verified counts",
@@ -9545,7 +9473,7 @@
     "role": "construct",
     "count": 1,
     "lines": [
-     553
+     587
     ],
     "class": "mint",
     "mints": "the sharded worker's kernel_verified_names, packed into its KernelVerifiedManifest",
@@ -9563,18 +9491,18 @@
     "kcheck_rung": 2
    },
    {
-    "id": "clean:crates/clean-native/src/external_lean.rs#ExternalLeanProgram::elaborate#for_lean_replay#call",
-    "file": "crates/clean-native/src/external_lean.rs",
-    "symbol": "ExternalLeanProgram::elaborate",
+    "id": "clean:crates/clean-native/src/external_lean/elaborate.rs#ExternalLeanProgram::capture#for_lean_replay#call",
+    "file": "crates/clean-native/src/external_lean/elaborate.rs",
+    "symbol": "ExternalLeanProgram::capture",
     "family": "root",
     "token": "for_lean_replay",
     "role": "call",
     "count": 1,
     "lines": [
-     113
+     46
     ],
     "class": "root",
-    "mints": "the environment a Lean program is elaborated in before native compilation",
+    "mints": "the environment a Lean program is elaborated in, shared since a55584e8ea by native compilation (ExternalLeanProgram::elaborate, which then requires complete runtime capture) and the read-only inspection context (ExternalLeanInspection::elaborate, whose custody require_native refuses for native selection)",
     "checker": {
      "kind": "clean-kernel",
      "entry": "replay",
@@ -9624,7 +9552,7 @@
     "role": "call",
     "count": 1,
     "lines": [
-     157
+     170
     ],
     "class": "root",
     "mints": "the replay base of a measurement example",
@@ -9649,7 +9577,7 @@
     "role": "call",
     "count": 1,
     "lines": [
-     407
+     406
     ],
     "class": "root",
     "mints": "a ReferenceAccepted token per replayed declaration (example)",
@@ -9674,7 +9602,7 @@
     "role": "call",
     "count": 1,
     "lines": [
-     337
+     336
     ],
     "class": "root",
     "mints": "the replay base of the example",
@@ -9689,6 +9617,34 @@
     ],
     "kcheck_rung": 2,
     "reach": "example"
+   },
+   {
+    "id": "clean:crates/clean-olean/examples/scalar_abi_records.rs#main#for_lean_replay#call",
+    "file": "crates/clean-olean/examples/scalar_abi_records.rs",
+    "symbol": "main",
+    "family": "root",
+    "token": "for_lean_replay",
+    "role": "call",
+    "count": 1,
+    "lines": [
+     164
+    ],
+    "class": "root",
+    "mints": "the replay base of the read-only scalar ABI record diagnostic (example scalar_abi_records, added in 90ab769634): official Init.Prelude is loaded into it for the declared world, and a clone taken before that load is the ImportedConeGate base the UInt32/UInt64 cones are re-admitted over",
+    "checker": {
+     "kind": "clean-kernel",
+     "entry": "replay",
+     "theory": "Extended",
+     "detail": "read 2026-11-17: Environment::for_lean_replay(), declare_environment_world, then load_module_with_deps(&mut source, \"Init.Prelude\", ..) under the default import policy; main selects no theory, so the load runs under KernelTheory::Extended (the enum default). The record comparisons and the 2^32/2^64 Nat.pow bounds it writes run only when ImportedConeGate::check over the pre-load clone passes, and in that gate's re-admitted environment; its module doc says no scalar admission or native call"
+    },
+    "evidence_tokens": [
+     "for_lean_replay",
+     "load_module_with_deps",
+     "ImportedConeGate"
+    ],
+    "reach": "example",
+    "kcheck_rung": null,
+    "rung_note": "an example diagnostic driver: it writes a JSON record report and grants no acceptance"
    },
    {
     "id": "clean:crates/clean-olean/src/bin/clean_export_write.rs#run#for_lean_replay#call",
@@ -9934,7 +9890,7 @@
     "role": "call",
     "count": 1,
     "lines": [
-     118
+     120
     ],
     "class": "root",
     "mints": "a ReferenceAccepted token per declaration of the closed cone",
@@ -9958,7 +9914,7 @@
     "role": "call",
     "count": 1,
     "lines": [
-     136
+     140
     ],
     "class": "root",
     "mints": "a ReferenceAccepted token per declaration of the closed cone",
@@ -9982,7 +9938,7 @@
     "role": "call",
     "count": 1,
     "lines": [
-     143
+     147
     ],
     "class": "root",
     "mints": "a ReferenceAccepted token per declaration of the closed cone",
@@ -10019,7 +9975,7 @@
     "role": "call",
     "count": 1,
     "lines": [
-     171
+     175
     ],
     "class": "root",
     "mints": "a ReferenceKernel over pinned Lean Init",
@@ -10043,7 +9999,7 @@
     "role": "call",
     "count": 1,
     "lines": [
-     545
+     555
     ],
     "class": "root",
     "mints": "a ReferenceKernel over an empty Environment::default base for the C4 tracing replay target, which observes each ordinary declaration through the labelled tracing core and then passes the same declaration to the same fenced admission (EntryTarget::admit_decl)",
@@ -10071,7 +10027,7 @@
     "role": "call",
     "count": 1,
     "lines": [
-     618
+     632
     ],
     "class": "root",
     "mints": "a ReferenceKernel over an empty Environment::default base (maxHeartbeats set from the options) for the C4 progress replay target, which prints a progress line every 100 rows and passes every declaration, family and Quot to the same fenced admission (EntryTarget)",
@@ -10351,6 +10307,32 @@
     "evidence_tokens": [],
     "kcheck_rung": 2,
     "reach": "internal"
+   },
+   {
+    "id": "clean:crates/clean-reflect/examples/original_formula_relation.rs#main#for_lean_replay#call",
+    "file": "crates/clean-reflect/examples/original_formula_relation.rs",
+    "symbol": "main",
+    "family": "root",
+    "token": "for_lean_replay",
+    "role": "call",
+    "count": 1,
+    "lines": [
+     98
+    ],
+    "class": "root",
+    "mints": "the untrusted import context of the exact-original Formula relation example; this constructor alone grants no checked token or verdict",
+    "checker": {
+     "kind": "none",
+     "detail": "Environment::for_lean_replay constructs only the import base. main captures every pinned module part with load_modules_with_deps_checked, then reference_base_closed actually re-admits the fixed target dependency closure from a fresh fenced base. The separate general source-goal API certifies and admits the exact original-data Iff and rechecks its retained proof; the example does not prove GoalB or the final original conjunction and grants no object, IR, compiler, SDK or compiled-checker grade."
+    },
+    "evidence_tokens": [
+     "for_lean_replay",
+     "load_modules_with_deps_checked",
+     "reference_base_closed"
+    ],
+    "reach": "example",
+    "kcheck_rung": null,
+    "rung_note": "An opt-in source relation qualification example. Its import constructor is not acceptance; host-kernel closure replay and source relation checks remain distinct from arithmetic truth or compiler self-proof."
    },
    {
     "id": "clean:crates/clean-server/src/handlers/swarm.rs#add_decl_to_session#AddDeclVerdict::KernelVerified#read",
@@ -10808,30 +10790,6 @@
     "count": 1,
     "lines": [
      36
-    ]
-   },
-   {
-    "id": "clean:crates/clean-verify/src/spec/core_spec/eval_ir_positive_division_v1/unsigned_compare_tests_support.rs#<module>#add_checked#def",
-    "file": "crates/clean-verify/src/spec/core_spec/eval_ir_positive_division_v1/unsigned_compare_tests_support.rs",
-    "symbol": "<module>",
-    "family": "root",
-    "token": "add_checked",
-    "role": "def",
-    "count": 1,
-    "lines": [
-     62
-    ]
-   },
-   {
-    "id": "clean:crates/clean-verify/src/spec/core_spec/eval_ir_positive_division_v1/word_add_tests_support.rs#<module>#add_checked#def",
-    "file": "crates/clean-verify/src/spec/core_spec/eval_ir_positive_division_v1/word_add_tests_support.rs",
-    "symbol": "<module>",
-    "family": "root",
-    "token": "add_checked",
-    "role": "def",
-    "count": 1,
-    "lines": [
-     66
     ]
    }
   ],

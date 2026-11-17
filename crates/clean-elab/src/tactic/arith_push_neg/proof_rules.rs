@@ -8,10 +8,10 @@ use clean_kernel::{BinderInfo, Expr};
 use super::super::{Goal, ProofState, TacticError};
 use super::proof_utils::{
     mk_and_intro, mk_and_left, mk_and_right, mk_by_contradiction, mk_exists_elim, mk_exists_intro,
-    mk_false_elim, mk_iff_intro, mk_lambda, mk_or_inl, mk_or_inr, mk_or_rec, mk_prop_eq_from_iff,
-    require_consts,
+    mk_exists_prop, mk_false_elim, mk_iff_intro, mk_lambda, mk_or_inl, mk_or_inr, mk_or_rec,
+    mk_prop_eq_from_iff, require_consts,
 };
-use super::{make_and, make_exists_push_neg, make_forall_push_neg, make_not, make_or};
+use super::{make_and, make_forall_push_neg, make_not, make_or};
 
 pub(super) fn mk_not_not_eq(state: &mut ProofState, p: &Expr) -> Result<Expr, TacticError> {
     require_consts(
@@ -241,7 +241,7 @@ pub(super) fn mk_not_forall_eq(
 
     let lhs = make_not(&make_forall_push_neg(ty, body));
     let not_body = make_not(body);
-    let rhs = make_exists_push_neg(ty, &not_body, state);
+    let rhs = mk_exists_prop(state, goal, ty, &not_body)?;
     let pred_not = Expr::lam(BinderInfo::Default, ty.clone(), not_body.clone());
 
     let forward = mk_lambda(state, &lhs, |state, h| {
@@ -313,7 +313,7 @@ pub(super) fn mk_not_exists_eq(
     )?;
 
     let pred = Expr::lam(BinderInfo::Default, ty.clone(), body.clone());
-    let exists_body = make_exists_push_neg(ty, body, state);
+    let exists_body = mk_exists_prop(state, goal, ty, body)?;
     let lhs = make_not(&exists_body);
     let not_body = make_not(body);
     let rhs = make_forall_push_neg(ty, &not_body);

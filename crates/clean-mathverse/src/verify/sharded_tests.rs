@@ -87,6 +87,8 @@ fn test_verified_rate_excludes_not_found() {
         math_sample: vec![],
         generated_sample: vec![],
         elapsed_secs: 0.0,
+        checker_settings: Environment::for_lean_replay().checker_settings(),
+        heartbeat: None,
     };
     // 7 / (7 + 2 + 1) = 70%
     assert!((result.verified_rate() - 70.0).abs() < 1e-9);
@@ -129,12 +131,29 @@ fn test_to_manifest_count_matches_names() {
         math_sample: vec![],
         generated_sample: vec![],
         elapsed_secs: 0.5,
+        checker_settings: {
+            let mut env = Environment::for_lean_replay();
+            env.set_kernel_theory(clean_kernel::env::KernelTheory::Lean);
+            env.checker_settings()
+        },
+        heartbeat: Some(7),
     };
-    let m = result.to_manifest();
-    assert_eq!(m.shard_dir, "Mathlib.Order.Basic");
-    assert_eq!(m.kernel_verified, 2);
-    assert_eq!(m.kernel_verified_names.len(), m.kernel_verified);
-    assert_eq!(m.axiom_accepted, 1);
-    assert_eq!(m.failed, 1);
-    assert_eq!(m.total_constants, 4);
+    let build = BuildIdentity::current().expect("build");
+    let m = result.to_manifest(build).expect("named settings");
+    assert_eq!(m.shard_dir(), "Mathlib.Order.Basic");
+    assert_eq!(m.accepted(), 2);
+    assert_eq!(m.accepted_names().len(), m.accepted());
+    assert_eq!(m.axiom_accepted(), 1);
+    assert_eq!(m.failed(), 1);
+    assert_eq!(m.total_constants(), 4);
+    let id = m.identity();
+    assert_eq!(
+        id.entry(),
+        crate::verify::kernel_verified_manifest::CheckerEntry::ShardedConstTypecheck
+    );
+    assert_eq!(
+        id.discipline(),
+        crate::verify::kernel_verified_manifest::Discipline::LeanReplay
+    );
+    assert_eq!(id.settings().heartbeat_limit, Some(7));
 }

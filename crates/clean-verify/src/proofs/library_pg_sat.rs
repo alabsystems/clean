@@ -26,11 +26,11 @@ impl ProofLibrary {
                 "fun (n : Nat) (w : Nat) (bound : WidthBound n w) => \
                  @WidthBound.rec n w \
                    (fun (b : WidthBound n w) => WidthSizeLower n w b) \
-                   (WidthSizeLower.empty n w) \
+                   (@WidthSizeLower.empty n w) \
                    (fun (cw : Nat) (prev : WidthBound n w) (ih : WidthSizeLower n w prev) => \
-                     WidthSizeLower.narrow n w cw prev ih) \
+                     @WidthSizeLower.narrow n w cw prev ih) \
                    (fun (cw : Nat) (prev : WidthBound n w) (ih : WidthSizeLower n w prev) => \
-                     WidthSizeLower.wide n w cw prev ih) \
+                     @WidthSizeLower.wide n w cw prev ih) \
                    bound",
                 "PG01 Width-size trade-off: resolution proofs of width w \
                  require size >= 2^{(w-W(F))^2/n}. Proof by induction \
@@ -46,11 +46,11 @@ impl ProofLibrary {
                 "fun (n : Nat) (seq : RestartSeq n) => \
                  @RestartSeq.rec n \
                    (fun (s : RestartSeq n) => RestartOptimal n s) \
-                   (RestartOptimal.done n) \
+                   (@RestartOptimal.done n) \
                    (fun (cw : Nat) (prev : RestartSeq n) (ih : RestartOptimal n prev) => \
-                     RestartOptimal.continue_narrow n cw prev ih) \
+                     @RestartOptimal.continue_narrow n cw prev ih) \
                    (fun (cw : Nat) (prev : RestartSeq n) (ih : RestartOptimal n prev) => \
-                     RestartOptimal.restart_wide n cw prev ih) \
+                     @RestartOptimal.restart_wide n cw prev ih) \
                    seq",
                 "PG02 Restart optimality: width-guided restarts produce \
                  O(2^{w^2/n}*n) size proofs on formulas with narrow \
@@ -72,11 +72,11 @@ impl ProofLibrary {
                 "fun (n : Nat) (seq : RestartSeq n) => \
                  @RestartSeq.rec n \
                    (fun (s : RestartSeq n) => RestartSatPreserving n s) \
-                   (RestartSatPreserving.done n) \
+                   (@RestartSatPreserving.done n) \
                    (fun (cw : Nat) (prev : RestartSeq n) (ih : RestartSatPreserving n prev) => \
-                     RestartSatPreserving.continue_narrow n cw prev ih) \
+                     @RestartSatPreserving.continue_narrow n cw prev ih) \
                    (fun (cw : Nat) (prev : RestartSeq n) (ih : RestartSatPreserving n prev) => \
-                     RestartSatPreserving.restart_wide n cw prev ih) \
+                     @RestartSatPreserving.restart_wide n cw prev ih) \
                    seq",
                 "PG04 Restart satisfiability preservation: width-guided \
                  restarts preserve soundness (UNSAT stays UNSAT) and \
@@ -97,11 +97,11 @@ impl ProofLibrary {
                 "fun (n : Nat) (sw : SpaceWidth n) => \
                  @SpaceWidth.rec n \
                    (fun (s : SpaceWidth n) => SpaceWidthValid n s) \
-                   (SpaceWidthValid.init n) \
+                   (@SpaceWidthValid.init n) \
                    (fun (cw : Nat) (prev : SpaceWidth n) (ih : SpaceWidthValid n prev) => \
-                     SpaceWidthValid.add_clause n cw prev ih) \
+                     @SpaceWidthValid.add_clause n cw prev ih) \
                    (fun (prev : SpaceWidth n) (ih : SpaceWidthValid n prev) => \
-                     SpaceWidthValid.remove_clause n prev ih) \
+                     @SpaceWidthValid.remove_clause n prev ih) \
                    sw",
                 "PG03 Space-width inequality: space(F) >= width(F) - O(log n). \
                  Proof by induction on SpaceWidth. \

@@ -173,6 +173,20 @@ impl Specification {
 }
 
 #[cfg(test)]
+pub(super) fn test_source_rows() -> Vec<(&'static str, &'static str, &'static str)> {
+    let rows = decls();
+    assert_eq!(rows.len(), BMEM_TRIE_NAMES.len());
+    BMEM_TRIE_NAMES
+        .iter()
+        .copied()
+        .zip(rows)
+        .map(|(name, (is_inductive, source, _description))| {
+            (name, if is_inductive { "inductive" } else { "def" }, source)
+        })
+        .collect()
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -194,18 +208,4 @@ mod tests {
             assert!(src.starts_with(&format!("{head} {name} ")), "{name}");
         }
     }
-}
-
-#[cfg(test)]
-pub(super) fn test_source_rows() -> Vec<(&'static str, &'static str, &'static str)> {
-    let rows = decls();
-    assert_eq!(rows.len(), BMEM_TRIE_NAMES.len());
-    BMEM_TRIE_NAMES
-        .iter()
-        .copied()
-        .zip(rows)
-        .map(|(name, (is_inductive, source, _description))| {
-            (name, if is_inductive { "inductive" } else { "def" }, source)
-        })
-        .collect()
 }

@@ -391,7 +391,7 @@ pub(super) const VAL_BETA_CONTRACTUM_IS_ARG: &str = "fun (a : KExpr) => lift_zer
 /// ARBITRARY argument, stated at the contractum `a` itself.
 pub(super) const TY_BETA_STEP_GENERAL: &str =
     "forall (A : KExpr) (a : KExpr), whnf_step (KExpr.app (KExpr.lam A (KExpr.bvar Nat.zero)) a) a";
-pub(super) const VAL_BETA_STEP_GENERAL: &str = "fun (A : KExpr) (a : KExpr) => @Eq.substType KExpr (fun (qz : KExpr) => whnf_step (KExpr.app (KExpr.lam A (KExpr.bvar Nat.zero)) a) qz) (instantiate (KExpr.bvar Nat.zero) a) a (r12_beta_contractum_is_arg a) (whnf_step.beta (KExpr.app (KExpr.lam A (KExpr.bvar Nat.zero)) a) (instantiate (KExpr.bvar Nat.zero) a) (beta_reduces.beta A (KExpr.bvar Nat.zero) a))";
+pub(super) const VAL_BETA_STEP_GENERAL: &str = "fun (A : KExpr) (a : KExpr) => @Eq.substType KExpr (fun (qz : KExpr) => whnf_step (KExpr.app (KExpr.lam A (KExpr.bvar Nat.zero)) a) qz) (instantiate (KExpr.bvar Nat.zero) a) a (r12_beta_contractum_is_arg a) (@whnf_step.beta (KExpr.app (KExpr.lam A (KExpr.bvar Nat.zero)) a) (instantiate (KExpr.bvar Nat.zero) a) (beta_reduces.beta A (KExpr.bvar Nat.zero) a))";
 
 /// **THE GENERAL CONVERSION-INVARIANCE STATEMENT.** Paired with
 /// `r12_beta_step_general`, which says the LHS's subject takes a real
@@ -406,7 +406,7 @@ pub(super) fn ty_beta_step_witness() -> String {
     format!("whnf_step r12_betaRedex {S0}")
 }
 pub(super) fn val_beta_step_witness() -> String {
-    format!("whnf_step.beta r12_betaRedex {S0} (beta_reduces.beta {V0} {V0} {S0})")
+    format!("@whnf_step.beta r12_betaRedex {S0} (beta_reduces.beta {V0} {V0} {S0})")
 }
 
 pub(super) fn ty_sval_beta_transports() -> String {

@@ -132,3 +132,26 @@ fn test_conversion_cache_reuses_an_open_pair_across_unused_prefixes() {
         "the cached pair costs one entry step"
     );
 }
+
+/// Lean's successful equivalence cache and failed-pair cache are symmetric.
+/// A reverse lookup must reuse the answer, under exactly the same context key.
+#[test]
+fn test_conversion_cache_reuses_both_orientations_in_each_context() {
+    let env = env().with_const_typed(Name::from_dotted("P"), 0, Term::sort(Level::zero()));
+    let p = constant(&env, "P");
+    let a = constant(&env, "A");
+    let left = Term::bvar(0);
+    let right = Term::bvar(1);
+    let _scope = crate::whnf::DecisionScope::enter();
+    for (ty, expected) in [(p, true), (a, false)] {
+        let ctx = [ty.clone(), ty];
+        assert_eq!(
+            is_def_eq_in_context(&env, &ctx, &left, &right, &mut Budget::default_budget()).unwrap(),
+            expected
+        );
+        assert_eq!(
+            is_def_eq_in_context(&env, &ctx, &right, &left, &mut Budget::new(1)).unwrap(),
+            expected
+        );
+    }
+}

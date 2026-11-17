@@ -25,7 +25,9 @@ use std::process::Command;
 use std::time::Instant;
 
 use clean_mathverse::verify::classify::classification_rule;
-use clean_mathverse::verify::kernel_verified_manifest::KernelVerifiedManifest;
+use clean_mathverse::verify::kernel_verified_manifest::{
+    BuildIdentity, CheckerEntry, KernelVerifiedManifest,
+};
 use clean_mathverse::verify::sharded::{
     enumerate_modules, verify_module, ClassCounts, ModuleVerifyResult,
 };
@@ -150,6 +152,14 @@ fn run_sharded(opts: ShardedOpts) -> i32 {
 
 fn run_worker(module: &str, opts: &ShardedOpts) -> i32 {
     eprintln!("[worker] verifying {module}");
+    // P6: the executable is hashed before the first check.
+    let build = match BuildIdentity::current() {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("[worker] {module}: {e}");
+            return 1;
+        }
+    };
     let result = match verify_module(module, &opts.olean_roots, MAX_FAILURE_DETAIL) {
         Ok(r) => r,
         Err(e) => {
@@ -163,7 +173,13 @@ fn run_worker(module: &str, opts: &ShardedOpts) -> i32 {
     }
 
     if let Some(path) = &opts.emit {
-        let manifest = result.to_manifest();
+        let manifest = match result.to_manifest(build) {
+            Ok(m) => m,
+            Err(e) => {
+                eprintln!("[worker] {module}: {e}");
+                return 1;
+            }
+        };
         if let Err(e) = manifest.write_to_file(path) {
             eprintln!(
                 "[worker] {module}: failed to write sidecar {}: {e}",
@@ -172,8 +188,8 @@ fn run_worker(module: &str, opts: &ShardedOpts) -> i32 {
             return 1;
         }
         eprintln!(
-            "[worker] {module}: wrote {} verified names to {}",
-            manifest.kernel_verified_names.len(),
+            "[worker] {module}: wrote {} accepted names (development tier) to {}",
+            manifest.accepted(),
             path.display()
         );
     }
@@ -290,12 +306,22 @@ fn run_driver(opts: &ShardedOpts) -> i32 {
         }
     };
 
+    // P6: the driver's own build; its workers are this executable.
+    let build = match BuildIdentity::current() {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("Error: {e}");
+            return 1;
+        }
+    };
+
     let start = Instant::now();
 
-    // RESUMABILITY: skip any module whose sidecar already exists and parses in
-    // --out, so an interrupted or re-run resumes instead of re-verifying ~all
-    // 12k modules. The kept (resumable) sidecars still feed the final merge.
-    let (to_run, resumable) = partition_resumable(&modules, &out_dir);
+    // RESUMABILITY: skip any module whose sidecar already exists, validates and
+    // was written by this build's sharded worker, so an interrupted or re-run
+    // resumes instead of re-verifying ~all 12k modules. The kept (resumable)
+    // sidecars still feed the final merge.
+    let (to_run, resumable) = partition_resumable(&modules, &out_dir, &build);
     if !resumable.is_empty() {
         println!("  resumed: {} skipped (sidecar present)", resumable.len());
     }
@@ -305,7 +331,7 @@ fn run_driver(opts: &ShardedOpts) -> i32 {
     // RETRY: one bounded pass over modules that produced NO sidecar or a sidecar
     // that no longer parses (the campaign's no-sidecar WARNINGs). Re-spawn only
     // those, then log whatever is still missing after the retry.
-    let missing = missing_modules(&modules, &out_dir);
+    let missing = missing_modules(&modules, &out_dir, &build);
     if !missing.is_empty() {
         println!(
             "  retry: {} module(s) had no usable sidecar; one bounded retry pass",
@@ -313,7 +339,7 @@ fn run_driver(opts: &ShardedOpts) -> i32 {
         );
         let retried = run_workers_bounded(&exe, &missing, opts, &out_dir);
         sidecar_paths.extend(retried);
-        let still_missing = missing_modules(&modules, &out_dir);
+        let still_missing = missing_modules(&modules, &out_dir, &build);
         if still_missing.is_empty() {
             println!("  retry: all recovered");
         } else {
@@ -347,22 +373,32 @@ fn sidecar_path_for(out_dir: &Path, module: &str) -> PathBuf {
     out_dir.join(format!("{}.json", sanitize(module)))
 }
 
-/// A sidecar is RESUMABLE when it exists on disk AND parses as a
-/// [`KernelVerifiedManifest`]. A present-but-corrupt sidecar (interrupted
-/// mid-write) is treated as absent so it gets re-verified.
-fn sidecar_is_resumable(path: &Path) -> bool {
-    path.exists() && KernelVerifiedManifest::from_file(path).is_ok()
+/// A sidecar is RESUMABLE when it exists on disk, validates as a
+/// [`KernelVerifiedManifest`], and was written by this build's sharded worker
+/// (P6 reader R12: a sidecar from another binary is another checker run). A
+/// present-but-corrupt, identity-less or foreign sidecar is treated as absent
+/// so it gets re-verified: an honest re-run, never a grant.
+fn sidecar_is_resumable(path: &Path, build: &BuildIdentity) -> bool {
+    path.exists()
+        && KernelVerifiedManifest::from_file(path).is_ok_and(|m| {
+            m.identity().entry() == CheckerEntry::ShardedConstTypecheck
+                && m.identity().build() == build
+        })
 }
 
 /// Split `modules` into `(to_run, resumable)` against existing sidecars in
 /// `out_dir`. `resumable` holds the sidecar paths to fold into the final merge
 /// without re-verifying; `to_run` holds module names that still need a worker.
-fn partition_resumable(modules: &[String], out_dir: &Path) -> (Vec<String>, Vec<PathBuf>) {
+fn partition_resumable(
+    modules: &[String],
+    out_dir: &Path,
+    build: &BuildIdentity,
+) -> (Vec<String>, Vec<PathBuf>) {
     let mut to_run = Vec::new();
     let mut resumable = Vec::new();
     for module in modules {
         let sidecar = sidecar_path_for(out_dir, module);
-        if sidecar_is_resumable(&sidecar) {
+        if sidecar_is_resumable(&sidecar, build) {
             resumable.push(sidecar);
         } else {
             to_run.push(module.clone());
@@ -372,10 +408,10 @@ fn partition_resumable(modules: &[String], out_dir: &Path) -> (Vec<String>, Vec<
 }
 
 /// Module names whose sidecar is absent or no longer parses in `out_dir`.
-fn missing_modules(modules: &[String], out_dir: &Path) -> Vec<String> {
+fn missing_modules(modules: &[String], out_dir: &Path, build: &BuildIdentity) -> Vec<String> {
     modules
         .iter()
-        .filter(|m| !sidecar_is_resumable(&sidecar_path_for(out_dir, m)))
+        .filter(|m| !sidecar_is_resumable(&sidecar_path_for(out_dir, m), build))
         .cloned()
         .collect()
 }
@@ -512,6 +548,10 @@ fn sanitize(module: &str) -> String {
         .collect()
 }
 
+/// Merge the sidecars into `<out_dir>/kernel-verified.json` (P6 writer W6).
+/// REFUSED (no consolidated file, exit 1) when any sidecar fails to read or
+/// validate, or when two sidecars are not the same build: a consolidated file
+/// can name only one checker run.
 fn merge_and_report(
     out_dir: &Path,
     sidecar_paths: &[PathBuf],
@@ -529,8 +569,20 @@ fn merge_and_report(
             }
         }
     }
+    if read_failures > 0 {
+        eprintln!(
+            "[driver] {read_failures} sidecar(s) unreadable: no consolidated manifest written"
+        );
+        return 1;
+    }
 
-    let merged = KernelVerifiedManifest::merge(&out_dir.display().to_string(), &sidecars);
+    let merged = match KernelVerifiedManifest::merge(&out_dir.display().to_string(), &sidecars) {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("[driver] merge refused, no consolidated manifest written: {e}");
+            return 1;
+        }
+    };
     let consolidated = out_dir.join("kernel-verified.json");
     if let Err(e) = merged.write_to_file(&consolidated) {
         eprintln!("[driver] failed to write consolidated manifest: {e}");
@@ -540,23 +592,23 @@ fn merge_and_report(
     println!("\n=== Sharded Corpus Verification Summary ===");
     println!("  Modules requested:    {module_count}");
     println!("  Sidecars merged:      {}", sidecars.len());
-    println!("  Total OWN constants:  {}", merged.total_constants);
-    println!("  Kernel verified:      {}", merged.kernel_verified);
-    println!("  Axiom-accepted:       {}", merged.axiom_accepted);
-    println!("  Failed:               {}", merged.failed);
-    if merged.total_constants > 0 {
-        let denom = merged.kernel_verified + merged.axiom_accepted + merged.failed;
+    println!("  Total OWN constants:  {}", merged.total_constants());
+    println!("  Accepted (development): {}", merged.accepted());
+    println!("  Axiom-accepted:       {}", merged.axiom_accepted());
+    println!("  Failed:               {}", merged.failed());
+    if merged.total_constants() > 0 {
+        let denom = merged.accepted() + merged.axiom_accepted() + merged.failed();
         if denom > 0 {
             println!(
-                "  Verified rate:        {:.2}%",
-                merged.kernel_verified as f64 / denom as f64 * 100.0
+                "  Accepted rate:        {:.2}%",
+                merged.accepted() as f64 / denom as f64 * 100.0
             );
         }
     }
     println!("  Wall-clock:           {elapsed_secs:.2}s");
     println!("  Consolidated:         {}", consolidated.display());
 
-    if read_failures > 0 || sidecars.len() < module_count {
+    if sidecars.len() < module_count {
         // Missing sidecars (worker OOM/crash/not-found) are a partial-run signal.
         eprintln!(
             "\n  WARNING: {} module(s) produced no usable sidecar",
@@ -570,22 +622,58 @@ fn merge_and_report(
 #[cfg(test)]
 mod tests {
     use super::{
-        missing_modules, partition_resumable, sanitize, sidecar_is_resumable, sidecar_path_for,
+        merge_and_report, missing_modules, partition_resumable, sanitize, sidecar_is_resumable,
+        sidecar_path_for,
     };
-    use clean_mathverse::verify::kernel_verified_manifest::KernelVerifiedManifest;
+    use clean_mathverse::verify::kernel_verified_manifest::{
+        BaseEnvironment, BuildIdentity, CheckSettings, DevelopmentRun, Elision, ExecutableIdentity,
+        Imports, InductiveReplay, KernelVerifiedManifest,
+    };
 
-    /// Write a well-formed sidecar for `module` into `out_dir`.
-    fn write_good_sidecar(out_dir: &std::path::Path, module: &str) {
-        let m = KernelVerifiedManifest::from_worker_parts(
+    fn current() -> BuildIdentity {
+        BuildIdentity::current().expect("the test binary is readable")
+    }
+
+    /// Another build: a different executable's bytes.
+    fn other_build(dir: &std::path::Path) -> BuildIdentity {
+        let exe = dir.join("another-clean");
+        std::fs::write(&exe, b"another build of the sharded worker").expect("write");
+        BuildIdentity::with_executable(ExecutableIdentity::capture(&exe).expect("hash"))
+    }
+
+    /// Write a well-formed sidecar for `module`, by `build`, into `out_dir`.
+    fn write_sidecar_by(out_dir: &std::path::Path, module: &str, build: BuildIdentity) {
+        let mut env = clean_kernel::Environment::for_lean_replay();
+        env.set_kernel_theory(clean_kernel::env::KernelTheory::Lean);
+        let run = DevelopmentRun::new(
+            env.checker_settings(),
+            BaseEnvironment::lean_replay(),
+            Imports::Trusted,
+            CheckSettings {
+                elision: Elision::None,
+                inductive_replay: InductiveReplay::OleanLoader,
+                level_repair: false,
+                heartbeat_limit: None,
+                max_closure_modules: None,
+            },
+            build,
+        )
+        .expect("named settings");
+        let m = KernelVerifiedManifest::from_sharded_worker(
             module,
             1,
             0,
             0,
             0.0,
             vec![format!("{module}.thm")],
+            run,
         );
         m.write_to_file(&sidecar_path_for(out_dir, module))
             .expect("write sidecar");
+    }
+
+    fn write_good_sidecar(out_dir: &std::path::Path, module: &str) {
+        write_sidecar_by(out_dir, module, current());
     }
 
     #[test]
@@ -595,16 +683,64 @@ mod tests {
 
         // Absent -> not resumable.
         let missing = sidecar_path_for(out, "Mathlib.Absent");
-        assert!(!sidecar_is_resumable(&missing));
+        assert!(!sidecar_is_resumable(&missing, &current()));
 
         // Present + parses -> resumable.
         write_good_sidecar(out, "Mathlib.Good");
-        assert!(sidecar_is_resumable(&sidecar_path_for(out, "Mathlib.Good")));
+        assert!(sidecar_is_resumable(
+            &sidecar_path_for(out, "Mathlib.Good"),
+            &current()
+        ));
 
         // Present but corrupt (truncated mid-write) -> NOT resumable.
         let corrupt = sidecar_path_for(out, "Mathlib.Corrupt");
         std::fs::write(&corrupt, b"{ not valid json").expect("write corrupt");
-        assert!(!sidecar_is_resumable(&corrupt));
+        assert!(!sidecar_is_resumable(&corrupt, &current()));
+
+        // Present, valid, but written by another build -> NOT resumable (R12).
+        write_sidecar_by(out, "Mathlib.Foreign", other_build(out));
+        assert!(!sidecar_is_resumable(
+            &sidecar_path_for(out, "Mathlib.Foreign"),
+            &current()
+        ));
+
+        // Present but schema 1 (no identity) -> NOT resumable.
+        let legacy = sidecar_path_for(out, "Mathlib.Legacy");
+        std::fs::write(
+            &legacy,
+            br#"{"schema_version": 1, "kernel_verified_names": ["x"]}"#,
+        )
+        .expect("write legacy");
+        assert!(!sidecar_is_resumable(&legacy, &current()));
+    }
+
+    #[test]
+    fn test_merge_and_report_refuses_corrupt_or_foreign_sidecar() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let out = dir.path();
+        let consolidated = out.join("kernel-verified.json");
+        write_good_sidecar(out, "Mathlib.A");
+        write_good_sidecar(out, "Mathlib.B");
+        let good = vec![
+            sidecar_path_for(out, "Mathlib.A"),
+            sidecar_path_for(out, "Mathlib.B"),
+        ];
+        assert_eq!(merge_and_report(out, &good, 2, 0.0), 0);
+        let merged = KernelVerifiedManifest::from_file(&consolidated).expect("merged");
+        assert_eq!(merged.accepted_names(), ["Mathlib.A.thm", "Mathlib.B.thm"]);
+        std::fs::remove_file(&consolidated).expect("rm");
+
+        // One corrupt sidecar: refused, no consolidated file written.
+        std::fs::write(sidecar_path_for(out, "Mathlib.C"), b"{ truncated").expect("write");
+        let with_corrupt = [good.clone(), vec![sidecar_path_for(out, "Mathlib.C")]].concat();
+        assert_eq!(merge_and_report(out, &with_corrupt, 3, 0.0), 1);
+        assert!(!consolidated.exists(), "a refused merge writes nothing");
+
+        // A sidecar whose exe_sha256 differs: refused, nothing written.
+        write_sidecar_by(out, "Mathlib.D", other_build(out));
+        let with_foreign = [good, vec![sidecar_path_for(out, "Mathlib.D")]].concat();
+        assert_eq!(merge_and_report(out, &with_foreign, 3, 0.0), 1);
+        assert!(!consolidated.exists(), "a refused merge writes nothing");
     }
 
     #[test]
@@ -619,7 +755,7 @@ mod tests {
         // Only B already has a good sidecar.
         write_good_sidecar(out, "Mathlib.B");
 
-        let (to_run, resumable) = partition_resumable(&modules, out);
+        let (to_run, resumable) = partition_resumable(&modules, out, &current());
 
         // B is skipped (resumable), A and C still need a worker.
         assert_eq!(
@@ -643,7 +779,7 @@ mod tests {
         // B corrupt, C absent -> both reported missing for the retry pass.
         std::fs::write(sidecar_path_for(out, "Mathlib.B"), b"oops").expect("write");
 
-        let missing = missing_modules(&modules, out);
+        let missing = missing_modules(&modules, out, &current());
         assert_eq!(
             missing,
             vec!["Mathlib.B".to_string(), "Mathlib.C".to_string()]

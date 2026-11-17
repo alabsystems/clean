@@ -109,7 +109,7 @@ pub(super) const VAL_STAR_EXTENDS: &str = "fun (D : Nat -> Sk) (e : KExpr) (w : 
 /// R17's `let_` witness reduces to its ζ contractum in ONE step, hence in one
 /// `whnfStar` link. The object every witness below is stated at.
 pub(super) fn src_let_star() -> String {
-    format!("def r22_letStar : whnfStar r17_letTerm {INST0} := whnfStar.step r17_letTerm {INST0} {INST0} (whnf_step.beta r17_letTerm {INST0} (beta_reduces.zeta {S0} {S0} {V0})) (whnfStar.refl {INST0})")
+    format!("def r22_letStar : whnfStar r17_letTerm {INST0} := whnfStar.step r17_letTerm {INST0} {INST0} (@whnf_step.beta r17_letTerm {INST0} (beta_reduces.zeta {S0} {S0} {V0})) (whnfStar.refl {INST0})")
 }
 
 /// **`r22_step_star_reaches_let`** — the ∀-form star law at that ζ sequence.

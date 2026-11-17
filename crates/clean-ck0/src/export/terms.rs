@@ -4,9 +4,6 @@ use crate::inductive::MutableEnv;
 use crate::term::TermKind;
 use crate::validate::Env;
 
-type DerivedBodies =
-    std::collections::HashMap<(Name, Vec<crate::RawLevel>), std::sync::Arc<crate::RawExpr>>;
-
 impl Replay {
     pub(super) fn term(
         &self,
@@ -17,13 +14,12 @@ impl Replay {
         let mut raw = self.tables.expr(index, params)?;
         reject_private_wire_names(env, &raw)?;
         let mut remaining = syntax::MAX_WIRE_DAG;
-        self.inline_derived_definitions(
+        self.rewrite_checked_helpers(
             env,
             &mut raw,
             0,
             &mut remaining,
             &mut crate::rawexpr::RawMemo::new(),
-            &mut std::collections::HashMap::new(),
         )?;
         lower_recursors(env, &mut raw)?;
         dag::bound(&raw)?;
@@ -34,25 +30,25 @@ impl Replay {
             u32::try_from(params.len()).map_err(|_| Refusal::Limit)?,
         )?)
     }
-    /// Lean exports casesOn/recOn as checked ordinary definitions. Inline only
-    /// these definitions before the unchanged reserved-name validation gate.
-    fn inline_derived_definitions(
+    /// Preserve checked ordinary helpers as private forwarding constants.
+    /// Eager body expansion loses Lean's delta heights and forces recursion
+    /// before conversion can compare the original heads.
+    fn rewrite_checked_helpers(
         &self,
         env: &MinimalEnv,
         raw: &mut crate::RawExpr,
         depth: u32,
         remaining: &mut u64,
         memo: &mut crate::rawexpr::RawMemo,
-        definitions: &mut DerivedBodies,
     ) -> Result<(), Refusal> {
         use crate::RawExpr;
         if matches!(raw, RawExpr::Shared(_)) {
             return crate::rawexpr::map_shared(raw, memo, |raw, memo| {
-                self.inline_derived_definitions(env, raw, depth, remaining, memo, definitions)
+                self.rewrite_checked_helpers(env, raw, depth, remaining, memo)
             });
         }
-        // The same resource bounds as the wire DAG (syntax.rs): an
-        // inlined derived body is walked as the wire term is.
+        // Helper transport walks the same bounded shared wire DAG. Every
+        // checked definition body was separately bounded at admission.
         if u64::from(depth) > syntax::MAX_WIRE_DEPTH || *remaining == 0 {
             return Err(Refusal::Limit);
         }
@@ -87,87 +83,28 @@ impl Replay {
                         )
                     ) =>
             {
-                if let Some((params, index)) = self.definitions.get(name) {
-                    if params.len() != ls.len() {
+                if let Some(alias) = self.checked_aliases.get(name) {
+                    let expected = env
+                        .num_level_params(name)
+                        .ok_or_else(|| Refusal::UnknownConstant(name.clone()))?;
+                    if ls.len() != usize::try_from(expected).map_err(|_| Refusal::Limit)? {
                         return Err(malformed("derived definition level arity"));
                     }
-                    // Different export roots may reference the same checked
-                    // helper. Cache its fully elaborated, closed body at the
-                    // actual universe instantiation, for this term only.
-                    let key = (name.clone(), ls.clone());
-                    if let Some(body) = definitions.get(&key) {
-                        *raw = RawExpr::Shared(body.clone());
-                        return Ok(());
-                    }
-                    let mut body = self.tables.expr(*index, params)?;
-                    substitute_levels(&mut body, ls)?;
-                    self.inline_derived_definitions(
-                        env,
-                        &mut body,
-                        depth.saturating_add(1),
-                        remaining,
-                        memo,
-                        definitions,
-                    )?;
-                    let body = std::sync::Arc::new(body);
-                    definitions.insert(key, body.clone());
-                    *raw = RawExpr::Shared(body);
-                } else if let Some(alias) = self.checked_aliases.get(name) {
                     *name = alias.clone();
                 }
             }
             RawExpr::App(a, b) | RawExpr::Pi(_, a, b) | RawExpr::Lam(_, a, b) => {
-                self.inline_derived_definitions(
-                    env,
-                    a,
-                    depth.saturating_add(1),
-                    remaining,
-                    memo,
-                    definitions,
-                )?;
-                self.inline_derived_definitions(
-                    env,
-                    b,
-                    depth.saturating_add(1),
-                    remaining,
-                    memo,
-                    definitions,
-                )?;
+                self.rewrite_checked_helpers(env, a, depth.saturating_add(1), remaining, memo)?;
+                self.rewrite_checked_helpers(env, b, depth.saturating_add(1), remaining, memo)?;
             }
             RawExpr::Let(a, b, c) => {
-                self.inline_derived_definitions(
-                    env,
-                    a,
-                    depth.saturating_add(1),
-                    remaining,
-                    memo,
-                    definitions,
-                )?;
-                self.inline_derived_definitions(
-                    env,
-                    b,
-                    depth.saturating_add(1),
-                    remaining,
-                    memo,
-                    definitions,
-                )?;
-                self.inline_derived_definitions(
-                    env,
-                    c,
-                    depth.saturating_add(1),
-                    remaining,
-                    memo,
-                    definitions,
-                )?;
+                self.rewrite_checked_helpers(env, a, depth.saturating_add(1), remaining, memo)?;
+                self.rewrite_checked_helpers(env, b, depth.saturating_add(1), remaining, memo)?;
+                self.rewrite_checked_helpers(env, c, depth.saturating_add(1), remaining, memo)?;
             }
-            RawExpr::Proj(_, _, a) => self.inline_derived_definitions(
-                env,
-                a,
-                depth.saturating_add(1),
-                remaining,
-                memo,
-                definitions,
-            )?,
+            RawExpr::Proj(_, _, a) => {
+                self.rewrite_checked_helpers(env, a, depth.saturating_add(1), remaining, memo)?
+            }
             _ => {}
         }
         Ok(())
@@ -330,83 +267,6 @@ pub(super) fn typed_rule_rhs(
 
 fn shift_above(t: &Term, cutoff: u32, amount: u32) -> Term {
     t.lift_at(cutoff, amount)
-}
-
-fn substitute_levels(raw: &mut crate::RawExpr, subst: &[crate::RawLevel]) -> Result<(), Refusal> {
-    substitute_levels_rec(raw, subst, &mut crate::rawexpr::RawMemo::new())
-}
-fn substitute_levels_rec(
-    raw: &mut crate::RawExpr,
-    subst: &[crate::RawLevel],
-    memo: &mut crate::rawexpr::RawMemo,
-) -> Result<(), Refusal> {
-    use crate::{RawExpr, RawLevel};
-    if matches!(raw, RawExpr::Shared(_)) {
-        return crate::rawexpr::map_shared(raw, memo, |raw, memo| {
-            substitute_levels_rec(raw, subst, memo)
-        });
-    }
-    fn level(l: &mut RawLevel, subst: &[RawLevel]) -> Result<(), Refusal> {
-        match l {
-            RawLevel::Param(i) => {
-                *l = subst
-                    .get(usize::try_from(*i).map_err(|_| Refusal::Limit)?)
-                    .ok_or(Refusal::UniverseScope)?
-                    .clone()
-            }
-            RawLevel::Succ(a) => level(a, subst)?,
-            RawLevel::Max(a, b) | RawLevel::IMax(a, b) => {
-                level(a, subst)?;
-                level(b, subst)?;
-            }
-            RawLevel::Zero => {}
-        }
-        // A substituted level can be wider/deeper than either input. Bound
-        // it here, before a later substitution can duplicate the expansion.
-        let mut stack = vec![(&*l, 0u32)];
-        let mut nodes = 0u32;
-        while let Some((node, depth)) = stack.pop() {
-            nodes = nodes.saturating_add(1);
-            if nodes > 256 || depth > 64 {
-                return Err(Refusal::Limit);
-            }
-            match node {
-                RawLevel::Succ(a) => stack.push((a, depth.saturating_add(1))),
-                RawLevel::Max(a, b) | RawLevel::IMax(a, b) => {
-                    stack.push((a, depth.saturating_add(1)));
-                    stack.push((b, depth.saturating_add(1)));
-                }
-                _ => {}
-            }
-        }
-        Ok(())
-    }
-    match raw {
-        RawExpr::Sort(l) => level(l, subst)?,
-        RawExpr::Const(_, ls) => {
-            for l in ls {
-                level(l, subst)?;
-            }
-        }
-        RawExpr::Elim(_, m, ls) => {
-            level(m, subst)?;
-            for l in ls {
-                level(l, subst)?;
-            }
-        }
-        RawExpr::App(a, b) | RawExpr::Pi(_, a, b) | RawExpr::Lam(_, a, b) => {
-            substitute_levels_rec(a, subst, memo)?;
-            substitute_levels_rec(b, subst, memo)?;
-        }
-        RawExpr::Let(a, b, c) => {
-            substitute_levels_rec(a, subst, memo)?;
-            substitute_levels_rec(b, subst, memo)?;
-            substitute_levels_rec(c, subst, memo)?;
-        }
-        RawExpr::Proj(_, _, a) => substitute_levels_rec(a, subst, memo)?,
-        _ => {}
-    }
-    Ok(())
 }
 
 /// Literal elaboration is allowed only over exactly the kernel Nat family.

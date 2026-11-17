@@ -6,7 +6,7 @@
 # gate → (optional) baseline promotion. The repeatable entrypoint for keeping the
 # Mathverse Coq lane current.
 #
-#   scripts/coq_refresh.sh [--redump] [--promote] [--timeout=SECS] [--out=DIR]
+#   scripts/coq_refresh.sh [--redump] [--promote | --rebaseline] [--timeout=SECS] [--out=DIR]
 #
 #   --redump    Re-dump every module whose sidecar (.meta.json) records skipped
 #               declarations, plus any module named in a manifest's
@@ -16,9 +16,15 @@
 #               corpus is imported as-is.
 #   --promote   Pass --promote-on-green to the import gate: on a fully green
 #               gate (0 regressions in every baselined library) the fresh
-#               kernel-verified manifests + shards replace the promoted
-#               baselines under data/corpora/coq-mathverse/. Red gates promote
-#               nothing and exit nonzero.
+#               development accepted-names manifests + shards replace the
+#               promoted baselines under data/corpora/coq-mathverse/. Red gates
+#               promote nothing and exit nonzero.
+#   --rebaseline
+#               --promote, reading each baseline's names only: the migration of
+#               the schema-1 baselines (which name no theory and no checker, so
+#               the strict gate refuses them) and of a schema-2 baseline whose
+#               checker identity changed. The same superset diff guards it; the
+#               report records both identities (P6, docs/DECISIONS.md 2026-11-16).
 #   --timeout   Per-declaration sertop answer timeout for --redump (default 300;
 #               giant Hierarchy-Builder terms need more than the dumper's 60s
 #               default).
@@ -39,12 +45,14 @@ SHARD_BIN="${REPO_ROOT}/target/release/mathverse_shard"
 
 REDUMP=0
 PROMOTE=0
+REBASELINE=0
 TIMEOUT=300
 OUT_DIR=""
 for arg in "$@"; do
   case "$arg" in
     --redump) REDUMP=1 ;;
     --promote) PROMOTE=1 ;;
+    --rebaseline) REBASELINE=1; PROMOTE=1 ;;
     --timeout=*) TIMEOUT="${arg#--timeout=}" ;;
     --out=*) OUT_DIR="${arg#--out=}" ;;
     *) echo "unknown arg: $arg" >&2; exit 2 ;;
@@ -101,4 +109,8 @@ echo "[coq-refresh] import + gate (out: ${OUT_DIR})"
 GATE_ARGS=("--sexp-root=${SEXP_ROOT}" "--out=${OUT_DIR}" "--json=${OUT_DIR}/report.json"
   "--gate-baseline=${BASELINE_DIR}")
 [[ "$PROMOTE" == 1 ]] && GATE_ARGS+=("--promote-on-green")
+# --rebaseline (P6): read each baseline's NAMES only (a schema-1 baseline, or a
+# schema-2 one from another checker identity), run the same superset diff, and
+# promote the fresh schema-2 manifest only on green. Implies --promote.
+[[ "$REBASELINE" == 1 ]] && GATE_ARGS+=("--rebaseline")
 "$SHARD_BIN" coq-import "${GATE_ARGS[@]}"

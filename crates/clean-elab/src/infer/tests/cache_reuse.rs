@@ -280,8 +280,12 @@ fn test_issue1852_kernel_answers_do_not_cross_elaboration_reducibility() {
     for equality_first in [false, true] {
         let seed_tc = TypeChecker::new(&env);
         // The standalone kernel deliberately ignores the reducibility hint.
-        assert_eq!(seed_tc.whnf(&value), Expr::nat_lit(0));
+        // Seed the equality before the WHNF: once `value`'s full WHNF is
+        // cached as a closed Nat literal, `is_def_eq` answers from it
+        // (`tc/def_eq/cached_nat.rs`) without recording an equality entry, and
+        // this control must seed BOTH caches the elaborator has to discard.
         assert!(seed_tc.is_def_eq(&value, &Expr::nat_lit(0)));
+        assert_eq!(seed_tc.whnf(&value), Expr::nat_lit(0));
         let seeded = seed_tc.take_caches();
         let debug = format!("{seeded:?}");
         assert!(cache_count(&debug, "whnf_entries") > 0);

@@ -29,7 +29,7 @@ const XLIFT: &str = "(xval (skcons Sk.ty D) (lift_at B Nat.zero (Nat.succ Nat.ze
 /// `candExpHF_beta`.
 pub(super) const TY_CANDHF_BETASTAR_CLOSED: &str = "forall (S : KExpr -> Type), IsCandHF S -> forall (x : KExpr) (y : KExpr), betaStar x y -> S x -> S y";
 
-pub(super) const VAL_CANDHF_BETASTAR_CLOSED: &str = "fun (S : KExpr -> Type) (hS : IsCandHF S) (x : KExpr) (y : KExpr) (hstar : betaStar x y) => @betaStar.rec (fun (x0 : KExpr) (y0 : KExpr) (_ : betaStar x0 y0) => S x0 -> S y0) (fun (xe : KExpr) (hx : S xe) => hx) (fun (xe : KExpr) (xe2 : KExpr) (xe3 : KExpr) (hstep : beta_reduces xe xe2) (_hrest : betaStar xe2 xe3) (ih : S xe2 -> S xe3) (hx : S xe) => ih (isCandHF_cr2 S hS xe xe2 hx (whnf_step.beta xe xe2 hstep))) x y hstar";
+pub(super) const VAL_CANDHF_BETASTAR_CLOSED: &str = "fun (S : KExpr -> Type) (hS : IsCandHF S) (x : KExpr) (y : KExpr) (hstar : betaStar x y) => @betaStar.rec (fun (x0 : KExpr) (y0 : KExpr) (_ : betaStar x0 y0) => S x0 -> S y0) (fun (xe : KExpr) (hx : S xe) => hx) (fun (xe : KExpr) (xe2 : KExpr) (xe3 : KExpr) (hstep : beta_reduces xe xe2) (_hrest : betaStar xe2 xe3) (ih : S xe2 -> S xe3) (hx : S xe) => ih (isCandHF_cr2 S hS xe xe2 hx (@whnf_step.beta xe xe2 hstep))) x y hstar";
 
 /// **`r26_candExpHF_beta_subst`** — R2's single-contractum engine at the
 /// HeadFree class.

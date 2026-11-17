@@ -349,7 +349,7 @@ fn test_deriving_unknown_class_inductive_undeclared_refused() {
 
 /// A failed handler leaves nothing behind for the next class or the next
 /// declaration: every piece of state term elaboration can change is put back
-/// by [`DeriveRollback`], not only metavariables and locals.
+/// by [`DeclarationRollback`], not only metavariables and locals.
 #[test]
 fn test_derive_rollback_restores_state_a_failed_handler_changed() {
     use clean_kernel::{Expr, ExprKind};
@@ -366,7 +366,7 @@ fn test_derive_rollback_restores_state_a_failed_handler_changed() {
         Expr::nat_lit(23),
     );
 
-    let rollback = super::DeriveRollback::take(&ctx);
+    let rollback = super::DeclarationRollback::take(&ctx);
     // What a handler that elaborated part of a term and then failed leaves.
     let leaked = ctx.fresh_fvar();
     ctx.push_local_let_with_fvar(

@@ -172,7 +172,7 @@ const DECLARATIONS: &[(&str, &str, &str)] = &[
   (Level.param Name.anonymous))) Bool.true",
         r"projection_bound_instantiated_bool_zero (fun (_n : Name) => Level.zero)
   (Level.param Name.anonymous) (Level.param Name.anonymous)
-  (fun (rho : Name -> Nat) => Le.refl (rho Name.anonymous)) level_zero_parameter_after",
+  (fun (rho : Name -> Nat) => @Le.refl (rho Name.anonymous)) level_zero_parameter_after",
     ),
 ];
 

@@ -597,7 +597,7 @@ impl ProofLibrary {
             "constant_extension_intro".to_string(),
             ProofTerm::new(
                 "ConstantExtension.mk",
-                "fun (env : KEnv) (kind : ConstExtensionKind) (decl_id : Nat) (ty : KExpr) (value : KExpr) (u : Level) (h_fresh : FreshDeclName env decl_id) (h_ty : Typing ty (KExpr.sort u)) (h_value : Typing value ty) => ConstantExtension.mk env kind decl_id ty value u h_fresh h_ty h_value",
+                "fun (env : KEnv) (kind : ConstExtensionKind) (decl_id : Nat) (ty : KExpr) (value : KExpr) (u : Level) (h_fresh : FreshDeclName env decl_id) (h_ty : Typing ty (KExpr.sort u)) (h_value : Typing value ty) => @ConstantExtension.mk env kind decl_id ty value u h_fresh h_ty h_value",
                 "Immediate constant extension rule exposing the fresh-name side condition.",
             ),
         );
@@ -606,7 +606,7 @@ impl ProofLibrary {
             "inductive_extension_intro".to_string(),
             ProofTerm::new(
                 "InductiveExtension.mk",
-                "fun (env : KEnv) (decl_id : Nat) (num_params : Nat) (ind_ty : KExpr) (ctors : CtorDecls) (u : Level) (h_fresh : FreshDeclName env decl_id) (h_ty : Typing ind_ty (KExpr.sort u)) (h_pos : StrictlyPositiveCtorDecls ind_ty ctors) (h_wf : WellFormedCtorDecls env decl_id num_params ind_ty ctors) => InductiveExtension.mk env decl_id num_params ind_ty ctors u h_fresh h_ty h_pos h_wf",
+                "fun (env : KEnv) (decl_id : Nat) (num_params : Nat) (ind_ty : KExpr) (ctors : CtorDecls) (u : Level) (h_fresh : FreshDeclName env decl_id) (h_ty : Typing ind_ty (KExpr.sort u)) (h_pos : StrictlyPositiveCtorDecls ind_ty ctors) (h_wf : WellFormedCtorDecls env decl_id num_params ind_ty ctors) => @InductiveExtension.mk env decl_id num_params ind_ty ctors u h_fresh h_ty h_pos h_wf",
                 "Immediate inductive extension rule exposing positivity and constructor well-formedness side conditions.",
             ),
         );

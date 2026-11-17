@@ -197,13 +197,70 @@ fn source_dependency_refusal_keeps_the_lowering_cause() {
             "unsupported expression: Expression form: Lam(",
         ),
         (
-            "c03_nested_overlapping_patterns",
-            "Tm.isNormal",
-            "reference(s) never released",
+            "c23_nat_literal_of_129_bits",
+            "two128",
+            "unsupported literal lowering for Nat",
         ),
     ] {
         assert_source_refusal(name, decl, cause);
     }
+}
+
+/// The IR-probe refusal this file used to pin, c03's `Tm.isNormal` ("reference(s)
+/// never released"), closed in the compiler's RC repair (see
+/// `rc_repair_tests_nested.rs`). Pin the closure end to end, against the bytes
+/// pinned Lean printed: the former refusing dependency compiles as root, and
+/// `run` prints exactly Lean's stdout, stderr and exit code.
+#[test]
+fn closed_nested_pattern_dependency_runs_with_lean_pinned_bytes() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let fixture = root.join("tests/fixtures/advice_replay_checker");
+    let source = fixture.join("programs/c03_nested_overlapping_patterns.lean");
+    let source = source.to_str().expect("source");
+    let pin = |ext: &str| {
+        std::fs::read(fixture.join(format!("expected/c03_nested_overlapping_patterns.{ext}")))
+            .expect("Lean pin")
+    };
+    let dir = tempfile::tempdir().expect("output dir");
+    let output = dir.path().join("root.c");
+    let compile = Command::new(env!("CARGO_BIN_EXE_clean"))
+        .args([
+            "compile",
+            source,
+            "--decl",
+            "Tm.isNormal",
+            "--emit",
+            "c",
+            "-o",
+            output.to_str().expect("output"),
+        ])
+        .output()
+        .expect("compile the formerly refused dependency");
+    assert_eq!(
+        compile.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&compile.stderr)
+    );
+    let emitted = std::fs::read_to_string(&output).expect("compile wrote C");
+    assert!(emitted.contains("l_Tm_isNormal"), "the root was emitted");
+    let run = Command::new(env!("CARGO_BIN_EXE_clean"))
+        .args(["run", source, "--decl", "main"])
+        .output()
+        .expect("run through closure walk");
+    let lean_rc: i32 = String::from_utf8(pin("rc"))
+        .expect("rc pin")
+        .trim()
+        .parse()
+        .expect("rc pin");
+    assert_eq!(
+        run.status.code(),
+        Some(lean_rc),
+        "{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+    assert_eq!(run.stdout, pin("stdout"), "stdout differs from pinned Lean");
+    assert_eq!(run.stderr, pin("stderr"), "stderr differs from pinned Lean");
 }
 
 fn assert_source_refusal(name: &str, decl: &str, cause: &str) {

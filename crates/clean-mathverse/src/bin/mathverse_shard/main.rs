@@ -21,7 +21,7 @@
 //!   mathverse_shard verify-kernel --module <Mathlib.X.Y> --olean-root <dir>... [--emit <sidecar.json>]
 //!   mathverse_shard verify-kernel --corpus-sharded --olean-root <dir>... --out <dir> [--jobs N] [--module-list <file>]
 //!   mathverse_shard verify-incremental <shard-dir>
-//!   mathverse_shard coq-import --sexp-root=<dir> --out=<dir> [--library=<name>]... [--json=<path>] [--lean-faithful] [--no-stamp]
+//!   mathverse_shard coq-import --sexp-root=<dir> --out=<dir> [--library=<name>]... [--json=<path>] [--lean-faithful] [--gate-baseline=<dir>] [--promote-on-green [--rebaseline]]
 //!   mathverse_shard lint-levels <shard-dir> [--strict]
 //!   mathverse_shard stamp --shard-dir=<dir> --manifest=<kernel-verified.json> [--json]
 //!   mathverse_shard audit <shard-dir> [--json=<path> | --name=<const>]
@@ -107,7 +107,8 @@ fn main() {
             if args.len() < 3 {
                 eprintln!(
                     "Usage: mathverse_shard coq-import --sexp-root=<dir> --out=<dir> \
-                     [--library=<name>]... [--json=<path>] [--lean-faithful] [--no-stamp]"
+                     [--library=<name>]... [--json=<path>] [--lean-faithful] \
+                     [--gate-baseline=<dir>] [--promote-on-green [--rebaseline]]"
                 );
                 std::process::exit(1);
             }
@@ -196,19 +197,19 @@ fn print_usage() {
     eprintln!("  verify-incremental <shard-dir>");
     eprintln!("        Incremental kernel verification with shared environment");
     eprintln!(
-        "  coq-import --sexp-root=<dir> --out=<dir> [--library=<name>]... [--json=<path>] [--lean-faithful] [--no-stamp]"
+        "  coq-import --sexp-root=<dir> --out=<dir> [--library=<name>]... [--json=<path>] [--lean-faithful] [--gate-baseline=<dir>] [--promote-on-green [--rebaseline]]"
     );
     eprintln!("        ONE-command Coq corpus harness: convert every <sexp-root>/<library>/*.sexp");
     eprintln!("        SerAPI dump to <out>/<library>/coq_<library>.mathverse, kernel-recheck the");
-    eprintln!("        whole library corpus, write kernel-verified.json, stamp verdicts (unless");
-    eprintln!("        --no-stamp), and report per-library trust distribution + BEDROCK counts");
+    eprintln!("        whole library corpus, write the development kernel-verified.json (nothing");
+    eprintln!("        is stamped), and report per-library trust distribution + BEDROCK counts");
     eprintln!("  lint-levels <shard-dir> [--strict]");
     eprintln!("        Audit level-parameter integrity of every .mathverse shard");
     eprintln!("        (--strict: exit 2 on a corrupt shard)");
     eprintln!("  stamp --shard-dir=<dir> --manifest=<kernel-verified.json> [--json]");
-    eprintln!("        Apply an EXISTING merged kernel-verified manifest to pre-built shards");
-    eprintln!("        on disk (NO re-verify). Persists the driver's full-closure verdict so a");
-    eprintln!("        `clean mathverse stats` reader sees a stored KernelVerified count.");
+    eprintln!("        Refused under P6: a kernel-verified.json is a development record that");
+    eprintln!("        confers no label, so no header is stamped from it (exit 1, shards");
+    eprintln!("        unchanged). Kept so a caller of the old grant fails loudly.");
     eprintln!("  audit <shard-dir> [--json=<path> | --name=<const>]");
     eprintln!("        Axiom audit: classify proof quality for all declarations");
     eprintln!("        --json=<path>: write the full report (not used with --name)");

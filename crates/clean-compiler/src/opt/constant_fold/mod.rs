@@ -242,12 +242,26 @@ fn fold_value(value: &LetValue, ctx: &ConstFoldCtx) -> LetValue {
 /// fold_fun/fold_join_point/fold_cases for context save/restore.
 struct ConstFoldFolder {
     ctx: ConstFoldCtx,
+    observation: Option<crate::primitive_uses::ObservationFrame>,
 }
 
 impl CodeFolder for ConstFoldFolder {
     fn fold_let(&mut self, decl: LetDecl, body: Code) -> Code {
         self.ctx.constants.remove(&decl.fvar_id);
+        let before = self
+            .observation
+            .as_ref()
+            .and_then(|frame| frame.value("constant_fold decision", &decl.value));
         let new_value = fold_value(&decl.value, &self.ctx);
+        if let Some(frame) = &self.observation {
+            let after = frame.value("constant_fold decision", &new_value);
+            frame.decision(
+                "constant_fold decision",
+                before,
+                after,
+                "actual fold attempt; unchanged is not primitive permission",
+            );
+        }
         if let LetValue::Lit(lit) = &new_value {
             self.ctx.record(decl.fvar_id, lit.clone());
         }
@@ -318,6 +332,7 @@ pub fn fold_constants(decl: &Decl) -> Decl {
         DeclValue::Code(code) => {
             let mut folder = ConstFoldFolder {
                 ctx: ConstFoldCtx::new(),
+                observation: None,
             };
             DeclValue::Code(Box::new(folder.fold_code(code)))
         }
@@ -336,8 +351,16 @@ pub fn fold_constants(decl: &Decl) -> Decl {
 
 /// Apply constant folding directly to a Code block.
 pub fn fold_constants_in_code(code: &Code) -> Code {
+    fold_constants_in_code_recording(code, None)
+}
+
+pub(crate) fn fold_constants_in_code_recording(
+    code: &Code,
+    observation: Option<&crate::primitive_uses::ObservationFrame>,
+) -> Code {
     ConstFoldFolder {
         ctx: ConstFoldCtx::new(),
+        observation: observation.cloned(),
     }
     .fold_code(code)
 }

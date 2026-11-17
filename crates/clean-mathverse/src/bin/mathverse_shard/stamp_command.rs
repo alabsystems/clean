@@ -5,28 +5,17 @@
 //! `mathverse_shard stamp --shard-dir=<dir> --manifest=<kernel-verified.json>` (the
 //! parser takes the `=` form only).
 //!
-//! Applies an EXISTING merged kernel-verified manifest to pre-built shards on
-//! disk, with NO re-verification. This is the missing glue between the sharded
-//! DRIVER (`verify-kernel --corpus-sharded`, which emits a merged
-//! `kernel-verified.json` with the higher full-dependency-closure verdict) and
-//! a persisted, `stats`-visible stored `KernelVerified` count.
-//!
-//! Contrast with `clean mathverse stamp-verified`, which RE-converts and
-//! RE-verifies internally (a lower-closure, lower-yield path). This subcommand
-//! never re-verifies: it only stamps the constants the kernel already accepted.
-//!
-//! SOUNDNESS: only `manifest.kernel_verified_names` are stamped — exactly the
-//! set whose value passed Clean's kernel during the driver's run. Axioms,
-//! axiom-fallbacks, and reconstruction failures are excluded upstream and are
-//! therefore never raised here. This is the identical guarantee to the existing
-//! `stamp-verified` / [`stamp_shard_dir_kernel_verified`] path; there is no
-//! heuristic promotion.
-//!
-//! [`stamp_shard_dir_kernel_verified`]: clean_mathverse::library::stamp_shard_dir_kernel_verified
+//! The verb's one job was to stamp `KernelVerified` into shard headers from an
+//! existing manifest, with no re-verification. Under P6 (reader R1 of
+//! `designs/2026-11-16-p6-acceptance-identity.md`) it refuses every manifest
+//! this build can read: a schema-1 or identity-less file is refused by its own
+//! validation, and a valid one is development tier, which confers no header
+//! label (P2 clause 1). The reference producer that could feed it lands in
+//! slice 1b, with its receipts. Nothing on disk is touched, and the verb exits
+//! non-zero.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
-use clean_mathverse::library::{count_stored_kernel_verified, stamp_shard_dir_kernel_verified};
 use clean_mathverse::verify::kernel_verified_manifest::KernelVerifiedManifest;
 
 /// Parsed options for `mathverse_shard stamp`.
@@ -48,8 +37,9 @@ pub(crate) fn cmd_stamp(args: &[String]) {
         }
     };
 
-    if let Err(code) = run_stamp(&opts) {
-        std::process::exit(code);
+    if let Err(msg) = run_stamp(&opts) {
+        eprintln!("Error: {msg}");
+        std::process::exit(1);
     }
 }
 
@@ -82,110 +72,39 @@ fn parse_stamp_args(args: &[String]) -> Result<StampOpts, String> {
     })
 }
 
-/// Read the manifest, stamp the shard dir in place, and report the resulting
-/// stored count. Returns `Err(exit_code)` on any error.
-fn run_stamp(opts: &StampOpts) -> Result<(), i32> {
+/// Read the manifest and refuse it: no manifest this build can read grants a
+/// header label. Returns the refusal; the shard directory is never written.
+fn run_stamp(opts: &StampOpts) -> Result<(), String> {
     if !opts.shard_dir.is_dir() {
-        eprintln!("Error: shard dir not found: {}", opts.shard_dir.display());
-        return Err(1);
+        return Err(format!("shard dir not found: {}", opts.shard_dir.display()));
     }
     if !opts.manifest.is_file() {
-        eprintln!("Error: manifest not found: {}", opts.manifest.display());
-        return Err(1);
+        return Err(format!("manifest not found: {}", opts.manifest.display()));
     }
-
-    let manifest = KernelVerifiedManifest::from_file(&opts.manifest).map_err(|e| {
-        eprintln!("Error reading manifest {}: {e}", opts.manifest.display());
-        1
-    })?;
-
-    // Count BEFORE so the metric move is auditable.
-    let (before, _) = count_stored_kernel_verified(&opts.shard_dir).map_err(|e| {
-        eprintln!("Error scanning shard dir: {e}");
-        1
-    })?;
-
-    // Apply ONLY the kernel's verdict set — no re-verify, no heuristic.
-    let stamp = stamp_shard_dir_kernel_verified(&opts.shard_dir, &manifest).map_err(|e| {
-        eprintln!("Error stamping shards: {e}");
-        1
-    })?;
-
-    // Re-read from disk to report the persisted count a `stats` reader sees.
-    let (after, unreadable) = count_stored_kernel_verified(&opts.shard_dir).map_err(|e| {
-        eprintln!("Error re-scanning shard dir: {e}");
-        1
-    })?;
-
+    let refusal = KernelVerifiedManifest::refuse_grant(&opts.manifest, "a shard header stamp");
     if opts.json {
-        print_json(opts, &manifest, before, after, &stamp, &unreadable);
-    } else {
-        print_human(opts, &manifest, before, after, &stamp, &unreadable);
+        println!(
+            "{}",
+            serde_json::json!({
+                "shard_dir": opts.shard_dir.display().to_string(),
+                "manifest": opts.manifest.display().to_string(),
+                "refused": refusal.to_string(),
+                "headers_stamped": 0,
+            })
+        );
     }
-    Ok(())
-}
-
-fn print_human(
-    opts: &StampOpts,
-    manifest: &KernelVerifiedManifest,
-    before: usize,
-    after: usize,
-    stamp: &clean_mathverse::library::ShardStampResult,
-    unreadable: &[String],
-) {
-    println!("=== Stamp KernelVerified from manifest ===");
-    println!("  Shard dir:           {}", opts.shard_dir.display());
-    println!("  Manifest:            {}", opts.manifest.display());
-    println!("  Manifest tool:       {}", manifest.tool);
-    println!(
-        "  Manifest names:      {} (kernel verdict set)",
-        manifest.kernel_verified_names.len()
-    );
-    println!("  Stored before:       {before}");
-    println!("  Shards rewritten:    {}", stamp.shards_rewritten);
-    println!("  Headers stamped:     {}", stamp.constants_stamped);
-    println!("  Stored after:        {after}");
-    for path in unreadable {
-        println!("  WARNING unreadable shard: {path}");
-    }
-}
-
-fn print_json(
-    opts: &StampOpts,
-    manifest: &KernelVerifiedManifest,
-    before: usize,
-    after: usize,
-    stamp: &clean_mathverse::library::ShardStampResult,
-    unreadable: &[String],
-) {
-    let unreadable_json: Vec<String> = unreadable
-        .iter()
-        .map(|p| serde_json::to_string(p).unwrap_or_else(|_| "\"\"".to_string()))
-        .collect();
-    println!("{{");
-    println!("  \"shard_dir\": {},", json_str(&opts.shard_dir));
-    println!("  \"manifest\": {},", json_str(&opts.manifest));
-    println!(
-        "  \"manifest_names\": {},",
-        manifest.kernel_verified_names.len()
-    );
-    println!("  \"stored_before\": {before},");
-    println!("  \"shards_rewritten\": {},", stamp.shards_rewritten);
-    println!("  \"headers_stamped\": {},", stamp.constants_stamped);
-    println!("  \"stored_after\": {after},");
-    println!("  \"unreadable\": [{}]", unreadable_json.join(", "));
-    println!("}}");
-}
-
-fn json_str(path: &Path) -> String {
-    serde_json::to_string(&path.display().to_string()).unwrap_or_else(|_| "\"\"".to_string())
+    Err(refusal.to_string())
 }
 
 fn print_stamp_usage() {
     eprintln!(
         "Usage: mathverse_shard stamp --shard-dir=<dir> --manifest=<kernel-verified.json> [--json]"
     );
-    eprintln!("  Apply an EXISTING merged kernel-verified manifest to pre-built shards on disk");
-    eprintln!("  (NO re-verify). Stamps only manifest.kernel_verified_names, then reports the");
-    eprintln!("  stored KernelVerified count a `clean mathverse stats` reader sees.");
+    eprintln!("  Refuses every manifest this build can read (P6): a development-tier");
+    eprintln!("  manifest confers no header label, and no reference producer exists yet.");
+    eprintln!("  Nothing on disk is written.");
 }
+
+#[cfg(test)]
+#[path = "stamp_command_tests.rs"]
+mod tests;

@@ -94,7 +94,10 @@ fn cmd_release_package(args: &[String]) {
     println!("  Shard dir: {}", shards.display());
     println!("  Output:    {}", out.display());
     if let Some(m) = &kernel_verified_manifest {
-        println!("  Stamping KernelVerified from manifest: {}", m.display());
+        println!(
+            "  Manifest named for stamping (refused under P6 unless reference tier): {}",
+            m.display()
+        );
     }
 
     match package_release_with_stamp(&shards, &version, &out, kernel_verified_manifest.as_deref()) {
@@ -254,8 +257,9 @@ pub(crate) struct PackageArgs {
     pub(crate) version: Option<String>,
     pub(crate) shard_dir: PathBuf,
     pub(crate) output_dir: PathBuf,
-    /// Optional path to a `kernel-verified.json` manifest. When set, the shards
-    /// are destructively stamped with `KernelVerified` before hashing (WS5).
+    /// Optional path to a `kernel-verified.json` manifest. Under P6 packaging
+    /// refuses it (development tier confers no label; a schema-1 file names no
+    /// theory and no checker); the flag stays so the refusal is loud.
     pub(crate) kernel_verified_manifest: Option<PathBuf>,
 }
 
@@ -320,8 +324,8 @@ fn print_release_usage() {
     eprintln!("  --shards <DIR>     Shard directory (default: data/mathverse-shards)");
     eprintln!("  --output <DIR>     Output directory for archive (default: dist)");
     eprintln!(
-        "  --kernel-verified-manifest <FILE>  Stamp KernelVerified into shard bytes \
-         from this kernel-verified.json before hashing"
+        "  --kernel-verified-manifest <FILE>  Refused under P6: a development manifest \
+         confers no label and stamps nothing"
     );
     eprintln!();
     eprintln!("download options:");

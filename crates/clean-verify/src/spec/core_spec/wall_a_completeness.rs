@@ -241,7 +241,7 @@ const KEXPR_IS_PROJ: &str = concat!(
 /// `Empty`, conclude `goal` (any sort — `Empty.rec` is universe-flexible).
 fn shape_discharge(discr: &str, x: &str, y: &str, heq: &str, goal: &str) -> String {
     format!(
-        "(Empty.rec (fun (_ : Empty) => {goal}) (@Eq.substType KExpr {discr} {x} {y} {heq} Nat.zero))"
+        "(@Empty.rec (fun (_ : Empty) => {goal}) (@Eq.substType KExpr {discr} {x} {y} {heq} Nat.zero))"
     )
 }
 
@@ -1412,7 +1412,7 @@ impl Specification {
                     "(fun (x0 : KExpr) (y0 : KExpr) (hi : iota_step (red_rec the_red_env) x0 y0) ",
                     "(heq : @Eq KExpr x0 (KExpr.app f a)) ",
                     "(_k : {kont_red}) => ",
-                    "Empty.rec (fun (_ : Empty) => C) ",
+                    "@Empty.rec (fun (_ : Empty) => C) ",
                     "(him (KExpr.app f a) y0 (@par_reduces_cd_star.refl the_red_env (KExpr.app f a)) ",
                     "(@Eq.substType KExpr (fun (z : KExpr) => iota_step (red_rec the_red_env) z y0) ",
                     "x0 (KExpr.app f a) heq hi))) "
@@ -1993,7 +1993,7 @@ impl Specification {
                     "(_ihf : par_reduces_cd_star the_red_env f (KExpr.const n us) -> ",
                     "@Eq KExpr f (KExpr.const n us)) => ",
                     "fun (hstar : par_reduces_cd_star the_red_env (KExpr.app f a) (KExpr.const n us)) => ",
-                    "Empty.rec (fun (_ : Empty) => @Eq KExpr (KExpr.app f a) (KExpr.const n us)) ",
+                    "@Empty.rec (fun (_ : Empty) => @Eq KExpr (KExpr.app f a) (KExpr.const n us)) ",
                     "(par_reduces_cd_star_neutral_app_inv_eq f a (KExpr.const n us) Empty hf him hstar ",
                     "(fun (f2 : KExpr) (a2 : KExpr) (eqw : @Eq KExpr (KExpr.const n us) (KExpr.app f2 a2)) ",
                     "(_hff2 : par_reduces_cd_star the_red_env f f2) ",
@@ -2141,7 +2141,7 @@ impl Specification {
                     "(_k0 : forall (g : KExpr) (d : KExpr), @Eq KExpr (KExpr.const m vs) (KExpr.app g d) -> ",
                     "iota_neutral g -> iota_immune (KExpr.app g d) -> ",
                     "par_reduces_cd_star the_red_env g P -> par_reduces_cd_star the_red_env d Q -> C) => ",
-                    "Empty.rec (fun (_ : Empty) => C) ",
+                    "@Empty.rec (fun (_ : Empty) => C) ",
                     "(@Eq.substType KExpr {is_app} (KExpr.app P Q) (KExpr.const m vs) ",
                     "(par_reduces_cd_star_const_dead_inv_eq m vs (KExpr.app P Q) hnd hstar) Nat.zero)) ",
                     // app arm: star app inversion aligns the components.
@@ -2435,7 +2435,7 @@ impl Specification {
                     // lam
                     "(fun (ty : KExpr) (body : KExpr) => ",
                     "fun (hstar : par_reduces_cd_star the_red_env (KExpr.lam ty body) (KExpr.sort n)) => ",
-                    "Empty.rec (fun (_ : Empty) => @Eq KExpr (KExpr.lam ty body) (KExpr.sort n)) ",
+                    "@Empty.rec (fun (_ : Empty) => @Eq KExpr (KExpr.lam ty body) (KExpr.sort n)) ",
                     "(par_reduces_cd_star_lam_inv_eq the_red_env ty body (KExpr.sort n) Empty hstar ",
                     "(fun (ty2 : KExpr) (body2 : KExpr) ",
                     "(eqw : @Eq KExpr (KExpr.sort n) (KExpr.lam ty2 body2)) ",
@@ -2445,7 +2445,7 @@ impl Specification {
                     // pi
                     "(fun (dom : KExpr) (body : KExpr) => ",
                     "fun (hstar : par_reduces_cd_star the_red_env (KExpr.pi dom body) (KExpr.sort n)) => ",
-                    "Empty.rec (fun (_ : Empty) => @Eq KExpr (KExpr.pi dom body) (KExpr.sort n)) ",
+                    "@Empty.rec (fun (_ : Empty) => @Eq KExpr (KExpr.pi dom body) (KExpr.sort n)) ",
                     "(par_reduces_cd_star_pi_inv_eq the_red_env dom body (KExpr.sort n) Empty hstar ",
                     "(fun (dom2 : KExpr) (body2 : KExpr) ",
                     "(eqw : @Eq KExpr (KExpr.sort n) (KExpr.pi dom2 body2)) ",
@@ -2633,7 +2633,7 @@ impl Specification {
                     "(_k : forall (A2 : KExpr) (b2 : KExpr), ",
                     "@Eq KExpr (KExpr.sort m) ({head} A2 b2) -> ",
                     "par_reduces_cd_star the_red_env A2 A -> par_reduces_cd_star the_red_env b2 b -> C) => ",
-                    "Empty.rec (fun (_ : Empty) => C) ",
+                    "@Empty.rec (fun (_ : Empty) => C) ",
                     "(@Eq.substType KExpr {not_sort} ({head} A b) (KExpr.sort m) ",
                     "(par_reduces_cd_star_sort_inv_eq the_red_env m ({head} A b) hstar) Nat.zero)) "
                 ),

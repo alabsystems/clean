@@ -42,8 +42,8 @@ use clean_olean::{
 };
 use meaning_digest::{MeaningDigests, Package};
 
-/// The module that imports every other module of the package.
-const ROOT: &str = "KCheck.Contracts";
+/// The fixture-generated import-only aggregate for every checker `ORDER` root.
+const ROOT: &str = "CleanQualification.kcheck";
 
 /// `(soundness lemma, statement pin in KCheck.Contracts)`.
 const CONTRACTS: &[(&str, &str)] = &[
@@ -129,8 +129,20 @@ fn kcheck_core_rechecks_through_two_kernels_with_forged_controls() {
         &std::env::var_os("PATH").unwrap_or_default(),
     ));
 
-    // Kernel one: Lean's own, replaying the root module and everything below
-    // it from nothing.
+    let aggregate = read_artifact(
+        ROOT,
+        &compiled.join(format!("{}.olean", ROOT.replace('.', "/"))),
+        ArtifactDepth::Names,
+    )
+    .expect("checker qualification aggregate");
+    assert!(
+        aggregate.names.is_empty(),
+        "qualification aggregate {ROOT} must declare no names: {:?}",
+        aggregate.names
+    );
+
+    // Kernel one: Lean's own, replaying every ORDER module through the
+    // import-only aggregate from nothing.
     let independent = Command::new(bin.join("leanchecker"))
         .args(["--fresh", ROOT])
         .current_dir(&compiled)

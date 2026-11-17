@@ -161,6 +161,8 @@ fn the_minted_families_and_the_theorems_above_them_register_axiom_free() {
          ir_stk_botret_false_of_running; then the mkv module axis (crystal link 4 M0 W3): 3 \
          encodings-agreement lemmas, the 43 ir_mextv_* twins and ir_mextv_run"
     );
+    assert_kernel_checked_axiom_free(&spec, clean_verify::spec::STACK_MINTED_NAMES);
+    assert_kernel_checked_axiom_free(&spec, clean_verify::spec::STACK_THEOREM_NAMES);
     for name in [
         "ir_stk_step",
         "ir_mext_step",

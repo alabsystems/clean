@@ -1457,13 +1457,13 @@ iota_reduct_full_inv env f f1 (@Eq (OptionType KExpr) (iota_reduct env (KExpr.ap
                     // zero: Le a (a + 0); transport Le a a along (a = a + 0).
                     "(@Eq.subst Nat (fun (z : Nat) => Le a z) a (Nat.add a Nat.zero) ",
                     "(@Eq.symm Nat (Nat.add a Nat.zero) a (nat_add_zero_right a)) ",
-                    "(Le.refl a)) ",
+                    "(@Le.refl a)) ",
                     // succ: Le a (a + succ m); from IH Le a (a + m), Le.step gives
                     // Le a (succ (a + m)); transport along (succ (a+m) = a + succ m).
                     "(fun (m : Nat) (ih : Le a (Nat.add a m)) => ",
                     "@Eq.subst Nat (fun (z : Nat) => Le a z) (Nat.succ (Nat.add a m)) (Nat.add a (Nat.succ m)) ",
                     "(@Eq.symm Nat (Nat.add a (Nat.succ m)) (Nat.succ (Nat.add a m)) (nat_add_succ_right a m)) ",
-                    "(Le.step a (Nat.add a m) ih)) ",
+                    "(@Le.step a (Nat.add a m) ih)) ",
                     "b"
                 )
                 .to_string(),
@@ -1740,7 +1740,7 @@ iota_reduct_full_inv env f f1 (@Eq (OptionType KExpr) (iota_reduct env (KExpr.ap
                     // Le prefix(meta) majidx(meta) = le_add_self_left prefix indices
                     "(le_add_self_left {prefix_meta} (recmeta_num_indices meta)) ",
                     // Le majidx(meta) (succ majidx(meta))
-                    "(Le.step {majidx_meta} {majidx_meta} (Le.refl {majidx_meta}))) ",
+                    "(@Le.step {majidx_meta} {majidx_meta} (@Le.refl {majidx_meta}))) ",
                     "{hbig_meta})"
                 ),
                 prefix_meta = prefix_meta,
@@ -2453,10 +2453,10 @@ iota_reduct_full_inv env f f1 (@Eq (OptionType KExpr) (iota_reduct env (KExpr.ap
                     "fun (a : Nat) (c : Nat) (h : Le (Nat.succ a) c) => ",
                     "@Le.rec (Nat.succ a) (fun (j : Nat) (_ : Le (Nat.succ a) j) => Le a (Nat.pred j)) ",
                     // refl: Le a (pred (succ a)) = Le a a
-                    "(Le.refl a) ",
+                    "(@Le.refl a) ",
                     // step: Le a (pred (succ p)) = Le a p, from _hp by dropping left succ.
                     "(fun (p : Nat) (_hp : Le (Nat.succ a) p) (_ihp : Le a (Nat.pred p)) => ",
-                    "le_trans a (Nat.succ a) p (Le.step a a (Le.refl a)) _hp) ",
+                    "le_trans a (Nat.succ a) p (@Le.step a a (@Le.refl a)) _hp) ",
                     "c h"
                 )
                 .to_string(),
@@ -4957,8 +4957,8 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (n : Nat) => @Nat.rec (fun (n0 : Nat) => Le Nat.zero n0) ",
-                    "(Le.refl Nat.zero) ",
-                    "(fun (m : Nat) (ih : Le Nat.zero m) => Le.step Nat.zero m ih) ",
+                    "(@Le.refl Nat.zero) ",
+                    "(fun (m : Nat) (ih : Le Nat.zero m) => @Le.step Nat.zero m ih) ",
                     "n"
                 )
                 .to_string(),
@@ -4986,9 +4986,9 @@ impl Specification {
                 concat!(
                     "fun (a : Nat) (b : Nat) (h : Le a b) => ",
                     "@Le.rec a (fun (j : Nat) (_ : Le a j) => Le (Nat.succ a) (Nat.succ j)) ",
-                    "(Le.refl (Nat.succ a)) ",
+                    "(@Le.refl (Nat.succ a)) ",
                     "(fun (m : Nat) (_hm : Le a m) (ihm : Le (Nat.succ a) (Nat.succ m)) => ",
-                    "Le.step (Nat.succ a) (Nat.succ m) ihm) ",
+                    "@Le.step (Nat.succ a) (Nat.succ m) ihm) ",
                     "b h"
                 )
                 .to_string(),
@@ -5017,7 +5017,7 @@ impl Specification {
                     "fun (a : Nat) (b : Nat) (c : Nat) (hab : Le a b) (hbc : Le b c) => ",
                     "@Le.rec b (fun (j : Nat) (_ : Le b j) => Le a j) ",
                     "hab ",
-                    "(fun (m : Nat) (_hm : Le b m) (ihm : Le a m) => Le.step a m ihm) ",
+                    "(fun (m : Nat) (_hm : Le b m) (ihm : Le a m) => @Le.step a m ihm) ",
                     "c hbc"
                 )
                 .to_string(),

@@ -48,7 +48,10 @@ use clean_olean::{
 use thiserror::Error;
 
 use crate::verify::classify::{classify_const, ConstKind};
-use crate::verify::kernel_verified_manifest::KernelVerifiedManifest;
+use crate::verify::kernel_verified_manifest::{
+    BaseEnvironment, BuildIdentity, CheckSettings, DevelopmentRun, Elision, Imports,
+    InductiveReplay, KernelVerifiedManifest, ManifestError,
+};
 
 /// How many OWN names per class to retain as an audit sample in the result.
 const CLASS_SAMPLE_CAP: usize = 25;
@@ -174,6 +177,12 @@ pub struct ModuleVerifyResult {
     pub generated_sample: Vec<String>,
     /// Wall-clock seconds for load + verify.
     pub elapsed_secs: f64,
+    /// The checker settings of the environment every check ran in (after the
+    /// closure was loaded and Lean's kernel theory set): the manifest's theory
+    /// profile (P6).
+    pub checker_settings: clean_kernel::env::CheckerSettings,
+    /// The per-check heartbeat budget applied (`None`: the kernel default).
+    pub heartbeat: Option<u32>,
 }
 
 impl ModuleVerifyResult {
@@ -188,17 +197,41 @@ impl ModuleVerifyResult {
         }
     }
 
-    /// Build the non-destructive per-shard sidecar manifest for this module.
-    #[must_use]
-    pub fn to_manifest(&self) -> KernelVerifiedManifest {
-        KernelVerifiedManifest::from_worker_parts(
+    /// Build the per-module development sidecar manifest (P6 writer W5): the
+    /// worker checks the module's own constants over Lean's replay environment
+    /// with the module's closure loaded trusted, families admitted by the
+    /// `.olean` loader, by the executable `build` captured at the worker's
+    /// start.
+    ///
+    /// # Errors
+    /// [`ManifestError::UnnamedSetting`] for a kernel setting the identity
+    /// schema cannot name.
+    pub fn to_manifest(
+        &self,
+        build: BuildIdentity,
+    ) -> Result<KernelVerifiedManifest, ManifestError> {
+        let run = DevelopmentRun::new(
+            self.checker_settings,
+            BaseEnvironment::lean_replay(),
+            Imports::Trusted,
+            CheckSettings {
+                elision: Elision::None,
+                inductive_replay: InductiveReplay::OleanLoader,
+                level_repair: false,
+                heartbeat_limit: self.heartbeat,
+                max_closure_modules: None,
+            },
+            build,
+        )?;
+        Ok(KernelVerifiedManifest::from_sharded_worker(
             &self.module,
             self.counts.total,
             self.counts.axiom_accepted,
             self.counts.failed,
             self.elapsed_secs,
             self.kernel_verified_names.clone(),
-        )
+            run,
+        ))
     }
 }
 
@@ -431,6 +464,7 @@ pub fn verify_module(
     env.set_kernel_theory(clean_kernel::env::KernelTheory::Lean);
 
     let closure_constants = env.num_constants();
+    let checker_settings = env.checker_settings();
 
     // Heartbeat budget for this worker's kernel checks. `CLEAN_KERNEL_HEARTBEAT`
     // overrides the kernel's `DEFAULT_HEARTBEAT_LIMIT` (0 = unlimited), so the
@@ -602,6 +636,8 @@ pub fn verify_module(
         math_sample,
         generated_sample,
         elapsed_secs: start.elapsed().as_secs_f64(),
+        checker_settings,
+        heartbeat,
     })
 }
 

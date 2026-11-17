@@ -68,3 +68,44 @@ fn whnf_cache_does_not_confuse_retired_and_new_binders() {
     assert!(!tc.is_def_eq(&Expr::fvar(new), &Expr::nat_lit(13)));
     tc.pop_binder_local();
 }
+
+#[test]
+fn completed_closed_nat_reductions_avoid_rewalking_alias_spines() {
+    let env = aliases();
+    let left = call(20, Expr::nat_lit(13));
+    let right = call(15, Expr::nat_lit(13));
+    let wrong = call(15, Expr::nat_lit(29));
+    let mut cold = TypeChecker::new(&env);
+    cold.set_heartbeat_limit(1);
+    assert!(!cold.is_def_eq(&left, &right));
+    assert!(cold.heartbeat_spent());
+
+    let mut warm = TypeChecker::new(&env);
+    assert_eq!(warm.whnf(&left), Expr::nat_lit(13));
+    assert_eq!(warm.whnf(&right), Expr::nat_lit(13));
+    assert_eq!(warm.whnf(&wrong), Expr::nat_lit(29));
+    warm.set_heartbeat_limit(1);
+    assert!(warm.is_def_eq(&left, &right));
+    assert!(!warm.heartbeat_spent());
+    assert!(!warm.is_def_eq(&left, &wrong));
+    assert!(!warm.heartbeat_spent());
+}
+
+#[test]
+fn completed_nat_answers_do_not_cross_a_theory_change() {
+    let env = aliases();
+    let left = call(20, Expr::nat_lit(13));
+    let right = call(15, Expr::nat_lit(13));
+    let mut checker = TypeChecker::new(&env);
+    assert_eq!(checker.whnf(&left), Expr::nat_lit(13));
+    assert_eq!(checker.whnf(&right), Expr::nat_lit(13));
+    checker.set_kernel_theory(clean_kernel::env::KernelTheory::Lean);
+    checker.set_heartbeat_limit(1);
+    assert!(!checker.is_def_eq(&left, &right));
+    assert!(checker.heartbeat_spent());
+    let mut recomputed = TypeChecker::new(&env);
+    recomputed.set_kernel_theory(clean_kernel::env::KernelTheory::Lean);
+    recomputed.set_heartbeat_limit(10_000);
+    assert!(recomputed.is_def_eq(&left, &right));
+    assert!(!recomputed.heartbeat_spent());
+}

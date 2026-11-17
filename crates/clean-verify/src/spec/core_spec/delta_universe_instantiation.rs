@@ -361,7 +361,7 @@ impl Specification {
    @Eq (OptionType KDefSig) (kdef_for (red_def the_red_env) n) (@OptionType.some KDefSig defn) ->
    KExprParamSupport (kconst_params (kdef_signature defn)) (kdef_value defn))
  (s : Name -> Level) (e : KExpr) (e' : KExpr) (step : delta_reduces e e') =>
- delta_reduces.mk (instL s e) (instL s e')
+ @delta_reduces.mk (instL s e) (instL s e')
    (delta_step_instL_supported (red_def the_red_env) supported s e e'
      (delta_reduces_to_step e e' step))",
             "Fixed-environment delta-reduces closure derived from the generic actual guarded graph theorem and the existing constructor/view pair. The only environment premise is support of stored schematic bodies; no per-instantiated equality or typing is assumed.",

@@ -12,10 +12,7 @@ use clean_kernel::name::{Name, NameInner};
 use clean_kernel::{BinderInfo, Expr, ExprFolder, ExprKind, ExprVisitor, Level, LevelVec};
 use clean_parser::{DeclModifiers, Span, SurfaceBinder, SurfaceExpr, SurfaceField, SurfaceName};
 
-use super::{
-    convert_binder_info, is_out_param_type, is_semi_out_param_type, ClassRegistration,
-    DerivedInstance, ElabCtx, ElabResult,
-};
+use super::{convert_binder_info, ClassRegistration, DerivedInstance, ElabCtx, ElabResult};
 
 /// Append an exact field identity without parsing its diagnostic spelling.
 fn structure_member_name(owner: &Name, field: &Name) -> Name {
@@ -289,6 +286,36 @@ impl<'a> ElabCtx<'a> {
         fields: &[SurfaceField],
         modifiers: &DeclModifiers,
     ) -> Result<ElabResult, ElabError> {
+        // Class validation must precede publication and must not leak local
+        // state when a raw ElabCtx elaborates another declaration afterward.
+        let rollback = super::deriving_log::DeclarationRollback::take(self);
+        let instances = self.instances.clone();
+        let result = self.elab_class_inner(
+            name,
+            _universe_params,
+            binders,
+            extends,
+            ty,
+            fields,
+            modifiers,
+        );
+        if result.is_err() {
+            rollback.restore(self);
+            self.instances = instances;
+        }
+        result
+    }
+
+    fn elab_class_inner(
+        &mut self,
+        name: &SurfaceName,
+        universe_params: &[SurfaceName],
+        binders: &[SurfaceBinder],
+        extends: &[Box<SurfaceExpr>],
+        ty: Option<&SurfaceExpr>,
+        fields: &[SurfaceField],
+        modifiers: &DeclModifiers,
+    ) -> Result<ElabResult, ElabError> {
         // Build fields list: parent fields from extends prepended, then declared fields.
         let mut all_fields: Vec<SurfaceField> = Vec::new();
 
@@ -326,7 +353,7 @@ impl<'a> ElabCtx<'a> {
         // to `elab_structure` — it must not additionally flatten parent fields.
         let mut result = self.elab_structure(
             name,
-            _universe_params,
+            universe_params,
             binders,
             &[],
             ty,
@@ -339,37 +366,22 @@ impl<'a> ElabCtx<'a> {
             },
         )?;
 
-        let out_params: Vec<usize> = binders
-            .iter()
-            .enumerate()
-            .filter_map(|(idx, b)| {
-                if let Some(ty) = &b.ty {
-                    if is_out_param_type(ty) {
-                        return Some(idx);
-                    }
-                }
-                None
-            })
-            .collect();
-
-        let semi_out_params: Vec<usize> = binders
-            .iter()
-            .enumerate()
-            .filter_map(|(idx, b)| {
-                if let Some(ty) = &b.ty {
-                    if is_semi_out_param_type(ty) {
-                        return Some(idx);
-                    }
-                }
-                None
-            })
-            .collect();
-
         let class_name = name.name().clone();
-
+        let ElabResult::Structure { ty: class_type, .. } = &result else {
+            return Err(ElabError::Unsupported {
+                feature: "class elaboration produced a non-structure result".into(),
+            });
+        };
+        // The exact retained global marker, not its surface spelling, controls
+        // output metadata. This also rejects dependent ordinary inputs before
+        // the class, constructor or projections reach the Environment.
+        let info = crate::class_attribute::metadata_from_type(&class_name, class_type)?;
+        let out_params = info.out_params;
+        let semi_out_params = info.semi_out_params;
+        let class_num_params = info.num_params;
         self.instances.register_class_full(
             class_name.clone(),
-            binders.len(),
+            class_num_params,
             out_params.clone(),
             semi_out_params.clone(),
         );
@@ -575,7 +587,7 @@ impl<'a> ElabCtx<'a> {
             projections.extend(inherited_projs);
             *parents = parent_meta;
             *class_info = Some(ClassRegistration {
-                num_params: binders.len(),
+                num_params: class_num_params,
                 out_params,
                 semi_out_params,
             });

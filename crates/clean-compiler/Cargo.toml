@@ -73,6 +73,7 @@ cli = ["dep:clap", "dep:clean-features", "dep:tracing"]
 # self-gate on the versioned lowering-target subset at finalization.
 trust-ir-backend = [
     "dep:trust-ir",
+    "trust-ir/serde",
     "dep:trust-ir-build",
     "dep:trust-ir-conformance",
     "dep:clean-reflect",
@@ -80,6 +81,8 @@ trust-ir-backend = [
 ]
 
 [dev-dependencies]
+# Focused emitter/RC DATA controls retain actual pipeline rows.
+serde_json = { workspace = true }
 clean-parser = { workspace = true }
 clean-elab = { workspace = true }
 # test-fixtures: tests/wf_recursion_e2e.rs mints a deliberately unchecked

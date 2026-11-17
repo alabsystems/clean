@@ -221,7 +221,7 @@ fn try_stamp(modules: &[&str], mode: Option<&str>) -> Result<BTreeSet<String>, M
     cmd_stamp_verified(s)?;
     let bytes = std::fs::read(&manifest).expect("manifest written");
     let m: KernelVerifiedManifest = serde_json::from_slice(&bytes).expect("manifest parses");
-    Ok(m.kernel_verified_names.into_iter().collect())
+    Ok(m.accepted_names().iter().cloned().collect())
 }
 
 fn path_str(p: &Path) -> &str {

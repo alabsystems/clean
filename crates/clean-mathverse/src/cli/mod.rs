@@ -151,9 +151,10 @@ pub enum MathverseCommands {
     /// Validate the Mathverse replay replacement report and corpus artifact.
     ValidateReplayReport(ValidateReplayReportArgs),
     /// Convert `.olean` input(s) to `.mathverse` shards, re-verify the corpus
-    /// in Clean's kernel, and stamp every genuinely kernel-verified constant
-    /// into the shard bytes on disk (`KernelVerified`). Prints a human-readable
-    /// summary (`--json` for JSON).
+    /// in Clean's legacy kernel, and write the development manifest naming the
+    /// accepted constants and the run's theory and checker (`--manifest`).
+    /// Under P6 a development acceptance confers no label, so no shard header
+    /// is stamped. Prints a human-readable summary (`--json` for JSON).
     StampVerified(StampVerifiedArgs),
     /// Assemble raw Isabelle zproof exports (the capture hook's per-theory
     /// `.jsonl` files) into ONE serial-sorted deduplicated corpus, then replay
@@ -257,15 +258,15 @@ pub enum MathverseCommands {
         #[command(subcommand)]
         command: AxiomAuditCommands,
     },
-    /// Monotonic-UP ratchet over `stamp-verified` KernelVerified counts:
+    /// Monotonic-UP ratchet over `stamp-verified` development accepted counts:
     /// `ratchet check|update`.
     ///
     /// Pure guardrail over a saved `stamp-verified --json` summary — re-asserts
     /// the `heuristic_kernel_verified == 0` soundness floor and fails closed if
-    /// a stamp run's KernelVerified count regressed below the ratcheted
-    /// baseline. Nested aggregator (mirrors `AxiomAudit`) so `check` and
-    /// `update` read as siblings. Subsumes the retired
-    /// `scripts/check_kv_ratchet.py`.
+    /// a run's development accepted count regressed below its baseline, or if
+    /// any header was reference-stamped while no reference producer exists.
+    /// Nested aggregator (mirrors `AxiomAudit`) so `check` and `update` read as
+    /// siblings. Subsumes the retired `scripts/check_kv_ratchet.py`.
     Ratchet {
         #[command(subcommand)]
         command: RatchetCommands,
@@ -281,13 +282,10 @@ pub enum MathverseCommands {
     /// `opaque-and-theorem` run. Subsumes the retired
     /// `scripts/check_kv_elision_subset.py`.
     ElisionGate(ElisionGateArgs),
-    /// Print the recorded reproducibility `StampEnvFingerprint` from a
-    /// kernel-verified manifest.
+    /// Print the identity record of a `kernel-verified.json` manifest.
     ///
-    /// Pure read of the `env_fingerprint` metadata a `stamp-verified --manifest`
-    /// run recorded (kernel/toolchain/heartbeat/elision-policy/closure ceiling/
-    /// prelude variant); fails closed if the manifest carries none (a legacy
-    /// manifest written before the field existed).
+    /// Pure read of the theory, checker and tier a `stamp-verified --manifest`
+    /// run recorded (P6); a manifest without one is refused when it is read.
     Fingerprint(FingerprintArgs),
     /// Build, audit, or prove membership in a Merkle **trust receipt** (P4) over
     /// a kernel-verified declaration set — a single root hash certifying "these N
@@ -457,9 +455,9 @@ pub struct TrustReceiptProveArgs {
 pub enum RatchetCommands {
     /// Compare a saved `stamp-verified --json` summary against the ratcheted
     /// baseline. SKIPs green when the summary is absent (so dev pushes stay
-    /// green until an operator stamps the real corpus); else fails closed on a
-    /// soundness-floor breach, a malformed summary, or a KernelVerified-count
-    /// regression.
+    /// green until an operator runs the real corpus); else fails closed on a
+    /// soundness-floor breach, a malformed or pre-P6 summary, a development
+    /// accepted-count regression, or a reference stamp with no producer.
     Check(RatchetCheckArgs),
     /// Raise the ratchet baseline from a saved `stamp-verified --json` summary.
     /// Requires the summary (does NOT skip) and re-asserts the soundness floor,
@@ -779,24 +777,26 @@ pub struct ValidateReplayReportArgs {
 
 /// Arguments for `clean mathverse stamp-verified`.
 ///
-/// Runs the full WS5 stamping pipeline against real `.olean` input: convert
-/// each module to a heuristic `.mathverse` shard (which mints zero
-/// `KernelVerified`), re-verify the merged corpus in Clean's kernel via
-/// [`crate::verify::incremental::verify_corpus_incremental`], and then
-/// destructively stamp `KernelVerified` into the shard bytes for exactly the
-/// constants the kernel accepted (`kernel_verified_names`). The stored
-/// `KernelVerified` count is re-read from disk and printed in the summary.
+/// Runs the WS5 pipeline against real `.olean` input: convert each module to a
+/// heuristic `.mathverse` shard (which mints zero `KernelVerified`), re-verify
+/// the merged corpus in Clean's legacy kernel via
+/// [`crate::verify::incremental::verify_corpus_incremental`], and write the
+/// development manifest (`accepted_names` plus the run's identity). Under P6
+/// nothing is stamped: a legacy-profile acceptance confers no label (P2 clause
+/// 1). The stored `KernelVerified` header count is re-read from disk and
+/// printed as `stored_reference_stamped`, which must be 0 in this build.
 #[derive(Debug, Args)]
 pub struct StampVerifiedArgs {
     /// One or more `.olean` files, or directories scanned recursively for
-    /// `.olean` files. Each module becomes one stamped `.mathverse` shard.
+    /// `.olean` files. Each module becomes one `.mathverse` shard.
     #[arg(required = true)]
     pub inputs: Vec<PathBuf>,
-    /// Output directory for the stamped `.mathverse` shards. Created if absent.
+    /// Output directory for the converted `.mathverse` shards. Created if absent.
     #[arg(long)]
     pub out_dir: PathBuf,
-    /// Optional path to write the kernel-verified manifest (the by-name record
-    /// of every constant Clean's kernel accepted). Skipped if omitted.
+    /// Optional path to write the development manifest (the by-name record of
+    /// every constant the legacy checker accepted, with the theory and checker
+    /// identity). Skipped if omitted.
     #[arg(long)]
     pub manifest: Option<PathBuf>,
     /// Optional `.olean` search root (e.g. `.../lib/lean`). When set, each
@@ -846,9 +846,9 @@ pub struct StampVerifiedArgs {
     /// runs, minus the env mutation). This replaces the serial `--single-pass`
     /// env-threading with a read-only fan-out across cores.
     ///
-    /// SOUNDNESS: identical to `--single-pass` — a constant earns `KernelVerified`
-    /// ONLY if the kernel accepted its value against the trusted dependency
-    /// closure; axioms and inductive families are trusted context, never stamped.
+    /// SOUNDNESS: identical to `--single-pass` — a constant is accepted ONLY if
+    /// the kernel accepted its value against the trusted dependency closure;
+    /// axioms and inductive families are trusted context, never accepted.
     /// Requires `--closure-root`. Takes precedence over `--single-pass`.
     #[arg(long)]
     pub parallel: bool,
@@ -893,10 +893,11 @@ pub struct StampVerifiedArgs {
     /// `--closure-root` on the SEQUENTIAL path (`--parallel` is always eager).
     #[arg(long)]
     pub no_lazy_closure: bool,
-    /// TURNKEY certification: after stamping, build a trust receipt over the
-    /// KernelVerified constants in `--out-dir` (equivalent to a follow-up
-    /// `trust-receipt from-shards --shard-dir <out-dir>`) and write it here. One
-    /// command: stamp → certify.
+    /// TURNKEY certification: build a trust receipt over the constants whose
+    /// headers in `--out-dir` STORE `KernelVerified` (equivalent to a follow-up
+    /// `trust-receipt from-shards --shard-dir <out-dir>`) and write it here.
+    /// Since P6 this run stamps no header, so the receipt covers only headers
+    /// already stored (none from a fresh conversion).
     #[arg(long)]
     pub receipt: Option<PathBuf>,
     /// With `--receipt`: also write the auditable leaves manifest here.
@@ -1107,7 +1108,7 @@ pub struct ElisionGateArgs {
 /// Arguments for `clean mathverse fingerprint`.
 #[derive(Debug, Args)]
 pub struct FingerprintArgs {
-    /// KernelVerifiedManifest JSON to read the `env_fingerprint` from.
+    /// KernelVerifiedManifest JSON to read the identity record from.
     pub manifest: PathBuf,
     /// Emit the fingerprint as JSON instead of the human-readable field lines.
     #[arg(long)]
@@ -1816,13 +1817,14 @@ pub enum MathverseCliError {
         .0.join("\n  ")
     )]
     ElisionDropped(Vec<String>),
-    /// `fingerprint` was asked to print the `env_fingerprint` of a manifest that
-    /// carries none (a legacy manifest written before the field existed).
-    #[error(
-        "manifest `{0}` has no env_fingerprint (legacy manifest written before \
-         the field existed)"
-    )]
-    MissingEnvFingerprint(PathBuf),
+    /// The ratchet baseline file is present but does not parse under the P6
+    /// schema (a pre-P6 `kernel_verified_baseline` file included).
+    #[error("ratchet baseline malformed (refused, never read as a zero floor): {0}")]
+    RatchetMalformedBaseline(String),
+    /// A `kernel-verified.json` manifest, or an identity operation on one, was
+    /// refused (P6).
+    #[error(transparent)]
+    Manifest(#[from] crate::verify::kernel_verified_manifest::ManifestError),
 }
 
 /// Dispatch entry point for `clean mathverse <verb>`.

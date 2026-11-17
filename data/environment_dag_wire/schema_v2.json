@@ -4709,14 +4709,6 @@
       "attributes": [
         "#[serde(skip)]"
       ],
-      "name": "matcher_info",
-      "serialized": false,
-      "type": "std::sync::OnceLock<HashMap<Name,Option<MatcherInfo>>>"
-    },
-    {
-      "attributes": [
-        "#[serde(skip)]"
-      ],
       "name": "simp_cache_identity",
       "serialized": false,
       "type": "SimpCacheIdentity"

@@ -150,7 +150,7 @@ fn fetched(name: &str, ty: &str, signed: &str, law: &str) -> String {
       function block {instruction} results site before functionFound blockFound nodeFound siteFound arity)"
     );
     let transfer_proof =
-        format!("({law} W ctx {MACHINE} world results site op width a b aFits bFits resultTypes)");
+        format!("(@{law} W ctx {MACHINE} world results site op width a b aFits bFits resultTypes)");
     format!(
         "def {name} (W : Type) (ctx : IRByteContextV1) (providers : IRByteProvidersV1 W)
   (current : IRFrame) (tail : IRList IRFrame) (legacy : IRList IRMemSlot) (cursor : Nat)

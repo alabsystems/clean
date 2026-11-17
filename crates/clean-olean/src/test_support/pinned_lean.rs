@@ -48,7 +48,9 @@
 //!   `<workspace>/theories/<name>/` into the staging directory and compile its
 //!   own `ORDER` there first (Compile steps only), so the family's modules can
 //!   `import` the theory's; every file of the theory joins the cache key under
-//!   `theory:<name>/<path>`;
+//!   `theory:<name>/<path>`. An import-only `CleanQualification.<name>` module
+//!   then imports every one of those roots in ORDER sequence, for complete
+//!   single-module `leanchecker --fresh` replay;
 //! * `from <family> <stem>` — copy the sibling fixture family's
 //!   `<family>/<stem>.lean` into the staging directory and compile it there, so
 //!   two families share one source instead of each holding a copy (the
@@ -116,7 +118,12 @@ const CACHE_DIR_NAME: &str = "clean-olean-lean-fixtures";
 /// `4` — 2026-10-30: the `From` step (a sibling family's source copied into the
 /// staging directory and compiled in its place); a family without a `from`
 /// line runs as under `3`.
-const RECIPE_VERSION: u32 = 4;
+/// `5` — 2026-11-16: every Theory step also compiles an import-only
+/// `CleanQualification.<theory>` aggregate from that theory's exact ORDER.
+/// Independent ORDER roots are replayed together; a hand-written partial root
+/// cannot silently stand in for the package. The deterministic aggregate is
+/// bound by the recipe version and the already hashed theory ORDER bytes.
+const RECIPE_VERSION: u32 = 5;
 
 /// Every regular file of a family, `/`-separated path relative to the family
 /// directory → bytes. `BTreeMap` so the hash order is the sorted path order.
@@ -520,6 +527,35 @@ fn compile_stem(lean: &Path, staging: &Path, stem: &str, whose: &str) {
     );
 }
 
+/// One import-only root over the exact theory roster. The aggregate lives
+/// outside every theory namespace and declares no subject of its own. Each
+/// fixture family has its own staging graph, so legacy KCheck and labelled
+/// KCheck declarations are never merged through these generated modules.
+fn compile_theory_aggregate(lean: &Path, staging: &Path, name: &str, stems: &[String]) {
+    assert!(
+        !stems.is_empty(),
+        "theory `{name}` has no qualification roots"
+    );
+    let stem = format!("CleanQualification/{name}");
+    let target = staging.join(format!("{stem}.lean"));
+    assert!(
+        !target.exists(),
+        "qualification aggregate would overwrite {}",
+        target.display()
+    );
+    let mut source = String::from("prelude\n");
+    for module in stems {
+        source.push_str("import ");
+        source.push_str(&module.replace('/', "."));
+        source.push('\n');
+    }
+    fs::create_dir_all(target.parent().expect("aggregate parent"))
+        .unwrap_or_else(|error| panic!("cannot create aggregate directory: {error}"));
+    fs::write(&target, source)
+        .unwrap_or_else(|error| panic!("cannot write {}: {error}", target.display()));
+    compile_stem(lean, staging, &stem, &format!("theory `{name}` aggregate"));
+}
+
 /// Compile the fixture family `tests/fixtures/lean/<pin>/<family>/` with the
 /// pinned Lean (once per content hash) and return the directory holding its
 /// sources and the emitted `.olean` artifacts.
@@ -658,6 +694,7 @@ fn compile_cached(
                 for stem in stems {
                     compile_stem(&lean, &staging, stem, &format!("theory `{name}`"));
                 }
+                compile_theory_aggregate(&lean, &staging, name, stems);
             }
         }
     }

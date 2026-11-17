@@ -2,6 +2,7 @@
    This adds neither an evaluator nor a program/claim syntax.
    Copyright 2026 Andrew Yates. Apache-2.0. -/
 import SemRNativeExecutionClaim
+import SemRUnsignedSelect
 
 namespace SemRNativeUnsignedTranslation
 open SemR SemRUnsignedSelect SemRBooleanClaim SemRNativeExecutionClaim

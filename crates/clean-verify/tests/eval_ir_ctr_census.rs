@@ -402,7 +402,7 @@ fn the_infer_type_instance_reproduces_the_structural_a4_shape_through_the_device
         .contains("(ir_it_in_itd p q)"));
     for (w, needle) in [
         ("ir_it_pc_witness_itd", "(ir_it_ag_hc1_at_itd spc p"),
-        ("ir_it_pc_crosscheck_itd", "(Le.refl ir_d14)"),
+        ("ir_it_pc_crosscheck_itd", "(@Le.refl ir_d14)"),
     ] {
         assert!(
             spec.definitions()[w].type_src.contains(needle),

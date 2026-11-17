@@ -1619,7 +1619,7 @@ fn compound_diamond_case(target: &str) -> String {
         &format!("({head} cL s1)"),
         "ebL",
         "ecL",
-        &format!("({lift_l} env bL cL s1 (ih0 bL cL hbL hcL))"),
+        &format!("(@{lift_l} env bL cL s1 (ih0 bL cL hbL hcL))"),
     );
     // (L,R): b reduced first slot, c reduced second; orthogonal one-join at HEAD bL cR.
     let lr_join = format!(
@@ -1653,7 +1653,7 @@ fn compound_diamond_case(target: &str) -> String {
         &format!("({head} s0 cR)"),
         "ebR",
         "ecR",
-        &format!("({lift_r} env bR cR s0 (ih1 bR cR hbR hcR))"),
+        &format!("(@{lift_r} env bR cR s0 (ih1 bR cR hbR hcR))"),
     );
 
     let psj_bc = "(par_strong_join_d env b0 c0)";
@@ -1661,13 +1661,13 @@ fn compound_diamond_case(target: &str) -> String {
         "(fun (s0 : KExpr) (s1 : KExpr) (ih0 : {p0}) (ih1 : {p1}) => \
          fun (b0 : KExpr) (c0 : KExpr) \
          (hb : delta_cong env ({head} s0 s1) b0) (hc : delta_cong env ({head} s0 s1) c0) => \
-         {inv} env s0 s1 b0 {psj_bc} hb \
+         @{inv} env s0 s1 b0 {psj_bc} hb \
          (fun (bL : KExpr) (hbL : delta_cong env s0 bL) (ebL : @Eq KExpr b0 ({head} bL s1)) => \
-         {inv} env s0 s1 c0 {psj_bc} hc \
+         @{inv} env s0 s1 c0 {psj_bc} hc \
          (fun (cL : KExpr) (hcL : delta_cong env s0 cL) (ecL : @Eq KExpr c0 ({head} cL s1)) => {ll}) \
          (fun (cR : KExpr) (hcR : delta_cong env s1 cR) (ecR : @Eq KExpr c0 ({head} s0 cR)) => {lr})) \
          (fun (bR : KExpr) (hbR : delta_cong env s1 bR) (ebR : @Eq KExpr b0 ({head} s0 bR)) => \
-         {inv} env s0 s1 c0 {psj_bc} hc \
+         @{inv} env s0 s1 c0 {psj_bc} hc \
          (fun (cL : KExpr) (hcL : delta_cong env s0 cL) (ecL : @Eq KExpr c0 ({head} cL s1)) => {rl}) \
          (fun (cR : KExpr) (hcR : delta_cong env s1 cR) (ecR : @Eq KExpr c0 ({head} s0 cR)) => {rr})))",
         p0 = p_of("s0"),

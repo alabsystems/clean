@@ -27,11 +27,11 @@ const OFFSET: &[(&str, &str)] = &[
     (
         r"def level_offset_le_succ_path (a : Level) : Le (level_offset_nat a) (level_succ_path a) :=
  @Level.rec (fun (x : Level) => Le (level_offset_nat x) (level_succ_path x))
- (Le.refl Nat.zero)
+ (@Le.refl Nat.zero)
  (fun (x : Level) (ih : Le (level_offset_nat x) (level_succ_path x)) => le_succ_succ (level_offset_nat x) (level_succ_path x) ih)
  (fun (x : Level) (y : Level) (_ : Le (level_offset_nat x) (level_succ_path x)) (_ : Le (level_offset_nat y) (level_succ_path y)) => le_zero_n (natMax (level_succ_path x) (level_succ_path y)))
  (fun (x : Level) (y : Level) (_ : Le (level_offset_nat x) (level_succ_path x)) (_ : Le (level_offset_nat y) (level_succ_path y)) => le_zero_n (natMax (level_succ_path x) (level_succ_path y)))
- (fun (_ : Name) => Le.refl Nat.zero) a",
+ (fun (_ : Name) => @Le.refl Nat.zero) a",
         "The actual leading successor count is bounded by the path-wide count.",
     ),
     (
@@ -43,7 +43,7 @@ const OFFSET: &[(&str, &str)] = &[
    (le_trans (Nat.succ (level_offset_nat x)) (Nat.succ (level_succ_path x)) cap
     (le_succ_succ (level_offset_nat x) (level_succ_path x) (level_offset_le_succ_path x)) h)
    (ih cap (le_trans (level_succ_path x) (Nat.succ (level_succ_path x)) cap
-    (Le.step (level_succ_path x) (level_succ_path x) (Le.refl (level_succ_path x))) h)))
+    (@Le.step (level_succ_path x) (level_succ_path x) (@Le.refl (level_succ_path x))) h)))
  (fun (x : Level) (y : Level) (ihx : forall (cap : Nat), Le (level_succ_path x) cap -> LevelOffsetsBounded cap x) (ihy : forall (cap : Nat), Le (level_succ_path y) cap -> LevelOffsetsBounded cap y) =>
  fun (cap : Nat) (h : Le (natMax (level_succ_path x) (level_succ_path y)) cap) =>
  uoffset_and_intro (LevelOffsetsBounded cap x) (LevelOffsetsBounded cap y)
@@ -521,7 +521,7 @@ const CONTROLS: &[(&str, &str)] = &[
     (
         r"def offset_spine_weak_input : LevelOffsetsBounded (Nat.succ Nat.zero) offset_spine_input :=
  uoffset_and_intro (Le (Nat.succ Nat.zero) (Nat.succ Nat.zero)) (LevelOffsetsBounded (Nat.succ Nat.zero) ugeq_join_left)
- (Le.refl (Nat.succ Nat.zero)) ugeq_cap_join_left_bound",
+ (@Le.refl (Nat.succ Nat.zero)) ugeq_cap_join_left_bound",
         "The old every-separate-spine invariant is genuinely inhabited for the problematic original input.",
     ),
     (
@@ -549,7 +549,7 @@ const CONTROLS: &[(&str, &str)] = &[
     ),
     (
         r"def offset_spine_safe_output : LevelOffsetsBounded (Nat.succ (Nat.succ Nat.zero)) offset_spine_output :=
- level_flatten_restore_offsets (Nat.succ (Nat.succ Nat.zero)) (Nat.succ Nat.zero) ugeq_join_left (Le.refl (Nat.succ (Nat.succ Nat.zero)))",
+ level_flatten_restore_offsets (Nat.succ (Nat.succ Nat.zero)) (Nat.succ Nat.zero) ugeq_join_left (@Le.refl (Nat.succ (Nat.succ Nat.zero)))",
         "Original path-plus-offset sum at cap two derives every created-output comparator bound.",
     ),
     (
@@ -557,9 +557,9 @@ const CONTROLS: &[(&str, &str)] = &[
  LevelListPathBudget (Nat.succ (Nat.succ Nat.zero)) (Nat.succ Nat.zero) (level_flatten_max ugeq_join_left) :=
  uoffset_and_intro (Le (Nat.succ (Nat.succ Nat.zero)) (Nat.succ (Nat.succ Nat.zero)))
   (LevelListPathBudget (Nat.succ (Nat.succ Nat.zero)) (Nat.succ Nat.zero) (@ListType.cons Level ugeq_test_v (@ListType.nil Level)))
-  (Le.refl (Nat.succ (Nat.succ Nat.zero)))
+  (@Le.refl (Nat.succ (Nat.succ Nat.zero)))
   (uoffset_and_intro (Le (Nat.succ Nat.zero) (Nat.succ (Nat.succ Nat.zero))) (Le Nat.zero (Nat.succ (Nat.succ Nat.zero)))
-   (Le.step (Nat.succ Nat.zero) (Nat.succ Nat.zero) (Le.refl (Nat.succ Nat.zero))) (le_zero_n (Nat.succ (Nat.succ Nat.zero))))",
+   (@Le.step (Nat.succ Nat.zero) (Nat.succ Nat.zero) (@Le.refl (Nat.succ Nat.zero))) (le_zero_n (Nat.succ (Nat.succ Nat.zero))))",
         "Actual pre-restoration members also inhabit the input-only sum-budget interface.",
     ),
     (

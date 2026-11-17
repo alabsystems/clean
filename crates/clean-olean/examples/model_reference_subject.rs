@@ -199,11 +199,11 @@ mod tests {
     fn native_audit_cannot_authorize_an_ill_typed_definition() {
         let (env, roots) = imported_metadata(ConstantKind::Definition, true);
         audit_cones(&env, &roots, None).expect("the native walk is only an assumption audit");
-        assert!(
-            !reference_base_closed(&env, &roots, &ClosedRecheckOptions::default())
-                .is_ok_and(|built| built.report.passed()),
-            "the original kernel must refuse"
-        );
+        // An Err here is the entry refusing its own EMPTY starting base, never
+        // this definition: a cone member's refusal lands in the report.
+        let built = reference_base_closed(&env, &roots, &ClosedRecheckOptions::default())
+            .expect("the empty reference entry must start before it can judge the subject");
+        assert!(!built.report.passed(), "the original kernel must refuse");
     }
 
     #[test]
@@ -211,11 +211,10 @@ mod tests {
         let (env, roots) = imported_metadata(ConstantKind::Opaque, true);
         audit_cones(&env, &roots, None).expect("the original entry must check this body");
         assert!(audit_cones(&env, &roots, Some(&BTreeSet::new())).is_err());
-        assert!(
-            !reference_base_closed(&env, &roots, &ClosedRecheckOptions::default())
-                .is_ok_and(|built| built.report.passed()),
-            "the original kernel must refuse"
-        );
+        // As above: an Err is the empty entry's own start-up refusal, not a verdict.
+        let built = reference_base_closed(&env, &roots, &ClosedRecheckOptions::default())
+            .expect("the empty reference entry must start before it can judge the subject");
+        assert!(!built.report.passed(), "the original kernel must refuse");
     }
 }
 

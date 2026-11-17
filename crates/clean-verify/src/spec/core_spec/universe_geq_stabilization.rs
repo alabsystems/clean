@@ -40,14 +40,14 @@ const SIZE: &[(&str, &str)] = &[
     (
         r"def ugeq_size_positive (a : Level) : Le (Nat.succ Nat.zero) (level_geq_size a) :=
  @Level.rec (fun (x : Level) => Le (Nat.succ Nat.zero) (level_geq_size x))
- (Le.refl (Nat.succ Nat.zero))
+ (@Le.refl (Nat.succ Nat.zero))
  (fun (x : Level) (ih : Le (Nat.succ Nat.zero) (level_geq_size x)) =>
-  Le.step (Nat.succ Nat.zero) (level_geq_size x) ih)
+  @Le.step (Nat.succ Nat.zero) (level_geq_size x) ih)
  (fun (x : Level) (y : Level) (_ : Le (Nat.succ Nat.zero) (level_geq_size x)) (_ : Le (Nat.succ Nat.zero) (level_geq_size y)) =>
   le_succ_succ Nat.zero (Nat.add (level_geq_size x) (level_geq_size y)) (le_zero_n (Nat.add (level_geq_size x) (level_geq_size y))))
  (fun (x : Level) (y : Level) (_ : Le (Nat.succ Nat.zero) (level_geq_size x)) (_ : Le (Nat.succ Nat.zero) (level_geq_size y)) =>
   le_succ_succ Nat.zero (Nat.add (level_geq_size x) (level_geq_size y)) (le_zero_n (Nat.add (level_geq_size x) (level_geq_size y))))
- (fun (_ : Name) => Le.refl (Nat.succ Nat.zero)) a",
+ (fun (_ : Name) => @Le.refl (Nat.succ Nat.zero)) a",
         "All raw Level trees have at least one node.",
     ),
     (
@@ -59,14 +59,14 @@ const SIZE: &[(&str, &str)] = &[
     (
         r"def ugeq_size_base_le (a : Level) : Le (level_geq_size (level_offset_base a)) (level_geq_size a) :=
  @Level.rec (fun (x : Level) => Le (level_geq_size (level_offset_base x)) (level_geq_size x))
- (Le.refl (Nat.succ Nat.zero))
+ (@Le.refl (Nat.succ Nat.zero))
  (fun (x : Level) (ih : Le (level_geq_size (level_offset_base x)) (level_geq_size x)) =>
-  Le.step (level_geq_size (level_offset_base x)) (level_geq_size x) ih)
+  @Le.step (level_geq_size (level_offset_base x)) (level_geq_size x) ih)
  (fun (x : Level) (y : Level) (_ : Le (level_geq_size (level_offset_base x)) (level_geq_size x)) (_ : Le (level_geq_size (level_offset_base y)) (level_geq_size y)) =>
-  Le.refl (level_geq_size (Level.max x y)))
+  @Le.refl (level_geq_size (Level.max x y)))
  (fun (x : Level) (y : Level) (_ : Le (level_geq_size (level_offset_base x)) (level_geq_size x)) (_ : Le (level_geq_size (level_offset_base y)) (level_geq_size y)) =>
-  Le.refl (level_geq_size (Level.imax x y)))
- (fun (n : Name) => Le.refl (level_geq_size (Level.param n))) a",
+  @Le.refl (level_geq_size (Level.imax x y)))
+ (fun (n : Name) => @Le.refl (level_geq_size (Level.param n))) a",
         "Stripping outer successors never increases the exact raw tree size.",
     ),
     (
@@ -289,7 +289,7 @@ const STABLE: &[(&str, &str)] = &[
         r"def level_geq_core_fuel_agrees (fuel : Nat) (a : Level) (b : Level)
  (enough : Le (level_geq_bound a b) fuel) :
  @Eq Bool (level_geq_core_fuel fuel a b) (level_geq_core a b) :=
- level_geq_core_fuel_stable fuel (level_geq_bound a b) a b enough (Le.refl (level_geq_bound a b))",
+ level_geq_core_fuel_stable fuel (level_geq_bound a b) a b enough (@Le.refl (level_geq_bound a b))",
         "Every adequate fuel agrees with the canonical total raw comparator.",
     ),
     (
@@ -299,13 +299,13 @@ const STABLE: &[(&str, &str)] = &[
  (level_geq_core_fuel (Nat.succ (level_geq_bound a b)) a b)
  (level_geq_core_step level_geq_core a b)
  (level_geq_core_fuel_stable (level_geq_bound a b) (Nat.succ (level_geq_bound a b)) a b
-  (Le.refl (level_geq_bound a b)) (Le.step (level_geq_bound a b) (level_geq_bound a b) (Le.refl (level_geq_bound a b))))
+  (@Le.refl (level_geq_bound a b)) (@Le.step (level_geq_bound a b) (level_geq_bound a b) (@Le.refl (level_geq_bound a b))))
  (ugeq_core_step_congr (level_geq_core_fuel (level_geq_bound a b)) level_geq_core a b
   (fun (x : Level) (y : Level) (small : Le (Nat.succ (level_geq_bound x y)) (level_geq_bound a b)) =>
    level_geq_core_fuel_stable (level_geq_bound a b) (level_geq_bound x y) x y
     (le_trans (level_geq_bound x y) (Nat.succ (level_geq_bound x y)) (level_geq_bound a b)
-     (Le.step (level_geq_bound x y) (level_geq_bound x y) (Le.refl (level_geq_bound x y))) small)
-    (Le.refl (level_geq_bound x y))))",
+     (@Le.step (level_geq_bound x y) (level_geq_bound x y) (@Le.refl (level_geq_bound x y))) small)
+    (@Le.refl (level_geq_bound x y))))",
         "The canonical comparator satisfies the exact checked raw-core one-layer branch equation with recursive calls to itself. Derived by stabilization and strict-call congruence, not assumed recursively.",
     ),
     (
@@ -446,7 +446,7 @@ const CONTROLS: &[(&str, &str)] = &[
  Eq.substType Nat (fun (n : Nat) => Le n (evalL rho ugeq_test_u))
  (evalL rho ugeq_test_u) (evalL rho ugeq_stable_incomplete_rhs)
  (level_imax_eq_sem (Level.succ Level.zero) ugeq_test_u rho)
- (Le.refl (evalL rho ugeq_test_u))",
+ (@Le.refl (evalL rho ugeq_test_u))",
         "Actual imax(1,u)=u identity supplies the refused semantic order under every valuation; reuses the checked mathematical imax bridge.",
     ),
     (

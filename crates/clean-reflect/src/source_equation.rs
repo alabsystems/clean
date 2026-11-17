@@ -18,6 +18,10 @@
 //! The returned object proves exactly its stored equation. It does NOT prove
 //! that the supplied denotation was derived from emitted IR, that elaboration
 //! preserves Lean source semantics, or that the executable implements the IR.
+//! [`check_source_goal_relation`] also relates an original typed-data predicate
+//! application to its consumer's exact proposition, with a conversion or supplied
+//! checked proof. That API adds no Formula vocabulary or arithmetic meaning.
+//!
 //! Source/IR binding, independent source-environment replay, runtime ownership,
 //! target ABI and machine-code correctness remain separate obligations. No
 //! module, certificate, body gate or proof grade is modified here.
@@ -31,8 +35,12 @@ use crate::{ReflectError, TvDenotation};
 
 mod bitwise;
 mod conditional;
+mod goal;
 mod scalar;
 mod subtraction;
+pub use goal::{
+    check_source_goal_relation, check_source_goal_relation_with_proof, CheckedSourceGoalRelation,
+};
 pub use scalar::{check_scalar_source_equation, check_scalar_source_equation_with_proof};
 
 /// A source equation actually accepted by the kernel in the supplied original

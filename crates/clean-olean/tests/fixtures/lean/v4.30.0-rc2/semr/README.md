@@ -3,13 +3,16 @@
 ## Current selected source
 
 The nine IR-owned source copies select canonical IR
-`bd313b4fbfae2c2826bade463e23224f1df9a61a`. The separately owned scalar
+`90619767a1d9b0c877702a651515da5073d68668`, the revision Clean's `Cargo.lock`
+resolves for the `trust-ir-semr` witness. Its `MiniRust.lean` is Trust's
+`noncomputable section`, `SpecrPrelude.lean`, generated `MiniRustSlice.lean`,
+`end` byte for byte, with libspecr's `Int::pow` panic past `u32::MAX`. The separately owned scalar
 profile is the exact source from canonical IR
 `486bcd5821c6380ce9b4e9c8d62e422df7e3670e`; it retains the model's complete
 blob table and proves that unreferenced table data does not affect this scalar
 body. It is not relabelled as part of the older selected model.
 `SemR.lean` SHA-256 is
-`0ea0e29f2b0d70a158f0ac54725d5175b9be81f4fc5b0a4d0839e9b968ee180d`.
+`91eba0576bb0fb6d8d8120b5227155bf660e6a336b0d3b68c2666195557329e0`.
 The canonical decoder/model includes the wire-70 blob/tensor additions; no
 Clean-owned program interpretation is substituted for it.
 

@@ -283,5 +283,5 @@ environment_schema! {
         generation: u64 => __wire_env_561, options: Map<String,Option<String>> => __wire_env_562,
         staged_headers: Set<WName> => __wire_env_563,
     }
-    transient { lazy_source => __wire_env_2, declaration_verification => __wire_env_4, codata_origins => __wire_env_5, codata_carriers => __wire_env_6, cumulative_ever => __wire_env_121, native_reducers => __wire_env_524, kernel_theory => __wire_env_525, native_fold_cache => __wire_env_527, prelude_aliases => __wire_env_557, matcher_info => __wire_env_564, simp_cache_identity => __wire_env_565 }
+    transient { lazy_source => __wire_env_2, declaration_verification => __wire_env_4, codata_origins => __wire_env_5, codata_carriers => __wire_env_6, cumulative_ever => __wire_env_121, native_reducers => __wire_env_524, kernel_theory => __wire_env_525, native_fold_cache => __wire_env_527, prelude_aliases => __wire_env_557, simp_cache_identity => __wire_env_564 }
 }

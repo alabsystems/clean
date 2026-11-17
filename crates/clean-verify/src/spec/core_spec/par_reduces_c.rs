@@ -6100,7 +6100,7 @@ fn par_strips_c_full_proof() -> String {
              (hty : par_reduces_c env ty ty') (hbody : par_reduces_c env body body') \
              (_ihty : {ihty}) (_ihbody : {ihbody}) \
              (hes : @Eq Nat (expr_size ({shape})) k) (d2s : par_reduces_c env ({shape}) a2) => \
-             {struct_lemma} env ty body ({head} ty' body') a2 \
+             @{struct_lemma} env ty body ({head} ty' body') a2 \
              (@{ctor} env ty ty' body body' hty hbody) d2s {dfst} {dsnd})",
                 ihty = ih("ty", "ty'"),
                 ihbody = ih("body", "body'"),
@@ -6595,17 +6595,17 @@ fn par_strips_c_struct_binder_proof(head: &str, inv: &str, diag: &str) -> String
             "par_strips_witness_c_star env s1 s2) ",
             "(dbody : forall (s1 : KExpr) (s2 : KExpr), par_reduces_c env body s1 -> par_reduces_c env body s2 -> ",
             "par_strips_witness_c_star env s1 s2) => ",
-            "{inv} env dom body e1 ",
+            "@{inv} env dom body e1 ",
             "(fun (x : KExpr) => par_strips_witness_c_star env x e2) ",
             "h1 ",
             "(fun (dom1 : KExpr) (body1 : KExpr) ",
             "(hdom1 : par_reduces_c env dom dom1) (hbody1 : par_reduces_c env body body1) => ",
-            "{inv} env dom body e2 ",
+            "@{inv} env dom body e2 ",
             "(fun (y : KExpr) => par_strips_witness_c_star env ({head} dom1 body1) y) ",
             "h2 ",
             "(fun (dom2 : KExpr) (body2 : KExpr) ",
             "(hdom2 : par_reduces_c env dom dom2) (hbody2 : par_reduces_c env body body2) => ",
-            "{diag} env dom1 dom2 body1 body2 ",
+            "@{diag} env dom1 dom2 body1 body2 ",
             "(ddom dom1 dom2 hdom1 hdom2) (dbody body1 body2 hbody1 hbody2)))"
         ),
         head = head,
@@ -7121,7 +7121,7 @@ fn par_subst_c_proof() -> String {
                 "(_hty : par_reduces_c env ty ty') (_hbody : par_reduces_c env body body') ",
                 "(ihty : {ih_ty}) (ihbody : {ih_body}) ",
                 "(v : KExpr) (v' : KExpr) (d : Nat) (h : par_reduces_bd v v') (closed : RecEnvClosed env) => ",
-                "{star_cong} env ",
+                "@{star_cong} env ",
                 "(instantiate_at ty v d) (instantiate_at ty' v' d) ",
                 "(instantiate_at body v (Nat.succ d)) (instantiate_at body' v' (Nat.succ d)) ",
                 "(ihty v v' d h closed) (ihbody v v' (Nat.succ d) h closed))"
@@ -7507,7 +7507,7 @@ fn par_subst_refl_full_c_proof() -> String {
                 "(fun (ty : KExpr) (body : KExpr) ",
                 "(ihty : {ih_ty}) (ihbody : {ih_body}) ",
                 "(v : KExpr) (v' : KExpr) (d : Nat) (lc : RecEnvLiftClosed env) (h : par_reduces_c env v v') => ",
-                "{star_cong} env ",
+                "@{star_cong} env ",
                 "(instantiate_at ty v d) (instantiate_at ty v' d) ",
                 "(instantiate_at body v (Nat.succ d)) (instantiate_at body v' (Nat.succ d)) ",
                 "(ihty v v' d lc h) (ihbody v v' (Nat.succ d) lc h))"
@@ -7633,7 +7633,7 @@ fn par_subst_full_c_proof() -> String {
                 "(ihty : {ih_ty}) (ihbody : {ih_body}) ",
                 "(v : KExpr) (v' : KExpr) (d : Nat) (h : par_reduces_c env v v') ",
                 "(closed : RecEnvClosed env) (liftclosed : RecEnvLiftClosed env) => ",
-                "{star_cong} env ",
+                "@{star_cong} env ",
                 "(instantiate_at ty v d) (instantiate_at ty' v' d) ",
                 "(instantiate_at body v (Nat.succ d)) (instantiate_at body' v' (Nat.succ d)) ",
                 "(ihty v v' d h closed liftclosed) (ihbody v v' (Nat.succ d) h closed liftclosed))"
@@ -7861,8 +7861,8 @@ fn par_strips_witness_c_star_binder_proof(head: &str, star_cong: &str) -> String
             "(fun (b3 : KExpr) ",
             "(pb1 : par_reduces_c_star env b1 b3) (pb2 : par_reduces_c_star env b2 b3) => ",
             "@par_strips_witness_c_star.intro env ({head} t1 b1) ({head} t2 b2) ({head} t3 b3) ",
-            "({star_cong} env t1 t3 b1 b3 pt1 pb1) ",
-            "({star_cong} env t2 t3 b2 b3 pt2 pb2)) ",
+            "(@{star_cong} env t1 t3 b1 b3 pt1 pb1) ",
+            "(@{star_cong} env t2 t3 b2 b3 pt2 pb2)) ",
             "wb) ",
             "wt"
         ),

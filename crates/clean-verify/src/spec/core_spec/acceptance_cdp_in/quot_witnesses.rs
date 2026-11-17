@@ -104,7 +104,7 @@ pub(super) fn proofs() -> Vec<OwnedProof> {
             ),
             format!(
                 "fun (R : RedEnv) (tenv : KDeclEnv) (G : ListType CtxEntryIn) =>
-kernel_accepts_tc_in_sound R tenv Bool.false G {target} {result} ({name} R tenv G)"
+kernel_accepts_tc_in_sound R tenv Bool.false G {target} {result} (@{name} R tenv G)"
             ),
         )
     };

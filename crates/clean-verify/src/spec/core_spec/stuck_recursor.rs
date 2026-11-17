@@ -120,7 +120,7 @@ const UNDER_LEVELS_CONTROLS: &[&str] = &[
  (@Eq.refl (OptionType RecMeta) (@OptionType.some RecMeta under_levels_fixture_meta))
  under_levels_fixture_before under_levels_fixture_after under_levels_fixture_trace
  (@Eq.refl (OptionType Name) (@OptionType.some Name Name.anonymous))
- (Le.refl (Nat.succ Nat.zero))",
+ (@Le.refl (Nat.succ Nat.zero))",
 ];
 
 impl Specification {
@@ -339,7 +339,7 @@ impl Specification {
         format!(
             "(Eq.substType Nat (fun (z : Nat) => Eq (OptionType KExpr) \
              (list_head (list_drop z (kapp_args (KExpr.app {f} (KExpr.bvar bi))))) \
-             (OptionType.some KExpr (KExpr.bvar bi))) \
+             (@OptionType.some KExpr (KExpr.bvar bi))) \
              (list_length (kapp_args {f})) {mi} hlen{f} \
              (list_head_drop_len_append (kapp_args {f}) (KExpr.bvar bi)))",
             mi = Self::mi_at("meta"),
@@ -353,7 +353,7 @@ impl Specification {
     fn le_from_len(f: &str) -> String {
         format!(
             "(Eq.subst Nat (fun (z : Nat) => Le z {mi}) {mi} (list_length (kapp_args {f})) \
-             (Eq.symm Nat (list_length (kapp_args {f})) {mi} hlen{f}) (Le.refl {mi}))",
+             (Eq.symm Nat (list_length (kapp_args {f})) {mi} hlen{f}) (@Le.refl {mi}))",
             mi = Self::mi_at("meta"),
         )
     }
@@ -508,7 +508,7 @@ impl Specification {
                              (list_length (kapp_args af)) \
                              (Eq.symm Nat (list_length (kapp_args af)) {mi} \
                              (Eq.substType KExpr (fun (X : KExpr) => {lenX}) F af \
-                             (Eq.symm KExpr af F {af_eq_f}) hlenF)) (Le.refl {mi})) \
+                             (Eq.symm KExpr af F {af_eq_f}) hlenF)) (@Le.refl {mi})) \
                              (fun (hh2 : {head_af2}) \
                              (hlen2 : @Eq Nat (list_length (kapp_args af2)) \
                              (list_length (kapp_args af))) => \
@@ -718,7 +718,7 @@ impl Specification {
     fn add_le_succ_weaken(&mut self) -> Result<(), SpecError> {
         self.add_recursive_def(
             "def le_succ_weaken (n : Nat) (m : Nat) (h : Le (Nat.succ n) m) : Le n m := \
-             le_trans n (Nat.succ n) m (Le.step n n (Le.refl n)) h",
+             le_trans n (Nat.succ n) m (@Le.step n n (@Le.refl n)) h",
             "le_succ_weaken: Le (succ n) m implies Le n m. Free from le_trans, since Le n (succ n) \
              is Le.step n n (Le.refl n). \
              \

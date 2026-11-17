@@ -34,6 +34,13 @@ impl From<crate::level::LevelTooDeep> for BudgetError {
     }
 }
 
+/// Named resource allowance, not a soundness condition. After the Init
+/// conversion-strategy corrections, the 3,703-member root closure consumes at
+/// most 1,463,822 steps per atomic record. The next power of two supplies finite
+/// headroom; whole-subject qualification is recorded with the decision in
+/// reports/ck0-init-residuals-2026-11-15. Exhaustion still refuses.
+pub const DEFAULT_DECISION_STEPS: u64 = 1 << 21;
+
 /// A deterministic step meter. Threaded by `&mut` through reduction and
 /// conversion so the *total* work of one decision is bounded.
 #[derive(Clone, Copy, Debug)]
@@ -48,12 +55,11 @@ impl Budget {
         Budget { fuel }
     }
 
-    /// The default genesis-pinned budget for top-level decisions. Generous
-    /// enough for the corpus shapes M1 exercises; the real genesis value is
-    /// pinned in the manifest (design §10).
+    /// The finite default resource budget for top-level decisions. Changing
+    /// this policy does not promote or rewrite the historical genesis manifest.
     #[must_use]
     pub fn default_budget() -> Self {
-        Budget::new(1_000_000)
+        Budget::new(DEFAULT_DECISION_STEPS)
     }
 
     /// Remaining fuel (for diagnostics/tests).

@@ -544,7 +544,7 @@ pub(super) fn val_candexp_iota_spine4() -> String {
             rest.push_str(&format!(" {item} (whnf_acc.intro {item} s{item}f)"));
         }
         let ih = format!(
-            "ih{} qy (whnf_step.beta {src} qy hy){rest} {} {}",
+            "ih{} qy (@whnf_step.beta {src} qy hy){rest} {} {}",
             slot + 1,
             shift("hfire"),
             shift("hfam")
@@ -940,7 +940,7 @@ pub(super) fn val_natrecs_major_acc_necessary() -> String {
     let mn0 = ap(NSUCC, "n0");
     let mn2 = ap(NSUCC, "n2");
     let step = format!(
-        "(@Eq.substType KExpr (fun (qz : KExpr) => whnf_step qz {r2}) {r0} qe0 (@Eq.symm KExpr qe0 {r0} heq) (whnf_step.beta {r0} {r2} (beta_reduces.app_right {sp3} {mn0} {mn2} (beta_reduces.app_right {NSUCC} n0 n2 hb))))"
+        "(@Eq.substType KExpr (fun (qz : KExpr) => whnf_step qz {r2}) {r0} qe0 (@Eq.symm KExpr qe0 {r0} heq) (@whnf_step.beta {r0} {r2} (beta_reduces.app_right {sp3} {mn0} {mn2} (beta_reduces.app_right {NSUCC} n0 n2 hb))))"
     );
     format!(
         "fun (x1 : KExpr) (x2 : KExpr) (x3 : KExpr) (n : KExpr) (hacc : whnf_acc {}) => @whnf_acc.rec (fun (qe : KExpr) (_ : whnf_acc qe) => forall (n0 : KExpr), @Eq KExpr qe {r0} -> whnf_acc {mn0}) (fun (qe0 : KExpr) (_qsteps : forall (qw : KExpr), whnf_step qe0 qw -> whnf_acc qw) (qih : forall (qw : KExpr), whnf_step qe0 qw -> forall (n0 : KExpr), @Eq KExpr qw {r0} -> whnf_acc {mn0}) (n0 : KExpr) (heq : @Eq KExpr qe0 {r0}) => whnf_acc.intro {mn0} (fun (qw : KExpr) (hw : whnf_step {mn0} qw) => succApp_whnf_inv n0 qw (whnf_acc qw) hw (fun (n2 : KExpr) (hb : beta_reduces n0 n2) (heqw : @Eq KExpr qw {mn2}) => @Eq.substType KExpr (fun (qv : KExpr) => whnf_acc qv) {mn2} qw (@Eq.symm KExpr qw {mn2} heqw) (qih {r2} {step} n2 (@Eq.refl KExpr {r2}))))) {} hacc n (@Eq.refl KExpr {})",
@@ -965,7 +965,7 @@ pub(super) fn val_natrecs_contract_acc_necessary() -> String {
     let r = sredex("x1", "x2", "x3", "n");
     let c = scontract("x1", "x2", "x3", "n");
     format!(
-        "fun (x1 : KExpr) (x2 : KExpr) (x3 : KExpr) (n : KExpr) (hacc : whnf_acc {r}) => whnfAcc_inv_step {r} hacc {c} (whnf_step.beta {r} {c} (beta_reduces.iota {r} {c} (iota_step_to_reduces {r} {c} (natRecS_iota_fires x1 x2 x3 n))))"
+        "fun (x1 : KExpr) (x2 : KExpr) (x3 : KExpr) (n : KExpr) (hacc : whnf_acc {r}) => whnfAcc_inv_step {r} hacc {c} (@whnf_step.beta {r} {c} (beta_reduces.iota {r} {c} (iota_step_to_reduces {r} {c} (natRecS_iota_fires x1 x2 x3 n))))"
     )
 }
 

@@ -63,7 +63,11 @@
 //! Part of #963 - Compiler IR infrastructure.
 
 mod body;
+mod foreign_proposal;
 mod helpers;
+pub use foreign_proposal::{
+    propose_boxed_foreign_c, BoxedForeignCEntry, BoxedForeignCProposal, ForeignCProposalError,
+};
 #[cfg(test)]
 mod tests;
 
@@ -165,6 +169,9 @@ pub struct CEmitter {
     /// as `emit_trust_ir::emit_apply_user`. Callees not in this map are
     /// emitted as direct calls (historical behavior for external symbols).
     decl_shapes: HashMap<Name, (usize, IRType)>,
+    // Populated ONLY by the separate untrusted boxed-foreign proposal API.
+    // Ordinary emit_c/CEmitter entry points keep this empty.
+    proposed_foreign_symbols: HashMap<Name, String>,
 }
 
 impl CEmitter {
@@ -182,6 +189,7 @@ impl CEmitter {
             jp_params: HashMap::new(),
             var_types: HashMap::new(),
             decl_shapes: HashMap::new(),
+            proposed_foreign_symbols: HashMap::new(),
         }
     }
 
@@ -319,7 +327,10 @@ impl CEmitter {
 
     /// Emit function ID.
     fn emit_fn_id(&self, fn_id: &FnId) -> String {
-        self.base.emit_fn_id(fn_id)
+        self.proposed_foreign_symbols
+            .get(&fn_id.0)
+            .cloned()
+            .unwrap_or_else(|| self.base.emit_fn_id(fn_id))
     }
 
     /// Emit an IR argument.

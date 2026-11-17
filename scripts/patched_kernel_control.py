@@ -14,9 +14,9 @@ accepted row would still mint one? Each host crate's
 what it sees with its pins (`crates/clean-kernel/tests/support/
 patched_kernel_control.rs` states the contract).
 
-This script never edits the repository's sources. It copies the tree into a
-scratch directory (`git archive` of HEAD, or the working tree with
-`--from-worktree`), and there it runs three legs:
+This script never edits the repository's sources. It copies the tree, less
+`reports/`, into a scratch directory (`git archive` of HEAD, or the working
+tree with `--from-worktree`), and there it runs three legs:
 
   unmodified  each host test on the kernel as committed: every site refuses;
   mutant      `TypeChecker::check_type` patched to accept exactly the planted
@@ -90,6 +90,7 @@ COVERAGE: dict[str, tuple[str, str, str]] = {
     "crates/clean-mathverse/src/graduate/intake.rs#evaluate_candidate": (EXERCISED, "mathverse.trust_sign.attest", "its verdict is graduate::recheck::recheck_and_classify, the function attest calls"),
     "crates/clean-mathverse/src/hol/isabelle_pure_verify/batch.rs#try_bridge_discharge": (ENTRY, "kernel.add_decl", "needs Isabelle dumps"),
     "crates/clean-mathverse/src/hol/isabelle_pure_verify/batch.rs#verify_one_with_translations": (ENTRY, "kernel.add_decl", "needs Isabelle dumps"),
+    "crates/clean-mathverse/src/hol/isabelle_pure_verify/emit_defs.rs#emit_synthesized_def_consts": (ENTRY, "kernel.check_decl_readonly_strict", "needs Isabelle dumps; its kernel call is check_decl_readonly_strict"),
     "crates/clean-mathverse/src/hol/isabelle_verified.rs#import_verified_hol_proofs": (ENTRY, "kernel.add_decl", "needs Isabelle dumps"),
     "crates/clean-mathverse/src/lean4/mathlib_kernel_verify.rs#verify_mathlib_lemmas_kernel": (ENTRY, "kernel.check_type", "needs a Mathlib lemma table"),
     "crates/clean-mathverse/src/lean4/shard_verify.rs#verify_shard_into_env": (ENTRY, "kernel.add_decl", "a second shard engine; the probed one is verify/incremental"),
@@ -99,12 +100,12 @@ COVERAGE: dict[str, tuple[str, str, str]] = {
     "crates/clean-mathverse/src/trust_sign/reauditor.rs#reaudit_one": (EXERCISED, "mathverse.trust_sign.attest", "reaudit_one's verdict is attest's"),
     "crates/clean-mathverse/src/verify/foreign/mod.rs#verify_single_constant": (ENTRY, "kernel.add_decl", "foreign-system shards not built"),
     "crates/clean-mathverse/src/verify/incremental/mod.rs#accept_unsafe_definition_type_only": (ENTRY, "kernel.add_decl", "the unsafe-definition branch; the planted theorem does not take it"),
-    "crates/clean-mathverse/src/verify/incremental/mod.rs#reconstruct_and_replay_one": (EXERCISED, "mathverse.stamp_kernel_verified", "on the shard engine's path for every constant"),
+    "crates/clean-mathverse/src/verify/incremental/mod.rs#reconstruct_and_replay_one": (EXERCISED, "mathverse.development_manifest", "on the shard engine's path for every constant"),
     "crates/clean-mathverse/src/verify/incremental/mod.rs#retry_motive_universe_bump_ladder": (ENTRY, "kernel.add_decl", "a retry branch the planted theorem does not take"),
     "crates/clean-mathverse/src/verify/incremental/mod.rs#retry_speculative_motive_universe": (ENTRY, "kernel.add_decl", "a retry branch the planted theorem does not take"),
     "crates/clean-mathverse/src/verify/incremental/mod.rs#try_accept_seeded_duplicate": (ENTRY, "kernel.check_type", "the duplicate-name branch; the planted theorem is not a duplicate"),
-    "crates/clean-mathverse/src/verify/incremental/mod.rs#try_add_constant": (EXERCISED, "mathverse.stamp_kernel_verified", "on the shard engine's path for every constant"),
-    "crates/clean-mathverse/src/verify/incremental/mod.rs#try_add_decl": (EXERCISED, "mathverse.stamp_kernel_verified", "the add_decl that mints AddConstResult::KernelVerified"),
+    "crates/clean-mathverse/src/verify/incremental/mod.rs#try_add_constant": (EXERCISED, "mathverse.development_manifest", "on the shard engine's path for every constant"),
+    "crates/clean-mathverse/src/verify/incremental/mod.rs#try_add_decl": (EXERCISED, "mathverse.development_manifest", "the add_decl that mints AddConstResult::KernelVerified"),
     "crates/clean-mathverse/src/verify/sharded.rs#verify_module": (EXERCISED, "mathverse.lean4.kernel_verify_const", "its per-constant verdict is kernel_verify_const_with_heartbeat"),
     "crates/clean-server/src/handlers/swarm.rs#recheck_and_classify_session": (ENTRY, "kernel.add_decl", "a clean-server session is not opened; it calls Environment::add_decl on the session overlay"),
     # ---- Trust, at the census's pinned commit (never built here) ----
@@ -153,23 +154,33 @@ def resolve_targo() -> str:
     return os.fsdecode(out.stdout).removesuffix("\n")
 
 
+# The tracked `reports/` (8 GB on 2026-11-16, 95% of the tree) is evidence no
+# leg reads: the legs build and run three integration tests, and the one file
+# under `reports/` they name (RECORD) is read only by the record test, which
+# the legs do not run. Copying it filled the shared volume (2026-11-17), so the
+# scratch tree omits it; a leg that did read it would fail on the missing file.
+EXCLUDED_PREFIX = b"reports/"
+
+
 def copy_tree(dest: Path, from_worktree: bool) -> None:
-    """The tracked tree into `dest`, every file stamped NOW (`tar -m`): a
-    scratch build directory kept across runs then always sees the copy as
-    newer than whatever it built last, a mutant build included."""
+    """The tracked tree minus `reports/` into `dest`, every file stamped NOW
+    (`tar -m`): a scratch build directory kept across runs then always sees the
+    copy as newer than whatever it built last, a mutant build included."""
     dest.mkdir(parents=True)
     if from_worktree:
         listed = subprocess.run(
             ["git", "-C", str(ROOT), "ls-files", "-z", "-c", "-o", "--exclude-standard"],
             check=True, capture_output=True,
         ).stdout.split(b"\0")
-        names = b"\0".join(n for n in listed if n and (ROOT / os.fsdecode(n)).is_file()) + b"\0"
+        names = b"\0".join(n for n in listed if n and not n.startswith(EXCLUDED_PREFIX)
+                           and (ROOT / os.fsdecode(n)).is_file()) + b"\0"
         pack = subprocess.Popen(["tar", "-c", "--null", "-T", "-", "-f", "-"], cwd=ROOT, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
         assert pack.stdin is not None
         pack.stdin.write(names)
         pack.stdin.close()
     else:
-        pack = subprocess.Popen(["git", "-C", str(ROOT), "archive", "--format=tar", "HEAD"], stdout=subprocess.PIPE)
+        pack = subprocess.Popen(["git", "-C", str(ROOT), "archive", "--format=tar", "HEAD", "--", ".",
+                                 f":(exclude){EXCLUDED_PREFIX.decode()}"], stdout=subprocess.PIPE)
     unpack = subprocess.run(["tar", "-x", "-m", "-f", "-", "-C", str(dest)], stdin=pack.stdout)
     if pack.wait() != 0 or unpack.returncode != 0:
         fail("copying the tree into the scratch directory failed")
@@ -323,7 +334,7 @@ def main() -> int:
         "minted_by": "scripts/patched_kernel_control.py --write-record",
         "generated_at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "measured_commit": head,
-        "tree": "git archive of measured_commit, built in a scratch directory with targo --unverified (no proof claim)",
+        "tree": "git archive of measured_commit without reports/, built in a scratch directory with targo --unverified (no proof claim)",
         "toolchain": subprocess.run([targo, "--unverified", "--version"], capture_output=True, text=True).stdout.strip(),
         "lean_toolchain": (ROOT / "lean-toolchain").read_text().strip(),
         "mutation": {"id": MUTANT_ID, "file": MUTATION_FILE, "anchor": ANCHOR, "replacement": REPLACEMENT, **mutation,

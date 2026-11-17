@@ -599,3 +599,29 @@ fn test_shard_builder_level_params_mixed_constants() {
     assert_eq!(c2.level_params_count, 1);
     assert_eq!(&reader.strings[c2.level_params_start as usize], "w");
 }
+
+#[test]
+fn compiler_record_roles_module_shard_refuses_payload_without_mutation() {
+    let bytes = super::super::compiler_record_roles_tests::fixture_bytes();
+    let module = clean_olean::parse_module(&bytes).unwrap();
+    let mut writer = ShardWriter::new();
+    writer.add_string("existing data");
+    let before = (
+        writer.string_count(),
+        writer.expr_count(),
+        writer.constant_count(),
+    );
+    let mut sidecar = ProvenanceSidecar::new();
+    let error = import_module_to_shard(&module, "PayloadRoles", &mut writer, &mut sidecar)
+        .expect_err("the payload owner is not its unsafe Lean mirror");
+    assert!(error.to_string().contains("Clean payload declarations"));
+    assert_eq!(
+        (
+            writer.string_count(),
+            writer.expr_count(),
+            writer.constant_count()
+        ),
+        before
+    );
+    assert_eq!(sidecar.len(), 0);
+}

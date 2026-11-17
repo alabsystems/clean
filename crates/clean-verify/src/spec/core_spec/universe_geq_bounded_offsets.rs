@@ -440,15 +440,15 @@ const CONTROLS: &[(&str, &str)] = &[
     (
         r"def ugeq_cap_succ_bound : LevelOffsetsBounded (Nat.succ Nat.zero) (Level.succ ugeq_test_u) :=
  uoffset_and_intro (Le (Nat.succ Nat.zero) (Nat.succ Nat.zero)) (LevelOffsetsBounded (Nat.succ Nat.zero) ugeq_test_u)
- (Le.refl (Nat.succ Nat.zero)) (le_zero_n (Nat.succ Nat.zero))",
+ (@Le.refl (Nat.succ Nat.zero)) (le_zero_n (Nat.succ Nat.zero))",
         "Positive boundary witness: one successor fits cap one, with the underlying parameter checked.",
     ),
     (
         r"def ugeq_cap_two_bound : LevelOffsetsBounded (Nat.succ (Nat.succ Nat.zero)) (Level.succ (Level.succ ugeq_test_u)) :=
  uoffset_and_intro (Le (Nat.succ (Nat.succ Nat.zero)) (Nat.succ (Nat.succ Nat.zero))) (LevelOffsetsBounded (Nat.succ (Nat.succ Nat.zero)) (Level.succ ugeq_test_u))
- (Le.refl (Nat.succ (Nat.succ Nat.zero)))
+ (@Le.refl (Nat.succ (Nat.succ Nat.zero)))
  (uoffset_and_intro (Le (Nat.succ Nat.zero) (Nat.succ (Nat.succ Nat.zero))) (LevelOffsetsBounded (Nat.succ (Nat.succ Nat.zero)) ugeq_test_u)
-  (Le.step (Nat.succ Nat.zero) (Nat.succ Nat.zero) (Le.refl (Nat.succ Nat.zero))) (le_zero_n (Nat.succ (Nat.succ Nat.zero))))",
+  (@Le.step (Nat.succ Nat.zero) (Nat.succ Nat.zero) (@Le.refl (Nat.succ Nat.zero))) (le_zero_n (Nat.succ (Nat.succ Nat.zero))))",
         "Two successors fit cap two; both successor subtrees have explicit actual bounds.",
     ),
     (

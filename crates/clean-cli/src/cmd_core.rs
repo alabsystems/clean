@@ -7,10 +7,13 @@
 use anyhow::Context;
 use clean_c_sem::parser::CParser;
 use clean_elab::agent_diagnostics::{AgentDiagnostic, AgentSourceSpan};
+use clean_elab::module_driver::source_graph::{
+    ElabOutcome, ImportGraph, ModuleElaboration as OwnElaboration,
+};
 use clean_elab::register::reset_kernel_check_counter;
 use clean_elab::{
-    kernel_check_failure_count, ElabCtx, ElabResult, FileContext, RegistrationWarning,
-    RegistrationWarningKind, TacticError,
+    kernel_check_failure_count, ElabCtx, FileContext, RegistrationWarning, RegistrationWarningKind,
+    TacticError,
 };
 use clean_kernel::sorry::{reset_sorry_counter, sorry_count};
 use clean_kernel::{Environment, Name, TypeChecker};
@@ -129,7 +132,11 @@ pub(crate) fn check_file_with_json_with_imports_in_world(
         automation_budget,
         options,
         explicit_world,
-    )?;
+    )
+    .map_err(|error| {
+        let message = format!("check failed: {error}");
+        error.context(message)
+    })?;
 
     finalize_check_run(
         path,
@@ -231,11 +238,14 @@ pub(crate) fn collect_check_outcome_in_world(
     let mut source_setup = if !imports_prefer_olean
         && clean_elab::module_driver::source_closure_needs_world_setup(path, &decision)?
     {
-        Some(clean_elab::module_driver::SourceModuleSetup::for_file(
-            environment_setup,
-            &decision,
-            path,
-        )?)
+        Some(
+            clean_elab::module_driver::SourceModuleSetup::for_file_with_import_policy(
+                environment_setup,
+                &decision,
+                path,
+                import_policy,
+            )?,
+        )
     } else {
         None
     };
@@ -665,18 +675,13 @@ pub(crate) fn parse_only_check_in_world(
 /// Recursion state shared across all files (cache + cycle detection).
 #[derive(Default)]
 struct ImportCheckState {
+    graph: ImportGraph,
     /// Fresh source headers require independent body/outcome comparisons.
     source_setup: Option<clean_elab::module_driver::SourceModuleSetup>,
     /// Exact bytes retained when independently re-elaborating source modules.
     source_inputs: HashMap<PathBuf, std::sync::Arc<str>>,
     /// The root whose header selected the initial environment.
     source_entry: Option<PathBuf>,
-    /// Set of canonical paths that have already been fully elaborated this run.
-    /// Used to avoid quadratic re-elaboration on diamond-shaped import graphs.
-    completed: HashSet<PathBuf>,
-    /// Set of canonical paths currently being elaborated up the call stack.
-    /// Used to detect import cycles.
-    in_flight: HashSet<PathBuf>,
     /// Cache of resolved module name -> resolved path.
     resolved_modules: HashMap<Name, Option<PathBuf>>,
     /// Canonical path of each intra-project source import -> the module name
@@ -733,12 +738,6 @@ struct ImportCheckState {
     /// [`sibling_import_divergence`]. `None` only in unit tests that build a
     /// bare state: such a comparison then fails closed.
     base_env: Option<Environment>,
-    /// One entry per file on the recursion stack: the canonical paths of the
-    /// intra-project `.lean` imports it named that resolved to source, in the
-    /// order the file names them (Lean's import order).
-    import_frames: Vec<Vec<PathBuf>>,
-    /// Per completed file: its transitive intra-project source-import closure.
-    closures: HashMap<PathBuf, HashSet<PathBuf>>,
     /// The Lean world of the whole run (G72, R111): the one the entry file's
     /// Lake package names, selected once, since every file of the run is
     /// elaborated into one environment and Lake builds every package of a
@@ -751,112 +750,12 @@ struct ImportCheckState {
     /// what its OWN declarations did to `env` (its imports' excluded) — see
     /// [`OwnElaboration`].
     own_elaborations: HashMap<PathBuf, OwnElaboration>,
-    /// Per file: the environment its own import closure plus itself give,
-    /// with what the file did there — `None` when that could not be built
-    /// faithfully (a module in its closure diverged in turn).
-    faithful: HashMap<PathBuf, Option<Rc<(Environment, OwnElaboration)>>>,
-    /// Per completed file: the intra-project source imports it names, in
-    /// source order.
-    direct_imports: HashMap<PathBuf, Vec<PathBuf>>,
     /// Divergences this run found (a nested run with one is not faithful).
     divergences: usize,
     /// Trust counter increments minted by isolated re-elaborations, which
     /// re-elaborate source this run already counted.
     nested_sorry_axioms: u64,
     nested_kernel_check_failures: u64,
-}
-
-/// What one file's OWN declarations did, measured from the environment right
-/// after its imports to the environment after its last declaration.
-///
-/// Both halves are compared between the file's elaboration next to modules it
-/// does not import and its elaboration in exactly its own import closure
-/// ([`sibling_import_divergence`]):
-///
-/// * `effect` covers EVERY component of the environment — instances,
-///   attributes, simp/aesop sets, structure metadata, options, extension
-///   entries, prelude flags — not only the constants the file added. The
-///   constants-only comparison let `attribute [instance] c` register P's root
-///   `c` next to P and `N.c` without it, with the same constants both ways
-///   (round-24 verification of ff6c33c2c).
-/// * `outcomes` says how each of its top-level declarations ELABORATED
-///   ([`ElabOutcome`]): a file that fails in its own closure (Lean cannot
-///   compile it) may elaborate cleanly next to a stranger that supplies what
-///   it lacks (`attribute [instance] N.c` where only an unimported sibling
-///   defines `N.c`), and the failed command changes nothing the effect would
-///   see. Credit decisions (the imported-cone gate, `sorry`) are not part of
-///   it: they depend on the run, not on the environment the file saw.
-#[derive(Clone, Debug)]
-struct OwnElaboration {
-    effect: clean_kernel::env::EnvEffect,
-    outcomes: Vec<ElabOutcome>,
-}
-
-/// How one top-level declaration elaborated: refused outright, or elaborated
-/// with this many failed leaves (members of a `namespace` / `section` /
-/// `mutual` block). Compared between a module's elaboration next to modules
-/// it does not import and in exactly its own import closure, by `clean check`
-/// and by `clean project check`.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum ElabOutcome {
-    Refused,
-    Elaborated { failed_leaves: usize },
-}
-
-impl ElabOutcome {
-    pub(crate) fn of(
-        result: &Result<clean_elab::RegisteredElabResult, clean_elab::ElabError>,
-    ) -> Self {
-        match result {
-            Ok(registered) => Self::of_registered(registered),
-            Err(_) => Self::Refused,
-        }
-    }
-
-    /// The outcome of a declaration that elaborated.
-    pub(crate) fn of_registered(registered: &clean_elab::RegisteredElabResult) -> Self {
-        let mut leaves: Vec<&ElabResult> = Vec::new();
-        registered.result.leaf_decls(&mut leaves);
-        Self::Elaborated {
-            failed_leaves: leaves
-                .iter()
-                .filter(|leaf| {
-                    matches!(
-                        leaf,
-                        ElabResult::Failed { .. } | ElabResult::Diagnosed { .. }
-                    )
-                })
-                .count(),
-        }
-    }
-}
-
-/// The first position where two elaborations' [`ElabOutcome`] sequences
-/// differ, described; `None` when they are the same.
-pub(crate) fn elab_outcome_difference(
-    own: &[ElabOutcome],
-    other: &[ElabOutcome],
-) -> Option<String> {
-    let position = own
-        .iter()
-        .zip(other)
-        .position(|(a, b)| a != b)
-        .or_else(|| (own.len() != other.len()).then(|| own.len().min(other.len())))?;
-    let show = |outcome: Option<&ElabOutcome>| match outcome {
-        None => "absent".to_string(),
-        Some(ElabOutcome::Refused) => "refused".to_string(),
-        Some(ElabOutcome::Elaborated { failed_leaves: 0 }) => "elaborated".to_string(),
-        Some(ElabOutcome::Elaborated { failed_leaves }) => {
-            format!("elaborated with {failed_leaves} failed member(s)")
-        }
-    };
-    Some(format!(
-        "its top-level declaration #{} is {} in its own import closure but {} next to \
-         modules it does not import",
-        position + 1,
-        show(own.get(position)),
-        show(other.get(position))
-    ))
 }
 
 /// Accumulator for the outcome of checking the entry file.
@@ -1072,15 +971,8 @@ fn check_file_recursive(
     allow_sorry: bool,
     json: bool,
 ) -> anyhow::Result<()> {
-    if state.in_flight.len() >= MAX_IMPORT_DEPTH {
-        anyhow::bail!(
-            "import depth limit ({MAX_IMPORT_DEPTH}) exceeded while checking {}",
-            path.display()
-        );
-    }
-
     let canonical = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-    if state.in_flight.is_empty()
+    if state.graph.in_flight.is_empty()
         && state
             .source_entry
             .as_ref()
@@ -1091,31 +983,15 @@ fn check_file_recursive(
             path.display()
         );
     }
-    if let Some(frame) = state.import_frames.last_mut() {
-        if !frame.contains(&canonical) {
-            frame.push(canonical.clone());
-        }
-    }
-
-    if state.completed.contains(&canonical) {
-        // Already elaborated into `env` earlier this run; skip.
+    let Some(completed_at_start) = state
+        .graph
+        .enter(&canonical, MAX_IMPORT_DEPTH)
+        .map_err(anyhow::Error::msg)?
+    else {
         return Ok(());
-    }
-    if !state.in_flight.insert(canonical.clone()) {
-        anyhow::bail!(
-            "import cycle detected at {}: file is already being elaborated",
-            path.display()
-        );
-    }
-
-    // Every file completed before this one started is in `env` while it is
-    // elaborated (an ancestor's own declarations come after its imports).
-    let completed_at_start = state.completed.clone();
-    state.import_frames.push(Vec::new());
+    };
     let result = check_file_body(path, env, state, outcome, verbose, allow_sorry, json);
-    let direct_imports = state.import_frames.pop().unwrap_or_default();
-
-    state.in_flight.remove(&canonical);
+    let direct_imports = state.graph.leave(&canonical);
     // No faithful completion or sibling comparison can be minted from a run
     // with an unfinished declaration. In particular, an importer's missing
     // own record after the cutoff below is not a semantic divergence.
@@ -1124,33 +1000,12 @@ fn check_file_recursive(
         return result;
     }
     if result.is_ok() {
-        let mut closure = HashSet::new();
-        for import in &direct_imports {
-            closure.insert(import.clone());
-            if let Some(inner) = state.closures.get(import) {
-                closure.extend(inner.iter().cloned());
-            }
-        }
-        // SIBLING-IMPORT LEAK (round-24 verification of 2bcef9307). The run
-        // elaborates every import into ONE environment, so a file was
-        // elaborated next to files it does not import: with `X: import P;
-        // import Q`, `P: instance (priority := high) three : OfNat Nat 2 :=
-        // ⟨3⟩` and `Q: def two : Nat := 2`, Q's `two` was elaborated with P's
-        // instance and became 3, and `M2: import X; theorem m : two = 3 :=
-        // rfl` passed `clean check` although Lean 4.8.0 rejects it (in Lean,
-        // Q is compiled without P). A file that saw such strangers is compared
-        // with its elaboration in exactly its own import closure; any
-        // difference fails the run closed.
-        let saw_strangers = completed_at_start
-            .iter()
-            .any(|done| !closure.contains(done));
-        // Recorded before the comparison, which seeds from them.
-        state.closures.insert(canonical.clone(), closure);
-        state
-            .direct_imports
-            .insert(canonical.clone(), direct_imports);
+        let saw_strangers =
+            state
+                .graph
+                .record_imports(&canonical, direct_imports, &completed_at_start);
         let own = state.own_elaborations.remove(&canonical);
-        if saw_strangers || (state.source_setup.is_some() && !state.in_flight.is_empty()) {
+        if saw_strangers || (state.source_setup.is_some() && !state.graph.in_flight.is_empty()) {
             let divergence = match &own {
                 Some(own) => {
                     sibling_import_divergence(path, &canonical, env, own, state, allow_sorry)
@@ -1174,43 +1029,22 @@ fn check_file_recursive(
                 ));
             }
         }
-        // With no stranger in `env` and no divergence so far, `env` is exactly
-        // what this file's own import closure plus itself give: keep it as the
-        // seed for a later isolated re-elaboration of a file that imports it.
-        // Bounded, because each is a whole environment: past the bound a
-        // re-elaboration seeds from a smaller kept closure or the base, which
-        // is slower and gives the same environment.
-        let keep_faithful = !saw_strangers
-            && own.is_some()
-            && state.divergences == 0
-            && !state.faithful.contains_key(&canonical)
-            && state
-                .faithful
-                .values()
-                .filter(|kept| kept.is_some())
-                .count()
-                < FAITHFUL_ENVIRONMENT_LIMIT;
-        match own {
-            Some(own) if keep_faithful => {
-                state
-                    .faithful
-                    .insert(canonical.clone(), Some(Rc::new((env.clone(), own))));
-            }
-            Some(own) if state.in_flight.is_empty() => {
-                // The entry file of an isolated re-elaboration: its caller
-                // reads this record when the environment was not kept above.
+        let own = state.graph.retain_faithful(
+            &canonical,
+            own,
+            env,
+            saw_strangers,
+            state.divergences == 0,
+        );
+        if let Some(own) = own {
+            if state.graph.in_flight.is_empty() {
                 state.own_elaborations.insert(canonical.clone(), own);
             }
-            _ => {}
         }
-        state.completed.insert(canonical);
+        state.graph.completed.insert(canonical);
     }
     result
 }
-
-/// How many faithful import environments one `clean check` run keeps as seeds
-/// (see [`faithful_import_environment`]); a measured TSL run keeps 48.
-const FAITHFUL_ENVIRONMENT_LIMIT: usize = 128;
 
 /// Why what `path` did to `env` (next to modules it does not import) differs
 /// from what it does in exactly its own import closure, or `None` when an
@@ -1240,8 +1074,7 @@ fn sibling_import_divergence(
         );
     };
     let (_, isolated) = &*faithful;
-    elab_outcome_difference(&isolated.outcomes, &own.outcomes)
-        .or_else(|| isolated.effect.disagreement(&own.effect, env))
+    isolated.disagreement(own, env)
 }
 
 /// The environment `path`'s own import closure plus `path` itself give, and
@@ -1263,7 +1096,7 @@ fn faithful_import_environment(
     state: &mut ImportCheckState,
     allow_sorry: bool,
 ) -> Option<Rc<(Environment, OwnElaboration)>> {
-    if let Some(cached) = state.faithful.get(canonical) {
+    if let Some(cached) = state.graph.faithful.get(canonical) {
         return cached.clone();
     }
     let base = state.base_env.clone()?;
@@ -1281,16 +1114,17 @@ fn faithful_import_environment(
         None
     } else {
         state
+            .graph
             .direct_imports
             .get(canonical)
             .and_then(|imports| imports.first())
-            .filter(|first| matches!(state.faithful.get(*first), Some(Some(_))))
+            .filter(|first| matches!(state.graph.faithful.get(*first), Some(Some(_))))
             .cloned()
     };
     let (mut nested_env, completed) = match &seed {
         Some(seed) => {
-            let seeded = state.faithful[seed].as_ref().map(|f| f.0.clone())?;
-            let mut completed = state.closures.get(seed).cloned().unwrap_or_default();
+            let seeded = state.graph.faithful[seed].as_ref().map(|f| f.0.clone())?;
+            let mut completed = state.graph.closures.get(seed).cloned().unwrap_or_default();
             completed.insert(seed.clone());
             (seeded, completed)
         }
@@ -1309,16 +1143,19 @@ fn faithful_import_environment(
         source_setup,
         source_inputs: state.source_inputs.clone(),
         source_entry: state.source_setup.as_ref().map(|_| canonical.to_path_buf()),
-        completed,
+        graph: ImportGraph {
+            completed,
+            closures: std::mem::take(&mut state.graph.closures),
+            direct_imports: std::mem::take(&mut state.graph.direct_imports),
+            faithful: std::mem::take(&mut state.graph.faithful),
+            ..ImportGraph::default()
+        },
         resolved_modules: state.resolved_modules.clone(),
         module_names: state.module_names.clone(),
         imports_prefer_olean: state.imports_prefer_olean,
         import_policy: state.import_policy,
         command_line_options: state.command_line_options.clone(),
         base_env: Some(base),
-        closures: std::mem::take(&mut state.closures),
-        direct_imports: std::mem::take(&mut state.direct_imports),
-        faithful: std::mem::take(&mut state.faithful),
         import_world: state.import_world.clone(),
         ..ImportCheckState::default()
     };
@@ -1342,11 +1179,12 @@ fn faithful_import_environment(
     // Closures and direct imports are properties of the import graph, the
     // same in every run; the faithful environments the nested run kept are
     // faithful for this run too.
-    state.closures = std::mem::take(&mut nested.closures);
-    state.direct_imports = std::mem::take(&mut nested.direct_imports);
-    state.faithful = std::mem::take(&mut nested.faithful);
+    state.graph.closures = std::mem::take(&mut nested.graph.closures);
+    state.graph.direct_imports = std::mem::take(&mut nested.graph.direct_imports);
+    state.graph.faithful = std::mem::take(&mut nested.graph.faithful);
     let faithful = if result.is_ok() && nested.divergences == 0 {
         state
+            .graph
             .faithful
             .get(canonical)
             .cloned()
@@ -1359,6 +1197,7 @@ fn faithful_import_environment(
         None
     };
     state
+        .graph
         .faithful
         .insert(canonical.to_path_buf(), faithful.clone());
     faithful
@@ -1373,7 +1212,7 @@ fn check_file_body(
     allow_sorry: bool,
     json: bool,
 ) -> anyhow::Result<()> {
-    let is_entry_file = state.in_flight.len() == 1;
+    let is_entry_file = state.graph.in_flight.len() == 1;
 
     let content = std::fs::read_to_string(path)?;
     if state.source_setup.is_some() {
@@ -1520,7 +1359,7 @@ fn check_file_body(
                 &report.header,
                 &decls,
                 &mut file_ctx,
-                state.completed.is_empty() && state.command_line_options.is_empty(),
+                state.graph.completed.is_empty() && state.command_line_options.is_empty(),
             )
             .map_err(anyhow::Error::from),
         None => clean_elab::module_driver::elaborate_prelude_header(env, &decls, &mut file_ctx)
@@ -3391,7 +3230,7 @@ mod tests {
 
         let mut env = Environment::with_prelude();
         let mut state = ImportCheckState::default();
-        state.in_flight.insert(path.clone()); // mark as entry file
+        state.graph.in_flight.insert(path.clone()); // mark as entry file
         let mut outcome = FileCheckOutcome::default();
         check_file_body(
             &path,
@@ -3651,8 +3490,14 @@ mod tests {
     #[test]
     fn import_check_state_default_is_empty() {
         let state = ImportCheckState::default();
-        assert!(state.completed.is_empty(), "fresh state has no completed");
-        assert!(state.in_flight.is_empty(), "fresh state has no in-flight");
+        assert!(
+            state.graph.completed.is_empty(),
+            "fresh state has no completed"
+        );
+        assert!(
+            state.graph.in_flight.is_empty(),
+            "fresh state has no in-flight"
+        );
         assert!(
             state.resolved_modules.is_empty(),
             "fresh state has no resolved cache"

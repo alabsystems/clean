@@ -19,29 +19,8 @@ use clean_server::handlers::validate_decl_read_only;
 
 use super::{push_blocking_diagnostic, ParsedProjectModule, ProjectModuleReport, ProjectSource};
 
-use crate::cmd_core::ElabOutcome;
-
-/// What one elaboration of a module did: its effect on every environment
-/// component, and how each of its top-level declarations elaborated.
-#[derive(Clone, Debug)]
-pub(super) struct ModuleElaboration {
-    pub(super) effect: clean_kernel::env::EnvEffect,
-    pub(super) outcomes: Vec<ElabOutcome>,
-}
-
-impl ModuleElaboration {
-    /// Why `replayed` — this module re-elaborated next to modules it does not
-    /// import, leaving `replayed_env` — does not give an importer what this
-    /// module's own check (`self`) gives it, or `None` when it does.
-    pub(super) fn disagreement(
-        &self,
-        replayed: &ModuleElaboration,
-        replayed_env: &Environment,
-    ) -> Option<String> {
-        crate::cmd_core::elab_outcome_difference(&self.outcomes, &replayed.outcomes)
-            .or_else(|| self.effect.disagreement(&replayed.effect, replayed_env))
-    }
-}
+use clean_elab::module_driver::source_graph::ElabOutcome;
+pub(super) use clean_elab::module_driver::source_graph::ModuleElaboration;
 
 #[allow(clippy::too_many_arguments)]
 pub(super) fn check_project_module_with_env(

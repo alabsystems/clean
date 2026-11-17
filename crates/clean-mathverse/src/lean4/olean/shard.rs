@@ -207,6 +207,7 @@ fn import_module_to_shard(
     writer: &mut ShardWriter,
     sidecar: &mut ProvenanceSidecar,
 ) -> MathverseResult<ModuleStats> {
+    super::require_lean_records_only(module)?;
     let mut stats = ModuleStats {
         module_name: module_name.to_string(),
         ..Default::default()
@@ -220,10 +221,9 @@ fn import_module_to_shard(
     let mut ctx = LoweringCtx::new(writer);
 
     for constant in &module.constants {
-        // SOUNDNESS: skip Lean compiler-IR stage decls (`._cstage1`/`._cstage2`)
-        // — non-kernel-checkable code-generator artifacts; see
-        // `clean_olean::import::is_compiler_ir_name`.
-        if clean_olean::import::is_compiler_ir_name(&constant.name) {
+        // Keep safe compiler-looking kernel records. Only the record
+        // itself can supply unsafe/partial replay-exclusion authority.
+        if clean_olean::import::is_nonreplayable_compiler_constant(constant) {
             continue;
         }
         let name_idx = ctx.intern_string(&constant.name);

@@ -1,7 +1,7 @@
 // Copyright 2026 Andrew Yates
 // SPDX-License-Identifier: Apache-2.0
 
-//! Review the two Nat folds needed by the genuine recent UInt witness.
+//! Review recent Nat folds and the explicitly qualified 4.35 literal heads.
 //! The ordinary genuine UInt.Basic load never uses a fold-authority bypass.
 //! Re-pin uses the existing test-only reference review, then deliberately
 //! fails: only a fresh ordinary run measures production authority.
@@ -17,9 +17,21 @@ use std::path::Path;
 mod fold_canon;
 use fold_canon::{check_world, fold_with_required_definitions, mint, repin_requested};
 
-const REVIEWED: [&str; 2] = ["Nat.mod", "Nat.xor"];
+const REVIEWED_RECENT: [&str; 2] = ["Nat.mod", "Nat.xor"];
+const REVIEWED_435: [&str; 5] = [
+    "Nat.mod",
+    "Nat.xor",
+    "Nat.div",
+    "Char.ofNat",
+    "String.ofList",
+];
 
 fn check_recent(world: LeanWorld) {
+    let required: &[&str] = if world == LeanWorld::Lean435 {
+        &REVIEWED_435
+    } else {
+        &REVIEWED_RECENT
+    };
     let repin = repin_requested();
     if repin {
         // The existing review bootstrap is process-global. Keep the genuine
@@ -50,10 +62,10 @@ fn check_recent(world: LeanWorld) {
     let minted = mint(&label, &env);
     let reviewed: Vec<_> = minted
         .iter()
-        .filter(|(_, name, _)| REVIEWED.contains(&name.as_str()))
+        .filter(|(_, name, _)| required.contains(&name.as_str()))
         .cloned()
         .collect();
-    assert_eq!(reviewed.len(), REVIEWED.len());
+    assert_eq!(reviewed.len(), required.len());
     for (_, name, digest) in &reviewed {
         assert!(
             !canonical_fold_rows()
@@ -74,11 +86,17 @@ fn check_recent(world: LeanWorld) {
             check()
         };
         eprintln!("RECENT_NAT_REVIEW {label} {name}: {review:#?}");
-        // The existing shared review uses every pair of its thirteen Nat
-        // boundary inputs, including zero and values beyond u64. Keep its
-        // type/independent/definition/kernel legs and normal production leg.
-        assert_eq!(review.cases, 169);
-        assert_eq!(review.fired, 169);
+        // Nat heads: every pair of thirteen boundary inputs. D/P skip deep
+        // inputs >1000; the dedicated 4.35 production controls exercise those.
+        // Literal heads: eight string expansions and nine Unicode boundaries,
+        // all in LeanReference. That specialized review has no production leg.
+        let cases = if matches!(name.as_str(), "Char.ofNat" | "String.ofList") {
+            17
+        } else {
+            169
+        };
+        assert_eq!(review.cases, cases);
+        assert_eq!(review.fired, cases);
         assert_eq!(review.unanswered, 0);
         assert!(review.passed(), "{label} {name}: {review:#?}");
     }
@@ -87,7 +105,7 @@ fn check_recent(world: LeanWorld) {
     // even when another world already knows the same bytes. Otherwise two
     // recent worlds sharing a digest could each depend on the other's row
     // and disappear from both batteries on the next ordinary run.
-    let required_arguments: BTreeSet<String> = REVIEWED
+    let required_arguments: BTreeSet<String> = required
         .iter()
         .flat_map(|name| native_fold_review::recognized_arguments(&env, &Name::from_string(name)))
         .filter(|name| env.get_const(name).is_some())
@@ -110,7 +128,7 @@ fn check_recent(world: LeanWorld) {
         .filter(|(_, _, _, role)| role == "fold")
         .map(|(_, name, _, _)| name.as_str())
         .collect();
-    assert_eq!(folded, BTreeSet::from(REVIEWED));
+    assert_eq!(folded, required.iter().copied().collect());
     assert!(rows
         .iter()
         .all(|(_, _, _, role)| role == "fold" || role == "definition"));
@@ -122,7 +140,7 @@ fn check_recent(world: LeanWorld) {
         !repin_requested(),
         "{label}: reviewed rows written; rebuild and run without CLEAN_NATIVE_FOLD_REPIN before any production claim"
     );
-    for name in REVIEWED {
+    for name in required {
         assert!(env.native_fold_authorized(&Name::from_string(name)));
         native_fold_review::fold_row_fires(&env, &Name::from_string(name))
             .unwrap_or_else(|error| panic!("{label} {name}: {error}"));

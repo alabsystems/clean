@@ -950,7 +950,7 @@ pub(super) fn ty_r9_konstdead_premise_necessary() -> String {
 }
 
 pub(super) fn val_r9_konstdead_premise_necessary() -> String {
-    format!("whnf_step.delta {LIVECONST} kcre_witness_delta_value (delta_step_to_reduces {LIVECONST} kcre_witness_delta_value the_red_env_delta_nonvacuous)")
+    format!("@whnf_step.delta {LIVECONST} kcre_witness_delta_value (delta_step_to_reduces {LIVECONST} kcre_witness_delta_value the_red_env_delta_nonvacuous)")
 }
 
 /// ...half two: that name's lookup is demonstrably NOT `none`, so the witness

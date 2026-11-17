@@ -366,12 +366,16 @@ theorem encode_minirust (s : Bool) (t : IntTy) (a : Nat) (ha : a < modulus t.bit
   have hbits := IntTy.bits_eq t
   have hib : SInt.in_bounds (readAt s t.bits a) (sgnOf s) (Int.ofNat t.bytes) = SOut.ok true := by
     unfold SInt.in_bounds
-    rw [bib _ s t.bytes t.bytes_pos, ← hbits, readAt_emod t.bits s a ha]
+    rw [bib_in_domain _ s t.bytes t.bytes_pos t.power_domain, ← hbits,
+      readAt_emod t.bits s a ha]
     simp only [SOut.bind_ok']
     show SOut.ok (SInt.beq (readAt s t.bits a) (readAt s t.bits (Int.ofNat a).toNat)) = SOut.ok true
     simp [SInt.beq]
   have hpow : SInt.pow 2 (Int.ofNat t.bytes * 8) = SOut.ok (Int.ofNat (modulus t.bits)) := by
-    rw [hbits]; rfl
+    rw [hbits]
+    change (if t.bytes * 8 < 4294967296 then _ else _) = _
+    rw [if_pos t.power_domain]
+    rfl
   have hm : 0 < modulus t.bits := Nat.pow_pos (by decide)
   unfold SEndian.encode
   rw [hib]

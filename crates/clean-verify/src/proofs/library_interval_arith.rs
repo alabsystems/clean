@@ -48,7 +48,7 @@ impl ProofLibrary {
             "ia_t01_add_containment".to_string(),
             ProofTerm::new(
                 "ia_t01_add_containment",
-                "fun (n : Nat) => IvContainSound.add n",
+                "fun (n : Nat) => @IvContainSound.add n",
                 "T01 Addition containment: if x in A and y in B, then \
                  x+y in add(A,B). Direct constructor application — the \
                  inductive witness type encodes the containment proof. \
@@ -61,7 +61,7 @@ impl ProofLibrary {
             "ia_t02_sub_containment".to_string(),
             ProofTerm::new(
                 "ia_t02_sub_containment",
-                "fun (n : Nat) => IvContainSound.sub n",
+                "fun (n : Nat) => @IvContainSound.sub n",
                 "T02 Subtraction containment: if x in A and y in B, then \
                  x-y in sub(A,B). A.lo-B.hi <= x-y <= A.hi-B.lo by order \
                  reversal under negation. Part of #3362.",
@@ -73,7 +73,7 @@ impl ProofLibrary {
             "ia_t03_neg_containment".to_string(),
             ProofTerm::new(
                 "ia_t03_neg_containment",
-                "fun (n : Nat) => IvContainSound.neg n",
+                "fun (n : Nat) => @IvContainSound.neg n",
                 "T03 Negation containment: if x in A, then -x in neg(A). \
                  -A.hi <= -x <= -A.lo by order reversal. Part of #3362.",
             ),
@@ -84,7 +84,7 @@ impl ProofLibrary {
             "ia_t04_mul_containment".to_string(),
             ProofTerm::new(
                 "ia_t04_mul_containment",
-                "fun (n : Nat) => IvContainSound.mul n",
+                "fun (n : Nat) => @IvContainSound.mul n",
                 "T04 Multiplication containment: if x in A and y in B, then \
                  x*y in mul(A,B). Bilinear on [A.lo,A.hi]x[B.lo,B.hi], \
                  extrema at corners. Part of #3362.",
@@ -96,7 +96,7 @@ impl ProofLibrary {
             "ia_t05_div_containment".to_string(),
             ProofTerm::new(
                 "ia_t05_div_containment",
-                "fun (n : Nat) => IvContainSound.div n",
+                "fun (n : Nat) => @IvContainSound.div n",
                 "T05 Division containment: if x in A, y in B, 0 not in B, \
                  then x/y in div(A,B). Reciprocal reverses order on \
                  intervals not containing zero, compose with T04. \
@@ -109,7 +109,7 @@ impl ProofLibrary {
             "ia_t06_abs_containment".to_string(),
             ProofTerm::new(
                 "ia_t06_abs_containment",
-                "fun (n : Nat) => IvContainSound.abs n",
+                "fun (n : Nat) => @IvContainSound.abs n",
                 "T06 Absolute value containment: if x in A, then |x| in \
                  abs(A). Case analysis on sign of endpoints. Part of #3362.",
             ),
@@ -120,7 +120,7 @@ impl ProofLibrary {
             "ia_t07_pow_containment".to_string(),
             ProofTerm::new(
                 "ia_t07_pow_containment",
-                "fun (n : Nat) (exp : Nat) => IvContainSound.pow n exp",
+                "fun (n : Nat) (exp : Nat) => @IvContainSound.pow n exp",
                 "T07 Power containment: if x in A with A.lo >= 0 and n >= 1, \
                  then x^n in pow(A,n). t -> t^n is monotone on [0,inf). \
                  Part of #3362.",
@@ -132,7 +132,7 @@ impl ProofLibrary {
             "ia_t08_sqrt_containment".to_string(),
             ProofTerm::new(
                 "ia_t08_sqrt_containment",
-                "fun (n : Nat) => IvContainSound.sqrt n",
+                "fun (n : Nat) => @IvContainSound.sqrt n",
                 "T08 Sqrt containment: if x in A with A.lo >= 0, then \
                  sqrt(x) in sqrt(A). sqrt is monotone on [0,inf). \
                  Part of #3362.",
@@ -144,7 +144,7 @@ impl ProofLibrary {
             "ia_t09_intersection_containment".to_string(),
             ProofTerm::new(
                 "ia_t09_intersection_containment",
-                "fun (n : Nat) => IvStructSound.intersect n",
+                "fun (n : Nat) => @IvStructSound.intersect n",
                 "T09 Intersection containment: if x in A and x in B, then \
                  x in intersect(A,B). max(A.lo,B.lo) <= x <= min(A.hi,B.hi). \
                  Part of #3362.",
@@ -156,7 +156,7 @@ impl ProofLibrary {
             "ia_t10_hull_containment".to_string(),
             ProofTerm::new(
                 "ia_t10_hull_containment",
-                "fun (n : Nat) => IvStructSound.hull n",
+                "fun (n : Nat) => @IvStructSound.hull n",
                 "T10 Hull containment: A subset hull(A,B) and B subset \
                  hull(A,B). hull = [min(A.lo,B.lo), max(A.hi,B.hi)]. \
                  Part of #3362.",
@@ -168,7 +168,7 @@ impl ProofLibrary {
             "ia_t11_subset_transitivity".to_string(),
             ProofTerm::new(
                 "ia_t11_subset_transitivity",
-                "fun (n : Nat) => IvStructSound.subset_trans n",
+                "fun (n : Nat) => @IvStructSound.subset_trans n",
                 "T11 Subset transitivity: if A subset B and B subset C, \
                  then A subset C. C.lo <= B.lo <= A.lo and A.hi <= B.hi <= \
                  C.hi. Part of #3362.",
@@ -180,7 +180,7 @@ impl ProofLibrary {
             "ia_t12_containment_transitivity".to_string(),
             ProofTerm::new(
                 "ia_t12_containment_transitivity",
-                "fun (n : Nat) => IvStructSound.contain_trans n",
+                "fun (n : Nat) => @IvStructSound.contain_trans n",
                 "T12 Containment transitivity: if x in A and A subset B, \
                  then x in B. B.lo <= A.lo <= x <= A.hi <= B.hi. \
                  Part of #3362.",
@@ -192,7 +192,7 @@ impl ProofLibrary {
             "ia_t13_point_interval".to_string(),
             ProofTerm::new(
                 "ia_t13_point_interval",
-                "fun (n : Nat) => IvStructSound.point n",
+                "fun (n : Nat) => @IvStructSound.point n",
                 "T13 Point interval: x in [x,x] and width([x,x]) = 0. \
                  Trivial. Part of #3362.",
             ),
@@ -203,7 +203,7 @@ impl ProofLibrary {
             "ia_t14_contains_reflexive".to_string(),
             ProofTerm::new(
                 "ia_t14_contains_reflexive",
-                "fun (n : Nat) => IvStructSound.reflexive n",
+                "fun (n : Nat) => @IvStructSound.reflexive n",
                 "T14 Contains reflexive: A.lo in A and A.hi in A. \
                  A.lo <= A.lo <= A.hi and A.lo <= A.hi <= A.hi. \
                  Part of #3362.",
@@ -215,7 +215,7 @@ impl ProofLibrary {
             "ia_t15_add_width".to_string(),
             ProofTerm::new(
                 "ia_t15_add_width",
-                "fun (n : Nat) => IvWidthSound.add_width n",
+                "fun (n : Nat) => @IvWidthSound.add_width n",
                 "T15 Width of addition: width(add(A,B)) = width(A)+width(B). \
                  (A.hi+B.hi)-(A.lo+B.lo) = (A.hi-A.lo)+(B.hi-B.lo). \
                  Part of #3362.",
@@ -227,7 +227,7 @@ impl ProofLibrary {
             "ia_t16_sub_width".to_string(),
             ProofTerm::new(
                 "ia_t16_sub_width",
-                "fun (n : Nat) => IvWidthSound.sub_width n",
+                "fun (n : Nat) => @IvWidthSound.sub_width n",
                 "T16 Width of subtraction: width(sub(A,B)) = \
                  width(A)+width(B). (A.hi-B.lo)-(A.lo-B.hi) = \
                  (A.hi-A.lo)+(B.hi-B.lo). Part of #3362.",
@@ -239,7 +239,7 @@ impl ProofLibrary {
             "ia_t17_neg_width".to_string(),
             ProofTerm::new(
                 "ia_t17_neg_width",
-                "fun (n : Nat) => IvWidthSound.neg_width n",
+                "fun (n : Nat) => @IvWidthSound.neg_width n",
                 "T17 Width of negation: width(neg(A)) = width(A). \
                  (-A.lo)-(-A.hi) = A.hi-A.lo. Part of #3362.",
             ),
@@ -250,7 +250,7 @@ impl ProofLibrary {
             "ia_t18_add_commutativity".to_string(),
             ProofTerm::new(
                 "ia_t18_add_commutativity",
-                "fun (n : Nat) => IvAlgebraSound.add_comm n",
+                "fun (n : Nat) => @IvAlgebraSound.add_comm n",
                 "T18 Addition commutativity: add(A,B) = add(B,A). \
                  A.lo+B.lo = B.lo+A.lo and A.hi+B.hi = B.hi+A.hi by \
                  commutativity of rational addition. Part of #3362.",
@@ -262,7 +262,7 @@ impl ProofLibrary {
             "ia_t19_mul_commutativity".to_string(),
             ProofTerm::new(
                 "ia_t19_mul_commutativity",
-                "fun (n : Nat) => IvAlgebraSound.mul_comm n",
+                "fun (n : Nat) => @IvAlgebraSound.mul_comm n",
                 "T19 Multiplication commutativity: mul(A,B) = mul(B,A). \
                  The corner-product set is invariant under swapping A and B. \
                  Part of #3362.",
@@ -274,7 +274,7 @@ impl ProofLibrary {
             "ia_t20_add_associativity".to_string(),
             ProofTerm::new(
                 "ia_t20_add_associativity",
-                "fun (n : Nat) => IvAlgebraSound.add_assoc n",
+                "fun (n : Nat) => @IvAlgebraSound.add_assoc n",
                 "T20 Addition associativity: add(add(A,B),C) = \
                  add(A,add(B,C)). Both sides equal \
                  [A.lo+B.lo+C.lo, A.hi+B.hi+C.hi] by associativity of \

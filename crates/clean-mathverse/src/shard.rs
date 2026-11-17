@@ -961,38 +961,6 @@ impl ShardWriter {
         }
     }
 
-    /// Stamp the persisted `import_confidence` byte of every constant whose name
-    /// appears in `verified_names` to [`ImportConfidence::KernelVerified`].
-    ///
-    /// This is the in-writer half of the on-disk stamp: it mutates the header
-    /// bytes that [`Self::write`] serializes, so the change survives to the
-    /// shard file (unlike the in-memory-only library upgrade). Only names that
-    /// (a) exist in this shard and (b) are not already `KernelVerified` are
-    /// counted. Returns the number of headers raised.
-    ///
-    /// SOUNDNESS: the caller is responsible for supplying *only* names whose
-    /// value genuinely passed the Clean kernel's `check_type`
-    /// (`verify_corpus_incremental` -> `kernel_verified_names`). This method does
-    /// not itself re-verify; it is a faithful persistence primitive.
-    pub fn stamp_kernel_verified(
-        &mut self,
-        verified_names: &std::collections::HashSet<String>,
-    ) -> usize {
-        let target = crate::types::ImportConfidence::KernelVerified as u8;
-        let mut upgraded = 0usize;
-        for constant in &mut self.constants {
-            let name = match self.strings.get(constant.name_idx as usize) {
-                Some(name) => name.as_str(),
-                None => continue,
-            };
-            if verified_names.contains(name) && constant.import_confidence != target {
-                constant.import_confidence = target;
-                upgraded += 1;
-            }
-        }
-        upgraded
-    }
-
     /// Write the shard to a file.
     pub fn write_to_file(&self, path: impl AsRef<Path>) -> MathverseResult<()> {
         let file = std::fs::File::create(path)?;
@@ -3841,11 +3809,8 @@ mod tests {
     }
 
     #[test]
-    fn test_from_reader_and_stamp_kernel_verified_round_trip() {
-        use std::collections::HashSet;
-
-        // Build a small shard with two constants at NON-KernelVerified
-        // confidence so a stamp is an observable transition.
+    fn test_from_reader_copy_reproduces_identical_bytes() {
+        // Build a small shard with two constants at different confidences.
         let mut writer = ShardWriter::new();
         let name_a = writer.add_string("A");
         let name_b = writer.add_string("B");
@@ -3882,35 +3847,6 @@ mod tests {
         let mut copy_buf = Vec::new();
         copy.write(&mut copy_buf).unwrap();
         assert_eq!(buf, copy_buf, "from_reader must reproduce identical bytes");
-
-        // Stamp ONLY "A"; "B" must stay untouched.
-        let verified: HashSet<String> = HashSet::from([String::from("A")]);
-        let mut stamper = ShardWriter::from_reader(&reader);
-        let stamped = stamper.stamp_kernel_verified(&verified);
-        assert_eq!(stamped, 1, "exactly one header (A) is raised");
-
-        let mut stamped_buf = Vec::new();
-        stamper.write(&mut stamped_buf).unwrap();
-        let restamped = ShardReader::from_bytes(&stamped_buf).unwrap();
-
-        let conf_of = |r: &ShardReader, n: &str| -> u8 {
-            let (_, h) = r.lookup_name(n).unwrap();
-            h.import_confidence
-        };
-        assert_eq!(
-            conf_of(&restamped, "A"),
-            ImportConfidence::KernelVerified as u8,
-            "A reads KernelVerified from the re-serialized bytes"
-        );
-        assert_eq!(
-            conf_of(&restamped, "B"),
-            ImportConfidence::Axiomatized as u8,
-            "B (not in the verified set) is left untouched"
-        );
-
-        // Idempotence: stamping again raises nothing.
-        let mut again = ShardWriter::from_reader(&restamped);
-        assert_eq!(again.stamp_kernel_verified(&verified), 0);
     }
 
     #[test]

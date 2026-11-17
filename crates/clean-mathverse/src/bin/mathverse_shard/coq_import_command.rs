@@ -25,7 +25,7 @@
 //!    (+ `.meta.json` sidecars and a `manifest.json`). Each library is one
 //!    subdirectory of the sexp root (`stdlib` today; more can be added).
 //!
-//! 2. **Import + verify + stamp** every library in one command:
+//! 2. **Import + verify** every library in one command:
 //!
 //!    ```text
 //!    cargo run --locked --release -p clean-mathverse --bin mathverse_shard -- \
@@ -34,18 +34,20 @@
 //!    ```
 //!
 //! 3. **Expected artifacts** per library `<lib>`:
-//!    - `<out>/<lib>/coq_<lib>.mathverse` — the converted shard, stamped in
-//!      place with the kernel's `KernelVerified` verdicts (unless
-//!      `--no-stamp`);
-//!    - `<out>/<lib>/kernel-verified.json` — the [`KernelVerifiedManifest`]
-//!      sidecar naming exactly which constants Clean's kernel re-verified.
+//!    - `<out>/<lib>/coq_<lib>.mathverse` — the converted shard, as the
+//!      converter wrote it (P6: this lane stamps nothing);
+//!    - `<out>/<lib>/kernel-verified.json` — the development
+//!      [`KernelVerifiedManifest`] naming the constants the legacy checker
+//!      accepted and the identity of the theory (Clean's import prelude or the
+//!      upstream library, with cumulative subtyping) and the checker. Coq is
+//!      pCIC: this lane has no reference theory under `LeanReferenceV1`, so its
+//!      acceptances are development tier and confer no label (P2 clause 1).
 //!
-//! The pipeline per library is the proven Template-B verify+stamp spine:
-//! convert with honest sub-`KernelVerified` labels → soundness floor → merge
-//! shards into a [`MathverseLibrary`] → prelude-seeded kernel env →
-//! [`verify_corpus_incremental_with_env_policy`] → manifest sidecar → stamp →
-//! stored-count audit → BEDROCK (empty transitive non-foundational axiom
-//! closure) count.
+//! The pipeline per library: convert with honest sub-`KernelVerified` labels →
+//! soundness floor → merge shards into a [`MathverseLibrary`] → prelude-seeded
+//! kernel env → [`verify_corpus_incremental_with_env_policy`] → manifest
+//! sidecar → stored-header audit → BEDROCK (empty transitive non-foundational
+//! axiom closure) count.
 //!
 //! # Refresh pipeline (gate + promote)
 //!
@@ -56,9 +58,11 @@
 //!     --gate-baseline=data/corpora/coq-mathverse --promote-on-green
 //! ```
 //!
-//! `--gate-baseline=DIR` diffs, per library, the fresh
-//! `kernel_verified_names` against the promoted baseline manifest at
-//! `DIR/<library>/kernel-verified.json` and prints a gate table. The
+//! `--gate-baseline=DIR` diffs, per library, the fresh accepted names against
+//! the promoted baseline manifest at `DIR/<library>/kernel-verified.json`
+//! (compared only when both name the same checker; a schema-1 baseline or one
+//! from another checker is refused, pointing at `--rebaseline`) and prints a
+//! gate table. The
 //! 0-REGRESSION RULE: the fresh set must be a SUPERSET of the baseline's —
 //! any baseline name missing from the fresh import is a regression and the
 //! command exits nonzero. A library without a baseline manifest is a first
@@ -70,13 +74,19 @@
 //! successfully imported library's fresh outputs (`kernel-verified.json` +
 //! `*.mathverse`) over `DIR/<library>/` when the gate is fully green,
 //! creating directories as needed. On a red gate NOTHING is promoted.
+//!
+//! `--rebaseline` (only valid with `--promote-on-green`) is the migration path
+//! for a baseline this build cannot compare (schema 1, or a schema-2 baseline
+//! from another checker identity): it reads the baseline's NAMES only
+//! ([`RegressionReference`], which grants nothing and reads schema 1 only until
+//! its dated window closes), runs the same superset diff, and promotes the
+//! fresh schema-2 manifest only on green. The JSON report records the baseline
+//! and fresh identities.
 
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use clean_mathverse::library::{
-    count_stored_kernel_verified, stamp_shard_dir_kernel_verified, MathverseLibrary,
-};
+use clean_mathverse::library::{count_stored_kernel_verified, MathverseLibrary};
 use clean_mathverse::shard::ShardReader;
 use clean_mathverse::shard_verify::discover_mathverse_files;
 use clean_mathverse::structured_import::{convert_coq_sexp_dir_with_context, CoqConvertDirStats};
@@ -86,12 +96,13 @@ use clean_mathverse::verify::incremental::{
     verify_corpus_incremental_with_env_policy, IncrementalVerifyReport, InductiveReplayPolicy,
 };
 use clean_mathverse::verify::kernel_verified_manifest::{
-    KernelVerifiedManifest, StampEnvFingerprint,
+    AcceptanceIdentity, BaseEnvironment, BaseVariant, BuildIdentity, CheckSettings, DevelopmentRun,
+    Elision, Imports, InductiveReplay, KernelVerifiedManifest, RegressionReference,
 };
 
 const USAGE: &str = "Usage: mathverse_shard coq-import --sexp-root=<dir> --out=<dir> \
-     [--library=<name>]... [--json=<path>] [--lean-faithful] [--no-stamp] \
-     [--gate-baseline=<dir>] [--promote-on-green]";
+     [--library=<name>]... [--json=<path>] [--lean-faithful] \
+     [--gate-baseline=<dir>] [--promote-on-green [--rebaseline]]";
 
 /// Parsed `coq-import` command-line arguments (`=`-form flags only, matching
 /// the other `mathverse_shard` subcommands).
@@ -107,6 +118,9 @@ struct CoqImportArgs {
     /// Promote fresh outputs over the baseline when the gate is fully green.
     /// Only valid together with `gate_baseline` (enforced by [`parse_args`]).
     promote_on_green: bool,
+    /// Read the baselines names-only ([`GateMode::Rebaseline`]). Only valid
+    /// together with `promote_on_green` (enforced by [`parse_args`]).
+    rebaseline: bool,
     options: CoqImportOptions,
 }
 
@@ -117,8 +131,6 @@ pub(crate) struct CoqImportOptions {
     /// Replay inductive families with [`InductiveReplayPolicy::LeanFaithful`]
     /// instead of the default `Generate`.
     pub(crate) lean_faithful: bool,
-    /// Stamp the kernel's verdict back into the shard bytes on disk.
-    pub(crate) stamp: bool,
 }
 
 /// Everything the harness learned about one library, for the stdout table and
@@ -132,11 +144,14 @@ pub(crate) struct CoqLibraryOutcome {
     /// KernelVerified constants whose transitive non-foundational axiom
     /// closure is empty (`env.axiom_deps` empty).
     pub(crate) bedrock: usize,
-    /// Stored `KernelVerified` header count on disk before stamping
-    /// (`None` when `--no-stamp` or nothing was verified).
-    pub(crate) stored_kernel_verified_before: Option<usize>,
-    /// Stored `KernelVerified` header count on disk after stamping.
-    pub(crate) stored_kernel_verified_after: Option<usize>,
+    /// `KernelVerified` header bytes in the library's shards after the run
+    /// (`None` when nothing was verified). This lane stamps none (P6); the
+    /// count is the converter's import-time inductive-family tags, which are
+    /// header mints of slice 2's format and not evidence until it lands.
+    pub(crate) stored_kernel_verified_headers: Option<usize>,
+    /// The identity of the development manifest written for the library
+    /// (`None` when nothing was verified).
+    pub(crate) identity: Option<AcceptanceIdentity>,
     /// First 10 masked-failure axiom-fallback roots as `(constant name,
     /// kernel reason)` pairs (reasons truncated to
     /// [`FALLBACK_REASON_MAX_CHARS`] chars).
@@ -167,8 +182,8 @@ fn parse_args(args: &[String]) -> Result<CoqImportArgs, String> {
     let mut json = None;
     let mut gate_baseline: Option<PathBuf> = None;
     let mut promote_on_green = false;
+    let mut rebaseline = false;
     let mut lean_faithful = false;
-    let mut no_stamp = false;
 
     for arg in args {
         if let Some(v) = arg.strip_prefix("--sexp-root=") {
@@ -185,8 +200,8 @@ fn parse_args(args: &[String]) -> Result<CoqImportArgs, String> {
             promote_on_green = true;
         } else if arg == "--lean-faithful" {
             lean_faithful = true;
-        } else if arg == "--no-stamp" {
-            no_stamp = true;
+        } else if arg == "--rebaseline" {
+            rebaseline = true;
         } else {
             return Err(format!("Unknown option: {arg}\n{USAGE}"));
         }
@@ -197,6 +212,12 @@ fn parse_args(args: &[String]) -> Result<CoqImportArgs, String> {
             "--promote-on-green requires --gate-baseline=<dir>\n{USAGE}"
         ));
     }
+    if rebaseline && !promote_on_green {
+        return Err(format!(
+            "--rebaseline requires --promote-on-green (it exists to promote a schema-2 \
+             baseline on a green names-only diff)\n{USAGE}"
+        ));
+    }
 
     Ok(CoqImportArgs {
         sexp_root: sexp_root.ok_or_else(|| format!("Missing --sexp-root=<dir>\n{USAGE}"))?,
@@ -205,10 +226,8 @@ fn parse_args(args: &[String]) -> Result<CoqImportArgs, String> {
         json,
         gate_baseline,
         promote_on_green,
-        options: CoqImportOptions {
-            lean_faithful,
-            stamp: !no_stamp,
-        },
+        rebaseline,
+        options: CoqImportOptions { lean_faithful },
     })
 }
 
@@ -278,28 +297,9 @@ fn soundness_floor_breaches(readers: &[(PathBuf, ShardReader)]) -> Vec<String> {
     breaches
 }
 
-/// Reproducibility fingerprint for the coq-import manifest. No `.olean`
-/// closure loading or proof-value elision happens on this pipeline, so those
-/// fields record the pipeline's fixed facts (`elision "none"`, bare prelude,
-/// `max_closure_modules 0` = no closure loader engaged).
-fn coq_import_fingerprint() -> StampEnvFingerprint {
-    StampEnvFingerprint {
-        kernel_version: clean_kernel::VERSION.to_string(),
-        toolchain: option_env!("CLEAN_MATHVERSE_TOOLCHAIN_VERSION")
-            .unwrap_or("unknown")
-            .to_string(),
-        heartbeat: std::env::var("CLEAN_KERNEL_HEARTBEAT")
-            .ok()
-            .filter(|s| !s.is_empty())
-            .unwrap_or_else(|| "default".to_string()),
-        elision_policy: "none".to_string(),
-        max_closure_modules: 0,
-        prelude_variant: "prelude-only".to_string(),
-    }
-}
-
 /// Run the full per-library pipeline: convert → soundness floor → merge →
-/// prelude env → corpus verify → manifest sidecar → stamp + audit → bedrock.
+/// prelude env → corpus verify → development manifest sidecar → stored-header
+/// audit → bedrock.
 ///
 /// Pure function of paths + options (no argv) so the command internals are
 /// end-to-end testable.
@@ -377,8 +377,8 @@ pub(crate) fn run_coq_import_library_with_context(
                 converted,
                 verified: None,
                 bedrock: 0,
-                stored_kernel_verified_before: None,
-                stored_kernel_verified_after: None,
+                stored_kernel_verified_headers: None,
+                identity: None,
                 top_fallback_roots: Vec::new(),
             },
             env,
@@ -395,13 +395,20 @@ pub(crate) fn run_coq_import_library_with_context(
         loaded += 1;
     }
 
+    // P6: the executable is hashed before the first check (a process-wide
+    // capture; `cmd_coq_import` takes it at its start).
+    let build = BuildIdentity::current().map_err(|e| format!("{name}: {e}"))?;
+
     // (d) Prelude-seeded kernel environment — the upstream libraries'
     // post-verification environment when given (dependency-ordered multi-
     // library run), else a fresh prelude.
-    let mut prelude = match base_env {
-        Some(env) => env,
-        None => clean_kernel::Environment::try_with_prelude_for_import()
-            .map_err(|e| format!("{name}: kernel prelude environment: {e}"))?,
+    let (mut prelude, base_variant) = match base_env {
+        Some(env) => (env, BaseVariant::UpstreamLibrary),
+        None => (
+            clean_kernel::Environment::try_with_prelude_for_import()
+                .map_err(|e| format!("{name}: kernel prelude environment: {e}"))?,
+            BaseVariant::ImportPrelude,
+        ),
     };
     // COQ LANE: Coq's type theory (pCIC) is CUMULATIVE (`Prop ≤ Set ≤ Type`),
     // so re-verify Coq-sourced declarations with cumulative subtyping. This is
@@ -409,6 +416,10 @@ pub(crate) fn run_coq_import_library_with_context(
     // Coq import path and does not affect the Lean/olean verification lane.
     // Idempotent when the upstream env already set it.
     prelude.set_cumulative(true);
+    // P6: the theory is the measured base and the settings every check runs
+    // in, taken before the verifier consumes the environment.
+    let base = BaseEnvironment::measure(&prelude, base_variant);
+    let env_settings = prelude.checker_settings();
 
     // (e) Global dependency-ordered corpus verification. Masked failures
     // (values the kernel rejected) surface as axiom_fallback, never as
@@ -433,35 +444,48 @@ pub(crate) fn run_coq_import_library_with_context(
         })
         .count();
 
-    // (f) Non-destructive manifest sidecar recording exactly what the kernel
-    // re-verified.
-    let manifest =
-        KernelVerifiedManifest::from_report(&out_lib_dir.display().to_string(), loaded, &report)
-            .with_env_fingerprint(coq_import_fingerprint());
+    // (f) The development manifest: the names the legacy checker accepted, and
+    // the identity of the theory (cumulative, over the measured base) and the
+    // checker (the incremental replay entry). Nothing is stamped (P6).
+    let run = DevelopmentRun::new(
+        env_settings,
+        base,
+        Imports::Replayed,
+        CheckSettings {
+            elision: Elision::None,
+            inductive_replay: if opts.lean_faithful {
+                InductiveReplay::LeanFaithful
+            } else {
+                InductiveReplay::Generate
+            },
+            level_repair: false,
+            heartbeat_limit: env_settings.max_heartbeats,
+            max_closure_modules: None,
+        },
+        build,
+    )
+    .map_err(|e| format!("{name}: {e}"))?;
+    let manifest = KernelVerifiedManifest::from_incremental_report(
+        "mathverse_shard coq-import",
+        &out_lib_dir.display().to_string(),
+        loaded,
+        &report,
+        run,
+    );
     let manifest_path = out_lib_dir.join("kernel-verified.json");
     manifest
         .write_to_file(&manifest_path)
         .map_err(|e| format!("{name}: write {}: {e}", manifest_path.display()))?;
 
-    // (g) Stamp the kernel's verdict into the shard bytes, with a before/after
-    // stored-count audit re-read from disk.
-    let (before, after) = if opts.stamp {
-        let (b, _) = count_stored_kernel_verified(out_lib_dir)
-            .map_err(|e| format!("{name}: pre-stamp stored count: {e}"))?;
-        stamp_shard_dir_kernel_verified(out_lib_dir, &manifest)
-            .map_err(|e| format!("{name}: stamp: {e}"))?;
-        let (a, unreadable) = count_stored_kernel_verified(out_lib_dir)
-            .map_err(|e| format!("{name}: post-stamp stored count: {e}"))?;
-        if !unreadable.is_empty() {
-            return Err(format!(
-                "{name}: unreadable shard(s) after stamp: {}",
-                unreadable.join(", ")
-            ));
-        }
-        (Some(b), Some(a))
-    } else {
-        (None, None)
-    };
+    // (g) Stored-header audit, re-read from disk: what the converter wrote.
+    let (stored, unreadable) = count_stored_kernel_verified(out_lib_dir)
+        .map_err(|e| format!("{name}: stored count: {e}"))?;
+    if !unreadable.is_empty() {
+        return Err(format!(
+            "{name}: unreadable shard(s): {}",
+            unreadable.join(", ")
+        ));
+    }
 
     let top_fallback_roots = report
         .axiom_fallback_names
@@ -480,8 +504,8 @@ pub(crate) fn run_coq_import_library_with_context(
             converted,
             verified: Some(report),
             bedrock,
-            stored_kernel_verified_before: before,
-            stored_kernel_verified_after: after,
+            stored_kernel_verified_headers: Some(stored),
+            identity: Some(manifest.identity().clone()),
             top_fallback_roots,
         },
         env,
@@ -534,17 +558,33 @@ pub(crate) fn run_coq_import_root(
     Ok(results)
 }
 
-/// Diff of a fresh kernel-verified name set against a promoted baseline
-/// (the 0-regression gate's per-library verdict).
+/// Diff of a fresh accepted-name set against a promoted baseline (the
+/// 0-regression gate's per-library verdict).
 #[derive(Debug)]
 pub(crate) struct GateDiff {
-    /// `kernel_verified_names` count in the baseline manifest.
+    /// Accepted-name count in the baseline manifest.
     pub(crate) baseline_len: usize,
-    /// `kernel_verified_names` count in the fresh import.
+    /// Accepted-name count in the fresh import.
     pub(crate) new_len: usize,
     /// Baseline names MISSING from the fresh import (sorted, deduped).
     /// Non-empty = regression = red gate.
     pub(crate) regressed: Vec<String>,
+    /// The baseline's identity (`None` for a schema-1 baseline read under
+    /// `--rebaseline`, which has none).
+    pub(crate) baseline_identity: Option<AcceptanceIdentity>,
+    /// The fresh run's identity (`None` when the library verified nothing).
+    pub(crate) fresh_identity: Option<AcceptanceIdentity>,
+}
+
+/// How [`gate_results`] reads a baseline.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum GateMode {
+    /// A schema-2 baseline from the same checker as the fresh run; anything
+    /// else is refused, pointing at `--rebaseline`.
+    Strict,
+    /// The baseline's names only, through [`RegressionReference`] (schema 1
+    /// inside its dated window, or schema 2 from another checker identity).
+    Rebaseline,
 }
 
 impl GateDiff {
@@ -571,7 +611,7 @@ pub(crate) enum LibraryGate {
 
 /// Pure gate diff: which `baseline` names are missing from `fresh`?
 /// The 0-regression rule holds iff the result's `regressed` is empty.
-pub(crate) fn diff_kernel_verified(baseline: &[String], fresh: &[String]) -> GateDiff {
+pub(crate) fn diff_accepted(baseline: &[String], fresh: &[String]) -> GateDiff {
     let fresh_set: std::collections::HashSet<&str> = fresh.iter().map(String::as_str).collect();
     let mut regressed: Vec<String> = baseline
         .iter()
@@ -584,34 +624,75 @@ pub(crate) fn diff_kernel_verified(baseline: &[String], fresh: &[String]) -> Gat
         baseline_len: baseline.len(),
         new_len: fresh.len(),
         regressed,
+        baseline_identity: None,
+        fresh_identity: None,
     }
 }
 
 /// Gate every library outcome against `baseline_root/<library>/
-/// kernel-verified.json` (read via [`KernelVerifiedManifest::from_file`]).
-/// A library that errored or produced no shard has an EMPTY fresh set, so
-/// with a baseline present every baseline name regresses (fail closed).
-/// An unreadable baseline manifest is a hard error — never gate against
-/// a half-read baseline.
+/// kernel-verified.json` (P6 reader R7). A library that errored or produced no
+/// shard has an EMPTY fresh set, so with a baseline present every baseline
+/// name regresses (fail closed). Under [`GateMode::Strict`] the baseline is
+/// read through [`KernelVerifiedManifest::from_file`] (a schema-1 or
+/// identity-less baseline is refused, never treated as absent, which would
+/// switch the guard off) and compared only when it names the same checker as
+/// the fresh run; under [`GateMode::Rebaseline`] only its names are read. An
+/// unreadable or refused baseline is a hard error, pointing at `--rebaseline`.
 pub(crate) fn gate_results(
     baseline_root: &Path,
     results: &[(String, Result<CoqLibraryOutcome, String>)],
+    mode: GateMode,
 ) -> Result<Vec<(String, LibraryGate)>, String> {
     const EMPTY: &[String] = &[];
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| format!("clock before the epoch: {e}"))?
+        .as_secs();
     let mut gates = Vec::with_capacity(results.len());
     for (name, res) in results {
-        let fresh: &[String] = match res {
-            Ok(o) => o
-                .verified
-                .as_ref()
-                .map_or(EMPTY, |r| &r.kernel_verified_names),
-            Err(_) => EMPTY,
+        let (fresh, fresh_identity): (&[String], Option<&AcceptanceIdentity>) = match res {
+            Ok(o) => (
+                o.verified
+                    .as_ref()
+                    .map_or(EMPTY, |r| &r.kernel_verified_names),
+                o.identity.as_ref(),
+            ),
+            Err(_) => (EMPTY, None),
         };
         let manifest_path = baseline_root.join(name).join("kernel-verified.json");
         let gate = if manifest_path.is_file() {
-            let baseline = KernelVerifiedManifest::from_file(&manifest_path)
-                .map_err(|e| format!("gate baseline {}: {e}", manifest_path.display()))?;
-            LibraryGate::Diffed(diff_kernel_verified(&baseline.kernel_verified_names, fresh))
+            let rebaseline_hint = |e: String| {
+                format!(
+                    "gate baseline {}: {e} (migrate it with `mathverse_shard coq-import \
+                     --promote-on-green --rebaseline`, `scripts/coq_refresh.sh --rebaseline`)",
+                    manifest_path.display()
+                )
+            };
+            let (names, baseline_identity) = match mode {
+                GateMode::Strict => {
+                    let baseline = KernelVerifiedManifest::from_file(&manifest_path)
+                        .map_err(|e| rebaseline_hint(e.to_string()))?;
+                    if let Some(fresh_id) = fresh_identity {
+                        baseline
+                            .identity()
+                            .same_checker(fresh_id)
+                            .map_err(|e| rebaseline_hint(e.to_string()))?;
+                    }
+                    (
+                        baseline.accepted_names().to_vec(),
+                        Some(baseline.identity().clone()),
+                    )
+                }
+                GateMode::Rebaseline => {
+                    let reference = RegressionReference::read(&manifest_path, now)
+                        .map_err(|e| format!("gate baseline {}: {e}", manifest_path.display()))?;
+                    (reference.names().to_vec(), reference.identity().cloned())
+                }
+            };
+            let mut diff = diff_accepted(&names, fresh);
+            diff.baseline_identity = baseline_identity;
+            diff.fresh_identity = fresh_identity.cloned();
+            LibraryGate::Diffed(diff)
         } else {
             LibraryGate::NoBaseline {
                 new_len: fresh.len(),
@@ -643,7 +724,7 @@ fn print_gate_table(baseline_root: &Path, gates: &[(String, LibraryGate)]) {
             }
             LibraryGate::Diffed(d) => {
                 println!(
-                    "  [gate] {name}: KV {} -> {} (net {}{})  REGRESSED {}",
+                    "  [gate] {name}: accepted (development) {} -> {} (net {}{})  REGRESSED {}",
                     d.baseline_len,
                     d.new_len,
                     if d.net() >= 0 { "+" } else { "" },
@@ -664,7 +745,8 @@ fn print_gate_table(baseline_root: &Path, gates: &[(String, LibraryGate)]) {
     }
 }
 
-/// Promotable outputs of a library dir: the manifest sidecar + the shards.
+/// Promotable outputs of a library dir: the manifest sidecar + the shards
+/// (P6 reader R8: a baseline is copied as data, a regression reference).
 fn is_promotable_file(path: &Path) -> bool {
     path.file_name()
         .is_some_and(|n| n == "kernel-verified.json")
@@ -890,22 +972,22 @@ pub(crate) fn cmd_coq_import(args: &[String]) {
             std::process::exit(1);
         }
     };
+    // P6: hash the executable before the first check.
+    if let Err(e) = BuildIdentity::current() {
+        eprintln!("Error: {e}");
+        std::process::exit(1);
+    }
 
     println!("=== Mathverse Coq Corpus Import (COQ-6 harness) ===");
     println!("  Sexp root: {}", parsed.sexp_root.display());
     println!("  Out dir:   {}", parsed.out_dir.display());
     println!(
-        "  Policy:    {} | {}\n",
+        "  Policy:    {} | development tier (manifest only, nothing stamped)\n",
         if parsed.options.lean_faithful {
             "LeanFaithful family replay"
         } else {
             "Generate family replay"
         },
-        if parsed.options.stamp {
-            "stamp verdicts"
-        } else {
-            "no-stamp (manifest only)"
-        }
     );
 
     let start = Instant::now();
@@ -938,7 +1020,15 @@ pub(crate) fn cmd_coq_import(args: &[String]) {
 
     // 0-regression gate against the promoted baselines.
     let gates = match &parsed.gate_baseline {
-        Some(baseline_root) => match gate_results(baseline_root, &results) {
+        Some(baseline_root) => match gate_results(
+            baseline_root,
+            &results,
+            if parsed.rebaseline {
+                GateMode::Rebaseline
+            } else {
+                GateMode::Strict
+            },
+        ) {
             Ok(g) => {
                 println!();
                 print_gate_table(baseline_root, &g);
@@ -1065,7 +1155,7 @@ fn print_library_outcome(name: &str, o: &CoqLibraryOutcome) {
     match &o.verified {
         Some(r) => {
             println!(
-                "  Verified:    total {}, kernel-verified {}, axiom-accepted {}, \
+                "  Verified:    total {}, accepted (development) {}, axiom-accepted {}, \
                  axiom-fallback {}, failed {}, cycle-skipped {}, reconstruct-failed {}",
                 r.total,
                 r.kernel_verified,
@@ -1086,7 +1176,7 @@ fn print_library_outcome(name: &str, o: &CoqLibraryOutcome) {
             if !r.discharged_axiom_names.is_empty() {
                 println!(
                     "  Discharged:  {} source axiom(s) re-proved as kernel Theorems \
-                     (counted in kernel-verified):",
+                     (counted in accepted):",
                     r.discharged_axiom_names.len()
                 );
                 for n in &r.discharged_axiom_names {
@@ -1097,12 +1187,10 @@ fn print_library_outcome(name: &str, o: &CoqLibraryOutcome) {
                 "  Bedrock:     {} (axiom_deps ⊆ propext / Quot.sound / Classical.choice)",
                 o.bedrock
             );
-            match (
-                o.stored_kernel_verified_before,
-                o.stored_kernel_verified_after,
-            ) {
-                (Some(b), Some(a)) => println!("  Stamped:     stored KernelVerified {b} → {a}"),
-                _ => println!("  Stamped:     skipped (--no-stamp)"),
+            if let Some(n) = o.stored_kernel_verified_headers {
+                println!(
+                    "  Headers:     {n} stored KernelVerified (converter-written; nothing stamped)"
+                );
             }
             if !o.top_fallback_roots.is_empty() {
                 println!(
@@ -1127,7 +1215,7 @@ fn print_summary_table(results: &[(String, Result<CoqLibraryOutcome, String>)]) 
         "Files",
         "FFail",
         "Decls",
-        "KV",
+        "Accepted",
         "AxAcc",
         "AxFb",
         "Failed",
@@ -1161,7 +1249,7 @@ fn print_summary_table(results: &[(String, Result<CoqLibraryOutcome, String>)]) 
                     failed,
                     rec,
                     o.bedrock,
-                    o.stored_kernel_verified_after
+                    o.stored_kernel_verified_headers
                         .map_or_else(|| "-".to_string(), |n| n.to_string()),
                 );
             }
@@ -1188,8 +1276,9 @@ fn verified_json(report: Option<&IncrementalVerifyReport>) -> serde_json::Value 
         });
     let discharged: &[String] = report.map_or(&[], |r| r.discharged_axiom_names.as_slice());
     serde_json::json!({
+        "tier": "development",
         "total": total,
-        "kernel_verified": kv,
+        "accepted": kv,
         "axiom_accepted": axacc,
         "axiom_fallback": axfb,
         "failed": failed,
@@ -1229,6 +1318,8 @@ fn gate_json(gate: &LibraryGate) -> serde_json::Value {
                 "net": d.net(),
                 "regressed": capped,
                 "regressed_truncated": d.regressed.len() > GATE_REGRESSED_JSON_CAP,
+                "baseline_identity": d.baseline_identity,
+                "fresh_identity": d.fresh_identity,
             })
         }
     }
@@ -1262,7 +1353,8 @@ fn write_json_report(
                     },
                     "verified": verified_json(o.verified.as_ref()),
                     "bedrock": o.bedrock,
-                    "stored_kernel_verified": o.stored_kernel_verified_after,
+                    "stored_kernel_verified_headers": o.stored_kernel_verified_headers,
+                    "identity": o.identity,
                     "top_fallback_roots": o.top_fallback_roots,
                 });
                 // Full, untruncated per-name verdict lists for regression
@@ -1326,9 +1418,12 @@ mod tests {
     use super::*;
     use std::collections::HashMap;
 
-    use clean_mathverse::coq::alpha::CoqImporter;
-    use clean_mathverse::library::stamp_shard_file_kernel_verified;
+    use clean_kernel::flat::{FlatExpr, FlatLevel};
     use clean_mathverse::shard::ShardWriter;
+    use clean_mathverse::types::{
+        AxiomProfile, ContentDomain, MathverseConstantHeader, SourceSystem,
+    };
+    use clean_mathverse::verify::kernel_verified_manifest::{AcceptanceTier, Discipline};
 
     /// The alpha.rs golden-test hand dialect (REFL_N closure style): nat + eq
     /// + one Qed theorem carrying its genuine proof term as its value + one
@@ -1348,8 +1443,15 @@ mod tests {
     fn opts() -> CoqImportOptions {
         CoqImportOptions {
             lean_faithful: false,
-            stamp: true,
         }
+    }
+
+    /// The stored import confidence of `name` in the library's shards.
+    fn stored_confidence(lib_dir: &Path, name: &str) -> Option<u8> {
+        discover_mathverse_files(lib_dir).iter().find_map(|p| {
+            let r = ShardReader::from_file(p).expect("shard reads");
+            r.lookup_name(name).map(|(_, h)| h.import_confidence)
+        })
     }
 
     /// Fallback-reason truncation is char-boundary safe and marks the cut.
@@ -1365,9 +1467,10 @@ mod tests {
         assert_eq!(truncate_reason(&exact, 160), exact);
     }
 
-    /// End-to-end over two libraries: the good library kernel-verifies and the
-    /// stamp round-trip persists; the corrupt library reports its file failure
-    /// LOUDLY without aborting the other library.
+    /// End-to-end over two libraries: the good library is accepted as a
+    /// development run and NOTHING is stamped (P6: the Qed theorem's header
+    /// keeps the converter's confidence); the corrupt library reports its file
+    /// failure LOUDLY without aborting the other library.
     #[test]
     fn test_coq_import_root_good_and_corrupt_libraries() {
         let tmp = tempfile::tempdir().expect("tempdir");
@@ -1385,7 +1488,7 @@ mod tests {
         let by_name: HashMap<&str, &Result<CoqLibraryOutcome, String>> =
             results.iter().map(|(n, r)| (n.as_str(), r)).collect();
 
-        // Good library: genuine kernel verification + persistent stamp.
+        // Good library: development acceptance, no stamp.
         let good = by_name["goodlib"]
             .as_ref()
             .expect("good library pipeline should succeed");
@@ -1402,20 +1505,28 @@ mod tests {
             report.kernel_verified_names.contains(&"refl_n".to_string()),
             "the Qed theorem must be genuinely kernel-verified"
         );
-        // Stamp round-trip: re-read from disk, independently of the report.
+        // Nothing stamped: the accepted Qed theorem's header is not
+        // KernelVerified on disk (before P6 the lane stamped it).
+        assert_ne!(
+            stored_confidence(&out.join("goodlib"), "refl_n"),
+            Some(ImportConfidence::KernelVerified as u8),
+            "a development acceptance must not stamp the header"
+        );
         let (stored, unreadable) =
             count_stored_kernel_verified(&out.join("goodlib")).expect("stored count");
         assert!(unreadable.is_empty());
-        assert!(stored > 0, "the stamp must persist in the shard bytes");
         assert_eq!(
-            good.stored_kernel_verified_after,
+            good.stored_kernel_verified_headers,
             Some(stored),
             "outcome audit must match the on-disk re-read"
         );
-        assert!(
-            out.join("goodlib/kernel-verified.json").exists(),
-            "manifest sidecar written"
-        );
+        // The manifest names its theory and checker, development tier.
+        let manifest = KernelVerifiedManifest::from_file(&out.join("goodlib/kernel-verified.json"))
+            .expect("manifest sidecar written and valid");
+        assert_eq!(manifest.tier(), AcceptanceTier::Development);
+        assert_eq!(manifest.identity().discipline(), Discipline::CoqCumulative);
+        assert!(manifest.accepted_names().contains(&"refl_n".to_string()));
+        assert_eq!(good.identity.as_ref(), Some(manifest.identity()));
 
         // Corrupt library: counted file failure, no shard, NO abort.
         let bad = by_name["badlib"]
@@ -1442,21 +1553,35 @@ mod tests {
         std::fs::write(sexp_dir.join("Mod.sexp"), GOOD_LIBRARY_SEXP).expect("write fixture");
 
         // Craft a shard whose value-bearing Definition falsely carries
-        // KernelVerified (via the destructive stamp helper), and drop it into
-        // the library dir the pipeline will load.
+        // KernelVerified in its header byte, and drop it into the library dir
+        // the pipeline will load.
         let mut w = ShardWriter::new();
-        CoqImporter
-            .import_sexp(
-                "(CoqConstant evil (Sort (Type 0)) (Lambda x (Sort (Type 0)) (Rel 0)))",
-                &mut w,
-            )
-            .expect("import evil fixture");
+        let name_idx = w.add_string("evil");
+        let l0 = w.add_level(FlatLevel::zero());
+        let ty = w.add_expr(FlatExpr::sort(l0));
+        let val = w.add_expr(FlatExpr::sort(l0));
+        w.add_constant(MathverseConstantHeader {
+            name_idx,
+            type_idx: ty,
+            value_idx: val,
+            source_system: SourceSystem::Coq as u8,
+            import_confidence: ImportConfidence::KernelVerified as u8,
+            content_domain: ContentDomain::PureMath as u8,
+            decl_kind: DeclKind::Definition as u8,
+            axiom_profile: AxiomProfile::NONE,
+            sidecar_digest: 0,
+            provenance_idx: 0,
+            level_params_start: 0,
+            level_params_count: 0,
+            _pad2: [0u8; 26],
+        });
         let evil_path = out_lib.join("evil.mathverse");
         w.write_to_file(&evil_path).expect("write evil shard");
-        let names: std::collections::HashSet<String> = ["evil".to_string()].into_iter().collect();
-        let stamped =
-            stamp_shard_file_kernel_verified(&evil_path, &names).expect("stamp evil shard");
-        assert_eq!(stamped, 1, "the false stamp must land for the test to bite");
+        assert_eq!(
+            stored_confidence(&out_lib, "evil"),
+            Some(ImportConfidence::KernelVerified as u8),
+            "the false header must land for the test to bite"
+        );
 
         let err = run_coq_import_library("goodlib", &sexp_dir, &out_lib, &opts())
             .expect_err("floor breach must abort the library before verification");
@@ -1471,22 +1596,36 @@ mod tests {
         );
     }
 
-    /// Write a synthetic promoted-baseline manifest for `lib` under `root`
-    /// carrying exactly `names` as its kernel-verified set.
-    fn write_baseline_manifest(root: &Path, lib: &str, names: &[&str]) {
-        let manifest = KernelVerifiedManifest::from_worker_parts(
-            lib,
-            names.len(),
-            0,
-            0,
-            0.0,
-            names.iter().map(|s| (*s).to_string()).collect(),
-        );
+    /// Write a promoted-baseline manifest for `lib` under `root`: the fresh
+    /// run's own manifest at `fresh`, with exactly `names` as its accepted set
+    /// (a prior run of the same checker).
+    fn write_baseline_manifest(root: &Path, lib: &str, fresh: &Path, names: &[&str]) {
+        let mut v: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(fresh).expect("read fresh"))
+                .expect("fresh manifest json");
+        v["accepted_names"] = serde_json::json!(names);
+        v["accepted"] = serde_json::json!(names.len());
         let lib_dir = root.join(lib);
         std::fs::create_dir_all(&lib_dir).expect("mk baseline lib dir");
-        manifest
-            .write_to_file(&lib_dir.join("kernel-verified.json"))
+        std::fs::write(lib_dir.join("kernel-verified.json"), v.to_string())
             .expect("write baseline manifest");
+    }
+
+    /// A schema-1 baseline, as the gitignored Coq baselines are today.
+    fn write_schema1_baseline(root: &Path, lib: &str, names: &[&str]) {
+        let lib_dir = root.join(lib);
+        std::fs::create_dir_all(&lib_dir).expect("mk baseline lib dir");
+        std::fs::write(
+            lib_dir.join("kernel-verified.json"),
+            serde_json::json!({
+                "schema_version": 1,
+                "tool": "mathverse_shard verify-kernel --corpus",
+                "kernel_verified": names.len(),
+                "kernel_verified_names": names,
+            })
+            .to_string(),
+        )
+        .expect("write schema-1 baseline");
     }
 
     /// `--promote-on-green` without `--gate-baseline` is rejected; with it,
@@ -1523,12 +1662,12 @@ mod tests {
     fn test_gate_diff_superset_green_missing_name_red() {
         let base: Vec<String> = ["a", "b"].iter().map(|s| (*s).to_string()).collect();
         let fresh: Vec<String> = ["b", "c", "a"].iter().map(|s| (*s).to_string()).collect();
-        let d = diff_kernel_verified(&base, &fresh);
+        let d = diff_accepted(&base, &fresh);
         assert!(d.is_green(), "superset must gate green: {:?}", d.regressed);
         assert_eq!((d.baseline_len, d.new_len, d.net()), (2, 3, 1));
 
         let shrunk: Vec<String> = ["c", "a"].iter().map(|s| (*s).to_string()).collect();
-        let d = diff_kernel_verified(&base, &shrunk);
+        let d = diff_accepted(&base, &shrunk);
         assert!(!d.is_green(), "a lost baseline name is a regression");
         assert_eq!(d.regressed, vec!["b".to_string()]);
         assert_eq!(d.net(), 0, "net can be flat while names still regress");
@@ -1542,6 +1681,8 @@ mod tests {
             baseline_len: 150,
             new_len: 0,
             regressed,
+            baseline_identity: None,
+            fresh_identity: None,
         });
         let v = gate_json(&gate);
         assert_eq!(v["baseline"], serde_json::json!(150));
@@ -1622,7 +1763,8 @@ mod tests {
         // (a) No baseline manifest anywhere: first import, green.
         let baseline_root = tmp.path().join("baseline");
         std::fs::create_dir_all(&baseline_root).expect("mk baseline root");
-        let gates = gate_results(&baseline_root, &results).expect("gate without baseline");
+        let gates = gate_results(&baseline_root, &results, GateMode::Strict)
+            .expect("gate without baseline");
         assert!(
             matches!(gates[0].1, LibraryGate::NoBaseline { new_len: 6 }),
             "first import must be NoBaseline with the fresh count: {gates:?}"
@@ -1631,8 +1773,10 @@ mod tests {
 
         // (b) Subset baseline: green, net +5; promotion copies the fresh
         // manifest + shard over the baseline dir.
-        write_baseline_manifest(&baseline_root, "goodlib", &["refl_n"]);
-        let gates = gate_results(&baseline_root, &results).expect("gate against subset");
+        let fresh = out.join("goodlib/kernel-verified.json");
+        write_baseline_manifest(&baseline_root, "goodlib", &fresh, &["refl_n"]);
+        let gates =
+            gate_results(&baseline_root, &results, GateMode::Strict).expect("gate against subset");
         match &gates[0].1 {
             LibraryGate::Diffed(d) => {
                 assert!(d.is_green(), "superset import must be green");
@@ -1655,7 +1799,8 @@ mod tests {
             "shard must be promoted: {files:?}"
         );
         // The promoted baseline now equals the fresh manifest: net +0 green.
-        let regates = gate_results(&baseline_root, &results).expect("re-gate after promote");
+        let regates = gate_results(&baseline_root, &results, GateMode::Strict)
+            .expect("re-gate after promote");
         match &regates[0].1 {
             LibraryGate::Diffed(d) => {
                 assert!(d.is_green());
@@ -1666,8 +1811,14 @@ mod tests {
 
         // (c) Baseline claims a name the fresh import lacks: RED, listed,
         // and a red gate promotes NOTHING.
-        write_baseline_manifest(&baseline_root, "goodlib", &["refl_n", "ghost_theorem"]);
-        let gates = gate_results(&baseline_root, &results).expect("gate against ghost");
+        write_baseline_manifest(
+            &baseline_root,
+            "goodlib",
+            &fresh,
+            &["refl_n", "ghost_theorem"],
+        );
+        let gates =
+            gate_results(&baseline_root, &results, GateMode::Strict).expect("gate against ghost");
         match &gates[0].1 {
             LibraryGate::Diffed(d) => {
                 assert_eq!(d.regressed, vec!["ghost_theorem".to_string()]);
@@ -1683,9 +1834,119 @@ mod tests {
                 .expect("baseline manifest still readable");
         assert!(
             untouched
-                .kernel_verified_names
+                .accepted_names()
                 .contains(&"ghost_theorem".to_string()),
             "red gate must leave the baseline manifest untouched"
+        );
+    }
+
+    /// R7 under P6: a schema-1 baseline, or a schema-2 baseline from another
+    /// checker, is REFUSED by the strict gate (never treated as absent, which
+    /// would switch the regression guard off), pointing at `--rebaseline`.
+    /// `--rebaseline` reads the names only: a baseline name the fresh run lost
+    /// is red and promotes nothing; a superset is green, promotes a schema-2
+    /// baseline, and records the identity transition.
+    #[test]
+    fn test_gate_schema1_baseline_refused_strict_and_migrated_by_rebaseline() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let sexp_root = tmp.path().join("sexp");
+        let out = tmp.path().join("out");
+        std::fs::create_dir_all(sexp_root.join("goodlib")).expect("mk goodlib");
+        std::fs::write(sexp_root.join("goodlib/Mod.sexp"), GOOD_LIBRARY_SEXP)
+            .expect("write fixture");
+        let results =
+            run_coq_import_root(&sexp_root, &out, &[], &opts()).expect("mini import runs");
+        let baseline_root = tmp.path().join("baseline");
+
+        write_schema1_baseline(&baseline_root, "goodlib", &["refl_n"]);
+        let err = gate_results(&baseline_root, &results, GateMode::Strict)
+            .expect_err("a schema-1 baseline is refused, not treated as absent");
+        assert!(err.contains("--rebaseline"), "{err}");
+
+        // A schema-1 baseline holding a name the fresh run lost: red.
+        write_schema1_baseline(&baseline_root, "goodlib", &["refl_n", "lost_theorem"]);
+        let gates =
+            gate_results(&baseline_root, &results, GateMode::Rebaseline).expect("names-only read");
+        assert!(!gate_is_green(&gates), "the lost name reddens the gate");
+        assert!(promote_if_green(&gates, &out, &baseline_root, &results)
+            .expect("red check")
+            .is_none());
+        assert!(
+            KernelVerifiedManifest::from_file(&baseline_root.join("goodlib/kernel-verified.json"))
+                .is_err(),
+            "nothing promoted: the baseline is still the schema-1 file"
+        );
+
+        // A superset: green, the fresh schema-2 manifest is promoted, and the
+        // identity transition (none -> the fresh identity) is recorded.
+        write_schema1_baseline(&baseline_root, "goodlib", &["refl_n"]);
+        let gates =
+            gate_results(&baseline_root, &results, GateMode::Rebaseline).expect("names-only read");
+        assert!(gate_is_green(&gates));
+        let json = gate_json(&gates[0].1);
+        assert_eq!(json["baseline_identity"], serde_json::Value::Null);
+        assert!(json["fresh_identity"].is_object(), "{json}");
+        promote_if_green(&gates, &out, &baseline_root, &results)
+            .expect("green promote")
+            .expect("promoted");
+        let promoted =
+            KernelVerifiedManifest::from_file(&baseline_root.join("goodlib/kernel-verified.json"))
+                .expect("the promoted baseline is schema 2");
+        assert_eq!(promoted.tier(), AcceptanceTier::Development);
+        assert!(gate_is_green(
+            &gate_results(&baseline_root, &results, GateMode::Strict).expect("strict now reads it")
+        ));
+
+        // A schema-2 baseline from another checker is refused by the strict gate.
+        let mut v: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(baseline_root.join("goodlib/kernel-verified.json"))
+                .expect("read"),
+        )
+        .expect("json");
+        v["identity"]["checker"]["settings"]["level_repair"] = serde_json::json!(true);
+        std::fs::write(
+            baseline_root.join("goodlib/kernel-verified.json"),
+            v.to_string(),
+        )
+        .expect("write");
+        let err = gate_results(&baseline_root, &results, GateMode::Strict)
+            .expect_err("another checker's baseline is refused");
+        assert!(
+            err.contains("level_repair") && err.contains("--rebaseline"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn test_parse_args_rebaseline_requires_promote_on_green() {
+        let bad: Vec<String> = [
+            "--sexp-root=/s",
+            "--out=/o",
+            "--gate-baseline=/b",
+            "--rebaseline",
+        ]
+        .iter()
+        .map(|s| (*s).to_string())
+        .collect();
+        assert!(parse_args(&bad).is_err());
+        let ok: Vec<String> = [
+            "--sexp-root=/s",
+            "--out=/o",
+            "--gate-baseline=/b",
+            "--promote-on-green",
+            "--rebaseline",
+        ]
+        .iter()
+        .map(|s| (*s).to_string())
+        .collect();
+        assert!(parse_args(&ok).expect("parses").rebaseline);
+        let gone: Vec<String> = ["--sexp-root=/s", "--out=/o", "--no-stamp"]
+            .iter()
+            .map(|s| (*s).to_string())
+            .collect();
+        assert!(
+            parse_args(&gone).is_err(),
+            "--no-stamp is gone: nothing stamps"
         );
     }
 
@@ -1700,20 +1961,9 @@ mod tests {
         std::fs::create_dir_all(&sexp_dir).expect("mk sexp dir");
         std::fs::write(sexp_dir.join("Mod.sexp"), GOOD_LIBRARY_SEXP).expect("write fixture");
 
-        let outcome = run_coq_import_library(
-            "goodlib",
-            &sexp_dir,
-            &out_lib,
-            &CoqImportOptions {
-                lean_faithful: false,
-                stamp: false,
-            },
-        )
-        .expect("fresh import-time inductive tags must pass the floor");
+        let outcome = run_coq_import_library("goodlib", &sexp_dir, &out_lib, &opts())
+            .expect("fresh import-time inductive tags must pass the floor");
         assert!(outcome.verified.is_some());
-        assert_eq!(
-            outcome.stored_kernel_verified_after, None,
-            "--no-stamp skips the stamp step"
-        );
+        assert!(outcome.stored_kernel_verified_headers.is_some());
     }
 }

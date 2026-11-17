@@ -487,6 +487,10 @@ pub enum ElabError {
         "invalid class, parameter #{parameter} depends on `outParam`, but it is not an `outParam`"
     )]
     InvalidClassOutParam { parameter: usize },
+    /// Lean's builtin class attribute has no local or scoped form.
+    #[error("invalid '{scope} class' attribute: class attributes must be global")]
+    InvalidClassAttributeScope { scope: &'static str },
+
     /// Feature is not supported by the elaborator.
     #[error("Unsupported feature: {feature}")]
     Unsupported { feature: String },

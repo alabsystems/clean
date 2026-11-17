@@ -22,7 +22,7 @@ class FixedSchema(unittest.TestCase):
 
     def test_all_current_and_legacy_fields_are_explicit(self):
         new=SCHEMA['environment_fields'];old=SCHEMA['legacy_3fa_fields']
-        self.assertEqual((len(new),len(old)),(566,563))
+        self.assertEqual((len(new),len(old)),(565,563))
         current=[f for f in new if f['serialized']]
         previous=[f for f in old if f['serialized']]
         self.assertEqual((len(current),len(previous)),(555,554))
@@ -31,7 +31,7 @@ class FixedSchema(unittest.TestCase):
         self.assertEqual([f for f in current if f['name']!='lean_level_profile'],previous)
         # Transient fields carry no wire bytes; neither adds serialized state.
         self.assertEqual({f['name'] for f in new if not f['serialized']},
-                         {f['name'] for f in old if not f['serialized']}|{'matcher_info','simp_cache_identity'})
+                         {f['name'] for f in old if not f['serialized']}|{'simp_cache_identity'})
 
     def test_metadata_is_an_ordered_sequence_not_a_map(self):
         self.assertEqual(g.wire_type('MDataMap'),'Vec<(WName, WMDataValue)>')

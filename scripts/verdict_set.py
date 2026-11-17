@@ -43,9 +43,10 @@ Derived mechanically, with no hand-listing:
   R-MINT      lane (a)/(b) roots in clean-mathverse = every production module
               with a `TrustLevel::KernelVerified` MINT site, found by a LEXED
               scan (comments, string/char literals blanked; `#[cfg(test)] mod`
-              bodies and test files excluded) that distinguishes a mint (a value
-              position) from a comparison or a match-arm pattern. The same scan
-              runs over every crate; hits outside the declared lane are recorded
+              bodies, test files by name and files headed `#![cfg(test)]`
+              excluded) that distinguishes a mint (a value position) from a
+              comparison or a match-arm pattern. The same scan runs over every
+              crate; hits outside the declared lane are recorded
               in `mint_sites_outside_declared_lane` so the scoping is a measured
               decision rather than a silence.
   R-SUITE     lane (a)'s "suite runner's input-digest machinery" is PROBED for
@@ -115,6 +116,7 @@ Usage:
     scripts/verdict_set.py                       # derive + write data/verdict_set.json
     scripts/verdict_set.py --check               # derive + fail if the committed file differs
     scripts/verdict_set.py --rebase-up "reason"  # allow the lane (c) ratchet to rise, dated
+    scripts/verdict_set.py --pinned-inputs       # the reference lexer this gate runs (registry R7)
 """
 
 from __future__ import annotations
@@ -126,7 +128,18 @@ import hashlib
 import json
 import re
 import sys
+import types
 from pathlib import Path
+
+# The reference Rust lexer, executed from its source: ignored bytecode is not an input.
+_reference_lexer = types.ModuleType("verdict_set_reference_lexer")
+_reference_lexer.__file__ = str(Path(__file__).resolve().parent / "check_add_decl_ratchet.py")
+exec(compile(Path(_reference_lexer.__file__).read_bytes(), _reference_lexer.__file__, "exec", dont_inherit=True),
+     _reference_lexer.__dict__)
+
+# check_gate_registry.py R7 pins what --pinned-inputs prints: the reference lexer this gate runs.
+ANSWERS_PINNED_INPUTS = True
+PINNED_INPUTS = ("scripts/check_add_decl_ratchet.py",)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCHEMA = "clean.verdict_set/v1"
@@ -223,19 +236,19 @@ CRATE_OF_SUBLANE = {
 }
 
 # ---------------------------------------------------------------------------
-# Lexing (identical posture to scripts/check_add_decl_ratchet.py: a soundness
-# scanner over Rust source is `lexed`, never `raw-lines` — gate-registry R9)
+# Lexing (a soundness scanner over Rust source is `lexed`, never `raw-lines` —
+# gate-registry R9)
 # ---------------------------------------------------------------------------
 
-NONCODE_RE = re.compile(
-    r"/\*.*?\*/"  # block comment (non-nested)
-    r"|//[^\n]*"  # line comment
-    r'|(?:b?r)(#*)"(?:.|\n)*?"\1'  # raw string
-    r'|b?"(?:\\.|[^"\\])*"'  # string literal
-    r"|'(?:\\.|[^\\'])'",  # char literal
-    re.DOTALL,
-)
-CFG_TEST_RE = re.compile(r"#\[cfg\((any\()?\s*test\b")
+# The lexer is scripts/check_add_decl_ratchet.py's, imported and pinned (PINNED_INPUTS).
+NONCODE_RE = _reference_lexer.NONCODE_RE
+# The EXACT spelling, as the three bypass ratchets read it. It used to accept
+# `#[cfg(any(test, ..))]` too, so the body of an inline module that a non-test
+# build compiles whenever the other arm holds (`#[cfg(any(test, feature = "x"))]
+# pub mod m { .. }`, three such modules in clean-kernel at 8f3129d1aa) was
+# blanked as test code: its mints, IO tokens and reference edges vanished from
+# every scan reading `production_text`. Any other cfg is production here.
+CFG_TEST_RE = re.compile(r"#\[\s*cfg\s*\(\s*test\s*\)\s*\]")
 MOD_RE = re.compile(r"\bmod\s+[A-Za-z_][A-Za-z0-9_]*")
 
 
@@ -264,6 +277,12 @@ def is_test_path(rel: Path) -> bool:
     # two bypass ratchets". Anchored forms only, so five live production
     # env/algebra_nat_*testbit* modules stop being excluded by their names.
     return bool(re.search(r"(^test_|_tests?\.rs$|^tests?\.rs$|^tests_)", name))
+
+
+# A file whose first line that is not blank or a `//` comment is exactly
+# `#![cfg(test)]` is test code, whatever route reaches it. The rule and its
+# cases (`_HEAD_CASES`) are the reference lexer's, imported with it.
+headed_cfg_test = _reference_lexer.headed_cfg_test
 
 
 def production_text(text: str, rel: Path) -> str:
@@ -582,7 +601,11 @@ def olean_structural_roots(root: Path) -> tuple[list[str], list[dict], list[dict
 
 
 def mint_sites(root: Path) -> dict[str, list[dict]]:
-    """R-MINT: lexed, cfg(test)-aware `TrustLevel::KernelVerified` MINT sites, all crates."""
+    """R-MINT: lexed, cfg(test)-aware `TrustLevel::KernelVerified` MINT sites, all crates.
+
+    Test code is excluded three ways: a test FILE by name (`is_test_path`), a file
+    whose head is `#![cfg(test)]` (`headed_cfg_test`), and an inline
+    `#[cfg(test)] mod { .. }` body (`production_text`)."""
     hits: dict[str, list[dict]] = {}
     crates = root / "crates"
     if not crates.is_dir():
@@ -594,7 +617,7 @@ def mint_sites(root: Path) -> dict[str, list[dict]]:
         if is_test_path(Path(*rel.parts[rel.parts.index("src") :])):
             continue
         text = path.read_text(errors="replace")
-        if "KernelVerified" not in text:
+        if "KernelVerified" not in text or headed_cfg_test(text):
             continue
         for lineno, line in production_lines(text, rel):
             for m in MINT_RE.finditer(line):
@@ -879,7 +902,8 @@ RULES = {
     "R-SHARD": "lane (a)/(b) mathverse shard-digest roots = the declared ANCHORS table, same posture.",
     "R-MINT": "lane (a)/(b) mathverse KernelVerified roots = every production module with a LEXED "
     "TrustLevel::KernelVerified mint site (value position; comparisons and match-arm patterns are "
-    "consumption, not minting; #[cfg(test)] mod bodies and test files excluded).",
+    "consumption, not minting; #[cfg(test)] mod bodies, test files by name and files headed "
+    "#![cfg(test)] excluded).",
     "R-SUITE": "lane (a)'s suite-runner input-digest machinery is PROBED for in Rust (fn input_digest "
     "over crates/**/*.rs); an empty probe is recorded as a dated correction, never as a silence.",
     "R-GATES": "lane (c) = every data/gate_registry.json row whose artifact is a script under scripts/ "
@@ -1367,6 +1391,20 @@ def self_test() -> int:
             failures.append("lexer: comment/string mint counted (raw-lines behaviour)")
         mutated.unlink()
 
+        # Arm 3b: the lexer this gate runs is the reference's; its own cases must hold here.
+        lexer_bad = _reference_lexer.lexer_failures()
+        if NONCODE_RE is not _reference_lexer.NONCODE_RE:
+            lexer_bad.append("NONCODE_RE is not the reference's object")
+        if headed_cfg_test is not _reference_lexer.headed_cfg_test:
+            lexer_bad.append("headed_cfg_test is not the reference's function")
+        if lexer_bad:
+            failures.append(f"lexer: read differently from rustc: {lexer_bad}")
+        else:
+            _ok(
+                f"lexer: the reference's {len(_reference_lexer._LEXER_CASES)} readings and "
+                f"{len(_reference_lexer._HEAD_CASES)} file heads hold (nested comments, raw-string prefixes)"
+            )
+
         # Arm 4: cfg(test) blocks are excluded ---------------------------
         cfgfile = root / "crates/clean-mathverse/src/cfgbait.rs"
         _write(
@@ -1378,6 +1416,51 @@ def self_test() -> int:
         else:
             failures.append("cfg(test): test-only mint counted as production")
         cfgfile.unlink()
+
+        # Arm 4b: only the EXACT #[cfg(test)] makes an inline body test code;
+        # #[cfg(any(test, ..))] compiles in a non-test build when the other arm holds.
+        cfgfile = root / "crates/clean-mathverse/src/cfgany.rs"
+        _write(
+            cfgfile,
+            '#[cfg(any(test, feature = "x"))]\npub mod m {\n    pub fn f() { let _ = TrustLevel::KernelVerified; }\n}\n',
+        )
+        if "crates/clean-mathverse/src/cfgany.rs" in mint_sites(root):
+            _ok("cfg(test): a mint inside #[cfg(any(test, ..))] mod stays production surface")
+        else:
+            failures.append("cfg(test): a #[cfg(any(test, ..))] body was blanked as test code")
+        cfgfile.unlink()
+
+        # Arm 4c: a file headed #![cfg(test)] is test code; every other head is not.
+        mint_body = "pub fn m() -> TrustLevel { TrustLevel::KernelVerified }\n"
+        heads = {
+            "headed_plain": ("// c\n//! doc\n\n#![cfg(test)]\n", False),
+            "headed_crlf": ("// c\r\n\r\n#![ cfg ( test ) ]\r\n", False),
+            "headed_block_comment": ("/* c */\n#![cfg(test)]\n", True),
+            "headed_other_attr": ("#![allow(dead_code)]\n#![cfg(test)]\n", True),
+            "headed_any": ('#![cfg(any(test, feature = "x"))]\n', True),
+            "headed_not": ("#![cfg(not(test))]\n", True),
+            "headed_tool": ("#![rustfmt::cfg(test)]\n", True),
+            "headed_outer": ("#[cfg(test)]\n", True),
+            "headed_after_item": ("fn f() {}\n#![cfg(test)]\n", True),
+            "headed_u2028": ("// c #![cfg(test)]\n", True),
+        }
+        for stem, (head, counted) in heads.items():
+            _write(root / f"crates/clean-mathverse/src/{stem}.rs", head + mint_body)
+        found = mint_sites(root)
+        wrong = sorted(
+            stem
+            for stem, (_head, counted) in heads.items()
+            if (f"crates/clean-mathverse/src/{stem}.rs" in found) is not counted
+        )
+        if not wrong:
+            _ok(
+                "cfg(test): a file headed #![cfg(test)] after only blank and // lines is test code; a block "
+                "comment, another attribute or cfg, an outer attribute, an item or a U+2028 first keeps it counted"
+            )
+        else:
+            failures.append(f"cfg(test): file-head rule misjudged {wrong}")
+        for stem in heads:
+            (root / f"crates/clean-mathverse/src/{stem}.rs").unlink()
 
         # Arm 5: fail-closed on a vanished anchor symbol -----------------
         anchor = root / VERIFY_ANCHORS[0][0]
@@ -1616,6 +1699,9 @@ def _print_delta(old: dict, new: dict) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    if "--pinned-inputs" in (sys.argv[1:] if argv is None else argv):
+        print(*PINNED_INPUTS, sep="\n")
+        return 0
     ap = argparse.ArgumentParser(
         prog="verdict_set.py",
         description="Derive data/verdict_set.json — the Ring R2 verdict-bearing surface (S&L §5).",

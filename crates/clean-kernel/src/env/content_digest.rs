@@ -1084,7 +1084,7 @@ impl Environment {
         ));
 
         let mut rows = Vec::new();
-        for (ext, st) in &self.persistent_extensions {
+        for (ext, st) in self.persistent_extensions.states() {
             let mut f = Fields::new("persistent_ext");
             f.name(ext);
             f.u64(st.imported_entries.len() as u64);

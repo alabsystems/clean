@@ -706,7 +706,7 @@ def globaladdr_body(o: str) -> str:
 
 def body_checks() -> list[str]:
     """Each abstracted body, re-instantiated at the source's own names and major,
-    must BE the source body."""
+    must BE the source body after removing only the wrapping parentheses."""
     bad = []
     cases = [
         ("ir_switch_n", switch_n_body("m", "s", "(ir_case_find cases n)")),

@@ -5,6 +5,7 @@ use super::graph::{Projection, Ref, Restoration};
 use super::primitive::*;
 use super::syntax::*;
 use super::types::*;
+use crate::env::extension_storage::PersistentExtensions;
 use crate::env::Environment;
 
 macro_rules! environment_schema {
@@ -88,22 +89,41 @@ macro_rules! environment_schema {
         impl FromWire<WireEnvironment> for Environment {
             fn from_wire(wire:WireEnvironment,r:&mut Restoration)->Result<Self> {
                 let WireEnvironment { $($pre:$pb,)* lean_level_profile:__wire_env_profile, $($post:$ab,)* }=wire;
-                let mut environment=Self {
+                // Transients restart at their defaults. The matcher index is
+                // not among them: it is derived inside `persistent_extensions`
+                // by that field's own restoration below.
+                Ok(Self {
                     $($pre:FromWire::from_wire($pb,r)?,)*
                     lean_level_profile:FromWire::from_wire(__wire_env_profile,r)?,
                     $($post:FromWire::from_wire($ab,r)?,)*
                     $($skip:Default::default(),)*
-                };
-                // Transients restart at their defaults; the matcher index is
-                // derived from persisted fields, so it is re-derived from them.
-                environment.rebuild_matcher_index();
-                Ok(environment)
+                })
             }
         }
     };
 }
 
 include!("environment_fields.rs");
+
+// The persistent-extension storage travels as its map of states, the wire
+// form it has always had; restoring it derives the matcher index it holds.
+type PersistentStates = hashbrown::HashMap<crate::Name, crate::env::PersistentEnvExtensionState>;
+
+impl ToWire for PersistentExtensions {
+    type Wire = <PersistentStates as ToWire>::Wire;
+    fn to_wire(&self, p: &mut Projection) -> Result<Self::Wire> {
+        self.states().to_wire(p)
+    }
+}
+
+impl<W> FromWire<W> for PersistentExtensions
+where
+    PersistentStates: FromWire<W>,
+{
+    fn from_wire(wire: W, r: &mut Restoration) -> Result<Self> {
+        PersistentStates::from_wire(wire, r).map(PersistentExtensions::from_states)
+    }
+}
 
 #[cfg(test)]
 impl Legacy3faEnvironment {

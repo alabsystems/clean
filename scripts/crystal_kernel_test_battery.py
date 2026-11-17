@@ -88,7 +88,18 @@ import os
 import re
 import subprocess
 import sys
+import types
 from pathlib import Path
+
+# The reference Rust lexer, executed from its source: ignored bytecode is not an input.
+_reference_lexer = types.ModuleType("crystal_kernel_test_battery_reference_lexer")
+_reference_lexer.__file__ = str(Path(__file__).resolve().parent / "check_add_decl_ratchet.py")
+exec(compile(Path(_reference_lexer.__file__).read_bytes(), _reference_lexer.__file__, "exec", dont_inherit=True),
+     _reference_lexer.__dict__)
+
+# check_gate_registry.py R7 pins what --pinned-inputs prints: the reference lexer this gate runs.
+ANSWERS_PINNED_INPUTS = True
+PINNED_INPUTS = ("scripts/check_add_decl_ratchet.py",)
 
 ROOT = Path(__file__).resolve().parent.parent
 HEAVY_GATE = ROOT / "scripts" / "heavy_gate.sh"
@@ -309,9 +320,7 @@ codegen-units = 16
 panic = "abort"
 overflow-checks = true
 """
-# Rust comments only; string literals are kept (the `env!("CARGO_…")` test needs them, and a
-# string cannot make a test crate depend on another crate).
-RUST_COMMENT_RE = re.compile(r"/\*.*?\*/|//[^\n]*", re.S)
+# The comment lexer is the reference's (scripts/check_add_decl_ratchet.py), imported and pinned.
 CARGO_ENV = re.compile(r'\benv!\s*\(\s*"CARGO_|CARGO_MANIFEST_DIR')
 LOCK_PKG = re.compile(r'\[\[package\]\]\nname = "([^"]+)"\nversion = "([^"]+)"')
 
@@ -322,7 +331,7 @@ def runner_exclusion(src: str, required: bool, foreign: set) -> str | None:
     `env!("CARGO_…")` check needs them, and they cannot name a crate)."""
     if required:
         return "declares required-features"
-    code = RUST_COMMENT_RE.sub("", src)
+    code = _reference_lexer.strip_comments_keep_strings(src)
     names = sorted(c for c in foreign if re.search(rf"\b{c}\b", code))
     if names:
         return "names a crate the runner does not provide: " + ", ".join(names)
@@ -440,10 +449,17 @@ def selftest() -> int:
         ("CARGO_MANIFEST_DIR leaves a test out", 'let d = env!("CARGO_MANIFEST_DIR");', False, "CARGO_MANIFEST"),
         ("#[path] and mod are kept", '#[path = "x/support.rs"]\nmod support;\nuse clean_kernel::Expr;',
          False, None),
+        ("a foreign crate inside a NESTED comment does not",
+         "/* /* */ clean_elab */ use clean_kernel::Expr;", False, None),
+        ("a `//` inside a string does not hide a foreign crate",
+         'let s = "//"; use clean_elab::X;', False, "clean_elab"),
     ]:
         got = runner_exclusion(src, req, foreign)
         good = (got is None) if want is None else (got is not None and want in got)
         arms.append((f"runner: {name}", good, [str(got)]))
+    lexer_bad = _reference_lexer.lexer_failures()
+    arms.append(("runner: the reference lexer reads its cases as rustc does", not lexer_bad,
+                 [str(lexer_bad)]))
     red = frozenset({"defect"})
     check("a falsifier that a test catches passes",
           {**base, ("defect", 16): {"outcomes": {**ok, "b": "FAILED"}, "summary": summ,
@@ -479,6 +495,9 @@ def selftest() -> int:
 
 
 def main() -> int:
+    if "--pinned-inputs" in sys.argv[1:]:
+        print(*PINNED_INPUTS, sep="\n")
+        return 0
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--config", help="JSON config (see module docs)")
     ap.add_argument("--out", help="directory for build/run traces and the JSON verdict")

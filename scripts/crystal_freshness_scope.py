@@ -188,11 +188,11 @@ SCHEMA = "clean.crystal.freshness_scope/v2"
 # in 44b8ecded, the day after the strict record, and the newest dump must be taken
 # by the driver committed now. Its control reproduced the 047ebd051 rebaseline's
 # three artifacts byte for byte with that driver; the fixtures stay cut at 047ebd051.
-# Since 2026-10-28 it is the at-head record measured at 1633a8e20: c1365ee61 added
-# `cumulative_ever` to `pub struct Environment`, which strict_monads pins, so the
-# 10-18 record's digest no longer matched; a fresh dump with the same compiler and
-# driver found all 19 chains numbering-only or identical, zero structural.
-RECORD = "data/crystal_chain_revalidation_2026-11-15_athead_35f090bb3.json"
+# Since 2026-10-28 an at-head record again, re-measured each time `pub struct
+# Environment` (which strict_monads pins) moved: c1365ee61 (1633a8e20), the plain
+# matcher index (35f090bb3), then 700ef2cb33 and the storage-held index (a97c0ec27).
+# Each fresh dump, same compiler and driver: 19 chains numbering-only, 0 structural.
+RECORD = "data/crystal_chain_revalidation_2026-11-16_athead_a97c0ec27.json"
 
 # chain stem -> (defining source file, a pattern that must occur in it, the
 # ITEMS pinned for that body, why those items).

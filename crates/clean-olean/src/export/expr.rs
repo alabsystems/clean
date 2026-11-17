@@ -102,6 +102,8 @@ impl OleanExporter {
                 self.write_u64(name_ptr);
                 self.write_u64(type_ptr);
                 self.write_u64(body_ptr);
+                // Expr.Data precedes the constructor's BinderInfo/nondep byte.
+                self.write_u64(expr.cached_metadata_word());
                 // BinderInfo as scalar byte
                 self.data.push(Self::binder_info_to_u8(binder_info.info));
                 self.align8();
@@ -117,6 +119,8 @@ impl OleanExporter {
                 self.write_u64(name_ptr);
                 self.write_u64(type_ptr);
                 self.write_u64(body_ptr);
+                // Expr.Data precedes the constructor's BinderInfo/nondep byte.
+                self.write_u64(expr.cached_metadata_word());
                 self.data.push(Self::binder_info_to_u8(binder_info.info));
                 self.align8();
                 Ok(self.offset_to_ptr(offset))
@@ -134,6 +138,8 @@ impl OleanExporter {
                 self.write_u64(type_ptr);
                 self.write_u64(value_ptr);
                 self.write_u64(body_ptr);
+                // Expr.Data precedes the constructor's BinderInfo/nondep byte.
+                self.write_u64(expr.cached_metadata_word());
                 self.data.push(if *nondep { 1 } else { 0 });
                 self.align8();
                 Ok(self.offset_to_ptr(offset))

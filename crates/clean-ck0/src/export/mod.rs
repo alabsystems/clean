@@ -174,7 +174,6 @@ struct Replay {
     env: MinimalEnv,
     declared: HashSet<Name>,
     report: Report,
-    definitions: std::collections::HashMap<Name, (Vec<Name>, u64)>,
     checked_aliases: std::collections::HashMap<Name, Name>,
 }
 impl Replay {
@@ -243,6 +242,7 @@ impl Replay {
             }
             _ => return Err(Refusal::Unsupported(kind.to_owned())),
         }
+        let decision = crate::whnf::DecisionScope::enter();
         for i in array(field(v, "all")?)? {
             self.tables.name(nat(i)?)?;
         }
@@ -269,7 +269,7 @@ impl Replay {
         } else {
             Transparency::Opaque
         };
-        let alias = self.prepare_alias(kind, name, arity)?;
+        let alias = self.prepare_alias(name, arity)?;
         let alias_type = ty.clone();
         let candidates = self.canonical.candidate(kind, v, &self.tables)?;
         let advice = target::prepare(
@@ -278,12 +278,20 @@ impl Replay {
             &self.tables,
             crate::validate::Env::string_literal_view(&self.env),
         )?;
-        if kind == "def" {
-            self.definitions
-                .insert(name.clone(), (params, nat(field(v, "value")?)?));
-        }
+        drop(decision);
         self.env =
             std::mem::take(&mut self.env).with_def(name.clone(), arity, ty, body, transparency);
+        if kind == "def" {
+            let hints = field(v, "hints")?;
+            let priority = if hints == "abbrev" {
+                u64::MAX
+            } else if hints == "opaque" {
+                0
+            } else {
+                u64::from(small(field(hints, "regular")?)?).saturating_add(1)
+            };
+            self.env.set_delta_priority(name.clone(), priority);
+        }
         if let Some(alias) = alias {
             self.env = std::mem::take(&mut self.env).with_def(
                 alias.name.clone(),
@@ -292,6 +300,8 @@ impl Replay {
                 alias.value,
                 Transparency::Transparent,
             );
+            let priority = crate::validate::Env::delta_priority(&self.env, name);
+            self.env.set_delta_priority(alias.name.clone(), priority);
             self.env.hide_from_export(alias.name.clone());
             self.checked_aliases.insert(name.clone(), alias.name);
         }
@@ -328,7 +338,6 @@ fn replay_state(mut input: impl BufRead, dialect: Dialect) -> Result<Replay, Ref
         env,
         declared: HashSet::new(),
         report: Report::default(),
-        definitions: std::collections::HashMap::new(),
         checked_aliases: std::collections::HashMap::new(),
     };
     let mut meta = false;
@@ -433,3 +442,8 @@ mod reduced_field_tests;
 mod target_tests;
 #[cfg(test)]
 mod unit_like_tests;
+
+#[cfg(test)]
+mod helper_transport_tests;
+#[cfg(test)]
+mod lambda_index_tests;

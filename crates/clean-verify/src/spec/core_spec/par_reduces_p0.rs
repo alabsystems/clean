@@ -1278,7 +1278,7 @@ fn dev0_refl_proof() -> String {
                 "@Eq.substType KExpr ",
                 "(fun (x : KExpr) => par_reduces_p0 env ({head} ty b) x) ",
                 "({head} (dev0 env ty) (dev0 env b)) (dev0 env ({head} ty b)) ",
-                "(@Eq.symm KExpr (dev0 env ({head} ty b)) ({head} (dev0 env ty) (dev0 env b)) ({unfold} env ty b)) ",
+                "(@Eq.symm KExpr (dev0 env ({head} ty b)) ({head} (dev0 env ty) (dev0 env b)) (@{unfold} env ty b)) ",
                 "(@{ctor} env ty (dev0 env ty) b (dev0 env b) ihty ihb))"
             ),
             ctor = ctor,

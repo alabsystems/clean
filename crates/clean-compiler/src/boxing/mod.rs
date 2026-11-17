@@ -18,13 +18,18 @@ mod native_signature_tests;
 pub(crate) mod visit;
 
 #[cfg(test)]
+mod signature_data_tests;
+#[cfg(test)]
 mod tests;
 
-pub use boxed_version::{mk_boxed_version, requires_boxed_version};
+pub use boxed_version::{
+    mk_boxed_version, mk_boxed_version_from_signature, requires_boxed_version,
+};
 pub use cast::{
     box_args, cast_arg_if_needed, cast_args, cast_var_if_needed, mk_cast, wrap_with_prefix,
 };
 pub use config::BoxingConfig;
+pub(crate) use config::CLOSURE_MAX_ARGS;
 pub use context::BoxingContext;
 pub use visit::{try_correct_vdecl_type, visit_body};
 

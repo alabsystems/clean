@@ -29,13 +29,13 @@
     "TrustSem.LibraryWrappers.const_alignment_keeps_constructor_check",
     "TrustSem.LibraryWrappers.successful_unwrap_is_exact",
     "TrustSem.LibraryWrappers.canonical_one_power",
-    "TrustSem.LibraryWrappers.canonical_wide_power_is_defined",
+    "TrustSem.LibraryWrappers.canonical_wide_power_panics",
     "TrustSem.LibraryWrappers.wide_power_lacks_conversion_domain",
     "TrustSem.LibraryWrappers.canonical_zero_right_shift",
     "TrustSem.LibraryWrappers.canonical_wide_right_shift_is_defined",
     "TrustSem.LibraryWrappers.wide_right_shift_lacks_conversion_domain",
     "TrustSem.LibraryWrappers.all_integers_are_sizes_goal_false",
-    "TrustSem.LibraryWrappers.canonical_wide_power_panics_goal_false"
+    "TrustSem.LibraryWrappers.canonical_wide_power_goal_false"
   ],
   "positive": [
     {
@@ -43,8 +43,8 @@
       "goal": "TrustSem.LibraryWrappers.ConstructorGoal"
     },
     {
-      "proof": "TrustSem.LibraryWrappers.canonical_wide_power_is_defined",
-      "goal": "TrustSem.LibraryWrappers.CanonicalWidePowerGoal"
+      "proof": "TrustSem.LibraryWrappers.canonical_wide_power_panics",
+      "goal": "TrustSem.LibraryWrappers.CanonicalWidePowerPanicsGoal"
     }
   ],
   "negative": [
@@ -53,8 +53,8 @@
       "goal": "TrustSem.LibraryWrappers.AllIntegersAreSizesGoal"
     },
     {
-      "proof": "TrustSem.LibraryWrappers.canonical_wide_power_is_defined",
-      "goal": "TrustSem.LibraryWrappers.CanonicalWidePowerPanicsGoal"
+      "proof": "TrustSem.LibraryWrappers.canonical_wide_power_panics",
+      "goal": "TrustSem.LibraryWrappers.CanonicalWidePowerGoal"
     }
   ]
 }

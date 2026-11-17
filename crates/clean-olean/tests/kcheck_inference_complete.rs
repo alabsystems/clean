@@ -1,5 +1,7 @@
 // Copyright 2026 Andrew Yates | SPDX-License-Identifier: Apache-2.0
 //! Static inference completeness with exact proof/meaning pins; no full C7 or authority claim.
+#[path = "support/subject_export.rs"]
+mod subject_export;
 use clean_kernel::env::{Declaration, Environment};
 use clean_kernel::{ConstantKind, Expr, KernelEnvError, KernelTypeError, Name, ReferenceRefusal};
 use clean_olean::test_support::compiled_fixture_dir;
@@ -190,7 +192,7 @@ fn actual_static_inference_replay_has_exact_proofs_meanings_and_refusals() {
     }
     assert_eq!(
         statements.len(),
-        112,
+        120,
         "exact theorem denominator; review every added/private theorem"
     );
     eprintln!(
@@ -206,23 +208,12 @@ fn actual_static_inference_replay_has_exact_proofs_meanings_and_refusals() {
         "inference-completeness-native-closure-pins: {}",
         serde_json::to_string(&closures).expect("complete native closure map")
     );
-    if let Some(path) = std::env::var_os("CLEAN_INFERENCE_EXPORT_PATH") {
-        let bytes = std::fs::File::create(path).expect("owned export capture");
-        let summary = clean_olean::ndjson::write_export(
-            &loaded,
-            &targets,
-            &clean_olean::ndjson::ExportWriteMeta {
-                lean_version: "4.30.0-rc2".to_owned(),
-                lean_githash: "3dc1a088b6d2d8eafe25a7cd7ec7b58d731bd7cc".to_owned(),
-            },
-            std::io::BufWriter::new(bytes),
-        )
-        .expect("exact owned subject dependency export");
-        eprintln!(
-            "inference-completeness-export: {}",
-            serde_json::to_string(&summary).expect("export identity")
-        );
-    }
+    subject_export::capture_if_requested(
+        "CLEAN_INFERENCE_EXPORT_PATH",
+        "inference-completeness-export",
+        &loaded,
+        &targets,
+    );
 
     let expected: BTreeMap<String, String> = serde_json::from_str(
         &std::fs::read_to_string(package.join("statement_pins.json")).expect(

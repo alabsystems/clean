@@ -30,6 +30,9 @@
 # `TrustGate::Strict`, any trust policy, or any test — check 3 asserts that.
 #
 # Cost: ~4 minutes wall, ~2.6 GB peak RSS, ~1 MB of artifacts.
+# P6 slice 1a: blocked until the reference producer (slice 1b); see scripts/lib/p6_blocked.sh.
+# shellcheck source=scripts/lib/p6_blocked.sh
+. "$(cd "$(dirname "$0")" && pwd)/lib/p6_blocked.sh" && p6_blocked "scripts/mathlib_via_mathverse.sh"
 
 set -eu
 

@@ -1,0 +1,8 @@
+# Complete prerequisite packages and exact checked-rule ORDER; recipe5 creates full aggregates.
+theory cic_l
+theory cic_l_model
+theory kcheck_spec
+theory kcheck_rule_certificates
+KCheckRuleCertificates
+TwoNullaryLiteralContracts
+RuleCertificateQualification

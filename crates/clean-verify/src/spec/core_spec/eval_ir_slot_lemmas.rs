@@ -66,6 +66,13 @@ const SRC_NAT_SUB_SELF: &str = "def ir_nat_sub_self (k : Nat) : @Eq Nat (Nat.sub
 const SRC_NAT_EQB_WALK_REFL: &str = "def ir_nat_eqb_walk_refl (n : Nat) : @Eq Bool (ir_nat_eqb_walk n n) Bool.true := @Nat.rec (fun (k : Nat) => @Eq Bool (ir_nat_eqb_walk k k) Bool.true) (@Eq.refl Bool Bool.true) (fun (k : Nat) (ih : @Eq Bool (ir_nat_eqb_walk k k) Bool.true) => ih) n";
 const SRC_NAT_EQB_REFL: &str = "def ir_nat_eqb_refl (n : Nat) : @Eq Bool (ir_nat_eqb n n) Bool.true := @Eq.trans Bool (ir_nat_eqb n n) (ir_nat_eqb_walk n n) Bool.true (ir_nat_eqb_walk_eq n n) (ir_nat_eqb_walk_refl n)";
 
+pub(super) fn nat_eqb_reflexivity_sources() -> [(&'static str, &'static str); 2] {
+    [
+        ("ir_nat_eqb_walk_refl", SRC_NAT_EQB_WALK_REFL),
+        ("ir_nat_eqb_refl", SRC_NAT_EQB_REFL),
+    ]
+}
+
 const SRC_MEM_LOOKUP_HEAD: &str = "def ir_mem_lookup_head (a : Nat) (v : IRScalar) (live : Bool) (m : IRList IRMemSlot) : @Eq (IROption IRMemSlot) (ir_mem_lookup (@IRList.cons IRMemSlot (IRMemSlot.mk a v live) m) a) (@IROption.some IRMemSlot (IRMemSlot.mk a v live)) := ir_eq_cong Bool (IROption IRMemSlot) (fun (b : Bool) => @Bool.rec (fun (_ : Bool) => IROption IRMemSlot) (ir_mem_lookup m a) (@IROption.some IRMemSlot (IRMemSlot.mk a v live)) b) (ir_nat_eqb a a) Bool.true (ir_nat_eqb_refl a)";
 
 const SRC_MEM_UPDATE_HEAD: &str = "def ir_mem_update_head (a : Nat) (v0 : IRScalar) (live : Bool) (m : IRList IRMemSlot) (v : IRScalar) : @Eq (IRList IRMemSlot) (ir_mem_update (@IRList.cons IRMemSlot (IRMemSlot.mk a v0 live) m) a v) (@IRList.cons IRMemSlot (IRMemSlot.mk a v live) m) := ir_eq_cong Bool (IRList IRMemSlot) (fun (b : Bool) => @Bool.rec (fun (_ : Bool) => IRList IRMemSlot) (@IRList.cons IRMemSlot (IRMemSlot.mk a v0 live) (ir_mem_update m a v)) (@IRList.cons IRMemSlot (IRMemSlot.mk a v live) m) b) (ir_nat_eqb a a) Bool.true (ir_nat_eqb_refl a)";

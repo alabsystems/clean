@@ -210,34 +210,13 @@ fn upgrade_stubs_to_fixpoint(
     }
 }
 
-/// Detect Lean compiler / code-generator auxiliary declarations that are not
-/// kernel-checkable logical declarations.
+/// A diagnostic name hint for compiler/code-generator auxiliaries.
 ///
-/// SOUNDNESS: every name matched here is a code-generator / lambda-lifting
-/// artifact, never referenced by any logical term, and never type-checked by
-/// Lean's own kernel:
-/// - `_cstage1` / `_cstage2`: compiled IR stages. Their stored types are written
-///   in Lean's erased compiler type system and reference the runtime
-///   pseudo-types `_obj` / `_neutral`, which are never declared — importing them
-///   makes every check trip on `UnknownConst(_obj)`.
-/// - `_elambda_N` / `_lambda_N`: lambda-lifted closures from the old code
-///   generator. In the exported `.olean` they are stored as `AxiomVal` with an
-///   EMPTY `levelParams` list but a universe-polymorphic type, so they cannot be
-///   re-typechecked as standalone constants (`UndefinedLevelParam`). They are
-///   referenced only through `@[implemented_by]` / `csimp` compiler metadata,
-///   never by a logical term (verified: parent defs' values contain no
-///   `_elambda` reference).
-/// - `_rarg`: the restricted-argument specialization of a code-generated def.
-/// - `_spec` / `_spec_N`: compiler specializations.
-/// - `_unsafe_rec`: the unsafe recursor used only by compiled code.
-///
-/// Excluding these at import drops no logical declaration and keeps the
-/// KernelVerified accounting honest (skipped, not failed). NOTE: the match-equation
-/// compiler's `Foo.match_N` and hygiene-mangled `_hyg` names are deliberately NOT
-/// matched here — they are genuine, logically-referenced declarations.
-///
-/// Additionally skips the specific Mathlib `CompileInductive` / `MemoFix`
-/// runtime-impl artifacts identified by [`is_compile_inductive_impl_artifact`].
+/// Lean permits safe logical declarations with these same names. A name alone
+/// is never authority to omit a `ConstantInfo` from import, custody, or replay.
+/// Use [`is_nonreplayable_compiler_constant`] for the legacy parsed-record skip
+/// policy; the direct loader applies the same independent stored-safety check.
+/// IR-only declarations remain in the producer's separate IR/extra-name role.
 pub fn is_compiler_ir_name(name: &str) -> bool {
     if is_compile_inductive_impl_artifact(name) {
         return true;
@@ -253,9 +232,8 @@ pub fn is_compiler_ir_name(name: &str) -> bool {
     })
 }
 
-/// Apply the existing artifact policy only to actual Name components. Quoted
-/// dots never create namespace edges; a display alias must not lose a genuine
-/// declaration merely because another typed name matches the old policy.
+/// Apply the diagnostic hint only to actual Name components. Quoted dots
+/// never create namespace edges. This does not classify a kernel declaration.
 pub(crate) fn is_typed_compiler_ir_name(name: &Name) -> bool {
     use clean_kernel::name::NameInner;
     let mut current = name;
@@ -283,39 +261,65 @@ pub(crate) fn is_typed_compiler_ir_name(name: &Name) -> bool {
     Name::from_string(&projected) == *name && is_compile_inductive_impl_artifact(&projected)
 }
 
-/// Whether `name` is one of the specific private `Float` runtime-impl /
-/// equation-spec artifacts the Mathlib `CompileInductive` TOOLING module emits:
-/// `Float.{mkImpl,valImpl,mk_eq,val_eq}`.
+/// Whether the parsed constant may keep the existing compiler-auxiliary skip.
 ///
-/// These reference the erased spec type `FloatSpec.float`, which is NOT
-/// reconstructable from a type-only import — Lean's own kernel re-checks them at
-/// definition time with the real `rfl` bodies a type-only import does not carry.
-/// They previously surfaced as masked-fallback "Eq vs Eq" / "Pi vs Pi" rows
-/// (measured `Nat vs FloatSpec.float`, a genuinely non-closeable mismatch —
-/// accepting it would be UNSOUND). Skipping them is denominator bookkeeping
-/// (skip-not-fail); zero constants registered, zero axioms admitted, no kernel
-/// path touched.
-///
-/// SOUNDNESS / CRITICAL GUARD — why this is scoped to EXACT artifact suffixes:
-///
-/// - NOT the whole `_private.Mathlib.Util.CompileInductive.` namespace: that
-///   broader scope would also drop GENUINE, kernel-verified helpers — e.g.
-///   `_private.…CompileInductive.1.Mathlib.Util.addAndCompile'`, which the PUBLIC
-///   `Mathlib.Util.compileDefn` references; filtering it regresses `compileDefn`
-///   to "Unknown constant".
-///
-/// - The `MemoFix` artifacts are deliberately NOT matched: although
-///   `memoFixImplObj` / `ObjectMap` are themselves unreconstructable, the genuine
-///   KERNEL-VERIFIED `_private.…MemoFix.1.memoFixImpl` references `memoFixImplObj`
-///   — filtering it would regress `memoFixImpl` to "Unknown constant". Likewise
-///   the `_@.…CompileInductive._hyg` macro-scope recursor copies are NOT matched
-///   (they are byte-identical copies of already-verified recursors that mostly
-///   kernel-verify; removing them would LOWER the honest KV rate).
-///
-/// All of the above was empirically validated against the Util subtree: every
-/// name matched here is a genuinely-failing artifact with NO genuine dependent.
-/// The `Lean.Export.*` / `Mathlib.Tactic.Superscript` rows are genuine structures
-/// (a separate reconstruction bug, out of scope) and are NOT matched.
+/// Both conditions are required: a historical compiler-name hint AND the
+/// record's own unsafe/partial flag. Lean's replay independently excludes the
+/// latter. Safe or unknown-safety kernel records must be converted and checked,
+/// including compiler-looking user definitions and malformed old artifacts.
+/// This says nothing about native executability or dependency closure.
+#[must_use]
+pub fn is_nonreplayable_compiler_constant(constant: &crate::ParsedConstant) -> bool {
+    is_compiler_ir_name(&constant.name)
+        && stored_unsafe_or_partial(&constant.kind, constant.definition_safety)
+}
+
+/// Source roles established before any part registers. A payload owns the
+/// names it declares; its Lean-format mirrors cannot supply original safety.
+pub(super) struct ArtifactRecordRoles {
+    pub(super) compiler_exclusions: HashSet<Name>,
+    pub(super) payload_names: HashSet<Name>,
+}
+
+impl ArtifactRecordRoles {
+    pub(super) fn from_parts(authoritative: &LoadModule, parts: &[&LoadModule]) -> Self {
+        let payload_names: HashSet<Name> = parts
+            .iter()
+            .filter_map(|part| part.clean_payload.as_ref())
+            .flat_map(|payload| payload.declared_names::<Vec<Name>>())
+            .collect();
+        let compiler_exclusions = authoritative
+            .constants
+            .iter()
+            .filter(|constant| {
+                !payload_names.contains(&constant.kernel_name)
+                    && is_typed_compiler_ir_name(&constant.kernel_name)
+                    && stored_unsafe_or_partial(&constant.kind, constant.definition_safety)
+            })
+            .map(|constant| constant.kernel_name.clone())
+            .collect();
+        Self {
+            compiler_exclusions,
+            payload_names,
+        }
+    }
+}
+
+/// Capture payload-owned declarations even when no Lean mirror exists, and
+/// without borrowing safety from an intentionally shadowed mirror. The current
+/// payload format carries no original declaration-safety metadata; None stays
+/// an explicit unknown-safety census refusal, not Safe or NotReplayable.
+fn payload_declarations(payload: Option<&CleanPayload>) -> Vec<(Name, Option<DefinitionSafety>)> {
+    payload
+        .into_iter()
+        .flat_map(|payload| payload.declared_names::<Vec<Name>>())
+        .map(|name| (name, None))
+        .collect()
+}
+
+/// Legacy diagnostic hints for known Mathlib runtime implementation records.
+/// These exact spellings do not authorize omitting a safe ConstantInfo; the
+/// record-aware policy still requires independent unsafe/partial metadata.
 fn is_compile_inductive_impl_artifact(name: &str) -> bool {
     const COMPILE_INDUCTIVE_PREFIX: &str = "_private.Mathlib.Util.CompileInductive.";
 
@@ -2996,6 +3000,20 @@ fn load_parsed_module_with_cache_and_policy_at_index(
 ) -> Result<LoadSummary, ImportError> {
     super::clean_payload_requirement::check_parsed_module(env, module, module_name.as_deref())?;
     policy.check_parsed_module(module, module_name.as_deref())?;
+    // This compatibility API has display-only Lean record names. Do not let
+    // a quoted/numeric payload identity miss ownership checks through reparsing.
+    if let Some(payload) = module.clean_payload.as_ref() {
+        if let Some(name) = payload
+            .declared_names::<Vec<Name>>()
+            .into_iter()
+            .find(|name| Name::from_string(&name.to_string()) != *name)
+        {
+            return Err(ImportError::LossyParsedPayloadName {
+                name: name.to_string(),
+                identity: name,
+            });
+        }
+    }
     super::projection_scan::begin_module(env);
     note_import_kinds(env, policy.import_kinds());
     // One artifact per parsed module (this path loads no companion parts).
@@ -3026,7 +3044,7 @@ fn load_parsed_module_with_cache_and_policy_at_index(
             .constants
             .iter()
             .enumerate()
-            .filter(|(_, c)| !c.name.is_empty() && !is_compiler_ir_name(&c.name))
+            .filter(|(_, c)| !c.name.is_empty())
             .map(|(i, c)| (i, Name::interned(&c.name)))
             .filter(|(_, n)| !payload_names.contains(n)),
         &artifact,
@@ -3105,7 +3123,7 @@ fn load_parsed_module_with_cache_and_policy_at_index(
     let mut stored_declarations = super::StoredDeclarationPart {
         artifact: artifact.clone(),
         part: summary.module_name.clone(),
-        declarations: Vec::new(),
+        declarations: payload_declarations(module.clean_payload.as_ref()),
         pending_restatements: Vec::new(),
         certified_restatements: Vec::new(),
         completed_theorems: Vec::new(),
@@ -3116,11 +3134,11 @@ fn load_parsed_module_with_cache_and_policy_at_index(
         .enumerate()
         .filter(|(_i, c)| !c.name.is_empty() || c.type_.is_some())
         .filter(|(_i, c)| {
-            // SOUNDNESS: skip code-generator artifacts — see is_compiler_ir_name.
-            if is_compiler_ir_name(&c.name) {
-                if stored_unsafe_or_partial(&c.kind, c.definition_safety) {
-                    cstage_not_replayable.push(c.name.clone());
-                }
+            // Spelling alone cannot remove a safe kernel ConstantInfo.
+            if !payload_names.contains(&Name::interned(&c.name))
+                && is_nonreplayable_compiler_constant(c)
+            {
+                cstage_not_replayable.push(c.name.clone());
                 cstage_skipped.push(SkippedConstant {
                     name: c.name.clone(),
                     reason: "compiler/code-generator artifact (not kernel-checkable)".to_string(),
@@ -3130,7 +3148,8 @@ fn load_parsed_module_with_cache_and_policy_at_index(
             true
         })
         // Capture at the existing logical-declaration boundary, before
-        // conversion/duplicate handling; compiler IR is not this population.
+        // conversion/duplicate handling. Only independently non-replayable
+        // auxiliaries were excluded above.
         .inspect(|(_, c)| {
             let safety = stored_constant_safety(
                 &c.kind,
@@ -3139,9 +3158,10 @@ fn load_parsed_module_with_cache_and_policy_at_index(
                 c.constructor_val.is_some(),
                 c.recursor_val.is_some(),
             );
-            stored_declarations
-                .declarations
-                .push((Name::interned(&c.name), safety));
+            let name = Name::interned(&c.name);
+            if !payload_names.contains(&name) {
+                stored_declarations.declarations.push((name, safety));
+            }
         })
         .filter(|(i, c)| {
             let name = Name::interned(&c.name);
@@ -3559,6 +3579,7 @@ pub(crate) fn load_part_direct_with_cache(
         OleanImportPolicy::default(),
         PartEntries::Read,
         None,
+        &ArtifactRecordRoles::from_parts(module, &[module]),
     )
 }
 
@@ -3599,6 +3620,7 @@ pub(crate) fn load_module_direct_with_cache_and_policy(
         policy,
         PartEntries::Read,
         None,
+        &ArtifactRecordRoles::from_parts(module, &[module]),
     )
 }
 
@@ -3623,6 +3645,7 @@ pub(crate) enum PartEntries {
 /// consumer that is not a `module`, and nothing of its other parts
 /// (`Environment.lean`, `finalizeImport`: `setImportedEntries` over
 /// `mainModule?`).
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn load_module_part_direct(
     env: &mut Environment,
     module: &LoadModule,
@@ -3632,6 +3655,7 @@ pub(crate) fn load_module_part_direct(
     policy: OleanImportPolicy,
     entries: PartEntries,
     deferred: Option<(&mut DeferredRecursors, usize)>,
+    record_roles: &ArtifactRecordRoles,
 ) -> Result<LoadSummary, ImportError> {
     // One environment, one Lean world (R38, R81): every loader of a
     // `LoadModule` registers through here, so a part of a refused or second
@@ -3662,7 +3686,6 @@ pub(crate) fn load_module_part_direct(
             .constants
             .iter()
             .enumerate()
-            .filter(|(_, c)| !is_typed_compiler_ir_name(&c.kernel_name))
             .map(|(i, c)| (i, c.kernel_name.clone()))
             .filter(|(_, n)| !payload_names.contains(n)),
         &artifact,
@@ -3746,7 +3769,7 @@ pub(crate) fn load_module_part_direct(
     let mut stored_declarations = super::StoredDeclarationPart {
         artifact: artifact.clone(),
         part: summary.module_name.clone(),
-        declarations: Vec::new(),
+        declarations: payload_declarations(module.clean_payload.as_ref()),
         pending_restatements: Vec::new(),
         certified_restatements: Vec::new(),
         completed_theorems: Vec::new(),
@@ -3757,11 +3780,10 @@ pub(crate) fn load_module_part_direct(
         .enumerate()
         .filter(|(_i, c)| !c.name.is_empty() || c.type_ptr != 0)
         .filter(|(_i, c)| {
-            // SOUNDNESS: skip code-generator artifacts — see is_compiler_ir_name.
-            if is_typed_compiler_ir_name(&c.kernel_name) {
-                if stored_unsafe_or_partial(&c.kind, c.definition_safety) {
-                    cstage_not_replayable.push(c.name.clone());
-                }
+            // These are kernel ConstantInfos, not the separate IR-only table.
+            // Retain safe/unknown-safety records regardless of their names.
+            if record_roles.compiler_exclusions.contains(&c.kernel_name) {
+                cstage_not_replayable.push(c.name.clone());
                 cstage_skipped.push(SkippedConstant {
                     name: c.name.clone(),
                     reason: "compiler/code-generator artifact (not kernel-checkable)".to_string(),
@@ -3771,7 +3793,8 @@ pub(crate) fn load_module_part_direct(
             true
         })
         // Capture at the existing logical-declaration boundary, before
-        // conversion/duplicate handling; compiler IR is not this population.
+        // conversion/duplicate handling. Only independently non-replayable
+        // auxiliaries were excluded above.
         .inspect(|(_, c)| {
             let safety = stored_constant_safety(
                 &c.kind,
@@ -3780,9 +3803,11 @@ pub(crate) fn load_module_part_direct(
                 c.constructor_val.is_some(),
                 c.recursor_val.is_some(),
             );
-            stored_declarations
-                .declarations
-                .push((c.kernel_name.clone(), safety));
+            if !record_roles.payload_names.contains(&c.kernel_name) {
+                stored_declarations
+                    .declarations
+                    .push((c.kernel_name.clone(), safety));
+            }
         })
         .filter(|(i, c)| {
             let name = c.kernel_name.clone();
@@ -3922,7 +3947,7 @@ pub(crate) fn load_module_part_direct(
                 .constants
                 .iter()
                 .map(|c| (c.name.as_str(), &c.kind, c.value_ptr)),
-        );
+        )?;
         // Binder NAMES of every constant's TYPE, for named arguments — see
         // `type_binder_names`.
         super::type_binder_names::record_type_binder_names_from_region(
@@ -3932,7 +3957,7 @@ pub(crate) fn load_module_part_direct(
                 .constants
                 .iter()
                 .map(|c| (c.name.as_str(), c.type_ptr)),
-        );
+        )?;
         // `∀` binder NAMES under each definition's value, for named arguments on a
         // head whose type unfolds to it — see `value_binder_names`.
         super::value_binder_names::record_value_binder_names_from_region(
@@ -3942,7 +3967,7 @@ pub(crate) fn load_module_part_direct(
                 .constants
                 .iter()
                 .map(|c| (c.name.as_str(), &c.kind, c.value_ptr)),
-        );
+        )?;
     }
 
     // Region-scoped memo for the direct converter (#import-dag-memo). Created

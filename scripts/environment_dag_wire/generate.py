@@ -142,7 +142,7 @@ def generate(schema):
         if not f['serialized']:skipped.append((f['name'],binding));continue
         if f['name']=='lean_level_profile':seen=True;continue
         (after if seen else before).append((f['name'],wire_type(f['type']),binding))
-    assert len(before)==519 and len(before)+len(after)==554 and len(skipped)==11
+    assert len(before)==519 and len(before)+len(after)==554 and len(skipped)==10
     lines=['// Copyright 2026 Andrew Yates | Apache-2.0','// Fixed schema data; the macro exhaustively matches the live Environment.','environment_schema! {','    before {']
     for group in (before,after):
         for i in range(0,len(group),2):lines.append('        '+' '.join(f'{n}: {t} => {b},' for n,t,b in group[i:i+2]))

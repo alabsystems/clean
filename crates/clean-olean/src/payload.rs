@@ -120,13 +120,17 @@ impl CleanPayload {
     /// families' members.
     #[must_use]
     pub(crate) fn declared_names<S: FromIterator<Name>>(&self) -> S {
+        self.declared_name_refs().cloned().collect()
+    }
+
+    /// Borrow every declaration occurrence before any new inventory allocation.
+    pub(crate) fn declared_name_refs(&self) -> impl Iterator<Item = &Name> {
         self.constants
             .iter()
-            .map(|c| c.name.clone())
-            .chain(self.inductives.iter().map(|i| i.name.clone()))
-            .chain(self.constructors.iter().map(|c| c.name.clone()))
-            .chain(self.recursors.iter().map(|r| r.name.clone()))
-            .collect()
+            .map(|c| &c.name)
+            .chain(self.inductives.iter().map(|i| &i.name))
+            .chain(self.constructors.iter().map(|c| &c.name))
+            .chain(self.recursors.iter().map(|r| &r.name))
     }
 
     /// A name this payload declares more than once — across its constants,

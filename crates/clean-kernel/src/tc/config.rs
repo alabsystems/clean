@@ -574,6 +574,8 @@ impl<'env> TypeChecker<'env> {
             #[cfg(debug_assertions)]
             in_infer_type_assert: Cell::new(false),
             cert_retained: Cell::new(false),
+            #[cfg(debug_assertions)]
+            cert_output_discarded: Cell::new(false),
             level_sharing_hazard: RefCell::new(None),
             sharing_replay: None,
             expr_loc: RefCell::new(ExprLocation::new()),
@@ -680,6 +682,8 @@ impl<'env> TypeChecker<'env> {
             #[cfg(debug_assertions)]
             in_infer_type_assert: Cell::new(false),
             cert_retained: Cell::new(false),
+            #[cfg(debug_assertions)]
+            cert_output_discarded: Cell::new(false),
             level_sharing_hazard: RefCell::new(None),
             sharing_replay: None,
             expr_loc: RefCell::new(ExprLocation::new()),
@@ -748,6 +752,8 @@ impl<'env> TypeChecker<'env> {
             #[cfg(debug_assertions)]
             in_infer_type_assert: Cell::new(false),
             cert_retained: Cell::new(false),
+            #[cfg(debug_assertions)]
+            cert_output_discarded: Cell::new(false),
             level_sharing_hazard: RefCell::new(None),
             sharing_replay: None,
             expr_loc: RefCell::new(ExprLocation::new()),

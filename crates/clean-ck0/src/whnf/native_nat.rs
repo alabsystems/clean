@@ -83,20 +83,24 @@ pub(super) fn try_native_nat(
     };
     let Some(bin) = bin else { return Ok(None) };
     let [a0, a1] = args else { return Ok(None) };
+    // Pinned Lean's reduce_bin_nat_op/pred and reduce_pow stop after a
+    // nonliteral first operand. Normalizing the second operand cannot enable
+    // the native rule and may force a deep, otherwise unused recursion.
     let a0 = whnf_in_context(env, ctx, a0, budget)?;
+    let Some(x) = nat_lit(&a0) else {
+        return Ok(None);
+    };
     let a1 = whnf_in_context(env, ctx, a1, budget)?;
-    match (nat_lit(&a0), nat_lit(&a1)) {
-        (Some(x), Some(y)) => {
-            // The work meter: the result's size is paid for before it is built.
-            budget.charge(native_result_words(op, &x, &y))?;
-            Ok(match bin(&x, &y) {
-                NatResult::Nat(n) => Some(Term::lit(Lit::Nat(n))),
-                NatResult::Bool(b) => Some(bool_term(b)),
-                NatResult::Stuck => None,
-            })
-        }
-        _ => Ok(None),
-    }
+    let Some(y) = nat_lit(&a1) else {
+        return Ok(None);
+    };
+    // The work meter pays for the result before it is built.
+    budget.charge(native_result_words(op, &x, &y))?;
+    Ok(match bin(&x, &y) {
+        NatResult::Nat(n) => Some(Term::lit(Lit::Nat(n))),
+        NatResult::Bool(b) => Some(bool_term(b)),
+        NatResult::Stuck => None,
+    })
 }
 
 /// The work meter's charge for the native `Nat` operation `op` on `a` and `b`

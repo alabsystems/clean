@@ -1,0 +1,18 @@
+[
+  [
+    "KCheckRuleCertificates.TwoNullaryRules.rule_valid",
+    "TwoNullaryLiteralContracts.rule_valid"
+  ],
+  [
+    "KCheckRuleCertificates.TwoNullaryRules.family_valid",
+    "TwoNullaryLiteralContracts.family_valid"
+  ],
+  [
+    "KCheckRuleCertificates.TwoNullaryRules.rule_closed",
+    "TwoNullaryLiteralContracts.rule_closed"
+  ],
+  [
+    "KCheckRuleCertificates.TwoNullaryRules.names_reserved",
+    "TwoNullaryLiteralContracts.names_reserved"
+  ]
+]

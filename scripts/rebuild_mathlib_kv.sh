@@ -40,6 +40,9 @@
 #                closure to fit under the bounded loader. Sets CLEAN_REQUIRE_BOUNDED=1.
 #   single-pass  memory-ADAPTIVE: one persistent env per piece, auto-split a piece
 #                that OOMs/times-out down to a floor. Best on a tight-RAM box.
+# P6 slice 1a: blocked until the reference producer (slice 1b); see scripts/lib/p6_blocked.sh.
+# shellcheck source=scripts/lib/p6_blocked.sh
+. "$(cd "$(dirname "$0")" && pwd)/lib/p6_blocked.sh" && p6_blocked "scripts/rebuild_mathlib_kv.sh"
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

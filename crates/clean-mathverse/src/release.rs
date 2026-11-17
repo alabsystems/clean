@@ -225,31 +225,24 @@ pub fn package_release(
     package_release_with_stamp(shard_dir, version, output_dir, None)
 }
 
-/// Package a release, optionally stamping `KernelVerified` into the shard bytes
-/// first (WS5).
+/// Package a release; `kernel_verified_manifest` names a `kernel-verified.json`
+/// whose acceptances the caller wants stamped into the shard bytes first.
 ///
-/// When `kernel_verified_manifest` names a `kernel-verified.json`
-/// ([`crate::verify::kernel_verified_manifest::KernelVerifiedManifest`]), the
-/// shards under `shard_dir` are **destructively rewritten** so that every
-/// kernel-re-verified constant carries [`crate::types::ImportConfidence::KernelVerified`]
-/// in its persisted header byte
-/// ([`crate::library::stamp_shard_dir_kernel_verified`]). This happens *before*
-/// the release manifest is built, so the recorded blake3 digests cover the
-/// stamped bytes — a downstream `verify` over those digests therefore proves
-/// the stamp persisted. The function then asserts that the stored
-/// `KernelVerified` count equals the manifest's verified-name length, failing
-/// with [`MathverseError::KernelVerifiedStampMismatch`] if the stamp did not
-/// take across the shards present on disk.
+/// Under P6 (`designs/2026-11-16-p6-acceptance-identity.md`, reader R5) a
+/// release stamp is a release acceptance, and only a reference-tier manifest
+/// could carry one. No producer in this build writes reference tier, so a
+/// named manifest is read (every refusal of
+/// [`crate::verify::kernel_verified_manifest::KernelVerifiedManifest::from_file`]
+/// applies) and then refused: a development manifest confers no label (P2
+/// clause 1). Nothing is stamped and nothing is packaged.
 ///
-/// With `kernel_verified_manifest == None` this is exactly the legacy
-/// [`package_release`] behavior: shards are packaged as-is.
-///
-/// SOUNDNESS: the manifest is the kernel's own verdict set
-/// (`verify_corpus_incremental`); no heuristic confidence is ever promoted here.
+/// With `kernel_verified_manifest == None` this is exactly [`package_release`]:
+/// shards are packaged as they are.
 ///
 /// # Errors
-/// Returns an error if the shard directory is missing, a shard cannot be
-/// stamped, the stored count does not match the manifest, or archiving fails.
+/// Returns an error if the shard directory is missing, a manifest is named
+/// (always refused in this build), the shard directory holds a
+/// `kernel-verified.json` (R6), or archiving fails.
 pub fn package_release_with_stamp(
     shard_dir: &Path,
     version: &str,
@@ -262,30 +255,17 @@ pub fn package_release_with_stamp(
             format!("shard directory not found: {}", shard_dir.display()),
         ));
     }
-
-    // WS5: persist the kernel-verified stamp into the shard bytes *before*
-    // hashing, so the release manifest's blake3 digests cover the stamped bytes.
     if let Some(manifest_path) = kernel_verified_manifest {
-        let manifest = crate::verify::kernel_verified_manifest::KernelVerifiedManifest::from_file(
-            manifest_path,
-        )?;
-        crate::library::stamp_shard_dir_kernel_verified(shard_dir, &manifest)?;
-        // A green release must *prove* the stamp persisted: the count of headers
-        // carrying KernelVerified in the bytes on disk must equal the number of
-        // manifest names that are actually present in the shards on disk. (The
-        // manifest may be a global corpus verdict spanning more shards than this
-        // directory holds, so we intersect with the names present here.)
-        let expected =
-            crate::library::count_present_names(shard_dir, &manifest.kernel_verified_names)?;
-        let (stored, _) = crate::library::count_stored_kernel_verified(shard_dir)?;
-        if stored != expected {
-            return Err(MathverseError::KernelVerifiedStampMismatch {
-                shard_dir: shard_dir.display().to_string(),
-                manifest: expected,
-                stored,
-            });
-        }
+        return Err(
+            crate::verify::kernel_verified_manifest::KernelVerifiedManifest::refuse_grant(
+                manifest_path,
+                "a release stamp",
+            ),
+        );
     }
+    // A manifest inside the shard directory would be swept into the archive,
+    // which `verify_release` then refuses (R6): refuse it here, before packaging.
+    assert_no_kernel_verified_manifest(shard_dir)?;
 
     // Build + include the `MVBIDX01` baseline novelty index alongside the
     // shards so a downloaded corpus is queryable without rescanning all of it.
@@ -606,47 +586,35 @@ impl VerifyResult {
 /// Verify release integrity by reading `mathverse-manifest.json` from `release_dir`
 /// and checking every shard's blake3 hash.
 ///
-/// If a `kernel-verified.json`
-/// ([`crate::verify::kernel_verified_manifest::KernelVerifiedManifest`]) sits
-/// alongside the shards, this additionally asserts that the stored
-/// `KernelVerified` count in the shard bytes matches the manifest (WS5) — so a
-/// green verify *proves* the kernel-verified stamp persisted, not merely that
-/// the bytes are uncorrupted. Absence of the manifest preserves the legacy
-/// blake3-only behavior.
+/// A `kernel-verified.json` beside the shards is refused
+/// ([`assert_no_kernel_verified_manifest`]): a release directory holding a
+/// development manifest would read as a kernel acceptance it is not.
 pub fn verify_release(release_dir: &Path) -> MathverseResult<VerifyResult> {
     let manifest = ReleaseManifest::from_file(&release_dir.join("mathverse-manifest.json"))?;
     let result = verify_against_manifest(&manifest, release_dir)?;
-    assert_kernel_verified_stamp(release_dir)?;
+    assert_no_kernel_verified_manifest(release_dir)?;
     Ok(result)
 }
 
-/// If `release_dir` holds a `kernel-verified.json`, assert that the number of
-/// constant headers carrying `KernelVerified` in the shard bytes equals the
-/// number of manifest names present in those shards. Returns `Ok(())` when no
-/// kernel-verified manifest is present (nothing to assert).
+/// Refuse a release directory that holds a `kernel-verified.json` (P6 reader
+/// R6). Every manifest this build can read is development tier, which confers
+/// no label (P2 clause 1); a schema-1 or identity-less file is refused by its
+/// own validation. `Ok(())` when no manifest is present.
 ///
 /// # Errors
-/// Returns [`MathverseError::KernelVerifiedStampMismatch`] when the persisted
-/// stamp count disagrees with the manifest, or an I/O/parse error if the
-/// manifest or shards cannot be read.
-pub fn assert_kernel_verified_stamp(release_dir: &Path) -> MathverseResult<()> {
+/// [`MathverseError::Manifest`] naming the file and the refusal, or an I/O or
+/// JSON error reading it.
+pub fn assert_no_kernel_verified_manifest(release_dir: &Path) -> MathverseResult<()> {
     let manifest_path = release_dir.join("kernel-verified.json");
     if !manifest_path.exists() {
         return Ok(());
     }
-    let manifest =
-        crate::verify::kernel_verified_manifest::KernelVerifiedManifest::from_file(&manifest_path)?;
-    let expected =
-        crate::library::count_present_names(release_dir, &manifest.kernel_verified_names)?;
-    let (stored, _) = crate::library::count_stored_kernel_verified(release_dir)?;
-    if stored != expected {
-        return Err(MathverseError::KernelVerifiedStampMismatch {
-            shard_dir: release_dir.display().to_string(),
-            manifest: expected,
-            stored,
-        });
-    }
-    Ok(())
+    Err(
+        crate::verify::kernel_verified_manifest::KernelVerifiedManifest::refuse_grant(
+            &manifest_path,
+            "a release directory",
+        ),
+    )
 }
 
 /// Verify shards against a manifest, checking blake3 hashes.

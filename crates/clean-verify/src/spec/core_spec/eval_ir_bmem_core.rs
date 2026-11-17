@@ -38,6 +38,16 @@
 //! by that old generator. Registration: after `add_eval_ir_bmem_trie`, in both the EvalIr
 //! bundle and `STAGES`.
 
+const SRC_AND_FST: &str = r#"def ir_bm_and_fst (x : Bool) (y : Bool) (h : @Eq Bool (Bool.and x y) Bool.true) : @Eq Bool x Bool.true := @Bool.rec (fun (x0 : Bool) => @Eq Bool (Bool.and x0 y) Bool.true -> @Eq Bool x0 Bool.true) (fun (h0 : @Eq Bool (Bool.and Bool.false y) Bool.true) => h0) (fun (_ : @Eq Bool (Bool.and Bool.true y) Bool.true) => @Eq.refl Bool Bool.true) x h"#;
+const SRC_AND_SND: &str = r#"def ir_bm_and_snd (x : Bool) (y : Bool) (h : @Eq Bool (Bool.and x y) Bool.true) : @Eq Bool y Bool.true := @Bool.rec (fun (x0 : Bool) => @Eq Bool (Bool.and x0 y) Bool.true -> @Eq Bool y Bool.true) (fun (h0 : @Eq Bool (Bool.and Bool.false y) Bool.true) => ir_bool_false_ne_true (@Eq Bool y Bool.true) h0) (fun (h0 : @Eq Bool (Bool.and Bool.true y) Bool.true) => h0) x h"#;
+
+pub(super) fn bool_and_elimination_sources() -> [(&'static str, &'static str); 2] {
+    [
+        ("ir_bm_and_fst", SRC_AND_FST),
+        ("ir_bm_and_snd", SRC_AND_SND),
+    ]
+}
+
 use crate::spec::error::SpecError;
 use crate::spec::Specification;
 
@@ -884,14 +894,8 @@ fn decls() -> Vec<(bool, &'static str)> {
             false,
             r#"def ir_bm_notin (a : Nat) (bs : IRList Nat) : Bool := @IRList.rec Nat (fun (_ : IRList Nat) => Bool) Bool.true (fun (b : Nat) (_ : IRList Nat) (ih : Bool) => Bool.and (Bool.not (ir_nat_eqb b a)) ih) bs"#,
         ),
-        (
-            false,
-            r#"def ir_bm_and_fst (x : Bool) (y : Bool) (h : @Eq Bool (Bool.and x y) Bool.true) : @Eq Bool x Bool.true := @Bool.rec (fun (x0 : Bool) => @Eq Bool (Bool.and x0 y) Bool.true -> @Eq Bool x0 Bool.true) (fun (h0 : @Eq Bool (Bool.and Bool.false y) Bool.true) => h0) (fun (_ : @Eq Bool (Bool.and Bool.true y) Bool.true) => @Eq.refl Bool Bool.true) x h"#,
-        ),
-        (
-            false,
-            r#"def ir_bm_and_snd (x : Bool) (y : Bool) (h : @Eq Bool (Bool.and x y) Bool.true) : @Eq Bool y Bool.true := @Bool.rec (fun (x0 : Bool) => @Eq Bool (Bool.and x0 y) Bool.true -> @Eq Bool y Bool.true) (fun (h0 : @Eq Bool (Bool.and Bool.false y) Bool.true) => ir_bool_false_ne_true (@Eq Bool y Bool.true) h0) (fun (h0 : @Eq Bool (Bool.and Bool.true y) Bool.true) => h0) x h"#,
-        ),
+        (false, SRC_AND_FST),
+        (false, SRC_AND_SND),
         (
             false,
             r#"def ir_bm_not_true (x : Bool) (h : @Eq Bool (Bool.not x) Bool.true) : @Eq Bool x Bool.false := @Bool.rec (fun (x0 : Bool) => @Eq Bool (Bool.not x0) Bool.true -> @Eq Bool x0 Bool.false) (fun (_ : @Eq Bool (Bool.not Bool.false) Bool.true) => @Eq.refl Bool Bool.false) (fun (h0 : @Eq Bool (Bool.not Bool.true) Bool.true) => ir_bool_false_ne_true (@Eq Bool Bool.true Bool.false) h0) x h"#,
@@ -959,6 +963,20 @@ impl Specification {
 }
 
 #[cfg(test)]
+pub(super) fn test_source_rows() -> Vec<(&'static str, &'static str, &'static str)> {
+    let rows = decls();
+    assert_eq!(rows.len(), BMEM_CORE_NAMES.len());
+    BMEM_CORE_NAMES
+        .iter()
+        .copied()
+        .zip(rows)
+        .map(|(name, (is_inductive, source))| {
+            (name, if is_inductive { "inductive" } else { "def" }, source)
+        })
+        .collect()
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -976,18 +994,4 @@ mod tests {
             assert!(src.starts_with(&format!("{head} {name} ")), "{name}");
         }
     }
-}
-
-#[cfg(test)]
-pub(super) fn test_source_rows() -> Vec<(&'static str, &'static str, &'static str)> {
-    let rows = decls();
-    assert_eq!(rows.len(), BMEM_CORE_NAMES.len());
-    BMEM_CORE_NAMES
-        .iter()
-        .copied()
-        .zip(rows)
-        .map(|(name, (is_inductive, source))| {
-            (name, if is_inductive { "inductive" } else { "def" }, source)
-        })
-        .collect()
 }

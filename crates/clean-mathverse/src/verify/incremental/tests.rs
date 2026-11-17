@@ -2272,26 +2272,9 @@ fn test_cross_shard_dependency_resolved_by_corpus_verifier() {
     );
 }
 
-/// The consume side: applying a kernel-verified manifest upgrades the in-memory
-/// `import_confidence` of named constants to `KernelVerified` (and skips names
-/// absent from the library).
-///
-/// `Foo` is a value-bearing `Definition` with a genuinely well-typed value
-/// (`Foo : Type 0 := Prop`, i.e. `Sort 0 : Sort 1`), so it is honestly
-/// `KernelVerified` by the corpus verifier and lands in `kernel_verified_names`
-/// and the derived manifest. A `NO_VALUE` axiom would instead be
-/// `AxiomAccepted` and absent from the verdict set, which would not exercise the
-/// upgrade.
-#[test]
-fn test_kernel_verified_manifest_upgrades_confidence() {
-    use super::verify_corpus_incremental;
-    use crate::library::MathverseLibrary;
-    use crate::trust::policy::TrustPolicy;
-    use crate::verify::kernel_verified_manifest::KernelVerifiedManifest;
-
-    // A shard with one Translated definition `Foo : Type 0 := Prop`. The value
-    // `Sort 0` (Prop) genuinely typechecks against the declared type `Sort 1`
-    // (Type 0), so the kernel proof-checks it.
+/// `Foo : Type 0 := Prop` (`Sort 0 : Sort 1`) as a value-bearing `Definition`
+/// stored at `Translated` confidence: the legacy corpus verifier accepts it.
+fn translated_foo_shard_bytes() -> Vec<u8> {
     let mut writer = ShardWriter::new();
     let name = writer.add_string("Foo");
     let l_zero = writer.add_level(FlatLevel::zero());
@@ -2315,260 +2298,125 @@ fn test_kernel_verified_manifest_upgrades_confidence() {
     });
     let mut buf = Vec::new();
     writer.write(&mut buf).unwrap();
-    let shard = ShardReader::from_bytes(&buf).unwrap();
-
-    let mut lib = MathverseLibrary::new(TrustPolicy::permissive());
-    lib.load_shard(&shard).unwrap();
-
-    let kv = ImportConfidence::KernelVerified as u8;
-    let foo_conf = |lib: &MathverseLibrary| {
-        let idx = lib.lookup_constant_idx("Foo").unwrap();
-        lib.get_constant(idx).unwrap().import_confidence
-    };
-    assert_ne!(foo_conf(&lib), kv, "Foo starts below KernelVerified");
-
-    // Derive the manifest from a genuine corpus verification run: Foo's value
-    // typechecks, so it is honestly KernelVerified and appears in the manifest.
-    let prelude = Environment::try_with_prelude().expect("kernel prelude environment");
-    let report = verify_corpus_incremental(&lib, prelude);
-    assert_eq!(
-        report.kernel_verified, 1,
-        "value-bearing Foo must be genuinely kernel-verified: failures = {:?}",
-        report.failures
-    );
-    assert_eq!(report.axiom_accepted, 0);
-    assert_eq!(report.axiom_fallback, 0);
-
-    let mut manifest = KernelVerifiedManifest::from_report("", 1, &report);
-    assert!(manifest.kernel_verified_names.contains(&"Foo".to_string()));
-    // An absent name must be skipped at apply time.
-    manifest.kernel_verified_names.push("Absent".to_string());
-
-    let upgraded = lib.apply_kernel_verified_manifest(&manifest);
-
-    assert_eq!(upgraded, 1, "Foo upgraded; Absent (not in library) skipped");
-    assert_eq!(
-        foo_conf(&lib),
-        kv,
-        "Foo -> KernelVerified after applying the manifest"
-    );
+    buf
 }
 
-/// WS5 end-to-end: build a tiny shard with a genuinely kernel-checkable
-/// definition written at a *below*-`KernelVerified` confidence, write it to
-/// disk, re-verify the corpus in the Clean kernel, stamp the verdict into the
-/// shard **bytes** on disk, reload from disk, and assert the stored
-/// `KernelVerified` count is non-zero and matches the kernel's verdict.
-///
-/// This is the proof the WS5 edge is wired: today every shipped shard stores
-/// `KernelVerified = 0` because nothing persists the kernel verdict. Here the
-/// stamp survives a full disk round-trip.
-///
-/// SOUNDNESS: the stamped name comes ONLY from `verify_corpus_incremental`'s
-/// `kernel_verified_names` — `Foo`'s value `Sort 0` genuinely typechecks against
-/// its declared type `Sort 1` through `add_decl`'s `check_type`. No heuristic
-/// confidence is ever promoted.
+/// P6 (F4): a development run over a shard dir on disk writes its manifest and
+/// leaves the shard bytes byte-identical — nothing stamps a header, in memory
+/// or on disk, from a development acceptance (P2 clause 1). Before P6 this
+/// pair of tests asserted the in-memory upgrade and the on-disk stamp.
 #[test]
-fn test_ws5_stamp_kernel_verified_persists_through_disk_roundtrip() {
+fn test_development_run_leaves_shard_bytes_and_confidence_unchanged() {
     use super::verify_corpus_incremental;
-    use crate::library::{
-        count_stored_kernel_verified, stamp_shard_dir_kernel_verified, MathverseLibrary,
-    };
+    use crate::library::{count_stored_kernel_verified, MathverseLibrary};
     use crate::trust::policy::TrustPolicy;
-    use crate::verify::kernel_verified_manifest::KernelVerifiedManifest;
+    use crate::verify::kernel_verified_manifest::{
+        test_run_in, AcceptanceTier, BaseVariant, Elision, KernelVerifiedManifest,
+    };
 
-    // (1) Build a shard with `Foo : Type 0 := Prop`, written at `Translated`
-    // confidence (NOT KernelVerified) so the stamp is an observable transition.
-    let mut writer = ShardWriter::new();
-    let name = writer.add_string("Foo");
-    let l_zero = writer.add_level(FlatLevel::zero());
-    let l_one = writer.add_level(FlatLevel::succ(l_zero));
-    let ty = writer.add_expr(FlatExpr::sort(l_one)); // Foo : Type 0
-    let value = writer.add_expr(FlatExpr::sort(l_zero)); // Foo := Prop
-    writer.add_constant(MathverseConstantHeader {
-        name_idx: name,
-        type_idx: ty,
-        value_idx: value,
-        source_system: SourceSystem::Lean4 as u8,
-        import_confidence: ImportConfidence::Translated as u8,
-        content_domain: ContentDomain::PureMath as u8,
-        decl_kind: DeclKind::Definition as u8,
-        axiom_profile: AxiomProfile::NONE,
-        sidecar_digest: 0,
-        provenance_idx: 0,
-        level_params_start: 0,
-        level_params_count: 0,
-        _pad2: [0u8; 26],
-    });
-    let mut buf = Vec::new();
-    writer.write(&mut buf).unwrap();
-
+    let buf = translated_foo_shard_bytes();
     let dir = tempfile::tempdir().expect("tempdir");
     let shard_path = dir.path().join("Foo.mathverse");
     std::fs::write(&shard_path, &buf).expect("write shard to disk");
 
-    // Pre-condition: stored KernelVerified == 0 (the status quo this WS fixes).
-    let (before, unreadable) =
-        count_stored_kernel_verified(dir.path()).expect("count stored before");
-    assert!(
-        unreadable.is_empty(),
-        "shard must be readable: {unreadable:?}"
-    );
-    assert_eq!(
-        before, 0,
-        "freshly built shard must store KernelVerified = 0"
-    );
-
-    // (2) Re-verify the corpus in the Clean kernel to obtain the GENUINE verdict.
-    let shard = ShardReader::from_bytes(&buf).unwrap();
+    let shard = ShardReader::from_file(&shard_path).unwrap();
     let mut lib = MathverseLibrary::new(TrustPolicy::permissive());
     lib.load_shard(&shard).unwrap();
     let prelude = Environment::try_with_prelude().expect("kernel prelude environment");
+    let run = test_run_in(&prelude, BaseVariant::Prelude, Elision::None);
     let report = verify_corpus_incremental(&lib, prelude);
     assert_eq!(
         report.kernel_verified, 1,
-        "value-bearing Foo must be genuinely kernel-verified: failures = {:?}",
+        "value-bearing Foo must be accepted: failures = {:?}",
         report.failures
     );
-    assert!(report.kernel_verified_names.contains(&"Foo".to_string()));
-
-    let manifest =
-        KernelVerifiedManifest::from_report(&dir.path().display().to_string(), 1, &report);
-
-    // (3) DESTRUCTIVE on-disk stamp: rewrite the shard bytes so Foo carries
-    // KernelVerified in its persisted header.
-    let stamp = stamp_shard_dir_kernel_verified(dir.path(), &manifest).expect("stamp on disk");
-    assert_eq!(stamp.shards_rewritten, 1, "the single shard is rewritten");
-    assert_eq!(stamp.constants_stamped, 1, "Foo's header byte is raised");
-
-    // (4) Reload from DISK (not the in-memory writer) and assert the stamp
-    // survived into the bytes.
-    let (after, unreadable_after) =
-        count_stored_kernel_verified(dir.path()).expect("count stored after");
-    assert!(
-        unreadable_after.is_empty(),
-        "rewritten shard must remain a valid, checksummed shard: {unreadable_after:?}"
+    let manifest = KernelVerifiedManifest::from_incremental_report(
+        "test",
+        &dir.path().display().to_string(),
+        1,
+        &report,
+        run,
     );
+    assert_eq!(manifest.accepted_names(), ["Foo".to_string()]);
+    assert_eq!(manifest.tier(), AcceptanceTier::Development);
+    manifest
+        .write_to_file(&dir.path().join("kernel-verified.json"))
+        .expect("write manifest");
+
     assert_eq!(
-        after, 1,
-        "stored KernelVerified must be > 0 after the on-disk stamp"
+        std::fs::read(&shard_path).expect("re-read"),
+        buf,
+        "shard bytes byte-identical after a development run"
     );
-
-    // The reloaded header genuinely reads KernelVerified, and the rest of the
-    // shard round-trips unchanged (Foo's type/value indices still resolve).
-    let reloaded = ShardReader::from_file(&shard_path).expect("reload stamped shard");
-    let foo = reloaded
-        .constants
-        .iter()
-        .find(|c| {
-            reloaded
-                .strings
-                .get(c.name_idx as usize)
-                .map(String::as_str)
-                == Some("Foo")
-        })
-        .expect("Foo present after rewrite");
+    let (stored, unreadable) = count_stored_kernel_verified(dir.path()).expect("count");
+    assert!(unreadable.is_empty());
+    assert_eq!(stored, 0, "no header raised");
+    let idx = lib.lookup_constant_idx("Foo").unwrap();
     assert_eq!(
-        foo.import_confidence,
-        ImportConfidence::KernelVerified as u8,
-        "Foo reads KernelVerified from the stamped bytes"
+        lib.get_constant(idx).unwrap().import_confidence,
+        ImportConfidence::Translated as u8,
+        "the in-memory confidence is not upgraded either"
     );
-
-    // Idempotence: re-stamping the already-stamped dir raises nothing further.
-    let restamp = stamp_shard_dir_kernel_verified(dir.path(), &manifest).expect("restamp");
-    assert_eq!(
-        restamp.constants_stamped, 0,
-        "already-stamped header is not re-raised"
-    );
-    assert_eq!(restamp.shards_rewritten, 0);
 }
 
-/// WS5 release gate: after the shards are stamped from a kernel-verified
-/// manifest, `verify_release`'s stored-`KernelVerified`-count assertion
-/// (`assert_kernel_verified_stamp`) passes; reverting a shard to its un-stamped
-/// bytes while the manifest still lists the name makes the gate fail. This
-/// proves the assertion is load bearing.
-///
-/// Does NOT invoke `package_release_with_stamp` directly so the test stays
-/// independent of the host `tar`/`zstd` binaries; it drives the same
-/// stamp-then-assert sequence that packaging performs.
+/// P6 reader R6 (F1/F9): `verify_release` refuses a release directory holding
+/// a `kernel-verified.json`, whether development tier (no label, P2 clause 1)
+/// or schema 1 (no identity); with no manifest the check passes. Before P6 the
+/// release gate compared stored stamps against the manifest's name count.
 #[test]
-fn test_ws5_release_verify_asserts_persisted_stamp_count() {
+fn test_release_dir_with_any_manifest_is_refused() {
     use super::verify_corpus_incremental;
-    use crate::library::{stamp_shard_dir_kernel_verified, MathverseLibrary};
-    use crate::release::assert_kernel_verified_stamp;
+    use crate::library::MathverseLibrary;
+    use crate::release::assert_no_kernel_verified_manifest;
     use crate::trust::policy::TrustPolicy;
-    use crate::verify::kernel_verified_manifest::KernelVerifiedManifest;
+    use crate::verify::kernel_verified_manifest::{
+        test_run_in, BaseVariant, Elision, KernelVerifiedManifest, ManifestError,
+    };
 
-    // Build `Foo : Type 0 := Prop` at Translated confidence, on disk.
-    let mut writer = ShardWriter::new();
-    let name = writer.add_string("Foo");
-    let l_zero = writer.add_level(FlatLevel::zero());
-    let l_one = writer.add_level(FlatLevel::succ(l_zero));
-    let ty = writer.add_expr(FlatExpr::sort(l_one));
-    let value = writer.add_expr(FlatExpr::sort(l_zero));
-    writer.add_constant(MathverseConstantHeader {
-        name_idx: name,
-        type_idx: ty,
-        value_idx: value,
-        source_system: SourceSystem::Lean4 as u8,
-        import_confidence: ImportConfidence::Translated as u8,
-        content_domain: ContentDomain::PureMath as u8,
-        decl_kind: DeclKind::Definition as u8,
-        axiom_profile: AxiomProfile::NONE,
-        sidecar_digest: 0,
-        provenance_idx: 0,
-        level_params_start: 0,
-        level_params_count: 0,
-        _pad2: [0u8; 26],
-    });
-    let mut buf = Vec::new();
-    writer.write(&mut buf).unwrap();
-
+    let buf = translated_foo_shard_bytes();
     let dir = tempfile::tempdir().expect("tempdir");
-    let shard_dir = dir.path().join("base");
-    std::fs::create_dir_all(&shard_dir).unwrap();
-    std::fs::write(shard_dir.join("Foo.mathverse"), &buf).unwrap();
+    std::fs::write(dir.path().join("Foo.mathverse"), &buf).unwrap();
+    assert_no_kernel_verified_manifest(dir.path()).expect("no manifest: nothing to refuse");
 
-    // Genuine verdict + manifest written alongside the shards.
     let shard = ShardReader::from_bytes(&buf).unwrap();
     let mut lib = MathverseLibrary::new(TrustPolicy::permissive());
     lib.load_shard(&shard).unwrap();
     let prelude = Environment::try_with_prelude().expect("kernel prelude environment");
+    let run = test_run_in(&prelude, BaseVariant::Prelude, Elision::None);
     let report = verify_corpus_incremental(&lib, prelude);
-    let manifest =
-        KernelVerifiedManifest::from_report(&shard_dir.display().to_string(), 1, &report);
-    let manifest_path = shard_dir.join("kernel-verified.json");
-    manifest.write_to_file(&manifest_path).unwrap();
-
-    // Before stamping, the gate must already FAIL: the manifest lists Foo but
-    // the bytes store KernelVerified = 0.
-    let pre = assert_kernel_verified_stamp(&shard_dir)
-        .expect_err("un-stamped shard must fail the persisted-count assertion");
-    assert!(matches!(
-        pre,
-        crate::error::MathverseError::KernelVerifiedStampMismatch { .. }
-    ));
-
-    // Stamp on disk (the same step packaging performs before hashing), then the
-    // gate must PASS: stored count == manifest names present on disk.
-    stamp_shard_dir_kernel_verified(&shard_dir, &manifest).expect("stamp on disk");
-    assert_kernel_verified_stamp(&shard_dir).expect("persisted stamp count matches manifest");
-
-    // Negative case: revert the shard to its original (un-stamped) bytes while
-    // the kernel-verified.json still lists `Foo`. Now `stored` (0) disagrees
-    // with `expected` (1 header present and named in the manifest), so the gate
-    // must fail with a stamp-count mismatch — proving the assertion is load
-    // bearing, not a no-op.
-    std::fs::write(shard_dir.join("Foo.mathverse"), &buf).unwrap();
-    let err = assert_kernel_verified_stamp(&shard_dir)
-        .expect_err("un-stamped shard must fail the persisted-count assertion");
+    let manifest_path = dir.path().join("kernel-verified.json");
+    KernelVerifiedManifest::from_incremental_report("test", "", 1, &report, run)
+        .write_to_file(&manifest_path)
+        .unwrap();
+    let err = assert_no_kernel_verified_manifest(dir.path())
+        .expect_err("a development manifest in a release dir is refused");
     assert!(
         matches!(
             err,
-            crate::error::MathverseError::KernelVerifiedStampMismatch { .. }
+            crate::error::MathverseError::Manifest {
+                source: ManifestError::DevelopmentTier { .. },
+                ..
+            }
         ),
-        "expected a stamp-count mismatch, got: {err}"
+        "{err}"
+    );
+
+    std::fs::write(
+        &manifest_path,
+        r#"{"schema_version":1,"kernel_verified":1,"kernel_verified_names":["Foo"]}"#,
+    )
+    .unwrap();
+    let err = assert_no_kernel_verified_manifest(dir.path())
+        .expect_err("a schema-1 manifest in a release dir is refused");
+    assert!(
+        matches!(
+            err,
+            crate::error::MathverseError::Manifest {
+                source: ManifestError::UnsupportedSchema { .. },
+                ..
+            }
+        ),
+        "{err}"
     );
 }
 

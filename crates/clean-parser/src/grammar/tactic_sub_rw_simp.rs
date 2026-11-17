@@ -13,7 +13,7 @@
 use super::Parser;
 use crate::lexer::TokenKind;
 use crate::surface::{
-    ConvEnterArg, SimpPhase, Span, SurfaceRwRule, SurfaceSimpArg, SurfaceTactic,
+    ConvEnterArg, SimpPhase, Span, SurfaceName, SurfaceRwRule, SurfaceSimpArg, SurfaceTactic,
     SurfaceTacticLocation,
 };
 use crate::ParseError;
@@ -248,7 +248,7 @@ impl Parser {
         // rejected `_`, so `case _` fell through to parser recovery / synthetic
         // sorry.
         let name = if self.eat(&TokenKind::Underscore) {
-            crate::SurfaceName::generated_path("_")
+            SurfaceName::generated_path("_")
         } else {
             let mut tag = self.expect_ident("case")?;
             // A case tag is one `ident` token in Lean, dotted parts included:
@@ -272,7 +272,7 @@ impl Parser {
                 }
                 TokenKind::Underscore => {
                     self.advance();
-                    binders.push(crate::SurfaceName::generated_path("_"));
+                    binders.push(SurfaceName::generated_path("_"));
                 }
                 _ => break,
             }
@@ -299,7 +299,7 @@ impl Parser {
                 }
                 TokenKind::Underscore => {
                     self.advance();
-                    binders.push(crate::SurfaceName::generated_path("_"));
+                    binders.push(SurfaceName::generated_path("_"));
                 }
                 _ => break,
             }
@@ -308,7 +308,7 @@ impl Parser {
         let tacs = self.indented_tactic_seq()?;
         Ok(SurfaceTactic::Case(
             start,
-            crate::SurfaceName::generated_path("_"),
+            SurfaceName::generated_path("_"),
             binders,
             tacs,
         ))
@@ -332,7 +332,7 @@ impl Parser {
                 let _ = self.eat(&TokenKind::Turnstile);
                 SurfaceTacticLocation::Wildcard
             } else {
-                let names = self.parse_ident_list();
+                let names = self.parse_location_hyp_list();
                 let apply_goal = self.eat(&TokenKind::Turnstile);
                 if apply_goal {
                     if names.is_empty() {
@@ -349,6 +349,32 @@ impl Parser {
         } else {
             SurfaceTacticLocation::Goal
         }
+    }
+
+    /// The hypothesis names of `at h₁ … hₙ`. Lean's `locationHyp` is
+    /// `(ppSpace colGt term:max)+`: a name on a later line belongs to the list
+    /// only right of the tactic block's column, so `push_neg at h` followed by
+    /// `obtain ⟨x, hx⟩ := h` on the next line of the block ends the list at
+    /// `obtain`. Only `try_eat_ident`'s keyword and tactic-name stops applied
+    /// before, so a tactic that is neither (`obtain`, `rcases`) was read as a
+    /// further hypothesis name and the declaration fell to parser recovery.
+    fn parse_location_hyp_list(&mut self) -> Vec<SurfaceName> {
+        let mut names = Vec::new();
+        loop {
+            let tok = self.current();
+            if !self.position_suppressed() && tok.preceded_by_newline {
+                if let Some(&block_col) = self.indent_stack.last() {
+                    if tok.col <= block_col {
+                        break;
+                    }
+                }
+            }
+            let Some(name) = self.try_eat_ident() else {
+                break;
+            };
+            names.push(name);
+        }
+        names
     }
 
     // =========================================================================

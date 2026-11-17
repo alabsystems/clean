@@ -32,6 +32,7 @@ import fcntl
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -49,6 +50,8 @@ ranges = os.environ.get("CLEAN_PUSH_RANGES", "").strip()
 print(f"STUB ran in {os.path.realpath(os.getcwd())} at {head} "
       f"checkout={os.environ.get('CLEAN_PUSH_CHECKOUT', '')} ranges=[{ranges}]")
 print("STUB verdict: BAD is in the pushed tree" if os.path.exists("BAD") else "STUB verdict: clean")
+print("STUB corpus: " + (open("theories/Required.lean").read().strip()
+      if os.path.exists("theories/Required.lean") else "ABSENT"))
 sys.exit(1)
 """
 EMPTY_REGISTRY = '{"rows": []}\n'
@@ -93,6 +96,8 @@ def build(tmp: Path) -> tuple[Path, str, str]:
     git(repo, "init", "-q", "-b", "main")
     (repo / "scripts/check_hook_coverage.py").write_text(STUB)
     (repo / "data/gate_registry.json").write_text(EMPTY_REGISTRY)
+    (repo / "theories").mkdir()
+    (repo / "theories/Required.lean").write_text("complete tracked corpus\n")
     (repo / "README").write_text("x\n")
     good = commit(repo, "good")
     (repo / "BAD").write_text("a failing pushed commit\n")
@@ -216,13 +221,93 @@ def arms(tmp: Path) -> list[str]:
     proc.wait(timeout=120)
     require("12 a push waits while another push holds the pre-push checkout",
             waited and f"at {good}" in out, out)
+    # 13. A new linked checkout inherits sparsity from its source. The real
+    # outer hook must restore tracked inputs before either checker runs.
+    repo13, good13, bad13 = build(tmp / "a13")
+    git(repo13, "checkout", "-q", good13)
+    git(repo13, "sparse-checkout", "init", "--cone")
+    git(repo13, "sparse-checkout", "set", "scripts", "data")
+    assert not (repo13 / "theories/Required.lean").exists()
+    source_status = git(repo13, "status", "--porcelain")
+    rc, out = hook(repo13, line(good13))
+    require("13 a sparse source creates a complete checkout of the pushed SHA",
+            rc != 0 and f"at {good13}" in out
+            and "STUB corpus: complete tracked corpus" in out
+            and git(repo13, "config", "--bool", "core.sparseCheckout") == "true"
+            and not (repo13 / "theories/Required.lean").exists()
+            and git(repo13, "status", "--porcelain") == source_status, out)
+    # 14. Force-checkout and clean alone leave a reused sparse index sparse.
+    checkout13 = repo13.parent / f".{repo13.name}.pre-push"
+    git(checkout13, "sparse-checkout", "init", "--cone")
+    git(checkout13, "sparse-checkout", "set", "scripts", "data")
+    assert not (checkout13 / "theories/Required.lean").exists()
+    rc, out = hook(repo13, line(bad13))
+    require("14 reuse rehydrates the exact other pushed SHA before its checker",
+            rc != 0 and f"at {bad13}" in out and "verdict: BAD" in out
+            and "STUB corpus: complete tracked corpus" in out
+            and git(checkout13, "config", "--bool", "core.sparseCheckout") == "false"
+            and not git(checkout13, "status", "--porcelain", "--ignored"), out)
+    # 15. Pristine status alone does not prove a directly invoked inner tree
+    # contains its tracked inputs.
+    rc, out = hook(repo13, line(good13), {"CLEAN_PUSH_CHECKOUT": good13})
+    require("15 direct inner invocation refuses a pristine sparse tree",
+            rc != 0 and "not a full tracked tree" in out and "STUB ran" not in out, out)
+    # 16. A real command failure must stop before R10 or a checker. This wrapper
+    # changes only this isolated fixture's Git hydration command.
+    wrapper = tmp / "git-control"
+    wrapper.mkdir()
+    real_git = shutil.which("git")
+    assert real_git
+    fake_git = wrapper / "git"
+    fake_git.write_text("#!/usr/bin/env python3\nimport os, sys\n"
+                        "if sys.argv[-2:] == ['sparse-checkout', 'disable']:\n"
+                        " print('CONTROL hydration refused'); sys.exit(78)\n"
+                        f"os.execv({real_git!r}, [{real_git!r}, *sys.argv[1:]])\n")
+    fake_git.chmod(0o755)
+    rc, out = hook(repo13, line(good13), {"PATH": str(wrapper) + os.pathsep + os.environ["PATH"]})
+    require("16 hydration failure refuses before R10 and before any checker",
+            rc != 0 and "CONTROL hydration refused" in out
+            and "could not restore the full tracked tree" in out
+            and "GATE_REGISTRY_PUSHED" not in out and "STUB ran" not in out, out)
+    # 17. Hydration belongs inside the same lock as checkout and all its reads.
+    git(checkout13, "sparse-checkout", "init", "--cone")
+    git(checkout13, "sparse-checkout", "set", "scripts", "data")
+    common13 = Path(git(repo13, "rev-parse", "--git-common-dir"))
+    if not common13.is_absolute():
+        common13 = repo13 / common13
+    holder = os.open(common13 / "clean-pre-push.flock", os.O_RDWR | os.O_CREAT, 0o644)
+    fcntl.flock(holder, fcntl.LOCK_EX)
+    proc = subprocess.Popen(["bash", str(HOOK), "origin", "https://example.invalid/x.git"],
+                            cwd=repo13, env=_env(), stdin=subprocess.PIPE,
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    assert proc.stdin
+    proc.stdin.write(line(good13))
+    proc.stdin.close()
+    time.sleep(3)
+    waited = proc.poll() is None and not (checkout13 / "theories/Required.lean").exists()
+    os.close(holder)
+    assert proc.stdout
+    out = proc.stdout.read()
+    proc.wait(timeout=120)
+    require("17 hydration waits for the repository lock",
+            waited and f"at {good13}" in out and "STUB corpus: complete tracked corpus" in out, out)
+    # 18. Manually skipped entries can hide a missing tracked input even with
+    # sparse mode disabled; the inner role must not accept that either.
+    repo18, good18, _ = build(tmp / "a18")
+    git(repo18, "checkout", "-q", good18)
+    git(repo18, "update-index", "--skip-worktree", "theories/Required.lean")
+    (repo18 / "theories/Required.lean").unlink()
+    assert not git(repo18, "status", "--porcelain")
+    rc, out = hook(repo18, line(good18), {"CLEAN_PUSH_CHECKOUT": good18})
+    require("18 direct inner invocation refuses skipped tracked entries",
+            rc != 0 and "not a full tracked tree" in out and "STUB ran" not in out, out)
     return problems
 
 
 def main() -> int:
     with tempfile.TemporaryDirectory(prefix="pre-push-checkout-") as td:
         problems = arms(Path(td).resolve())
-    print(f"PRE_PUSH_CHECKOUT_SELFTEST arms=12 failed={len(problems)}")
+    print(f"PRE_PUSH_CHECKOUT_SELFTEST arms=18 failed={len(problems)}")
     for p in problems:
         print(p, file=sys.stderr)
     return 1 if problems else 0

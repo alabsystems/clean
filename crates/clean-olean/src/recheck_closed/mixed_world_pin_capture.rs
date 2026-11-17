@@ -241,12 +241,13 @@ fn capture_actual_mixed_world() {
             .insert(world.label.to_owned(), rows)
             .is_none());
     }
-    assert_eq!(expected_worlds.len(), 3, "unexpected reviewed world");
+    assert_eq!(expected_worlds.len(), 4, "unexpected reviewed world");
     assert_eq!(EXTENSION_KEYS.len(), 41, "unexpected extension-key census");
     for (label, count) in [
         ("lean-v4.8.0-core", 40),
         ("lean-v4.30.0-rc2-core", 41),
         ("clean-import+lean-v4.30.0-rc2-core", 27),
+        ("lean-v4.35.0-literals-div-mod", 5),
     ] {
         assert_eq!(
             expected_worlds

@@ -4,7 +4,7 @@
  "derivation": {
   "script": "scripts/verdict_io_contracts.py",
   "source_artifact": "data/verdict_set.json",
-  "source_artifact_sha256": "1f50ee9fce64529ed3dd07fb2f4483f3836f389e25c8da045a5ea35d19f25ffb",
+  "source_artifact_sha256": "2fbf3a2fb5720cb43c4ad88cf629a28d08f980ecd2104eff2c4ccb33bc7e4811",
   "shared_denominator": "the site scan is IMPORTED from scripts/verdict_set.py (production_lines + IO_TOKENS) and re-run over the same members at the same pinned digests; a total that disagrees with the committed io_site_total aborts the mint",
   "axis_1_effect": {
    "what": "what the site actually does, decided by ordered lexical rules over the LEXED line (comments and literals blanked, #[cfg(test)] mod bodies removed); first match wins; a site matching no rule aborts the mint",
@@ -134,14 +134,14 @@
   "regenerate": "scripts/verdict_io_contracts.py     (--check to verify the committed file)"
  },
  "classification": {
-  "site_total": 317,
-  "sites_issuing_io": 211,
-  "sites_issuing_no_io": 106,
+  "site_total": 326,
+  "sites_issuing_io": 217,
+  "sites_issuing_no_io": 109,
   "by_effect": {
-   "read-file": 100,
-   "declaration-import": 46,
+   "read-file": 106,
+   "declaration-import": 48,
    "write-file": 40,
-   "declaration-type": 35,
+   "declaration-type": 36,
    "error-value": 23,
    "spawn-process": 23,
    "read-dir": 22,
@@ -152,13 +152,13 @@
    "stat-file": 2
   },
   "by_dependence": {
-   "content-bearing": 171,
-   "verdict-irrelevant": 106,
+   "content-bearing": 177,
+   "verdict-irrelevant": 109,
    "success-only": 40
   },
   "effect_by_dependence": {
    "content-bearing": {
-    "read-file": 100,
+    "read-file": 106,
     "spawn-process": 23,
     "read-dir": 22,
     "read-env": 20,
@@ -170,8 +170,8 @@
     "write-file": 40
    },
    "verdict-irrelevant": {
-    "declaration-import": 46,
-    "declaration-type": 35,
+    "declaration-import": 48,
+    "declaration-type": 36,
     "error-value": 23,
     "in-memory-no-io": 2
    }
@@ -403,11 +403,11 @@
     "declaration_only": false
    },
    "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs": {
-    "sites": 5,
-    "issuing_io": 5,
-    "content_bearing": 3,
+    "sites": 14,
+    "issuing_io": 11,
+    "content_bearing": 9,
     "success_only": 2,
-    "verdict_irrelevant": 0,
+    "verdict_irrelevant": 3,
     "declaration_only": false
    },
    "crates/clean-olean/src/error.rs": {
@@ -550,7 +550,7 @@
     "read-file"
    ],
    "dependence": "content-bearing",
-   "site_count": 100,
+   "site_count": 106,
    "member_count": 28,
    "members": [
     "crates/clean-mathverse/src/artifacts.rs",
@@ -589,8 +589,8 @@
      "file": "crates/clean-mathverse/src/shard.rs",
      "pattern": "let actual_hash = blake3::hash\\(content\\);",
      "lines": [
-      1245,
-      1685
+      1213,
+      1653
      ],
      "what": "the EAGER shard readers (`ShardReader::from_bytes`, `ShardMmapReader::from_mmap`) recompute a whole-file blake3 and compare it to the footer, so on those two entry points corruption and truncation are caught"
     }
@@ -600,7 +600,7 @@
      "file": "crates/clean-mathverse/src/shard.rs",
      "pattern": "fn from_mmap_no_checksum",
      "lines": [
-      1859
+      1827
      ],
      "what": "`open_lazy` / `open_lazy_from_bytes` route through a reader that SKIPS the footer blake3 by design (demand paging: checking it would fault every page), so on the lazy path nothing verifies the bytes at all"
     },
@@ -608,7 +608,8 @@
      "file": "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs",
      "pattern": "let data = std::fs::read_to_string\\(path\\)\\?;",
      "lines": [
-      299
+      468,
+      633
      ],
      "what": "the KernelVerified manifest is read back as authoritative JSON with no digest, no signature and no comparison to the run that wrote it"
     }
@@ -637,7 +638,7 @@
     "crates/clean-mathverse/src/shard.rs": 10,
     "crates/clean-mathverse/src/shard_verify/cake_gate.rs": 2,
     "crates/clean-mathverse/src/shard_verify/native_gate.rs": 2,
-    "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs": 3,
+    "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs": 9,
     "crates/clean-olean/src/import/artifact.rs": 2,
     "crates/clean-olean/src/import/lake_package.rs": 6,
     "crates/clean-olean/src/import/load.rs": 6,
@@ -1062,7 +1063,7 @@
      "file": "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs",
      "pattern": "std::fs::write\\(path, self\\.to_json\\(\\)\\?\\)\\?;",
      "lines": [
-      290
+      458
      ],
      "what": "`fs::write` is not atomic: a crash or a full disk mid-write leaves a truncated JSON manifest that `from_file` will later read as authoritative"
     },
@@ -1070,8 +1071,8 @@
      "file": "crates/clean-mathverse/src/release.rs",
      "pattern": "let _ = fs::remove_file\\(&index_path\\);",
      "lines": [
-      366,
-      386
+      346,
+      366
      ],
      "what": "the error is DISCARDED, so 'or reports an error' is simply false at this site and the two others shaped like it"
     }
@@ -1120,7 +1121,7 @@
    "fn-item-path"
   ],
   "statement": "These sites matched the IO token table but perform no IO: they import a module, name a type or a function ITEM, construct or inspect an `io::Error` value, or wrap an in-memory buffer in an IO-shaped API. No verdict can turn on their result, so no contract is owed.",
-  "site_count": 106
+  "site_count": 109
  },
  "ledger": {
   "what": "the \u00a73.6 assumption ledger for lane (b): one row per (contract x member) that nothing fully checks, plus the rows this MODEL itself stands on. Each row carries a statement, a probe command, a discharge condition, a date and an owning job.",
@@ -1507,22 +1508,22 @@
     "member": "crates/clean-mathverse/src/shard.rs",
     "site_count": 10,
     "lines": [
-     1214,
-     1214,
-     1651,
-     1651,
-     1651,
-     1655,
-     1810,
-     1810,
-     1810,
-     1815
+     1182,
+     1182,
+     1619,
+     1619,
+     1619,
+     1623,
+     1778,
+     1778,
+     1778,
+     1783
     ],
     "statement": "crates/clean-mathverse/src/shard.rs assumes, without proof, that: Every byte a verdict path consumes from a file is the byte its provenance was established over: the path names the file that was digested, the file is not substituted between the pin and the read, and a short or truncated read is refused rather than decoded.",
     "checked": "PARTIAL \u2014 1 cited check(s) for this contract, at least one inside this member; the member's other sites are not covered by it",
     "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-mathverse/src/shard.rs",
     "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
-    "date": "2026-11-14",
+    "date": "2026-11-17",
     "owning_job": "R2b-READ"
    },
    {
@@ -1564,17 +1565,23 @@
     "contract": "C-READ-BYTES",
     "class": "content-bearing",
     "member": "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs",
-    "site_count": 3,
+    "site_count": 9,
     "lines": [
-     299,
-     299,
-     299
+     468,
+     468,
+     468,
+     633,
+     633,
+     633,
+     684,
+     684,
+     684
     ],
     "statement": "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs assumes, without proof, that: Every byte a verdict path consumes from a file is the byte its provenance was established over: the path names the file that was digested, the file is not substituted between the pin and the read, and a short or truncated read is refused rather than decoded.",
     "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
     "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-mathverse/src/verify/kernel_verified_manifest.rs",
     "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
-    "date": "2026-11-14",
+    "date": "2026-11-17",
     "owning_job": "R2b-READ"
    },
    {
@@ -1584,14 +1591,14 @@
     "member": "crates/clean-olean/src/import/artifact.rs",
     "site_count": 2,
     "lines": [
-     116,
-     116
+     125,
+     125
     ],
     "statement": "crates/clean-olean/src/import/artifact.rs assumes, without proof, that: Every byte a verdict path consumes from a file is the byte its provenance was established over: the path names the file that was digested, the file is not substituted between the pin and the read, and a short or truncated read is refused rather than decoded.",
     "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
     "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-olean/src/import/artifact.rs",
     "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
-    "date": "2026-11-15",
+    "date": "2026-11-17",
     "owning_job": "R2b-READ"
    },
    {
@@ -1622,18 +1629,18 @@
     "member": "crates/clean-olean/src/import/load.rs",
     "site_count": 6,
     "lines": [
-     87,
-     87,
-     599,
-     599,
-     887,
-     887
+     89,
+     89,
+     642,
+     642,
+     947,
+     947
     ],
     "statement": "crates/clean-olean/src/import/load.rs assumes, without proof, that: Every byte a verdict path consumes from a file is the byte its provenance was established over: the path names the file that was digested, the file is not substituted between the pin and the read, and a short or truncated read is refused rather than decoded.",
     "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
     "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-olean/src/import/load.rs",
     "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
-    "date": "2026-11-15",
+    "date": "2026-11-17",
     "owning_job": "R2b-READ"
    },
    {
@@ -1824,15 +1831,15 @@
     "site_count": 4,
     "lines": [
      176,
-     475,
-     505,
-     517
+     455,
+     485,
+     497
     ],
     "statement": "crates/clean-mathverse/src/release.rs assumes, without proof, that: A directory walk returns exactly the input set the verdict quantifies over: no entry appears or disappears during the walk, no entry is silently dropped for being a symlink, non-UTF-8 or unreadable, and enumeration order does not change the verdict.",
     "checked": "NOTHING in the tree checks this contract",
     "probe": "scripts/verdict_io_contracts.py --sites C-READ-SET --member crates/clean-mathverse/src/release.rs",
     "discharge": "quantify every walk over a committed manifest and refuse on set difference in BOTH directions (missing and unexpected), rather than over whatever the filesystem returned.",
-    "date": "2026-11-14",
+    "date": "2026-11-17",
     "owning_job": "R2b-SET"
    },
    {
@@ -2171,21 +2178,21 @@
     "site_count": 10,
     "lines": [
      203,
-     312,
-     321,
-     325,
-     330,
-     435,
-     543,
-     555,
-     558,
-     563
+     292,
+     301,
+     305,
+     310,
+     415,
+     523,
+     535,
+     538,
+     543
     ],
     "statement": "crates/clean-mathverse/src/release.rs assumes, without proof, that: A spawned program is the pinned binary at the pinned version: the name resolves to one intended executable rather than the first PATH match, and the executable that actually ran is the one whose identity the verdict's provenance records.",
     "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
     "probe": "scripts/verdict_io_contracts.py --sites C-SPAWN-IDENTITY --member crates/clean-mathverse/src/release.rs",
     "discharge": "resolve each tool once to an absolute path, fingerprint it through the `capture_solver_binary` machinery that already exists, and compare the digest to a committed pin before the first spawn.",
-    "date": "2026-11-14",
+    "date": "2026-11-17",
     "owning_job": "R2b-SPAWN"
    },
    {
@@ -2244,13 +2251,13 @@
     "member": "crates/clean-mathverse/src/release.rs",
     "site_count": 1,
     "lines": [
-     402
+     382
     ],
     "statement": "crates/clean-mathverse/src/release.rs assumes, without proof, that: `std::process::id()` is used only for uniqueness, so two runs over the same input that differ only in pid produce the same verdict.",
     "checked": "NOTHING in the tree checks this contract",
     "probe": "scripts/verdict_io_contracts.py --sites C-AMBIENT-NONCE --member crates/clean-mathverse/src/release.rs",
     "discharge": "a determinism probe \u2014 mint the same verdict twice in one tree and diff \u2014 plus this enumeration held at exactly two sites by the gate.",
-    "date": "2026-11-14",
+    "date": "2026-11-17",
     "owning_job": "R2b-AMBIENT"
    },
    {
@@ -2371,20 +2378,20 @@
     "lines": [
      28,
      164,
-     300,
+     280,
+     346,
      366,
-     386,
-     403,
-     426,
-     523,
-     526,
-     540
+     383,
+     406,
+     503,
+     506,
+     520
     ],
     "statement": "crates/clean-mathverse/src/release.rs assumes, without proof, that: Every write either lands completely or reports an error; no partially written artifact is later read back as authoritative. The write's CONTENT needs no contract at all \u2014 the bytes were computed in memory before the call, so the verdict depends on the call's SUCCESS and on nothing that came back.",
     "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
     "probe": "scripts/verdict_io_contracts.py --sites C-WRITE-COMPLETE --member crates/clean-mathverse/src/release.rs",
     "discharge": "tmp-write + rename for the writes whose output is read back as authoritative, and propagate (or explicitly justify discarding) every write error. This is the cheapest class in the model and should close first.",
-    "date": "2026-11-14",
+    "date": "2026-11-17",
     "owning_job": "R2b-WRITE"
    },
    {
@@ -2394,17 +2401,17 @@
     "member": "crates/clean-mathverse/src/shard.rs",
     "site_count": 5,
     "lines": [
-     998,
-     998,
-     998,
-     999,
-     999
+     966,
+     966,
+     966,
+     967,
+     967
     ],
     "statement": "crates/clean-mathverse/src/shard.rs assumes, without proof, that: Every write either lands completely or reports an error; no partially written artifact is later read back as authoritative. The write's CONTENT needs no contract at all \u2014 the bytes were computed in memory before the call, so the verdict depends on the call's SUCCESS and on nothing that came back.",
     "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
     "probe": "scripts/verdict_io_contracts.py --sites C-WRITE-COMPLETE --member crates/clean-mathverse/src/shard.rs",
     "discharge": "tmp-write + rename for the writes whose output is read back as authoritative, and propagate (or explicitly justify discarding) every write error. This is the cheapest class in the model and should close first.",
-    "date": "2026-11-14",
+    "date": "2026-11-17",
     "owning_job": "R2b-WRITE"
    },
    {
@@ -2447,14 +2454,14 @@
     "member": "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs",
     "site_count": 2,
     "lines": [
-     290,
-     290
+     458,
+     458
     ],
     "statement": "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs assumes, without proof, that: Every write either lands completely or reports an error; no partially written artifact is later read back as authoritative. The write's CONTENT needs no contract at all \u2014 the bytes were computed in memory before the call, so the verdict depends on the call's SUCCESS and on nothing that came back.",
     "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
     "probe": "scripts/verdict_io_contracts.py --sites C-WRITE-COMPLETE --member crates/clean-mathverse/src/verify/kernel_verified_manifest.rs",
     "discharge": "tmp-write + rename for the writes whose output is read back as authoritative, and propagate (or explicitly justify discarding) every write error. This is the cheapest class in the model and should close first.",
-    "date": "2026-11-14",
+    "date": "2026-11-17",
     "owning_job": "R2b-WRITE"
    },
    {
@@ -2481,8 +2488,8 @@
     "probe": "scripts/verdict_io_contracts.py --sites C-NONE",
     "discharge": "re-derive the classification from MIR/THIR rather than from source lines \u2014 the same whole-crate dump G-SPINE-SET waits on (data/spine_set.PENDING.md).",
     "owning_job": "R2b-LEX",
-    "date": "2026-11-14",
-    "site_count": 106
+    "date": "2026-11-17",
+    "site_count": 109
    },
    {
     "id": "L-DENOM",
@@ -2492,8 +2499,8 @@
     "probe": "scripts/verdict_io_contracts.py --describe   # prints the borrowed token table",
     "discharge": "derive sites from the call graph instead of from tokens; until then, every added token lands with a mutation arm proving the scan would have missed it before.",
     "owning_job": "R2b-DENOM",
-    "date": "2026-11-16",
-    "site_count": 317
+    "date": "2026-11-17",
+    "site_count": 326
    }
   ]
  },
@@ -4109,7 +4116,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/release.rs",
-   "line": 261,
+   "line": 254,
    "token": "std::io",
    "rule": "E-ERRVAL",
    "effect": "error-value",
@@ -4118,7 +4125,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/release.rs",
-   "line": 300,
+   "line": 280,
    "token": "fs::*",
    "rule": "E-WRITE",
    "effect": "write-file",
@@ -4128,7 +4135,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/release.rs",
-   "line": 306,
+   "line": 286,
    "token": "std::io",
    "rule": "E-ERRVAL",
    "effect": "error-value",
@@ -4137,7 +4144,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/release.rs",
-   "line": 309,
+   "line": 289,
    "token": "std::io",
    "rule": "E-ERRVAL",
    "effect": "error-value",
@@ -4146,7 +4153,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/release.rs",
-   "line": 312,
+   "line": 292,
    "token": "process::Command",
    "rule": "E-SPAWN",
    "effect": "spawn-process",
@@ -4157,7 +4164,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/release.rs",
-   "line": 321,
+   "line": 301,
    "token": "process::Command",
    "rule": "E-SPAWN",
    "effect": "spawn-process",
@@ -4168,7 +4175,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/release.rs",
-   "line": 325,
+   "line": 305,
    "token": "std::process",
    "rule": "E-SPAWN",
    "effect": "spawn-process",
@@ -4179,7 +4186,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/release.rs",
-   "line": 329,
+   "line": 309,
    "token": "std::io",
    "rule": "E-ERRVAL",
    "effect": "error-value",
@@ -4188,7 +4195,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/release.rs",
-   "line": 330,
+   "line": 310,
    "token": "process::Command",
    "rule": "E-SPAWN",
    "effect": "spawn-process",
@@ -4199,7 +4206,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/release.rs",
-   "line": 336,
+   "line": 316,
    "token": "std::io",
    "rule": "E-ERRVAL",
    "effect": "error-value",
@@ -4208,12 +4215,22 @@
   },
   {
    "member": "crates/clean-mathverse/src/release.rs",
-   "line": 342,
+   "line": 322,
    "token": "std::io",
    "rule": "E-ERRVAL",
    "effect": "error-value",
    "dependence": "verdict-irrelevant",
    "code": "std::io::ErrorKind::NotFound,"
+  },
+  {
+   "member": "crates/clean-mathverse/src/release.rs",
+   "line": 346,
+   "token": "fs::*",
+   "rule": "E-WRITE",
+   "effect": "write-file",
+   "dependence": "success-only",
+   "code": "let _ = fs::remove_file(&index_path);",
+   "error_discarded": true
   },
   {
    "member": "crates/clean-mathverse/src/release.rs",
@@ -4227,17 +4244,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/release.rs",
-   "line": 386,
-   "token": "fs::*",
-   "rule": "E-WRITE",
-   "effect": "write-file",
-   "dependence": "success-only",
-   "code": "let _ = fs::remove_file(&index_path);",
-   "error_discarded": true
-  },
-  {
-   "member": "crates/clean-mathverse/src/release.rs",
-   "line": 402,
+   "line": 382,
    "token": "std::process",
    "rule": "E-PID",
    "effect": "read-ambient",
@@ -4246,7 +4253,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/release.rs",
-   "line": 403,
+   "line": 383,
    "token": "fs::*",
    "rule": "E-WRITE",
    "effect": "write-file",
@@ -4256,7 +4263,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/release.rs",
-   "line": 418,
+   "line": 398,
    "token": "std::io",
    "rule": "E-ERRVAL",
    "effect": "error-value",
@@ -4265,7 +4272,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/release.rs",
-   "line": 426,
+   "line": 406,
    "token": "fs::*",
    "rule": "E-WRITE",
    "effect": "write-file",
@@ -4275,7 +4282,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/release.rs",
-   "line": 435,
+   "line": 415,
    "token": "process::Command",
    "rule": "E-SPAWN",
    "effect": "spawn-process",
@@ -4286,7 +4293,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/release.rs",
-   "line": 451,
+   "line": 431,
    "token": "std::io",
    "rule": "E-ERRVAL",
    "effect": "error-value",
@@ -4295,7 +4302,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/release.rs",
-   "line": 461,
+   "line": 441,
    "token": "std::io",
    "rule": "E-ERRVAL",
    "effect": "error-value",
@@ -4304,7 +4311,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/release.rs",
-   "line": 475,
+   "line": 455,
    "token": "fs::*",
    "rule": "E-READDIR",
    "effect": "read-dir",
@@ -4314,7 +4321,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/release.rs",
-   "line": 486,
+   "line": 466,
    "token": "std::io",
    "rule": "E-ERRVAL",
    "effect": "error-value",
@@ -4323,7 +4330,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/release.rs",
-   "line": 505,
+   "line": 485,
    "token": "fs::*",
    "rule": "E-READDIR",
    "effect": "read-dir",
@@ -4333,7 +4340,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/release.rs",
-   "line": 517,
+   "line": 497,
    "token": "fs::*",
    "rule": "E-READDIR",
    "effect": "read-dir",
@@ -4343,7 +4350,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/release.rs",
-   "line": 523,
+   "line": 503,
    "token": "fs::*",
    "rule": "E-WRITE",
    "effect": "write-file",
@@ -4353,7 +4360,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/release.rs",
-   "line": 526,
+   "line": 506,
    "token": "fs::*",
    "rule": "E-WRITE",
    "effect": "write-file",
@@ -4363,7 +4370,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/release.rs",
-   "line": 540,
+   "line": 520,
    "token": "fs::*",
    "rule": "E-WRITE",
    "effect": "write-file",
@@ -4373,7 +4380,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/release.rs",
-   "line": 543,
+   "line": 523,
    "token": "process::Command",
    "rule": "E-SPAWN",
    "effect": "spawn-process",
@@ -4384,7 +4391,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/release.rs",
-   "line": 555,
+   "line": 535,
    "token": "process::Command",
    "rule": "E-SPAWN",
    "effect": "spawn-process",
@@ -4395,7 +4402,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/release.rs",
-   "line": 558,
+   "line": 538,
    "token": "std::process",
    "rule": "E-SPAWN",
    "effect": "spawn-process",
@@ -4406,7 +4413,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/release.rs",
-   "line": 562,
+   "line": 542,
    "token": "std::io",
    "rule": "E-ERRVAL",
    "effect": "error-value",
@@ -4415,7 +4422,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/release.rs",
-   "line": 563,
+   "line": 543,
    "token": "process::Command",
    "rule": "E-SPAWN",
    "effect": "spawn-process",
@@ -4426,7 +4433,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/release.rs",
-   "line": 570,
+   "line": 550,
    "token": "std::io",
    "rule": "E-ERRVAL",
    "effect": "error-value",
@@ -4435,7 +4442,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/release.rs",
-   "line": 672,
+   "line": 640,
    "token": "std::io",
    "rule": "E-TYPE",
    "effect": "declaration-type",
@@ -4482,7 +4489,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/shard.rs",
-   "line": 998,
+   "line": 966,
    "token": "File::open/create",
    "rule": "E-WRITE",
    "effect": "write-file",
@@ -4492,7 +4499,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/shard.rs",
-   "line": 998,
+   "line": 966,
    "token": "fs::*",
    "rule": "E-WRITE",
    "effect": "write-file",
@@ -4502,7 +4509,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/shard.rs",
-   "line": 998,
+   "line": 966,
    "token": "std::fs",
    "rule": "E-WRITE",
    "effect": "write-file",
@@ -4512,7 +4519,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/shard.rs",
-   "line": 999,
+   "line": 967,
    "token": "BufWriter",
    "rule": "E-WRITE",
    "effect": "write-file",
@@ -4522,7 +4529,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/shard.rs",
-   "line": 999,
+   "line": 967,
    "token": "std::io",
    "rule": "E-WRITE",
    "effect": "write-file",
@@ -4532,7 +4539,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/shard.rs",
-   "line": 1214,
+   "line": 1182,
    "token": "fs::*",
    "rule": "E-READ",
    "effect": "read-file",
@@ -4542,7 +4549,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/shard.rs",
-   "line": 1214,
+   "line": 1182,
    "token": "std::fs",
    "rule": "E-READ",
    "effect": "read-file",
@@ -4552,7 +4559,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/shard.rs",
-   "line": 1603,
+   "line": 1571,
    "token": "mmap",
    "rule": "E-TYPE",
    "effect": "declaration-type",
@@ -4561,7 +4568,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/shard.rs",
-   "line": 1647,
+   "line": 1615,
    "token": "std::io",
    "rule": "E-TYPE",
    "effect": "declaration-type",
@@ -4570,7 +4577,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/shard.rs",
-   "line": 1651,
+   "line": 1619,
    "token": "File::open/create",
    "rule": "E-READ",
    "effect": "read-file",
@@ -4580,7 +4587,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/shard.rs",
-   "line": 1651,
+   "line": 1619,
    "token": "fs::*",
    "rule": "E-READ",
    "effect": "read-file",
@@ -4590,7 +4597,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/shard.rs",
-   "line": 1651,
+   "line": 1619,
    "token": "std::fs",
    "rule": "E-READ",
    "effect": "read-file",
@@ -4600,7 +4607,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/shard.rs",
-   "line": 1655,
+   "line": 1623,
    "token": "mmap",
    "rule": "E-READ",
    "effect": "read-file",
@@ -4610,7 +4617,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/shard.rs",
-   "line": 1661,
+   "line": 1629,
    "token": "mmap",
    "rule": "E-TYPE",
    "effect": "declaration-type",
@@ -4619,7 +4626,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/shard.rs",
-   "line": 1806,
+   "line": 1774,
    "token": "std::io",
    "rule": "E-TYPE",
    "effect": "declaration-type",
@@ -4628,7 +4635,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/shard.rs",
-   "line": 1810,
+   "line": 1778,
    "token": "File::open/create",
    "rule": "E-READ",
    "effect": "read-file",
@@ -4638,7 +4645,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/shard.rs",
-   "line": 1810,
+   "line": 1778,
    "token": "fs::*",
    "rule": "E-READ",
    "effect": "read-file",
@@ -4648,7 +4655,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/shard.rs",
-   "line": 1810,
+   "line": 1778,
    "token": "std::fs",
    "rule": "E-READ",
    "effect": "read-file",
@@ -4658,7 +4665,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/shard.rs",
-   "line": 1815,
+   "line": 1783,
    "token": "mmap",
    "rule": "E-READ",
    "effect": "read-file",
@@ -4668,7 +4675,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/shard.rs",
-   "line": 1833,
+   "line": 1801,
    "token": "mmap",
    "rule": "E-NOIO",
    "effect": "in-memory-no-io",
@@ -4677,7 +4684,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/shard.rs",
-   "line": 1859,
+   "line": 1827,
    "token": "mmap",
    "rule": "E-TYPE",
    "effect": "declaration-type",
@@ -4900,7 +4907,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs",
-   "line": 290,
+   "line": 458,
    "token": "fs::*",
    "rule": "E-WRITE",
    "effect": "write-file",
@@ -4910,7 +4917,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs",
-   "line": 290,
+   "line": 458,
    "token": "std::fs",
    "rule": "E-WRITE",
    "effect": "write-file",
@@ -4920,7 +4927,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs",
-   "line": 299,
+   "line": 468,
    "token": "fs::*",
    "rule": "E-READ",
    "effect": "read-file",
@@ -4930,7 +4937,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs",
-   "line": 299,
+   "line": 468,
    "token": "read_to_string",
    "rule": "E-READ",
    "effect": "read-file",
@@ -4940,12 +4947,99 @@
   },
   {
    "member": "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs",
-   "line": 299,
+   "line": 468,
    "token": "std::fs",
    "rule": "E-READ",
    "effect": "read-file",
    "dependence": "content-bearing",
    "code": "let data = std::fs::read_to_string(path)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs",
+   "line": 633,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let data = std::fs::read_to_string(path)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs",
+   "line": 633,
+   "token": "read_to_string",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let data = std::fs::read_to_string(path)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs",
+   "line": 633,
+   "token": "std::fs",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let data = std::fs::read_to_string(path)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs",
+   "line": 681,
+   "token": "std::io",
+   "rule": "E-TYPE",
+   "effect": "declaration-type",
+   "dependence": "verdict-irrelevant",
+   "code": "fn hash_file(path: &Path) -> std::io::Result<(u64, [u8; 32])> {"
+  },
+  {
+   "member": "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs",
+   "line": 683,
+   "token": "io::*",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::io::Read as _;"
+  },
+  {
+   "member": "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs",
+   "line": 683,
+   "token": "std::io",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::io::Read as _;"
+  },
+  {
+   "member": "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs",
+   "line": 684,
+   "token": "File::open/create",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let mut file = std::fs::File::open(path)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs",
+   "line": 684,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let mut file = std::fs::File::open(path)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs",
+   "line": 684,
+   "token": "std::fs",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let mut file = std::fs::File::open(path)?;",
    "error_discarded": false
   },
   {
@@ -4959,7 +5053,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/artifact.rs",
-   "line": 116,
+   "line": 125,
    "token": "fs::*",
    "rule": "E-READ",
    "effect": "read-file",
@@ -4969,7 +5063,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/artifact.rs",
-   "line": 116,
+   "line": 125,
    "token": "std::fs",
    "rule": "E-READ",
    "effect": "read-file",
@@ -5039,7 +5133,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/load.rs",
-   "line": 87,
+   "line": 89,
    "token": "fs::*",
    "rule": "E-READ",
    "effect": "read-file",
@@ -5049,7 +5143,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/load.rs",
-   "line": 87,
+   "line": 89,
    "token": "std::fs",
    "rule": "E-READ",
    "effect": "read-file",
@@ -5059,7 +5153,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/load.rs",
-   "line": 599,
+   "line": 642,
    "token": "fs::*",
    "rule": "E-READ",
    "effect": "read-file",
@@ -5069,7 +5163,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/load.rs",
-   "line": 599,
+   "line": 642,
    "token": "std::fs",
    "rule": "E-READ",
    "effect": "read-file",
@@ -5079,7 +5173,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/load.rs",
-   "line": 887,
+   "line": 947,
    "token": "fs::*",
    "rule": "E-READ",
    "effect": "read-file",
@@ -5089,7 +5183,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/load.rs",
-   "line": 887,
+   "line": 947,
    "token": "std::fs",
    "rule": "E-READ",
    "effect": "read-file",
@@ -5119,7 +5213,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/mod.rs",
-   "line": 226,
+   "line": 241,
    "token": "std::io",
    "rule": "E-TYPE",
    "effect": "declaration-type",
@@ -5128,7 +5222,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/mod.rs",
-   "line": 242,
+   "line": 257,
    "token": "std::io",
    "rule": "E-TYPE",
    "effect": "declaration-type",

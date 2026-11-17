@@ -621,7 +621,7 @@ def crosscheck_itd() -> str:
     return (
         f"def ir_it_pc_crosscheck_itd (spc : IRConst) (p : Nat) (q : Nat) : "
         f"Eq IROutcome {itd_eval('ir_d14')} (IROutcome.ret (ir_vl1 (IRScalar.aggv (ir_it_ag_itd_spv spc)))) := "
-        f"ir_it_pc_a4_crosscheck {itd_args('ir_d14')} (Le.refl ir_d14)"
+        f"ir_it_pc_a4_crosscheck {itd_args('ir_d14')} (@Le.refl ir_d14)"
     )
 
 
@@ -770,7 +770,7 @@ PINNED_DIGESTS: dict = {
     "SRC_IR_IT_LOCAL": "f4a73493888858e242aad57f9141ab1624249888416ec6a9d1c74c9a2511f7d6",
     "SRC_IR_IT_PC": "c8af55f4ae54db29cdeeed2a652cc99d87887d45ee8d1c335547a39ca5ac5012",
     "SRC_IR_IT_PC_A4_CROSSCHECK": "419f7f6245eb99e4c2042c10816d0dfc0d61d20c172cfa3e9aeb87086bbfebbe",
-    "SRC_IR_IT_PC_CROSSCHECK_ITD": "7b87d5f5984807148ee4194ba22a85afefe707f69ee2e5065b4ea86a05e7bb05",
+    "SRC_IR_IT_PC_CROSSCHECK_ITD": "77783f7428014d42c784d66be409efe777e26ba8be3982858da19b246d82768a",
     "SRC_IR_IT_PC_NEVER_UNREACHABLE": "208b867e358c3b55e199d3cdd6d93e6aca896052c47cf050097a3b03b3a36b28",
     "SRC_IR_IT_PC_NO_BAD_HALT": "304013a42d165176229a1fd44cf1031e20960c6128ea2805a652e49891186486",
     "SRC_IR_IT_PC_OF_EXACT": "407d9aa0785aa403a8d5d70d2da634c6f3165369397059eca01097c6ec1fa26a",

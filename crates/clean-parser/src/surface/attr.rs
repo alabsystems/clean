@@ -102,12 +102,14 @@ pub enum Attribute {
     /// in front of an attribute (`Lean/Parser/Term.lean`): the attribute is in
     /// force until the enclosing section or namespace ends. Lifted out of
     /// [`Self::Unknown`] only for the attributes whose scoping Clean models —
-    /// today `simp`, `csimp` and `instance`; every other `local …` keeps its legacy
+    /// today `simp`, `csimp` and `instance`, plus `class` so its global-only
+    /// handler can refuse this scope; every other `local …` keeps its legacy
     /// `Unknown("local")` spelling.
     Local(Box<Attribute>),
     /// `scoped <attr>`: the attribute is in force wherever the CURRENT
     /// namespace is active (`namespace`, `open`). Lifted out of
-    /// the parser's error arm for `instance` and `csimp`; every other `scoped …`
+    /// the parser's error arm for `instance` and `csimp`, and for the
+    /// global-only `class` handler's refusal; every other `scoped …`
     /// attribute is still a parse error.
     Scoped(Box<Attribute>),
 

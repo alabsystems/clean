@@ -6,7 +6,8 @@
 #   - EAGER: CLEAN_LAZY_CLOSURE unset  -> closure deserialized from .olean (today's path)
 #   - LAZY:  CLEAN_LAZY_CLOSURE=1       -> closure served on demand from mmap'd .mathverse
 #            shards (ShardConstantSource installed via Environment::set_constant_source)
-# and asserts the KernelVerified NAME SET is IDENTICAL (symmetric difference empty).
+# and asserts the accepted NAME SET is IDENTICAL (symmetric difference empty); under
+# P6 both are development tier, so the names are data here, never a label.
 #
 # This is the corpus-scale form of the integration test already PROVEN green on real
 # data (closure_source::tests::lazy_closure_verdict_matches_eager: crown-proofs
@@ -83,6 +84,11 @@ fail() { echo "kv invariance gate: FAIL — $2" >&2; verdict "failed:$1"; exit 1
 # `convert_expr` (NOT derived from the lazy source), so it catches encoder
 # divergence the old lazy_closure_verdict_matches_eager (both legs from the lazy
 # source) cannot. This makes the gate run real work instead of SKIP-green.
+# The corpus leg's comparison is self-tested first, on every run: two empty sets,
+# a divergence and a schema-1 manifest must each be refused (equal non-empty sets
+# pass), so the leg can never pass over sets a renamed or missing key emptied.
+python3 scripts/acceptance_manifest.py --selftest \
+  || fail comparison-selftest "the eager-vs-lazy comparison self-test FAILED (scripts/acceptance_manifest.py --selftest)"
 echo "kv invariance gate: running always-on independent-parity unit tests (Minimal.olean seed)..."
 # The output is KEPT, and the two failure modes are told apart.
 #
@@ -150,19 +156,10 @@ CLEAN_LAZY_CLOSURE=1 CLEAN_CLOSURE_SHARDS="$CLOSURE_SHARDS" "$CLEAN_BIN" mathver
   --manifest "$OUT/lazy.json" --json > "$OUT/lazy.out" 2>&1 \
   || fail lazy-stamp "lazy stamp errored: $(tail -3 "$OUT/lazy.out")"
 
-python3 - "$OUT/eager.json" "$OUT/lazy.json" <<'PY' || fail verdict-divergence "KernelVerified set differs eager-vs-lazy (lazy loading changed a verdict)"
-import json, sys
-def kv(p):
-    d = json.load(open(p))
-    return set(d.get("kernel_verified_names", []))
-e, l = kv(sys.argv[1]), kv(sys.argv[2])
-only_e, only_l = e - l, l - e
-if only_e or only_l:
-    print(f"DIVERGENCE: eager-only={len(only_e)} lazy-only={len(only_l)} (eager={len(e)} lazy={len(l)})")
-    for n in list(only_e)[:10]: print("  eager-only:", n)
-    for n in list(only_l)[:10]: print("  lazy-only:", n)
-    sys.exit(1)
-print(f"OK: KernelVerified set IDENTICAL eager-vs-lazy ({len(e)} names)")
-PY
+# P6 reader R15: scripts/acceptance_manifest.py refuses a schema-1, identity-less
+# or reference-tier manifest (never reading a missing list as empty) and two EMPTY
+# sets, since "identical" over nothing measures nothing.
+python3 scripts/acceptance_manifest.py invariance "$OUT/eager.json" "$OUT/lazy.json" \
+  || fail verdict-divergence "accepted set differs eager-vs-lazy, or a manifest was refused (lazy loading changed a verdict, or the comparison measured nothing)"
 echo "kv invariance gate: PASS (lazy closure loading is verdict-identical to eager)."
 verdict measured

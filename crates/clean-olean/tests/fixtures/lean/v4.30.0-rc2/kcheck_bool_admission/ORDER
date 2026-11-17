@@ -1,0 +1,11 @@
+# Full adopted graph plus standalone atomic Bool; every theory contributes its complete ORDER.
+theory cic_l
+theory cic_l_model
+theory kcheck_spec
+theory kcheck_labelled
+theory kcheck_rule_certificates
+theory kcheck_bool_island
+theory kcheck_bool_admission
+KCheckBoolAdmission
+AtomicBoolContracts
+AtomicBoolQualification

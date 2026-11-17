@@ -657,14 +657,14 @@ fn def_eq_respects_lift_at_core() -> &'static str {
         // (redenv_faithful_i6), re-wrap with delta_reduces.mk, close with DefEq.delta.
         "(fun (de : KExpr) (de' : KExpr) (hde : delta_reduces de de') (c : Nat) => ",
         "DefEq.delta (lift_at de c d) (lift_at de' c d) ",
-        "(delta_reduces.mk (lift_at de c d) (lift_at de' c d) ",
+        "(@delta_reduces.mk (lift_at de c d) (lift_at de' c d) ",
         "(delta_lift_commutes (red_def the_red_env) de de' c d ",
         "(redenv_faithful_i6 the_red_env hf) ",
         "(delta_reduces_to_step de de' hde)))) ",
         // ----- iota (mirror of delta over red_rec / RecEnvLiftClosed) -----
         "(fun (ie : KExpr) (ie' : KExpr) (hie : iota_reduces ie ie') (c : Nat) => ",
         "DefEq.iota (lift_at ie c d) (lift_at ie' c d) ",
-        "(iota_reduces.mk (lift_at ie c d) (lift_at ie' c d) ",
+        "(@iota_reduces.mk (lift_at ie c d) (lift_at ie' c d) ",
         "(iota_lift_commutes (red_rec the_red_env) ie ie' c d ",
         "(redenv_faithful_i4 the_red_env hf) ",
         "(iota_reduces_to_step ie ie' hie)))) ",

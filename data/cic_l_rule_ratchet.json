@@ -2,12 +2,12 @@
   "what_this_is": "The rule families of data/cic_l_rule_inventory.json that are not `specified`, each with its status. scripts/check_cic_l_rule_inventory.py fails unless this set is exactly the inventory's, status for status. It only shrinks: `--update` removes a family that became specified and moves unspecified to partial; a new or regressed family is added by hand with its reason in docs/DECISIONS.md. KR2's inventory acceptance holds when not_specified is empty.",
   "established": "2026-11-12",
   "not_specified": {
-    "defeq-projection": "unspecified",
-    "defeq-structure-eta": "partial",
     "infer-proj": "unspecified",
+    "reduce-proj": "unspecified",
     "iota-structure-eta-major": "partial",
+    "quot-reduction": "partial",
     "quot-admission": "unspecified",
-    "quot-reduction": "unspecified",
-    "reduce-proj": "unspecified"
+    "defeq-structure-eta": "partial",
+    "defeq-projection": "unspecified"
   }
 }

@@ -25,6 +25,7 @@ mod types;
 mod used_constants;
 pub mod visitor;
 
+pub use bignat_ops::{nat_word_div, nat_word_mod};
 pub use drop::iterative_drop;
 pub(crate) use kind::ek;
 pub use kind::{ExprKind, ZFCSetExpr};
@@ -318,6 +319,15 @@ impl Expr {
     #[allow(dead_code)]
     pub(crate) fn compute_meta(&self) -> ExprMeta {
         self.meta
+    }
+
+    /// The expression's computed cache word, for CleanLegacy serialization.
+    ///
+    /// This read-only projection does not accept or install external metadata.
+    /// Its packed field layout does not assert cross-runtime hash equality.
+    #[inline]
+    pub fn cached_metadata_word(&self) -> u64 {
+        self.meta.raw()
     }
 
     /// Cached hash (O(1), lower 32 bits of metadata word).

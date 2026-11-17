@@ -224,6 +224,25 @@ fn get_sort_level(
     }
 }
 
+/// `Exists.{u} ty (fun _ => body)` at the CONCRETE level `u` of `ty`'s sort,
+/// as Mathlib's `mkAppM ``Exists` instantiates it. A fresh level metavariable
+/// (what `ProofState::mk_const_str` hands out) is never assigned on the
+/// `push_neg at h` path: `replace_local_decl_with_cast` strict-checks the new
+/// local type at once and refuses `Sort ?u` against `Type`.
+/// REQUIRES: `ty` is well-typed in `goal`'s context.
+/// ENSURES: On `Ok`, the `Exists` head carries `ty`'s inferred sort level.
+pub(super) fn mk_exists_prop(
+    state: &ProofState,
+    goal: &Goal,
+    ty: &Expr,
+    body: &Expr,
+) -> Result<Expr, TacticError> {
+    let level = get_sort_level(state, goal, ty, "Exists binder type")?;
+    let exists_const = Expr::const_(Name::from_string("Exists"), vec![level]);
+    let lam = Expr::lam(BinderInfo::Default, ty.clone(), body.clone());
+    Ok(Expr::app(Expr::app(exists_const, ty.clone()), lam))
+}
+
 pub(super) fn mk_exists_intro(
     state: &ProofState,
     goal: &Goal,

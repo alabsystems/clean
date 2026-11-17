@@ -13,7 +13,8 @@ timeouts never vote; a panic is recorded as a panic, not a refusal. Fenced
 Clean's refusals are classified (`kstar_subjects.classify_clean`), never
 filtered. --members is a local build receipt, not a claim of compiler
 verification. --check-record checks the standing dated result and its exact
-source inputs; it never promotes a red result. Binary availability is
+source inputs (every file a member's build reads, by the rule in
+`kstar_inputs`); it never promotes a red result. Binary availability is
 required for replay.
 """
 import argparse
@@ -28,6 +29,7 @@ import sys
 import tempfile
 import time
 
+import kstar_inputs
 import kstar_subjects as subj
 import lean4lean_recheck as l4l
 import nanoda_recheck as nano
@@ -66,7 +68,8 @@ def digest(p):
 
 def pinned_inputs():
     return ['scripts/kstar_recheck.sh', 'scripts/kstar_recheck.py',
-            'scripts/kstar_selftest.py', 'scripts/kstar_subjects.py',
+            'scripts/kstar_selftest.py', 'scripts/kstar_inputs.py',
+            'scripts/check_add_decl_ratchet.py', 'scripts/kstar_subjects.py',
             'scripts/kstar_subjects_selftest.py',
             'scripts/lean4lean_recheck.py', 'scripts/lean4lean_selftest.py',
             'scripts/nanoda_recheck.py',
@@ -75,20 +78,22 @@ def pinned_inputs():
             *[nano.CONTROLS[n]['path'] for n in CONTROL_NAMES]]
 
 
+# The fixed source inputs: the manifests, the runner (the input rule and the
+# reference lexer it reads Rust through included), the theory and the controls.
+FIXED_INPUTS = ('Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', '.cargo/config.toml',
+                'scripts/kstar_recheck.sh', 'scripts/kstar_recheck.py', 'scripts/kstar_selftest.py',
+                'scripts/kstar_inputs.py', 'scripts/check_add_decl_ratchet.py',
+                'scripts/kstar_subjects.py', 'scripts/lean4lean_recheck.py',
+                'scripts/lean4lean_selftest.py', 'scripts/nanoda_recheck.py',
+                'scripts/lean_export_replay.sh', 'scripts/lean_export_mint.sh', 'scripts/heavy_gate.sh',
+                'scripts/lean_export_replay/Upstream.lean', l4l.PIN, l4l.REASONS,
+                'theories/cic_l/lean-toolchain', 'theories/cic_l/ORDER',
+                *[nano.CONTROLS[n]['path'] for n in CONTROL_NAMES])
+
+
 def source_inputs():
-    paths = ['Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', '.cargo/config.toml',
-             'scripts/kstar_recheck.sh', 'scripts/kstar_recheck.py', 'scripts/kstar_selftest.py',
-             'scripts/kstar_subjects.py', 'scripts/lean4lean_recheck.py',
-             'scripts/lean4lean_selftest.py', 'scripts/nanoda_recheck.py',
-             'scripts/lean_export_replay.sh', 'scripts/lean_export_mint.sh', 'scripts/heavy_gate.sh',
-             'scripts/lean_export_replay/Upstream.lean', l4l.PIN, l4l.REASONS,
-             'theories/cic_l/lean-toolchain', 'theories/cic_l/ORDER']
-    for directory, suffixes in [('crates', ('.rs', '.toml')), ('theories/cic_l', ('.lean', '.toml'))]:
-        paths += [str(p.relative_to(ROOT)) for p in (ROOT / directory).rglob('*')
-                  if p.is_file() and p.suffix in suffixes and '.lake' not in p.parts]
-    for name in CONTROL_NAMES:
-        paths.append(nano.CONTROLS[name]['path'])
-    return {p: digest(ROOT / p) for p in sorted(set(paths))}
+    """Digest of every file a member's build reads (`kstar_inputs`); ValueError if one cannot be named."""
+    return {p: digest(ROOT / p) for p in kstar_inputs.inputs(ROOT, FIXED_INPUTS)}
 
 
 def invoke(argv, seconds=600):
@@ -325,10 +330,14 @@ def main():
     if not args.members or not args.subject or not args.out:
         print('KSTAR_RECHECK=not knowable here: --members, --subject and --out required')
         return 1
+    try:
+        inputs = source_inputs()
+    except (OSError, ValueError) as e:
+        print(f'KSTAR_RECHECK=not knowable here: {e}'); return 1
     record = dict(source_commit=invoke(['git', 'rev-parse', 'HEAD'])['stdout'].strip(),
                   dirty_status=invoke(['git', 'status', '--porcelain'])['stdout'],
                   schema='clean.kstar-recheck.v1', utc=datetime.now(timezone.utc).isoformat(),
-                  success=False, qualified_lean4lean=False, subjects=[], controls={}, source_inputs=source_inputs(),
+                  success=False, qualified_lean4lean=False, subjects=[], controls={}, source_inputs=inputs,
                   limits='Implementation agreement, not semantic soundness. Per-bound claims only; no generation exceeds its base; independent quorum required.')
     args.out.mkdir(parents=True, exist_ok=False)
     def save():

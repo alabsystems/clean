@@ -63,6 +63,69 @@ fn project_with_header(dir: &Path, header: &str) -> (PathBuf, PathBuf) {
     (main, lib)
 }
 
+#[test]
+fn test_permissive_source_setup_ignores_only_absent_source_artifacts() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let (main, lib) = project_with_header(dir.path(), "import MissingSourceArtifact");
+    let decision = world(&main);
+    assert_eq!(
+        decision.world(),
+        clean_kernel::lean_world::LeanWorld::ORACLE
+    );
+    assert!(decision.imports().is_ok());
+    let setup = super::super::EnvironmentSetup::default();
+    assert!(matches!(
+        SourceModuleSetup::for_file(setup, &decision, &main),
+        Err(super::SourceModuleError::Artifact { .. })
+    ));
+    let permissive = SourceModuleSetup::for_file_with_import_policy(
+        setup,
+        &decision,
+        &main,
+        crate::ImportPolicy::Permissive,
+    )
+    .expect("the ordinary importer handles an explicitly permissive missing source import");
+    assert!(
+        !permissive.bootstrap_snapshot,
+        "an absent import cannot justify bootstrap semantics"
+    );
+    assert!(permissive.artifact_imports_permitted);
+    assert!(permissive.init.is_none(), "genuine Init stays pending");
+
+    std::fs::write(
+        lib.join("MissingSourceArtifact.olean"),
+        b"malformed artifact",
+    )
+    .expect("write malformed artifact");
+    assert!(matches!(
+        SourceModuleSetup::for_file_with_import_policy(
+            setup,
+            &decision,
+            &main,
+            crate::ImportPolicy::Permissive,
+        ),
+        Err(super::SourceModuleError::Artifact { .. })
+    ));
+}
+
+#[test]
+fn test_permissive_source_setup_requires_existing_artifact_dependencies() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let (main, lib) = project_with_header(dir.path(), "import Lib\nimport MissingSourceArtifact");
+    write_artifact(&lib, "Lib", &["MissingArtifactDependency"], true);
+    let error = match SourceModuleSetup::for_file_with_import_policy(
+        super::super::EnvironmentSetup::default(),
+        &world(&main),
+        &main,
+        crate::ImportPolicy::Permissive,
+    ) {
+        Err(super::SourceModuleError::Artifact { reason, .. }) => reason,
+        Err(other) => panic!("expected the recorded dependency's artifact error, got {other}"),
+        Ok(_) => panic!("a recorded missing artifact dependency cannot select bootstrap"),
+    };
+    assert!(error.contains("MissingArtifactDependency"), "{error}");
+}
+
 /// A module Clean's hand-written prelude names verbatim, with no artifact
 /// anywhere the importer searches, is served from that prelude, which is
 /// built over the bootstrap prelude: it selects no world. Selecting genuine

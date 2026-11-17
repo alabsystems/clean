@@ -376,26 +376,24 @@ fn write_shard(
 /// (name lookup, discrimination tree, etc.) with a permissive trust policy.
 pub fn load_built_library(output_dir: &Path) -> MathverseResult<MathverseLibrary> {
     let loader = LibraryLoader::new(output_dir.to_path_buf());
-    let mut library = loader.load_library(TrustPolicy::permissive())?;
+    let library = loader.load_library(TrustPolicy::permissive())?;
 
-    // If a kernel-verified manifest sits alongside the shards, apply it so the
-    // constants Clean's own kernel re-verified carry KernelVerified confidence
-    // in-memory — the trust-gated `mathverse use` tactic then accepts them at the
-    // top tier. Non-fatal when absent or unreadable.
+    // A `kernel-verified.json` beside the shards (P6 reader R4) is validated
+    // and never skipped: a present manifest that names no theory or no checker
+    // is an error naming the file. A valid one is development tier in this
+    // build and applies nothing (P2 clause 1: a development check confers no
+    // label); its tier is printed so nobody reads the file as a grant.
     let manifest_path = output_dir.join("kernel-verified.json");
     if manifest_path.exists() {
-        if let Ok(manifest) =
-            crate::verify::kernel_verified_manifest::KernelVerifiedManifest::from_file(
-                &manifest_path,
-            )
-        {
-            let upgraded = library.apply_kernel_verified_manifest(&manifest);
-            if upgraded > 0 {
-                eprintln!(
-                    "  Applied kernel-verified manifest: {upgraded} constants -> KernelVerified"
-                );
-            }
-        }
+        let manifest = crate::verify::kernel_verified_manifest::KernelVerifiedManifest::from_file(
+            &manifest_path,
+        )?;
+        eprintln!(
+            "  kernel-verified.json: {} accepted names, {} tier ({}), applied to no header",
+            manifest.accepted(),
+            manifest.tier().as_str(),
+            manifest.identity().entry().as_str(),
+        );
     }
 
     // If a shipped `MVBIDX01` baseline novelty index sits alongside the shards,

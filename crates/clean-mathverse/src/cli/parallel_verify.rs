@@ -145,6 +145,10 @@ pub(crate) struct ParallelVerifyOutput {
     pub(crate) cache_hits: usize,
     /// Modules freshly converted + verified this run (cache miss or no cache).
     pub(crate) cache_misses: usize,
+    /// The checker settings of the base every check ran in, snapshotted after
+    /// the kernel theory and heartbeat were set (P6: the manifest's theory
+    /// profile is this snapshot, not a reconstruction).
+    pub(crate) checker_settings: clean_kernel::env::CheckerSettings,
 }
 
 /// Configuration for the content-addressed incremental cache. When passed to
@@ -435,10 +439,10 @@ fn build_lazy_base(
     let search_paths = build_paragon_search_paths(root);
 
     // (1) Closure shards for the union of all targets (one walk, persistent dir).
-    // CRITICAL: this dir must live OUTSIDE `out_dir` — the stamp/manifest/count
-    // helpers (`stamp_shard_dir_kernel_verified`, `count_stored_kernel_verified`)
-    // scan `out_dir` RECURSIVELY for `.mathverse` shards, so closure shards under
-    // `out_dir` would be wrongly stamped/counted as TARGET output. Default to a
+    // CRITICAL: this dir must live OUTSIDE `out_dir` — the stored-header audit
+    // (`count_stored_kernel_verified`) scans `out_dir` RECURSIVELY for
+    // `.mathverse` shards, so closure shards under `out_dir` would be wrongly
+    // counted as TARGET output. Default to a
     // SIBLING dir; override with `CLEAN_PARAGON_CLOSURE_SHARDS` (e.g. to a shared
     // cache reused across runs/subtrees).
     let shards_dir = paragon_closure_shards_dir(out_dir);
@@ -1027,6 +1031,10 @@ pub(crate) fn parallel_convert_and_verify(
         }
     };
     let phase_a_secs = phase_a_start.elapsed().as_secs_f64();
+    let checker_settings = match &base {
+        BaseEnv::Eager(env) => env.checker_settings(),
+        BaseEnv::Lazy { base_env, .. } => base_env.checker_settings(),
+    };
 
     // Import-topological order is NOT required for correctness here (every dep
     // type/value already lives in the immutable base — there is no accumulating
@@ -1252,6 +1260,7 @@ pub(crate) fn parallel_convert_and_verify(
         phase_b_secs,
         cache_hits,
         cache_misses,
+        checker_settings,
     })
 }
 

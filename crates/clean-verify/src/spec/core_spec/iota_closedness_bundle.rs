@@ -322,7 +322,7 @@ impl Specification {
                     // (Type-valued discrimination via opt_is_none: is_closed_at is
                     // Type, not Prop, so option_none_ne_some (Prop-only) is unusable).
                     "(fun (d0 : Nat) => fun (hn : @Eq (OptionType KExpr) (@OptionType.none KExpr) (@OptionType.some KExpr x)) => ",
-                    "Empty.rec (fun (_ : Empty) => is_closed_at x d0) ",
+                    "@Empty.rec (fun (_ : Empty) => is_closed_at x d0) ",
                     "(@Eq.substType (OptionType KExpr) (opt_is_none KExpr) (@OptionType.none KExpr) (@OptionType.some KExpr x) hn Nat.zero)) ",
                     // cons branch: list_head (cons y rest) = some y; some y = some x => y = x.
                     "(fun (y : KExpr) (rest : ListType KExpr) (d0 : Nat) (hy : is_closed_at y d0) (hrest : AllClosed rest d0) ",
@@ -440,7 +440,7 @@ impl Specification {
                     "(fun (_dch : NatLtLeDichotomy i c0) => is_closed_at (KExpr.bvar i) c0) ",
                     "(fun (hic : Lt i c0) => is_closed_at.bvar i c0 hic) ",
                     "(fun (hci : Le c0 i) => ",
-                    "Empty.rec (fun (_ : Empty) => is_closed_at (KExpr.bvar i) c0) ",
+                    "@Empty.rec (fun (_ : Empty) => is_closed_at (KExpr.bvar i) c0) ",
                     "(nat_lt_ne i (Nat.add i (Nat.succ a0)) ",
                     "(@Eq.substType Nat (fun (z : Nat) => Lt i z) (Nat.add (Nat.succ i) a0) (Nat.succ (Nat.add i a0)) (nat_succ_add i a0) ",
                     "(lt_add_weaken_right i (Nat.succ i) a0 (lt_succ_self i))) ",
@@ -613,7 +613,7 @@ impl Specification {
                     "(fun (h0 : @Eq (OptionType b) (opt_bind a b (@OptionType.none a) f) (@OptionType.some b r)) ",
                     "(k0 : forall (w : a), @Eq (OptionType a) (@OptionType.none a) (@OptionType.some a w) -> ",
                     "@Eq (OptionType b) (f w) (@OptionType.some b r) -> C) => ",
-                    "Empty.rec (fun (_ : Empty) => C) ",
+                    "@Empty.rec (fun (_ : Empty) => C) ",
                     "(@Eq.substType (OptionType b) (opt_is_none b) (@OptionType.none b) (@OptionType.some b r) h0 Nat.zero)) ",
                     "(fun (w : a) ",
                     "(h0 : @Eq (OptionType b) (opt_bind a b (@OptionType.some a w) f) (@OptionType.some b r)) ",
@@ -893,7 +893,7 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (n : Name) (us : ListType Level) (T : KExpr) (C : Type) (h : has_type (KExpr.const n us) T) => ",
-                    "Empty.rec (fun (_ : Empty) => C) ",
+                    "@Empty.rec (fun (_ : Empty) => C) ",
                     "(const_subject_untypable (KExpr.const n us) T h Nat.zero)"
                 )
                 .to_string(),

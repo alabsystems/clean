@@ -309,7 +309,7 @@ const SRC_IR_BR_PATH_UPPER: &str = "def ir_br_path_upper (i : Nat) (s : Nat) (e 
 
 const SRC_IR_BR_PATH_SHORT_CIRCUIT: &str = "def ir_br_path_short_circuit (i : Nat) (s : Nat) (e : Nat) (mem : IRList IRMemSlot) (na : Nat) : @Eq IROutcome (ir_run ir_d5 ir_br_module (IRConfig.running (ir_br_m4 i s e mem na Bool.false))) (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.false))) := ir_br_split2 i s e mem na Bool.false";
 
-const SRC_IR_BR_CORRECT_WITNESS: &str = "def ir_br_correct_witness (i : Nat) (s : Nat) (e : Nat) : @Eq IROutcome (ir_eval ir_d9 ir_br_module ir_d0 (ir_vl3 (IRScalar.int_ i) (IRScalar.int_ s) (IRScalar.int_ e)) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 (IRScalar.bool_ (expr_bvar_in_range i s e)))) := ir_br_correct ir_mem0 ir_d9 ir_d0 (IRScalar.int_ i) (IRScalar.int_ s) (IRScalar.int_ e) i s e (EncodesU32Val.mk i) (EncodesU32Val.mk s) (EncodesU32Val.mk e) (Le.refl ir_d9)";
+const SRC_IR_BR_CORRECT_WITNESS: &str = "def ir_br_correct_witness (i : Nat) (s : Nat) (e : Nat) : @Eq IROutcome (ir_eval ir_d9 ir_br_module ir_d0 (ir_vl3 (IRScalar.int_ i) (IRScalar.int_ s) (IRScalar.int_ e)) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 (IRScalar.bool_ (expr_bvar_in_range i s e)))) := ir_br_correct ir_mem0 ir_d9 ir_d0 (IRScalar.int_ i) (IRScalar.int_ s) (IRScalar.int_ e) i s e (EncodesU32Val.mk i) (EncodesU32Val.mk s) (EncodesU32Val.mk e) (@Le.refl ir_d9)";
 
 // ── CONCRETE execution witnesses (2026-08-15) ─────────────────────────────
 //
@@ -343,7 +343,7 @@ const SRC_IR_BR_CONCRETE_UNBOUNDED: &str = "def ir_br_concrete_unbounded : @Eq I
 
 const SRC_IR_BR_CONCRETE_UNBOUNDED_BELOW_START: &str = "def ir_br_concrete_unbounded_below_start : @Eq IROutcome (ir_eval ir_d9 ir_br_module ir_d0 (ir_vl3 (IRScalar.int_ Nat.zero) (IRScalar.int_ 1) (IRScalar.int_ 4294967295)) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.false))) := @Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.false)))";
 
-const SRC_IR_BR_MACHINE_SOUND_WITNESS: &str = "def ir_br_machine_sound_witness (i : Nat) (s : Nat) (e : Nat) : @Eq Bool (expr_bvar_in_range i s e) (expr_bvar_in_range i s e) := ir_br_machine_sound ir_mem0 ir_d9 ir_d0 (IRScalar.int_ i) (IRScalar.int_ s) (IRScalar.int_ e) i s e (expr_bvar_in_range i s e) (EncodesU32Val.mk i) (EncodesU32Val.mk s) (EncodesU32Val.mk e) (Le.refl ir_d9) (ir_br_correct_witness i s e)";
+const SRC_IR_BR_MACHINE_SOUND_WITNESS: &str = "def ir_br_machine_sound_witness (i : Nat) (s : Nat) (e : Nat) : @Eq Bool (expr_bvar_in_range i s e) (expr_bvar_in_range i s e) := ir_br_machine_sound ir_mem0 ir_d9 ir_d0 (IRScalar.int_ i) (IRScalar.int_ s) (IRScalar.int_ e) i s e (expr_bvar_in_range i s e) (EncodesU32Val.mk i) (EncodesU32Val.mk s) (EncodesU32Val.mk e) (@Le.refl ir_d9) (ir_br_correct_witness i s e)";
 
 impl Specification {
     /// Register the FIFTH complete width-one chain, and the first over a body

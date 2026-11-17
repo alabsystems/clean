@@ -9,6 +9,8 @@ Acquisition (GitHub access uses agh):
 This inventories files, not semantic capabilities or test verdicts. No file is
 credited as passed. Includes sidecars, scripts and generated stage0 sources so
 unclassified surface cannot disappear through a source-extension filter.
+The default keeps the frozen v4.30.0-rc2 -> v4.35.0 inventory; select
+--release-pair v4.35.0..v4.36.0 for the separate latest-release delta.
 """
 import argparse
 from collections import Counter
@@ -21,6 +23,16 @@ import re
 WORLDS = {
     'v4.30.0-rc2': '3dc1a088b6d2d8eafe25a7cd7ec7b58d731bd7cc',
     'v4.35.0': 'eb6cafb7290e8bd5f2937522d8d804f58f02bafc',
+}
+DEFAULT_RELEASE_PAIR = 'v4.30.0-rc2..v4.35.0'
+# A profile binds both revisions and its acquisition date. Keep the original
+# profile frozen: the case/driver inventories consume its exact manifest hash.
+RELEASE_PAIRS = {
+    DEFAULT_RELEASE_PAIR: (WORLDS, '2026-11-12'),
+    'v4.35.0..v4.36.0': ({
+        'v4.35.0': WORLDS['v4.35.0'],
+        'v4.36.0': '611c117bfaf7b7ae1cfcf246ce6fba31e8f509e9',
+    }, '2026-11-16'),
 }
 
 
@@ -79,24 +91,23 @@ def inventory(old, new):
     return rows
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--baseline-tree', required=True)
-    parser.add_argument('--target-tree', required=True)
-    parser.add_argument('--out-dir', required=True)
-    args = parser.parse_args()
-    baseline, old_hash = load_tree(args.baseline_tree, WORLDS['v4.30.0-rc2'])
-    target, new_hash = load_tree(args.target_tree, WORLDS['v4.35.0'])
+def write_inventory(baseline_tree, target_tree, out_dir, release_pair=DEFAULT_RELEASE_PAIR):
+    if release_pair not in RELEASE_PAIRS:
+        raise ValueError('unreviewed release pair: ' + release_pair)
+    worlds, acquired = RELEASE_PAIRS[release_pair]
+    baseline_revision, target_revision = worlds.values()
+    baseline, old_hash = load_tree(baseline_tree, baseline_revision)
+    target, new_hash = load_tree(target_tree, target_revision)
     rows = inventory(baseline, target)
     manifest = {'schema': 'clean-replacement-file-inventory-v1',
-                'worlds': WORLDS, 'files': rows}
+                'worlds': worlds, 'files': rows}
     encoded = (json.dumps(manifest, sort_keys=True, separators=(',', ':')) + '\n').encode()
     counts = {}
     for row in rows:
         counts.setdefault(row['area'], Counter())[row['change']] += 1
     summary = {
         'schema': 'clean-replacement-file-inventory-summary-v1',
-        'worlds': WORLDS, 'acquired': '2026-11-12',
+        'worlds': worlds, 'acquired': acquired,
         'input_sha256': {'baseline': old_hash, 'target': new_hash},
         'manifest_sha256': hashlib.sha256(encoded).hexdigest(),
         'baseline_files': len(baseline), 'target_files': len(target),
@@ -110,10 +121,22 @@ def main():
                                 'Mathlib corpus at compatible pinned revision'],
         'claim': 'Complete upstream tracked-file inventory and hash delta only; no parity verdicts.',
     }
-    out = Path(args.out_dir)
+    out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     (out / 'files.json.gz').write_bytes(gzip.compress(encoded, mtime=0))
     (out / 'summary.json').write_text(json.dumps(summary, indent=2, sort_keys=True) + '\n')
+    return summary
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--baseline-tree', required=True)
+    parser.add_argument('--target-tree', required=True)
+    parser.add_argument('--out-dir', required=True)
+    parser.add_argument('--release-pair', choices=RELEASE_PAIRS, default=DEFAULT_RELEASE_PAIR,
+                        help='reviewed revision pair; the historical profile remains the default')
+    args = parser.parse_args()
+    summary = write_inventory(args.baseline_tree, args.target_tree, args.out_dir, args.release_pair)
     print(json.dumps({key: summary[key] for key in
                       ('baseline_files', 'target_files', 'changes')}, indent=2))
 

@@ -510,8 +510,8 @@ impl Environment {
                 self.value_binder_table(),
             ),
             persistent_extensions: map_effect(
-                &before.persistent_extensions,
-                &self.persistent_extensions,
+                before.persistent_extensions.states(),
+                self.persistent_extensions.states(),
             ),
             extension_entries: acc_effect(&extension_entry_map(before), &extension_entry_map(self)),
             inductives: map_effect(&before.inductives, &self.inductives),
@@ -712,7 +712,7 @@ impl EnvEffect {
                 "persistent extension",
                 &self.persistent_extensions,
                 &shared.persistent_extensions,
-                &env.persistent_extensions,
+                env.persistent_extensions.states(),
             ),
             acc_disagreement(
                 "extension entries",

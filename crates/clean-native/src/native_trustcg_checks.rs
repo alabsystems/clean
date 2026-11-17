@@ -133,6 +133,7 @@ fn module_self_checks_with_policy(
     })
 }
 
+#[cfg(test)]
 pub(crate) fn object_self_checks_for_env(
     env: &Environment,
     module: &Module,
@@ -144,17 +145,42 @@ fn object_self_checks_with_policy(
     module: &Module,
     policy: StringLayoutPolicy,
 ) -> Result<ObjectSelfChecks, LaneError> {
+    object_self_checks_with_policy_recording(module, policy, None)
+}
+
+pub(crate) fn object_self_checks_for_env_recording(
+    env: &Environment,
+    module: &Module,
+    observation: Option<&crate::primitive_uses::NativeRecorder>,
+) -> Result<ObjectSelfChecks, LaneError> {
+    object_self_checks_with_policy_recording(module, StringLayoutPolicy::from_env(env), observation)
+}
+
+fn object_self_checks_with_policy_recording(
+    module: &Module,
+    policy: StringLayoutPolicy,
+    observation: Option<&crate::primitive_uses::NativeRecorder>,
+) -> Result<ObjectSelfChecks, LaneError> {
     let bytes =
         serialize_module_bytes(module).map_err(|e| LaneError::core("serialize")(e.into()))?;
-    validate_module_bytes(&bytes).map_err(|cause| LaneError::Core {
+    let validation = validate_module_bytes(&bytes).map_err(|cause| LaneError::Core {
         step: "module-validation",
         cause,
-    })?;
+    });
+    let module_context = observation.and_then(|observer| {
+        observer.bytes(
+            "actual native module before license",
+            "module supplied to native checks",
+            std::path::Path::new("module-before-license.trustir"),
+            bytes,
+        )
+    });
+    validation?;
     if !policy.permits_byte_backed_bodies() {
         refuse_source_lowered_string_body(module)?;
     }
     let bodyless = bodyless_declarations(module);
-    check_link_demand(&bodyless)?;
+    check_link_demand_recording(&bodyless, observation, module_context.as_ref())?;
     let digest =
         module_stable_digest_string(module).map_err(|e| LaneError::core("digest")(e.into()))?;
     Ok(ObjectSelfChecks { digest })
@@ -180,10 +206,18 @@ fn refuse_source_lowered_string_body(module: &Module) -> Result<(), LaneError> {
     }
 }
 
-fn check_link_demand(bodyless: &[LinkSignature]) -> Result<(), LaneError> {
-    let shims: BTreeMap<&str, &str> = prelude_shim_definitions().into_iter().collect();
+fn check_link_demand_recording(
+    bodyless: &[LinkSignature],
+    observation: Option<&crate::primitive_uses::NativeRecorder>,
+    module_context: Option<&crate::primitive_uses::NativeArtifactId>,
+) -> Result<(), LaneError> {
+    let shims: BTreeMap<&'static str, &'static str> =
+        prelude_shim_definitions().into_iter().collect();
     for decl in bodyless.iter().filter(|d| d.symbol.starts_with("l_")) {
         let Some(definition) = shims.get(decl.symbol.as_str()) else {
+            if let Some(observer) = observation {
+                observer.shim_demand(module_context, decl, None, None);
+            }
             return Err(LaneError::Core {
                 step: "link-demand",
                 cause: format!(
@@ -193,7 +227,11 @@ fn check_link_demand(bodyless: &[LinkSignature]) -> Result<(), LaneError> {
                 ),
             });
         };
-        if let Some(why) = shim_abi_mismatch(definition, decl) {
+        let mismatch = shim_abi_mismatch(definition, decl);
+        if let Some(observer) = observation {
+            observer.shim_demand(module_context, decl, Some(*definition), mismatch.as_deref());
+        }
+        if let Some(why) = mismatch {
             return Err(LaneError::Core {
                 step: "link-demand",
                 cause: format!("prelude shim ABI mismatch: {why}"),

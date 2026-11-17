@@ -73,10 +73,10 @@ impl<'env> TypeChecker<'env> {
                     .get(*id)
                     .map(|d| d.type_.clone())
                     .ok_or(TypeError::UnknownFVar(*id))?;
-                let cert = ProofCert::FVar {
+                let cert = self.inference_certificate(|| ProofCert::FVar {
                     id: *id,
                     type_: Box::new(ty.clone()),
-                };
+                });
                 Ok((ty, cert))
             }
             ExprKind::Sort(l) => {
@@ -86,7 +86,7 @@ impl<'env> TypeChecker<'env> {
                     self.check_level(l)?;
                 }
                 let result_ty = Expr::from_kind(ExprKind::Sort(Level::succ(l.clone())));
-                let cert = ProofCert::Sort { level: l.clone() };
+                let cert = self.inference_certificate(|| ProofCert::Sort { level: l.clone() });
                 Ok((result_ty, cert))
             }
             ExprKind::Const(name, levels) => {
@@ -124,11 +124,11 @@ impl<'env> TypeChecker<'env> {
                     .ok_or_else(|| TypeError::UnknownConst(name.clone()))?;
                 let ty =
                     self.instantiate_levels_checked(name, &info.type_, &info.level_params, levels)?;
-                let cert = ProofCert::Const {
+                let cert = self.inference_certificate(|| ProofCert::Const {
                     name: name.clone(),
                     levels: levels.to_vec(),
                     type_: Box::new(ty.clone()),
-                };
+                });
                 Ok((ty, cert))
             }
             ExprKind::App(f, a) => {
@@ -200,12 +200,12 @@ impl<'env> TypeChecker<'env> {
                         // Substitute argument into result type
                         let result_ty = result_type.instantiate(a);
 
-                        let cert = ProofCert::App {
+                        let cert = self.inference_certificate(|| ProofCert::App {
                             fn_cert: f_cert,
                             fn_type: Box::new(f_type_whnf.clone()),
                             arg_cert,
                             result_type: Box::new(result_ty.clone()),
-                        };
+                        });
 
                         Ok((result_ty, cert))
                     }
@@ -243,7 +243,7 @@ impl<'env> TypeChecker<'env> {
                 }
             }
             ExprKind::Lam(bi, arg_type, body) => {
-                // Infer arg type cert (always needed for the certificate).
+                // Preserve strict certificate-path inference even when output is discarded.
                 // #3425: breadcrumb into the lambda's binder type.
                 self.expr_loc_push(ExprPathStep::LamType);
                 let arg_type_result = self.infer_type_with_cert_impl(arg_type);
@@ -276,9 +276,6 @@ impl<'env> TypeChecker<'env> {
                 self.ctx_pop();
                 let (body_type, body_cert_raw) = body_result?;
 
-                // Convert FVar certificates back to BVar certificates for the body
-                let body_cert = self.rebind_certificate_body(body_cert_raw, fvar_id);
-
                 // Abstract back to get Pi type
                 let body_type_abstract = body_type.abstract_fvar(fvar_id);
                 let result_type = Expr::from_kind(ExprKind::Pi(
@@ -287,12 +284,12 @@ impl<'env> TypeChecker<'env> {
                     body_type_abstract.into(),
                 ));
 
-                let cert = ProofCert::Lam {
+                let cert = self.inference_certificate(|| ProofCert::Lam {
                     binder_info: bi.info,
                     arg_type_cert: Arc::new(arg_type_cert),
-                    body_cert: Arc::new(body_cert),
+                    body_cert: Arc::new(self.rebind_certificate_body(body_cert_raw, fvar_id)),
                     result_type: Box::new(result_type.clone()),
-                };
+                });
 
                 Ok((result_type, cert))
             }
@@ -326,9 +323,6 @@ impl<'env> TypeChecker<'env> {
                 self.ctx_pop();
                 let (body_sort, body_type_cert_raw) = body_result?;
 
-                // Convert FVar certificates back to BVar certificates for the body
-                let body_type_cert = self.rebind_certificate_body(body_type_cert_raw, fvar_id);
-
                 let body_sort_whnf = self.whnf_impl(&body_sort);
                 let ExprKind::Sort(l2) = &body_sort_whnf.kind else {
                     self.expr_loc_push(ExprPathStep::PiBody);
@@ -344,18 +338,20 @@ impl<'env> TypeChecker<'env> {
                 let result_level = self.level_imax(l1.clone(), l2.clone());
                 let result_type = Expr::from_kind(ExprKind::Sort(result_level));
 
-                let cert = ProofCert::Pi {
+                let cert = self.inference_certificate(|| ProofCert::Pi {
                     binder_info: bi.info,
                     arg_type_cert: Arc::new(arg_type_cert),
                     arg_level: l1,
-                    body_type_cert: Arc::new(body_type_cert),
+                    body_type_cert: Arc::new(
+                        self.rebind_certificate_body(body_type_cert_raw, fvar_id),
+                    ),
                     body_level: l2,
-                };
+                });
 
                 Ok((result_type, cert))
             }
             ExprKind::Let(let_name, ty, val, body, _) => {
-                // Always infer type and value certs for the certificate.
+                // Preserve strict inference of both annotation and value, including discard calls.
                 // #3425: breadcrumb into the let-type annotation.
                 self.expr_loc_push(ExprPathStep::LetType);
                 let ty_result = self.infer_type_with_cert_impl(ty);
@@ -419,29 +415,26 @@ impl<'env> TypeChecker<'env> {
                 self.ctx_pop();
                 let (body_type, body_cert_raw) = body_result?;
 
-                // Convert FVar certificates back to BVar certificates for the body
-                let body_cert = self.rebind_certificate_body(body_cert_raw, fvar_id);
-
                 // Preserve the same checked dependent-let result as fast
                 // inference, while retaining the real body certificate below.
                 let result_type =
                     self.close_inferred_let_type(let_name, ty, val, body_type, fvar_id);
 
-                let cert = ProofCert::Let {
+                let cert = self.inference_certificate(|| ProofCert::Let {
                     type_cert: Arc::new(type_cert),
                     value_cert: Arc::new(value_cert),
-                    body_cert: Arc::new(body_cert),
+                    body_cert: Arc::new(self.rebind_certificate_body(body_cert_raw, fvar_id)),
                     result_type: Box::new(result_type.clone()),
-                };
+                });
 
                 Ok((result_type, cert))
             }
             ExprKind::Lit(lit) => {
                 let type_ = infer_literal_type(lit);
-                let cert = ProofCert::Lit {
+                let cert = self.inference_certificate(|| ProofCert::Lit {
                     lit: lit.clone(),
                     type_: Box::new(type_.clone()),
-                };
+                });
                 Ok((type_, cert))
             }
             ExprKind::Proj(struct_name, idx, e) => {
@@ -455,13 +448,13 @@ impl<'env> TypeChecker<'env> {
                 // Get the field type using the pre-computed expr_type to avoid duplicate inference
                 let field_type = self.infer_proj_type_from(struct_name, *idx, e, &expr_type)?;
 
-                let cert = ProofCert::Proj {
+                let cert = self.inference_certificate(|| ProofCert::Proj {
                     struct_name: struct_name.clone(),
                     idx: *idx,
                     expr_cert: Arc::new(expr_cert),
                     expr_type: Box::new(expr_type),
                     field_type: Box::new(field_type.clone()),
-                };
+                });
                 Ok((field_type, cert))
             }
             // MData is transparent - just infer the type of the inner expression
@@ -472,11 +465,11 @@ impl<'env> TypeChecker<'env> {
                 let inner_result = self.infer_type_with_cert_impl(inner);
                 self.expr_loc_pop();
                 let (inner_type, inner_cert) = inner_result?;
-                let cert = ProofCert::MData {
+                let cert = self.inference_certificate(|| ProofCert::MData {
                     metadata: metadata.clone(),
                     inner_cert: Arc::new(inner_cert),
                     result_type: Box::new(inner_type.clone()),
-                };
+                });
                 Ok((inner_type, cert))
             }
 

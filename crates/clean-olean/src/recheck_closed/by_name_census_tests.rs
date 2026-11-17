@@ -153,6 +153,7 @@ const IMPLICIT_METHODS: &[(&str, &str)] = &[
 ];
 
 const NOT_A_NAME: &str = "not a constant name: a Debug/Display/serde label, a diagnostic string or a binder spelling for printing; nothing compares a declaration's name against it";
+const MATCHER_STORAGE: &str = "the key of Clean's own matcher-metadata extension (env/matcher.rs `STORAGE_KEY`): since the plain matcher index (52b9317c99) the append funnel `add_persistent_extension_entries` compares each incoming EXTENSION's name with it, never a declaration's; the index it keys has one reader outside env/matcher.rs, clean-elab's simp matcher reduction (no type-checker path), and `get_matcher_info` re-checks each row against the current declaration";
 const OPTION: &str = "an `Environment` option key or value (`set_option`), read as a resource budget or profiler switch; no declaration name is compared against it";
 const ENV_VAR: &str = "a process environment-variable name or a profiler frame label; no declaration name is compared against it";
 const UNIV: &str =
@@ -184,6 +185,11 @@ pub(super) const EXPLAINED: &[(&str, &[&str], &str)] = &[
         "env/matcher.rs",
         &["camelCase"],
         NOT_A_NAME,
+    ),
+    (
+        "env/matcher.rs",
+        &["Clean.matcherInfo.v1"],
+        MATCHER_STORAGE,
     ),
     (
         "tc/fold_admission.rs",
@@ -564,6 +570,22 @@ pub(super) const EXPLAINED: &[(&str, &[&str], &str)] = &[
 // The test.
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// Writes every literal site and its role to `CLEAN_BY_NAME_LITERAL_DUMP` when
+/// it is set: a diagnostic beside the census test, never part of what it
+/// asserts, so the condition lives here rather than in the test body.
+fn dump_literal_roles_if_requested<R: std::fmt::Debug>(
+    sites: &BTreeMap<(String, usize), (String, R)>,
+) {
+    let Ok(path) = std::env::var("CLEAN_BY_NAME_LITERAL_DUMP") else {
+        return;
+    };
+    let dump = sites
+        .iter()
+        .map(|((file, at), (s, role))| format!("{file}\t{at}\t{s}\t{role:?}\n"))
+        .collect::<String>();
+    std::fs::write(path, dump).expect("write literal roles");
+}
+
 #[test]
 fn every_by_name_reference_the_replay_can_reach_is_gated_or_explained() {
     let census = Census::build();
@@ -575,14 +597,7 @@ fn every_by_name_reference_the_replay_can_reach_is_gated_or_explained() {
     }
     let literals = census.literals();
     let sites = census.literal_sites();
-    // SELF-SKIP OK: optional diagnostic write only; all assertions still run.
-    if let Ok(path) = std::env::var("CLEAN_BY_NAME_LITERAL_DUMP") {
-        let dump = sites
-            .iter()
-            .map(|((file, at), (s, role))| format!("{file}\t{at}\t{s}\t{role:?}\n"))
-            .collect::<String>();
-        std::fs::write(path, dump).expect("write literal roles");
-    }
+    dump_literal_roles_if_requested(&sites);
     // Classification keeps the original denominator. In particular all byte
     // literals remain visible, even when their direct role is byte data.
     let mut site_literals: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();

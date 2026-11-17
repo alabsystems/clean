@@ -30,6 +30,7 @@ mod native_kernel_bool;
 mod native_monad_inline;
 mod native_opaque_audit;
 mod native_rec_split_audit;
+pub mod primitive_uses;
 // The linkable runtime archive `clean native-runtime` writes (WS6.13).
 pub mod native_runtime;
 mod native_string_carrier_audit;

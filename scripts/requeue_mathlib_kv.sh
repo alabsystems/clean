@@ -15,6 +15,9 @@
 #   --batch  initial piece size (default 300 — deliberately below the
 #            measured death threshold, unlike the fresh-run default 600)
 #   --floor  don't split below this many modules (default 60)
+# P6 slice 1a: blocked until the reference producer (slice 1b); see scripts/lib/p6_blocked.sh.
+# shellcheck source=scripts/lib/p6_blocked.sh
+. "$(cd "$(dirname "$0")" && pwd)/lib/p6_blocked.sh" && p6_blocked "scripts/requeue_mathlib_kv.sh"
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

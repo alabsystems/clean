@@ -899,7 +899,7 @@ fn par_reduces_cd_binder_inv_eq_proof(b: BinderInv) -> String {
             "(_ihsub : @Eq KExpr psub ({head} s0 body) -> {kont_sub} -> C) ",
             "(eq : @Eq KExpr (KExpr.proj ps pidx psub) ({head} s0 body)) ",
             "(_k : {kont_red}) => ",
-            "{proj_ne} ps pidx psub s0 body C eq)"
+            "@{proj_ne} ps pidx psub s0 body C eq)"
         ),
         head = head,
         proj_ne = proj_ne,
@@ -983,7 +983,7 @@ fn par_reduces_cd_star_binder_inv_proof(b: BinderInv) -> String {
             "par_reduces_cd_star env s0 A -> par_reduces_cd_star env body B -> C e'') => ",
             "fun (A : KExpr) (B : KExpr) (eq : @Eq KExpr e ({head} A B)) ",
             "(hd : par_reduces_cd_star env s0 A) (hb : par_reduces_cd_star env body B) => ",
-            "{single} env A B e' (C e'') ",
+            "@{single} env A B e' (C e'') ",
             "(@Eq.substType KExpr (fun (x : KExpr) => par_reduces_cd env x e') e ({head} A B) eq hstep) ",
             "(fun (A' : KExpr) (B' : KExpr) (eq' : @Eq KExpr e' ({head} A' B')) ",
             "(hAA' : par_reduces_cd env A A') (hBB' : par_reduces_cd env B B') => ",
@@ -1032,7 +1032,7 @@ fn par_reduces_cd_star_binder_inv_eq_proof(b: BinderInv) -> String {
             "(k : forall (s0' : KExpr) (body' : KExpr), ",
             "@Eq KExpr w ({head} s0' body') -> ",
             "par_reduces_cd_star env s0 s0' -> par_reduces_cd_star env body body' -> C) => ",
-            "{kexpr_inv} env s0 body w ",
+            "@{kexpr_inv} env s0 body w ",
             "(fun (ww : KExpr) => @Eq KExpr w ww -> C) h ",
             "(fun (s0' : KExpr) (body' : KExpr) ",
             "(hd : par_reduces_cd_star env s0 s0') (hb : par_reduces_cd_star env body body') => ",
@@ -1109,7 +1109,7 @@ fn par_cd_binder_injectivity_proof(
         concat!(
             "(fun (a1' : KExpr) (b1' : KExpr) (eq1 : @Eq KExpr e3 ({head} a1' b1')) ",
             "(hda1 : par_reduces_cd_star env a1 a1') (hdb1 : par_reduces_cd_star env b1 b1') => ",
-            "{star_inv_eq} env a2 b2 e3 ",
+            "@{star_inv_eq} env a2 b2 e3 ",
             "(par_strips_witness_cd_star env {clhs} {crhs}) p2 {inner_k})"
         ),
         head = head,
@@ -1128,7 +1128,7 @@ fn par_cd_binder_injectivity_proof(
             "(fun (e3 : KExpr) ",
             "(p1 : par_reduces_cd_star env ({head} a1 b1) e3) ",
             "(p2 : par_reduces_cd_star env ({head} a2 b2) e3) => ",
-            "{star_inv_eq} env a1 b1 e3 ",
+            "@{star_inv_eq} env a1 b1 e3 ",
             "(par_strips_witness_cd_star env {clhs} {crhs}) p1 {outer_k}) ",
             "w"
         ),

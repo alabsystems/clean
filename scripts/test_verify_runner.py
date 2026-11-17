@@ -4464,8 +4464,15 @@ class EveryLibTestCompilesInARow(unittest.TestCase):
         cut = [r for r in rows if r["id"] != "clean-ck0::lib::features::export"]
         problems = vr.lib_test_coverage_problems(meta, cut)
         self.assertGreaterEqual(len(problems), 22, problems)
-        self.assertTrue(all("clean-ck0: lib test export::" in m
-                            or "minimal_env::overlay::tests" in m for m in problems), problems)
+        # The modules whose tests are `cfg(all(test, feature = "export"))`: the
+        # export reader, the overlay, and (2026-11-15, ck0's lazy conversion) the
+        # def_eq tests that build their subjects through the reader.
+        export_only = ("clean-ck0: lib test export::", "minimal_env::overlay::tests",
+                       "clean-ck0: lib test def_eq::argument_delta::tests::",
+                       "clean-ck0: lib test def_eq::lazy::tests::",
+                       "clean-ck0: lib test def_eq::lazy::projection_tests::")
+        self.assertTrue(all(any(module in m for module in export_only) for m in problems),
+                        problems)
 
     def test_the_real_release_infer_parity_debug_row_is_replaced(self):
         meta = vr.cargo_metadata()
@@ -4620,8 +4627,53 @@ class ParserInputCoverage(unittest.TestCase):
 
 
 class CheckerQualificationInputs(unittest.TestCase):
+    _EXTRA_FIXTURE_CLOSURES = {
+        "align_nat_word": [
+            "cic_l",
+            "align_nat_word"
+        ],
+        "align_nat_word_semr": [
+            "cic_l",
+            "align_nat_word"
+        ],
+        "kcheck_rule_certificates": [
+            "cic_l",
+            "cic_l_model",
+            "kcheck_spec",
+            "kcheck_rule_certificates"
+        ],
+        "kcheck_bool_island": [
+            "cic_l",
+            "cic_l_model",
+            "kcheck_spec",
+            "kcheck_labelled",
+            "kcheck_rule_certificates",
+            "kcheck_bool_island"
+        ],
+        "kcheck_bool_admission": [
+            "cic_l",
+            "cic_l_model",
+            "kcheck_spec",
+            "kcheck_labelled",
+            "kcheck_rule_certificates",
+            "kcheck_bool_island",
+            "kcheck_bool_admission"
+        ],
+        "kcheck_eq_headers": [
+            "cic_l",
+            "cic_l_model",
+            "kcheck_spec",
+            "kcheck_labelled",
+            "kcheck_rule_certificates",
+            "kcheck_bool_island",
+            "kcheck_bool_admission",
+            "kcheck_eq_headers"
+        ]
+    }
+
     CORE = "clean-olean::test::kcheck_core"
     SPEC = "clean-olean::test::kcheck_spec"
+    SOUND = "clean-olean::test::kcheck_sound"
     BINDING_NOT = "clean-olean::test::binding_not_review"
     CHK_LIA = "clean-olean::test::vf4_chk_lia"
     CHK_LIA_F1 = "clean-olean::test::vf4_chk_lia_f1"
@@ -4643,11 +4695,14 @@ class CheckerQualificationInputs(unittest.TestCase):
         core = set(vr.TARGET_EXTRA_PATHS.get(self.CORE, ()))
         spec = set(vr.TARGET_EXTRA_PATHS.get(self.SPEC, ()))
         binding_not = set(vr.TARGET_EXTRA_PATHS.get(self.BINDING_NOT, ()))
+        sound = set(vr.TARGET_EXTRA_PATHS.get(self.SOUND, ()))
         self.assertTrue({"lean-toolchain", "theories/cic_l", "theories/kcheck"} <= core)
         self.assertTrue({"lean-toolchain", "theories/cic_l", "theories/cic_l_model",
                          "theories/kcheck_spec"} <= spec)
         self.assertTrue({"crates/clean-ck0", "lean-toolchain", "theories/binding_not_review",
                          "reports/2026-11-14-extension-binding-not-review"} <= binding_not)
+        self.assertTrue({"lean-toolchain", "theories/cic_l", "theories/cic_l_model",
+                         "theories/kcheck_spec", "theories/kcheck_sound"} <= sound)
         for target in (self.CHK_LIA, self.CHK_LIA_F1, self.CHK_LIA_QUORUM, self.VF5_F1):
             self.assertTrue({"lean-toolchain", "theories/chk_lia"}
                             <= set(vr.TARGET_EXTRA_PATHS.get(target, ())), target)
@@ -4669,6 +4724,12 @@ class CheckerQualificationInputs(unittest.TestCase):
         pin = (vr.REPO_ROOT / "lean-toolchain").read_text().strip().split(":")[-1]
         fixtures = vr.REPO_ROOT / "crates/clean-olean/tests/fixtures/lean" / pin
         family_targets = {
+            "align_nat_word": ("clean-olean::test::align_nat_word",),
+            "align_nat_word_semr": ("clean-olean::test::align_nat_word_semr",),
+            "kcheck_rule_certificates": ("clean-olean::test::kcheck_rule_certificates",),
+            "kcheck_bool_island": ("clean-olean::test::kcheck_bool_island",),
+            "kcheck_bool_admission": ("clean-olean::test::kcheck_bool_admission",),
+            "kcheck_eq_headers": ("clean-olean::test::kcheck_eq_headers",),
             "binding_not_review": (self.BINDING_NOT,),
             "chk_lia": (self.CHK_LIA,),
             "chk_lia_f1": (self.CHK_LIA_F1, self.CHK_LIA_QUORUM),
@@ -4688,6 +4749,7 @@ class CheckerQualificationInputs(unittest.TestCase):
             "kcheck_static_complete": ("clean-olean::test::kcheck_static_complete",),
             "kcheck_nat_acceptance": ("clean-olean::test::kcheck_nat_acceptance",),
             "kcheck_sort_bounds": ("clean-olean::test::kcheck_sort_bounds",),
+            "kcheck_sound": (self.SOUND,),
             "kcheck_soundness": ("clean-olean::test::kcheck_labelled",),
             "kcheck_spec": (self.SPEC,),
             "vf5_f1": (self.VF5_F1,),
@@ -4707,9 +4769,261 @@ class CheckerQualificationInputs(unittest.TestCase):
                     cic_l_split = (theory == "cic_l" and {"theories/cic_l/CICL", "theories/cic_l/ORDER"} <= declared)
                     self.assertTrue(whole or cic_l_split, (family, target, theory, declared))
 
+    def _fixture_input_tree(self, family="kcheck_bool_island"):
+        temporary = tempfile.TemporaryDirectory(prefix="fixture_inputs_", dir=_SANDBOX)
+        self.addCleanup(temporary.cleanup)
+        base = Path(temporary.name)
+        (base / "lean-toolchain").write_text("leanprover/lean4:v4.30.0-rc2\n")
+        source = base / "crates/clean-olean/tests" / f"{family}.rs"
+        source.parent.mkdir(parents=True)
+        (source.parent.parent / "lean_worlds.tsv").write_text(
+            "# INERT fixture has no repository world-table rows\n")
+        source.write_text('fn fixture() { qualify(&Package { family: "' + family + '", '
+                          'theories: &["cic_l"], }); }\n')
+        order = base / "crates/clean-olean/tests/fixtures/lean/v4.30.0-rc2" / family / "ORDER"
+        order.parent.mkdir(parents=True)
+        order.write_text("theory cic_l\n")
+        return base, source, order
+
+    def test_six_fixture_source_closures_are_independently_derived(self):
+        found = vr._crystal_extra_paths_owed()
+        for family, packages in self._EXTRA_FIXTURE_CLOSURES.items():
+            target = f"clean-olean::test::{family}"
+            expected = {"lean-toolchain", *(f"theories/{p}" for p in packages)}
+            self.assertTrue(expected <= found.get(target, set()), (target, found.get(target)))
+            self.assertTrue(expected <= set(vr.TARGET_EXTRA_PATHS.get(target, ())), target)
+            self.assertTrue(found[target] <= set(vr.TARGET_EXTRA_PATHS[target]),
+                            (target, found[target] - set(vr.TARGET_EXTRA_PATHS[target])))
+        align = found["clean-olean::test::align_nat_word"]
+        self.assertTrue({"theories/align_nat_word/ORDER",
+                         "theories/align_nat_word/lakefile.toml",
+                         "theories/align_nat_word/checked_inventory.json"} <= align)
+        self.assertNotIn("theories/align_nat_word_semr",
+                         found["clean-olean::test::align_nat_word_semr"])
+
+    def test_fixture_order_and_rust_config_additions_require_declared_inputs(self):
+        # Unknown facts belong to this inert Rust-text fixture, not an SDK.
+        with mock.patch.object(vr, "_library_read_facts", return_value={}):
+            base, source, order = self._fixture_input_tree()
+            original = source.read_text()
+            self.assertEqual(vr.check_crystal_extra_paths(base), [])
+            order.write_text("theory cic_l\ntheory new_order_package\n")
+            problems = vr.check_crystal_extra_paths(base)
+            self.assertTrue(any("theories/new_order_package" in p for p in problems), problems)
+            order.write_text("theory cic_l\n")
+            source.write_text(original.replace('["cic_l"]', '["cic_l", "new_config_package"]'))
+            problems = vr.check_crystal_extra_paths(base)
+            self.assertTrue(any("theories/new_config_package" in p for p in problems), problems)
+            source.write_text(original)
+            order.write_text("theory cic_l\nfrom semr SemR\n")
+            self.assertNotIn("theories/semr", vr._fixture_theory_paths_owed(base)[
+                "clean-olean::test::kcheck_bool_island"])
+
+    def test_fixture_source_inputs_refuse_malformed_or_dynamic_declarations(self):
+        base, source, order = self._fixture_input_tree()
+        original = source.read_text()
+        pin = base / "lean-toolchain"
+        cases = [
+            (original, "theory ../escape\n", "leanprover/lean4:v4.30.0-rc2\n", "package"),
+            (original.replace('["cic_l"]', 'computed_theories'), "theory cic_l\n",
+             "leanprover/lean4:v4.30.0-rc2\n", "literal Rust arrays"),
+            (original.replace('family: "kcheck_bool_island"', 'family: "different"'),
+             "theory cic_l\n", "leanprover/lean4:v4.30.0-rc2\n", "family"),
+            (original, "theory cic_l\n", "../outside\n", "safe Lean pin"),
+        ]
+        for text, recipe, version, expected in cases:
+            with self.subTest(expected=expected):
+                source.write_text(text)
+                order.write_text(recipe)
+                pin.write_text(version)
+                with self.assertRaisesRegex(ValueError, expected):
+                    vr._fixture_theory_paths_owed(base)
+
+    def test_actual_package_family_cannot_hide_behind_an_unrelated_literal(self):
+        base, source, _ = self._fixture_input_tree()
+        original = source.read_text()
+        constant = 'const FAMILY: &str = "kcheck_bool_island";\n'
+        dynamic = original.replace('family: "kcheck_bool_island"', 'family: computed_family()')
+        cases = [
+            constant + dynamic,
+            original + dynamic,
+            constant + 'fn other() { compiled_fixture_dir(FAMILY); }\n'
+            + original.replace('family: "kcheck_bool_island"', 'family'),
+            original.replace('theories: &["cic_l"],',
+                             'theories: &["cic_l"], ..computed_package()'),
+            original.replace('theories: &["cic_l"]', 'theories'),
+            original + 'fn other() { standalone_theory::qualify(&computed_package()); }\n',
+            original + 'fn actual(config: &Package) { standalone_theory::qualify(config); }\n',
+            original + 'fn other() { (standalone_theory::qualify)(&computed_package()); }\n',
+            original + 'use standalone_theory::qualify as other;\n',
+            original.replace('qualify(', 'other::qualify('),
+            original.replace('qualify(', 'r#qualify('),
+            original.replace('qualify(', 'other::r#standalone_theory::qualify('),
+            original.replace('qualify(', '\u0394::standalone_theory::qualify('),
+            original.replace('qualify(', '\u0394standalone_theory::qualify('),
+            original.replace('qualify(', 'x\u0301standalone_theory::qualify('),
+            original.replace('qualify(', 'x\u0301qualify('),
+            'some_macro! { ' + original + ' }\n',
+            'macro \u0394() { ' + original + ' }\n',
+        ]
+        for text in cases:
+            with self.subTest(text=text):
+                source.write_text(text)
+                with self.assertRaisesRegex(ValueError, "family|Package update|theories"):
+                    vr._fixture_theory_paths_owed(base)
+        # An unused literal is harmless when the actual Package owner is also
+        # literal; strings/comments cannot invent owner declarations.
+        source.write_text(constant + original
+                          + 'const DESCRIPTION: &str = r#"family: opaque() const FAMILY: &str"#;\n'
+                          + '/* const FAMILY: &str = opaque(); */\n')
+        self.assertEqual(vr._fixture_theory_paths_owed(base), {
+            "clean-olean::test::kcheck_bool_island": {
+                "lean-toolchain", "theories/cic_l", "theories/kcheck_bool_island"}})
+
+    def test_fixture_constant_owner_cannot_be_nested_dynamic_or_shadowed(self):
+        base, source, order = self._fixture_input_tree("align_nat_word")
+        order.write_text("theory cic_l\ntheory align_nat_word\n")
+        literal = 'const FAMILY: &str = "align_nat_word";\n'
+        call = 'fn fixture() { compiled_fixture_dir(FAMILY); }\n'
+        cases = [
+            'const FAMILY: &str = fixture_family();\n'
+            + 'mod unrelated { const FAMILY: &str = "align_nat_word"; }\n' + call,
+            'mod unrelated { const FAMILY: &str = "align_nat_word"; }\n' + call,
+            literal + 'fn fixture() { let FAMILY = fixture_family(); compiled_fixture_dir(FAMILY); }\n',
+            literal + 'fn fixture() { compiled_fixture_dir(fixture_family()); }\n',
+            literal + 'fn fixture() { compiled_fixture_dir("another_family"); }\n',
+            literal + 'fn unused() { compiled_fixture_dir(FAMILY); }\n'
+            + 'fn fixture() { (compiled_fixture_dir)("other_fixture"); }\n',
+            literal + 'fn unused() { compiled_fixture_dir(FAMILY); }\n'
+            + 'use clean_olean::test_support::compiled_fixture_dir as other;\n'
+            + 'fn fixture() { other("other_fixture"); }\n',
+            literal + 'fn unused() { compiled_fixture_dir(FAMILY); }\n'
+            + 'fn fixture() { other::compiled_fixture_dir("align_nat_word"); }\n',
+            literal + 'fn unused() { compiled_fixture_dir(FAMILY); }\n'
+            + 'fn fixture() { other::r#compiled_fixture_dir("align_nat_word"); }\n',
+            'use clean_olean as \u0394clean_olean;\n' + literal
+            + 'fn fixture() { \u0394clean_olean::test_support::compiled_fixture_dir(FAMILY); }\n',
+            'use clean_olean as x\u0301clean_olean;\n' + literal
+            + 'fn fixture() { x\u0301clean_olean::test_support::compiled_fixture_dir(FAMILY); }\n',
+            literal + 'macro_rules! pick { ($clean_olean:ident) => { '
+            + '$clean_olean::test_support::compiled_fixture_dir(FAMILY) }; }\n',
+            literal + 'macro_rules! pick { ($($prefix:ident),*) => { '
+            + '$($prefix::)* clean_olean::test_support::compiled_fixture_dir(FAMILY) }; }\n',
+            literal,
+        ]
+        for text in cases:
+            with self.subTest(text=text):
+                source.write_text(text)
+                with self.assertRaisesRegex(ValueError, "family|FAMILY"):
+                    vr._fixture_theory_paths_owed(base)
+        source.write_text(literal + call)
+        self.assertEqual(vr._fixture_theory_paths_owed(base), {
+            "clean-olean::test::align_nat_word": {
+                "lean-toolchain", "theories/cic_l", "theories/align_nat_word"}})
+
+    def test_six_fixture_theory_edits_demote_only_affected_records(self):
+        temporary = tempfile.TemporaryDirectory(prefix="fixture_digests_", dir=_SANDBOX)
+        self.addCleanup(temporary.cleanup)
+        base = Path(temporary.name)
+        subprocess.run(["git", "init", "-q", str(base)], check=True)
+        crate = base / "crates/clean-olean"
+        crate.mkdir(parents=True)
+        (crate / "Cargo.toml").write_text("# inert metadata fixture\n")
+        (base / "lean-toolchain").write_text("leanprover/lean4:v4.30.0-rc2\n")
+        packages = sorted({p for names in self._EXTRA_FIXTURE_CLOSURES.values() for p in names})
+        for package in packages:
+            directory = base / "theories" / package
+            directory.mkdir(parents=True)
+            (directory / "Root.lean").write_text("-- INERT original source\n")
+            (directory / "ORDER").write_text("Root\n")
+            (directory / "checked_inventory.json").write_text('{"inert":"original"}\n')
+        subprocess.run(["git", "-C", str(base), "add", "."], check=True)
+        targets = [f"clean-olean::test::{f}" for f in self._EXTRA_FIXTURE_CLOSURES]
+        meta = {"packages": [{"name": "clean-olean", "manifest_path": str(crate / "Cargo.toml"),
+                              "targets": [{"name": f, "kind": ["test"], "test": True}
+                                          for f in self._EXTRA_FIXTURE_CLOSURES]}]}
+        with mock.patch.object(vr, "REPO_ROOT", base), \
+                mock.patch.object(vr, "cargo_metadata", return_value=meta), \
+                mock.patch.object(vr, "check_crystal_extra_paths", return_value=[]), \
+                mock.patch.object(vr, "load_plan", return_value=None), \
+                mock.patch.object(vr, "toolchain_id", return_value="fixture"), \
+                mock.patch.object(vr, "lane_cfg_facts", return_value={}):
+            entries = {e["id"]: e for e in vr.build_inventory(["clean-olean"], with_gates=False)}
+            self.assertEqual(set(entries), set(targets))
+            for package in packages:
+                affected = {f"clean-olean::test::{f}" for f, names in
+                            self._EXTRA_FIXTURE_CLOSURES.items() if package in names}
+                for leaf in ("Root.lean", "ORDER", "checked_inventory.json"):
+                    with self.subTest(package=package, leaf=leaf):
+                        before = {key: vr.input_digest(entry, fresh=True)
+                                  for key, entry in entries.items()}
+                        path = base / "theories" / package / leaf
+                        original = path.read_text()
+                        path.write_text(original + "INERT changed source\n")
+                        for key, entry in entries.items():
+                            after = vr.input_digest(entry, fresh=True)
+                            self.assertEqual(before[key] != after, key in affected,
+                                             (package, leaf, key))
+                            bucket = vr.derive(entry, record(target=key, input_digest=before[key]), after)["bucket"]
+                            self.assertEqual(bucket, vr.BUCKET_UNKNOWN if key in affected else vr.BUCKET_GREEN,
+                                             (package, leaf, key))
+                        path.write_text(original)
+
+    def test_omitted_fixture_theory_input_is_refused_then_restored(self):
+        # Exercise the independent fixture-ORDER coverage guard, not a second
+        # derivation of TARGET_EXTRA_PATHS. Each removed package is a real
+        # compile/runtime input of one of the six independently reviewed callers.
+        pin = (vr.REPO_ROOT / "lean-toolchain").read_text().strip().split(":")[-1]
+        fixtures = vr.REPO_ROOT / "crates/clean-olean/tests/fixtures/lean" / pin
+        self.test_fixture_order_theory_packages_are_covered()
+        for family in ("align_nat_word", "align_nat_word_semr", "kcheck_rule_certificates",
+                       "kcheck_bool_island", "kcheck_bool_admission", "kcheck_eq_headers"):
+            target = f"clean-olean::test::{family}"
+            theories = [parts[1] for line in (fixtures / family / "ORDER").read_text().splitlines()
+                        if (parts := line.partition("#")[0].split()) and parts[0] == "theory"]
+            self.assertTrue(theories, family)
+            for theory in theories:
+                with self.subTest(target=target, omitted=theory):
+                    paths = dict(vr.TARGET_EXTRA_PATHS)
+                    missing = f"theories/{theory}"
+                    self.assertIn(missing, paths[target])
+                    paths[target] = [path for path in paths[target] if path != missing]
+                    with mock.patch.object(vr, "TARGET_EXTRA_PATHS", paths):
+                        with self.assertRaises(AssertionError):
+                            self.test_fixture_order_theory_packages_are_covered()
+                    self.test_fixture_order_theory_packages_are_covered()
+
+
+    def test_exec_kcheck_support_theory_packages_are_covered(self):
+        found = vr._crystal_extra_paths_owed()
+        base_req = {
+            "lean-toolchain",
+            "theories/cic_l",
+            "theories/cic_l_model",
+            "theories/kcheck_spec",
+            "theories/kcheck_labelled",
+        }
+        lbn_target = "clean-olean::test::level_bound_n_gate"
+        lbn_expected = {"data/level_bound_n.json", "lean-toolchain"}
+        self.assertTrue(lbn_expected <= found.get(lbn_target, set()), (lbn_target, found.get(lbn_target)))
+        self.assertTrue(lbn_expected <= set(vr.TARGET_EXTRA_PATHS.get(lbn_target, ())), lbn_target)
+        for pkg in ("kcheck_loader", "kcheck_eval", "kcheck_m5_m6", "kcheck_c7_p2", "kcheck_capstone"):
+            target = f"clean-olean::test::{pkg}"
+            expected = base_req | {f"theories/{pkg}"}
+            if pkg == "kcheck_capstone":
+                expected |= {
+                    "theories/kcheck_loader",
+                    "theories/kcheck_eval",
+                    "theories/kcheck_m5_m6",
+                    "theories/kcheck_c7_p2",
+                }
+            self.assertTrue(expected <= found.get(target, set()), (target, found.get(target)))
+            self.assertTrue(expected <= set(vr.TARGET_EXTRA_PATHS.get(target, ())), target)
+
     def test_direct_statement_and_closure_pins_are_scanned(self):
         found = vr._crystal_extra_paths_owed()
-        for target, package in [(self.CORE, "kcheck"), (self.SPEC, "kcheck_spec")]:
+        for target, package in [(self.CORE, "kcheck"), (self.SPEC, "kcheck_spec"),
+                                (self.SOUND, "kcheck_sound")]:
             pins = {f"theories/{package}/{p}" for p in
                     ("ORDER", "statement_pins.json", "axiom_closures.json")}
             self.assertTrue(pins <= found.get(target, set()), target)
@@ -4721,7 +5035,9 @@ class CheckerQualificationInputs(unittest.TestCase):
         crate = base / "crates/clean-olean"
         crate.mkdir(parents=True)
         (crate / "Cargo.toml").write_text("# fixture\n")
-        packages = ["cic_l", "cic_l_model", "kcheck", "kcheck_spec"]
+        packages = ["cic_l", "cic_l_model", "kcheck", "kcheck_spec", "kcheck_sound",
+                    "align_nat_word", "kcheck_labelled", "kcheck_rule_certificates",
+                    "kcheck_bool_island", "kcheck_bool_admission", "kcheck_eq_headers"]
         for package in packages:
             path = base / "theories" / package / "Root.lean"
             path.parent.mkdir(parents=True)
@@ -4729,15 +5045,39 @@ class CheckerQualificationInputs(unittest.TestCase):
         subprocess.run(["git", "-C", str(base), "add", "."], check=True)
         meta = {"packages": [{"name": "clean-olean", "manifest_path": str(crate / "Cargo.toml"),
                               "targets": [{"name": name, "kind": ["test"], "test": True}
-                                          for name in ("kcheck_core", "kcheck_spec")]}]}
+                                          for name in ("kcheck_core", "kcheck_spec", "kcheck_sound",
+                                                       "align_nat_word", "align_nat_word_semr",
+                                                       "kcheck_rule_certificates", "kcheck_bool_island",
+                                                       "kcheck_bool_admission", "kcheck_eq_headers")]}]}
         with mock.patch.object(vr, "REPO_ROOT", base), \
                 mock.patch.object(vr, "cargo_metadata", return_value=meta), \
                 mock.patch.object(vr, "check_crystal_extra_paths", return_value=[]), \
                 mock.patch.object(vr, "load_plan", return_value=None), \
-                mock.patch.object(vr, "toolchain_id", return_value="fixture"):
+                mock.patch.object(vr, "toolchain_id", return_value="fixture"), \
+                mock.patch.object(vr, "lane_cfg_facts", return_value={}):
             entries = {e["id"]: e for e in vr.build_inventory(["clean-olean"], with_gates=False)}
-            expected = {"cic_l": {self.CORE, self.SPEC}, "cic_l_model": {self.SPEC},
-                        "kcheck": {self.CORE}, "kcheck_spec": {self.SPEC}}
+            def target(family):
+                return f"clean-olean::test::{family}"
+
+            alignment = {target("align_nat_word"), target("align_nat_word_semr")}
+            rule = {target("kcheck_rule_certificates")}
+            island = {target("kcheck_bool_island")}
+            admission = {target("kcheck_bool_admission")}
+            headers = {target("kcheck_eq_headers")}
+            standalone = rule | island | admission | headers
+            expected = {
+                "cic_l": {self.CORE, self.SPEC, self.SOUND} | alignment | standalone,
+                "cic_l_model": {self.SPEC, self.SOUND} | standalone,
+                "kcheck": {self.CORE},
+                "kcheck_spec": {self.SPEC, self.SOUND} | standalone,
+                "kcheck_sound": {self.SOUND},
+                "align_nat_word": alignment,
+                "kcheck_labelled": island | admission | headers,
+                "kcheck_rule_certificates": standalone,
+                "kcheck_bool_island": island | admission | headers,
+                "kcheck_bool_admission": admission | headers,
+                "kcheck_eq_headers": headers,
+            }
             for package, affected in expected.items():
                 before = {key: vr.input_digest(entry, fresh=True) for key, entry in entries.items()}
                 path = base / "theories" / package / "Root.lean"
@@ -4748,6 +5088,8 @@ class CheckerQualificationInputs(unittest.TestCase):
                     bucket = vr.derive(entry, record(target=key, input_digest=before[key]), after)["bucket"]
                     self.assertEqual(bucket, vr.BUCKET_UNKNOWN if key in affected else vr.BUCKET_GREEN)
                 path.write_text("-- before\n")
+                self.assertEqual(before, {key: vr.input_digest(entry, fresh=True)
+                                          for key, entry in entries.items()}, package)
 
 
 

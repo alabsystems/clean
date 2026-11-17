@@ -7,8 +7,6 @@ Reads archived data only: never configures CMake or executes upstream scripts.
 Case roots, execution variants and supporting files are separate denominators.
 A runnable upstream case is not evidence that Clean passes it.
 """
-import argparse
-import base64
 from collections import Counter
 import fnmatch
 import gzip
@@ -46,41 +44,10 @@ def read_json(path):
     return json.loads(gzip.decompress(raw) if str(path).endswith('.gz') else raw)
 
 
-def load_inputs(inventory_path, bundle_path):
-    inventory_raw = Path(inventory_path).read_bytes()
-    if str(inventory_path).endswith('.gz'):
-        inventory_raw = gzip.decompress(inventory_raw)
-    if hashlib.sha256(inventory_raw).hexdigest() != INVENTORY_SHA256:
-        raise ValueError('file inventory does not match the reviewed complete manifest')
-    inventory = json.loads(inventory_raw)
-    if inventory.get('worlds', {}).get('v4.35.0') != REVISION:
-        raise ValueError('wrong upstream inventory revision')
-    targets = {}
-    seen = set()
-    for row in inventory['files']:
-        path = row['id']
-        if path in seen or str(PurePosixPath(path)) != path or '..' in PurePosixPath(path).parts or path.startswith('/'):
-            raise ValueError('duplicate or invalid upstream path: ' + path)
-        seen.add(path)
-        if row['target']:
-            targets[path] = row['target']
-    bundle = read_json(bundle_path)
-    if bundle.get('upstream_revision') != REVISION:
-        raise ValueError('wrong harness-source revision')
-    sources = {}
-    for row in bundle['files']:
-        path = row['path']
-        raw = base64.b64decode(row['content_base64'], validate=True)
-        if (path in sources or path not in targets or git_blob(raw) != targets[path]['blob']
-                or row['blob'] != targets[path]['blob'] or row['mode'] != targets[path]['mode']
-                or hashlib.sha256(raw).hexdigest() != row['sha256'] or len(raw) != row['bytes']):
-            raise ValueError('missing, duplicate or mismatched harness source: ' + path)
-        sources[path] = raw.decode('utf-8')
-    if targets.get(CATALOG, {}).get('blob') != CATALOG_BLOB:
-        raise ValueError('unreviewed CMake catalog: update the parser contract before changing the pin')
-    if not {CATALOG, 'tests/util.sh', 'tests/with_env.sh.in'} <= sources.keys():
-        raise ValueError('missing pinned CMake catalog or common harness')
-    return targets, sources
+def load_inputs(inventory_path, bundle_path, world='v4.35.0'):
+    from replacement_case_profiles import load_profile_inputs, case_profile
+    return load_profile_inputs(inventory_path, bundle_path,
+        case_profile(world, (REVISION, INVENTORY_SHA256, CATALOG_BLOB)))
 
 
 def normalize(path):
@@ -278,7 +245,9 @@ def variants(path, runner, profile, targets, sources, aggregate):
     return modes
 
 
-def build_manifest(targets, sources, tool):
+def build_manifest(targets, sources, tool, world='v4.35.0'):
+    from replacement_case_profiles import case_profile
+    profile = case_profile(world, (REVISION, INVENTORY_SHA256, CATALOG_BLOB))
     entries = catalog_entries(sources[CATALOG])
     roots = {}
     exclusions = []
@@ -420,12 +389,16 @@ def build_manifest(targets, sources, tool):
     for row in cases:
         for variant in row['variants']:
             if variant.get('contract_state') == 'driver-subcases-not-enumerated':
-                contract = driver_contract(row['path'], variant['driver_source']['path'], sources, targets)
+                contract = driver_contract(row['path'], variant['driver_source']['path'], sources, targets, world=world)
                 contract['shell'] = [dict(ref(p, targets), source=sources[p]) for p in
                     [variant['harness'][-1]['path'], 'tests/util.sh', 'tests/with_env.sh.in']]
                 contract['setup_hooks'] = [dict(hook, source=sources[hook['path']]) for hook in row['hooks']]
                 contract['output_policy'] = variant['output']
                 contract['expected_shell_exit'] = variant['expected_exit']
+                if 'directory_inputs' in contract:
+                    row['input_scope'] = 'driver-dispatch-file-and-directory-inputs'
+                    row['supporting_inputs'] = [ref(p, targets) for p in contract['directory_inputs']]
+                    row['unresolved'].append('runtime-filtered-directory-driver-subcases')
                 variant['behavioral_contract'] = contract
                 variant['imports'] = contract['imports']
                 variant['contract_state'] = ('source-derived-driver-dynamic-expansion-required'
@@ -454,7 +427,7 @@ def build_manifest(targets, sources, tool):
     identifiers = [row['id'] for row in cases] + [v['id'] for v in all_variants]
     if len(identifiers) != len(set(identifiers)):
         raise ValueError('duplicate case/variant identity')
-    return dict(schema='clean-upstream-test-case-manifest-v2', upstream_revision=REVISION,
+    return dict(schema='clean-upstream-test-case-manifest-v2', upstream_revision=profile['revision'],
         catalog=ref(CATALOG, targets), common_harness=[ref(p, targets) for p in ('tests/util.sh', 'tests/with_env.sh.in')], oracle_identity=tool,
         status=STATUS, claim='Pinned upstream case-root and harness-variant inventory only; no executed Clean or Lean parity verdict.',
         driver_source_records=driver_source_records, cases=cases, exclusions=exclusions, file_roles=files,
@@ -472,40 +445,30 @@ def build_manifest(targets, sources, tool):
             'compatible Mathlib corpus', 'fresh execution and root-cause classification'])
 
 
-def validate_driver_cohort(manifest, frozen):
+def validate_driver_cohort(manifest, frozen, world='v4.35.0'):
+    from replacement_case_profiles import case_profile
+    profile = case_profile(world, (REVISION, INVENTORY_SHA256, CATALOG_BLOB))
     actual = sorted(v['id'] for c in manifest['cases'] for v in c['variants'] if 'behavioral_contract' in v)
-    if (frozen['upstream_revision'] != REVISION or actual != frozen['variant_ids'] or len(actual) != 355
-            or frozen['starting_manifest_sha256'] != 'bcb0f5a06fa9dc5959bc59bfc78e1ea4afaed91aaac8789876e48f11e20c3470'):
+    if (frozen['upstream_revision'] != profile['revision'] or actual != frozen['variant_ids']
+            or len(actual) != profile['driver_count']
+            or frozen['starting_manifest_sha256'] != profile['starting_manifest_sha256']):
         raise ValueError('driver starting cohort changed: no denominator substitution permitted')
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--inventory', required=True)
-    parser.add_argument('--harness-sources', required=True)
-    parser.add_argument('--oracle', required=True)
-    parser.add_argument('--out-dir', required=True)
-    args = parser.parse_args()
-    targets, sources = load_inputs(args.inventory, args.harness_sources)
+    from replacement_case_profiles import arguments, write_manifest, case_profile
+    args = arguments(__doc__)
+    profile = case_profile(args.world, (REVISION, INVENTORY_SHA256, CATALOG_BLOB))
+    targets, sources = load_inputs(args.inventory, args.harness_sources, args.world)
     oracle = read_json(args.oracle)
-    if oracle.get('githash') != REVISION:
-        raise ValueError('wrong recorded oracle revision')
+    if oracle.get('githash') != profile['revision'] or oracle.get('world') != args.world:
+        raise ValueError('wrong recorded oracle revision or world')
     tool = {key: oracle[key] for key in ('world', 'version', 'githash', 'executable_sha256', 'archive_sha256')}
-    manifest = build_manifest(targets, sources, tool)
+    manifest = build_manifest(targets, sources, tool, args.world)
     frozen = read_json(Path(args.harness_sources).parent / 'driver-starting-ids.json')
-    validate_driver_cohort(manifest, frozen)
+    validate_driver_cohort(manifest, frozen, args.world)
     manifest['driver_starting_cohort'] = frozen
-    raw = encoded(manifest)
-    out = Path(args.out_dir); out.mkdir(parents=True, exist_ok=True)
-    (out / 'manifest.json.gz').write_bytes(gzip.compress(raw, mtime=0))
-    summary = dict(manifest['summary'],
-        driver_contract_producer_sha256=hashlib.sha256(Path(__file__).with_name('replacement_driver_contracts.py').read_bytes()).hexdigest(), schema='clean-upstream-test-case-summary-v2',
-        upstream_revision=REVISION, manifest_sha256=hashlib.sha256(raw).hexdigest(),
-        input_sha256={Path(p).name: hashlib.sha256(Path(p).read_bytes()).hexdigest() for p in
-                      (args.inventory, args.harness_sources, args.oracle)},
-        producer_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-        remaining_inventory=manifest['remaining_inventory'], claim=manifest['claim'])
-    (out / 'summary.json').write_text(json.dumps(summary, indent=2, sort_keys=True) + '\n')
+    write_manifest(manifest, args, Path(__file__))
     print(json.dumps(manifest['summary'], indent=2, sort_keys=True))
 
 

@@ -2,11 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! The matcher index is plain data kept equal to its storage. Every test here
-//! drives one write or restore path and then checks the index against a fresh
-//! decode of the persistent-extension entries it is derived from.
+//! drives one write or restore path of an `Environment` and then checks the
+//! index against a fresh decode of the persistent-extension entries it is
+//! derived from, and each lookup against what the test stored. The storage
+//! type's own constructors and mutators are tested in
+//! `extension_storage_tests.rs`.
 
 use super::*;
-use crate::env::Declaration;
+use crate::env::{Declaration, TrustedEnvExt};
 use crate::expr::Expr;
 use crate::BinderInfo;
 
@@ -57,22 +60,92 @@ fn malformed(name: &Name) -> EnvExtensionEntry {
 }
 
 fn decoded_storage(env: &Environment) -> MatcherIndex {
-    MatcherIndex::decode(env.persistent_extensions.get(&storage_key()))
+    MatcherIndex::decode(env.persistent_extensions.get(&matcher_storage_key()))
+}
+
+fn index(env: &Environment) -> &MatcherIndex {
+    env.persistent_extensions.matcher_index()
 }
 
 #[track_caller]
 fn assert_index_is_storage(env: &Environment, after: &str) {
     assert_eq!(
-        env.matcher_info,
-        decoded_storage(env),
+        index(env),
+        &decoded_storage(env),
         "after {after}, the matcher index disagrees with a decode of its storage"
     );
 }
 
+/// Every name's lookup is exactly what the test stored for it.
+#[track_caller]
+fn assert_lookups(env: &Environment, expected: &[(Name, Option<MatcherInfo>)], after: &str) {
+    for (name, want) in expected {
+        assert_eq!(
+            env.get_matcher_info(name),
+            want.as_ref(),
+            "after {after}, lookup of `{name}`"
+        );
+    }
+}
+
 fn append(env: &mut Environment, module: usize, entries: Vec<EnvExtensionEntry>) {
-    let key = storage_key();
+    let key = matcher_storage_key();
     env.register_persistent_extension(key.clone());
     env.add_persistent_extension_entries(&key, module, entries);
+}
+
+/// Six matcher definitions and two multi-entry appends, the first through the
+/// inherent funnel and the second through [`TrustedEnvExt`], the path the
+/// production `.olean` import takes, which appends a module's rows in one
+/// call. Returns each name with the metadata its entries agree on.
+fn multi_entry_environment() -> (Environment, Vec<(Name, Option<MatcherInfo>)>) {
+    let mut env = Environment::default();
+    let [a, b, same, split, broken, late] = [
+        ("matcher_index.multi.a", 1),
+        ("matcher_index.multi.b", 2),
+        ("matcher_index.multi.same", 3),
+        ("matcher_index.multi.split", 2),
+        ("matcher_index.multi.broken", 1),
+        ("matcher_index.multi.late", 4),
+    ]
+    .map(|(name, alternatives)| matcher_definition(&mut env, name, alternatives));
+    let key = matcher_storage_key();
+    env.register_persistent_extension(key.clone());
+    env.add_persistent_extension_entries(
+        &key,
+        3,
+        vec![
+            encoded(&a, &info(1)),
+            encoded(&b, &info(2)),
+            encoded(&same, &info(3)),
+            encoded(&same, &info(3)),
+            encoded(&split, &info(1)),
+            encoded(&split, &info(2)),
+            malformed(&broken),
+        ],
+    );
+    assert_index_is_storage(&env, "a seven-entry append at module 3");
+    TrustedEnvExt::add_persistent_extension_entries(
+        &mut env,
+        &key,
+        0,
+        vec![
+            encoded(&late, &info(4)),
+            encoded(&a, &info(1)),
+            encoded(&b, &info(1)),
+        ],
+    );
+    assert_index_is_storage(&env, "a three-entry trait append at module 0");
+    let expected = vec![
+        (a, Some(info(1))),
+        (b, None),
+        (same, Some(info(3))),
+        (split, None),
+        (broken, None),
+        (late, Some(info(4))),
+    ];
+    assert_lookups(&env, &expected, "the multi-entry appends");
+    (env, expected)
 }
 
 /// An environment whose storage holds a valid row, a malformed row and a
@@ -88,6 +161,18 @@ fn populated() -> (Environment, Name, MatcherInfo) {
     append(&mut env, 1, vec![malformed(&broken)]);
     append(&mut env, 2, vec![encoded(&split, &info(2))]);
     append(&mut env, 3, vec![encoded(&split, &info(1))]);
+    // A module holding several rows: a restore that decoded only part of a
+    // module would lose `good`'s second row agreeing and `tail`'s only row.
+    let tail = matcher_definition(&mut env, "matcher_index.tail", 2);
+    append(
+        &mut env,
+        4,
+        vec![
+            encoded(&broken, &info(1)),
+            encoded(&good, &good_info),
+            encoded(&tail, &info(2)),
+        ],
+    );
     assert_index_is_storage(&env, "populating");
     (env, good, good_info)
 }
@@ -122,10 +207,10 @@ fn test_matcher_index_register_and_raw_appends_track_storage() {
 
     // Another extension's entries leave the index alone.
     let unrelated = Name::from_string("matcher_index.unrelated_extension");
-    let before = env.matcher_info.clone();
+    let before = index(&env).clone();
     env.register_persistent_extension(unrelated.clone());
     env.add_persistent_extension_entries(&unrelated, 0, vec![encoded(&name, &info(2))]);
-    assert_eq!(env.matcher_info, before);
+    assert_eq!(index(&env), &before);
     assert_index_is_storage(&env, "an append to another extension");
 }
 
@@ -147,7 +232,7 @@ fn test_matcher_index_append_order_does_not_change_the_index() {
     }
     assert_index_is_storage(&forward, "appends in module order");
     assert_index_is_storage(&backward, "appends in reverse module order");
-    assert_eq!(forward.matcher_info, backward.matcher_info);
+    assert_eq!(index(&forward), index(&backward));
     assert!(forward.get_matcher_info(&name).is_none());
 }
 
@@ -156,7 +241,7 @@ fn test_matcher_index_constant_removal_drops_the_row() {
     let (mut env, name, _) = populated();
     assert!(env.forget_decl(&name));
     assert_index_is_storage(&env, "removing the matcher's constant");
-    assert!(!env.matcher_info.0.contains_key(&name));
+    assert!(index(&env).row(&name).is_none());
     assert!(env.get_matcher_info(&name).is_none());
 }
 
@@ -179,7 +264,7 @@ fn test_matcher_index_fact_delta_application_rederives_it() {
         .apply_local_fact_delta(&delta)
         .expect("the delta applies to its base");
     assert_index_is_storage(&before, "applying a fact delta");
-    assert_eq!(before.matcher_info, after.matcher_info);
+    assert_eq!(index(&before), index(&after));
     assert_eq!(before.get_matcher_info(&other), Some(&info));
     assert!(before.get_matcher_info(&name).is_none());
 }
@@ -194,8 +279,8 @@ fn test_matcher_index_fact_delta_without_matcher_rows_keeps_it() {
     // storage changed.
     after.init_nat().expect("Nat initializes");
     assert_eq!(
-        after.persistent_extensions.get(&storage_key()),
-        before.persistent_extensions.get(&storage_key()),
+        after.persistent_extensions.get(&matcher_storage_key()),
+        before.persistent_extensions.get(&matcher_storage_key()),
         "this delta must leave matcher storage alone"
     );
     let delta = after
@@ -205,7 +290,7 @@ fn test_matcher_index_fact_delta_without_matcher_rows_keeps_it() {
         .apply_local_fact_delta(&delta)
         .expect("the delta applies to its base");
     assert_index_is_storage(&before, "a fact delta that moved no matcher row");
-    assert_eq!(before.matcher_info, after.matcher_info);
+    assert_eq!(index(&before), index(&after));
     assert_eq!(before.get_matcher_info(&name), Some(&info));
 }
 
@@ -227,7 +312,7 @@ fn test_matcher_index_every_restore_rederives_it() {
     ];
     for (path, restored) in &restored {
         assert_index_is_storage(restored, path);
-        assert_eq!(restored.matcher_info, env.matcher_info, "{path}");
+        assert_eq!(index(restored), index(&env), "{path}");
         assert_eq!(restored.get_matcher_info(&name), Some(&info), "{path}");
     }
 }
@@ -258,25 +343,114 @@ fn test_matcher_index_restore_inside_an_outer_decode_budget() {
     assert_eq!(restored.get_matcher_info(&named), Some(&named_info));
 }
 
-/// Negative control for every check above: an index left behind by its
-/// storage is caught, and it changes what a lookup answers.
 #[test]
-fn test_matcher_index_stale_index_is_caught() {
-    let (env, name, info) = populated();
-    let mut stale = env.clone();
-    stale.matcher_info = MatcherIndex::default();
-    assert_ne!(stale.matcher_info, decoded_storage(&stale));
-    assert!(stale.get_matcher_info(&name).is_none());
-    assert_eq!(env.get_matcher_info(&name), Some(&info));
+fn test_matcher_index_multi_entry_appends_index_every_entry() {
+    let (env, expected) = multi_entry_environment();
+    for (name, _) in &expected {
+        assert!(index(&env).row(name).is_some(), "`{name}` has no index row");
+    }
+    // `info(0)` is valid against every definition here (control), so a
+    // refusal below comes from the row the appends left, not from validation:
+    // the conflict check reads the same rows as the lookups.
+    let mut control = Environment::default();
+    let fresh = matcher_definition(&mut control, "matcher_index.multi.a", 1);
+    control
+        .register_matcher_info(fresh, info(0))
+        .expect("info(0) is valid against these definitions");
+    for (name, want) in &expected {
+        let refused = env
+            .clone()
+            .register_matcher_info(name.clone(), info(0))
+            .is_err();
+        assert!(refused, "`{name}` accepted other metadata over {want:?}");
+    }
+}
 
-    let mut lagging = env.clone();
-    lagging
+#[test]
+fn test_matcher_index_constant_removal_drops_rows_from_every_module() {
+    let (mut env, expected) = multi_entry_environment();
+    // `a` is stored at module 3 and at module 0, among other rows.
+    let removed = expected[0].0.clone();
+    assert!(env.forget_decl(&removed));
+    let state = env
         .persistent_extensions
-        .get_mut(&storage_key())
-        .expect("the storage exists")
-        .imported_entries[0]
-        .push(malformed(&name));
-    assert_ne!(lagging.matcher_info, decoded_storage(&lagging));
+        .get(&matcher_storage_key())
+        .expect("the storage exists");
+    for (module, rows) in state.imported_entries.iter().enumerate() {
+        assert!(
+            rows.iter().all(|entry| entry.name != removed),
+            "module {module} still stores `{removed}`"
+        );
+    }
+    assert_index_is_storage(&env, "removing a constant stored in two modules");
+    assert!(index(&env).row(&removed).is_none());
+    let mut rest = expected.clone();
+    rest[0].1 = None;
+    assert_lookups(&env, &rest, "removing a constant");
+}
+
+#[test]
+fn test_matcher_index_fact_delta_over_several_extensions_rederives_it() {
+    let (mut before, _) = multi_entry_environment();
+    let late = matcher_definition(&mut before, "matcher_index.delta.late", 1);
+    let other = matcher_definition(&mut before, "matcher_index.delta.other", 2);
+    let mut after = before.clone();
+    // The delta changes an extension that sorts BEFORE the matcher key and
+    // the matcher storage itself, both with multi-entry appends; it moves no
+    // constant.
+    let neighbour = Name::from_string("AMatcherIndexNeighbour.extension");
+    after.register_persistent_extension(neighbour.clone());
+    after.add_persistent_extension_entries(
+        &neighbour,
+        0,
+        vec![malformed(&neighbour), malformed(&matcher_storage_key())],
+    );
+    append(
+        &mut after,
+        7,
+        vec![
+            encoded(&late, &info(1)),
+            encoded(&other, &info(2)),
+            malformed(&Name::from_string("matcher_index.multi.same")),
+        ],
+    );
+    let delta = after
+        .local_fact_delta_since(&before)
+        .expect("the delta replays");
+    before
+        .apply_local_fact_delta(&delta)
+        .expect("the delta applies to its base");
+    assert_index_is_storage(&before, "a fact delta over two extensions");
+    assert_eq!(index(&before), index(&after));
+    let mut expected = vec![
+        (late, Some(info(1))),
+        (other, Some(info(2))),
+        (Name::from_string("matcher_index.multi.same"), None),
+    ];
+    expected.push((Name::from_string("matcher_index.multi.late"), Some(info(4))));
+    assert_lookups(&before, &expected, "a fact delta over two extensions");
+}
+
+#[test]
+fn test_matcher_index_restores_of_multi_entry_storage_read_every_entry() {
+    let (env, expected) = multi_entry_environment();
+    let restored = [
+        (
+            "a serde bincode restore",
+            Environment::from_bincode(&env.to_bincode().expect("bincode encodes"))
+                .expect("bincode decodes"),
+        ),
+        (
+            "a DAG restore",
+            Environment::from_dag_bincode(&env.to_dag_bincode().expect("DAG encodes"))
+                .expect("DAG decodes"),
+        ),
+    ];
+    for (path, restored) in &restored {
+        assert_index_is_storage(restored, path);
+        assert_eq!(index(restored), index(&env), "{path}");
+        assert_lookups(restored, &expected, path);
+    }
 }
 
 /// Conventional associated-call syntax must not bypass matcher rebuilding.
@@ -305,7 +479,7 @@ fn test_matcher_index_direct_deserialize_rederives_without_verification_stamps()
             .expect("the direct Deserialize call restores the environment");
     assert_eq!(consumed, bytes.len());
     assert_index_is_storage(&restored, "the direct Deserialize call");
-    assert_eq!(restored.matcher_info, env.matcher_info);
+    assert_eq!(index(&restored), index(&env));
     assert_eq!(restored.get_matcher_info(&good), Some(&good_info));
     assert!(restored
         .get_matcher_info(&Name::from_string("matcher_index.broken"))
@@ -352,7 +526,7 @@ fn test_matcher_index_generic_nested_deserialize_rederives_without_verification_
     assert_eq!(restored.environments.len(), 2);
     for restored in &restored.environments {
         assert_index_is_storage(restored, "generic nested serde decoding");
-        assert_eq!(restored.matcher_info, env.matcher_info);
+        assert_eq!(index(restored), index(&env));
         assert_eq!(restored.get_matcher_info(&good), Some(&good_info));
         assert!(restored
             .get_matcher_info(&Name::from_string("matcher_index.broken"))

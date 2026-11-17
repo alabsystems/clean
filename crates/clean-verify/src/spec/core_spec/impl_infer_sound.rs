@@ -1459,7 +1459,7 @@ impl Specification {
                     "Nat.zero (Nat.sub d d) ",
                     "(Eq.symm Nat (Nat.sub d d) Nat.zero (nat_sub_self d)) ",
                     "(Eq.symm ImplExpr (impl_lift_at v Nat.zero d) v ",
-                    "(impl_lift_lc v Nat.zero hlc Nat.zero (Le.refl Nat.zero) d)))) ",
+                    "(impl_lift_lc v Nat.zero hlc Nat.zero (@Le.refl Nat.zero) d)))) ",
                     "(nat_eqb y x) (@Eq.refl Bool (nat_eqb y x))) ",
                     // ── sort / const ────────────────────────────────────────
                     "(fun (l : Level) (d : Nat) => @Eq.refl ImplExpr (ImplExpr.sort l)) ",
@@ -2597,7 +2597,7 @@ impl Specification {
                     "(instantiate (to_kexpr_at b rho (Nat.succ Nat.zero)) ",
                     "(to_kexpr_at a rho Nat.zero)) ",
                     "(to_kexpr r0 rho) ",
-                    "(whnf_step.beta ",
+                    "(@whnf_step.beta ",
                     "(KExpr.app (KExpr.lam (to_kexpr_at A rho Nat.zero) ",
                     "(to_kexpr_at b rho (Nat.succ Nat.zero))) (to_kexpr_at a rho Nat.zero)) ",
                     "(instantiate (to_kexpr_at b rho (Nat.succ Nat.zero)) ",
@@ -2622,7 +2622,7 @@ impl Specification {
                     "(instantiate (to_kexpr_at b rho (Nat.succ Nat.zero)) ",
                     "(to_kexpr_at v rho Nat.zero)) ",
                     "(to_kexpr r0 rho) ",
-                    "(whnf_step.beta ",
+                    "(@whnf_step.beta ",
                     "(KExpr.let_ (to_kexpr_at ty rho Nat.zero) (to_kexpr_at v rho Nat.zero) ",
                     "(to_kexpr_at b rho (Nat.succ Nat.zero))) ",
                     "(instantiate (to_kexpr_at b rho (Nat.succ Nat.zero)) ",
@@ -4919,7 +4919,7 @@ impl Specification {
             (
                 "implscoped_witness",
                 "ImplScoped Nat.zero (ImplExpr.bvar Nat.zero) Nat.zero".to_string(),
-                "@ImplScoped.bvar Nat.zero Nat.zero Nat.zero (Le.refl Nat.zero)".to_string(),
+                "@ImplScoped.bvar Nat.zero Nat.zero Nat.zero (@Le.refl Nat.zero)".to_string(),
                 "ImplScoped IS INHABITED, on the term that matters: the body of the identity \
                  lambda. Its single loose index is 0 and the bound is Le 0 0 — the boundary \
                  case, which is precisely why this relation carries Le and not Lt.",

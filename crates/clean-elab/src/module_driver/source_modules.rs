@@ -180,6 +180,7 @@ enum BootstrapContext {
 pub struct SourceModuleSetup {
     bare: Environment,
     init: Option<Environment>,
+    init_completed_imports: Option<clean_olean::CompletedModuleImports>,
     init_present: bool,
     artifact_imports_permitted: bool,
     bootstrap_snapshot: bool,
@@ -206,7 +207,25 @@ impl SourceModuleSetup {
         decision: &clean_olean::SourceWorldDecision,
         path: &Path,
     ) -> Result<Self, SourceModuleError> {
-        Self::for_file_in_context(setup, decision, path, BootstrapContext::Checker)
+        Self::for_file_with_import_policy(setup, decision, path, crate::ImportPolicy::FailClosed)
+    }
+
+    /// Match an explicit checker import policy without relaxing artifact reads.
+    /// Permissive source imports may be absent, but existing artifact parts and
+    /// the dependencies they record must still classify successfully.
+    pub fn for_file_with_import_policy(
+        setup: EnvironmentSetup,
+        decision: &clean_olean::SourceWorldDecision,
+        path: &Path,
+        import_policy: crate::ImportPolicy,
+    ) -> Result<Self, SourceModuleError> {
+        Self::for_file_in_context(
+            setup,
+            decision,
+            path,
+            BootstrapContext::Checker,
+            import_policy,
+        )
     }
 
     /// Match Clean Lake/native program bootstrap without checker-only List
@@ -221,6 +240,7 @@ impl SourceModuleSetup {
             decision,
             path,
             BootstrapContext::Program,
+            crate::ImportPolicy::FailClosed,
         )
     }
 
@@ -229,11 +249,17 @@ impl SourceModuleSetup {
         decision: &clean_olean::SourceWorldDecision,
         path: &Path,
         context: BootstrapContext,
+        import_policy: crate::ImportPolicy,
     ) -> Result<Self, SourceModuleError> {
         let mut fresh = Self::new(setup, decision)?;
         if decision.world() == clean_kernel::lean_world::LeanWorld::ORACLE
             && decision.imports().is_ok()
-            && clean_format_source_closure(path, decision)?
+            && match import_policy {
+                crate::ImportPolicy::FailClosed => clean_format_source_closure(path, decision)?,
+                crate::ImportPolicy::Permissive => {
+                    clean_format_source_closure_with_import_policy(path, decision, import_policy)?
+                }
+            }
         {
             let mut bootstrap = match context {
                 BootstrapContext::Checker => {
@@ -306,11 +332,19 @@ impl SourceModuleSetup {
         Ok(Self {
             bare,
             init,
+            init_completed_imports: None,
             init_present: false,
             artifact_imports_permitted: decision.imports().is_ok(),
             bootstrap_snapshot: false,
             search_paths,
         })
+    }
+
+    /// A captured invocation selects its artifact roots explicitly. This is
+    /// applied only to a freshly constructed setup, before any Init snapshot.
+    pub(super) fn with_captured_artifact_paths(mut self, paths: Vec<PathBuf>) -> Self {
+        self.search_paths = paths;
+        self
     }
 
     /// Header used only to construct the root environment and citation base.
@@ -358,6 +392,24 @@ impl SourceModuleSetup {
         Ok(env)
     }
 
+    /// Produce the same initial environment with its actual completed artifact
+    /// import bookkeeping. No search or admission is enabled by this DATA.
+    /// Bootstrap and explicit-prelude contexts receive no artifact completion.
+    /// The caller still checks every original source body and dependency cone.
+    pub fn initial_environment_and_file_context(
+        &mut self,
+        header: &FileHeader,
+    ) -> Result<(Environment, FileContext), SourceModuleError> {
+        let environment = self.initial_environment(header)?;
+        let mut context = FileContext::new();
+        if self.init_present && self.artifact_imports_permitted && !self.bootstrap_snapshot {
+            if let Some(completed) = &self.init_completed_imports {
+                context.set_preloaded_artifact_imports(completed.clone());
+            }
+        }
+        Ok((environment, context))
+    }
+
     /// Prepare one header before imports. The caller MUST independently
     /// validate each imported source body's complete outcome and effect.
     pub fn prepare<'a>(
@@ -386,9 +438,14 @@ impl SourceModuleSetup {
     fn ensure_init_snapshot(&mut self) -> Result<(), SourceModuleError> {
         if self.init.is_none() {
             let mut fresh = self.environment();
-            clean_olean::load_module_with_deps(&mut fresh, "Init", &self.search_paths)
-                .map_err(|error| SourceModuleError::ImplicitInit(error.to_string()))?;
+            let (_, completed) = clean_olean::load_module_with_deps_and_completed_imports(
+                &mut fresh,
+                "Init",
+                &self.search_paths,
+            )
+            .map_err(|error| SourceModuleError::ImplicitInit(error.to_string()))?;
             self.init = Some(fresh);
+            self.init_completed_imports = Some(completed);
         }
         Ok(())
     }
@@ -449,6 +506,14 @@ fn clean_format_source_closure(
     path: &Path,
     decision: &clean_olean::SourceWorldDecision,
 ) -> Result<bool, SourceModuleError> {
+    clean_format_source_closure_with_import_policy(path, decision, crate::ImportPolicy::FailClosed)
+}
+
+fn clean_format_source_closure_with_import_policy(
+    path: &Path,
+    decision: &clean_olean::SourceWorldDecision,
+    import_policy: crate::ImportPolicy,
+) -> Result<bool, SourceModuleError> {
     let mut sources = vec![SourceVisit::Enter(path.to_path_buf())];
     let mut completed_sources = HashSet::new();
     let mut active_sources = HashSet::new();
@@ -498,21 +563,31 @@ fn clean_format_source_closure(
             {
                 sources.push(SourceVisit::Enter(source));
             } else {
-                artifacts.push((import.module.name().clone(), search_paths.clone()));
+                artifacts.push((import.module.name().clone(), search_paths.clone(), true));
             }
         }
     }
 
     let mut seen_artifacts = HashSet::new();
     let mut found_artifact = false;
-    while let Some((module, search_paths)) = artifacts.pop() {
-        let artifact =
-            clean_olean::resolve_typed_module_path(&module, &search_paths).map_err(|error| {
-                SourceModuleError::Artifact {
+    while let Some((module, search_paths, source_import)) = artifacts.pop() {
+        let artifact = match clean_olean::resolve_typed_module_path(&module, &search_paths) {
+            Ok(artifact) => artifact,
+            Err(clean_olean::ImportError::ModuleNotFound { .. })
+                if source_import && import_policy == crate::ImportPolicy::Permissive =>
+            {
+                // The ordinary importer still emits the policy's warning.
+                // Absence contributes no artifact and cannot justify bootstrap:
+                // an all-absent graph leaves found_artifact false below.
+                continue;
+            }
+            Err(error) => {
+                return Err(SourceModuleError::Artifact {
                     path: path.to_path_buf(),
                     reason: error.to_string(),
-                }
-            })?;
+                });
+            }
+        };
         let canonical =
             std::fs::canonicalize(&artifact).map_err(|error| SourceModuleError::Artifact {
                 path: artifact.clone(),
@@ -537,7 +612,9 @@ fn clean_format_source_closure(
             return Ok(false);
         }
         for import in read.typed_imports {
-            artifacts.push((import.module_name, search_paths.clone()));
+            // An existing artifact promises this dependency. Even permissive
+            // source checking must not turn its absence into a format choice.
+            artifacts.push((import.module_name, search_paths.clone(), false));
         }
     }
     Ok(found_artifact)

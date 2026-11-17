@@ -107,7 +107,7 @@ impl ProofLibrary {
                     "(_hctx : KernelStateLocalCtxWellFormed st) ",
                     "(_hadm : KernelInputAdmissible st (KExpr.let_ ty val body)) ",
                     "(hinfer : KernelInferAccepts st (KExpr.let_ ty val body) T) => ",
-                    "Empty.rec (fun (_ : Empty) => has_type (KExpr.let_ ty val body) T) ",
+                    "@Empty.rec (fun (_ : Empty) => has_type (KExpr.let_ ty val body) T) ",
                     "(kernel_infer_inversion st (KExpr.let_ ty val body) T hinfer)"
                 ),
                 concat!(

@@ -147,15 +147,15 @@ impl Specification {
                     "(_h : ImplInfer tenv lps n2 G2 e2 T2 m2) => Le n2 m2) ",
                     // sort / fvar / const / lit: the counter is untouched.
                     "(fun (sn : Nat) (sG : LCtx) (sl : Level) ",
-                    "(shl : @Eq Bool (level_params_ok lps sl) Bool.true) => Le.refl sn) ",
+                    "(shl : @Eq Bool (level_params_ok lps sl) Bool.true) => @Le.refl sn) ",
                     "(fun (vn : Nat) (vG : LCtx) (vx : Nat) (vA : ImplExpr) ",
-                    "(vlk : @Eq (OptionType ImplExpr) (lctx_lookup vG vx) (@OptionType.some ImplExpr vA)) => Le.refl vn) ",
+                    "(vlk : @Eq (OptionType ImplExpr) (lctx_lookup vG vx) (@OptionType.some ImplExpr vA)) => @Le.refl vn) ",
                     "(fun (cn : Nat) (cG : LCtx) (cnm : Name) (cus : ListType Level) (cci : ImplConstInfo) ",
                     "(cget : @Eq (OptionType ImplConstInfo) (tenv cnm) (@OptionType.some ImplConstInfo cci)) ",
                     "(car : @Eq Nat (name_list_len (impl_const_lps cci)) (level_list_len cus)) ",
                     "(clv : @Eq Bool (impl_levels_ok lps cus) Bool.true) ",
                     "(cuf : @Eq Bool (impl_const_unsafe cci) Bool.false) ",
-                    "(cpf : @Eq Bool (impl_const_partial cci) Bool.false) => Le.refl cn) ",
+                    "(cpf : @Eq Bool (impl_const_partial cci) Bool.false) => @Le.refl cn) ",
                     // app: two sub-derivations in sequence, n -> n1 -> n2.
                     "(fun (an : Nat) (an1 : Nat) (an2 : Nat) (aG : LCtx) (af : ImplExpr) (aa : ImplExpr) ",
                     "(aF : ImplExpr) (abd : BinderData) (aA : ImplExpr) (aB : ImplExpr) (aA2 : ImplExpr) ",
@@ -174,7 +174,7 @@ impl Specification {
                     "(lhb : ImplInfer tenv lps (Nat.succ ln1) (LCtx.snoc lG (LocalDecl.mk ln1 lA (@OptionType.none ImplExpr) lbd)) (impl_open lb ln1) lbt ln2) ",
                     "(lihA : Le ln ln1) (lihb : Le (Nat.succ ln1) ln2) => ",
                     "le_trans ln ln1 ln2 lihA ",
-                    "(le_trans ln1 (Nat.succ ln1) ln2 (Le.step ln1 ln1 (Le.refl ln1)) lihb)) ",
+                    "(le_trans ln1 (Nat.succ ln1) ln2 (@Le.step ln1 ln1 (@Le.refl ln1)) lihb)) ",
                     // pi: identical counter discipline to lam.
                     "(fun (pn : Nat) (pn1 : Nat) (pn2 : Nat) (pG : LCtx) (pbd : BinderData) ",
                     "(pA : ImplExpr) (pb : ImplExpr) (pS1 : ImplExpr) (pS2 : ImplExpr) (pl1 : Level) (pl2 : Level) ",
@@ -184,7 +184,7 @@ impl Specification {
                     "(phS2 : ImplWhnfTo pS2 (ImplExpr.sort pl2)) ",
                     "(pihA : Le pn pn1) (pihb : Le (Nat.succ pn1) pn2) => ",
                     "le_trans pn pn1 pn2 pihA ",
-                    "(le_trans pn1 (Nat.succ pn1) pn2 (Le.step pn1 pn1 (Le.refl pn1)) pihb)) ",
+                    "(le_trans pn1 (Nat.succ pn1) pn2 (@Le.step pn1 pn1 (@Le.refl pn1)) pihb)) ",
                     // let_: three sub-derivations, n -> n1 -> n2, then the let
                     // binder consumes n2 and the body runs succ n2 -> n3.
                     "(fun (zn : Nat) (zn1 : Nat) (zn2 : Nat) (zn3 : Nat) (zG : LCtx) (znm : Name) ",
@@ -197,8 +197,8 @@ impl Specification {
                     "(zhb : ImplInfer tenv lps (Nat.succ zn2) (LCtx.snoc zG (LocalDecl.mk zn2 zty (@OptionType.some ImplExpr zv) (BinderData.mk BinderInfo.default Multiplicity.many))) (impl_open zb zn2) zbt zn3) ",
                     "(zihty : Le zn zn1) (zihv : Le zn1 zn2) (zihb : Le (Nat.succ zn2) zn3) => ",
                     "le_trans zn zn2 zn3 (le_trans zn zn1 zn2 zihty zihv) ",
-                    "(le_trans zn2 (Nat.succ zn2) zn3 (Le.step zn2 zn2 (Le.refl zn2)) zihb)) ",
-                    "(fun (in2 : Nat) (iG : LCtx) (ilt : ImplLit) => Le.refl in2) ",
+                    "(le_trans zn2 (Nat.succ zn2) zn3 (@Le.step zn2 zn2 (@Le.refl zn2)) zihb)) ",
+                    "(fun (in2 : Nat) (iG : LCtx) (ilt : ImplLit) => @Le.refl in2) ",
                     // mdata: transparent, so the body's own bound is the answer.
                     "(fun (mn : Nat) (mn1 : Nat) (mG : LCtx) (me : ImplExpr) (mT : ImplExpr) ",
                     "(mh : ImplInfer tenv lps mn mG me mT mn1) (mih : Le mn mn1) => mih) ",

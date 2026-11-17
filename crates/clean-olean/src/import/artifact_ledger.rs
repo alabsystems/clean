@@ -791,12 +791,56 @@ pub(crate) fn records_same(earlier: &PartRecord, later: &PartRecord) -> bool {
     earlier.same_as(later)
 }
 
+/// The producer's axiom stub preserves the completed declaration's safety.
+/// Lean 4.30 encoded partial definitions as Safe stubs; 4.35 uses Unsafe.
+/// Neither encoding permits an Unsafe stub to become a Safe declaration, or
+/// a Safe stub to become an Unsafe definition/opaque. Clean payload records
+/// carry no separate safety field: preserve their existing None/None equality
+/// without interpreting unknown metadata as safe or as a replay exclusion.
+pub(super) fn stub_safety_agrees(
+    stub: Option<crate::DefinitionSafety>,
+    full_kind: &crate::ConstantKind,
+    full: Option<crate::DefinitionSafety>,
+) -> bool {
+    use crate::{ConstantKind, DefinitionSafety};
+    if stub.is_none() && full.is_none() {
+        return true;
+    }
+    match (full_kind, full) {
+        (ConstantKind::Theorem, None) => stub == Some(DefinitionSafety::Safe),
+        (ConstantKind::Definition, Some(DefinitionSafety::Partial)) => {
+            matches!(
+                stub,
+                Some(DefinitionSafety::Safe | DefinitionSafety::Unsafe)
+            )
+        }
+        (_, Some(DefinitionSafety::Safe | DefinitionSafety::Unsafe)) => stub == full,
+        _ => false,
+    }
+}
+
 /// `complete` states the declaration `stub` stubs: the same name, universe
 /// parameters and type, with a value.
 fn stub_completed_by(stub: &PartRecord, complete: &PartRecord) -> bool {
     match (stub, complete) {
-        (PartRecord::Constant { info: s, .. }, PartRecord::Constant { info: c, .. }) => {
-            s.name == c.name
+        (
+            PartRecord::Constant {
+                info: s,
+                safety: ss,
+            },
+            PartRecord::Constant {
+                info: c,
+                safety: cs,
+            },
+        ) => {
+            let kind = match c.kind {
+                clean_kernel::env::ConstantKind::Theorem => crate::ConstantKind::Theorem,
+                clean_kernel::env::ConstantKind::Opaque => crate::ConstantKind::Opaque,
+                clean_kernel::env::ConstantKind::Axiom => crate::ConstantKind::Axiom,
+                clean_kernel::env::ConstantKind::Definition => crate::ConstantKind::Definition,
+            };
+            stub_safety_agrees(*ss, &kind, *cs)
+                && s.name == c.name
                 && s.level_params == c.level_params
                 && s.type_ == c.type_
                 && s.value.is_none()

@@ -5,18 +5,15 @@
 //! Definitional equality — `ck0` **decides**; it never trusts advice
 //! (design §1, §5.1).
 //!
-//! The fixed, documented order (design §5.1):
+//! The bounded conversion strategy follows pinned Lean's kernel:
 //!
-//! 1. **structural + hash fast-reject** then **pointer eq** (cheap accepts);
-//! 2. **sort / level eq** on canonical levels;
-//! 3. **congruence under binders** (`Pi`/`Lam`/`Let`, context push/pop) and on
-//!    `App`/`Proj`/`Const`/`Elim`/`Lit` heads;
-//! 4. **β / δ / ζ / native** reduction via [`crate::whnf()`] (lazy: only when the
-//!    cheap structural compare fails) — both sides to whnf, then re-compare;
-//! 5. **function-η** (`λ x. f x ≡ f`);
-//! 6. **structure-η** (`s ≡ S.mk s.1 s.2 …`);
-//! 7. **proof-irrelevance for `Prop`** — with the full side condition;
-//! 8. **`Quot`** (handled inside whnf's ι-rule, then re-compared structurally).
+//! 1. exact equality and decision-scoped, context-keyed memoization;
+//! 2. quick sort/literal/binder comparisons;
+//! 3. proof irrelevance with the full same-proposition and `Prop` checks;
+//! 4. head reduction and pair-directed lazy delta, using untrusted definition
+//!    heights only to schedule which checked body unfolds first;
+//! 5. delayed projections and String expansion, constructor/literal equality,
+//!    recursor reduction, function eta and structure/unit-like eta.
 //!
 //! Returns `Result<bool, BudgetError>` with **three real outcomes**:
 //! `Ok(true)` (equal), `Ok(false)` (provably unequal *within budget*), and
@@ -38,12 +35,19 @@
 //! constructor head; proj *reduction* on a constructor is a separate whnf rule.
 
 use crate::budget::{Budget, BudgetError};
-use crate::infer::{infer_in_context, InferError};
+use crate::infer::{infer_for_conversion, CheckedType, InferError, TypeQueryScope};
 use crate::name::Name;
 use crate::rawexpr::BinderInfo;
 use crate::term::{Term, TermKind};
 use crate::validate::Env;
+mod argument_delta;
 mod eta;
+mod k;
+pub(crate) use k::k_like_major;
+mod lazy;
+mod offset;
+mod proof;
+use proof::is_def_eq_proof_irrel;
 #[cfg(test)]
 mod memo_tests;
 use crate::whnf::whnf_in_context;
@@ -59,6 +63,7 @@ pub fn is_def_eq(
     budget: &mut Budget,
 ) -> Result<bool, BudgetError> {
     let _scope = crate::whnf::DecisionScope::enter();
+    let _unknown = TypeQueryScope::unknown();
     is_def_eq_at(env, &mut Ctx::new(), a, b, budget)
 }
 
@@ -77,7 +82,22 @@ pub(crate) fn is_def_eq_in_context(
     budget: &mut Budget,
 ) -> Result<bool, BudgetError> {
     let _scope = crate::whnf::DecisionScope::enter();
+    let _unknown = TypeQueryScope::unknown();
     is_def_eq_at(env, &mut ctx.to_vec(), a, b, budget)
+}
+
+/// Conversion of well-formed types, with witnesses produced only by full
+/// inference/checking. No caller can mint a witness from a merely scoped term.
+pub(crate) fn is_def_eq_checked_types(
+    env: &dyn Env,
+    ctx: &[Term],
+    a: CheckedType<'_>,
+    b: CheckedType<'_>,
+    budget: &mut Budget,
+) -> Result<bool, BudgetError> {
+    let _scope = crate::whnf::DecisionScope::enter();
+    let _known = TypeQueryScope::checked(&a, &b);
+    is_def_eq_at(env, &mut ctx.to_vec(), a.term(), b.term(), budget)
 }
 
 /// The local context for congruence under binders: binder types (de Bruijn,
@@ -86,6 +106,13 @@ pub(crate) fn is_def_eq_in_context(
 /// in a later milestone; at M1 proof-irrel runs at the empty context (top
 /// level), matching where the corpus exercises it.
 type Ctx = Vec<Term>;
+
+/// A tail conversion step changes neither context nor typing assumptions.
+/// Retrying it in a loop preserves the fuel charge without growing native stack.
+enum ConversionStep {
+    Answer(bool),
+    Retry(Term, Term),
+}
 
 fn is_def_eq_at(
     env: &dyn Env,
@@ -96,18 +123,34 @@ fn is_def_eq_at(
 ) -> Result<bool, BudgetError> {
     budget.step()?;
     let _frame = crate::whnf::ReductionFrame::enter()?;
-
-    // (1) pointer / structural-hash fast accept, then this decision's earlier
-    // answer for the pair (`crate::whnf`'s conversion cache).
-    if a == b {
-        return Ok(true);
+    let (mut left, mut right) = (a.clone(), b.clone());
+    let mut pending = Vec::new();
+    let answer = loop {
+        if left == right {
+            break true;
+        }
+        if let Some(equal) = crate::whnf::cached_def_eq(ctx, &left, &right) {
+            break equal;
+        }
+        pending.push((left.clone(), right.clone()));
+        match is_def_eq_uncached(env, ctx, &left, &right, budget)? {
+            ConversionStep::Answer(answer) => break answer,
+            ConversionStep::Retry(a, b) => {
+                // Exactly the charge formerly made by the recursive tail call.
+                // The frame bound still protects actual nested congruence,
+                // inference and reduction; tail iteration uses no extra frame.
+                budget.step()?;
+                left = a;
+                right = b;
+            }
+        }
+    };
+    // As before, only completed answers are memoized. An exhaustion above
+    // records no answer for any of the still-pending tail pairs.
+    for (a, b) in pending.into_iter().rev() {
+        crate::whnf::remember_def_eq(ctx, &a, &b, answer);
     }
-    if let Some(equal) = crate::whnf::cached_def_eq(ctx, a, b) {
-        return Ok(equal);
-    }
-    let equal = is_def_eq_uncached(env, ctx, a, b, budget)?;
-    crate::whnf::remember_def_eq(ctx, a, b, equal);
-    Ok(equal)
+    Ok(answer)
 }
 
 /// [`is_def_eq_at`]'s rules, past its fast accepts.
@@ -117,51 +160,97 @@ fn is_def_eq_uncached(
     a: &Term,
     b: &Term,
     budget: &mut Budget,
-) -> Result<bool, BudgetError> {
-    // (2) cheap structural congruence *before* reducing (lazy δ): try to match
-    // heads without unfolding. If that conclusively succeeds, accept.
-    if structural_congruence(env, ctx, a, b, budget)? {
-        return Ok(true);
+) -> Result<ConversionStep, BudgetError> {
+    // Lean's quick cases decide sorts, literals and matching binders before
+    // proof irrelevance. Applications are deliberately not quick cases: proof
+    // bodies need not normalize when their checked proposition types agree.
+    if matches!(
+        (a.kind(), b.kind()),
+        (TermKind::Sort(_), TermKind::Sort(_))
+            | (TermKind::Lit(_), TermKind::Lit(_))
+            | (TermKind::Pi(..), TermKind::Pi(..))
+            | (TermKind::Lam(..), TermKind::Lam(..))
+    ) {
+        return structural_congruence(env, ctx, a, b, budget).map(ConversionStep::Answer);
+    }
+    if let Some(answer) = is_def_eq_proof_irrel(env, ctx, a, b, budget)? {
+        return Ok(ConversionStep::Answer(answer));
     }
 
-    // (3) reduce both sides to whnf and compare heads.
-    let a_w = whnf_in_context(env, ctx, a, budget)?;
-    let b_w = whnf_in_context(env, ctx, b, budget)?;
+    let (a_w, b_w) = match lazy::reduce(env, ctx, a, b, budget)? {
+        lazy::Reduced::Answer(answer) => return Ok(ConversionStep::Answer(answer)),
+        lazy::Reduced::Retry(a, b) => return Ok(ConversionStep::Retry(a, b)),
+        lazy::Reduced::Stuck(a, b) => (a, b),
+    };
 
     // (2) sort/level eq on canonical levels.
     if let (TermKind::Sort(la), TermKind::Sort(lb)) = (a_w.kind(), b_w.kind()) {
-        return Ok(la == lb);
+        return Ok(ConversionStep::Answer(la == lb));
     }
 
-    // structural congruence on the reduced terms.
-    if structural_congruence(env, ctx, &a_w, &b_w, budget)? {
-        return Ok(true);
+    // Projections compare their subjects before the expensive retry below.
+    // Applied projections must expose their selected function first: app
+    // congruence here can force a false, arbitrarily expensive argument pair.
+    if !matches!(a_w.kind(), TermKind::App(..))
+        && structural_congruence(env, ctx, &a_w, &b_w, budget)?
+    {
+        return Ok(ConversionStep::Answer(true));
     }
 
     // A `Nat` literal against a `Nat` constructor application (R162).
-    if let Some(r) = try_nat_lit_ctor(env, ctx, &a_w, &b_w, budget)? {
-        return Ok(r);
+    if let Some(step) = offset::step(&a_w, &b_w, budget)? {
+        return Ok(step);
+    }
+
+    // Lean retries expensive projections only after pair-directed delta has
+    // stopped. Literal String expansion is likewise a fallback against a
+    // constructor, rather than work performed on every literal comparison.
+    let needs_full = |x: &Term, y: &Term| {
+        matches!(x.unfold_apps().0.kind(), TermKind::Proj(..))
+            || (matches!(x.kind(), TermKind::Lit(crate::term::Lit::Str(_)))
+                && matches!(y.kind(), TermKind::App(..)))
+    };
+    if needs_full(&a_w, &b_w) || needs_full(&b_w, &a_w) {
+        let expand = |x: &Term, budget: &mut Budget| {
+            if matches!(x.kind(), TermKind::Lit(crate::term::Lit::Str(_))) {
+                whnf_in_context(env, ctx, x, budget)
+            } else {
+                crate::whnf::conversion_project(env, ctx, x, budget)
+            }
+        };
+        let a_full = expand(&a_w, budget)?;
+        let b_full = expand(&b_w, budget)?;
+        if a_full != a_w || b_full != b_w {
+            return Ok(ConversionStep::Retry(a_full, b_full));
+        }
     }
 
     // K-like reduction (R162): a stuck eliminator of a K-target whose major
     // premise has the constructor's type is the eliminator of the constructor.
     for (x, y) in [(&a_w, &b_w), (&b_w, &a_w)] {
         if let Some(x2) = k_like_major(env, ctx, x, budget)? {
-            return is_def_eq_at(env, ctx, &x2, y, budget);
+            return Ok(ConversionStep::Retry(x2, y.clone()));
         }
+    }
+
+    // Lean's final application congruence follows the projection retry.
+    if matches!(a_w.kind(), TermKind::App(..))
+        && structural_congruence(env, ctx, &a_w, &b_w, budget)?
+    {
+        return Ok(ConversionStep::Answer(true));
     }
 
     // (5) function-η.
     if let Some(r) = try_eta(env, ctx, &a_w, &b_w, budget)? {
         if r {
-            return Ok(true);
+            return Ok(ConversionStep::Answer(true));
         }
     }
 
     // (6) structure-η.
     if let Some(r) = try_struct_eta(env, ctx, &a_w, &b_w, budget)? {
         if r {
-            return Ok(true);
+            return Ok(ConversionStep::Answer(true));
         }
     }
 
@@ -171,154 +260,11 @@ fn is_def_eq_uncached(
     // gap). The side condition is never skipped: `typeof(a) ≡ typeof(b)` AND
     // `typeof(a) : Prop`.
     if let Some(true) = is_def_eq_proof_irrel(env, ctx, &a_w, &b_w, budget)? {
-        return Ok(true);
+        return Ok(ConversionStep::Answer(true));
     }
 
     // exhausted the relation -> provably unequal *within budget*.
-    Ok(false)
-}
-
-/// A `Nat` literal against a whnf'd `Nat.zero` or `Nat.succ x`: Lean's kernel
-/// reads the literal as its constructor form (`0` is `Nat.zero`, `n + 1` is
-/// `Nat.succ n`), so `Lit 0 ≡ Nat.zero`, `Lit (n+1) ≡ Nat.succ x` iff `Lit n ≡
-/// x`, and a literal never equals the other constructor. `None` when neither
-/// side is a literal facing a `Nat` constructor (the caller goes on). The literal
-/// is never expanded on its own: `Nat.succ (Lit n)` whnf's back to a literal.
-fn try_nat_lit_ctor(
-    env: &dyn Env,
-    ctx: &mut Ctx,
-    a: &Term,
-    b: &Term,
-    budget: &mut Budget,
-) -> Result<Option<bool>, BudgetError> {
-    let lit_of = |t: &Term| match t.kind() {
-        TermKind::Lit(crate::term::Lit::Nat(n)) => Some(n.clone()),
-        _ => None,
-    };
-    let (lit, other) = match (lit_of(a), lit_of(b)) {
-        (Some(n), None) => (n, b),
-        (None, Some(n)) => (n, a),
-        _ => return Ok(None),
-    };
-    let (head, args) = other.unfold_apps();
-    let TermKind::Const(c) = head.kind() else {
-        return Ok(None);
-    };
-    if *c.name() == Name::from_dotted("Nat.zero") && args.is_empty() {
-        return Ok(Some(lit.is_zero()));
-    }
-    if *c.name() == Name::from_dotted("Nat.succ") && args.len() == 1 {
-        if lit.is_zero() {
-            return Ok(Some(false));
-        }
-        // Native arithmetic: the work meter charges the predecessor's size
-        // before it is built (R166).
-        let one = crate::BigNat::one();
-        budget.charge(crate::bignat::result_words::sum(&lit, &one))?;
-        let pred = Term::lit(crate::term::Lit::Nat(lit.sub(&one)));
-        return is_def_eq_at(env, ctx, &pred, &args[0], budget).map(Some);
-    }
-    Ok(None)
-}
-
-/// Lean's K-like reduction, applied where `ck0` has a context. Since the
-/// round-5 merge, `whnf` applies the same rule at a recursor's major
-/// (`major_is_k_constructor`), so both sides usually arrive here reduced. The
-/// eliminator of an inductive `I` that is a K-target — `I` lives in `Prop` and
-/// has exactly one constructor `C`, with no fields — whose saturated major
-/// premise `m` is not `C` itself: when `m : I ps is` and `C ps : I ps is'` with
-/// the two types definitionally equal, `m` is replaced by `C ps` (proof
-/// irrelevance makes them equal; the replacement lets the ι-rule fire). `None`
-/// when `e` is not such an application or any step does not hold (the
-/// eliminator stays stuck: fail-closed).
-pub(crate) fn k_like_major(
-    env: &dyn Env,
-    ctx: &mut Ctx,
-    e: &Term,
-    budget: &mut Budget,
-) -> Result<Option<Term>, BudgetError> {
-    let (head, args) = e.unfold_apps();
-    let TermKind::Elim(eref) = head.kind() else {
-        return Ok(None);
-    };
-    let ind = eref.inductive().clone();
-    let (Some(shape), Some(rules)) = (env.recursor_shape(&ind), env.recursor_rules(&ind)) else {
-        return Ok(None);
-    };
-    if shape.num_motives != 1 {
-        return Ok(None);
-    }
-    let [rule] = rules.as_slice() else {
-        return Ok(None);
-    };
-    if rule.num_fields != 0 {
-        return Ok(None);
-    }
-    // `I : (params) → (indices) → Prop`.
-    let Some(mut ty) = env.const_type(&ind) else {
-        return Ok(None);
-    };
-    while let TermKind::Pi(_, _, body) = ty.kind() {
-        let next = body.clone();
-        ty = next;
-    }
-    match ty.kind() {
-        TermKind::Sort(l) if l.is_zero() => {}
-        _ => return Ok(None),
-    }
-    let to_usize = |x: u32| usize::try_from(x).unwrap_or(usize::MAX);
-    let np = to_usize(shape.num_params);
-    let major_pos = np
-        .checked_add(to_usize(shape.num_motives))
-        .and_then(|x| x.checked_add(to_usize(shape.num_minors)))
-        .and_then(|x| x.checked_add(to_usize(shape.num_indices)));
-    let Some(major_pos) = major_pos else {
-        return Ok(None);
-    };
-    let Some(major) = args.get(major_pos) else {
-        return Ok(None);
-    };
-    let major_w = whnf_in_context(env, ctx, major, budget)?;
-    if let TermKind::Const(c) = major_w.unfold_apps().0.kind() {
-        if *c.name() == rule.constructor {
-            return Ok(None); // the ι-rule's own case
-        }
-    }
-    let major_ty = match infer_in_context(env, ctx, major, budget) {
-        Ok(t) => t,
-        Err(InferError::OutOfBudget) => return Err(BudgetError::OutOfBudget),
-        Err(_) => return Ok(None),
-    };
-    let major_ty = whnf_in_context(env, ctx, &major_ty, budget)?;
-    let (ty_head, ty_args) = major_ty.unfold_apps();
-    let TermKind::Const(ty_ref) = ty_head.kind() else {
-        return Ok(None);
-    };
-    if *ty_ref.name() != ind || Some(ty_args.len()) != np.checked_add(to_usize(shape.num_indices)) {
-        return Ok(None);
-    }
-    let Ok(ctor) =
-        crate::term::ConstRef::mk(env, rule.constructor.clone(), ty_ref.levels().to_vec())
-    else {
-        return Ok(None);
-    };
-    let ctor_app = Term::apply(Term::const_ref(ctor), &ty_args[..np]);
-    let ctor_ty = match infer_in_context(env, ctx, &ctor_app, budget) {
-        Ok(t) => t,
-        Err(InferError::OutOfBudget) => return Err(BudgetError::OutOfBudget),
-        Err(_) => return Ok(None),
-    };
-    if !is_def_eq_at(env, ctx, &ctor_ty, &major_ty, budget)? {
-        return Ok(None);
-    }
-    let mut new_args = args.clone();
-    new_args[major_pos] = ctor_app;
-    Ok(Some(whnf_in_context(
-        env,
-        ctx,
-        &Term::apply(head, &new_args),
-        budget,
-    )?))
+    Ok(ConversionStep::Answer(false))
 }
 
 /// Structural congruence: equal heads with recursively-def-eq children. Does not
@@ -391,7 +337,7 @@ fn structural_congruence(
             if na != nb || ia != ib {
                 return Ok(false);
             }
-            is_def_eq_at(env, ctx, ea, eb, budget)
+            lazy::project_pair(env, ctx, na, *ia, ea, eb, budget)
         }
         _ => Ok(false),
     }
@@ -405,62 +351,6 @@ impl From<crate::term::TermError> for BudgetError {
         // accepts (fail-closed).
         BudgetError::OutOfBudget
     }
-}
-
-/// Proof-irrelevance with the **full side condition** (design §5.1):
-/// `a ≡ b` iff `typeof(a) ≡ typeof(b)` *and* `typeof(a) : Prop`. Re-infers the
-/// sort of the bridged subterm every time; never relies on a cache.
-///
-/// Returns `Some(true)` if the bridge applies and types match, `Some(false)` if
-/// it applies but types differ (so the caller does not accept), `None` if the
-/// bridge does not apply (not a Prop).
-fn is_def_eq_proof_irrel(
-    env: &dyn Env,
-    ctx: &[Term],
-    a: &Term,
-    b: &Term,
-    budget: &mut Budget,
-) -> Result<Option<bool>, BudgetError> {
-    // typeof(a) in the current local context.
-    let ty_a = match infer_in_context(env, ctx, a, budget) {
-        Ok(t) => t,
-        Err(InferError::OutOfBudget) => return Err(BudgetError::OutOfBudget),
-        Err(_) => return Ok(None),
-    };
-    // typeof(a) : Prop?  i.e. infer(ty_a) whnf's to Sort 0.
-    if !type_is_prop(env, ctx, &ty_a, budget)? {
-        return Ok(None);
-    }
-    let ty_b = match infer_in_context(env, ctx, b, budget) {
-        Ok(t) => t,
-        Err(InferError::OutOfBudget) => return Err(BudgetError::OutOfBudget),
-        Err(_) => return Ok(None),
-    };
-    // The common type must itself be def-eq (a and b must be proofs of the
-    // *same* proposition).
-    let mut ctx_vec = ctx.to_vec();
-    Ok(Some(is_def_eq_at(env, &mut ctx_vec, &ty_a, &ty_b, budget)?))
-}
-
-/// True iff `ty`'s own type whnf's to `Sort 0` (i.e. `ty : Prop`) in `ctx`.
-fn type_is_prop(
-    env: &dyn Env,
-    ctx: &[Term],
-    ty: &Term,
-    budget: &mut Budget,
-) -> Result<bool, BudgetError> {
-    // A Sort is never in Prop (Sort l : Sort (succ l) which is never Sort 0).
-    let ty_w = whnf_in_context(env, ctx, ty, budget)?;
-    if matches!(ty_w.kind(), TermKind::Sort(_)) {
-        return Ok(false);
-    }
-    let sort = match infer_in_context(env, ctx, &ty_w, budget) {
-        Ok(t) => t,
-        Err(InferError::OutOfBudget) => return Err(BudgetError::OutOfBudget),
-        Err(_) => return Ok(false),
-    };
-    let sort = whnf_in_context(env, ctx, &sort, budget)?;
-    Ok(matches!(sort.kind(), TermKind::Sort(l) if l.is_zero()))
 }
 
 #[cfg(kani)]

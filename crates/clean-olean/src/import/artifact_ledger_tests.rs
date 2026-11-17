@@ -543,3 +543,47 @@ fn completion_evidence_requires_an_actual_matching_active_load() {
     assert!(finish_artifact_load(&mut env, &key("D")).unwrap().is_some());
     assert!(finish_artifact_load(&mut env, &key("D")).unwrap().is_none());
 }
+
+#[test]
+fn compiler_name_stub_completion_safety_matrix_preserves_partial_versions() {
+    use crate::DefinitionSafety::{Partial, Safe, Unsafe};
+    use clean_kernel::env::ConstantKind;
+    for (stub_safety, full_safety, expected) in [
+        (Some(Safe), Some(Safe), true),
+        (Some(Unsafe), Some(Unsafe), true),
+        (Some(Safe), Some(Partial), true),
+        (Some(Unsafe), Some(Partial), true),
+        (Some(Unsafe), Some(Safe), false),
+        (Some(Safe), Some(Unsafe), false),
+        (None, Some(Safe), false),
+        (Some(Safe), None, false),
+        (None, None, true),
+    ] {
+        let mut early = stub(nat());
+        let mut later = record("D.e", c("Nat.zero"));
+        if let PartRecord::Constant { info, safety } = &mut early {
+            info.kind = ConstantKind::Axiom;
+            *safety = stub_safety;
+        }
+        if let PartRecord::Constant { safety, .. } = &mut later {
+            *safety = full_safety;
+        }
+        assert_eq!(
+            records_agree(&early, &later),
+            expected,
+            "{stub_safety:?} -> {full_safety:?}"
+        );
+    }
+    for (stub_safety, expected) in [(Some(Safe), true), (Some(Unsafe), false)] {
+        let mut early = stub(nat());
+        let mut later = record("D.e", c("Nat.zero"));
+        if let PartRecord::Constant { info, safety } = &mut early {
+            info.kind = ConstantKind::Axiom;
+            *safety = stub_safety;
+        }
+        if let PartRecord::Constant { info, .. } = &mut later {
+            info.kind = ConstantKind::Theorem;
+        }
+        assert_eq!(records_agree(&early, &later), expected);
+    }
+}

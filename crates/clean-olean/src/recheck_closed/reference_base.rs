@@ -30,7 +30,7 @@
 
 use std::collections::BTreeSet;
 
-use clean_kernel::env::{Declaration, Environment};
+use clean_kernel::env::{Declaration, Environment, Reducibility};
 use clean_kernel::inductive::InductiveDecl;
 use clean_kernel::name::Name;
 use clean_kernel::{ReferenceKernel, ReferenceRefusal};
@@ -108,14 +108,18 @@ impl ReplayTarget for EntryTarget {
         self.kernel.environment()
     }
 
-    fn admit_decl(&mut self, decl: Declaration) -> Result<(), String> {
+    fn admit_decl(&mut self, decl: Declaration, hint: Option<Reducibility>) -> Result<(), String> {
         let unit = match &decl {
             Declaration::Definition { name, .. }
             | Declaration::Theorem { name, .. }
             | Declaration::Opaque { name, .. }
             | Declaration::Axiom { name, .. } => name.to_string(),
         };
-        match self.kernel.add_checked(decl) {
+        let result = match hint {
+            Some(hint) => self.kernel.add_checked_with_reducibility(decl, hint),
+            None => self.kernel.add_checked(decl),
+        };
+        match result {
             Ok(_token) => Ok(()),
             Err(refusal) => Err(self.refuse(unit, refusal)),
         }
@@ -442,7 +446,7 @@ impl ReplayTarget for TracingTarget<'_> {
     fn env(&self) -> &Environment {
         self.entry.env()
     }
-    fn admit_decl(&mut self, decl: Declaration) -> Result<(), String> {
+    fn admit_decl(&mut self, decl: Declaration, hint: Option<Reducibility>) -> Result<(), String> {
         use clean_kernel::kcheck_trace::core::CoreTracer;
         let name = match &decl {
             Declaration::Definition { name, .. }
@@ -467,8 +471,9 @@ impl ReplayTarget for TracingTarget<'_> {
         // Keep candidate search separate from the diagnostic journal and from
         // admission. Its conservative supplied depth is an untrusted proposal,
         // not an interpretation/model bound or a completeness measurement.
-        let candidate = clean_kernel::kcheck_trace::core::advice::produce_ordinary(
+        let candidate = clean_kernel::kcheck_trace::core::advice::produce_ordinary_with_labelled(
             self.entry.env(),
+            &self.labelled,
             &decl,
             self.operations,
             self.operations,
@@ -482,7 +487,7 @@ impl ReplayTarget for TracingTarget<'_> {
                 reason: error.to_string(),
             },
         };
-        let result = self.entry.admit_decl(decl);
+        let result = self.entry.admit_decl(decl, hint);
         let mut row = row;
         row.advice_candidate = Some(advice_candidate);
         row.reference_accepted = result.is_ok();
@@ -591,7 +596,11 @@ pub fn reference_base_progress(
         fn env(&self) -> &Environment {
             self.entry.env()
         }
-        fn admit_decl(&mut self, decl: Declaration) -> Result<(), String> {
+        fn admit_decl(
+            &mut self,
+            decl: Declaration,
+            hint: Option<Reducibility>,
+        ) -> Result<(), String> {
             let name = match &decl {
                 Declaration::Definition { name, .. }
                 | Declaration::Theorem { name, .. }
@@ -599,7 +608,7 @@ pub fn reference_base_progress(
                 | Declaration::Axiom { name, .. } => name.to_unambiguous_string(),
             };
             self.next(&name);
-            self.entry.admit_decl(decl)
+            self.entry.admit_decl(decl, hint)
         }
         fn admit_family(&mut self, decl: InductiveDecl, clean_built: bool) -> Result<(), String> {
             self.next(&format!(

@@ -400,15 +400,15 @@
     },
     {
       "path": "crates/clean-mathverse/src/bin/mathverse_shard/coq_import_command.rs",
-      "prose_sha256": "f438a234d7ff20cf5ad4a271dd49e11bac20405821fd0f8e20cb892d8e5d0178",
-      "verified": "2026-09-13",
-      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow (clean-D-mathverse-shard); findings fixed in the commit that added this row; re-read 2026-09-13 against the code that moved under it since this row's anchor commit, by the 2026-09-13 drift sweep (lane mathverse-rest, ~95 claims checked over the group); this surface's claims DO reach the change \u2014 the two bins that grew a USAGE const and -h handling, and graduate_dispatch's doc fixes \u2014 and none contradicted it"
+      "prose_sha256": "06d650f04b1655c691cc737240d41d587c49770f80683c030f42fd5bd13be4db",
+      "verified": "2026-11-16",
+      "method": "re-read 2026-11-16 against its handler by the P6 slice 1a change (unit P6, designs/2026-11-16-p6-acceptance-identity.md), which rewrote this text: the stamp, release-stamp and coq-import help now say that a development manifest confers no label and nothing is stamped, and coq-import gained --rebaseline in place of --no-stamp; each claim was checked against the code in the same change"
     },
     {
       "path": "crates/clean-mathverse/src/bin/mathverse_shard/main.rs",
-      "prose_sha256": "a4b73e05bb48683e8cdbedd499f11af0588071bb1715f61c75374a257aca15da",
-      "verified": "2026-09-13",
-      "method": "re-read on 2026-09-12 against the code that moved under it since the roster was minted, by drift sweep agent-workflow (clean:clean-mathverse); no claim contradicted the moved code; re-read 2026-09-13 against the code that moved under it since this row's anchor commit, by the 2026-09-13 drift sweep (lane mathverse-rest, ~95 claims checked over the group); this surface's claims DO reach the change \u2014 the two bins that grew a USAGE const and -h handling, and graduate_dispatch's doc fixes \u2014 and none contradicted it"
+      "prose_sha256": "607a9f4bb7f5de2b186424be3be6cb6c854b2df731d29d280d99c52e88eae272",
+      "verified": "2026-11-16",
+      "method": "re-read 2026-11-16 against its handler by the P6 slice 1a change (unit P6, designs/2026-11-16-p6-acceptance-identity.md), which rewrote this text: the stamp, release-stamp and coq-import help now say that a development manifest confers no label and nothing is stamped, and coq-import gained --rebaseline in place of --no-stamp; each claim was checked against the code in the same change"
     },
     {
       "path": "crates/clean-mathverse/src/bin/mathverse_shard/native_build.rs",
@@ -419,9 +419,9 @@
     },
     {
       "path": "crates/clean-mathverse/src/bin/mathverse_shard/stamp_command.rs",
-      "prose_sha256": "d7a46f6de10c765615e418a857ae9a95dcef3acb408b8efc7090541ce1fdeeaf",
-      "verified": "2026-09-12",
-      "method": "re-read on 2026-09-12 against the code that moved under it since the roster was minted, by drift sweep agent-workflow (clean:clean-mathverse); no claim contradicted the moved code; the 2026-09-13 drift sweep (lane mathverse-rest, ~95 claims checked over the group) READ this surface against the five files that moved in crates/clean-mathverse and found the change reaches none of its claims \u2014 two of the five are #[cfg(test)]-only edits, and the other three are binaries and docs this surface never names \u2014 so `verified` stands and `drift_swept` records the commit the drift question was answered up to",
+      "prose_sha256": "4dcc1039ecb21585a618f1ce428d4ee5976766fcc1e63711ce99c8cbc265ef9b",
+      "verified": "2026-11-16",
+      "method": "re-read 2026-11-16 against its handler by the P6 slice 1a change (unit P6, designs/2026-11-16-p6-acceptance-identity.md), which rewrote this text: the stamp, release-stamp and coq-import help now say that a development manifest confers no label and nothing is stamped, and coq-import gained --rebaseline in place of --no-stamp; each claim was checked against the code in the same change",
       "drift_swept": "7b41ae718c12934fa303cc6b62e66ec3fe1f4ccb"
     },
     {
@@ -473,9 +473,9 @@
     },
     {
       "path": "crates/clean-mathverse/src/cli/mod.rs",
-      "prose_sha256": "eaaa9d270ad2b68ecaaef896a9005511e0834561f11c89ea82d94371dd99b635",
-      "verified": "2026-11-15",
-      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow (clean-C-mathverse-cli); findings fixed in the commit that added this row; re-read 2026-09-13 against the code that moved under it since this row's anchor commit, by the 2026-09-13 drift sweep (lane mathverse-rest, ~95 claims checked over the group); this surface's claims DO reach the change \u2014 the two bins that grew a USAGE const and -h handling, and graduate_dispatch's doc fixes \u2014 and none contradicted it; re-read 2026-09-30 when 9e61c1f67 (the mathverse forged-lanes fix) added MathverseCliError::StampImportRefused, the only prose that moved: read against closure_load.rs closure_load_error (the variant is built only when ImportError::is_inconsistent_artifact() and declaration_names() is non-empty, else StampClosure) and its three callers -- closure_load.rs's load_targets_closure_with_policy, which loads every target's closure before stamp_verified_dispatch verifies anything, and parallel_verify.rs's base and lazy-base loads, which precede every check -- so 'nothing of the run was checked or stamped' holds; no stamp lane loads under OleanImportPolicy::with_replay_refusals (grep: only the sharded worker uses the module-replay variant), the --parallel base holds every target, and the sequential lanes pre-seed the targets into `visited` so their base is trusted imports only. No claim contradicted the code. Re-read 2026-11-15 when the mathverse/lazy-resolution-2026-08-01 merge (422f31b3d7) changed the only moved prose, the `ram_budget` module doc: read against ram_budget.rs default_workers, which computes cpus.min(max(1, ram_gib.saturating_sub(BASE_RESERVE_GIB) / PER_WORKER_GIB)) and min(cpus, 4) when RAM is unknown, so the stated clamp holds. No claim contradicted the code. Re-read 2026-11-15 when `isabelle-fetch` (IsabelleFetch, IsabelleFetchArgs, MathverseCliError::IsabelleFetch) was added: read against cli/isabelle_fetch_dispatch.rs and hol/isabelle_fetch: --work-dir is tilde-expanded and defaults to ~/isabelle-work; --only takes the manifest ids (Isabelle2025, Isabelle2025-2, afp); --dry runs Mode::Dry, which checks present inputs and downloads and writes nothing; --manifest is PublicInputs::load, else the built-in copy of data/isabelle_public_inputs.json; a present input with the pinned checksum is left alone; every run prints the not-fetched list. No claim contradicted the code."
+      "prose_sha256": "c79ab9bbd9677413280eea7c70ea445b010070d2b9dd12da0f45649f01a1f6fa",
+      "verified": "2026-11-16",
+      "method": "re-read 2026-11-16 against its handler by the P6 slice 1a change (unit P6, designs/2026-11-16-p6-acceptance-identity.md), which rewrote this text: the stamp, release-stamp and coq-import help now say that a development manifest confers no label and nothing is stamped, and coq-import gained --rebaseline in place of --no-stamp; each claim was checked against the code in the same change"
     },
     {
       "path": "crates/clean-mathverse/src/mathverse_bin_cmds/commands/deps.rs",
@@ -527,9 +527,9 @@
     },
     {
       "path": "crates/clean-mathverse/src/mathverse_bin_cmds/commands/release.rs",
-      "prose_sha256": "cb721e0cace7d09646cd561bd3046a5396d1903cb9ce693a8fdaee05d492ae72",
-      "verified": "2026-09-10",
-      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow (clean-C-mathverse-cli); findings fixed in the commit that added this row; the 2026-09-13 drift sweep (lane mathverse-rest, ~95 claims checked over the group) READ this surface against the five files that moved in crates/clean-mathverse and found the change reaches none of its claims \u2014 two of the five are #[cfg(test)]-only edits, and the other three are binaries and docs this surface never names \u2014 so `verified` stands and `drift_swept` records the commit the drift question was answered up to",
+      "prose_sha256": "cb641f1469624d4c594e6d6f2673afba6fb728faf3c2db1fff3349fccc49a611",
+      "verified": "2026-11-16",
+      "method": "re-read 2026-11-16 against its handler by the P6 slice 1a change (unit P6, designs/2026-11-16-p6-acceptance-identity.md), which rewrote this text: the stamp, release-stamp and coq-import help now say that a development manifest confers no label and nothing is stamped, and coq-import gained --rebaseline in place of --no-stamp; each claim was checked against the code in the same change",
       "drift_swept": "7b41ae718c12934fa303cc6b62e66ec3fe1f4ccb"
     },
     {

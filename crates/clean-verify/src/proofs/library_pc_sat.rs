@@ -54,10 +54,10 @@ impl ProofLibrary {
                 "fun (nc : Nat) (step : ResolvStep nc) => \
                  @ResolvStep.rec nc \
                    (fun (s : ResolvStep nc) => ResolvSound nc s) \
-                   (fun (idx : Nat) => ResolvSound.input nc idx) \
+                   (fun (idx : Nat) => @ResolvSound.input nc idx) \
                    (fun (pivot : Nat) (left : ResolvStep nc) (right : ResolvStep nc) \
                         (ih_left : ResolvSound nc left) (ih_right : ResolvSound nc right) => \
-                     ResolvSound.resolve nc pivot left right ih_left ih_right) \
+                     @ResolvSound.resolve nc pivot left right ih_left ih_right) \
                    step",
                 "PC01 Resolution soundness: each resolve step produces a valid \
                  resolvent. Proof by induction on ResolvStep using ResolvStep.rec. \
@@ -90,7 +90,7 @@ impl ProofLibrary {
             ProofTerm::new(
                 "pc02_resolution_completeness",
                 "fun (n : Nat) => \
-                 Nat.rec \
+                 @Nat.rec \
                    (ResolvComplete.base_empty) \
                    (fun (m : Nat) (ih : ResolvComplete m) => \
                      ResolvComplete.elim_var m m ih) \
@@ -137,14 +137,14 @@ impl ProofLibrary {
                 "fun (ni : Nat) (step : CPStep ni) => \
                  @CPStep.rec ni \
                    (fun (s : CPStep ni) => CPSound ni s) \
-                   (fun (idx : Nat) => CPSound.input ni idx) \
+                   (fun (idx : Nat) => @CPSound.input ni idx) \
                    (fun (left : CPStep ni) (right : CPStep ni) \
                         (ih_left : CPSound ni left) (ih_right : CPSound ni right) => \
-                     CPSound.addition ni left right ih_left ih_right) \
+                     @CPSound.addition ni left right ih_left ih_right) \
                    (fun (coeff : Nat) (inner : CPStep ni) (ih : CPSound ni inner) => \
-                     CPSound.scalar_mul ni coeff inner ih) \
+                     @CPSound.scalar_mul ni coeff inner ih) \
                    (fun (divisor : Nat) (inner : CPStep ni) (ih : CPSound ni inner) => \
-                     CPSound.division ni divisor inner ih) \
+                     @CPSound.division ni divisor inner ih) \
                    step",
                 "PC03 Cutting planes soundness: each derived inequality is valid \
                  over 0-1 variables. Proof by induction on CPStep using CPStep.rec. \
@@ -182,10 +182,10 @@ impl ProofLibrary {
                 "fun (nc : Nat) (step : CPSimResolvStep nc) => \
                  @CPSimResolvStep.rec nc \
                    (fun (s : CPSimResolvStep nc) => CPSimResolvSound nc s) \
-                   (fun (idx : Nat) => CPSimResolvSound.encode_clause nc idx) \
+                   (fun (idx : Nat) => @CPSimResolvSound.encode_clause nc idx) \
                    (fun (pivot : Nat) (left : CPSimResolvStep nc) (right : CPSimResolvStep nc) \
                         (ih_left : CPSimResolvSound nc left) (ih_right : CPSimResolvSound nc right) => \
-                     CPSimResolvSound.sim_resolve nc pivot left right ih_left ih_right) \
+                     @CPSimResolvSound.sim_resolve nc pivot left right ih_left ih_right) \
                    step",
                 "PC04 CP subsumes resolution: every resolution proof can be \
                  simulated by a cutting planes proof. Proof by induction on \

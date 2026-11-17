@@ -75,6 +75,16 @@ command lines fixed here in Python:
     scanner and the typed driver are themselves STANDALONE_GATED, so this check
     runs their tests and lints and scans them, each with both scans.
 
+The canonical lint_types test entry has one additional conjunctive role: the
+syn preflight recognizes its exact adapter before test compilation, then this
+owner's already-built typed driver authenticates the ACTUAL test compilation
+and normal/test typed units against the selected SDK object bytes. Exact nonce,
+source, argv, fresh artifact and complete unfiltered thirty-test facts are all
+required. Only that owned role can replace the direct test compiler; every
+other wrapper stays refused. Clippy retains its own driver/flags and source
+coverage rules, with the same SDK/source epochs; it emits no native witness.
+No scheduler advertisement or descriptor is cleared or fabricated.
+
 THE RUNS ARE HERMETIC (lane r10, 2026-09-26). A cargo configuration file above
 the checkout or in CARGO_HOME -- files nothing in this repository can pin --
 capped every lint until verifier r9 (`rustflags = ["@lint.args"]`), and reading
@@ -121,10 +131,12 @@ The self-test runs first on every invocation; `--selftest` stops after it.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
 import secrets
+import stat
 import shlex
 import shutil
 import subprocess
@@ -624,13 +636,504 @@ def _is_under(path: str, directory: Path) -> bool:
         return False
 
 
-def tests_verdict(rc: int, out: str, dirs: list[Path] | None = None) -> str | None:
+# The native entry is a closed role of this owner's already-built typed driver.
+# A witness printed by any other program, compilation, source or SDK is no verdict.
+NATIVE_CONTEXT = "CLEAN_LINT_TYPES_NATIVE_ENTRY_CONTEXT"
+NATIVE_CONTEXT_SHA = "CLEAN_LINT_TYPES_NATIVE_ENTRY_CONTEXT_SHA256"
+NATIVE_CONTEXT_SCHEMA = b"lint-types-native-entry-context-v2"
+NATIVE_CONTEXT_LIMIT = 4 * 1024 * 1024
+NATIVE_MANIFEST_LIMIT = 2 * 1024 * 1024
+NATIVE_WITNESS = "lint-types-native-entry-v1 "
+NATIVE_TEST_MODULE_SHA = "da608bcc15d25c6ca86625f8bbd4bf9dbf8d6ada73ff2023d74a1c97fa49e286"
+NATIVE_TEST_NAMES = ('tests::a_binding_is_a_binding_whatever_its_case', 'tests::a_bound_of_the_impl_or_the_resolved_impl_is_a_comparison', 'tests::a_catch_all_below_the_top_is_refused', 'tests::a_comparison_of_a_type_parameter_may_tell_apart_any_variant', 'tests::a_comparison_passed_as_a_value_is_a_comparison', 'tests::a_comparison_with_a_named_variant_is_refused', 'tests::a_discriminant_cast_is_refused', 'tests::a_fixed_value_of_the_gated_crate_names_what_it_holds', 'tests::a_function_that_compares_what_it_is_given_is_a_comparison', 'tests::a_function_value_passed_on_is_called_with_what_the_callee_holds', 'tests::a_guard_does_not_make_a_catch_all_safe', 'tests::a_match_a_macro_writes_is_scanned', 'tests::a_method_another_crate_runs_may_be_passed_any_value', 'tests::a_named_constant_is_the_variants_it_denotes', 'tests::a_named_variant_is_followed_into_callbacks_and_writes', 'tests::a_named_variant_is_followed_into_closures_and_calls', 'tests::a_named_variant_is_followed_into_the_crate_s_own_functions', 'tests::a_named_variant_is_followed_out_of_the_crate_s_own_functions', 'tests::a_named_variant_is_followed_through_bindings', 'tests::a_refutable_let_has_a_catch_all_failure_branch', 'tests::a_value_erased_to_a_trait_object_keeps_its_variants', 'tests::a_value_of_a_gated_enum_that_reads_no_variable_is_named', 'tests::a_whole_arm_catch_all_beside_a_variant_is_refused', 'tests::agreement_and_an_assertion_are_not_a_told_variant', 'tests::an_impl_trait_result_may_hold_any_variant', 'tests::an_incremental_rerun_scans_every_body_again', 'tests::every_body_is_scanned', 'tests::named_variants_and_ungated_catch_alls_pass', 'tests::self_and_an_alias_are_the_type_they_name', 'tests::trust_ir_s_enums_are_gated_and_no_other_crate_s')
+NATIVE_IDENTITIES = {'capture': 'rustc_data_structures::jobserver::capture_early_for_test_harness', 'descriptor/type': 'test::TestDescAndFn', 'failure/enum': 'core::result::Result', 'failure/exit': 'std::process::exit', 'failure/variant': 'core::result::Result::Err', 'libtest/result': 'std::process::ExitCode', 'policy/loan': 'rustc_data_structures::jobserver::lends_own_execution', 'policy/threads': 'std::env::var_os'}
+NATIVE_TEST_FACTS = ('compiler/book', 'entry', 'descriptors/full-set', 'descriptor/type', 'capture', 'failure/variant', 'failure/enum', 'failure/exit', 'policy/loan', 'policy/threads', 'libtest/runner', 'libtest/result', 'libtest/exit', 'libtest/exit-impl', 'callback', 'forwarded/parameter')
+NATIVE_CONTEXT_KEYS = frozenset(("schema", "role", "nonce", "root", "source", "source_sha256",
+    "compiler", "out_dir_root", "crate_name", "sdk_root", "sdk_manifest_sha256",
+    "sdk_manifest_path", "sdk_manifest_identity"))
+NATIVE_WITNESS_KEYS = frozenset(("schema", "context_role", "role", "nonce", "root", "source",
+    "source_sha256", "compiler_argv", "sdk_root", "sdk_manifest_sha256", "resolved_facts"))
+
+
+def _native_require(condition: bool, reason: str) -> None:
+    if not condition:
+        raise CoverageFailure("native entry: " + reason)
+
+
+def _native_file(path: Path, *, capture: bool = True) -> tuple[bytes | None, dict]:
+    """Hash large code objects in bounded chunks; captured Source uses the same FD."""
+    _native_require(path.is_absolute() and path.resolve(strict=True) == path,
+                    f"noncanonical file role: {path}")
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    with os.fdopen(fd, "rb") as stream:
+        before = os.fstat(stream.fileno())
+        _native_require(stat.S_ISREG(before.st_mode), f"nonregular file: {path}")
+        collected = bytearray() if capture else None
+        digest = hashlib.sha256()
+        count = 0
+        while chunk := stream.read(1024 * 1024):
+            count += len(chunk)
+            digest.update(chunk)
+            if collected is not None:
+                _native_require(count <= 4 * 1024 * 1024, f"captured Source/context exceeds limit: {path}")
+                collected.extend(chunk)
+        after = os.fstat(stream.fileno())
+        endpoint = path.lstat()
+    _native_file_endpoints(path, before, after, endpoint, count, path.resolve(strict=True) == path)
+    return (bytes(collected) if collected is not None else None), {"sha256": digest.hexdigest(), "bytes": count,
+                  "mode": stat.S_IMODE(before.st_mode), "dev": before.st_dev, "ino": before.st_ino}
+
+
+def _native_file_endpoints(path: Path, before, after, endpoint, count: int, canonical: bool) -> None:
+    _native_require((before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns, before.st_mode)
+                    == (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_mode)
+                    == (endpoint.st_dev, endpoint.st_ino, endpoint.st_size, endpoint.st_mtime_ns, endpoint.st_mode)
+                    and count == before.st_size and stat.S_ISREG(endpoint.st_mode)
+                    and canonical, f"file/path changed while read: {path}")
+
+
+def _native_hex_json(raw: bytes, keys: frozenset[str]) -> dict[str, bytes]:
+    def unique(pairs):
+        value = {}
+        for key, item in pairs:
+            _native_require(key not in value, "duplicate JSON member")
+            value[key] = item
+        return value
+    try:
+        value = json.loads(raw, object_pairs_hook=unique)
+        _native_require(type(value) is dict and set(value) == keys, "JSON member roster")
+        _native_require(all(type(item) is str and re.fullmatch(r"(?:[0-9a-f]{2})*", item)
+                            is not None for item in value.values()), "JSON canonical hex strings")
+        _native_require(raw == json.dumps(value, sort_keys=True, separators=(",", ":")).encode(),
+                        "noncanonical JSON encoding")
+        return {key: bytes.fromhex(item) for key, item in value.items()}
+    except (ValueError, UnicodeError, TypeError) as exc:
+        raise CoverageFailure(f"native entry: malformed JSON: {exc}") from exc
+
+
+def _native_manifest(root: Path) -> tuple[bytes, dict[str, bytes]]:
+    import tomllib
+    crate = root / TYPES
+    tracked = tracked_files(root, TYPES)
+    _native_require(f"{TYPES}/src/main.rs" in tracked and f"{TYPES}/Cargo.toml" in tracked,
+                    "canonical root/manifest is not tracked")
+    sources = {}
+    for rel in tracked:
+        path = root / rel
+        _native_require(path.resolve(strict=True) == path and path.is_file(), "untracked/aliased source")
+        sources[rel] = _native_file(path)[0]
+    _native_manifest_doc(tomllib.loads(sources[f"{TYPES}/Cargo.toml"].decode()))
+    source = sources[f"{TYPES}/src/main.rs"]
+    marker = b"#[cfg(test)]\nmod tests {"
+    _native_require(marker in source, "original test module missing")
+    module = source[source.rindex(marker):]
+    _native_require(hashlib.sha256(module).hexdigest() == NATIVE_TEST_MODULE_SHA,
+                    "original thirty-test module changed")
+    return source, sources
+
+
+def _native_manifest_doc(doc: dict) -> None:
+    expected = {"workspace": {}, "package": {"name": "clean-lint-types", "version": "0.1.0",
+                "edition": "2021", "publish": False}, "dependencies": {},
+                "bin": [{"name": "lint-types", "path": "src/main.rs"}]}
+    _native_require(json.dumps(doc, sort_keys=True) == json.dumps(expected, sort_keys=True),
+                    "manifest/dependencies/features/target context differs")
+
+
+def _native_sdk(targo: str, root: Path, env: dict[str, str]) -> dict:
+    compiler = Path(targo).resolve(strict=True).parent / "trustc"
+    compiler_before = _native_file(compiler, capture=False)[1]
+    proc = subprocess.run([str(compiler), "--print=sysroot"], cwd=root, env=env,
+                          pass_fds=custody_fds(env), capture_output=True, check=False)
+    output = os.fsdecode(proc.stdout).removesuffix("\n")
+    _native_require(proc.returncode == 0 and output and not any(c in output for c in "\n\r\x00"),
+                    "selected compiler sysroot query refused")
+    sdk = Path(output)
+    _native_require(sdk.is_absolute() and sdk.resolve(strict=True) == sdk and sdk.is_dir(),
+                    "selected SDK root is not canonical")
+    _native_require(compiler == sdk / "bin/trustc", "compiler/selected SDK role differs")
+    lib = sdk / "lib"
+    _native_require(lib.is_dir() and lib.resolve(strict=True) == lib, "SDK lib directory role differs")
+    objects = {}
+    def fail(error):
+        raise error
+    for current, dirs, files in os.walk(lib, followlinks=False, onerror=fail):
+        dirs.sort()
+        for name in dirs:
+            path = Path(current) / name
+            _native_require(stat.S_ISDIR(path.lstat().st_mode), "SDK directory alias/non-directory")
+        for name in sorted(files):
+            path = Path(current) / name
+            objects[str(path)] = _native_file(path, capture=False)[1]
+    objects[str(compiler)] = _native_file(compiler, capture=False)[1]
+    _native_require(objects[str(compiler)] == compiler_before, "compiler changed during SDK selection")
+    for name in ("tippy", "tippy-driver"):
+        objects[str(sdk / "bin" / name)] = _native_file(sdk / "bin" / name, capture=False)[1]
+    _native_require(len(objects) > 1, "selected SDK object roster empty")
+    manifest = _native_sdk_manifest(sdk, objects)
+    return {"compiler": str(compiler), "root": str(sdk), "objects": objects,
+            "manifest": manifest, "sha256": hashlib.sha256(manifest).digest()}
+
+
+def _native_sdk_manifest(sdk: Path, objects: dict) -> bytes:
+    # V2 preserves UTF8 path bytes. Sort complete byte lines, not bare paths;
+    # an allowed low control byte after a prefix can sort before the TAB.
+    prefix = str(sdk) + "/"
+    lines = []
+    for path, book in objects.items():
+        _native_require(type(path) is str and path.startswith(prefix), "SDK relative path root")
+        relative = path[len(prefix):].encode("utf-8")
+        _native_require(relative and not any(byte in relative for byte in (0, 9, 10, 13))
+                        and all(part not in (b"", b".", b"..") for part in relative.split(b"/")),
+                        "SDK relative path separators/components")
+        lines.append(relative + b"\t" + book["sha256"].encode("ascii") + b"\t"
+                     + str(book["bytes"]).encode("ascii") + b"\t"
+                     + format(book["mode"], "o").encode("ascii") + b"\n")
+    raw = b"".join(sorted(lines))
+    _native_pair_budget(b"", raw)
+    return raw
+
+
+def _native_pair_budget(context_raw: bytes, manifest_raw: bytes) -> None:
+    _native_require(type(context_raw) is bytes and type(manifest_raw) is bytes,
+                    "input pair bytes type")
+    _native_require(len(manifest_raw) <= NATIVE_MANIFEST_LIMIT,
+                    "SDK manifest exceeds decoded 2 MiB limit")
+    _native_require(len(context_raw) + len(manifest_raw) <= NATIVE_CONTEXT_LIMIT,
+                    "combined input pair exceeds 4 MiB limit")
+
+
+def _native_manifest_identity(book: dict) -> bytes:
+    _native_require(all(type(book.get(key)) is int and book[key] >= 0
+                        for key in ("dev", "ino", "bytes", "mode"))
+                    and book["mode"] <= 0o7777, "manifest identity typed schema")
+    return f"{book['dev']}:{book['ino']}:{book['bytes']}:{book['mode']:o}".encode("ascii")
+
+
+def _native_pair_paths(path: Path, manifest_path: Path, driver: Path, nonce: bytes) -> None:
+    _native_require(type(nonce) is bytes and len(nonce) == 32, "input pair nonce length")
+    directory = driver.parent / "native-entry-contexts" / nonce.hex()
+    _native_require(path == directory / "context.json" and
+                    manifest_path == directory / "sdk-objects.manifest", "input pair nonce paths")
+    info = directory.lstat()
+    _native_require(directory.resolve(strict=True) == directory and stat.S_ISDIR(info.st_mode)
+                    and stat.S_IMODE(info.st_mode) == 0o700, "input pair directory mode/alias")
+
+
+def _native_write_input(path: Path, raw: bytes) -> None:
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, "wb") as stream:
+        os.fchmod(stream.fileno(), 0o600)
+        stream.write(raw)
+
+
+def _native_context_input_endpoints(context: dict) -> None:
+    try:
+        raw, book = _native_file(context["path"])
+        manifest_raw, manifest_book = _native_file(context["manifest_path"])
+    except OSError as exc:
+        raise CoverageFailure(f"native entry: input pair unavailable: {exc}") from exc
+    _native_pair_budget(raw, manifest_raw)
+    fields = _native_hex_json(raw, NATIVE_CONTEXT_KEYS)
+    _native_require(fields["schema"] == NATIVE_CONTEXT_SCHEMA, "input pair schema")
+    _native_require(book["mode"] == 0o600 and manifest_book["mode"] == 0o600,
+                    "input pair file modes")
+    _native_pair_paths(context["path"], context["manifest_path"], Path(context["driver"]), fields["nonce"])
+    _native_require(fields["sdk_manifest_path"] == str(context["manifest_path"]).encode()
+                    and fields["sdk_manifest_identity"] == _native_manifest_identity(manifest_book)
+                    and fields["sdk_manifest_sha256"] == hashlib.sha256(manifest_raw).digest(),
+                    "input manifest path/identity/hash")
+    _native_require(raw == context["raw"] and book == context["context_book"] and
+                    manifest_raw == context["manifest_raw"] and manifest_book == context["manifest_book"],
+                    "context/manifest bytes/book changed")
+
+
+def _native_context(root: Path, role: str, driver: Path, sdk: dict, env: dict[str, str],
+                    sources: dict[str, bytes], source: bytes) -> dict:
+    _native_require(role in ("actual-test-compile", "typed-analysis"), "context role")
+    driver = driver.resolve(strict=True)
+    driver_book = _native_file(driver, capture=False)[1]
+    _native_require(driver_book["mode"] & 0o111 != 0, "owned driver is not executable")
+    out = Path(env.get("CARGO_BUILD_BUILD_DIR") or env["CARGO_TARGET_DIR"])
+    _native_require(out.is_absolute() and out.resolve(strict=False) == out,
+                    "owned output root is not canonical")
+    # build_types already initialized this owned target through public Targo.
+    parent = driver.parent / "native-entry-contexts"
+    parent.mkdir(exist_ok=True)
+    _native_require(parent.resolve(strict=True) == parent, "context directory alias")
+    nonce = secrets.token_bytes(32)
+    directory = parent / nonce.hex()
+    directory.mkdir(mode=0o700)
+    directory.chmod(0o700)
+    path, manifest_path = directory / "context.json", directory / "sdk-objects.manifest"
+    _native_pair_paths(path, manifest_path, driver, nonce)
+    manifest_raw = sdk["manifest"]
+    _native_pair_budget(b"", manifest_raw)
+    _native_write_input(manifest_path, manifest_raw)
+    actual_manifest, manifest_book = _native_file(manifest_path)
+    _native_require(actual_manifest == manifest_raw and manifest_book["mode"] == 0o600,
+                    "created manifest bytes/mode")
+    fields = {"schema": NATIVE_CONTEXT_SCHEMA, "role": role.encode(),
+        "nonce": nonce, "root": str(root / TYPES / "src/main.rs").encode(),
+        "source": source, "source_sha256": hashlib.sha256(source).digest(),
+        "compiler": sdk["compiler"].encode(), "out_dir_root": str(out).encode(),
+        "crate_name": b"lint_types", "sdk_root": sdk["root"].encode(),
+        "sdk_manifest_sha256": sdk["sha256"], "sdk_manifest_path": str(manifest_path).encode(),
+        "sdk_manifest_identity": _native_manifest_identity(manifest_book)}
+    raw = json.dumps({key: value.hex() for key, value in fields.items()},
+                     sort_keys=True, separators=(",", ":")).encode()
+    _native_pair_budget(raw, manifest_raw)
+    _native_write_input(path, raw)
+    created_raw, context_book = _native_file(path)
+    _native_require(created_raw == raw and context_book["mode"] == 0o600, "created context bytes/mode")
+    return {"fields": fields, "path": path, "raw": raw, "context_book": context_book,
+            "manifest_path": manifest_path, "manifest_raw": manifest_raw, "manifest_book": manifest_book,
+            "sha256": hashlib.sha256(raw).hexdigest(),
+            "driver": str(driver), "driver_book": driver_book, "sdk": sdk,
+            "root": root, "sources": sources, "artifact_names": set(NATIVE_TEST_NAMES)}
+
+
+def _native_context_endpoints(context: dict, targo: str, env: dict[str, str]) -> None:
+    _native_context_input_endpoints(context)
+    _native_require(_native_file(Path(context["driver"]), capture=False)[1] == context["driver_book"],
+                    "owned driver artifact changed")
+    for rel, data in context["sources"].items():
+        _native_require(_native_file(context["root"] / rel)[0] == data, "source epoch changed: " + rel)
+    _native_require(set(tracked_files(context["root"], TYPES)) == set(context["sources"]),
+                    "tracked source roster changed")
+    _native_require(_native_sdk(targo, context["root"], env) == context["sdk"], "SDK epoch changed")
+
+
+def _native_object(value: str, context: dict) -> None:
+    fields = value.split(":")
+    _native_require(len(fields) == 6, "resolved object six-field schema")
+    path_hex, digest, size, mode, device, inode = fields
+    _native_require(re.fullmatch(r"(?:[0-9a-f]{2})+", path_hex) is not None, "object path hex")
+    path = bytes.fromhex(path_hex).decode()
+    _native_require(path in context["sdk"]["objects"], "resolved object outside selected SDK roster")
+    for text in (size, device, inode):
+        _native_require(re.fullmatch(r"0|[1-9][0-9]*", text) is not None, "object integer spelling")
+    _native_require(re.fullmatch(r"0|[1-7][0-7]*", mode) is not None, "object mode spelling")
+    actual = {"sha256": digest, "bytes": int(size), "mode": int(mode, 8),
+              "dev": int(device), "ino": int(inode)}
+    expected = context["sdk"]["objects"][path]
+    _native_require(set(expected) == set(actual) and type(expected["sha256"]) is str and
+                    all(type(expected[key]) is int for key in ("bytes", "mode", "dev", "ino")),
+                    "selected SDK book typed schema")
+    _native_require(actual == expected, "resolved SDK object book differs")
+
+
+def _native_crates(facts: dict[str, str], context: dict) -> set[str]:
+    crates = {}
+    for key, value in facts.items():
+        if key.startswith("crate/"):
+            match = re.fullmatch(r"crate/([1-9][0-9]*)/(core|std|test|rustc_data_structures)/(dylib|rlib|rmeta|sdylib_interface)", key)
+            _native_require(match is not None, "unknown SDK crate/slot role")
+            number, name, slot = match.groups()
+            _native_require(name not in crates or crates[name][0] == number, "SDK crate identity split")
+            if name not in crates:
+                crates[name] = (number, {})
+            crates[name][1][slot] = value
+            if value != "absent":
+                _native_object(value, context)
+    _native_require(set(crates) == {"core", "std", "test", "rustc_data_structures"}
+                    and len({number for number, _ in crates.values()}) == 4, "SDK defining crate roster")
+    expected = set()
+    for name, (number, slots) in crates.items():
+        _native_require(set(slots) == {"dylib", "rlib", "rmeta", "sdylib_interface"}
+                        and any(value != "absent" for value in slots.values()), "SDK four-slot completeness")
+        expected |= {f"crate/{number}/{name}/{slot}" for slot in slots}
+    return expected
+
+
+def _native_facts(raw: bytes, role: str, context: dict) -> None:
+    text = raw.decode()
+    _native_require(text.endswith("\n"), "resolved facts missing final LF")
+    facts = {}
+    for line in text.splitlines():
+        parts = line.split("\t")
+        _native_require(len(parts) == 2 and parts[0] not in facts and
+                        re.fullmatch(r"(?:[0-9a-f]{2})+", parts[1]) is not None,
+                        "resolved fact duplicate/encoding")
+        facts[parts[0]] = bytes.fromhex(parts[1]).decode()
+    _native_require(list(facts) == sorted(facts), "resolved facts not sorted")
+    _native_require("compiler/book" in facts, "compiler object fact missing")
+    _native_object(facts["compiler/book"], context)
+    _native_require(bytes.fromhex(facts["compiler/book"].split(":")[0]).decode()
+                    == context["sdk"]["compiler"], "compiler object role differs")
+    if role == "typed-normal-analysis":
+        _native_require(set(facts) == {"compiler/book", "unit"} and facts["unit"] == "normal-no-test-entry",
+                        "normal unit claims test facts")
+        return
+    expected = set(NATIVE_TEST_FACTS) | {"descriptor/" + name for name in NATIVE_TEST_NAMES}
+    expected |= _native_crates(facts, context)
+    _native_require(set(facts) == expected and len(facts) == 62 and facts["descriptors/full-set"] == "30",
+                    "resolved test fact/descriptor full roster")
+    for label, expected_path in NATIVE_IDENTITIES.items():
+        _native_identity(facts[label], expected_path, label)
+    runner = facts["libtest/runner"].split("\t")
+    _native_require(len(runner) == 3 and runner[0] and runner[2] and
+                    runner[1] == "test::test_main_env_args", "panic-matched libtest runner identity")
+    for name in NATIVE_TEST_NAMES:
+        value = facts["descriptor/" + name].split("\t")
+        _native_require(len(value) == 2 and value[0] and value[1] == "builtin", "descriptor origin")
+    for key in ("entry", "callback", "forwarded/parameter", "libtest/exit", "libtest/exit-impl"):
+        _native_require(bool(facts[key]) and "\n" not in facts[key], "missing actual entry/exit identity")
+
+
+def _native_identity(value: str, expected_path: str, label: str) -> None:
+    parts = value.split("\t")
+    _native_require(len(parts) == 3 and parts[0] and parts[1] == expected_path and parts[2],
+                    "resolved SDK identity differs: " + label)
+
+
+def _native_wrapper(argv: list[str], context: dict) -> None:
+    _native_require(len(argv) >= 3 and argv[0] == context["driver"] and
+                    argv[1] == context["sdk"]["compiler"], "unknown/configured test wrapper")
+
+
+def _native_preflight_clean(problems: list[str]) -> None:
+    _native_require(not problems, "syntax preflight refused before test compilation: " + "; ".join(problems))
+
+
+def _native_argv(argv: list[str], context: dict, dirs: list[Path]) -> bool:
+    _native_require(len(argv) >= 2 and argv[0] == context["sdk"]["compiler"], "compiler argv role")
+    args = argv[1:]
+    _native_require(not unmodeled_lint_args(args, dirs), "unmodeled compiler flags/root/target/sysroot")
+    pairs, positional = lint_args(args)
+    _native_require(not any(flag == "--extern" for flag, _ in pairs),
+                    "dependency-free native context forbids --extern aliases/modifiers")
+    _native_require(len(positional) == 1 and str((context["root"] / TYPES / positional[0]).resolve())
+                    == context["fields"]["root"].decode(), "actual compiler source root")
+    def one(flag):
+        values = [value for key, value in pairs if key == flag]
+        _native_require(len(values) == 1, "missing/duplicate compiler flag: " + flag)
+        return values[0]
+    _native_require(one("--crate-name") == "lint_types" and one("--edition") == "2021", "crate/edition")
+    out = one("--out-dir")
+    _native_require(type(out) is str and Path(out).is_absolute() and
+                    Path(out).is_relative_to(Path(context["fields"]["out_dir_root"].decode())), "compiler output root")
+    _native_require(sum(key == "--test" for key, _ in pairs) in (0, 1), "duplicate test-mode flag")
+    _native_require(all(value == "panic=unwind" for key, value in pairs if key in ("-C", "--codegen")
+                        and value and value.startswith("panic=")), "panic mode differs")
+    return "--test" in args
+
+
+def _native_witnesses(out: str, context: dict, dirs: list[Path]) -> set[tuple[str, ...]]:
+    lines = [line[len(NATIVE_WITNESS):].encode() for line in out.splitlines() if line.startswith(NATIVE_WITNESS)]
+    units = [argv for argv in running_commands(out) if _crate_name(argv) is not None]
+    expected_roles = ({"actual-test-compile"} if context["fields"]["role"] == b"actual-test-compile"
+                      else {"typed-normal-analysis", "typed-test-analysis"})
+    _native_require(len(lines) == len(units) == len(expected_roles), "missing/duplicate actual compilation witness")
+    remaining = set()
+    for argv in units:
+        _native_wrapper(argv, context)
+        _native_argv(argv[1:], context, dirs)
+        remaining.add(tuple(argv[1:]))
+    _native_require(len(remaining) == len(units), "duplicate compile command")
+    seen_roles = set()
+    for raw in lines:
+        item = _native_hex_json(raw, NATIVE_WITNESS_KEYS)
+        _native_witness_fields(item, context)
+        role = item["role"].decode()
+        _native_require(role in expected_roles and role not in seen_roles, "unit witness role/cardinality")
+        seen_roles.add(role)
+        vector = item["compiler_argv"]
+        _native_require(vector.endswith(b"\0"), "actual argv missing terminal NUL")
+        argv = tuple(part.decode() for part in vector[:-1].split(b"\0"))
+        _native_require(argv in remaining and all(argv), "witness/Cargo actual compiler argv differs")
+        remaining.remove(argv)
+        test = _native_argv(list(argv), context, dirs)
+        _native_require(test == (role != "typed-normal-analysis"), "actual unit test-mode mismatch")
+        _native_facts(item["resolved_facts"], role, context)
+    _native_require(not remaining and seen_roles == expected_roles, "actual compile unit set incomplete")
+    return {tuple(argv) for argv in units}
+
+
+def _native_witness_fields(item: dict, context: dict) -> None:
+    fields = context["fields"]
+    _native_require(item["schema"] == b"lint-types-native-entry-v1" and item["context_role"] == fields["role"],
+                    "witness schema/input role")
+    for key in ("nonce", "root", "source", "source_sha256", "sdk_root", "sdk_manifest_sha256"):
+        _native_require(type(item[key]) is bytes and item[key] == fields[key], "stale/wrong witness field: " + key)
+
+
+def _native_framework(out: str, names: set[str]) -> None:
+    rows = re.findall(r"^test (\S+?)(?: - should panic)? \.\.\. (ok|FAILED|ignored)$", out, re.M)
+    candidates = [line for line in out.splitlines() if line.startswith("test ")
+                  and not line.startswith("test result:")]
+    _native_require(len(candidates) == len(rows), "unknown framework test/benchmark status")
+    actual = [name for name, status in rows]
+    _native_require(len(actual) == len(set(actual)) == len(names) and set(actual) == names,
+                    "complete unfiltered native test-name roster")
+    _native_require(all(status == "ok" for _, status in rows), "native test failed/ignored")
+    summaries = re.findall(r"^test result: (ok|FAILED)\. (\d+) passed; (\d+) failed; (\d+) ignored; (\d+) measured; (\d+) filtered out; finished in [0-9]+(?:\.[0-9]+)?s$", out, re.M)
+    _native_require(summaries == [("ok", str(len(names)), "0", "0", "0", "0")], "complete native framework footer")
+    _native_require(re.findall(r"^running (\d+) tests?$", out, re.M) == [str(len(names))], "native running header")
+
+
+def _native_artifacts(out: str, context: dict, dirs: list[Path]) -> None:
+    artifacts = _artifacts(out, context["root"] / TYPES / "Cargo.toml")
+    actual_compile = context["fields"]["role"] == b"actual-test-compile"
+    expected_modes = {True} if actual_compile else {False, True}
+    modes = []
+    for item in artifacts:
+        _native_artifact_shape(item, context["fields"]["root"].decode())
+        profile = item["profile"]
+        modes.append(profile["test"])
+    _native_require(len(modes) == len(expected_modes) and set(modes) == expected_modes,
+                    "fresh native artifact unit set")
+    if not actual_compile:
+        return
+    executable = artifacts[0].get("executable")
+    _native_require(type(executable) is str and Path(executable).is_absolute()
+                    and any(_is_under(executable, directory) for directory in dirs), "native executable ownership")
+    _, book = _native_file(Path(executable), capture=False)
+    _native_require(book["mode"] & 0o111 != 0, "native artifact not executable")
+    units = [argv for argv in running_commands(out) if _crate_name(argv) is not None]
+    _native_require(len(units) == 1, "actual test compile cardinality")
+    flags, _ = lint_args(units[0][2:])
+    outputs = [value for flag, value in flags if flag == "--out-dir"]
+    suffixes = [value.split("=", 1)[1] for flag, value in flags
+                if flag in ("-C", "--codegen") and value and value.startswith("extra-filename=")]
+    emits = [value for flag, value in flags if flag == "--emit"]
+    _native_require(len(outputs) == len(suffixes) == len(emits) == 1 and
+                    re.fullmatch(r"-[0-9a-f]+", suffixes[0]) is not None and emits[0] == "dep-info,link" and
+                    Path(executable) == Path(outputs[0]) / ("lint_types" + suffixes[0]),
+                    "actual compile does not identify the executed artifact")
+    commands = running_commands(out)
+    executed = [argv for argv in commands if _crate_name(argv) is None]
+    _native_require(executed == [[executable]], "native execution filtered/replaced/extra command")
+
+
+def _native_artifact_shape(item: dict, root: str) -> None:
+    profile, target = item.get("profile"), item.get("target")
+    _native_require(type(profile) is dict and type(profile.get("test")) is bool and
+                    item.get("fresh") is False, "native artifact stale/missing typed freshness")
+    _native_require(type(target) is dict and target.get("name") == "lint-types" and
+                    target.get("kind") == ["bin"] and target.get("src_path") == root,
+                    "native artifact manifest/target/root role")
+
+
+def _native_clippy_binding(out: str, context: dict) -> None:
+    units = lint_units(out, context["root"] / TYPES / "Cargo.toml")
+    _native_require(units and all(len(argv) >= 2 and
+                    argv[0] == str(Path(context["sdk"]["root"]) / "bin/tippy-driver") and
+                    argv[1] == context["sdk"]["compiler"] for argv in units),
+                    "clippy is not the same selected SDK's driver/compiler")
+
+
+
+def tests_verdict(rc: int, out: str, dirs: list[Path] | None = None,
+                  native_entry: dict | None = None) -> str | None:
     """Why a `targo --unverified test -v` run does not show the crate's tests passing, or None.
 
     `dirs` are the target and build dirs the run built into; when given, every
     binary the run EXECUTED must be one cargo built there, and every compile
     must start the compiler itself (RUSTC_WRAPPER='' resets a configured one;
-    this is the check that it did)."""
+    this is the check that it did). The sole explicit native_entry role must
+    first satisfy actual compiler/SDK/source/witness/artifact/full30 checks;
+    its exact owned driver command is then the only additional allowed path."""
     results = RESULT_LINE.findall(out)
     failed = [line for line in out.splitlines() if line.startswith("test ") and
               line.endswith("FAILED")]
@@ -643,10 +1146,19 @@ def tests_verdict(rc: int, out: str, dirs: list[Path] | None = None) -> str | No
     if sum(int(passed) for _, passed, *_ in results) == 0:
         return ("`targo --unverified test` exited 0 and no `test result:` line reports a test passed -- "
                 "a run that selects nothing cannot fail")
+    native_commands = set()
+    if native_entry is not None:
+        try:
+            native_commands = _native_witnesses(out, native_entry, dirs or [])
+            _native_artifacts(out, native_entry, dirs or [])
+            _native_framework(out, native_entry["artifact_names"])
+        except (CoverageFailure, OSError, ValueError, UnicodeError) as exc:
+            return str(exc)
     if dirs:
         commands = running_commands(out)
         for argv in commands:
-            if _crate_name(argv) is not None and Path(argv[0]).name not in RUSTC_NAMES:
+            if _crate_name(argv) is not None and Path(argv[0]).name not in RUSTC_NAMES \
+                    and tuple(argv) not in native_commands:
                 return (f"`targo --unverified test -v` compiled through `{argv[0]}`, not the compiler -- a "
                         f"rustc wrapper stands between cargo and the code the tests run")
         executed = [argv for argv in commands if _crate_name(argv) is None]
@@ -752,7 +1264,7 @@ def _unused_dependency_warning(messages: list[dict]) -> bool:
 
 
 def types_verdict(rc: int, out: str, manifest: Path, driver: Path,
-                  dirs: list[Path] | None = None) -> str | None:
+                  dirs: list[Path] | None = None, native_entry: dict | None = None) -> str | None:
     """Why a `targo --unverified check --all-targets -v --message-format=json` run under the
     typed driver does not show every unit of the crate scanned clean IN THIS
     RUN, through that driver, over a command line this check models, or None."""
@@ -790,6 +1302,12 @@ def types_verdict(rc: int, out: str, manifest: Path, driver: Path,
             return (f"the typed driver checked `{_crate_name(argv)}`"
                     f"{' (test)' if '--test' in argv else ''} and printed no scan of it -- a "
                     f"driver that compiles without scanning passes everything")
+    if native_entry is not None:
+        try:
+            _native_witnesses(out, native_entry, dirs or [])
+            _native_artifacts(out, native_entry, dirs or [])
+        except (CoverageFailure, OSError, ValueError, UnicodeError) as exc:
+            return str(exc)
     return None
 
 
@@ -1114,10 +1632,17 @@ def build_types(root: Path, env: dict[str, str], targo: str) -> tuple[Path | Non
     return Path(exes[0]), ""
 
 
-def scan_sources(root: Path, scanner: Path, files: list[str]) -> list[str]:
+def scan_sources(root: Path, scanner: Path, files: list[str],
+                 native_root: Path | None = None) -> list[str]:
     """The scanner's refusals over `files` (repo-relative)."""
     forbid = [flag for lint in FORBIDDEN_LINTS for flag in ("--forbidden", lint)]
-    rc, out = _run([str(scanner), *forbid, *files], root, {"PATH": os.environ.get("PATH", "")})
+    native = []
+    if native_root is not None:
+        files = [str(root / name) for name in files]
+        if files.count(str(native_root)) != 1:
+            return ["native entry: selected absolute root must occur exactly once"]
+        native = ["--native-entry-root", str(native_root)]
+    rc, out = _run([str(scanner), *forbid, *native, *files], root, {"PATH": os.environ.get("PATH", "")})
     lines = out.strip().splitlines()
     if rc == 0 and not lines:
         return []
@@ -1204,7 +1729,8 @@ def source_problems(root: Path, crate: str, outs: dict[str, str],
     files = sorted(rel(p) for p in everything
                    if p != os.path.normpath(manifest) and rel(p) not in untracked)
     return problems + [f"its source keeps code out of the lint run: {line}"
-                       for line in (scan_sources(root, scanner, files) if files else [])]
+                       for line in (scan_sources(root, scanner, files,
+                           root / TYPES / "src/main.rs" if crate == TYPES else None) if files else [])]
 
 
 def run_standalone(root: Path, crate: str, env: dict[str, str] | None = None) -> list[str]:
@@ -1229,11 +1755,20 @@ def run_standalone(root: Path, crate: str, env: dict[str, str] | None = None) ->
     if (root / crate / "build.rs").exists() or "build" in package:
         failures.append(f"{head} and it has a build script -- it runs under clippy and under "
                         f"`targo --unverified test` alike and can set a cfg only in one of them")
+    if crate == TYPES:
+        if failures:
+            return failures
+        if any(name in source_env for name in (NATIVE_CONTEXT, NATIVE_CONTEXT_SHA)):
+            return [f"{head} and inherited native-context keys are refused before any compiler"]
     try:
         targo = resolve_targo(source_env)
     except CoverageFailure as exc:
         return failures + [f"{head} and {exc}"]
     hermetic = hermetic_env(source_env, _private_home_path(base, root))
+    if crate == TYPES and "RUST_TEST_THREADS" in source_env:
+        # Preserve this actual request. Only the SDK's public entry API may
+        # validate/narrow it; clearing it must not manufacture loan eligibility.
+        hermetic["RUST_TEST_THREADS"] = source_env["RUST_TEST_THREADS"]
     # The frontend's clippy run resolves through the same rule; hand it THIS
     # answer, so the three runs cannot use two different targos.
     hermetic["TARGO"] = targo
@@ -1259,9 +1794,36 @@ def run_standalone(root: Path, crate: str, env: dict[str, str] | None = None) ->
     scanner, why = build_scanner(root, hermetic, targo)
     if scanner is None:
         failures.append(f"{head} and its source cannot be scanned: {why}")
+    native_seed = None
+    if crate == TYPES:
+        if scanner is None:
+            return failures
+        try:
+            source, sources = _native_manifest(root)
+            _native_preflight_clean(scan_sources(root, scanner,
+                sorted(name for name in sources if name.endswith(".rs")),
+                root / TYPES / "src/main.rs"))
+            native_seed = {"source": source, "sources": sources, "root": root,
+                           "sdk": _native_sdk(targo, root, hermetic)}
+        except (CoverageFailure, OSError, ValueError, UnicodeError) as exc:
+            return failures + [f"{head} and its native entry preflight FAILED: {exc}"]
     driver, why = build_types(root, hermetic, targo)
     if driver is None:
         failures.append(f"{head} and its source cannot be type-scanned: {why}")
+    if native_seed is not None:
+        if driver is None:
+            return failures
+        try:
+            driver = driver.resolve(strict=True)
+            build_dirs = _dirs(base, root, TYPES, "check-tests")
+            _native_require(any(_is_under(str(driver), Path(path)) for path in build_dirs.values()),
+                            "typed driver artifact is outside its own build roots")
+            _native_require(_native_manifest(root)[1] == native_seed["sources"],
+                            "typed driver build changed source inputs")
+            _native_require(_native_sdk(targo, root, hermetic) == native_seed["sdk"],
+                            "typed driver build changed selected SDK")
+        except (CoverageFailure, OSError, ValueError, UnicodeError) as exc:
+            return failures + [f"{head} and its native driver binding FAILED: {exc}"]
     blocked = bool(failures)
     manifest = root / crate / "Cargo.toml"
     nonce = secrets.token_hex(8)
@@ -1276,14 +1838,41 @@ def run_standalone(root: Path, crate: str, env: dict[str, str] | None = None) ->
             run_env["CARGO_NET_OFFLINE"] = "true"
         if half == "types" and driver is not None:
             run_env.update({"RUSTC_WORKSPACE_WRAPPER": str(driver), TYPES_RUN_VAR: nonce})
+        native_context = None
+        if native_seed is not None and half in ("tests", "types"):
+            try:
+                native_context = _native_context(root,
+                    "actual-test-compile" if half == "tests" else "typed-analysis",
+                    driver, native_seed["sdk"], run_env, native_seed["sources"], native_seed["source"])
+                run_env.update({"RUSTC_WORKSPACE_WRAPPER": native_context["driver"],
+                    TYPES_RUN_VAR: native_context["fields"]["nonce"].hex(),
+                    NATIVE_CONTEXT: str(native_context["path"]), NATIVE_CONTEXT_SHA: native_context["sha256"]})
+            except (CoverageFailure, OSError, ValueError, UnicodeError) as exc:
+                return failures + [f"{head} and its native {half} context FAILED: {exc}"]
         rc, outs[half] = _run(argv, root, run_env)
         built_in = [Path(v) for v in dirs.values()]
         if half == "tests":
-            verdicts[half] = tests_verdict(rc, outs[half], built_in)
+            verdicts[half] = tests_verdict(rc, outs[half], built_in, native_context)
         elif half == "clippy":
             verdicts[half] = clippy_verdict(rc, outs[half], manifest, built_in)
         elif driver is not None:
-            verdicts[half] = types_verdict(rc, outs[half], manifest, driver, built_in)
+            verdicts[half] = types_verdict(rc, outs[half], manifest, driver, built_in, native_context)
+        if native_seed is not None:
+            try:
+                if native_context is not None:
+                    _native_context_endpoints(native_context, targo, hermetic)
+                else:
+                    if verdicts.get(half) is None:
+                        _native_clippy_binding(outs[half], native_seed)
+                    _native_require(_native_manifest(root)[1] == native_seed["sources"],
+                                    "clippy changed source inputs")
+                    _native_require(_native_sdk(targo, root, hermetic) == native_seed["sdk"],
+                                    "clippy changed selected SDK")
+            except (CoverageFailure, OSError, ValueError, UnicodeError) as exc:
+                # Keep the first real phase refusal; endpoint drift is additional.
+                failures.append(f"{head} and its native {half} endpoints FAILED: {exc}")
+                if verdicts.get(half) is None:
+                    verdicts[half] = str(exc)
         if verdicts.get(half):
             failures.append(f"{head} and its {half} FAILED: {verdicts[half]}. "
                             f"Command: {' '.join(argv)}")
@@ -2104,10 +2693,348 @@ def _selftest_arm(work: Path, stubs: Path, i: int, arm: tuple) -> str | None:
 SELFTEST_WORKERS = 4
 
 
+def _selftest_native_entry_components() -> tuple[list[str], int]:
+    """Inert parser/context components; never a complete current30 Native positive."""
+    import copy
+    cases = []
+    def case(name, call, reason=None):
+        cases.append((name, call, reason))
+    def encode(value):
+        return json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+    case("native component canonical generic hex", lambda: _native_hex_json(b'{"value":"61"}', frozenset({"value"})))
+    for label, raw, reason in [
+        ("duplicate", b'{"value":"61","value":"62"}', "duplicate JSON member"),
+        ("bool", b'{"value":true}', "JSON canonical hex strings"),
+        ("uppercase", b'{"value":"AF"}', "JSON canonical hex strings"),
+        ("escape", b'{"value":"\\u0036\\u0031"}', "noncanonical JSON encoding"),
+        ("unknown", b'{"extra":"61","value":"61"}', "JSON member roster"),
+        ("noncanonical", b'{ "value":"61"}', "noncanonical JSON encoding")]:
+        case("native JSON " + label, lambda raw=raw: _native_hex_json(raw, frozenset({"value"})), reason)
+    manifest = {"workspace": {}, "package": {"name": "clean-lint-types", "version": "0.1.0",
+        "edition": "2021", "publish": False}, "dependencies": {},
+        "bin": [{"name": "lint-types", "path": "src/main.rs"}]}
+    case("native component empty manifest dependencies", lambda: _native_manifest_doc(manifest))
+    for key in ("dependencies", "dev-dependencies", "build-dependencies", "target", "features"):
+        bad = copy.deepcopy(manifest)
+        bad[key] = {"test": "counterfeit"}
+        case("native reserved manifest " + key, lambda bad=bad: _native_manifest_doc(bad), "manifest/dependencies")
+    bad = copy.deepcopy(manifest); bad["package"]["publish"] = 0
+    case("native manifest numeric bool alias", lambda bad=bad: _native_manifest_doc(bad), "manifest/dependencies")
+    case("native legacy internal descriptor identity label", lambda: _native_identity(
+        "inert-def\ttest::types::TestDescAndFn\tinert-hash",
+        NATIVE_IDENTITIES["descriptor/type"], "descriptor/type"), "resolved SDK identity differs")
+    context = {"root": Path("/inert/repo"), "fields": {"root": b"/inert/repo/scripts/lint_types/src/main.rs",
+        "out_dir_root": b"/inert/out"}, "sdk": {"compiler": "/inert/sdk/bin/trustc"}}
+    argv = ["/inert/sdk/bin/trustc", "--crate-name", "lint_types", "--edition=2021", "src/main.rs",
+        "--test", "--out-dir", "/inert/out", "--emit=dep-info,link", "-C", "extra-filename=-1"]
+    case("native component generic compiler shape", lambda: _native_argv(argv, context, [Path('/inert/out')]))
+    for label, mutate, reason in [
+        ("root", lambda a: a.__setitem__(4, "src/other.rs"), "actual compiler source root"),
+        ("compiler", lambda a: a.__setitem__(0, "/inert/counterfeit/trustc"), "compiler argv role"),
+        ("response", lambda a: a.append("@counterfeit"), "unmodeled compiler flags"),
+        ("sysroot", lambda a: a.extend(["--sysroot", "/inert/other-sdk"]), "unmodeled compiler flags"),
+        ("target", lambda a: a.extend(["--target", "counterfeit-target"]), "unmodeled compiler flags"),
+        ("extern", lambda a: a.extend(["--extern", "test=/inert/foreign/test.rlib"]), "unmodeled compiler flags"),
+        ("duplicate-test", lambda a: a.append("--test"), "duplicate test-mode flag")]:
+        bad = argv.copy(); mutate(bad)
+        case("native actual argv " + label, lambda bad=bad: _native_argv(bad, context, [Path('/inert/out')]), reason)
+    for value in ("counterfeit=/inert/out/foreign.rmeta", "force:counterfeit=/inert/out/foreign.rmeta"):
+        bad = argv + ["--extern", value]
+        case("native owned-path extern or modifier " + value, lambda bad=bad: _native_argv(
+            bad, context, [Path('/inert/out')]), "native context forbids --extern aliases/modifiers")
+    path = "/inert/sdk/lib/test.rmeta"
+    book = {"sha256": "0" * 64, "bytes": 1, "mode": 0o644, "dev": 1, "ino": 2}
+    object_context = {"sdk": {"objects": {path: book}}}
+    def manifest_prefix_order():
+        objects = {"/inert/sdk/lib/a": book, "/inert/sdk/lib/a\x01": book}
+        lines = _native_sdk_manifest(Path('/inert/sdk'), objects).split(b'\n')[:-1]
+        _native_require(lines == sorted(lines) and len(lines) == 2 and
+                        lines[0].startswith(b'lib/a\x01\t'),
+                        "encoded SDK manifest prefix-pair order differs")
+    case("native component encoded SDK manifest prefix pair", manifest_prefix_order)
+    def manifest_utf8_bytes():
+        raw_path = "lib/\v\f\u0085-α.rmeta".encode("utf-8")
+        actual = _native_sdk_manifest(Path('/inert/sdk'),
+            {"/inert/sdk/" + raw_path.decode("utf-8"): book})
+        _native_require(actual == raw_path + b"\t" + b"0" * 64 + b"\t1\t644\n",
+                        "UTF8 manifest path bytes changed")
+    case("native component TSV preserves UTF8 nonseparator bytes", manifest_utf8_bytes)
+    for label, relative in (("tab", "lib/a\tb"), ("cr", "lib/a\rb"),
+            ("lf", "lib/a\nb"), ("nul", "lib/a\0b"), ("empty", "lib//a"),
+            ("dot", "lib/./a"), ("dotdot", "lib/../a"), ("absolute", "/lib/a")):
+        case("native manifest reserved path " + label,
+             lambda relative=relative: _native_sdk_manifest(Path('/inert/sdk'),
+                {"/inert/sdk/" + relative: book}), "SDK relative path separators/components")
+    generic_manifest = b"lib/a\t" + b"0" * 64 + b"\t1\t644\n"
+    case("native component pair budget valid framing", lambda: _native_pair_budget(
+        b'{"component":"generic"}', generic_manifest))
+    # These are isolated budget-stage inputs with valid JSON/TSV framing,
+    # not a complete current-thirty context or a Native transcript.
+    oversized_manifest = b"".join(f"lib/{i:06d}\t{'0' * 64}\t1\t644\n".encode()
+                                   for i in range(26000))
+    _native_require(NATIVE_MANIFEST_LIMIT < len(oversized_manifest) < NATIVE_CONTEXT_LIMIT,
+                    "manifest bound fixture does not isolate 2 MiB")
+    case("native decoded manifest bound retained", lambda: _native_pair_budget(
+        b'{"component":"generic"}', oversized_manifest), "decoded 2 MiB limit")
+    oversized_pair_context = b'{"component":"' + b'x' * (NATIVE_CONTEXT_LIMIT - 40) + b'"}'
+    _native_require(len(oversized_pair_context) <= NATIVE_CONTEXT_LIMIT and
+                    len(oversized_pair_context) + len(generic_manifest) > NATIVE_CONTEXT_LIMIT
+                    and type(json.loads(oversized_pair_context)) is dict,
+                    "combined bound fixture does not isolate pair sum")
+    case("native combined input pair bound retained", lambda: _native_pair_budget(
+        oversized_pair_context, generic_manifest), "combined input pair exceeds 4 MiB")
+    present = path.encode().hex() + ":" + "0" * 64 + ":1:644:1:2"
+    case("native component generic object book", lambda: _native_object(present, object_context))
+    case("native counterfeit object hash", lambda: _native_object(present.replace('0' * 64, '1' * 64), object_context), "resolved SDK object book")
+    def object_path_swap(path=path):
+        swapped = present.replace(path.encode().hex(), b'/inert/foreign/test.rmeta'.hex())
+        _native_require(swapped != present, "object path swap fixture did not mutate")
+        return _native_object(swapped, object_context)
+    case("native object path swap", object_path_swap, "outside selected SDK")
+    bool_context = copy.deepcopy(object_context); bool_context["sdk"]["objects"][path]["bytes"] = True
+    case("native object numeric bool alias", lambda: _native_object(present, bool_context), "typed schema")
+    slots = {}
+    for number, name in enumerate(("core", "std", "test", "rustc_data_structures"), 1):
+        for slot in ("dylib", "rlib", "rmeta", "sdylib_interface"):
+            slots[f"crate/{number}/{name}/{slot}"] = present if slot == "rmeta" else "absent"
+    case("native component four-slot roster only", lambda: _native_crates(slots, object_context))
+    bad = dict(slots); del bad["crate/3/test/sdylib_interface"]
+    case("native missing fourth SDK slot", lambda bad=bad: _native_crates(bad, object_context), "four-slot completeness")
+    bad_extra = dict(slots); bad_extra["crate/3/test/fifth_slot"] = "absent"
+    case("native unknown SDK slot", lambda: _native_crates(bad_extra, object_context), "unknown SDK crate/slot")
+    fourth_bad = dict(slots)
+    fourth_bad["crate/3/test/sdylib_interface"] = present.replace(
+        path.encode().hex(), b"/inert/foreign/test.interface".hex())
+    case("native present fourth SDK slot outside selected root", lambda: _native_crates(
+        fourth_bad, object_context), "outside selected SDK roster")
+    compiler_path = "/inert/sdk/bin/trustc"
+    compiler_present = present.replace(path.encode().hex(), compiler_path.encode().hex())
+    fact_context = {"sdk": {"compiler": compiler_path, "objects": {compiler_path: book}}}
+    def fact_bytes(values):
+        return "".join(key + "\t" + value.encode().hex() + "\n" for key, value in sorted(values.items())).encode()
+    normal_facts = {"compiler/book": compiler_present, "unit": "normal-no-test-entry"}
+    case("native component generic normal two-fact formula only", lambda: _native_facts(
+        fact_bytes(normal_facts), "typed-normal-analysis", fact_context))
+    case("native facts missing compiler", lambda: _native_facts(
+        fact_bytes({"unit": "normal-no-test-entry"}), "typed-normal-analysis", fact_context), "compiler object fact missing")
+    duplicate_facts = ("compiler/book\t" + compiler_present.encode().hex() + "\n") * 2
+    case("native duplicate resolved facts", lambda: _native_facts(
+        duplicate_facts.encode(), "typed-normal-analysis", fact_context), "resolved fact duplicate/encoding")
+    case("native unknown resolved fact", lambda: _native_facts(fact_bytes(
+        {**normal_facts, "unknown/fact": "counterfeit"}), "typed-normal-analysis", fact_context), "normal unit claims test facts")
+    fields = {key: key.encode() for key in ("nonce", "root", "source", "source_sha256", "sdk_root", "sdk_manifest_sha256")}
+    fields["role"] = b"actual-test-compile"
+    witness = {**{key: value for key, value in fields.items() if key != "role"},
+        "schema": b"lint-types-native-entry-v1", "context_role": fields["role"]}
+    case("native component witness common fields only", lambda: _native_witness_fields(witness, {"fields": fields}))
+    for key in ("nonce", "root", "source", "source_sha256", "sdk_root", "sdk_manifest_sha256", "context_role"):
+        bad = dict(witness); bad[key] = b"counterfeit"
+        reason = "witness schema/input role" if key == "context_role" else "stale/wrong witness field: " + key
+        case("native witness wrong " + key, lambda bad=bad: _native_witness_fields(bad, {"fields": fields}), reason)
+    generic = "running 2 tests\ntest component::one ... ok\ntest component::two ... ok\ntest result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s\n"
+    names = {"component::one", "component::two"}
+    case("native component generic two-name framework only", lambda: _native_framework(generic, names))
+    for label, text, reason in [
+        ("partial", generic.replace('test component::two ... ok\n', ''), "unfiltered native test-name roster"),
+        ("duplicate", generic.replace('component::two', 'component::one'), "unfiltered native test-name roster"),
+        ("extra", generic.replace('test result:', 'test component::three ... ok\ntest result:'), "unfiltered native test-name roster"),
+        ("failed", generic.replace('component::two ... ok', 'component::two ... FAILED'), "native test failed/ignored"),
+        ("benchmark", generic.replace('component::two ... ok', 'component::two ... bench: 10 ns/iter'), "unknown framework test/benchmark"),
+        ("ignored", generic.replace('0 ignored;', '1 ignored;'), "complete native framework footer"),
+        ("measured", generic.replace('0 measured;', '1 measured;'), "complete native framework footer"),
+        ("filtered", generic.replace('0 filtered out;', '1 filtered out;'), "complete native framework footer"),
+        ("duplicate-footer", generic + generic.splitlines()[-1] + '\n', "complete native framework footer")]:
+        case("native runtime " + label, lambda text=text: _native_framework(text, names), reason)
+    case("native supplied generic nonzero outcome stays failed", lambda: _native_require(
+        tests_verdict(101, generic) is not None, "nonzero was promoted"))
+    wrapper = {"driver": "/inert/owned-driver", "sdk": {"compiler": "/inert/sdk/bin/trustc"}}
+    case("native component exact wrapper role only", lambda: _native_wrapper(
+        [wrapper["driver"], wrapper["sdk"]["compiler"], "--test"], wrapper))
+    for path in ("/inert/configured-wrapper", "/inert/copied-driver"):
+        case("native unknown wrapper " + path, lambda path=path: _native_wrapper(
+            [path, wrapper["sdk"]["compiler"], "--test"], wrapper), "unknown/configured test wrapper")
+    case("native preflight barrier", lambda: _native_preflight_clean(["late capture"]), "before test compilation")
+    case("native component genuine Err identity shape only", lambda: _native_identity(
+        "inert-def\tcore::result::Result::Err\tinert-hash", "core::result::Result::Err", "failure/variant"))
+    for path in ("core::result::Result::Ok", "counterfeit::Result::Err"):
+        case("native inverted or alias Err " + path, lambda path=path: _native_identity(
+            "inert-def\t" + path + "\tinert-hash", "core::result::Result::Err", "failure/variant"), "resolved SDK identity differs")
+    artifact = {"fresh": False, "profile": {"test": True},
+        "target": {"name": "lint-types", "kind": ["bin"], "src_path": "/inert/main.rs"}}
+    case("native component fresh artifact shape only", lambda: _native_artifact_shape(artifact, "/inert/main.rs"))
+    for label, value in (("fresh", True), ("missing", None), ("numeric-alias", 0)):
+        bad = copy.deepcopy(artifact)
+        if value is None:
+            del bad["fresh"]
+        else:
+            bad["fresh"] = value
+        case("native artifact " + label, lambda bad=bad: _native_artifact_shape(bad, "/inert/main.rs"), "typed freshness")
+    bad = copy.deepcopy(artifact); bad["profile"]["test"] = 1
+    case("native artifact test bool alias", lambda bad=bad: _native_artifact_shape(bad, "/inert/main.rs"), "typed freshness")
+    # Real owned inert files exercise the reader without any SDK/Native fixture.
+    import tempfile
+    inert_directory = tempfile.TemporaryDirectory(prefix="clean-lint-native-book-")
+    inert = Path(inert_directory.name).resolve()
+    small = inert / "source.rs"
+    small.write_bytes(b"ordinary inert source\n")
+    def captured_source():
+        value, book = _native_file(small)
+        _native_require(value == b"ordinary inert source\n" and
+                        book["sha256"] == hashlib.sha256(value).hexdigest(), "captured buffer/book mismatch")
+    case("native component actual inert captured bytes", captured_source)
+    large = inert / "large-code.bin"
+    chunk = b"x" * (1024 * 1024)
+    expected_hash = hashlib.sha256()
+    with large.open("wb") as stream:
+        for _ in range(5):
+            stream.write(chunk)
+            expected_hash.update(chunk)
+    def streamed_code():
+        value, book = _native_file(large, capture=False)
+        _native_require(value is None and book["bytes"] == 5 * 1024 * 1024 and
+                        book["sha256"] == expected_hash.hexdigest(), "streamed object/book mismatch")
+    case("native component actual inert streamed code", streamed_code)
+    case("native captured Source size bound", lambda: _native_file(large), "captured Source/context exceeds limit")
+    alias = inert / "alias.rs"
+    alias.symlink_to(small)
+    case("native inert path alias", lambda: _native_file(alias), "noncanonical file role")
+    def replaced_path():
+        original, replacement = inert / "opened.rs", inert / "replacement.rs"
+        original.write_bytes(b"same bytes")
+        replacement.write_bytes(b"same bytes")
+        with original.open("rb") as stream:
+            before = os.fstat(stream.fileno())
+            value = stream.read()
+            os.replace(replacement, original)
+            _native_file_endpoints(original, before, os.fstat(stream.fileno()), original.lstat(),
+                                   len(value), original.resolve() == original)
+    case("native actual inert pathname replaced during FD read", replaced_path, "file/path changed while read")
+    # Actual ordinary inert file pairs exercise only the two-input stage.
+    # Their role/source are explicitly generic and cannot be a current30 positive.
+    generic_driver = inert / "ordinary-not-executed-driver"
+    generic_driver.write_bytes(b"inert observer data, never executed\n")
+    generic_driver.chmod(0o755)
+    def generic_pair():
+        nonce = secrets.token_bytes(32)
+        parent = generic_driver.parent / "native-entry-contexts"
+        parent.mkdir(exist_ok=True)
+        directory = parent / nonce.hex()
+        directory.mkdir(mode=0o700)
+        directory.chmod(0o700)
+        path, manifest_path = directory / "context.json", directory / "sdk-objects.manifest"
+        _native_write_input(manifest_path, generic_manifest)
+        manifest_raw, manifest_book = _native_file(manifest_path)
+        fields = {key: b"generic-component" for key in NATIVE_CONTEXT_KEYS}
+        fields.update({"schema": NATIVE_CONTEXT_SCHEMA, "nonce": nonce,
+            "source": b"inert component bytes", "source_sha256": hashlib.sha256(b"inert component bytes").digest(),
+            "sdk_manifest_path": str(manifest_path).encode(),
+            "sdk_manifest_identity": _native_manifest_identity(manifest_book),
+            "sdk_manifest_sha256": hashlib.sha256(manifest_raw).digest()})
+        raw = encode({key: value.hex() for key, value in fields.items()})
+        _native_write_input(path, raw)
+        return {"fields": fields, "path": path, "raw": raw, "context_book": _native_file(path)[1],
+            "manifest_path": manifest_path, "manifest_raw": manifest_raw, "manifest_book": manifest_book,
+            "driver": str(generic_driver)}
+    def pair_control(mutate=None):
+        value = generic_pair()
+        if mutate is not None:
+            mutate(value)
+        _native_context_input_endpoints(value)
+    case("native component actual inert two-input pair", pair_control)
+    for label, mutant in (("basename", "wrong.manifest"), ("outside nonce", "../sdk-objects.manifest")):
+        case("native pair path " + label, lambda mutant=mutant: _native_pair_paths(
+            inert / "native-entry-contexts" / (b'n' * 32).hex() / "context.json",
+            inert / "native-entry-contexts" / (b'n' * 32).hex() / mutant,
+            generic_driver, b'n' * 32), "input pair nonce paths")
+    case("native pair wrong nonce", lambda: _native_pair_paths(
+        inert / "native-entry-contexts" / (b'n' * 32).hex() / "context.json",
+        inert / "native-entry-contexts" / (b'n' * 32).hex() / "sdk-objects.manifest",
+        generic_driver, b'm' * 32), "input pair nonce paths")
+    def wrong_pair_fields(value, key, replacement):
+        fields = dict(value["fields"]); fields[key] = replacement
+        raw = encode({name: item.hex() for name, item in fields.items()})
+        value["path"].write_bytes(raw)
+        value.update(fields=fields, raw=raw, context_book=_native_file(value["path"])[1])
+    case("native pair wrong hash", lambda: pair_control(lambda value: wrong_pair_fields(
+        value, "sdk_manifest_sha256", b'x' * 32)), "input manifest path/identity/hash")
+    def pair_declared_path_alias(value):
+        raw_path = str(value["manifest_path"]).replace("/sdk-objects.manifest", "//sdk-objects.manifest")
+        wrong_pair_fields(value, "sdk_manifest_path", raw_path.encode())
+    case("native pair declared path alias", lambda: pair_control(pair_declared_path_alias),
+         "input manifest path/identity/hash")
+    case("native pair legacy schema refused", lambda: pair_control(lambda value: wrong_pair_fields(
+        value, "schema", b"lint-types-native-entry-context-v1")), "input pair schema")
+    case("native pair unknown field refused", lambda: pair_control(lambda value: wrong_pair_fields(
+        value, "unexpected", b"extra")), "JSON member roster")
+    def pair_inode_swap(value):
+        replacement = value["manifest_path"].with_name("replacement.manifest")
+        _native_write_input(replacement, value["manifest_raw"])
+        os.replace(replacement, value["manifest_path"])
+    case("native pair equal-content inode replacement", lambda: pair_control(pair_inode_swap),
+         "input manifest path/identity/hash")
+    def pair_context_inode_swap(value):
+        replacement = value["path"].with_name("replacement.context")
+        _native_write_input(replacement, value["raw"])
+        os.replace(replacement, value["path"])
+    case("native pair context equal-content inode replacement", lambda: pair_control(pair_context_inode_swap),
+         "context/manifest bytes/book changed")
+    def pair_context_payload_swap(value):
+        fields = dict(value["fields"]); fields["role"] = b"another-generic-component"
+        value["path"].write_bytes(encode({key: item.hex() for key, item in fields.items()}))
+    case("native pair context expected-payload mutation", lambda: pair_control(pair_context_payload_swap),
+         "context/manifest bytes/book changed")
+    def pair_missing_manifest(value):
+        value["manifest_path"].unlink()
+    case("native pair missing manifest", lambda: pair_control(pair_missing_manifest), "input pair unavailable")
+    def pair_mode_swap(value):
+        value["manifest_path"].chmod(0o644)
+    case("native pair manifest mode mutation", lambda: pair_control(pair_mode_swap), "input pair file modes")
+    def pair_context_mode_swap(value):
+        value["path"].chmod(0o644)
+    case("native pair context mode mutation", lambda: pair_control(pair_context_mode_swap), "input pair file modes")
+    def pair_directory_mode_swap(value):
+        value["path"].parent.chmod(0o755)
+    case("native pair directory mode mutation", lambda: pair_control(pair_directory_mode_swap),
+         "input pair directory mode/alias")
+    def pair_path_alias(value):
+        alias_target = value["manifest_path"].with_name("ordinary.manifest")
+        value["manifest_path"].rename(alias_target)
+        value["manifest_path"].symlink_to(alias_target)
+    case("native pair manifest symlink mutation", lambda: pair_control(pair_path_alias), "noncanonical file role")
+    # Negative-only full-parser prefixes; these are fabricated command TEXT,
+    # never an observed command or a complete current-thirty witness positive.
+    program = inert / "ordinary-not-executed-wrapper"
+    program.write_text("inert parser data, not executable\n")
+    compile_line = f"    Running `{shlex.quote(str(program))} /inert/trustc --crate-name lint_types`\n"
+    witness_line = NATIVE_WITNESS + "{}\n"
+    cardinality_context = {"fields": {"role": b"actual-test-compile"}}
+    for label, text in (("empty", ""), ("missing", compile_line),
+                        ("duplicate", compile_line + witness_line * 2),
+                        ("wrong-unit-set", compile_line * 2 + witness_line)):
+        case("native whole-witness cardinality " + label, lambda text=text: _native_witnesses(
+            text, cardinality_context, []), "missing/duplicate actual compilation witness")
+    problems = []
+    try:
+        for name, call, wanted in cases:
+            try:
+                call()
+                if wanted is not None:
+                    problems.append(f"  ARM FAILED {name}: component unexpectedly accepted")
+            except CoverageFailure as exc:
+                if wanted is None or wanted not in str(exc):
+                    problems.append(f"  ARM FAILED {name}: wrong component refusal: {exc}")
+            except Exception as exc:
+                problems.append(f"  ARM FAILED {name}: component raised {type(exc).__name__}: {exc}")
+    finally:
+        inert_directory.cleanup()
+    return problems, len(cases)
+
+
 def selftest(root: Path = ROOT) -> int:
     from concurrent.futures import ThreadPoolExecutor
     work = root / "target" / f"lint-coverage-selftest-{os.getpid()}"
     problems = []
+    native_arms = 0
     try:
         # The stubs are written ONCE and linked into each arm: macOS evaluates a
         # newly written executable on its first exec, which cost ~0.25s per
@@ -2130,11 +3057,13 @@ def selftest(root: Path = ROOT) -> int:
         problems += [v for v in verdicts if v]
         problems += _selftest_non_runner_arms(work)
         problems += _selftest_both_scans(work, stubs)
+        native_problems, native_arms = _selftest_native_entry_components()
+        problems += native_problems
     finally:
         shutil.rmtree(work, ignore_errors=True)
     for problem in problems:
         print(problem, file=sys.stderr)
-    print(f"LINT_COVERAGE_SELFTEST arms={len(_SELFTEST_ARMS) + 4} failed={len(problems)}")
+    print(f"LINT_COVERAGE_SELFTEST arms={len(_SELFTEST_ARMS) + 4 + native_arms} failed={len(problems)}")
     return len(problems)
 
 

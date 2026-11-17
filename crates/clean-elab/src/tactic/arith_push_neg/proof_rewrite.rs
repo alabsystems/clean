@@ -16,9 +16,9 @@ use super::proof_utils::{
     mk_prop_eq_from_iff, require_consts, PropRewriteResult,
 };
 use super::{
-    is_prop, is_raw_nat_rel, make_and, make_exists_push_neg, make_forall_push_neg, make_not,
-    make_or, match_and, match_exists_push_neg, match_forall_push_neg, match_ge, match_gt,
-    match_implies, match_le_any, match_lt_any, match_not, match_or, nat_le_raw, nat_lt_raw,
+    is_prop, is_raw_nat_rel, make_and, make_forall_push_neg, make_not, make_or, match_and,
+    match_exists_push_neg, match_ge, match_gt, match_le_any, match_lt_any, match_not_head,
+    match_or, nat_le_raw, nat_lt_raw,
 };
 
 fn lift_wrapper_rewrite_with_congr_arg<F>(
@@ -54,16 +54,34 @@ where
     })
 }
 
+/// Mathlib's `isProp ty`: the binder type is itself a proposition (its type
+/// is `Prop`), not the sort `Prop`.
+/// REQUIRES: `dom` is a binder type in `goal`'s context.
+/// ENSURES: `Err` when `dom`'s type cannot be inferred there (a binder bound
+/// outside it), so a negation is never classified by a guess.
+fn binder_is_proposition(state: &ProofState, goal: &Goal, dom: &Expr) -> Result<bool, TacticError> {
+    if dom.has_loose_bvars() {
+        return Err(TacticError::TypeCheckFailed(
+            "push_neg: cannot classify a binder type that mentions an enclosing binder".into(),
+        ));
+    }
+    let sort = state.infer_type(goal, dom)?;
+    Ok(matches!(state.whnf(goal, &sort).kind(), ExprKind::Sort(level) if level.is_zero()))
+}
+
 fn rewrite_not_head_with_proof(
     state: &mut ProofState,
     goal: &Goal,
     expr: &Expr,
 ) -> Result<Option<PropRewriteResult>, TacticError> {
-    let Some(inner) = match_not(expr) else {
+    // Mathlib's `push_neg` reads only the `Not` head, at the top and for the
+    // double negation: `P → False` is not pushed, and `¬(P → False)` is the
+    // implication row (`P ∧ ¬False`), not `P`.
+    let Some(inner) = match_not_head(expr) else {
         return Ok(None);
     };
 
-    if let Some(inner_inner) = match_not(&inner) {
+    if let Some(inner_inner) = match_not_head(&inner) {
         return Ok(Some(super::proof_utils::mk_prop_rewrite_result(
             inner_inner.clone(),
             mk_not_not_eq(state, &inner_inner)?,
@@ -86,16 +104,30 @@ fn rewrite_not_head_with_proof(
         )));
     }
 
-    if let Some((p, q)) = match_implies(&inner) {
-        let new_expr = make_and(&p, &make_not(&q));
-        return Ok(Some(super::proof_utils::mk_prop_rewrite_result(
-            new_expr,
-            mk_not_imp_eq(state, &p, &q)?,
-        )));
-    }
-
-    if let Some((binder_ty, body)) = match_forall_push_neg(&inner) {
-        let new_expr = make_exists_push_neg(&binder_ty, &make_not(&body), state);
+    // `¬∀`: Mathlib's `forallE` row. `¬(P → Q)` becomes `P ∧ ¬Q`
+    // (`not_implies_eq`) exactly when the binder type is a PROPOSITION and the
+    // body does not mention the bound variable (`isProp ty &&
+    // !body.hasLooseBVars`); every other binder, a proof-dependent one
+    // included, is `∃ x, ¬P x` (`not_forall_eq`).
+    if let ExprKind::Pi(_, dom, cod) = inner.kind() {
+        if binder_is_proposition(state, goal, dom)? && !cod.has_loose_bvar(0) {
+            if cod.has_loose_bvars() {
+                return Err(TacticError::TypeCheckFailed(
+                    "push_neg: cannot split an implication whose conclusion mentions an enclosing binder".into(),
+                ));
+            }
+            let q = (**cod).clone();
+            let p = (**dom).clone();
+            let new_expr = make_and(&p, &make_not(&q));
+            return Ok(Some(super::proof_utils::mk_prop_rewrite_result(
+                new_expr,
+                mk_not_imp_eq(state, &p, &q)?,
+            )));
+        }
+        let binder_ty = (**dom).clone();
+        let body = (**cod).clone();
+        let new_expr =
+            super::proof_utils::mk_exists_prop(state, goal, &binder_ty, &make_not(&body))?;
         return Ok(Some(super::proof_utils::mk_prop_rewrite_result(
             new_expr,
             mk_not_forall_eq(state, goal, &binder_ty, &body)?,

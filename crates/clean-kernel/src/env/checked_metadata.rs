@@ -3,9 +3,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! Checked metadata shared by source admission and existing declaration producers.
-//! Metadata never admits a declaration or promotes its verification provenance.
+//! Metadata writes never bypass declaration checking or promote verification provenance.
 
-use super::{ConstantKind, EnvError, Environment, Reducibility};
+use super::{ConstantKind, Declaration, EnvError, Environment, Reducibility};
 use crate::{BinderInfo, Expr, ExprKind, Name};
 
 fn invalid(name: &Name, detail: &'static str) -> EnvError {
@@ -24,6 +24,51 @@ fn strip_metadata(mut expr: &Expr) -> &Expr {
 }
 
 impl Environment {
+    /// Fully check a definition and retain its explicit ordinary unfolding hint.
+    ///
+    /// This runs the unchanged `add_decl` checks. Only after successful checked
+    /// insertion does it retain the supplied hint, without replacing the type,
+    /// value, kind or verification provenance. It exposes no operation on an
+    /// already resident declaration: duplicate names still refuse.
+    ///
+    /// The legacy flag must agree exactly with the hint. Other declaration kinds
+    /// refuse, and every returned error precedes any insertion or metadata write.
+    pub fn add_decl_with_reducibility(
+        &mut self,
+        decl: Declaration,
+        hint: Reducibility,
+    ) -> Result<(), EnvError> {
+        let name = match &decl {
+            Declaration::Definition {
+                name, is_reducible, ..
+            } => {
+                if *is_reducible != matches!(hint, Reducibility::Reducible) {
+                    return Err(invalid(name, "reducibility disagrees with the legacy flag"));
+                }
+                name.clone()
+            }
+            Declaration::Theorem { name, .. }
+            | Declaration::Opaque { name, .. }
+            | Declaration::Axiom { name, .. } => {
+                return Err(invalid(
+                    name,
+                    "an explicit ordinary hint requires a definition",
+                ));
+            }
+        };
+        self.add_decl(decl)?;
+        // SOUNDNESS: add_decl has just checked and inserted this exact definition
+        // under exclusive &mut access. This existing metadata write changes no
+        // logical payload or provenance, and invalidates the generation cache.
+        // Its only false case is an absent name, impossible after successful
+        // insertion above; do not silently accept that invariant violation.
+        assert!(
+            self.set_reducibility(&name, hint),
+            "a successfully checked definition must remain resident"
+        );
+        Ok(())
+    }
+
     fn checked_metadata_type(&self, name: &Name) -> Result<Expr, EnvError> {
         let info = self
             .get_const(name)

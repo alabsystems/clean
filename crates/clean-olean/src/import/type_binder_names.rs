@@ -26,7 +26,8 @@ use clean_kernel::env::{
 };
 use clean_kernel::name::Name;
 
-use crate::error::OleanResult;
+use super::binder_spine::BinderSpine;
+use super::ImportError;
 use crate::expr::{expr_tags, ParsedExpr};
 use crate::module::ParsedConstant;
 use crate::region::{is_ptr, CompactedRegion};
@@ -110,9 +111,12 @@ fn record(env: &mut Environment, name: &str, names: Vec<String>) {
 fn read_leading_forall_names(
     region: &CompactedRegion<'_>,
     mut ptr: u64,
-) -> OleanResult<Vec<String>> {
+    constant: &str,
+) -> Result<Vec<String>, ImportError> {
     let mut out = Vec::new();
+    let mut spine = BinderSpine::new(region, constant)?;
     while is_ptr(ptr) {
+        spine.visit(ptr)?;
         let offset = region.ptr_to_offset(ptr)?;
         let header = region.read_header_at(offset)?;
         CompactedRegion::require_expr_fields(&header, offset)?;
@@ -155,21 +159,15 @@ pub(crate) fn record_type_binder_names_from_region<'a>(
     env: &mut Environment,
     region: &CompactedRegion<'_>,
     constants: impl IntoIterator<Item = (&'a str, u64)>,
-) {
+) -> Result<(), ImportError> {
     for (name, type_ptr) in constants {
         if type_ptr == 0 {
             continue;
         }
-        match read_leading_forall_names(region, type_ptr) {
-            Ok(names) => record(env, name, names),
-            Err(e) => {
-                tracing::warn!(
-                    target: "clean_olean::import",
-                    "type binder names of `{name}` could not be read: {e}"
-                );
-            }
-        }
+        let names = read_leading_forall_names(region, type_ptr, name)?;
+        record(env, name, names);
     }
+    Ok(())
 }
 
 /// `ParsedModule` path: the same table, read off the parsed types.

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Copyright 2026 Andrew Yates
 # SPDX-License-Identifier: Apache-2.0
-"""E7: build all twelve pinned Lean packages under theories/; census ALL constants by origin module.
+"""E7: build all eighteen pinned Lean packages in PACKAGES under theories/; census ALL constants by origin module.
 
 Run under build-slot / heavy_gate.sh. No source text patterns determine a
 verdict: module names come from source paths, declarations and closures from
@@ -42,6 +42,12 @@ PACKAGES = (
     'kcheck_labelled',
     'kcheck_soundness',
     'kcheck_sort_bounds',
+    'kcheck_sound',
+    'kcheck_loader',
+    'kcheck_eval',
+    'kcheck_m5_m6',
+    'kcheck_c7_p2',
+    'kcheck_capstone',
     'binding_not_review',
     'chk_lia',
 )

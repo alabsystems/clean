@@ -680,7 +680,7 @@ impl Specification {
  @par_reduces_p.rec env (fun (s : KExpr) (t : KExpr) (_h : par_reduces_p env s t) => @Eq (OptionType Name) (kexpr_const_name (kapp_fn s)) (@OptionType.some Name nm) -> Le (list_length (kapp_args s)) (iota_major_index meta) -> @Eq KExpr (kapp_fn s) (kapp_fn t))
  (fun (s : KExpr) (ghead : @Eq (OptionType Name) (kexpr_const_name (kapp_fn s)) (@OptionType.some Name nm)) (glen : Le (list_length (kapp_args s)) (iota_major_index meta)) => @Eq.refl KExpr (kapp_fn s))
  (fun (A : KExpr) (A2 : KExpr) (b : KExpr) (b2 : KExpr) (a : KExpr) (a2 : KExpr) (hA : par_reduces_p env A A2) (hb : par_reduces_p env b b2) (ha : par_reduces_p env a a2) (ihA : @Eq (OptionType Name) (kexpr_const_name (kapp_fn A)) (@OptionType.some Name nm) -> Le (list_length (kapp_args A)) (iota_major_index meta) -> @Eq KExpr (kapp_fn A) (kapp_fn A2)) (ihb : @Eq (OptionType Name) (kexpr_const_name (kapp_fn b)) (@OptionType.some Name nm) -> Le (list_length (kapp_args b)) (iota_major_index meta) -> @Eq KExpr (kapp_fn b) (kapp_fn b2)) (iha : @Eq (OptionType Name) (kexpr_const_name (kapp_fn a)) (@OptionType.some Name nm) -> Le (list_length (kapp_args a)) (iota_major_index meta) -> @Eq KExpr (kapp_fn a) (kapp_fn a2)) (ghead : @Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.app (KExpr.lam A b) a))) (@OptionType.some Name nm)) (glen : Le (list_length (kapp_args (KExpr.app (KExpr.lam A b) a))) (iota_major_index meta)) => option_none_ne_some Name nm (@Eq KExpr (kapp_fn (KExpr.app (KExpr.lam A b) a)) (kapp_fn (instantiate b2 a2))) ghead)
- (fun (f : KExpr) (f2 : KExpr) (a : KExpr) (a2 : KExpr) (hf : par_reduces_p env f f2) (ha : par_reduces_p env a a2) (ihf : @Eq (OptionType Name) (kexpr_const_name (kapp_fn f)) (@OptionType.some Name nm) -> Le (list_length (kapp_args f)) (iota_major_index meta) -> @Eq KExpr (kapp_fn f) (kapp_fn f2)) (iha : @Eq (OptionType Name) (kexpr_const_name (kapp_fn a)) (@OptionType.some Name nm) -> Le (list_length (kapp_args a)) (iota_major_index meta) -> @Eq KExpr (kapp_fn a) (kapp_fn a2)) (ghead : @Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.app f a))) (@OptionType.some Name nm)) (glen : Le (list_length (kapp_args (KExpr.app f a))) (iota_major_index meta)) => ihf ghead (le_trans (list_length (kapp_args f)) (Nat.succ (list_length (kapp_args f))) (iota_major_index meta) (Le.step (list_length (kapp_args f)) (list_length (kapp_args f)) (Le.refl (list_length (kapp_args f)))) (@Eq.subst Nat (fun (n : Nat) => Le n (iota_major_index meta)) (list_length (kapp_args (KExpr.app f a))) (Nat.succ (list_length (kapp_args f))) (@Eq.trans Nat (list_length (kapp_args (KExpr.app f a))) (list_length (list_append (kapp_args f) (@ListType.cons KExpr a (@ListType.nil KExpr)))) (Nat.succ (list_length (kapp_args f))) (@Eq.cong (ListType KExpr) Nat list_length (kapp_args (KExpr.app f a)) (list_append (kapp_args f) (@ListType.cons KExpr a (@ListType.nil KExpr))) (kapp_args_app f a)) (list_length_append_singleton (kapp_args f) a)) glen)))
+ (fun (f : KExpr) (f2 : KExpr) (a : KExpr) (a2 : KExpr) (hf : par_reduces_p env f f2) (ha : par_reduces_p env a a2) (ihf : @Eq (OptionType Name) (kexpr_const_name (kapp_fn f)) (@OptionType.some Name nm) -> Le (list_length (kapp_args f)) (iota_major_index meta) -> @Eq KExpr (kapp_fn f) (kapp_fn f2)) (iha : @Eq (OptionType Name) (kexpr_const_name (kapp_fn a)) (@OptionType.some Name nm) -> Le (list_length (kapp_args a)) (iota_major_index meta) -> @Eq KExpr (kapp_fn a) (kapp_fn a2)) (ghead : @Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.app f a))) (@OptionType.some Name nm)) (glen : Le (list_length (kapp_args (KExpr.app f a))) (iota_major_index meta)) => ihf ghead (le_trans (list_length (kapp_args f)) (Nat.succ (list_length (kapp_args f))) (iota_major_index meta) (@Le.step (list_length (kapp_args f)) (list_length (kapp_args f)) (@Le.refl (list_length (kapp_args f)))) (@Eq.subst Nat (fun (n : Nat) => Le n (iota_major_index meta)) (list_length (kapp_args (KExpr.app f a))) (Nat.succ (list_length (kapp_args f))) (@Eq.trans Nat (list_length (kapp_args (KExpr.app f a))) (list_length (list_append (kapp_args f) (@ListType.cons KExpr a (@ListType.nil KExpr)))) (Nat.succ (list_length (kapp_args f))) (@Eq.cong (ListType KExpr) Nat list_length (kapp_args (KExpr.app f a)) (list_append (kapp_args f) (@ListType.cons KExpr a (@ListType.nil KExpr))) (kapp_args_app f a)) (list_length_append_singleton (kapp_args f) a)) glen)))
  (fun (A : KExpr) (A2 : KExpr) (b : KExpr) (b2 : KExpr) (hA : par_reduces_p env A A2) (hb : par_reduces_p env b b2) (ihA : @Eq (OptionType Name) (kexpr_const_name (kapp_fn A)) (@OptionType.some Name nm) -> Le (list_length (kapp_args A)) (iota_major_index meta) -> @Eq KExpr (kapp_fn A) (kapp_fn A2)) (ihb : @Eq (OptionType Name) (kexpr_const_name (kapp_fn b)) (@OptionType.some Name nm) -> Le (list_length (kapp_args b)) (iota_major_index meta) -> @Eq KExpr (kapp_fn b) (kapp_fn b2)) (ghead : @Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.lam A b))) (@OptionType.some Name nm)) (glen : Le (list_length (kapp_args (KExpr.lam A b))) (iota_major_index meta)) => option_none_ne_some Name nm (@Eq KExpr (kapp_fn (KExpr.lam A b)) (kapp_fn (KExpr.lam A2 b2))) ghead)
  (fun (A : KExpr) (A2 : KExpr) (b : KExpr) (b2 : KExpr) (hA : par_reduces_p env A A2) (hb : par_reduces_p env b b2) (ihA : @Eq (OptionType Name) (kexpr_const_name (kapp_fn A)) (@OptionType.some Name nm) -> Le (list_length (kapp_args A)) (iota_major_index meta) -> @Eq KExpr (kapp_fn A) (kapp_fn A2)) (ihb : @Eq (OptionType Name) (kexpr_const_name (kapp_fn b)) (@OptionType.some Name nm) -> Le (list_length (kapp_args b)) (iota_major_index meta) -> @Eq KExpr (kapp_fn b) (kapp_fn b2)) (ghead : @Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.pi A b))) (@OptionType.some Name nm)) (glen : Le (list_length (kapp_args (KExpr.pi A b))) (iota_major_index meta)) => option_none_ne_some Name nm (@Eq KExpr (kapp_fn (KExpr.pi A b)) (kapp_fn (KExpr.pi A2 b2))) ghead)
  (fun (A : KExpr) (A2 : KExpr) (b : KExpr) (b2 : KExpr) (hA : par_reduces_p env A A2) (hb : par_reduces_p env b b2) (ihA : @Eq (OptionType Name) (kexpr_const_name (kapp_fn A)) (@OptionType.some Name nm) -> Le (list_length (kapp_args A)) (iota_major_index meta) -> @Eq KExpr (kapp_fn A) (kapp_fn A2)) (ihb : @Eq (OptionType Name) (kexpr_const_name (kapp_fn b)) (@OptionType.some Name nm) -> Le (list_length (kapp_args b)) (iota_major_index meta) -> @Eq KExpr (kapp_fn b) (kapp_fn b2)) (ghead : @Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.forall_ A b))) (@OptionType.some Name nm)) (glen : Le (list_length (kapp_args (KExpr.forall_ A b))) (iota_major_index meta)) => option_none_ne_some Name nm (@Eq KExpr (kapp_fn (KExpr.forall_ A b)) (kapp_fn (KExpr.forall_ A2 b2))) ghead)
@@ -3302,7 +3302,7 @@ fn cd_refl_proof() -> String {
                 "@Eq.substType KExpr ",
                 "(fun (x : KExpr) => par_reduces_p env ({head} ty b) x) ",
                 "({head} (cd env ty) (cd env b)) (cd env ({head} ty b)) ",
-                "(@Eq.symm KExpr (cd env ({head} ty b)) ({head} (cd env ty) (cd env b)) ({unfold} env ty b)) ",
+                "(@Eq.symm KExpr (cd env ({head} ty b)) ({head} (cd env ty) (cd env b)) (@{unfold} env ty b)) ",
                 "(@{ctor} env ty (cd env ty) b (cd env b) ihty ihb))"
             ),
             ctor = ctor,
@@ -3612,7 +3612,7 @@ fn par_reduces_p_reduct_cong_proof() -> String {
     // -> Eq.subst.
     let le_guard = format!(
         "(@Eq.subst Nat (fun (z : Nat) => Le {len_f} z) {len_f} {major_idx} \
-         (@Eq.symm Nat {major_idx} {len_f} hidx) (Le.refl {len_f}))"
+         (@Eq.symm Nat {major_idx} {len_f} hidx) (@Le.refl {len_f}))"
     );
 
     // f-spine congruence: kapp_args f ⇒_p_list kapp_args f' (recursor head, below boundary).
@@ -3735,7 +3735,7 @@ fn par_reduces_p_app_redex_proof() -> String {
     // BELOW-BOUNDARY guard Le (len(kapp_args f)) major_idx: reflexive via hidx.
     let le_guard = format!(
         "(@Eq.subst Nat (fun (z : Nat) => Le {len_f} z) {len_f} {major_idx} \
-         (@Eq.symm Nat {major_idx} {len_f} hidx) (Le.refl {len_f}))"
+         (@Eq.symm Nat {major_idx} {len_f} hidx) (@Le.refl {len_f}))"
     );
 
     // f-spine congruence: kapp_args f ⇒_p_list kapp_args f' (recursor head, below boundary).
@@ -4241,7 +4241,7 @@ fn par_reduces_p_spine_cong_below_boundary_andtype() -> String {
             leq = len_app_eq2("g0", "b"),
         );
         let glen_g0 = format!(
-            "(le_trans {l_g0} (Nat.succ {l_g0}) {k} (Le.step {l_g0} {l_g0} (Le.refl {l_g0})) {glen_succ_g0})",
+            "(le_trans {l_g0} (Nat.succ {l_g0}) {k} (@Le.step {l_g0} {l_g0} (@Le.refl {l_g0})) {glen_succ_g0})",
             l_g0 = len("g0"),
         );
         // Build product(app g0 b, app g0' b') by unbundling IH(g0).

@@ -99,7 +99,7 @@ impl Specification {
         // (ctx [C,z,n,(C n)]).
         self.add_recursive_def(
             "def natRecSArm : KExpr := KExpr.pi natTypeC (KExpr.pi (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (KExpr.bvar Nat.zero)) (KExpr.app (KExpr.bvar (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (KExpr.app natSuccC (KExpr.bvar (Nat.succ Nat.zero)))))",
-            "Nat.rec succ-minor arm (n : Nat) -> C n -> C (succ n), under [C, z]. Nat.rec port N0.",
+            "Nat.rec succ-minor arm (n : Nat) -> C n -> C (succ n), under [C, z]. @Nat.rec port N0.",
         )?;
         // THE REAL DEPENDENT RECURSOR TYPE (binder order C, z, s, t):
         //   Π (C : Π Nat. sort u). Π (app C zero). Π (sArm). Π Nat. app C t
@@ -396,7 +396,7 @@ impl Specification {
         )?;
         self.add_recursive_def(
             "def natOnePlusOne (u : Level) : KExpr := natRecApp u natConstMotive natOne natAddOneCase natOne",
-            "natOnePlusOne = Nat.rec (fun _ => Nat) 1 (fun n ih => succ ih) 1 = 1 + 1. Nat.rec port N4-demo.",
+            "natOnePlusOne = @Nat.rec (fun _ => Nat) 1 (fun n ih => succ ih) 1 = 1 + 1. @Nat.rec port N4-demo.",
         )?;
 
         // app_right congruence for a single natStep: the iota leg lifts via

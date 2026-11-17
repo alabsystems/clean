@@ -43,8 +43,9 @@ use clean_kernel::env::{
 use clean_kernel::expr::BinderInfo;
 use clean_kernel::name::Name;
 
+use super::binder_spine::BinderSpine;
 use super::convert_expr::convert_binder_info;
-use crate::error::OleanResult;
+use super::ImportError;
 use crate::expr::{expr_tags, ParsedBinderInfo, ParsedExpr, EXPR_DATA_SCALAR_BYTES};
 use crate::module::{ConstantKind, ParsedConstant};
 use crate::region::{is_ptr, CompactedRegion};
@@ -128,9 +129,12 @@ fn record(env: &mut Environment, name: &str, binders: Vec<(String, ParsedBinderI
 fn read_leading_lambda_binders(
     region: &CompactedRegion<'_>,
     mut ptr: u64,
-) -> OleanResult<Vec<(String, ParsedBinderInfo)>> {
+    constant: &str,
+) -> Result<Vec<(String, ParsedBinderInfo)>, ImportError> {
     let mut out = Vec::new();
+    let mut spine = BinderSpine::new(region, constant)?;
     while is_ptr(ptr) {
+        spine.visit(ptr)?;
         let offset = region.ptr_to_offset(ptr)?;
         let header = region.read_header_at(offset)?;
         CompactedRegion::require_expr_fields(&header, offset)?;
@@ -181,22 +185,16 @@ pub(crate) fn record_default_fn_binders_from_region<'a>(
     env: &mut Environment,
     region: &CompactedRegion<'_>,
     constants: impl IntoIterator<Item = (&'a str, &'a ConstantKind, u64)>,
-) {
+) -> Result<(), ImportError> {
     for (name, kind, value_ptr) in constants {
         if !matches!(kind, ConstantKind::Definition) || value_ptr == 0 || !is_default_fn_name(name)
         {
             continue;
         }
-        match read_leading_lambda_binders(region, value_ptr) {
-            Ok(binders) => record(env, name, binders),
-            Err(e) => {
-                tracing::warn!(
-                    target: "clean_olean::import",
-                    "default-fn binder names of `{name}` could not be read: {e}"
-                );
-            }
-        }
+        let binders = read_leading_lambda_binders(region, value_ptr, name)?;
+        record(env, name, binders);
     }
+    Ok(())
 }
 
 /// `ParsedModule` path: the same table, read off the parsed values.

@@ -1,0 +1,1090 @@
+{
+ "schema": "clean.crystal.fixture_freshness/v1",
+ "dump": "target-envplain-dump",
+ "bodies": {
+  "has_cubical_layer": {
+   "def_path": "mode::CleanMode::has_cubical_layer",
+   "classes": [
+    "loc-file-index"
+   ],
+   "detail": {
+    "loc-file-index": [
+     "%2 = load enum.17, ptr %0  ; #loc: 214 337 8  ->  %2 = load enum.17, ptr %0  ; #loc: 266 337 8",
+     "%3 = extractfield u8 %2, 0  ; #loc: 214 337 8  ->  %3 = extractfield u8 %2, 0  ; #loc: 266 337 8",
+     "switch %3 [ 2: bb1 3: bb2 default: bb3 ]  ; #loc: 214 337 8  ->  switch %3 [ 2: bb1 3: bb2 default: bb3 ]  ; #loc: 266 337 8",
+     "%4 = const bool true  ; #loc: 214 337 8  ->  %4 = const bool true  ; #loc: 266 337 8",
+     "br bb4(%4)  ; #loc: 214 337 8  ->  br bb4(%4)  ; #loc: 266 337 8",
+     "%5 = const bool true  ; #loc: 214 337 8  ->  %5 = const bool true  ; #loc: 266 337 8",
+     "br bb4(%5)  ; #loc: 214 337 8  ->  br bb4(%5)  ; #loc: 266 337 8",
+     "%6 = const bool false  ; #loc: 214 337 8  ->  %6 = const bool false  ; #loc: 266 337 8",
+     "br bb4(%6)  ; #loc: 214 337 8  ->  br bb4(%6)  ; #loc: 266 337 8",
+     "ret %1  ; #loc: 214 338 5  ->  ret %1  ; #loc: 266 338 5"
+    ]
+   },
+   "diff": "--- fixture has_cubical_layer.trust-ir.txt\n+++ live dump\n@@ -2,18 +2,18 @@\n     ; #producer: trust\n     ; #names: %0=\"self\"\n bb0(%0: ptr):\n-    %2 = load enum.17, ptr %0  ; #loc: 214 337 8\n-    %3 = extractfield u8 %2, 0  ; #loc: 214 337 8\n-    switch %3 [ 2: bb1 3: bb2 default: bb3 ]  ; #loc: 214 337 8\n+    %2 = load enum.17, ptr %0  ; #loc: 266 337 8\n+    %3 = extractfield u8 %2, 0  ; #loc: 266 337 8\n+    switch %3 [ 2: bb1 3: bb2 default: bb3 ]  ; #loc: 266 337 8\n bb1:\n-    %4 = const bool true  ; #loc: 214 337 8\n-    br bb4(%4)  ; #loc: 214 337 8\n+    %4 = const bool true  ; #loc: 266 337 8\n+    br bb4(%4)  ; #loc: 266 337 8\n bb2:\n-    %5 = const bool true  ; #loc: 214 337 8\n-    br bb4(%5)  ; #loc: 214 337 8\n+    %5 = const bool true  ; #loc: 266 337 8\n+    br bb4(%5)  ; #loc: 266 337 8\n bb3:\n-    %6 = const bool false  ; #loc: 214 337 8\n-    br bb4(%6)  ; #loc: 214 337 8\n+    %6 = const bool false  ; #loc: 266 337 8\n+    br bb4(%6)  ; #loc: 266 337 8\n bb4(%1: bool):\n-    ret %1  ; #loc: 214 338 5\n+    ret %1  ; #loc: 266 338 5\n }\n",
+   "verdict": "NUMBERING-ONLY",
+   "at_head": {
+    "lineage": "sha256:00410aaf6fa6677ad7d3f38466873b9d575533ebd233740ee7f9c38399a2e559",
+    "def_index": 22202,
+    "func_id": 2496,
+    "instr_count": 10,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir_verdict": "agreed",
+    "markers_exact": true,
+    "flip_event": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:22202 ~ clean_kernel[47a1]::mode::{impl#0}::has_cubical_layer), asserts=0, lineage=sha256:00410aaf6fa6677ad7d3f38466873b9d575533ebd233740ee7f9c38399a2e559, flipped_so_far=76"
+   },
+   "pinned": {
+    "lineage": "sha256:2654a8b2d6f53f3d1e206b59c90f0ceb6c1da1664632b7f04bbde6fb1b56613d",
+    "def_index": 19695,
+    "func_id": 2090,
+    "instr_count": 10
+   }
+  },
+  "level_kind_ord": {
+   "def_path": "level::Level::kind_ord",
+   "classes": [
+    "functy-index",
+    "loc-file-index"
+   ],
+   "detail": {
+    "functy-index": [
+     "rustcc fn @level::Level::kind_ord(functy.278) {  ->  rustcc fn @level::Level::kind_ord(functy.340) {"
+    ],
+    "loc-file-index": [
+     "%2 = load enum.3, ptr %0  ; #loc: 204 619 8  ->  %2 = load enum.3, ptr %0  ; #loc: 255 619 8",
+     "%3 = extractfield u8 %2, 0  ; #loc: 204 619 8  ->  %3 = extractfield u8 %2, 0  ; #loc: 255 619 8",
+     "switch %3 [ 0: bb1 1: bb2 2: bb3 3: bb4 default: bb5 ]  ; #loc: 204 619 8  ->  switch %3 [ 0: bb1 1: bb2 2: bb3 3: bb4 default: bb5 ]  ; #loc: 255 619 8",
+     "%4 = const u8 0  ; #loc: 204 620 27  ->  %4 = const u8 0  ; #loc: 255 620 27",
+     "br bb6(%4)  ; #loc: 204 619 8  ->  br bb6(%4)  ; #loc: 255 619 8",
+     "%5 = const u8 1  ; #loc: 204 621 30  ->  %5 = const u8 1  ; #loc: 255 621 30",
+     "br bb6(%5)  ; #loc: 204 619 8  ->  br bb6(%5)  ; #loc: 255 619 8",
+     "%6 = const u8 2  ; #loc: 204 622 32  ->  %6 = const u8 2  ; #loc: 255 622 32",
+     "br bb6(%6)  ; #loc: 204 619 8  ->  br bb6(%6)  ; #loc: 255 619 8",
+     "%7 = const u8 3  ; #loc: 204 623 33  ->  %7 = const u8 3  ; #loc: 255 623 33",
+     "br bb6(%7)  ; #loc: 204 619 8  ->  br bb6(%7)  ; #loc: 255 619 8",
+     "%8 = const u8 4  ; #loc: 204 624 31  ->  %8 = const u8 4  ; #loc: 255 624 31",
+     "br bb6(%8)  ; #loc: 204 619 8  ->  br bb6(%8)  ; #loc: 255 619 8",
+     "ret %1  ; #loc: 204 626 5  ->  ret %1  ; #loc: 255 626 5"
+    ]
+   },
+   "diff": "--- fixture level_kind_ord.trust-ir.txt\n+++ live dump\n@@ -1,25 +1,25 @@\n-rustcc fn @level::Level::kind_ord(functy.278) {\n+rustcc fn @level::Level::kind_ord(functy.340) {\n     ; #producer: trust\n     ; #names: %0=\"self\"\n bb0(%0: ptr):\n-    %2 = load enum.3, ptr %0  ; #loc: 204 619 8\n-    %3 = extractfield u8 %2, 0  ; #loc: 204 619 8\n-    switch %3 [ 0: bb1 1: bb2 2: bb3 3: bb4 default: bb5 ]  ; #loc: 204 619 8\n+    %2 = load enum.3, ptr %0  ; #loc: 255 619 8\n+    %3 = extractfield u8 %2, 0  ; #loc: 255 619 8\n+    switch %3 [ 0: bb1 1: bb2 2: bb3 3: bb4 default: bb5 ]  ; #loc: 255 619 8\n bb1:\n-    %4 = const u8 0  ; #loc: 204 620 27\n-    br bb6(%4)  ; #loc: 204 619 8\n+    %4 = const u8 0  ; #loc: 255 620 27\n+    br bb6(%4)  ; #loc: 255 619 8\n bb2:\n-    %5 = const u8 1  ; #loc: 204 621 30\n-    br bb6(%5)  ; #loc: 204 619 8\n+    %5 = const u8 1  ; #loc: 255 621 30\n+    br bb6(%5)  ; #loc: 255 619 8\n bb3:\n-    %6 = const u8 2  ; #loc: 204 622 32\n-    br bb6(%6)  ; #loc: 204 619 8\n+    %6 = const u8 2  ; #loc: 255 622 32\n+    br bb6(%6)  ; #loc: 255 619 8\n bb4:\n-    %7 = const u8 3  ; #loc: 204 623 33\n-    br bb6(%7)  ; #loc: 204 619 8\n+    %7 = const u8 3  ; #loc: 255 623 33\n+    br bb6(%7)  ; #loc: 255 619 8\n bb5:\n-    %8 = const u8 4  ; #loc: 204 624 31\n-    br bb6(%8)  ; #loc: 204 619 8\n+    %8 = const u8 4  ; #loc: 255 624 31\n+    br bb6(%8)  ; #loc: 255 619 8\n bb6(%1: u8):\n-    ret %1  ; #loc: 204 626 5\n+    ret %1  ; #loc: 255 626 5\n }\n",
+   "verdict": "NUMBERING-ONLY",
+   "at_head": {
+    "lineage": "sha256:5201ad569da9b5dbc630e20bb0b8759a8a263265d6ef0f66603951400e4bf061",
+    "def_index": 21254,
+    "func_id": 2354,
+    "instr_count": 14,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir_verdict": "agreed",
+    "markers_exact": true,
+    "flip_event": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:21254 ~ clean_kernel[47a1]::level::{impl#18}::kind_ord), asserts=0, lineage=sha256:5201ad569da9b5dbc630e20bb0b8759a8a263265d6ef0f66603951400e4bf061, flipped_so_far=413"
+   },
+   "pinned": {
+    "lineage": "sha256:f1b3086e88ef8f79095b468a3e38ac76d02d0bf198608480f4f1ba1ce67606ba",
+    "def_index": 18808,
+    "func_id": 1964,
+    "instr_count": 14
+   }
+  },
+  "from_source_system": {
+   "def_path": "mode::CleanMode::from_source_system",
+   "classes": [
+    "functy-index",
+    "loc-file-index",
+    "type-table-index"
+   ],
+   "detail": {
+    "functy-index": [
+     "rustcc fn @mode::CleanMode::from_source_system(functy.518) {  ->  rustcc fn @mode::CleanMode::from_source_system(functy.676) {"
+    ],
+    "type-table-index": [
+     "bb0(%0: enum.211):  ->  bb0(%0: enum.303):"
+    ],
+    "loc-file-index": [
+     "%2 = extractfield u8 %0, 0  ; #loc: 214 211 8  ->  %2 = extractfield u8 %0, 0  ; #loc: 266 211 8",
+     "switch %2 [ 0: bb1 1: bb2 2: bb3 3: bb4 4: bb5 5: bb6 6: bb7 7: bb8 8: bb9 9: bb10 11: bb11 default: bb12 ]  ; #loc: 214 211 8  ->  switch %2 [ 0: bb1 1: bb2 2: bb3 3: bb4 4: bb5 5: bb6 6: bb7 7: bb8 8: bb9 9: bb10 11: bb11 default: bb12 ]  ; #loc: 266 211 8",
+     "%3 = const enum.17 { 0 }  ; #loc: 214 212 21  ->  %3 = const enum.17 { 0 }  ; #loc: 266 212 21",
+     "br bb13(%3)  ; #loc: 214 211 8  ->  br bb13(%3)  ; #loc: 266 211 8",
+     "%4 = const enum.17 { 1 }  ; #loc: 214 213 19  ->  %4 = const enum.17 { 1 }  ; #loc: 266 213 19",
+     "br bb13(%4)  ; #loc: 214 211 8  ->  br bb13(%4)  ; #loc: 266 211 8",
+     "%5 = const enum.17 { 0 }  ; #loc: 214 214 20  ->  %5 = const enum.17 { 0 }  ; #loc: 266 214 20",
+     "br bb13(%5)  ; #loc: 214 211 8  ->  br bb13(%5)  ; #loc: 266 211 8",
+     "%6 = const enum.17 { 2 }  ; #loc: 214 215 27  ->  %6 = const enum.17 { 2 }  ; #loc: 266 215 27",
+     "br bb13(%6)  ; #loc: 214 211 8  ->  br bb13(%6)  ; #loc: 266 211 8",
+     "%7 = const enum.17 { 4 }  ; #loc: 214 216 45  ->  %7 = const enum.17 { 4 }  ; #loc: 266 216 45",
+     "br bb13(%7)  ; #loc: 214 211 8  ->  br bb13(%7)  ; #loc: 266 211 8",
+     "%8 = const enum.17 { 4 }  ; #loc: 214 216 45  ->  %8 = const enum.17 { 4 }  ; #loc: 266 216 45",
+     "br bb13(%8)  ; #loc: 214 211 8  ->  br bb13(%8)  ; #loc: 266 211 8",
+     "%9 = const enum.17 { 4 }  ; #loc: 214 216 45  ->  %9 = const enum.17 { 4 }  ; #loc: 266 216 45",
+     "br bb13(%9)  ; #loc: 214 211 8  ->  br bb13(%9)  ; #loc: 266 211 8",
+     "%10 = const enum.17 { 5 }  ; #loc: 214 217 35  ->  %10 = const enum.17 { 5 }  ; #loc: 266 217 35",
+     "br bb13(%10)  ; #loc: 214 211 8  ->  br bb13(%10)  ; #loc: 266 211 8",
+     "%11 = const enum.17 { 5 }  ; #loc: 214 217 35  ->  %11 = const enum.17 { 5 }  ; #loc: 266 217 35",
+     "br bb13(%11)  ; #loc: 214 211 8  ->  br bb13(%11)  ; #loc: 266 211 8",
+     "%12 = const enum.17 { 4 }  ; #loc: 214 218 34  ->  %12 = const enum.17 { 4 }  ; #loc: 266 218 34",
+     "br bb13(%12)  ; #loc: 214 211 8  ->  br bb13(%12)  ; #loc: 266 211 8",
+     "%13 = const enum.17 { 4 }  ; #loc: 214 218 34  ->  %13 = const enum.17 { 4 }  ; #loc: 266 218 34",
+     "br bb13(%13)  ; #loc: 214 211 8  ->  br bb13(%13)  ; #loc: 266 211 8",
+     "%14 = const enum.17 { 4 }  ; #loc: 214 219 19  ->  %14 = const enum.17 { 4 }  ; #loc: 266 219 19",
+     "br bb13(%14)  ; #loc: 214 211 8  ->  br bb13(%14)  ; #loc: 266 211 8",
+     "ret %1  ; #loc: 214 221 5  ->  ret %1  ; #loc: 266 221 5"
+    ]
+   },
+   "diff": "--- fixture from_source_system.trust-ir.txt\n+++ live dump\n@@ -1,45 +1,45 @@\n-rustcc fn @mode::CleanMode::from_source_system(functy.518) {\n+rustcc fn @mode::CleanMode::from_source_system(functy.676) {\n     ; #producer: trust\n     ; #names: %0=\"system\"\n-bb0(%0: enum.211):\n-    %2 = extractfield u8 %0, 0  ; #loc: 214 211 8\n-    switch %2 [ 0: bb1 1: bb2 2: bb3 3: bb4 4: bb5 5: bb6 6: bb7 7: bb8 8: bb9 9: bb10 11: bb11 default: bb12 ]  ; #loc: 214 211 8\n+bb0(%0: enum.303):\n+    %2 = extractfield u8 %0, 0  ; #loc: 266 211 8\n+    switch %2 [ 0: bb1 1: bb2 2: bb3 3: bb4 4: bb5 5: bb6 6: bb7 7: bb8 8: bb9 9: bb10 11: bb11 default: bb12 ]  ; #loc: 266 211 8\n bb1:\n-    %3 = const enum.17 { 0 }  ; #loc: 214 212 21\n-    br bb13(%3)  ; #loc: 214 211 8\n+    %3 = const enum.17 { 0 }  ; #loc: 266 212 21\n+    br bb13(%3)  ; #loc: 266 211 8\n bb2:\n-    %4 = const enum.17 { 1 }  ; #loc: 214 213 19\n-    br bb13(%4)  ; #loc: 214 211 8\n+    %4 = const enum.17 { 1 }  ; #loc: 266 213 19\n+    br bb13(%4)  ; #loc: 266 211 8\n bb3:\n-    %5 = const enum.17 { 0 }  ; #loc: 214 214 20\n-    br bb13(%5)  ; #loc: 214 211 8\n+    %5 = const enum.17 { 0 }  ; #loc: 266 214 20\n+    br bb13(%5)  ; #loc: 266 211 8\n bb4:\n-    %6 = const enum.17 { 2 }  ; #loc: 214 215 27\n-    br bb13(%6)  ; #loc: 214 211 8\n+    %6 = const enum.17 { 2 }  ; #loc: 266 215 27\n+    br bb13(%6)  ; #loc: 266 211 8\n bb5:\n-    %7 = const enum.17 { 4 }  ; #loc: 214 216 45\n-    br bb13(%7)  ; #loc: 214 211 8\n+    %7 = const enum.17 { 4 }  ; #loc: 266 216 45\n+    br bb13(%7)  ; #loc: 266 211 8\n bb6:\n-    %8 = const enum.17 { 4 }  ; #loc: 214 216 45\n-    br bb13(%8)  ; #loc: 214 211 8\n+    %8 = const enum.17 { 4 }  ; #loc: 266 216 45\n+    br bb13(%8)  ; #loc: 266 211 8\n bb7:\n-    %9 = const enum.17 { 4 }  ; #loc: 214 216 45\n-    br bb13(%9)  ; #loc: 214 211 8\n+    %9 = const enum.17 { 4 }  ; #loc: 266 216 45\n+    br bb13(%9)  ; #loc: 266 211 8\n bb8:\n-    %10 = const enum.17 { 5 }  ; #loc: 214 217 35\n-    br bb13(%10)  ; #loc: 214 211 8\n+    %10 = const enum.17 { 5 }  ; #loc: 266 217 35\n+    br bb13(%10)  ; #loc: 266 211 8\n bb9:\n-    %11 = const enum.17 { 5 }  ; #loc: 214 217 35\n-    br bb13(%11)  ; #loc: 214 211 8\n+    %11 = const enum.17 { 5 }  ; #loc: 266 217 35\n+    br bb13(%11)  ; #loc: 266 211 8\n bb10:\n-    %12 = const enum.17 { 4 }  ; #loc: 214 218 34\n-    br bb13(%12)  ; #loc: 214 211 8\n+    %12 = const enum.17 { 4 }  ; #loc: 266 218 34\n+    br bb13(%12)  ; #loc: 266 211 8\n bb11:\n-    %13 = const enum.17 { 4 }  ; #loc: 214 218 34\n-    br bb13(%13)  ; #loc: 214 211 8\n+    %13 = const enum.17 { 4 }  ; #loc: 266 218 34\n+    br bb13(%13)  ; #loc: 266 211 8\n bb12:\n-    %14 = const enum.17 { 4 }  ; #loc: 214 219 19\n-    br bb13(%14)  ; #loc: 214 211 8\n+    %14 = const enum.17 { 4 }  ; #loc: 266 219 19\n+    br bb13(%14)  ; #loc: 266 211 8\n bb13(%1: enum.17):\n-    ret %1  ; #loc: 214 221 5\n+    ret %1  ; #loc: 266 221 5\n }\n",
+   "verdict": "NUMBERING-ONLY",
+   "at_head": {
+    "lineage": "sha256:5315c9cbc536f3463a522c1d48cd45a971a377547259f56bbe013cb27e6331f9",
+    "def_index": 22197,
+    "func_id": 2493,
+    "instr_count": 27,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir_verdict": "agreed",
+    "markers_exact": true,
+    "flip_event": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:22197 ~ clean_kernel[47a1]::mode::{impl#0}::from_source_system), asserts=0, lineage=sha256:5315c9cbc536f3463a522c1d48cd45a971a377547259f56bbe013cb27e6331f9, flipped_so_far=78"
+   },
+   "pinned": {
+    "lineage": "sha256:4a27f6a167ef2ec5aee35a1741d307045032a9139cdc406552cf752558529a35",
+    "def_index": 19690,
+    "func_id": 2087,
+    "instr_count": 27
+   }
+  },
+  "flat_flags_contains": {
+   "def_path": "flat::types::FlatFlags::contains",
+   "classes": [
+    "functy-index",
+    "loc-file-index",
+    "type-table-index"
+   ],
+   "detail": {
+    "functy-index": [
+     "rustcc fn @flat::types::FlatFlags::contains(functy.459) {  ->  rustcc fn @flat::types::FlatFlags::contains(functy.604) {"
+    ],
+    "type-table-index": [
+     "bb0(%0: struct.815, %1: struct.815):  ->  bb0(%0: struct.991, %1: struct.991):"
+    ],
+    "loc-file-index": [
+     "%2 = extractfield u8 %0, 0  ; #loc: 201 90 9  ->  %2 = extractfield u8 %0, 0  ; #loc: 250 90 9",
+     "%3 = extractfield u8 %1, 0  ; #loc: 201 90 18  ->  %3 = extractfield u8 %1, 0  ; #loc: 250 90 18",
+     "%4 = and u8 %2, %3  ; #loc: 201 90 8  ->  %4 = and u8 %2, %3  ; #loc: 250 90 8",
+     "%5 = extractfield u8 %1, 0  ; #loc: 201 90 30  ->  %5 = extractfield u8 %1, 0  ; #loc: 250 90 30",
+     "%6 = icmp eq u8 %4, %5  ; #loc: 201 90 8  ->  %6 = icmp eq u8 %4, %5  ; #loc: 250 90 8",
+     "ret %6  ; #loc: 201 91 5  ->  ret %6  ; #loc: 250 91 5"
+    ]
+   },
+   "diff": "--- fixture flat_flags_contains.trust-ir.txt\n+++ live dump\n@@ -1,11 +1,11 @@\n-rustcc fn @flat::types::FlatFlags::contains(functy.459) {\n+rustcc fn @flat::types::FlatFlags::contains(functy.604) {\n     ; #producer: trust\n     ; #names: %0=\"self\", %1=\"other\"\n-bb0(%0: struct.815, %1: struct.815):\n-    %2 = extractfield u8 %0, 0  ; #loc: 201 90 9\n-    %3 = extractfield u8 %1, 0  ; #loc: 201 90 18\n-    %4 = and u8 %2, %3  ; #loc: 201 90 8\n-    %5 = extractfield u8 %1, 0  ; #loc: 201 90 30\n-    %6 = icmp eq u8 %4, %5  ; #loc: 201 90 8\n-    ret %6  ; #loc: 201 91 5\n+bb0(%0: struct.991, %1: struct.991):\n+    %2 = extractfield u8 %0, 0  ; #loc: 250 90 9\n+    %3 = extractfield u8 %1, 0  ; #loc: 250 90 18\n+    %4 = and u8 %2, %3  ; #loc: 250 90 8\n+    %5 = extractfield u8 %1, 0  ; #loc: 250 90 30\n+    %6 = icmp eq u8 %4, %5  ; #loc: 250 90 8\n+    ret %6  ; #loc: 250 91 5\n }\n",
+   "verdict": "NUMBERING-ONLY",
+   "at_head": {
+    "lineage": "sha256:25636ea633b5f6c8e6ccdf56b9ebe0089ea677ff325db803f38a93c6d8c8cfdd",
+    "def_index": 20971,
+    "func_id": 2274,
+    "instr_count": 6,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir_verdict": "agreed",
+    "markers_exact": true,
+    "flip_event": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:20971 ~ clean_kernel[47a1]::flat::types::{impl#1}::contains), asserts=0, lineage=sha256:25636ea633b5f6c8e6ccdf56b9ebe0089ea677ff325db803f38a93c6d8c8cfdd, flipped_so_far=321"
+   },
+   "pinned": {
+    "lineage": "sha256:a4d7670bf5b1fefac2714ceb7a5d2a4843905f3ddcfba812f0889a13db1b7f6b",
+    "def_index": 18558,
+    "func_id": 1896,
+    "instr_count": 6
+   }
+  },
+  "bvar_in_range": {
+   "def_path": "expr::bvar_in_range",
+   "classes": [
+    "functy-index",
+    "loc-file-index"
+   ],
+   "detail": {
+    "functy-index": [
+     "rustcc fn @expr::bvar_in_range(functy.435) {  ->  rustcc fn @expr::bvar_in_range(functy.581) {"
+    ],
+    "loc-file-index": [
+     "%5 = const u32 4294967295  ; #loc: 192 109 14  ->  %5 = const u32 4294967295  ; #loc: 241 111 14",
+     "%6 = icmp eq u32 %2, %5  ; #loc: 192 109 7  ->  %6 = icmp eq u32 %2, %5  ; #loc: 241 111 7",
+     "condbr %6, bb1, bb2  ; #loc: 192 109 4  ->  condbr %6, bb1, bb2  ; #loc: 241 111 4",
+     "%7 = icmp uge u32 %0, %1  ; #loc: 192 110 8  ->  %7 = icmp uge u32 %0, %1  ; #loc: 241 112 8",
+     "br bb3(%7)  ; #loc: 192 109 4  ->  br bb3(%7)  ; #loc: 241 111 4",
+     "%8 = icmp uge u32 %0, %1  ; #loc: 192 112 8  ->  %8 = icmp uge u32 %0, %1  ; #loc: 241 114 8",
+     "condbr %8, bb4, bb5  ; #loc: 192 112 8  ->  condbr %8, bb4, bb5  ; #loc: 241 114 8",
+     "ret %3  ; #loc: 192 114 1  ->  ret %3  ; #loc: 241 116 1",
+     "%9 = icmp ult u32 %0, %2  ; #loc: 192 112 24  ->  %9 = icmp ult u32 %0, %2  ; #loc: 241 114 24",
+     "br bb6(%9)  ; #loc: 192 112 8  ->  br bb6(%9)  ; #loc: 241 114 8",
+     "%10 = const bool false  ; #loc: 192 112 8  ->  %10 = const bool false  ; #loc: 241 114 8",
+     "br bb6(%10)  ; #loc: 192 112 8  ->  br bb6(%10)  ; #loc: 241 114 8",
+     "br bb3(%4)  ; #loc: 192 109 4  ->  br bb3(%4)  ; #loc: 241 111 4"
+    ]
+   },
+   "diff": "--- fixture bvar_in_range.trust-ir.txt\n+++ live dump\n@@ -1,24 +1,24 @@\n-rustcc fn @expr::bvar_in_range(functy.435) {\n+rustcc fn @expr::bvar_in_range(functy.581) {\n     ; #producer: trust\n     ; #names: %0=\"idx\", %1=\"start\", %2=\"end\"\n bb0(%0: u32, %1: u32, %2: u32):\n-    %5 = const u32 4294967295  ; #loc: 192 109 14\n-    %6 = icmp eq u32 %2, %5  ; #loc: 192 109 7\n-    condbr %6, bb1, bb2  ; #loc: 192 109 4\n+    %5 = const u32 4294967295  ; #loc: 241 111 14\n+    %6 = icmp eq u32 %2, %5  ; #loc: 241 111 7\n+    condbr %6, bb1, bb2  ; #loc: 241 111 4\n bb1:\n-    %7 = icmp uge u32 %0, %1  ; #loc: 192 110 8\n-    br bb3(%7)  ; #loc: 192 109 4\n+    %7 = icmp uge u32 %0, %1  ; #loc: 241 112 8\n+    br bb3(%7)  ; #loc: 241 111 4\n bb2:\n-    %8 = icmp uge u32 %0, %1  ; #loc: 192 112 8\n-    condbr %8, bb4, bb5  ; #loc: 192 112 8\n+    %8 = icmp uge u32 %0, %1  ; #loc: 241 114 8\n+    condbr %8, bb4, bb5  ; #loc: 241 114 8\n bb3(%3: bool):\n-    ret %3  ; #loc: 192 114 1\n+    ret %3  ; #loc: 241 116 1\n bb4:\n-    %9 = icmp ult u32 %0, %2  ; #loc: 192 112 24\n-    br bb6(%9)  ; #loc: 192 112 8\n+    %9 = icmp ult u32 %0, %2  ; #loc: 241 114 24\n+    br bb6(%9)  ; #loc: 241 114 8\n bb5:\n-    %10 = const bool false  ; #loc: 192 112 8\n-    br bb6(%10)  ; #loc: 192 112 8\n+    %10 = const bool false  ; #loc: 241 114 8\n+    br bb6(%10)  ; #loc: 241 114 8\n bb6(%4: bool):\n-    br bb3(%4)  ; #loc: 192 109 4\n+    br bb3(%4)  ; #loc: 241 111 4\n }\n",
+   "verdict": "NUMBERING-ONLY",
+   "at_head": {
+    "lineage": "sha256:62ce31555ff9fa5d658525dfad6e11895a8c70914911f3ce666e8bebaacbc5fc",
+    "def_index": 20692,
+    "func_id": 2198,
+    "instr_count": 13,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir_verdict": "agreed",
+    "markers_exact": true,
+    "flip_event": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:20692 ~ clean_kernel[47a1]::expr::bvar_in_range), asserts=0, lineage=sha256:62ce31555ff9fa5d658525dfad6e11895a8c70914911f3ce666e8bebaacbc5fc, flipped_so_far=414"
+   },
+   "pinned": {
+    "lineage": "sha256:3b2faceae49b1afe0bc4e3e03f44ad764685330578a7ae429599bb28699b6026",
+    "def_index": 18282,
+    "func_id": 1820,
+    "instr_count": 13
+   }
+  },
+  "is_valid_char": {
+   "def_path": "env::native_reducers_char::is_valid_char",
+   "classes": [
+    "functy-index",
+    "loc-file-index"
+   ],
+   "detail": {
+    "functy-index": [
+     "rustcc fn @env::native_reducers_char::is_valid_char(functy.359) {  ->  rustcc fn @env::native_reducers_char::is_valid_char(functy.444) {"
+    ],
+    "loc-file-index": [
+     "%3 = const u64 55296  ; #loc: 164 112 8  ->  %3 = const u64 55296  ; #loc: 192 112 8",
+     "%4 = icmp ult u64 %0, %3  ; #loc: 164 112 4  ->  %4 = icmp ult u64 %0, %3  ; #loc: 192 112 4",
+     "condbr %4, bb2, bb1  ; #loc: 164 112 4  ->  condbr %4, bb2, bb1  ; #loc: 192 112 4",
+     "%5 = const u64 57343  ; #loc: 164 112 19  ->  %5 = const u64 57343  ; #loc: 192 112 19",
+     "%6 = icmp ult u64 %5, %0  ; #loc: 164 112 19  ->  %6 = icmp ult u64 %5, %0  ; #loc: 192 112 19",
+     "condbr %6, bb4, bb5  ; #loc: 164 112 18  ->  condbr %6, bb4, bb5  ; #loc: 192 112 18",
+     "%7 = const bool true  ; #loc: 164 112 4  ->  %7 = const bool true  ; #loc: 192 112 4",
+     "br bb3(%7)  ; #loc: 164 112 4  ->  br bb3(%7)  ; #loc: 192 112 4",
+     "ret %1  ; #loc: 164 113 1  ->  ret %1  ; #loc: 192 113 1",
+     "%8 = const u64 1114112  ; #loc: 164 112 37  ->  %8 = const u64 1114112  ; #loc: 192 112 37",
+     "%9 = icmp ult u64 %0, %8  ; #loc: 164 112 33  ->  %9 = icmp ult u64 %0, %8  ; #loc: 192 112 33",
+     "br bb6(%9)  ; #loc: 164 112 18  ->  br bb6(%9)  ; #loc: 192 112 18",
+     "%10 = const bool false  ; #loc: 164 112 18  ->  %10 = const bool false  ; #loc: 192 112 18",
+     "br bb6(%10)  ; #loc: 164 112 18  ->  br bb6(%10)  ; #loc: 192 112 18",
+     "br bb3(%2)  ; #loc: 164 112 4  ->  br bb3(%2)  ; #loc: 192 112 4"
+    ]
+   },
+   "diff": "--- fixture is_valid_char.trust-ir.txt\n+++ live dump\n@@ -1,26 +1,26 @@\n-rustcc fn @env::native_reducers_char::is_valid_char(functy.359) {\n+rustcc fn @env::native_reducers_char::is_valid_char(functy.444) {\n     ; #producer: trust\n     ; #names: %0=\"n\"\n bb0(%0: u64):\n-    %3 = const u64 55296  ; #loc: 164 112 8\n-    %4 = icmp ult u64 %0, %3  ; #loc: 164 112 4\n-    condbr %4, bb2, bb1  ; #loc: 164 112 4\n+    %3 = const u64 55296  ; #loc: 192 112 8\n+    %4 = icmp ult u64 %0, %3  ; #loc: 192 112 4\n+    condbr %4, bb2, bb1  ; #loc: 192 112 4\n bb1:\n-    %5 = const u64 57343  ; #loc: 164 112 19\n-    %6 = icmp ult u64 %5, %0  ; #loc: 164 112 19\n-    condbr %6, bb4, bb5  ; #loc: 164 112 18\n+    %5 = const u64 57343  ; #loc: 192 112 19\n+    %6 = icmp ult u64 %5, %0  ; #loc: 192 112 19\n+    condbr %6, bb4, bb5  ; #loc: 192 112 18\n bb2:\n-    %7 = const bool true  ; #loc: 164 112 4\n-    br bb3(%7)  ; #loc: 164 112 4\n+    %7 = const bool true  ; #loc: 192 112 4\n+    br bb3(%7)  ; #loc: 192 112 4\n bb3(%1: bool):\n-    ret %1  ; #loc: 164 113 1\n+    ret %1  ; #loc: 192 113 1\n bb4:\n-    %8 = const u64 1114112  ; #loc: 164 112 37\n-    %9 = icmp ult u64 %0, %8  ; #loc: 164 112 33\n-    br bb6(%9)  ; #loc: 164 112 18\n+    %8 = const u64 1114112  ; #loc: 192 112 37\n+    %9 = icmp ult u64 %0, %8  ; #loc: 192 112 33\n+    br bb6(%9)  ; #loc: 192 112 18\n bb5:\n-    %10 = const bool false  ; #loc: 164 112 18\n-    br bb6(%10)  ; #loc: 164 112 18\n+    %10 = const bool false  ; #loc: 192 112 18\n+    br bb6(%10)  ; #loc: 192 112 18\n bb6(%2: bool):\n-    br bb3(%2)  ; #loc: 164 112 4\n+    br bb3(%2)  ; #loc: 192 112 4\n }\n",
+   "verdict": "NUMBERING-ONLY",
+   "at_head": {
+    "lineage": "sha256:ac70a37721f377c63ea0a923384cdc94cecbfefa8b78dc26b4d09b2ec57b2408",
+    "def_index": 18042,
+    "func_id": 1694,
+    "instr_count": 15,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir_verdict": "agreed",
+    "markers_exact": true,
+    "flip_event": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:18042 ~ clean_kernel[47a1]::env::native_reducers_char::is_valid_char), asserts=0, lineage=sha256:ac70a37721f377c63ea0a923384cdc94cecbfefa8b78dc26b4d09b2ec57b2408, flipped_so_far=394"
+   },
+   "pinned": {
+    "lineage": "sha256:da935567c5724781faa6452e47cfad70f384d98e8af6e60444280c219ee4512a",
+    "def_index": 16674,
+    "func_id": 1447,
+    "instr_count": 15
+   }
+  },
+  "expr_path_step_clone": {
+   "def_path": "<tc::expr_location::ExprPathStep as std::clone::Clone>::clone",
+   "classes": [
+    "functy-index",
+    "loc-file-index",
+    "type-table-index"
+   ],
+   "detail": {
+    "functy-index": [
+     "rustcc fn @<tc::expr_location::ExprPathStep as std::clone::Clone>::clone(functy.903) {  ->  rustcc fn @<tc::expr_location::ExprPathStep as std::clone::Clone>::clone(functy.1157) {"
+    ],
+    "type-table-index": [
+     "%2 = load enum.225, ptr %0  ; #loc: 243 28 16  ->  %2 = load enum.314, ptr %0  ; #loc: 298 28 16",
+     "%4 = const enum.225 { 0 }  ; #loc: 243 28 16  ->  %4 = const enum.314 { 0 }  ; #loc: 298 28 16",
+     "%5 = const enum.225 { 1 }  ; #loc: 243 28 16  ->  %5 = const enum.314 { 1 }  ; #loc: 298 28 16",
+     "%6 = const enum.225 { 2 }  ; #loc: 243 28 16  ->  %6 = const enum.314 { 2 }  ; #loc: 298 28 16",
+     "%7 = const enum.225 { 3 }  ; #loc: 243 28 16  ->  %7 = const enum.314 { 3 }  ; #loc: 298 28 16",
+     "%8 = const enum.225 { 4 }  ; #loc: 243 28 16  ->  %8 = const enum.314 { 4 }  ; #loc: 298 28 16",
+     "%9 = const enum.225 { 5 }  ; #loc: 243 28 16  ->  %9 = const enum.314 { 5 }  ; #loc: 298 28 16",
+     "%10 = const enum.225 { 6 }  ; #loc: 243 28 16  ->  %10 = const enum.314 { 6 }  ; #loc: 298 28 16",
+     "%11 = const enum.225 { 7 }  ; #loc: 243 28 16  ->  %11 = const enum.314 { 7 }  ; #loc: 298 28 16",
+     "%12 = const enum.225 { 8 }  ; #loc: 243 28 16  ->  %12 = const enum.314 { 8 }  ; #loc: 298 28 16",
+     "%13 = const enum.225 { 9 }  ; #loc: 243 28 16  ->  %13 = const enum.314 { 9 }  ; #loc: 298 28 16",
+     "%14 = const enum.225 { 10 }  ; #loc: 243 28 16  ->  %14 = const enum.314 { 10 }  ; #loc: 298 28 16",
+     "bb12(%1: enum.225):  ->  bb12(%1: enum.314):"
+    ],
+    "loc-file-index": [
+     "%2 = load enum.225, ptr %0  ; #loc: 243 28 16  ->  %2 = load enum.314, ptr %0  ; #loc: 298 28 16",
+     "%3 = extractfield u8 %2, 0  ; #loc: 243 28 16  ->  %3 = extractfield u8 %2, 0  ; #loc: 298 28 16",
+     "switch %3 [ 0: bb1 1: bb2 2: bb3 3: bb4 4: bb5 5: bb6 6: bb7 7: bb8 8: bb9 9: bb10 default: bb11 ]  ; #loc: 243 28 16  ->  switch %3 [ 0: bb1 1: bb2 2: bb3 3: bb4 4: bb5 5: bb6 6: bb7 7: bb8 8: bb9 9: bb10 default: bb11 ]  ; #loc: 298 28 16",
+     "%4 = const enum.225 { 0 }  ; #loc: 243 28 16  ->  %4 = const enum.314 { 0 }  ; #loc: 298 28 16",
+     "br bb12(%4)  ; #loc: 243 28 16  ->  br bb12(%4)  ; #loc: 298 28 16",
+     "%5 = const enum.225 { 1 }  ; #loc: 243 28 16  ->  %5 = const enum.314 { 1 }  ; #loc: 298 28 16",
+     "br bb12(%5)  ; #loc: 243 28 16  ->  br bb12(%5)  ; #loc: 298 28 16",
+     "%6 = const enum.225 { 2 }  ; #loc: 243 28 16  ->  %6 = const enum.314 { 2 }  ; #loc: 298 28 16",
+     "br bb12(%6)  ; #loc: 243 28 16  ->  br bb12(%6)  ; #loc: 298 28 16",
+     "%7 = const enum.225 { 3 }  ; #loc: 243 28 16  ->  %7 = const enum.314 { 3 }  ; #loc: 298 28 16",
+     "br bb12(%7)  ; #loc: 243 28 16  ->  br bb12(%7)  ; #loc: 298 28 16",
+     "%8 = const enum.225 { 4 }  ; #loc: 243 28 16  ->  %8 = const enum.314 { 4 }  ; #loc: 298 28 16",
+     "br bb12(%8)  ; #loc: 243 28 16  ->  br bb12(%8)  ; #loc: 298 28 16",
+     "%9 = const enum.225 { 5 }  ; #loc: 243 28 16  ->  %9 = const enum.314 { 5 }  ; #loc: 298 28 16",
+     "br bb12(%9)  ; #loc: 243 28 16  ->  br bb12(%9)  ; #loc: 298 28 16",
+     "%10 = const enum.225 { 6 }  ; #loc: 243 28 16  ->  %10 = const enum.314 { 6 }  ; #loc: 298 28 16",
+     "br bb12(%10)  ; #loc: 243 28 16  ->  br bb12(%10)  ; #loc: 298 28 16",
+     "%11 = const enum.225 { 7 }  ; #loc: 243 28 16  ->  %11 = const enum.314 { 7 }  ; #loc: 298 28 16",
+     "br bb12(%11)  ; #loc: 243 28 16  ->  br bb12(%11)  ; #loc: 298 28 16",
+     "%12 = const enum.225 { 8 }  ; #loc: 243 28 16  ->  %12 = const enum.314 { 8 }  ; #loc: 298 28 16",
+     "br bb12(%12)  ; #loc: 243 28 16  ->  br bb12(%12)  ; #loc: 298 28 16",
+     "%13 = const enum.225 { 9 }  ; #loc: 243 28 16  ->  %13 = const enum.314 { 9 }  ; #loc: 298 28 16",
+     "br bb12(%13)  ; #loc: 243 28 16  ->  br bb12(%13)  ; #loc: 298 28 16",
+     "%14 = const enum.225 { 10 }  ; #loc: 243 28 16  ->  %14 = const enum.314 { 10 }  ; #loc: 298 28 16",
+     "br bb12(%14)  ; #loc: 243 28 16  ->  br bb12(%14)  ; #loc: 298 28 16",
+     "ret %1  ; #loc: 243 28 16  ->  ret %1  ; #loc: 298 28 16"
+    ]
+   },
+   "diff": "--- fixture expr_path_step_clone.trust-ir.txt\n+++ live dump\n@@ -1,43 +1,43 @@\n-rustcc fn @<tc::expr_location::ExprPathStep as std::clone::Clone>::clone(functy.903) {\n+rustcc fn @<tc::expr_location::ExprPathStep as std::clone::Clone>::clone(functy.1157) {\n     ; #producer: trust\n     ; #names: %0=\"self\"\n bb0(%0: ptr):\n-    %2 = load enum.225, ptr %0  ; #loc: 243 28 16\n-    %3 = extractfield u8 %2, 0  ; #loc: 243 28 16\n-    switch %3 [ 0: bb1 1: bb2 2: bb3 3: bb4 4: bb5 5: bb6 6: bb7 7: bb8 8: bb9 9: bb10 default: bb11 ]  ; #loc: 243 28 16\n+    %2 = load enum.314, ptr %0  ; #loc: 298 28 16\n+    %3 = extractfield u8 %2, 0  ; #loc: 298 28 16\n+    switch %3 [ 0: bb1 1: bb2 2: bb3 3: bb4 4: bb5 5: bb6 6: bb7 7: bb8 8: bb9 9: bb10 default: bb11 ]  ; #loc: 298 28 16\n bb1:\n-    %4 = const enum.225 { 0 }  ; #loc: 243 28 16\n-    br bb12(%4)  ; #loc: 243 28 16\n+    %4 = const enum.314 { 0 }  ; #loc: 298 28 16\n+    br bb12(%4)  ; #loc: 298 28 16\n bb2:\n-    %5 = const enum.225 { 1 }  ; #loc: 243 28 16\n-    br bb12(%5)  ; #loc: 243 28 16\n+    %5 = const enum.314 { 1 }  ; #loc: 298 28 16\n+    br bb12(%5)  ; #loc: 298 28 16\n bb3:\n-    %6 = const enum.225 { 2 }  ; #loc: 243 28 16\n-    br bb12(%6)  ; #loc: 243 28 16\n+    %6 = const enum.314 { 2 }  ; #loc: 298 28 16\n+    br bb12(%6)  ; #loc: 298 28 16\n bb4:\n-    %7 = const enum.225 { 3 }  ; #loc: 243 28 16\n-    br bb12(%7)  ; #loc: 243 28 16\n+    %7 = const enum.314 { 3 }  ; #loc: 298 28 16\n+    br bb12(%7)  ; #loc: 298 28 16\n bb5:\n-    %8 = const enum.225 { 4 }  ; #loc: 243 28 16\n-    br bb12(%8)  ; #loc: 243 28 16\n+    %8 = const enum.314 { 4 }  ; #loc: 298 28 16\n+    br bb12(%8)  ; #loc: 298 28 16\n bb6:\n-    %9 = const enum.225 { 5 }  ; #loc: 243 28 16\n-    br bb12(%9)  ; #loc: 243 28 16\n+    %9 = const enum.314 { 5 }  ; #loc: 298 28 16\n+    br bb12(%9)  ; #loc: 298 28 16\n bb7:\n-    %10 = const enum.225 { 6 }  ; #loc: 243 28 16\n-    br bb12(%10)  ; #loc: 243 28 16\n+    %10 = const enum.314 { 6 }  ; #loc: 298 28 16\n+    br bb12(%10)  ; #loc: 298 28 16\n bb8:\n-    %11 = const enum.225 { 7 }  ; #loc: 243 28 16\n-    br bb12(%11)  ; #loc: 243 28 16\n+    %11 = const enum.314 { 7 }  ; #loc: 298 28 16\n+    br bb12(%11)  ; #loc: 298 28 16\n bb9:\n-    %12 = const enum.225 { 8 }  ; #loc: 243 28 16\n-    br bb12(%12)  ; #loc: 243 28 16\n+    %12 = const enum.314 { 8 }  ; #loc: 298 28 16\n+    br bb12(%12)  ; #loc: 298 28 16\n bb10:\n-    %13 = const enum.225 { 9 }  ; #loc: 243 28 16\n-    br bb12(%13)  ; #loc: 243 28 16\n+    %13 = const enum.314 { 9 }  ; #loc: 298 28 16\n+    br bb12(%13)  ; #loc: 298 28 16\n bb11:\n-    %14 = const enum.225 { 10 }  ; #loc: 243 28 16\n-    br bb12(%14)  ; #loc: 243 28 16\n-bb12(%1: enum.225):\n-    ret %1  ; #loc: 243 28 16\n+    %14 = const enum.314 { 10 }  ; #loc: 298 28 16\n+    br bb12(%14)  ; #loc: 298 28 16\n+bb12(%1: enum.314):\n+    ret %1  ; #loc: 298 28 16\n }\n",
+   "verdict": "NUMBERING-ONLY",
+   "at_head": {
+    "lineage": "sha256:a2b98ac66b891771e3497a687b71a206d91bdd3728d3a3195877279681cb4046",
+    "def_index": 46043,
+    "func_id": 4973,
+    "instr_count": 26,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir_verdict": "agreed",
+    "markers_exact": true,
+    "flip_event": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:46043 ~ clean_kernel[47a1]::tc::expr_location::{impl#4}::clone), asserts=0, lineage=sha256:a2b98ac66b891771e3497a687b71a206d91bdd3728d3a3195877279681cb4046, flipped_so_far=362"
+   },
+   "pinned": {
+    "lineage": "sha256:f1787a2586d3874cf46f599e3967cf5002c5f6eda44c053775e253f710089271",
+    "def_index": 38656,
+    "func_id": 4113,
+    "instr_count": 26
+   }
+  },
+  "float_div": {
+   "def_path": "env::native_reducers_float::reduce_float_div::{closure#0}",
+   "classes": [
+    "functy-index",
+    "loc-file-index"
+   ],
+   "detail": {
+    "functy-index": [
+     "rustcc fn @env::native_reducers_float::reduce_float_div::{closure#0}(functy.363) {  ->  rustcc fn @env::native_reducers_float::reduce_float_div::{closure#0}(functy.448) {"
+    ],
+    "loc-file-index": [
+     "%3 = fdiv f64 %1, %2  ; #loc: 168 222 33  ->  %3 = fdiv f64 %1, %2  ; #loc: 196 222 33",
+     "ret %3  ; #loc: 168 222 38  ->  ret %3  ; #loc: 196 222 38"
+    ]
+   },
+   "diff": "--- fixture float_div.trust-ir.txt\n+++ live dump\n@@ -1,7 +1,7 @@\n-rustcc fn @env::native_reducers_float::reduce_float_div::{closure#0}(functy.363) {\n+rustcc fn @env::native_reducers_float::reduce_float_div::{closure#0}(functy.448) {\n     ; #producer: trust\n     ; #names: %1=\"a\", %2=\"b\"\n bb0(%0: ptr, %1: f64, %2: f64):\n-    %3 = fdiv f64 %1, %2  ; #loc: 168 222 33\n-    ret %3  ; #loc: 168 222 38\n+    %3 = fdiv f64 %1, %2  ; #loc: 196 222 33\n+    ret %3  ; #loc: 196 222 38\n }\n",
+   "verdict": "NUMBERING-ONLY",
+   "at_head": {
+    "lineage": "sha256:9684e026df94d9ff504cd47109b99d055e969b57550f55b312c818502623535b",
+    "def_index": 18250,
+    "func_id": 1750,
+    "instr_count": 2,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir_verdict": "agreed",
+    "markers_exact": true,
+    "flip_event": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:18250 ~ clean_kernel[47a1]::env::native_reducers_float::reduce_float_div::{closure#0}), asserts=0, lineage=sha256:9684e026df94d9ff504cd47109b99d055e969b57550f55b312c818502623535b, flipped_so_far=420"
+   },
+   "pinned": {
+    "lineage": "sha256:2c2b7aaa8d93e8ca7353080e0ea4e6c019fbde01ef1412d14ba0dca8a225d5f0",
+    "def_index": 16882,
+    "func_id": 1503,
+    "instr_count": 2
+   }
+  },
+  "get_char_val_trunc": {
+   "def_path": "env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}",
+   "classes": [
+    "functy-index",
+    "loc-file-index"
+   ],
+   "detail": {
+    "functy-index": [
+     "rustcc fn @env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}(functy.352) {  ->  rustcc fn @env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}(functy.437) {"
+    ],
+    "loc-file-index": [
+     "%2 = trunc u64 %1 to u32  ; #loc: 161 120 60  ->  %2 = trunc u64 %1 to u32  ; #loc: 189 120 60",
+     "ret %2  ; #loc: 161 120 68  ->  ret %2  ; #loc: 189 120 68"
+    ]
+   },
+   "diff": "--- fixture get_char_val_trunc.trust-ir.txt\n+++ live dump\n@@ -1,7 +1,7 @@\n-rustcc fn @env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}(functy.352) {\n+rustcc fn @env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}(functy.437) {\n     ; #producer: trust\n     ; #names: %1=\"n\"\n bb0(%0: (), %1: u64):\n-    %2 = trunc u64 %1 to u32  ; #loc: 161 120 60\n-    ret %2  ; #loc: 161 120 68\n+    %2 = trunc u64 %1 to u32  ; #loc: 189 120 60\n+    ret %2  ; #loc: 189 120 68\n }\n",
+   "verdict": "NUMBERING-ONLY",
+   "at_head": {
+    "lineage": "sha256:268840310c10f60d26472575c5902e66ae50865530a22a6634ecc540fd608077",
+    "def_index": 17875,
+    "func_id": 1661,
+    "instr_count": 2,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir_verdict": "agreed",
+    "markers_exact": true,
+    "flip_event": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:17875 ~ clean_kernel[47a1]::env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}), asserts=0, lineage=sha256:268840310c10f60d26472575c5902e66ae50865530a22a6634ecc540fd608077, flipped_so_far=395"
+   },
+   "pinned": {
+    "lineage": "sha256:2bc788de73894ba42da5eea9e28a3ce9782c8acfc9c9d3c307784ce1aa9d5933",
+    "def_index": 16507,
+    "func_id": 1414,
+    "instr_count": 2
+   }
+  },
+  "meta_tag_shl": {
+   "def_path": "tc::local_context::LocalContext::push_low_local::META_TAG",
+   "classes": [
+    "functy-index",
+    "loc-file-index"
+   ],
+   "detail": {
+    "functy-index": [
+     "rustcc fn @tc::local_context::LocalContext::push_low_local::META_TAG::{const-init}(functy.116) {  ->  rustcc fn @tc::local_context::LocalContext::push_low_local::META_TAG::{const-init}(functy.117) {"
+    ],
+    "loc-file-index": [
+     "%0 = const u64 1  ; #loc: 254 157 30  ->  %0 = const u64 1  ; #loc: 311 157 30",
+     "%1 = const i32 63  ; #loc: 254 157 38  ->  %1 = const i32 63  ; #loc: 311 157 38",
+     "%2 = bitcast i32 %1 to u32  ; #loc: 254 157 30  ->  %2 = bitcast i32 %1 to u32  ; #loc: 311 157 30",
+     "%3 = const u32 64  ; #loc: 254 157 30  ->  %3 = const u32 64  ; #loc: 311 157 30",
+     "%4 = icmp ult u32 %2, %3  ; #loc: 254 157 30  ->  %4 = icmp ult u32 %2, %3  ; #loc: 311 157 30",
+     "assert %4  ; #proof: shift_in_range  ; #loc: 254 157 30  ->  assert %4  ; #proof: shift_in_range  ; #loc: 311 157 30",
+     "%6 = shl u64 %0, %5  ; #loc: 254 157 30  ->  %6 = shl u64 %0, %5  ; #loc: 311 157 30",
+     "ret %6  ; #loc: 254 157 40  ->  ret %6  ; #loc: 311 157 40"
+    ]
+   },
+   "diff": "--- fixture meta_tag_shl.trust-ir.txt\n+++ live dump\n@@ -1,13 +1,13 @@\n-rustcc fn @tc::local_context::LocalContext::push_low_local::META_TAG::{const-init}(functy.116) {\n+rustcc fn @tc::local_context::LocalContext::push_low_local::META_TAG::{const-init}(functy.117) {\n     ; #producer: trust\n bb0:\n-    %0 = const u64 1  ; #loc: 254 157 30\n-    %1 = const i32 63  ; #loc: 254 157 38\n-    %2 = bitcast i32 %1 to u32  ; #loc: 254 157 30\n-    %3 = const u32 64  ; #loc: 254 157 30\n-    %4 = icmp ult u32 %2, %3  ; #loc: 254 157 30\n-    assert %4  ; #proof: shift_in_range  ; #loc: 254 157 30\n+    %0 = const u64 1  ; #loc: 311 157 30\n+    %1 = const i32 63  ; #loc: 311 157 38\n+    %2 = bitcast i32 %1 to u32  ; #loc: 311 157 30\n+    %3 = const u32 64  ; #loc: 311 157 30\n+    %4 = icmp ult u32 %2, %3  ; #loc: 311 157 30\n+    assert %4  ; #proof: shift_in_range  ; #loc: 311 157 30\n     %5 = sext i32 %1 to u64\n-    %6 = shl u64 %0, %5  ; #loc: 254 157 30\n-    ret %6  ; #loc: 254 157 40\n+    %6 = shl u64 %0, %5  ; #loc: 311 157 30\n+    ret %6  ; #loc: 311 157 40\n }\n",
+   "verdict": "NUMBERING-ONLY",
+   "at_head": {
+    "lineage": "sha256:5f1f1946e4c2b2a65784fe7b8ec6cea1cc46d6be298dce03f7cbeba7f5e53cb8",
+    "def_index": 24438,
+    "func_id": 2881,
+    "instr_count": 9,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir_verdict": "agreed",
+    "markers_exact": true,
+    "flip_event": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: CTFE compiled from trust-ir, did=DefId(0:24438 ~ clean_kernel[47a1]::tc::local_context::{impl#0}::push_low_local::META_TAG), asserts=1, lineage=sha256:5f1f1946e4c2b2a65784fe7b8ec6cea1cc46d6be298dce03f7cbeba7f5e53cb8, flipped_so_far=33"
+   },
+   "pinned": {
+    "lineage": "sha256:63a448e3459cecaa6bad428c8e4abc19bdcd45a4911f27062b3b882ed82dccbd",
+    "def_index": 21628,
+    "func_id": 2436,
+    "instr_count": 9
+   }
+  },
+  "level_is_zero": {
+   "def_path": "level::Level::is_zero",
+   "classes": [
+    "callee-index",
+    "loc-file-index"
+   ],
+   "detail": {
+    "loc-file-index": [
+     "%3 = load enum.3, ptr %0  ; #loc: 204 545 8  ->  %3 = load enum.3, ptr %0  ; #loc: 255 545 8",
+     "%4 = extractfield u8 %3, 0  ; #loc: 204 545 8  ->  %4 = extractfield u8 %3, 0  ; #loc: 255 545 8",
+     "switch %4 [ 0: bb1 1: bb2 4: bb3 2: bb4 default: bb5 ]  ; #loc: 204 545 8  ->  switch %4 [ 0: bb1 1: bb2 4: bb3 2: bb4 default: bb5 ]  ; #loc: 255 545 8",
+     "%5 = const bool true  ; #loc: 204 546 27  ->  %5 = const bool true  ; #loc: 255 546 27",
+     "br bb6(%5)  ; #loc: 204 545 8  ->  br bb6(%5)  ; #loc: 255 545 8",
+     "%6 = const bool false  ; #loc: 204 547 48  ->  %6 = const bool false  ; #loc: 255 547 48",
+     "br bb6(%6)  ; #loc: 204 545 8  ->  br bb6(%6)  ; #loc: 255 545 8",
+     "%7 = const bool false  ; #loc: 204 547 48  ->  %7 = const bool false  ; #loc: 255 547 48",
+     "br bb6(%7)  ; #loc: 204 545 8  ->  br bb6(%7)  ; #loc: 255 545 8",
+     "%8 = const i64 8  ; #loc: 204 545 8  ->  %8 = const i64 8  ; #loc: 255 545 8",
+     "%9 = gep inbounds i8, ptr %0, %8  ; #loc: 204 545 8  ->  %9 = gep inbounds i8, ptr %0, %8  ; #loc: 255 545 8",
+     "%10 = const i64 16  ; #loc: 204 545 8  ->  %10 = const i64 16  ; #loc: 255 545 8",
+     "%11 = gep inbounds i8, ptr %0, %10  ; #loc: 204 545 8  ->  %11 = gep inbounds i8, ptr %0, %10  ; #loc: 255 545 8",
+     "%12 = call @func.1947(%9)  ; #loc: 204 548 34  ->  %12 = call @func.2337(%9)  ; #loc: 255 548 34",
+     "%13 = call @func.1961(%12)  ; #loc: 204 548 37  ->  %13 = call @func.2351(%12)  ; #loc: 255 548 37",
+     "condbr %13, bb7, bb8  ; #loc: 204 548 34  ->  condbr %13, bb7, bb8  ; #loc: 255 548 34",
+     "%14 = const i64 16  ; #loc: 204 545 8  ->  %14 = const i64 16  ; #loc: 255 545 8",
+     "%15 = gep inbounds i8, ptr %0, %14  ; #loc: 204 545 8  ->  %15 = gep inbounds i8, ptr %0, %14  ; #loc: 255 545 8",
+     "%16 = call @func.1947(%15)  ; #loc: 204 549 34  ->  %16 = call @func.2337(%15)  ; #loc: 255 549 34",
+     "%17 = call @func.1961(%16)  ; #loc: 204 549 37  ->  %17 = call @func.2351(%16)  ; #loc: 255 549 37",
+     "br bb6(%17)  ; #loc: 204 545 8  ->  br bb6(%17)  ; #loc: 255 545 8",
+     "ret %1  ; #loc: 204 551 5  ->  ret %1  ; #loc: 255 551 5",
+     "%18 = call @func.1947(%11)  ; #loc: 204 548 50  ->  %18 = call @func.2337(%11)  ; #loc: 255 548 50",
+     "%19 = call @func.1961(%18)  ; #loc: 204 548 53  ->  %19 = call @func.2351(%18)  ; #loc: 255 548 53",
+     "br bb9(%19)  ; #loc: 204 548 34  ->  br bb9(%19)  ; #loc: 255 548 34",
+     "%20 = const bool false  ; #loc: 204 548 34  ->  %20 = const bool false  ; #loc: 255 548 34",
+     "br bb9(%20)  ; #loc: 204 548 34  ->  br bb9(%20)  ; #loc: 255 548 34",
+     "br bb6(%2)  ; #loc: 204 545 8  ->  br bb6(%2)  ; #loc: 255 545 8"
+    ],
+    "callee-index": [
+     "%12 = call @func.1947(%9)  ; #loc: 204 548 34  ->  %12 = call @func.2337(%9)  ; #loc: 255 548 34",
+     "%13 = call @func.1961(%12)  ; #loc: 204 548 37  ->  %13 = call @func.2351(%12)  ; #loc: 255 548 37",
+     "%16 = call @func.1947(%15)  ; #loc: 204 549 34  ->  %16 = call @func.2337(%15)  ; #loc: 255 549 34",
+     "%17 = call @func.1961(%16)  ; #loc: 204 549 37  ->  %17 = call @func.2351(%16)  ; #loc: 255 549 37",
+     "%18 = call @func.1947(%11)  ; #loc: 204 548 50  ->  %18 = call @func.2337(%11)  ; #loc: 255 548 50",
+     "%19 = call @func.1961(%18)  ; #loc: 204 548 53  ->  %19 = call @func.2351(%18)  ; #loc: 255 548 53"
+    ]
+   },
+   "diff": "--- fixture level_is_zero.trust-ir.txt\n+++ live dump\n@@ -2,41 +2,41 @@\n     ; #producer: trust\n     ; #names: %0=\"self\"\n bb0(%0: ptr):\n-    %3 = load enum.3, ptr %0  ; #loc: 204 545 8\n-    %4 = extractfield u8 %3, 0  ; #loc: 204 545 8\n-    switch %4 [ 0: bb1 1: bb2 4: bb3 2: bb4 default: bb5 ]  ; #loc: 204 545 8\n+    %3 = load enum.3, ptr %0  ; #loc: 255 545 8\n+    %4 = extractfield u8 %3, 0  ; #loc: 255 545 8\n+    switch %4 [ 0: bb1 1: bb2 4: bb3 2: bb4 default: bb5 ]  ; #loc: 255 545 8\n bb1:\n-    %5 = const bool true  ; #loc: 204 546 27\n-    br bb6(%5)  ; #loc: 204 545 8\n+    %5 = const bool true  ; #loc: 255 546 27\n+    br bb6(%5)  ; #loc: 255 545 8\n bb2:\n-    %6 = const bool false  ; #loc: 204 547 48\n-    br bb6(%6)  ; #loc: 204 545 8\n+    %6 = const bool false  ; #loc: 255 547 48\n+    br bb6(%6)  ; #loc: 255 545 8\n bb3:\n-    %7 = const bool false  ; #loc: 204 547 48\n-    br bb6(%7)  ; #loc: 204 545 8\n+    %7 = const bool false  ; #loc: 255 547 48\n+    br bb6(%7)  ; #loc: 255 545 8\n bb4:\n-    %8 = const i64 8  ; #loc: 204 545 8\n-    %9 = gep inbounds i8, ptr %0, %8  ; #loc: 204 545 8\n-    %10 = const i64 16  ; #loc: 204 545 8\n-    %11 = gep inbounds i8, ptr %0, %10  ; #loc: 204 545 8\n-    %12 = call @func.1947(%9)  ; #loc: 204 548 34\n-    %13 = call @func.1961(%12)  ; #loc: 204 548 37\n-    condbr %13, bb7, bb8  ; #loc: 204 548 34\n+    %8 = const i64 8  ; #loc: 255 545 8\n+    %9 = gep inbounds i8, ptr %0, %8  ; #loc: 255 545 8\n+    %10 = const i64 16  ; #loc: 255 545 8\n+    %11 = gep inbounds i8, ptr %0, %10  ; #loc: 255 545 8\n+    %12 = call @func.2337(%9)  ; #loc: 255 548 34\n+    %13 = call @func.2351(%12)  ; #loc: 255 548 37\n+    condbr %13, bb7, bb8  ; #loc: 255 548 34\n bb5:\n-    %14 = const i64 16  ; #loc: 204 545 8\n-    %15 = gep inbounds i8, ptr %0, %14  ; #loc: 204 545 8\n-    %16 = call @func.1947(%15)  ; #loc: 204 549 34\n-    %17 = call @func.1961(%16)  ; #loc: 204 549 37\n-    br bb6(%17)  ; #loc: 204 545 8\n+    %14 = const i64 16  ; #loc: 255 545 8\n+    %15 = gep inbounds i8, ptr %0, %14  ; #loc: 255 545 8\n+    %16 = call @func.2337(%15)  ; #loc: 255 549 34\n+    %17 = call @func.2351(%16)  ; #loc: 255 549 37\n+    br bb6(%17)  ; #loc: 255 545 8\n bb6(%1: bool):\n-    ret %1  ; #loc: 204 551 5\n+    ret %1  ; #loc: 255 551 5\n bb7:\n-    %18 = call @func.1947(%11)  ; #loc: 204 548 50\n-    %19 = call @func.1961(%18)  ; #loc: 204 548 53\n-    br bb9(%19)  ; #loc: 204 548 34\n+    %18 = call @func.2337(%11)  ; #loc: 255 548 50\n+    %19 = call @func.2351(%18)  ; #loc: 255 548 53\n+    br bb9(%19)  ; #loc: 255 548 34\n bb8:\n-    %20 = const bool false  ; #loc: 204 548 34\n-    br bb9(%20)  ; #loc: 204 548 34\n+    %20 = const bool false  ; #loc: 255 548 34\n+    br bb9(%20)  ; #loc: 255 548 34\n bb9(%2: bool):\n-    br bb6(%2)  ; #loc: 204 545 8\n+    br bb6(%2)  ; #loc: 255 545 8\n }\n",
+   "verdict": "NUMBERING-ONLY",
+   "at_head": {
+    "lineage": "sha256:2d922ad0255d0a6332706a579d91d0df353844b01c581696413b1e1ee3468aac",
+    "def_index": 21248,
+    "func_id": 2351,
+    "instr_count": 28,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 6,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir_verdict": "agreed",
+    "markers_exact": true,
+    "flip_event": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:21248 ~ clean_kernel[47a1]::level::{impl#18}::is_zero), asserts=0, lineage=sha256:2d922ad0255d0a6332706a579d91d0df353844b01c581696413b1e1ee3468aac, flipped_so_far=85"
+   },
+   "pinned": {
+    "lineage": "sha256:72bace631bad67e0cee6c76802b0697d0af3c3e882507c1e73b71fd2a5f94c97",
+    "def_index": 18802,
+    "func_id": 1961,
+    "instr_count": 28
+   }
+  },
+  "float_add": {
+   "def_path": "env::native_reducers_float::reduce_float_add::{closure#0}",
+   "classes": [
+    "functy-index",
+    "loc-file-index"
+   ],
+   "detail": {
+    "functy-index": [
+     "rustcc fn @env::native_reducers_float::reduce_float_add::{closure#0}(functy.363) {  ->  rustcc fn @env::native_reducers_float::reduce_float_add::{closure#0}(functy.448) {"
+    ],
+    "loc-file-index": [
+     "%3 = fadd f64 %1, %2  ; #loc: 168 210 33  ->  %3 = fadd f64 %1, %2  ; #loc: 196 210 33",
+     "ret %3  ; #loc: 168 210 38  ->  ret %3  ; #loc: 196 210 38"
+    ]
+   },
+   "diff": "--- fixture float_add.trust-ir.txt\n+++ live dump\n@@ -1,7 +1,7 @@\n-rustcc fn @env::native_reducers_float::reduce_float_add::{closure#0}(functy.363) {\n+rustcc fn @env::native_reducers_float::reduce_float_add::{closure#0}(functy.448) {\n     ; #producer: trust\n     ; #names: %1=\"a\", %2=\"b\"\n bb0(%0: ptr, %1: f64, %2: f64):\n-    %3 = fadd f64 %1, %2  ; #loc: 168 210 33\n-    ret %3  ; #loc: 168 210 38\n+    %3 = fadd f64 %1, %2  ; #loc: 196 210 33\n+    ret %3  ; #loc: 196 210 38\n }\n",
+   "verdict": "NUMBERING-ONLY",
+   "at_head": {
+    "lineage": "sha256:54289aa4f03898c876a16e24ba631f4d8223d2a433e38e8c24a5ebfbe6a67efd",
+    "def_index": 18244,
+    "func_id": 1747,
+    "instr_count": 2,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir_verdict": "agreed",
+    "markers_exact": true,
+    "flip_event": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:18244 ~ clean_kernel[47a1]::env::native_reducers_float::reduce_float_add::{closure#0}), asserts=0, lineage=sha256:54289aa4f03898c876a16e24ba631f4d8223d2a433e38e8c24a5ebfbe6a67efd, flipped_so_far=417"
+   },
+   "pinned": {
+    "lineage": "sha256:6ea882530d7228e4995bb57437266c86d8264f2a88cdc1135b271b4de7d6171b",
+    "def_index": 16876,
+    "func_id": 1500,
+    "instr_count": 2
+   }
+  },
+  "float_sub": {
+   "def_path": "env::native_reducers_float::reduce_float_sub::{closure#0}",
+   "classes": [
+    "functy-index",
+    "loc-file-index"
+   ],
+   "detail": {
+    "functy-index": [
+     "rustcc fn @env::native_reducers_float::reduce_float_sub::{closure#0}(functy.363) {  ->  rustcc fn @env::native_reducers_float::reduce_float_sub::{closure#0}(functy.448) {"
+    ],
+    "loc-file-index": [
+     "%3 = fsub f64 %1, %2  ; #loc: 168 214 33  ->  %3 = fsub f64 %1, %2  ; #loc: 196 214 33",
+     "ret %3  ; #loc: 168 214 38  ->  ret %3  ; #loc: 196 214 38"
+    ]
+   },
+   "diff": "--- fixture float_sub.trust-ir.txt\n+++ live dump\n@@ -1,7 +1,7 @@\n-rustcc fn @env::native_reducers_float::reduce_float_sub::{closure#0}(functy.363) {\n+rustcc fn @env::native_reducers_float::reduce_float_sub::{closure#0}(functy.448) {\n     ; #producer: trust\n     ; #names: %1=\"a\", %2=\"b\"\n bb0(%0: ptr, %1: f64, %2: f64):\n-    %3 = fsub f64 %1, %2  ; #loc: 168 214 33\n-    ret %3  ; #loc: 168 214 38\n+    %3 = fsub f64 %1, %2  ; #loc: 196 214 33\n+    ret %3  ; #loc: 196 214 38\n }\n",
+   "verdict": "NUMBERING-ONLY",
+   "at_head": {
+    "lineage": "sha256:1388d6aeca7994b4b5cf037e9ff24c04235f944b3274dc67275268f3393598b3",
+    "def_index": 18246,
+    "func_id": 1748,
+    "instr_count": 2,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir_verdict": "agreed",
+    "markers_exact": true,
+    "flip_event": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:18246 ~ clean_kernel[47a1]::env::native_reducers_float::reduce_float_sub::{closure#0}), asserts=0, lineage=sha256:1388d6aeca7994b4b5cf037e9ff24c04235f944b3274dc67275268f3393598b3, flipped_so_far=418"
+   },
+   "pinned": {
+    "lineage": "sha256:9bee539bf3dc9990f2eb9c353d73aef8f04fa9b67395de580ab6ffeeee6ca351",
+    "def_index": 16878,
+    "func_id": 1501,
+    "instr_count": 2
+   }
+  },
+  "float_mul": {
+   "def_path": "env::native_reducers_float::reduce_float_mul::{closure#0}",
+   "classes": [
+    "functy-index",
+    "loc-file-index"
+   ],
+   "detail": {
+    "functy-index": [
+     "rustcc fn @env::native_reducers_float::reduce_float_mul::{closure#0}(functy.363) {  ->  rustcc fn @env::native_reducers_float::reduce_float_mul::{closure#0}(functy.448) {"
+    ],
+    "loc-file-index": [
+     "%3 = fmul f64 %1, %2  ; #loc: 168 218 33  ->  %3 = fmul f64 %1, %2  ; #loc: 196 218 33",
+     "ret %3  ; #loc: 168 218 38  ->  ret %3  ; #loc: 196 218 38"
+    ]
+   },
+   "diff": "--- fixture float_mul.trust-ir.txt\n+++ live dump\n@@ -1,7 +1,7 @@\n-rustcc fn @env::native_reducers_float::reduce_float_mul::{closure#0}(functy.363) {\n+rustcc fn @env::native_reducers_float::reduce_float_mul::{closure#0}(functy.448) {\n     ; #producer: trust\n     ; #names: %1=\"a\", %2=\"b\"\n bb0(%0: ptr, %1: f64, %2: f64):\n-    %3 = fmul f64 %1, %2  ; #loc: 168 218 33\n-    ret %3  ; #loc: 168 218 38\n+    %3 = fmul f64 %1, %2  ; #loc: 196 218 33\n+    ret %3  ; #loc: 196 218 38\n }\n",
+   "verdict": "NUMBERING-ONLY",
+   "at_head": {
+    "lineage": "sha256:ddd93ae3cc30dad269cc2ba4f37c0e8e20051c336afb670e6461abc9e9cdc651",
+    "def_index": 18248,
+    "func_id": 1749,
+    "instr_count": 2,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir_verdict": "agreed",
+    "markers_exact": true,
+    "flip_event": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:18248 ~ clean_kernel[47a1]::env::native_reducers_float::reduce_float_mul::{closure#0}), asserts=0, lineage=sha256:ddd93ae3cc30dad269cc2ba4f37c0e8e20051c336afb670e6461abc9e9cdc651, flipped_so_far=419"
+   },
+   "pinned": {
+    "lineage": "sha256:e2f0153fbae5987d381bf26a753b140b52eb07c4e796664ef99ee0846a6789d0",
+    "def_index": 16880,
+    "func_id": 1502,
+    "instr_count": 2
+   }
+  },
+  "strict_monads": {
+   "def_path": "env::Environment::set_lean4_core_strict_monads",
+   "classes": [
+    "functy-index",
+    "loc-file-index",
+    "type-table-index"
+   ],
+   "detail": {
+    "functy-index": [
+     "rustcc fn @env::Environment::set_lean4_core_strict_monads(functy.385) {  ->  rustcc fn @env::Environment::set_lean4_core_strict_monads(functy.470) {"
+    ],
+    "type-table-index": [
+     "%2 = load struct.586, ptr %0  ; #loc: 180 3784 8  ->  %2 = load struct.547, ptr %0  ; #loc: 208 3932 8",
+     "%3 = insertfield struct.586 %2, 83, %1  ; #loc: 180 3784 8  ->  %3 = insertfield struct.547 %2, 83, %1  ; #loc: 208 3932 8",
+     "store struct.586 %3, ptr %0  ; #loc: 180 3784 8  ->  store struct.547 %3, ptr %0  ; #loc: 208 3932 8"
+    ],
+    "loc-file-index": [
+     "%2 = load struct.586, ptr %0  ; #loc: 180 3784 8  ->  %2 = load struct.547, ptr %0  ; #loc: 208 3932 8",
+     "%3 = insertfield struct.586 %2, 83, %1  ; #loc: 180 3784 8  ->  %3 = insertfield struct.547 %2, 83, %1  ; #loc: 208 3932 8",
+     "store struct.586 %3, ptr %0  ; #loc: 180 3784 8  ->  store struct.547 %3, ptr %0  ; #loc: 208 3932 8",
+     "ret  ; #loc: 180 3785 5  ->  ret  ; #loc: 208 3933 5"
+    ]
+   },
+   "diff": "--- fixture strict_monads.trust-ir.txt\n+++ live dump\n@@ -1,9 +1,9 @@\n-rustcc fn @env::Environment::set_lean4_core_strict_monads(functy.385) {\n+rustcc fn @env::Environment::set_lean4_core_strict_monads(functy.470) {\n     ; #producer: trust\n     ; #names: %0=\"self\", %1=\"strict\"\n bb0(%0: ptr, %1: bool):\n-    %2 = load struct.586, ptr %0  ; #loc: 180 3784 8\n-    %3 = insertfield struct.586 %2, 83, %1  ; #loc: 180 3784 8\n-    store struct.586 %3, ptr %0  ; #loc: 180 3784 8\n-    ret  ; #loc: 180 3785 5\n+    %2 = load struct.547, ptr %0  ; #loc: 208 3932 8\n+    %3 = insertfield struct.547 %2, 83, %1  ; #loc: 208 3932 8\n+    store struct.547 %3, ptr %0  ; #loc: 208 3932 8\n+    ret  ; #loc: 208 3933 5\n }\n",
+   "verdict": "NUMBERING-ONLY",
+   "at_head": {
+    "lineage": "sha256:5d34c8562e32835497ff0cbc46564baa67498f8701155f1aa6f81a22fab095d6",
+    "def_index": 18898,
+    "func_id": 1887,
+    "instr_count": 4,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir_verdict": "agreed",
+    "markers_exact": true,
+    "flip_event": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:18898 ~ clean_kernel[47a1]::env::{impl#0}::set_lean4_core_strict_monads), asserts=0, lineage=sha256:5d34c8562e32835497ff0cbc46564baa67498f8701155f1aa6f81a22fab095d6, flipped_so_far=103"
+   },
+   "pinned": {
+    "lineage": "sha256:c2ef759ef3b24431ca65eb7dd1679a9d50e65d697083b180caefc38374d4440b",
+    "def_index": 17525,
+    "func_id": 1640,
+    "instr_count": 4
+   }
+  },
+  "flat_flags_with": {
+   "def_path": "flat::types::FlatFlags::with",
+   "classes": [
+    "functy-index",
+    "loc-file-index",
+    "type-table-index"
+   ],
+   "detail": {
+    "functy-index": [
+     "rustcc fn @flat::types::FlatFlags::with(functy.460) {  ->  rustcc fn @flat::types::FlatFlags::with(functy.605) {"
+    ],
+    "type-table-index": [
+     "bb0(%0: struct.815, %1: struct.815):  ->  bb0(%0: struct.991, %1: struct.991):",
+     "%5 = const struct.815 { 0 }  ; #loc: 201 96 8  ->  %5 = const struct.991 { 0 }  ; #loc: 250 96 8",
+     "%6 = insertfield struct.815 %5, 0, %4  ; #loc: 201 96 8  ->  %6 = insertfield struct.991 %5, 0, %4  ; #loc: 250 96 8"
+    ],
+    "loc-file-index": [
+     "%2 = extractfield u8 %0, 0  ; #loc: 201 96 18  ->  %2 = extractfield u8 %0, 0  ; #loc: 250 96 18",
+     "%3 = extractfield u8 %1, 0  ; #loc: 201 96 27  ->  %3 = extractfield u8 %1, 0  ; #loc: 250 96 27",
+     "%4 = or u8 %2, %3  ; #loc: 201 96 18  ->  %4 = or u8 %2, %3  ; #loc: 250 96 18",
+     "%5 = const struct.815 { 0 }  ; #loc: 201 96 8  ->  %5 = const struct.991 { 0 }  ; #loc: 250 96 8",
+     "%6 = insertfield struct.815 %5, 0, %4  ; #loc: 201 96 8  ->  %6 = insertfield struct.991 %5, 0, %4  ; #loc: 250 96 8",
+     "ret %6  ; #loc: 201 97 5  ->  ret %6  ; #loc: 250 97 5"
+    ]
+   },
+   "diff": "--- fixture flat_flags_with.trust-ir.txt\n+++ live dump\n@@ -1,11 +1,11 @@\n-rustcc fn @flat::types::FlatFlags::with(functy.460) {\n+rustcc fn @flat::types::FlatFlags::with(functy.605) {\n     ; #producer: trust\n     ; #names: %0=\"self\", %1=\"other\"\n-bb0(%0: struct.815, %1: struct.815):\n-    %2 = extractfield u8 %0, 0  ; #loc: 201 96 18\n-    %3 = extractfield u8 %1, 0  ; #loc: 201 96 27\n-    %4 = or u8 %2, %3  ; #loc: 201 96 18\n-    %5 = const struct.815 { 0 }  ; #loc: 201 96 8\n-    %6 = insertfield struct.815 %5, 0, %4  ; #loc: 201 96 8\n-    ret %6  ; #loc: 201 97 5\n+bb0(%0: struct.991, %1: struct.991):\n+    %2 = extractfield u8 %0, 0  ; #loc: 250 96 18\n+    %3 = extractfield u8 %1, 0  ; #loc: 250 96 27\n+    %4 = or u8 %2, %3  ; #loc: 250 96 18\n+    %5 = const struct.991 { 0 }  ; #loc: 250 96 8\n+    %6 = insertfield struct.991 %5, 0, %4  ; #loc: 250 96 8\n+    ret %6  ; #loc: 250 97 5\n }\n",
+   "verdict": "NUMBERING-ONLY",
+   "at_head": {
+    "lineage": "sha256:d0ddf2b12ad09e0edc9e862f01c21e1a611aaba43206adca8c415840440ab77d",
+    "def_index": 20972,
+    "func_id": 2275,
+    "instr_count": 6,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir_verdict": "agreed",
+    "markers_exact": true,
+    "flip_event": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:20972 ~ clean_kernel[47a1]::flat::types::{impl#1}::with), asserts=0, lineage=sha256:d0ddf2b12ad09e0edc9e862f01c21e1a611aaba43206adca8c415840440ab77d, flipped_so_far=322"
+   },
+   "pinned": {
+    "lineage": "sha256:e9ffc1768651272207f777e45be49449ff07a35f1ab2e7cd46208f1e7daf39ed",
+    "def_index": 18559,
+    "func_id": 1897,
+    "instr_count": 6
+   }
+  },
+  "node_id_index": {
+   "def_path": "cert::builder::state::NodeId::index",
+   "classes": [
+    "functy-index",
+    "type-table-index"
+   ],
+   "detail": {
+    "functy-index": [
+     "rustcc fn @cert::builder::state::NodeId::index(functy.85) {  ->  rustcc fn @cert::builder::state::NodeId::index(functy.86) {"
+    ],
+    "type-table-index": [
+     "bb0(%0: struct.210):  ->  bb0(%0: struct.206):"
+    ]
+   },
+   "diff": "--- fixture node_id_index.trust-ir.txt\n+++ live dump\n@@ -1,7 +1,7 @@\n-rustcc fn @cert::builder::state::NodeId::index(functy.85) {\n+rustcc fn @cert::builder::state::NodeId::index(functy.86) {\n     ; #producer: trust\n     ; #names: %0=\"self\"\n-bb0(%0: struct.210):\n+bb0(%0: struct.206):\n     %1 = extractfield u32 %0, 0  ; #loc: 26 23 8\n     %2 = zext u32 %1 to usize  ; #loc: 26 23 8\n     ret %2  ; #loc: 26 24 5\n",
+   "verdict": "NUMBERING-ONLY",
+   "at_head": {
+    "lineage": "sha256:c0b94a6e973350a4d7c0c3cad43ca08342dc3672eafebaabcdc5038935a9052c",
+    "def_index": 1930,
+    "func_id": 338,
+    "instr_count": 3,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir_verdict": "agreed",
+    "markers_exact": true,
+    "flip_event": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:1930 ~ clean_kernel[47a1]::cert::builder::state::{impl#0}::index), asserts=0, lineage=sha256:c0b94a6e973350a4d7c0c3cad43ca08342dc3672eafebaabcdc5038935a9052c, flipped_so_far=123"
+   },
+   "pinned": {
+    "lineage": "sha256:e4d331e09f028b6c08d01c569699ea9757245ad8f9c7538008c03e947734ca73",
+    "def_index": 1925,
+    "func_id": 334,
+    "instr_count": 3
+   }
+  },
+  "has_loose_bvars": {
+   "def_path": "expr::meta::ExprMeta::has_loose_bvars",
+   "classes": [
+    "callee-index",
+    "functy-index",
+    "loc-file-index",
+    "type-table-index"
+   ],
+   "detail": {
+    "functy-index": [
+     "rustcc fn @expr::meta::ExprMeta::has_loose_bvars(functy.410) {  ->  rustcc fn @expr::meta::ExprMeta::has_loose_bvars(functy.556) {"
+    ],
+    "type-table-index": [
+     "bb0(%0: struct.765):  ->  bb0(%0: struct.938):"
+    ],
+    "callee-index": [
+     "%1 = call @func.1729(%0)  ; #loc: 187 137 13  ->  %1 = call @func.2102(%0)  ; #loc: 235 137 13"
+    ],
+    "loc-file-index": [
+     "%1 = call @func.1729(%0)  ; #loc: 187 137 13  ->  %1 = call @func.2102(%0)  ; #loc: 235 137 13",
+     "%2 = const u32 0  ; #loc: 187 137 34  ->  %2 = const u32 0  ; #loc: 235 137 34",
+     "%3 = icmp ugt u32 %1, %2  ; #loc: 187 137 8  ->  %3 = icmp ugt u32 %1, %2  ; #loc: 235 137 8",
+     "ret %3  ; #loc: 187 138 5  ->  ret %3  ; #loc: 235 138 5"
+    ]
+   },
+   "diff": "--- fixture has_loose_bvars.trust-ir.txt\n+++ live dump\n@@ -1,9 +1,9 @@\n-rustcc fn @expr::meta::ExprMeta::has_loose_bvars(functy.410) {\n+rustcc fn @expr::meta::ExprMeta::has_loose_bvars(functy.556) {\n     ; #producer: trust\n     ; #names: %0=\"self\"\n-bb0(%0: struct.765):\n-    %1 = call @func.1729(%0)  ; #loc: 187 137 13\n-    %2 = const u32 0  ; #loc: 187 137 34\n-    %3 = icmp ugt u32 %1, %2  ; #loc: 187 137 8\n-    ret %3  ; #loc: 187 138 5\n+bb0(%0: struct.938):\n+    %1 = call @func.2102(%0)  ; #loc: 235 137 13\n+    %2 = const u32 0  ; #loc: 235 137 34\n+    %3 = icmp ugt u32 %1, %2  ; #loc: 235 137 8\n+    ret %3  ; #loc: 235 138 5\n }\n",
+   "verdict": "NUMBERING-ONLY",
+   "at_head": {
+    "lineage": "sha256:4abcacaaf47b938ec3f728db51d445816aa5d4a4d357353617facf1282a4588b",
+    "def_index": 20197,
+    "func_id": 2103,
+    "instr_count": 4,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 1,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir_verdict": "agreed",
+    "markers_exact": true,
+    "flip_event": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:20197 ~ clean_kernel[47a1]::expr::meta::{impl#0}::has_loose_bvars), asserts=0, lineage=sha256:4abcacaaf47b938ec3f728db51d445816aa5d4a4d357353617facf1282a4588b, flipped_so_far=95"
+   },
+   "pinned": {
+    "lineage": "sha256:11b479743e4383464de6f566026adfab0c9847e2916029cff7495fd85d531c97",
+    "def_index": 17842,
+    "func_id": 1730,
+    "instr_count": 4
+   }
+  },
+  "simp_priority_value": {
+   "def_path": "env::types::SimpPriority::value",
+   "classes": [
+    "functy-index",
+    "loc-file-index",
+    "type-table-index"
+   ],
+   "detail": {
+    "functy-index": [
+     "rustcc fn @env::types::SimpPriority::value(functy.149) {  ->  rustcc fn @env::types::SimpPriority::value(functy.150) {"
+    ],
+    "type-table-index": [
+     "%2 = load enum.135, ptr %0  ; #loc: 127 229 8  ->  %2 = load enum.157, ptr %0  ; #loc: 150 229 8"
+    ],
+    "loc-file-index": [
+     "%2 = load enum.135, ptr %0  ; #loc: 127 229 8  ->  %2 = load enum.157, ptr %0  ; #loc: 150 229 8",
+     "%3 = extractfield u32 %2, 0  ; #loc: 127 229 8  ->  %3 = extractfield u32 %2, 0  ; #loc: 150 229 8",
+     "switch %3 [ 0: bb1 default: bb2 ]  ; #loc: 127 229 8  ->  switch %3 [ 0: bb1 default: bb2 ]  ; #loc: 150 229 8",
+     "%4 = const u32 1000  ; #loc: 127 230 37  ->  %4 = const u32 1000  ; #loc: 150 230 37",
+     "br bb3(%4)  ; #loc: 127 229 8  ->  br bb3(%4)  ; #loc: 150 229 8",
+     "%5 = const i64 4  ; #loc: 127 229 8  ->  %5 = const i64 4  ; #loc: 150 229 8",
+     "%6 = gep inbounds i8, ptr %0, %5  ; #loc: 127 229 8  ->  %6 = gep inbounds i8, ptr %0, %5  ; #loc: 150 229 8",
+     "%7 = load u32, ptr %6  ; #loc: 127 231 39  ->  %7 = load u32, ptr %6  ; #loc: 150 231 39",
+     "br bb3(%7)  ; #loc: 127 229 8  ->  br bb3(%7)  ; #loc: 150 229 8",
+     "ret %1  ; #loc: 127 233 5  ->  ret %1  ; #loc: 150 233 5"
+    ]
+   },
+   "diff": "--- fixture simp_priority_value.trust-ir.txt\n+++ live dump\n@@ -1,18 +1,18 @@\n-rustcc fn @env::types::SimpPriority::value(functy.149) {\n+rustcc fn @env::types::SimpPriority::value(functy.150) {\n     ; #producer: trust\n     ; #names: %0=\"self\"\n bb0(%0: ptr):\n-    %2 = load enum.135, ptr %0  ; #loc: 127 229 8\n-    %3 = extractfield u32 %2, 0  ; #loc: 127 229 8\n-    switch %3 [ 0: bb1 default: bb2 ]  ; #loc: 127 229 8\n+    %2 = load enum.157, ptr %0  ; #loc: 150 229 8\n+    %3 = extractfield u32 %2, 0  ; #loc: 150 229 8\n+    switch %3 [ 0: bb1 default: bb2 ]  ; #loc: 150 229 8\n bb1:\n-    %4 = const u32 1000  ; #loc: 127 230 37\n-    br bb3(%4)  ; #loc: 127 229 8\n+    %4 = const u32 1000  ; #loc: 150 230 37\n+    br bb3(%4)  ; #loc: 150 229 8\n bb2:\n-    %5 = const i64 4  ; #loc: 127 229 8\n-    %6 = gep inbounds i8, ptr %0, %5  ; #loc: 127 229 8\n-    %7 = load u32, ptr %6  ; #loc: 127 231 39\n-    br bb3(%7)  ; #loc: 127 229 8\n+    %5 = const i64 4  ; #loc: 150 229 8\n+    %6 = gep inbounds i8, ptr %0, %5  ; #loc: 150 229 8\n+    %7 = load u32, ptr %6  ; #loc: 150 231 39\n+    br bb3(%7)  ; #loc: 150 229 8\n bb3(%1: u32):\n-    ret %1  ; #loc: 127 233 5\n+    ret %1  ; #loc: 150 233 5\n }\n",
+   "verdict": "NUMBERING-ONLY",
+   "at_head": {
+    "lineage": "sha256:5586b3ea96662b89a9d358cbbf45ded66ed388154431098704e0b4584b3169c7",
+    "def_index": 15535,
+    "func_id": 1266,
+    "instr_count": 10,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir_verdict": "agreed",
+    "markers_exact": true,
+    "flip_event": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:15535 ~ clean_kernel[47a1]::env::types::{impl#1}::value), asserts=0, lineage=sha256:5586b3ea96662b89a9d358cbbf45ded66ed388154431098704e0b4584b3169c7, flipped_so_far=106"
+   },
+   "pinned": {
+    "lineage": "sha256:88cbd3c53f5338595d41875b66e0f54fa6eb62dc9878935a8c4579e014354982",
+    "def_index": 14490,
+    "func_id": 1080,
+    "instr_count": 10
+   }
+  },
+  "level_is_zero_deref_callee": {
+   "def_path": "<level::LevelArc as std::ops::Deref>::deref",
+   "classes": [
+    "callee-index",
+    "functy-index",
+    "global-index",
+    "loc-file-index"
+   ],
+   "detail": {
+    "functy-index": [
+     "rustcc fn @<level::LevelArc as std::ops::Deref>::deref(functy.22) {  ->  rustcc fn @<level::LevelArc as std::ops::Deref>::deref(functy.23) {"
+    ],
+    "callee-index": [
+     "%1 = call @func.4924(%0)  ; #loc: 204 60 13  ->  %1 = call @func.5964(%0)  ; #loc: 255 60 13",
+     "%5 = call @func.4925(%1, %4)  ; #loc: 204 61 13  ->  %5 = call @func.5965(%1, %4)  ; #loc: 255 61 13"
+    ],
+    "loc-file-index": [
+     "%1 = call @func.4924(%0)  ; #loc: 204 60 13  ->  %1 = call @func.5964(%0)  ; #loc: 255 60 13",
+     "%2 = global_addr @global.1135  ; #loc: 204 61 20  ->  %2 = global_addr @global.1358  ; #loc: 255 61 20",
+     "%3 = const u64 34  ; #loc: 204 61 20  ->  %3 = const u64 34  ; #loc: 255 61 20",
+     "%4 = ptr_from_parts fatptr<str> ptr %2, u64 %3  ; #loc: 204 61 20  ->  %4 = ptr_from_parts fatptr<str> ptr %2, u64 %3  ; #loc: 255 61 20",
+     "%5 = call @func.4925(%1, %4)  ; #loc: 204 61 13  ->  %5 = call @func.5965(%1, %4)  ; #loc: 255 61 13",
+     "ret %5  ; #loc: 204 62 5  ->  ret %5  ; #loc: 255 62 5"
+    ],
+    "global-index": [
+     "%2 = global_addr @global.1135  ; #loc: 204 61 20  ->  %2 = global_addr @global.1358  ; #loc: 255 61 20"
+    ]
+   },
+   "diff": "--- fixture level_is_zero_deref_callee.trust-ir.txt\n+++ live dump\n@@ -1,11 +1,11 @@\n-rustcc fn @<level::LevelArc as std::ops::Deref>::deref(functy.22) {\n+rustcc fn @<level::LevelArc as std::ops::Deref>::deref(functy.23) {\n     ; #producer: trust\n     ; #names: %0=\"self\"\n bb0(%0: ptr):\n-    %1 = call @func.4924(%0)  ; #loc: 204 60 13\n-    %2 = global_addr @global.1135  ; #loc: 204 61 20\n-    %3 = const u64 34  ; #loc: 204 61 20\n-    %4 = ptr_from_parts fatptr<str> ptr %2, u64 %3  ; #loc: 204 61 20\n-    %5 = call @func.4925(%1, %4)  ; #loc: 204 61 13\n-    ret %5  ; #loc: 204 62 5\n+    %1 = call @func.5964(%0)  ; #loc: 255 60 13\n+    %2 = global_addr @global.1358  ; #loc: 255 61 20\n+    %3 = const u64 34  ; #loc: 255 61 20\n+    %4 = ptr_from_parts fatptr<str> ptr %2, u64 %3  ; #loc: 255 61 20\n+    %5 = call @func.5965(%1, %4)  ; #loc: 255 61 13\n+    ret %5  ; #loc: 255 62 5\n }\n",
+   "verdict": "NUMBERING-ONLY",
+   "at_head": {
+    "lineage": "sha256:77de54a06e701877b76f5d3cd617905fccb7cf45637fa2c3b13bc67c33ee67ca",
+    "def_index": 21197,
+    "func_id": 2337,
+    "instr_count": 6,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 2
+    },
+    "derived_mir_verdict": "unsupported",
+    "markers_exact": false,
+    "flip_event": null
+   }
+  },
+  "loose_bvar_range_callee": {
+   "def_path": "expr::meta::ExprMeta::loose_bvar_range",
+   "classes": [
+    "functy-index",
+    "loc-file-index",
+    "type-table-index"
+   ],
+   "detail": {
+    "functy-index": [
+     "rustcc fn @expr::meta::ExprMeta::loose_bvar_range(functy.408) {  ->  rustcc fn @expr::meta::ExprMeta::loose_bvar_range(functy.554) {"
+    ],
+    "type-table-index": [
+     "bb0(%0: struct.765):  ->  bb0(%0: struct.938):"
+    ],
+    "loc-file-index": [
+     "%1 = extractfield u64 %0, 0  ; #loc: 187 131 9  ->  %1 = extractfield u64 %0, 0  ; #loc: 235 131 9",
+     "%2 = const u32 44  ; #loc: 187 131 19  ->  %2 = const u32 44  ; #loc: 235 131 19",
+     "%3 = const u32 64  ; #loc: 187 131 8  ->  %3 = const u32 64  ; #loc: 235 131 8",
+     "%4 = icmp ult u32 %2, %3  ; #loc: 187 131 8  ->  %4 = icmp ult u32 %2, %3  ; #loc: 235 131 8",
+     "assert %4  ; #proof: shift_in_range  ; #loc: 187 131 8  ->  assert %4  ; #proof: shift_in_range  ; #loc: 235 131 8",
+     "%6 = lshr u64 %1, %5  ; #loc: 187 131 8  ->  %6 = lshr u64 %1, %5  ; #loc: 235 131 8",
+     "%7 = trunc u64 %6 to u32  ; #loc: 187 131 8  ->  %7 = trunc u64 %6 to u32  ; #loc: 235 131 8",
+     "ret %7  ; #loc: 187 132 5  ->  ret %7  ; #loc: 235 132 5"
+    ]
+   },
+   "diff": "--- fixture loose_bvar_range_callee.trust-ir.txt\n+++ live dump\n@@ -1,14 +1,14 @@\n-rustcc fn @expr::meta::ExprMeta::loose_bvar_range(functy.408) {\n+rustcc fn @expr::meta::ExprMeta::loose_bvar_range(functy.554) {\n     ; #producer: trust\n     ; #names: %0=\"self\"\n-bb0(%0: struct.765):\n-    %1 = extractfield u64 %0, 0  ; #loc: 187 131 9\n-    %2 = const u32 44  ; #loc: 187 131 19\n-    %3 = const u32 64  ; #loc: 187 131 8\n-    %4 = icmp ult u32 %2, %3  ; #loc: 187 131 8\n-    assert %4  ; #proof: shift_in_range  ; #loc: 187 131 8\n+bb0(%0: struct.938):\n+    %1 = extractfield u64 %0, 0  ; #loc: 235 131 9\n+    %2 = const u32 44  ; #loc: 235 131 19\n+    %3 = const u32 64  ; #loc: 235 131 8\n+    %4 = icmp ult u32 %2, %3  ; #loc: 235 131 8\n+    assert %4  ; #proof: shift_in_range  ; #loc: 235 131 8\n     %5 = zext u32 %2 to u64\n-    %6 = lshr u64 %1, %5  ; #loc: 187 131 8\n-    %7 = trunc u64 %6 to u32  ; #loc: 187 131 8\n-    ret %7  ; #loc: 187 132 5\n+    %6 = lshr u64 %1, %5  ; #loc: 235 131 8\n+    %7 = trunc u64 %6 to u32  ; #loc: 235 131 8\n+    ret %7  ; #loc: 235 132 5\n }\n",
+   "verdict": "NUMBERING-ONLY",
+   "at_head": {
+    "lineage": "sha256:38df71139bf6654ce385cef15ebfe93ed77c27c0abf9fff0a3bb3e11a915a299",
+    "def_index": 20196,
+    "func_id": 2102,
+    "instr_count": 9,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir_verdict": "unsupported",
+    "markers_exact": false,
+    "flip_event": null
+   }
+  }
+ },
+ "rows": {
+  "level_is_zero_deref_globals": {
+   "referencing_body": "level_is_zero_deref_callee",
+   "fixture_global": "__trust_promoted_1135",
+   "global": "__trust_promoted_1358",
+   "at_head": null,
+   "at_head_reason": "module-table row, no coverage body",
+   "classes": [
+    "global-index"
+   ],
+   "detail": {
+    "global-index": [
+     "global internal @__trust_promoted_1135 [ty.0 x 34] = array[ 108, 105, 118, 101, 32, 76, 101, 118, 101, 108, 65, 114, 99, 32, 109, 117, 115, 116, 32, 99, 111, 110, 116, 97, 105, 110, 32, 97, 32, 108, 101, 118, 101, 108 ]  ->  global internal @__trust_promoted_1358 [ty.0 x 34] = array[ 108, 105, 118, 101, 32, 76, 101, 118, 101, 108, 65, 114, 99, 32, 109, 117, 115, 116, 32, 99, 111, 110, 116, 97, 105, 110, 32, 97, 32, 108, 101, 118, 101, 108 ]"
+    ]
+   },
+   "diff": "--- fixture level_is_zero_deref_globals.trust-ir-rows.txt\n+++ live dump\n@@ -1,2 +1,2 @@\n type ty.0 = u8\n-global internal @__trust_promoted_1135 [ty.0 x 34] = array[ 108, 105, 118, 101, 32, 76, 101, 118, 101, 108, 65, 114, 99, 32, 109, 117, 115, 116, 32, 99, 111, 110, 116, 97, 105, 110, 32, 97, 32, 108, 101, 118, 101, 108 ]\n+global internal @__trust_promoted_1358 [ty.0 x 34] = array[ 108, 105, 118, 101, 32, 76, 101, 118, 101, 108, 65, 114, 99, 32, 109, 117, 115, 116, 32, 99, 111, 110, 116, 97, 105, 110, 32, 97, 32, 108, 101, 118, 101, 108 ]\n",
+   "verdict": "NUMBERING-ONLY"
+  }
+ }
+}

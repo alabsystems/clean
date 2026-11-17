@@ -319,6 +319,16 @@ fn resolve_trust_cg() -> Result<TrustCg, LaneError> {
 }
 
 impl TrustCg {
+    pub(crate) fn compile_object_recording(
+        &self,
+        module: &Module,
+        target: &str,
+        dir: &Path,
+        observer: &crate::primitive_uses::NativeRecorder,
+    ) -> Result<(PathBuf, Option<crate::primitive_uses::NativeArtifactId>), LaneError> {
+        cli::compile_object_with_cli_recording(self, target, module, dir, Some(observer))
+    }
+
     pub(crate) fn from_path(path: PathBuf) -> Result<Self, LaneError> {
         let path = std::fs::canonicalize(&path).unwrap_or(path);
         let out = Command::new(&path).arg("--version").output().map_err(|e| {

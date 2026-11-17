@@ -710,7 +710,7 @@ impl Specification {
                     "KernelInputAdmissible st Rf) ",
                     "(_ihf : InferInversionAt st f Rf) ",
                     "(_iha : InferInversionAt st a Ra) => ",
-                    "AppInferDecomp.mk st f a T2 Rf Ra hf ha hwit hguard) ",
+                    "@AppInferDecomp.mk st f a T2 Rf Ra hf ha hwit hguard) ",
                     // lam minor: repackage the recursive body-infer field + the
                     // LamInferWitness into the LamInferDecomp existential (binding
                     // the inferred body type bt), mirroring the app minor. The IH
@@ -719,7 +719,7 @@ impl Specification {
                     "(hbody : KernelInferAccepts st body bt) ",
                     "(hwit : LamInferWitness A body bt T2) ",
                     "(_ihbody : InferInversionAt st body bt) => ",
-                    "LamInferDecomp.mk st A body T2 bt hbody hwit) ",
+                    "@LamInferDecomp.mk st A body T2 bt hbody hwit) ",
                     // pi minor: identity on PiInferWitness
                     "(fun (A : KExpr) (B : KExpr) (T2 : KExpr) ",
                     "(hfield : PiInferWitness A B T2) => hfield) ",

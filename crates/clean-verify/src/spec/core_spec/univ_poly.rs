@@ -68,7 +68,7 @@ impl Specification {
         //    lands on a natMax defeq firing. Reuses the pre-existing spec Le kit
         //    (le_zero_n / le_succ_succ — already registered by earlier stages).
         self.add_recursive_def(
-            "def le_natMax_left (a : Nat) : forall (b : Nat), Le a (natMax a b) := @Nat.rec (fun (a0 : Nat) => forall (b : Nat), Le a0 (natMax a0 b)) (fun (b : Nat) => le_zero_n (natMax Nat.zero b)) (fun (a0 : Nat) (ih : forall (b : Nat), Le a0 (natMax a0 b)) => fun (b : Nat) => @Nat.rec (fun (b0 : Nat) => Le (Nat.succ a0) (natMax (Nat.succ a0) b0)) (Le.refl (Nat.succ a0)) (fun (b0 : Nat) (_ : Le (Nat.succ a0) (natMax (Nat.succ a0) b0)) => le_succ_succ a0 (natMax a0 b0) (ih b0)) b) a",
+            "def le_natMax_left (a : Nat) : forall (b : Nat), Le a (natMax a b) := @Nat.rec (fun (a0 : Nat) => forall (b : Nat), Le a0 (natMax a0 b)) (fun (b : Nat) => le_zero_n (natMax Nat.zero b)) (fun (a0 : Nat) (ih : forall (b : Nat), Le a0 (natMax a0 b)) => fun (b : Nat) => @Nat.rec (fun (b0 : Nat) => Le (Nat.succ a0) (natMax (Nat.succ a0) b0)) (@Le.refl (Nat.succ a0)) (fun (b0 : Nat) (_ : Le (Nat.succ a0) (natMax (Nat.succ a0) b0)) => le_succ_succ a0 (natMax a0 b0) (ih b0)) b) a",
             "Le a (natMax a b) (double Nat.rec; 0-arm le_zero_n, succ/0 refl via natMax defeq, succ/succ le_succ_succ of ih). UnivPoly rung kit.",
         )?;
         // ── THE punchline the conservative level_leb cannot see: a <= max a b at
@@ -188,7 +188,7 @@ impl Specification {
         // semantic order levelLeqSem is COMPLETE for a <= max a b (levelLeq_max_left)
         // where the conservative syntactic level_leb is not.
         self.add_recursive_def(
-            "def levelLeqSem_refl (a : Level) : levelLeqSem a a := fun (v : Name -> Nat) => Le.refl (evalL v a)",
+            "def levelLeqSem_refl (a : Level) : levelLeqSem a a := fun (v : Name -> Nat) => @Le.refl (evalL v a)",
             "levelLeqSem_refl: the semantic level order is reflexive (Le.refl pointwise). UnivPoly cumulativity.",
         )?;
         self.add_recursive_def(

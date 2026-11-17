@@ -89,16 +89,16 @@ const MODULE: &str = "SemRCheck";
 /// SHA-256 of `SemR.lean`, the same constant trust-ir's
 /// `crates/trust-ir-conformance/tests/lean_exec_differential.rs`
 /// (`SEMR_SOURCE_SHA256`) pins for `lean/semr/SemR.lean`.
-const SEMR_SHA256: &str = "0ea0e29f2b0d70a158f0ac54725d5175b9be81f4fc5b0a4d0839e9b968ee180d";
+const SEMR_SHA256: &str = "91eba0576bb0fb6d8d8120b5227155bf660e6a336b0d3b68c2666195557329e0";
 
 /// SHA-256 of `MiniRust.lean` and `SemRMiniRust.lean`, the constants trust-ir's
 /// `lean_exec_differential.rs` (`MINIRUST_WRAPPER_SHA256`, `SEMR_MINIRUST_SHA256`)
 /// pins for `lean/semr/`.
 const MINIRUST_WRAPPER_SHA256: &str =
-    "3bf00652679675fd80e304a36766b5e2f7f200949f99c79a76fb742fe388e0e5";
+    "0de8e8aa1c30f277e4a2bca00b44696d5cf803fffc081767e067d5f713ecef51";
 const SEMR_MINIRUST_SHA256: &str =
-    "dffb758f95897cba5a7794207752e36435d9ffd453edcd760a57663a88d4ce5a";
-const SEMR_MEMORY_SHA256: &str = "a00a3d42cd6e4e6159f91cf749b712179198f56582772064712cd7879bb0f0b4";
+    "edc17ec135c79a02e2e3a36e51c03c3c56bbec5adec8371c57087e9ef29e965c";
+const SEMR_MEMORY_SHA256: &str = "76ae6a87c7140e2afde71a18bb5a7e7597b58370c0af48989e5ee59cf8992577";
 const CLOSURE_CONSTRUCTION_SHA256: &str =
     "d65f33468b3d7d5732e2fd683f8c8240a3cd1530d0df8ff4efd4f3bac7297468";
 const METADATA_CHECK_SHA256: &str =
@@ -106,7 +106,7 @@ const METADATA_CHECK_SHA256: &str =
 
 /// The fixture's explicit source revision, independently of the workspace's
 /// compiled dependency pin. An unpublished candidate grants no landing credit.
-const SEMR_SOURCE_REVISION: &str = "bd313b4fbfae2c2826bade463e23224f1df9a61a";
+const SEMR_SOURCE_REVISION: &str = "90619767a1d9b0c877702a651515da5073d68668";
 const MODEL_MODULES: [&str; 13] = [
     "SemR",
     "SemRUnsignedSelect",

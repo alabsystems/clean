@@ -19,6 +19,8 @@ mod ir;
 mod lower;
 mod matcher;
 mod source;
+mod source_scoped;
+pub use source_scoped::RuntimeScopedEnvironmentCapture;
 #[cfg(test)]
 mod source_tests;
 #[cfg(test)]

@@ -208,26 +208,62 @@ where
     Ok(())
 }
 
+/// A typed map component: read as one table, written one entry at a time.
+/// The persistent-extension storage is one, and writes through it keep the
+/// matcher index it holds equal to a decode of what it stores.
+trait TypedMap<K, V> {
+    /// Every entry.
+    fn table(&self) -> &HashMap<K, V>;
+    /// Set (`Some`) or remove (`None`) the entry for `key`.
+    fn put(&mut self, key: &K, value: Option<V>);
+}
+
+impl<K: Eq + Hash + Clone, V> TypedMap<K, V> for HashMap<K, V> {
+    fn table(&self) -> &HashMap<K, V> {
+        self
+    }
+
+    fn put(&mut self, key: &K, value: Option<V>) {
+        match value {
+            Some(value) => {
+                self.insert(key.clone(), value);
+            }
+            None => {
+                self.remove(key);
+            }
+        }
+    }
+}
+
+impl TypedMap<Name, super::PersistentEnvExtensionState>
+    for super::extension_storage::PersistentExtensions
+{
+    fn table(&self) -> &HashMap<Name, super::PersistentEnvExtensionState> {
+        self.states()
+    }
+
+    fn put(&mut self, key: &Name, value: Option<super::PersistentEnvExtensionState>) {
+        self.set_state(key, value);
+    }
+}
+
 /// Apply a delta [`map_fits`] accepted.
-fn apply_map<K, V>(table: &mut HashMap<K, V>, delta: &MapDelta<K, V>, relocate: impl Fn(&V) -> V)
-where
-    K: Eq + Hash + Clone,
+fn apply_map<K, V>(
+    table: &mut impl TypedMap<K, V>,
+    delta: &MapDelta<K, V>,
+    relocate: impl Fn(&V) -> V,
+) where
     V: Clone,
 {
     for (key, was, value) in &delta.changed {
-        match value {
-            Some(value) => {
-                let value = if was.is_none() {
-                    relocate(value)
-                } else {
-                    value.clone()
-                };
-                table.insert(key.clone(), value);
+        let value = value.as_ref().map(|value| {
+            if was.is_none() {
+                relocate(value)
+            } else {
+                value.clone()
             }
-            None => {
-                table.remove(key);
-            }
-        }
+        });
+        table.put(key, value);
     }
 }
 
@@ -352,7 +388,7 @@ macro_rules! typed_components {
         fn typed_delta(before: &Environment, after: &Environment) -> EnvFactDelta {
             EnvFactDelta {
                 format: LOCAL_FACT_DELTA_FORMAT.to_string(),
-                $($map: map_delta(&before.$map, &after.$map),)*
+                $($map: map_delta(before.$map.table(), after.$map.table()),)*
                 $($set: set_delta(&before.$set, &after.$set),)*
                 $($whole: whole_delta(&before.$whole, &after.$whole),)*
                 instance_seqs: map_delta(&before.instance_seqs, &after.instance_seqs),
@@ -378,7 +414,7 @@ macro_rules! typed_components {
 
         /// Whether every typed component of `delta` fits `env`; changes nothing.
         fn typed_fits(env: &Environment, delta: &EnvFactDelta) -> Result<(), FactDeltaError> {
-            $(map_fits(stringify!($map), &env.$map, &delta.$map)?;)*
+            $(map_fits(stringify!($map), env.$map.table(), &delta.$map)?;)*
             $(set_fits(stringify!($set), &env.$set, &delta.$set)?;)*
             $(if let Some((was, _)) = &delta.$whole {
                 if env.$whole != *was {
@@ -417,17 +453,9 @@ macro_rules! typed_components {
 
         /// Apply the typed components [`typed_fits`] accepted.
         fn apply_typed(env: &mut Environment, delta: &EnvFactDelta) {
+            // The persistent-extension storage re-derives the matcher index
+            // it holds when a delta replaces the matcher entries.
             $(apply_map(&mut env.$map, &delta.$map, identity);)*
-            // The matcher index is a function of its storage entries: a delta
-            // that replaced them re-derives it.
-            if delta
-                .persistent_extensions
-                .changed
-                .iter()
-                .any(|(extension, _, _)| super::matcher::is_matcher_storage(extension))
-            {
-                env.rebuild_matcher_index();
-            }
             $(apply_set(&mut env.$set, &delta.$set);)*
             $(if let Some((_, value)) = &delta.$whole {
                 env.$whole = value.clone();
@@ -486,7 +514,6 @@ macro_rules! typed_components {
             to.kernel_theory = from.kernel_theory;
             // A function of the environment's content, recomputed on demand.
             to.native_fold_cache = Default::default();
-            to.matcher_info = std::mem::take(&mut from.matcher_info);
             to.prelude_aliases = std::mem::take(&mut from.prelude_aliases);
             // Scalar reconstruction can change the meaning of reductions.
             // Derived simp structures must not inherit the old origin.

@@ -432,7 +432,7 @@ pub(super) fn ty_r6_lam_body_acc_necessary() -> String {
 
 pub(super) fn val_r6_lam_body_acc_necessary() -> String {
     let step = format!(
-        "(whnf_step.beta {LOOP_LAM} {LOOP_LAM} (beta_reduces.lam_body {S0} r5_omegaV r5_omegaV (beta_reduces.beta {V0} {SELF_BODY} r5_omegaLam)))"
+        "(@whnf_step.beta {LOOP_LAM} {LOOP_LAM} (beta_reduces.lam_body {S0} r5_omegaV r5_omegaV (beta_reduces.beta {V0} {SELF_BODY} r5_omegaLam)))"
     );
     format!(
         "@AndType.intro (whnf_step {LOOP_LAM} {LOOP_LAM}) (whnf_acc {LOOP_LAM} -> Empty) {step} (selfLoop_not_whnfAcc {LOOP_LAM} {step})"

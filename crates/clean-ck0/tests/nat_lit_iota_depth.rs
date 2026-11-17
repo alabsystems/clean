@@ -595,11 +595,11 @@ fn test_native_division_is_charged_by_its_work() {
         Ok(vlvl(&env, &big)),
         "control: gcd L L = L within 2M steps"
     );
-    let mut budget = Budget::default_budget();
+    let mut budget = Budget::new(1_000_000);
     assert_eq!(
         clean_ck0::whnf(&env, &gcd, &mut budget),
         Err(BudgetError::OutOfBudget),
-        "a 1,050,625-step charge does not fit the default 1M"
+        "a 1,050,625-step charge does not fit the explicit 1M allowance"
     );
     let modulo = vlvl(&env, &r_apps(r_const("Nat.mod"), vec![big, lit(3)]));
     let mut budget = Budget::new(5_000);
@@ -668,4 +668,29 @@ fn test_native_shift_left_past_two_to_the_24_reduces_as_in_lean() {
         Ok(vlvl(&env, &lit(1))),
         "(1 <<< k) >>> k = 1"
     );
+}
+
+/// Native binary folds, like pinned Lean's kernel, do not touch the second
+/// operand after the first is known not to be a literal. The unchanged depth
+/// guard still refuses that second operand when it is actually demanded.
+#[test]
+fn test_native_binary_fold_short_circuits_a_nonliteral_first_operand() {
+    let env = env();
+    let ty = vlvl(
+        &env,
+        &r_pi(r_const("Nat"), r_pi(r_const("Nat"), r_const("Nat"))),
+    );
+    let env = env.with_const_typed(n("Nat.add"), 0, ty);
+    let rhs = nat_rec(
+        "Nat",
+        r_const("Nat.zero"),
+        succ_case("Nat", r_app(r_const("Nat.succ"), r_bvar(0))),
+        lit(300),
+    );
+    let raw = r_apps(r_const("Nat.add"), vec![r_bvar(0), rhs]);
+    let term = Term::validate(&env, &raw, 1, 0).unwrap();
+    let mut budget = Budget::default_budget();
+    assert_eq!(clean_ck0::whnf(&env, &term, &mut budget).unwrap(), term);
+    let mut demanded = Budget::default_budget();
+    assert!(clean_ck0::whnf(&env, &count_up(&env, 300), &mut demanded).is_err());
 }

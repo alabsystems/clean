@@ -19,6 +19,11 @@ import unittest
 from unittest.mock import patch
 
 SCRIPT=Path(__file__).with_name('check_ck0_lineage.py')
+PATHSPEC_SELECTORS=('GIT_LITERAL_PATHSPECS','GIT_GLOB_PATHSPECS',
+                    'GIT_NOGLOB_PATHSPECS','GIT_ICASE_PATHSPECS')
+PATHSPEC_CONTEXTS=[{},*({key:'1'} for key in PATHSPEC_SELECTORS),dict.fromkeys(PATHSPEC_SELECTORS,'1'),
+                  {'GIT_LITERAL_PATHSPECS':'1','GIT_GLOB_PATHSPECS':'1'},
+                  {'GIT_GLOB_PATHSPECS':'1','GIT_NOGLOB_PATHSPECS':'1'}]
 
 
 def subject(path=SCRIPT):
@@ -167,6 +172,17 @@ class BatchProtocol(unittest.TestCase):
         self.assertEqual(actual,{**untouched,'GIT_NO_REPLACE_OBJECTS':'1',
                                  'GIT_NO_LAZY_FETCH':'1','GIT_TERMINAL_PROMPT':'0'})
 
+    def test_pathspec_selectors_are_removed_without_resource_changes(self):
+        selectors=dict.fromkeys(PATHSPEC_SELECTORS,'1')
+        untouched={'PATH':'unchanged','CARGO_MAKEFLAGS':'untouched advertisement',
+                   'ATERM_SDK_LEASE_V3':'untouched descriptor',
+                   'ATERM_WORKLOAD_CPU_FDS_V1':'untouched transport',
+                   'TRUST_CPU_IMPLICIT_FD':'untouched descriptor'}
+        with patch.dict(os.environ,{**selectors,**untouched},clear=True):
+            actual=self.s._production_env()
+        self.assertEqual(actual,{**untouched,'GIT_NO_REPLACE_OBJECTS':'1',
+                                 'GIT_NO_LAZY_FETCH':'1','GIT_TERMINAL_PROMPT':'0'})
+
     def test_authentication_cannot_be_shadowed_by_introspection(self):
         command=[sys.executable,'-B',str(SCRIPT),'--authenticate-production','--pinned-inputs']
         child=subprocess.run(command,capture_output=True,text=True)
@@ -210,6 +226,24 @@ class RealCommittedInventory(unittest.TestCase):
 
     def test_literal_paths_regular_modes_and_shared_content(self):
         self.assertEqual(self.s.git_files(self.root,self.revision,['src','.cargo']),self.expected())
+
+    def test_pathspec_context_preserves_committed_inventory(self):
+        for context in PATHSPEC_CONTEXTS:
+            with self.subTest(context=context),patch.dict(os.environ,context):
+                self.assertEqual(self.s.git_files(self.root,self.revision,['src','.cargo']),self.expected())
+
+    def test_omitted_pathspec_normalization_recovers_actual_git_refusal(self):
+        original=SCRIPT.read_text()
+        needle="    'GIT_LITERAL_PATHSPECS', 'GIT_GLOB_PATHSPECS', 'GIT_NOGLOB_PATHSPECS',\n    'GIT_ICASE_PATHSPECS',\n"
+        self.assertEqual(original.count(needle),1)
+        mutant=types.ModuleType('omitted_pathspec_control');mutant.__file__=str(SCRIPT)
+        exec(compile(original.replace(needle,''),str(SCRIPT),'exec',dont_inherit=True),mutant.__dict__)
+        with patch.dict(os.environ,{'GIT_ICASE_PATHSPECS':'1'}):
+            with self.assertRaises(subprocess.CalledProcessError) as caught:
+                mutant.git_files(self.root,self.revision,['src'])
+            self.assertEqual(caught.exception.returncode,128)
+            self.assertIn(b'pathspec magic not supported',caught.exception.stderr)
+            self.assertIn(b'icase',caught.exception.stderr)
 
     def test_exact_two_git_processes_and_unique_oid_requests(self):
         actual_run=subprocess.run;calls=[]
@@ -337,6 +371,29 @@ dependencies=["clean-ck0"]
             with self.subTest(context=sorted(context)),patch.dict(os.environ,context):
                 self.assertEqual(self.record('HEAD'),expected)
                 self.s.authenticate_production(expected,self.trust,self.ty,self.clean)
+
+    def test_pathspec_context_preserves_full_record_and_authentication(self):
+        expected=self.s.encoded(self.record())
+        for context in PATHSPEC_CONTEXTS:
+            with self.subTest(context=context),patch.dict(os.environ,context):
+                actual=self.record()
+                self.assertEqual(self.s.encoded(actual),expected)
+                self.s.authenticate_production(actual,self.trust,self.ty,self.clean)
+
+    def test_actual_capture_cli_ignores_pathspec_context(self):
+        expected=self.s.encoded(self.record())
+        for index,context in enumerate(PATHSPEC_CONTEXTS):
+            target=self.root/('capture-'+str(index)+'.json')
+            target.write_bytes(b'pre-existing sentinel')
+            env=dict(os.environ);env.update(context)
+            argv=[sys.executable,'-B',str(SCRIPT),'--capture-production','--production',str(target),
+                  '--trust-repo',str(self.trust),'--ty-repo',str(self.ty),'--clean-repo',str(self.clean),
+                  '--trust-ref',self.commit]
+            with self.subTest(context=context):
+                result=subprocess.run(argv,env=env,capture_output=True,
+                                      pass_fds=self.s._resource_fds(env))
+                self.assertEqual(result.returncode,0,result.stderr)
+                self.assertEqual(target.read_bytes(),expected)
 
     def test_worktree_repository_context_is_still_supported(self):
         worktree=self.root/'trust worktree'

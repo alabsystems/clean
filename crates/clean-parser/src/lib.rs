@@ -383,6 +383,21 @@ pub struct FileHeader {
     pub imports: Vec<ImportSpec>,
 }
 
+/// Header information for Lean's dependency-listing commands.
+///
+/// These commands discard header diagnostics, unlike source admission. An
+/// incomplete import retains an anonymous failure target. The pinned Lean
+/// API probe produced that fallback alongside panics; this does not establish
+/// malformed full-CLI diagnostic parity. This is not an accepted file header.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct DependencyHeader {
+    /// The explicit `prelude`, which suppresses implicit Init dependencies.
+    pub is_prelude: bool,
+    /// Explicit imports in order, including an anonymous incomplete target.
+    pub imports: Vec<SurfaceName>,
+}
+
 /// One header import: Lean's `Lean.Import` (`Lean/Setup.lean`), filled as
 /// `HeaderSyntax.imports` fills it from `public? meta? import all? <name>`.
 #[derive(Debug, Clone, PartialEq, Eq)]

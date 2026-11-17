@@ -7,7 +7,7 @@ use crate::term_dag::NodeKey;
 /// infer reads it only at a BVar, lifting the stored type by index + 1. Removing
 /// an unused outer prefix changes neither those relative indices nor a cached
 /// answer. Invalid/over-large ranges conservatively retain the whole context.
-pub(super) fn context_key(ctx: &[Term], loose: u32) -> Vec<NodeKey> {
+pub(crate) fn context_key(ctx: &[Term], loose: u32) -> Vec<NodeKey> {
     if loose == 0 {
         return Vec::new();
     }

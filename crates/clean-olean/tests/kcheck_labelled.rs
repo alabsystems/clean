@@ -9,11 +9,14 @@
 //! `theories/kcheck_spec`, replayed by `leanchecker --fresh`, and re-admitted
 //! constant by constant through Clean's reference kernel from an empty base.
 //!
-//! What a green run shows: every constant the package's fifty-seven modules declare
+//! What a green run shows: every constant the package's ninety ORDER modules declare
 //! is admitted by two kernels; every case line the executable prints
-//! (`expected_output.txt`) is stated by a re-admitted theorem `run_<case> =
-//! Except.ok ...` or `Except.error ...`, which the kernels decide by evaluating
-//! the checker; the axiom closures are the committed ones; the checker's
+//! (`expected_output.txt`) is, character for character, the verdict a re-admitted
+//! theorem `run_<case> = Except.ok ...` or `Except.error ...` states, rendered as
+//! the executable's printers render it (`kcheck_labelled/verdict_text.rs`), and
+//! the kernels decide each such theorem by evaluating the checker (that the
+//! compiled executable prints `expected_output.txt` is a dated measurement, not
+//! this test's); the axiom closures are the committed ones; the checker's
 //! definitions (with the auxiliary constants holding their bodies) and the
 //! forged runs' statements have the committed digests; and
 //! an accepted run's verdict is admitted at its own statement while each forged
@@ -23,9 +26,12 @@
 //! stored telescope, D4R4-1's untied index and a stored constructor result too
 //! short for the record from the re-check of Revision 4, the two instances of
 //! the re-check of Revision 1 and the declarations of R4-V3 and BR4-2 claimed
-//! at a lower bound); every advice tag but `MEMO`'s is read by some accepted
-//! run, by a re-admitted theorem (`per_token_tags`); and C2's checker, as a
-//! `KCheckSpec.Checker`, meets `Checker.StartsAtBase` by a re-admitted
+//! at a lower bound); one ground acceptance per token, by a re-admitted theorem
+//! (`per_token_accepted`) whose statement and named definitions are pinned:
+//! `KCheck.checker` accepts every per-token case, each case's printed run is
+//! that case, and their advice reads every tag but `MEMO`'s, while the same
+//! cases with `MEMO`'s refused run appended are refused by evaluation; and C2's checker, as a
+//! `KCheckSpec.Checker`, meets `Checker.StartsAt KCheck.checker PSigmaSeed.seed` by a re-admitted
 //! theorem (D1 Revision 5). It also re-checks and statement-pins the bounded
 //! C3 report-calculus, checker-output and first semantic-base theorems, refuses
 //! a dropped-successor report and a proved `Sort 1 : Sort 2` bound at height 1.
@@ -42,7 +48,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::process::Command;
 
 use clean_kernel::env::{ConstantInfo, Declaration, Environment};
-use clean_kernel::{Expr, ExprKind, KernelEnvError, KernelTypeError, Name, ReferenceRefusal};
+use clean_kernel::{
+    ConstantKind, Expr, ExprKind, KernelEnvError, KernelTypeError, Name, ReferenceRefusal,
+};
 use clean_olean::recheck_closed::ClosedRecheckOptions;
 use clean_olean::test_support::compiled_fixture_dir;
 use clean_olean::{
@@ -51,8 +59,8 @@ use clean_olean::{
 };
 use sha2::{Digest, Sha256};
 
-/// The module that imports every other module of the package.
-const ROOT: &str = "KCheck.CheckerContracts";
+/// Import-only fixture aggregate generated from every labelled ORDER root.
+const ROOT: &str = "CleanQualification.kcheck_labelled";
 
 /// `(accepted case theorem, forged statement)`. Each forged statement is
 /// `run_x = v`: an acceptance claimed for a run the checker refuses, or a bound
@@ -123,6 +131,23 @@ const CHECKER: &[&str] = &[
     "KCheck.Term.closeAt",
     "KCheck.Term.sameErasure",
     "KCheck.Term.getSpine",
+    "KCheck.Term.getSpineAux",
+    "KCheck.ProjectionPacket.termExact",
+    "KCheck.ProjectionPacket.entryExact",
+    "KCheck.ProjectionPacket.recognise",
+    "KCheck.UnitFamilyPacket.ruleExact",
+    "KCheck.UnitFamilyPacket.rulesExact",
+    "KCheck.UnitFamilyPacket.familyExact",
+    "KCheck.UnitFamilyPacket.lookupExact",
+    "KCheck.UnitFamilyPacket.familyMember",
+    "KCheck.UnitFamilyPacket.oldRecognise",
+    "KCheck.UnitFamilyPacket.fresh",
+    "KCheck.UnitFamilyPacket.scopedLevel",
+    "KCheck.UnitFamilyPacket.sourceBlock",
+    "KCheck.UnitFamilyPacket.extract",
+    "KCheck.UnitFamilyPacket.reportsOf",
+    "KCheck.UnitFamilyPacket.outputsExact",
+    "KCheck.UnitFamilyFrames.parse",
     "KCheck.familyOfRecursor",
     "KCheck.findRule",
     "KCheck.leadingCount",
@@ -135,6 +160,9 @@ const CHECKER: &[&str] = &[
     "KCheck.lookupLocal",
     "KCheck.findEntry",
     "KCheck.unfoldHead",
+    "KCheck.projectionGuard",
+    "KCheck.projectionFieldType",
+    "KCheck.projectionEta",
     "KCheck.redexAt",
     "KCheck.iotaReduct",
     "KCheck.instR",
@@ -150,6 +178,11 @@ const CHECKER: &[&str] = &[
     "KCheck.ordinaryParts",
     "KCheck.checkOrdinary",
     "KCheck.blockName",
+    "KCheck.unitFormer",
+    "KCheck.unitConstructor",
+    "KCheck.unitRecursor",
+    "KCheck.unitInstall",
+    "KCheck.checkUnitFamily",
     "KCheck.kcheck",
     "KCheck.kcheckBytes",
     "KCheck.base",
@@ -529,6 +562,56 @@ const BETA_DEFINITIONS: &[&str] = &[
 const FORGED_REPORT: &str = "forged_report_successor";
 const FORGED_BOUND: &str = "forged_check_bound_low";
 
+/// C2's "a ground acceptance per token is a theorem closed by evaluation": the
+/// theorem that `KCheck.checker` accepts every case `perTokenCases` lists and
+/// that their advice reads every tag but `0x00` and `MEMO`'s `0x15`. Its
+/// statement is pinned like a C3 theorem's.
+const PER_TOKEN_THEOREM: &str = "KCheck.CheckerContracts.per_token_accepted";
+
+/// The definitions `PER_TOKEN_THEOREM`'s statement names, each pinned by its
+/// type and value with its auxiliaries like the checker's: the run of
+/// `KCheck.checker` from its first handle, the case list, the advice and tags
+/// read from it, and a token's tag. A theorem pinned by statement alone keeps
+/// its digest when a definition it names is changed.
+const PER_TOKEN_DEFINITIONS: &[&str] = &[
+    "KCheck.CheckerContracts.checkerRun",
+    "KCheck.CheckerCases.perTokenCases",
+    "KCheck.CheckerCases.perTokenAdvice",
+    "KCheck.CheckerCases.perTokenTags",
+    "KCheck.CheckerCases.tokenTag",
+];
+
+/// `PER_TOKEN_THEOREM`'s first conjunct with `MEMO`'s refused run appended:
+/// `Eq.refl true` at it must fail by type mismatch.
+const PER_TOKEN_FORGED: &str = "forged_per_token_memo";
+
+/// The cases `perTokenCases` lists, in order: each is `(case, case_<case>)`,
+/// and the run the executable prints for it, `run_<case>`, is
+/// `runCase case_<case>`.
+const PER_TOKEN_CASES: &[&str] = &[
+    "refl",
+    "pi",
+    "sort",
+    "const",
+    "const_polymorphic",
+    "app",
+    "lam",
+    "core_right",
+    "core_left",
+    "delta_right",
+    "delta_left",
+    "delta_both",
+    "whnf_delta",
+    "eta_right",
+    "eta_left",
+    "irrel",
+    "iota_zero",
+    "iota_spine",
+    "iota_succ",
+    "iota_eq",
+    "k",
+];
+
 fn name(s: &str) -> Name {
     Name::from_string(s)
 }
@@ -616,6 +699,34 @@ fn is_type_mismatch<T>(result: &Result<T, ReferenceRefusal>) -> bool {
 fn kcheck_labelled_rechecks_through_two_kernels_with_forged_runs() {
     let lib = require_pinned_lean_lib_path().expect("install the repository-pinned Lean toolchain");
     let compiled = compiled_fixture_dir("kcheck_labelled");
+    let stems = order_stems();
+    assert_eq!(
+        stems.len(),
+        90,
+        "module denominator of theories/kcheck_labelled/ORDER"
+    );
+    let aggregate = read_artifact(
+        ROOT,
+        &compiled.join("CleanQualification/kcheck_labelled.olean"),
+        ArtifactDepth::Names,
+    )
+    .expect("read exact labelled aggregate");
+    assert!(
+        aggregate.names.is_empty(),
+        "qualification aggregate declares subjects"
+    );
+    assert_eq!(
+        aggregate
+            .imports
+            .iter()
+            .map(|import| import.module_name.clone())
+            .collect::<Vec<_>>(),
+        stems
+            .iter()
+            .map(|stem| stem.replace('/', "."))
+            .collect::<Vec<_>>(),
+        "qualification aggregate must import every labelled ORDER root in order"
+    );
     let lean = clean_olean::pinned_lean_binary().expect("pinned Lean binary");
     let bin = lean.parent().expect("Lean bin directory");
     let mut paths = vec![bin.to_path_buf()];
@@ -667,15 +778,25 @@ fn kcheck_labelled_rechecks_through_two_kernels_with_forged_runs() {
     let mut loaded = Environment::for_lean_replay();
     let summaries = load_module_with_deps(&mut loaded, ROOT, &[compiled.clone(), lib])
         .expect("load the compiled checker");
+    let expected_modules: BTreeSet<_> = stems.iter().map(|stem| stem.replace('/', ".")).collect();
+    let loaded_modules: BTreeSet<_> = summaries
+        .iter()
+        .filter_map(|summary| summary.module_name.as_ref())
+        .filter(|module| module.starts_with("KCheck."))
+        .cloned()
+        .collect();
+    assert_eq!(
+        expected_modules, loaded_modules,
+        "all and only labelled ORDER modules must be loaded"
+    );
 
     // The subjects are the constants the package's own modules declare, read
     // from each artifact's name table, as in `kcheck_core.rs`: a `CICL.*` or
     // `KCheckSpec.*` constant is never counted as the checker's, and a
     // compiler's `unsafe` copy must be marked so by its own artifact.
-    let stems = order_stems();
     assert_eq!(
         stems.len(),
-        57,
+        90,
         "module denominator of theories/kcheck_labelled/ORDER"
     );
     let not_replayable: BTreeSet<&str> = summaries
@@ -729,6 +850,27 @@ fn kcheck_labelled_rechecks_through_two_kernels_with_forged_runs() {
             "{copy} has no definition among the subjects"
         );
     }
+    let owned_theorems: BTreeSet<_> = targets
+        .iter()
+        .filter(|subject| {
+            loaded
+                .get_const(subject)
+                .is_some_and(|constant| constant.kind == ConstantKind::Theorem)
+        })
+        .cloned()
+        .collect();
+    let owned_data: BTreeSet<_> = targets
+        .iter()
+        // Pin all own Definition ConstantInfo type/value records, including
+        // private runtime helpers and semantic witness data such as localEnv.
+        // Separate inductive/constructor/recursor tables are not claimed here.
+        .filter(|subject| {
+            loaded
+                .get_const(subject)
+                .is_some_and(|constant| constant.kind == ConstantKind::Definition)
+        })
+        .cloned()
+        .collect();
 
     // Kernel two: Clean's reference kernel, from an empty base. Re-admitting a
     // case theorem evaluates the checker on its run.
@@ -745,13 +887,12 @@ fn kcheck_labelled_rechecks_through_two_kernels_with_forged_runs() {
         .expect("all reference admissions passed");
 
     // Every line the executable prints is a re-admitted theorem's statement:
-    // `run_<case> = Except.ok ...` or `Except.error ...`.
-    let case_states = |case: &str, accepted: bool| -> bool {
+    // `run_<case> = Except.ok ...` or `Except.error ...`, the whole verdict text
+    // and not only its head. `case_value` returns the stated value.
+    let case_value = |case: &str, accepted: bool| -> Option<Expr> {
         let suffix = if accepted { "accepted" } else { "refused" };
         let theorem = name(&format!("KCheck.CheckerCases.{case}_{suffix}"));
-        let Some(constant) = loaded.get_const(&theorem) else {
-            return false;
-        };
+        let constant = loaded.get_const(&theorem)?;
         let statement = &constant.type_;
         let is_const = |e: &Expr, expected: &str| matches!(e.get_app_fn().kind(), ExprKind::Const(n, _) if n == &name(expected));
         let verdict = if accepted {
@@ -761,43 +902,55 @@ fn kcheck_labelled_rechecks_through_two_kernels_with_forged_runs() {
         };
         let run = name(&format!("KCheck.CheckerCases.run_{case}"));
         let mut sides = statement.get_app_args_iter();
-        targets.contains(&theorem)
+        let right = sides.next()?;
+        let shaped = targets.contains(&theorem)
             && targets.contains(&run)
             && constant.value.is_some()
             && is_const(statement, "Eq")
             && statement.get_app_num_args() == 3
-            && sides.next().is_some_and(|right| is_const(right, verdict))
+            && is_const(right, verdict)
             && sides
                 .next()
-                .is_some_and(|left| matches!(left.kind(), ExprKind::Const(n, _) if n == &run))
+                .is_some_and(|left| matches!(left.kind(), ExprKind::Const(n, _) if n == &run));
+        shaped.then(|| right.clone())
     };
     let expected_output = include_str!("../../../theories/kcheck_labelled/expected_output.txt");
     let mut accepted_cases = 0_usize;
     let mut refused_cases = 0_usize;
     let mut summary = None;
-    for line in expected_output.lines() {
-        if let Some(rest) = line.strip_prefix("cases ") {
-            summary = Some(rest.to_owned());
-            continue;
-        }
-        let (case, verdict) = line
-            .split_once(": ")
-            .unwrap_or_else(|| panic!("malformed verdict line: {line}"));
-        let accepted = if verdict.starts_with("accepted ") {
-            true
-        } else if verdict.starts_with("refused ") {
-            false
-        } else {
-            panic!("verdict line is neither accepted nor refused: {line}");
-        };
-        assert!(
-            case_states(case, accepted),
-            "no re-admitted theorem states the verdict of line: {line}"
-        );
-        if accepted {
-            accepted_cases += 1;
-        } else {
-            refused_cases += 1;
+    {
+        let text = verdict_text::VerdictText::new(kernel.environment());
+        for line in expected_output.lines() {
+            if let Some(rest) = line.strip_prefix("cases ") {
+                summary = Some(rest.to_owned());
+                continue;
+            }
+            let (case, verdict) = line
+                .split_once(": ")
+                .unwrap_or_else(|| panic!("malformed verdict line: {line}"));
+            let accepted = if verdict.starts_with("accepted ") {
+                true
+            } else if verdict.starts_with("refused ") {
+                false
+            } else {
+                panic!("verdict line is neither accepted nor refused: {line}");
+            };
+            let value = case_value(case, accepted).unwrap_or_else(|| {
+                panic!("no re-admitted theorem states the verdict of line: {line}")
+            });
+            let stated = text
+                .verdict(&value)
+                .unwrap_or_else(|why| panic!("cannot render the verdict stated for {case}: {why}"));
+            assert_eq!(
+                verdict, stated,
+                "line `{line}` of expected_output.txt differs from the verdict \
+                 KCheck.CheckerCases.{case}'s re-admitted theorem states"
+            );
+            if accepted {
+                accepted_cases += 1;
+            } else {
+                refused_cases += 1;
+            }
         }
     }
     assert_eq!(
@@ -823,37 +976,89 @@ fn kcheck_labelled_rechecks_through_two_kernels_with_forged_runs() {
         "every run of KCheck/CheckerCases.lean has an output line"
     );
 
-    // A ground acceptance per token: the advice lists of the per-token
-    // acceptances use every tag but `MEMO`'s, by a theorem both kernels
-    // admitted (`perTokenTags` is evaluated, not assumed).
-    let per_token = name("KCheck.CheckerCases.per_token_tags");
-    let coverage = loaded
+    // A ground acceptance per token: `KCheck.checker` accepts every case
+    // `perTokenCases` lists and their advice uses every tag but `MEMO`'s, by a
+    // theorem both kernels admitted (evaluated, not assumed). Its statement and
+    // the definitions it names are pinned below; here, each listed case is the
+    // run the executable prints under its name (`run_<case>` is `runCase
+    // case_<case>`, and `perTokenCases` lists `(case, case_<case>)`), so the
+    // advice the theorem reads is the advice of those printed acceptances.
+    let per_token = name(PER_TOKEN_THEOREM);
+    let per_token_theorem = loaded
         .get_const(&per_token)
-        .expect("KCheck.CheckerCases.per_token_tags is resident");
+        .unwrap_or_else(|| panic!("{PER_TOKEN_THEOREM} is resident"));
     assert!(
-        targets.contains(&per_token) && coverage.value.is_some(),
-        "KCheck.CheckerCases.per_token_tags is not an admitted theorem of the package"
+        targets.contains(&per_token) && per_token_theorem.value.is_some(),
+        "{PER_TOKEN_THEOREM} is not an admitted theorem of the package"
     );
+    {
+        let text = verdict_text::VerdictText::new(kernel.environment());
+        let cases = loaded
+            .get_const(&name("KCheck.CheckerCases.perTokenCases"))
+            .and_then(|cases| cases.value.clone())
+            .expect("KCheck.CheckerCases.perTokenCases has a value");
+        let listed = text
+            .list(&cases)
+            .unwrap_or_else(|why| panic!("perTokenCases is not a list: {why}"));
+        let listed: Vec<(String, Expr)> = listed
+            .iter()
+            .map(|entry| {
+                let (label, case) = text
+                    .pair(entry)
+                    .unwrap_or_else(|why| panic!("a perTokenCases entry is not a pair: {why}"));
+                let label = text
+                    .string(&label)
+                    .unwrap_or_else(|why| panic!("a perTokenCases label is not a string: {why}"));
+                (label, case)
+            })
+            .collect();
+        assert_eq!(
+            listed
+                .iter()
+                .map(|(label, _)| label.as_str())
+                .collect::<Vec<_>>(),
+            PER_TOKEN_CASES,
+            "perTokenCases lists other cases than PER_TOKEN_CASES"
+        );
+        let run_case = name("KCheck.CheckerCases.runCase");
+        for (label, case) in &listed {
+            let case_name = name(&format!("KCheck.CheckerCases.case_{label}"));
+            assert!(
+                matches!(case.kind(), ExprKind::Const(n, _) if n == &case_name),
+                "perTokenCases lists {label} with {case}, not {case_name}"
+            );
+            let run = loaded
+                .get_const(&name(&format!("KCheck.CheckerCases.run_{label}")))
+                .and_then(|run| run.value.clone())
+                .unwrap_or_else(|| panic!("run_{label} has a value"));
+            let args = run.get_app_args();
+            assert!(
+                matches!(run.get_app_fn().kind(), ExprKind::Const(n, _) if n == &run_case)
+                    && args.len() == 1
+                    && matches!(args[0].kind(), ExprKind::Const(n, _) if n == &case_name),
+                "run_{label} is {run}, not runCase case_{label}: the printed run is not the \
+                 case the per-token theorem reads"
+            );
+        }
+    }
 
-    // D1 Revision 5 (RT4-1): C2's checker starts at `Env.base`, by a theorem
-    // both kernels admitted, stated as `Checker.StartsAtBase KCheck.checker`.
-    let starts_at_base = name("KCheck.checker_startsAtBase");
+    // The sole actual initializer is the protected pair seed. Check the
+    // admitted theorem's exact checker and initial environment arguments.
+    let starts_at_seed = name("KCheck.checker_startsAtSeed");
     let starts = loaded
-        .get_const(&starts_at_base)
-        .expect("KCheck.checker_startsAtBase is resident");
+        .get_const(&starts_at_seed)
+        .expect("KCheck.checker_startsAtSeed is resident");
     assert!(
-        targets.contains(&starts_at_base) && starts.value.is_some(),
-        "KCheck.checker_startsAtBase is not an admitted theorem of the package"
+        targets.contains(&starts_at_seed) && starts.value.is_some(),
+        "KCheck.checker_startsAtSeed is not an admitted theorem of the package"
     );
+    let starts_args = starts.type_.get_app_args();
     assert!(
-        matches!(starts.type_.get_app_fn().kind(), ExprKind::Const(n, _) if n == &name("KCheckSpec.Checker.StartsAtBase"))
-            && starts.type_.get_app_num_args() == 1
-            && starts
-                .type_
-                .get_app_args_iter()
-                .next()
-                .is_some_and(|checker| matches!(checker.kind(), ExprKind::Const(n, _) if n == &name("KCheck.checker"))),
-        "KCheck.checker_startsAtBase does not state Checker.StartsAtBase KCheck.checker"
+        matches!(starts.type_.get_app_fn().kind(), ExprKind::Const(n, _) if n == &name("KCheckSpec.Checker.StartsAt"))
+            && starts_args.len() == 2
+            && matches!(starts_args[0].kind(), ExprKind::Const(n, _) if n == &name("KCheck.checker"))
+            && matches!(starts_args[1].kind(), ExprKind::Const(n, _) if n == &name("KCheckSpec.PSigmaSeed.seed")),
+        "KCheck.checker_startsAtSeed does not state Checker.StartsAt KCheck.checker PSigmaSeed.seed"
     );
 
     // Axiom closures. The checker is computation: no `Classical.choice`.
@@ -881,7 +1086,12 @@ fn kcheck_labelled_rechecks_through_two_kernels_with_forged_runs() {
     }
     let mut observed_closures: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     observed_closures.insert("*".to_owned(), union);
-    for definition in CHECKER.iter().chain(BETA_DEFINITIONS) {
+    for definition in CHECKER
+        .iter()
+        .chain(BETA_DEFINITIONS)
+        .chain(PER_TOKEN_DEFINITIONS)
+        .chain(std::iter::once(&PER_TOKEN_THEOREM))
+    {
         let subject = name(definition);
         assert!(targets.contains(&subject), "{definition} is not a subject");
         observed_closures.insert(
@@ -910,6 +1120,11 @@ fn kcheck_labelled_rechecks_through_two_kernels_with_forged_runs() {
             (*theorem).to_owned(),
             closure_of(kernel.environment(), &subject),
         );
+    }
+    for subject in &owned_theorems {
+        observed_closures
+            .entry(subject.to_unambiguous_string())
+            .or_insert_with(|| closure_of(kernel.environment(), subject));
     }
     for (subject, closure) in &observed_closures {
         eprintln!("axiom-closure {subject} {closure:?}");
@@ -954,6 +1169,24 @@ fn kcheck_labelled_rechecks_through_two_kernels_with_forged_runs() {
             .is_none(),
         "{FORGED_BOUND} is listed twice"
     );
+    assert!(
+        observed_pins
+            .insert(
+                PER_TOKEN_FORGED.to_owned(),
+                digest(&statement(PER_TOKEN_FORGED))
+            )
+            .is_none(),
+        "{PER_TOKEN_FORGED} is listed twice"
+    );
+    assert!(
+        observed_pins
+            .insert(
+                PER_TOKEN_THEOREM.to_owned(),
+                digest(&per_token_theorem.type_)
+            )
+            .is_none(),
+        "{PER_TOKEN_THEOREM} is listed twice"
+    );
     for theorem in C3_THEOREMS {
         let constant = loaded
             .get_const(&name(theorem))
@@ -974,7 +1207,11 @@ fn kcheck_labelled_rechecks_through_two_kernels_with_forged_runs() {
         );
     }
     let mut pinned_auxiliaries: BTreeSet<String> = BTreeSet::new();
-    for definition in CHECKER.iter().chain(BETA_DEFINITIONS) {
+    for definition in CHECKER
+        .iter()
+        .chain(BETA_DEFINITIONS)
+        .chain(PER_TOKEN_DEFINITIONS)
+    {
         let constant = loaded
             .get_const(&name(definition))
             .expect("resident subject");
@@ -1025,19 +1262,66 @@ fn kcheck_labelled_rechecks_through_two_kernels_with_forged_runs() {
             "the body of {member} ({member}._f) is not pinned"
         );
     }
+    let old_pin_count = observed_pins.len();
+    for subject in &owned_theorems {
+        let pin = digest(&loaded.get_const(subject).expect("owned theorem").type_);
+        if let Some(previous) = observed_pins.insert(subject.to_unambiguous_string(), pin.clone()) {
+            assert_eq!(
+                previous, pin,
+                "existing theorem statement pin must remain unchanged: {subject}"
+            );
+        }
+    }
+    for subject in &owned_data {
+        // A preserved named checker digest may also include its auxiliaries.
+        // Keep that exact old meaning rather than replacing it by a bare body.
+        observed_pins
+            .entry(subject.to_unambiguous_string())
+            .or_insert_with(|| checker_digest(loaded.get_const(subject).expect("owned data"), &[]));
+    }
+    let expected_pin_keys: BTreeSet<String> = FORGED_RUNS
+        .iter()
+        .map(|(_, pin)| (*pin).to_owned())
+        .chain([FORGED_REPORT.to_owned(), FORGED_BOUND.to_owned()])
+        .chain(C3_THEOREMS.iter().map(|subject| (*subject).to_owned()))
+        .chain(CHECKER.iter().map(|subject| (*subject).to_owned()))
+        .chain(
+            BETA_CONTRACTS
+                .iter()
+                .chain(BETA_FORGED)
+                .map(|(_, pin)| (*pin).to_owned()),
+        )
+        .chain(BETA_DEFINITIONS.iter().map(|subject| (*subject).to_owned()))
+        .chain(
+            PER_TOKEN_DEFINITIONS
+                .iter()
+                .map(|subject| (*subject).to_owned()),
+        )
+        .chain([PER_TOKEN_FORGED.to_owned(), PER_TOKEN_THEOREM.to_owned()])
+        .chain(owned_theorems.iter().map(Name::to_unambiguous_string))
+        .chain(owned_data.iter().map(Name::to_unambiguous_string))
+        .collect();
+    assert_eq!(
+        observed_pins.keys().cloned().collect::<BTreeSet<_>>(),
+        expected_pin_keys,
+        "pin keys must equal the complete named-plus-module-origin registration index"
+    );
+    let added_pin_count = expected_pin_keys.len() - old_pin_count;
     for (pin, value) in &observed_pins {
         eprintln!("statement-pin {pin} {value}");
     }
     assert_eq!(
-        observed_pins.len(),
+        old_pin_count,
         FORGED_RUNS.len()
             + 2
             + C3_THEOREMS.len()
             + CHECKER.len()
             + BETA_CONTRACTS.len()
             + BETA_FORGED.len()
-            + BETA_DEFINITIONS.len(),
-        "pin denominator"
+            + BETA_DEFINITIONS.len()
+            + PER_TOKEN_DEFINITIONS.len()
+            + 2,
+        "preserved named pin denominator including Main per-token controls"
     );
     let committed_closures: BTreeMap<String, BTreeSet<String>> = serde_json::from_str(
         include_str!("../../../theories/kcheck_labelled/axiom_closures.json"),
@@ -1109,6 +1393,63 @@ fn kcheck_labelled_rechecks_through_two_kernels_with_forged_runs() {
         );
     }
 
+    // The per-token theorem: its proof is admitted at its own (pinned)
+    // statement and refused at `False`; `Eq.refl true` is admitted at its first
+    // conjunct, `(perTokenCases.all fun c => (checkerRun c.2).isOk) = true` (the
+    // reference kernel runs `KCheck.checker` on every case), and refused by type
+    // mismatch at the same conjunct over the cases with `MEMO`'s refused run
+    // appended (the kernel evaluates that `all` to `false`).
+    let per_token_proof = per_token_theorem
+        .value
+        .clone()
+        .expect("checked above: the per-token theorem has a proof");
+    kernel
+        .add_checked(Declaration::Theorem {
+            name: name("KCheck.Controls.per_token_accepted_own_statement"),
+            level_params: per_token_theorem.level_params.clone(),
+            type_: per_token_theorem.type_.clone(),
+            value: per_token_proof.clone(),
+        })
+        .unwrap_or_else(|refusal| panic!("{PER_TOKEN_THEOREM} at its own statement: {refusal:?}"));
+    let per_token_false = kernel.add_checked(Declaration::Theorem {
+        name: name("KCheck.Controls.per_token_accepted_false"),
+        level_params: per_token_theorem.level_params.clone(),
+        type_: Expr::const_(name("False"), vec![]),
+        value: per_token_proof,
+    });
+    assert!(
+        is_type_mismatch(&per_token_false),
+        "{PER_TOKEN_THEOREM} at False must fail by type mismatch: {per_token_false:?}"
+    );
+    let conjuncts = per_token_theorem.type_.get_app_args();
+    assert!(
+        matches!(per_token_theorem.type_.get_app_fn().kind(), ExprKind::Const(n, _) if n == &name("And"))
+            && conjuncts.len() == 2,
+        "{PER_TOKEN_THEOREM} does not state a conjunction"
+    );
+    let all_accepted = (*conjuncts[0]).clone();
+    kernel
+        .add_checked(Declaration::Theorem {
+            name: name("KCheck.Controls.per_token_accepted_all_refl"),
+            level_params: per_token_theorem.level_params.clone(),
+            type_: all_accepted.clone(),
+            value: verdict_refl(&all_accepted),
+        })
+        .unwrap_or_else(|refusal| {
+            panic!("Eq.refl at {PER_TOKEN_THEOREM}'s acceptance conjunct: {refusal:?}")
+        });
+    let forged_per_token = statement(PER_TOKEN_FORGED);
+    let bad_per_token = kernel.add_checked(Declaration::Theorem {
+        name: name(&format!("KCheck.Controls.{PER_TOKEN_FORGED}")),
+        level_params: per_token_theorem.level_params.clone(),
+        type_: forged_per_token.clone(),
+        value: verdict_refl(&forged_per_token),
+    });
+    assert!(
+        is_type_mismatch(&bad_per_token),
+        "Eq.refl true at {PER_TOKEN_FORGED} must fail by type mismatch: {bad_per_token:?}"
+    );
+
     // Each C3 theorem's actual proof re-enters at its pinned statement and
     // is rejected at False. This controls every generic theorem acceptance;
     // the ground mutation below separately exercises executable evaluation.
@@ -1179,6 +1520,41 @@ fn kcheck_labelled_rechecks_through_two_kernels_with_forged_runs() {
         assert!(is_type_mismatch(&bad), "guard deletion must fail: {bad:?}");
     }
 
+    // Preserve every named C3/beta/forged control above, and give every other
+    // own theorem the same original-body/False check at its complete type.
+    // These are qualification subjects, not additional C3 headline claims.
+    for (index, subject) in owned_theorems.iter().enumerate() {
+        let display = subject.to_string();
+        if C3_THEOREMS.contains(&display.as_str())
+            || BETA_CONTRACTS
+                .iter()
+                .any(|(theorem, _)| *theorem == display)
+        {
+            continue;
+        }
+        let proof = loaded.get_const(subject).expect("owned theorem");
+        let value = proof.value.clone().expect("owned theorem proof");
+        kernel
+            .add_checked(Declaration::Theorem {
+                name: name(&format!("KCheck.Controls.owned_{index}_positive")),
+                level_params: proof.level_params.clone(),
+                type_: proof.type_.clone(),
+                value: value.clone(),
+            })
+            .unwrap_or_else(|refusal| panic!("{subject} at its own statement: {refusal:?}"));
+        let bad = kernel.add_checked(Declaration::Theorem {
+            name: name(&format!("KCheck.Controls.owned_{index}_false")),
+            level_params: proof.level_params.clone(),
+            type_: Expr::const_(name("False"), vec![]),
+            value,
+        });
+        assert!(
+            is_type_mismatch(&bad),
+            "{subject} at False must fail by type mismatch: {bad:?}"
+        );
+    }
+    eprintln!("labelled full index: {} owned theorem statements, {} owned Definition type/value records, {added_pin_count} additional pin rows", owned_theorems.len(), owned_data.len());
+
     // C3 report-calculus mutation: the proved ground successor report is
     // admitted at its own equation, while both that proof and `Eq.refl` of the
     // forged right-hand side fail at the statement that drops the increment.
@@ -1244,7 +1620,8 @@ fn kcheck_labelled_rechecks_through_two_kernels_with_forged_runs() {
     eprintln!(
         "kcheck_labelled subjects {}, modules {}, cases {} ({accepted_cases} accepted, \
          {refused_cases} refused), checker pins {}, C3 theorems {}, forged runs {}, \
-         forged C3 controls 2, beta contracts {}, beta guard forgeries {}, beta definition pins {}",
+         forged C3 controls 2, beta contracts {}, beta guard forgeries {}, beta definition pins {}, \
+         per-token cases {} with {} definition pins and 1 forged control",
         targets.len(),
         stems.len(),
         accepted_cases + refused_cases,
@@ -1253,9 +1630,14 @@ fn kcheck_labelled_rechecks_through_two_kernels_with_forged_runs() {
         FORGED_RUNS.len(),
         BETA_CONTRACTS.len(),
         BETA_FORGED.len(),
-        BETA_DEFINITIONS.len()
+        BETA_DEFINITIONS.len(),
+        PER_TOKEN_CASES.len(),
+        PER_TOKEN_DEFINITIONS.len()
     );
 }
 
 #[path = "kcheck_labelled/semantic_soundness.rs"]
 mod semantic_soundness;
+
+#[path = "kcheck_labelled/verdict_text.rs"]
+mod verdict_text;

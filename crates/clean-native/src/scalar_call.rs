@@ -22,6 +22,10 @@ use clean_compiler::Decl;
 use clean_kernel::expr::UsedConstants;
 use clean_kernel::{Environment, Expr, Name, TypeChecker};
 
+mod observations;
+use observations::ScalarSelectedInput;
+pub use observations::{ObservedScalarCall, ObservedScalarCallFailure};
+
 const ENTRY: &str = "clean_scalar_call";
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 type Entry = unsafe extern "C" fn(u32, u32, u64, u64) -> u64;
@@ -83,10 +87,42 @@ impl ScalarCall {
         source: Option<&Path>,
         closure: Option<&clean_compiler::RuntimeBindingClosure>,
     ) -> anyhow::Result<Self> {
+        Self::from_selected_with_replay(decls, env, pipeline, root, source, closure, None)
+    }
+
+    pub(crate) fn from_selected_with_replay(
+        decls: &[Decl],
+        env: &Environment,
+        pipeline: &PipelineConfig,
+        root: &Name,
+        source: Option<&Path>,
+        closure: Option<&clean_compiler::RuntimeBindingClosure>,
+        replay: Option<&clean_olean::ReplayedImportedSource>,
+    ) -> anyhow::Result<Self> {
+        Self::from_selected_input(
+            ScalarSelectedInput::Borrowed {
+                decls,
+                env,
+                pipeline,
+                closure,
+            },
+            root,
+            source,
+            replay,
+        )
+    }
+
+    fn from_selected_input(
+        selected: ScalarSelectedInput<'_>,
+        root: &Name,
+        source: Option<&Path>,
+        replay: Option<&clean_olean::ReplayedImportedSource>,
+    ) -> anyhow::Result<Self> {
+        let (decls, env, pipeline, closure) = selected.parts();
         host()?;
-        source_contract(env, root)?;
+        source_contract_with_replay(env, root, replay)?;
         for declaration in decls {
-            source_eligibility(env, &declaration.name)?;
+            source_eligibility_with_replay(env, &declaration.name, replay)?;
         }
         let symbol = root.to_string();
         if symbol == ENTRY
@@ -103,41 +139,48 @@ impl ScalarCall {
             dir,
             &crate::native_runtime::RuntimeMember::ALL,
         )?;
+        if let ScalarSelectedInput::Observed { observer, .. } = selected {
+            observer.runtime(&runtime);
+        }
         let mut runtime_symbols = BTreeSet::new();
         for (_, path) in &runtime.objects {
             runtime_symbols.extend(object_symbols(path, false)?);
         }
         runtime_symbols.insert(ENTRY.to_owned());
         let object = dir.join("source.o");
-        crate::compile::emit_selected_object_with_check(
-            decls,
-            env,
-            pipeline,
-            source,
-            &object,
-            closure,
-            |module| {
-                check_scalar_c_signature(
-                    module,
-                    &symbol,
-                    &[
-                        ScalarWord::U32,
-                        ScalarWord::U32,
-                        ScalarWord::U64,
-                        ScalarWord::U64,
-                    ],
+        let check = |module: &clean_compiler::emit_trust_ir_lane::Module| {
+            check_scalar_c_signature(
+                module,
+                &symbol,
+                &[
+                    ScalarWord::U32,
+                    ScalarWord::U32,
                     ScalarWord::U64,
-                )
-                .map_err(anyhow::Error::msg)?;
-                // TrustIR's names are normative object link symbols. Refuse
-                // source capture of actual runtime definitions OR imports
-                // (such as malloc) before invoking codegen. Recheck the
-                // emitted object's own definitions below as well.
-                let mut names = defined_symbols(module);
-                names.extend(module.globals.iter().map(|global| global.name.clone()));
-                refuse_collisions(names.into_iter().collect(), &runtime_symbols)
-            },
-        )?;
+                    ScalarWord::U64,
+                ],
+                ScalarWord::U64,
+            )
+            .map_err(anyhow::Error::msg)?;
+            // TrustIR's names are normative object link symbols. Refuse
+            // source capture of actual runtime definitions OR imports
+            // (such as malloc) before invoking codegen. Recheck the
+            // emitted object's own definitions below as well.
+            let mut names = defined_symbols(module);
+            names.extend(module.globals.iter().map(|global| global.name.clone()));
+            refuse_collisions(names.into_iter().collect(), &runtime_symbols)
+        };
+        match selected {
+            ScalarSelectedInput::Borrowed { .. } => {
+                crate::compile::emit_selected_object_with_check(
+                    decls, env, pipeline, source, &object, closure, check,
+                )?
+            }
+            ScalarSelectedInput::Observed { input, observer } => {
+                crate::compile::emit_selected_object_owned_recording(
+                    input, source, &object, observer, check,
+                )?
+            }
+        }
         let source_symbols = object_symbols(&object, true)?;
         let source_all_symbols = object_symbols(&object, false)?;
         let source_imports: BTreeSet<_> = source_all_symbols
@@ -184,6 +227,9 @@ impl ScalarCall {
                 output.status,
                 String::from_utf8_lossy(&output.stderr)
             );
+        }
+        if let ScalarSelectedInput::Observed { observer, .. } = selected {
+            observer.file("actual linked scalar image", &library, None);
         }
         let image = loader::Image::open(&library)?;
         Ok(Self {
@@ -247,7 +293,7 @@ fn host() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn scalar_type() -> Expr {
+pub(crate) fn scalar_type() -> Expr {
     let u32_ty = Expr::const_str("UInt32");
     let u64_ty = Expr::const_str("UInt64");
     Expr::arrow(
@@ -259,19 +305,27 @@ fn scalar_type() -> Expr {
     )
 }
 
+#[cfg(test)]
 fn source_contract(env: &Environment, root: &Name) -> anyhow::Result<()> {
-    source_eligibility(env, root)?;
+    source_contract_with_replay(env, root, None)
+}
+
+fn source_contract_with_replay(
+    env: &Environment,
+    root: &Name,
+    replay: Option<&clean_olean::ReplayedImportedSource>,
+) -> anyhow::Result<()> {
+    source_eligibility_with_replay(env, root, replay)?;
     // A name match is not a primitive/layout witness. Compare the complete
     // reachable kernel records and inductive/constructor/recursor roles with
     // Clean's own kernel-built canonical prelude, not caller-provided hashes.
     // This intentionally refuses a differing official/source representation;
     // extending that admission requires its own concrete layout controls.
     let canonical = Environment::try_with_prelude().context("canonical scalar prelude")?;
-    let mut pending = vec![Name::from_string("UInt32"), Name::from_string("UInt64")];
-    let mut seen = HashSet::new();
-    while let Some(name) = pending.pop() {
-        if !seen.insert(name.clone()) {
-            continue;
+    let provenance = replay.map_or(env, |r| r.checked_environment());
+    for name in scalar_dependencies(&canonical)? {
+        if replay.is_some() {
+            source_eligibility_with_replay(env, &name, replay)?;
         }
         let expected = canonical
             .get_const(&name)
@@ -282,16 +336,43 @@ fn source_contract(env: &Environment, root: &Name) -> anyhow::Result<()> {
             || env.get_recursor(&name) != canonical.get_recursor(&name)
             || env.get_structure_field_names(&name) != canonical.get_structure_field_names(&name)
             || env.get_structure_parents(&name) != canonical.get_structure_parents(&name)
-            || env.declaration_verification(&name) != canonical.declaration_verification(&name)
+            || provenance.declaration_verification(&name)
+                != canonical.declaration_verification(&name)
             || env.get_extern(&name) != canonical.get_extern(&name)
             || env.get_implemented_by(&name) != canonical.get_implemented_by(&name)
             || env.is_unsafe(&name)
             || env.is_partial(&name)
             || env.is_staged_header(&name)
-            || env.constant_needs_recheck(&name)
+            || provenance.constant_needs_recheck(&name)
         {
             bail!("noncanonical scalar primitive/layout dependency `{name}`");
         }
+    }
+    let info = env
+        .get_const(root)
+        .context("selected scalar source declaration is absent")?;
+    if !info.level_params.is_empty()
+        || !TypeChecker::new(env).is_def_eq(&info.type_, &scalar_type())
+    {
+        bail!("scalar source type refused for `{root}`: expected UInt32 -> UInt32 -> UInt64 -> UInt64 -> UInt64");
+    }
+    Ok(())
+}
+
+pub(crate) fn scalar_source_roots() -> anyhow::Result<BTreeSet<Name>> {
+    scalar_dependencies(&Environment::try_with_prelude().context("canonical scalar prelude")?)
+}
+
+fn scalar_dependencies(canonical: &Environment) -> anyhow::Result<BTreeSet<Name>> {
+    let mut pending = vec![Name::from_string("UInt32"), Name::from_string("UInt64")];
+    let mut seen = BTreeSet::new();
+    while let Some(name) = pending.pop() {
+        if !seen.insert(name.clone()) {
+            continue;
+        }
+        let expected = canonical
+            .get_const(&name)
+            .with_context(|| format!("no canonical scalar dependency {name}"))?;
         let mut dependencies = HashSet::new();
         expected
             .type_
@@ -316,15 +397,28 @@ fn source_contract(env: &Environment, root: &Name) -> anyhow::Result<()> {
         }
         pending.extend(dependencies);
     }
-    let info = env
-        .get_const(root)
-        .context("selected scalar source declaration is absent")?;
-    if !info.level_params.is_empty()
-        || !TypeChecker::new(env).is_def_eq(&info.type_, &scalar_type())
-    {
-        bail!("scalar source type refused for `{root}`: expected UInt32 -> UInt32 -> UInt64 -> UInt64 -> UInt64");
+    Ok(seen)
+}
+
+fn source_eligibility_with_replay(
+    env: &Environment,
+    name: &Name,
+    replay: Option<&clean_olean::ReplayedImportedSource>,
+) -> anyhow::Result<()> {
+    let Some(replay) = replay else {
+        return source_eligibility(env, name);
+    };
+    // Compiler-owned synthetic declarations retain the original policy. A
+    // resident source declaration requires matching actual replay evidence.
+    if env.get_const(name).is_none() {
+        return source_eligibility(env, name);
     }
-    Ok(())
+    replay.require_record(env, name)?;
+    if env.is_unsafe(name) || env.is_partial(name) || env.is_staged_header(name) {
+        bail!("scalar original source eligibility refused for `{name}`: unsafe, partial or staged declaration");
+    }
+    replay.checked_constant(name)?;
+    source_eligibility(replay.checked_environment(), name)
 }
 
 fn source_eligibility(env: &Environment, name: &Name) -> anyhow::Result<()> {

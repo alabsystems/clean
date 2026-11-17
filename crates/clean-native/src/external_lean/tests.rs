@@ -406,3 +406,103 @@ fn dangling_import_companion_is_refused_instead_of_copied_as_absent() {
 
 #[path = "runtime_binding_tests.rs"]
 mod runtime_binding;
+
+#[test]
+fn ir_signature_inputs_and_outputs_remain_bound_to_the_snapshot() {
+    let source = tempfile::tempdir().unwrap();
+    for module in ["Init", "Target"] {
+        std::fs::copy(
+            fixture().join(format!("{module}.olean")),
+            source.path().join(format!("{module}.olean")),
+        )
+        .unwrap();
+    }
+    // Deliberately opaque bytes: this tests custody, not IR validity/admission.
+    let signature = source.path().join("Target.ir.sig");
+    std::fs::write(&signature, b"original signature observation").unwrap();
+    let captured = tempfile::tempdir().unwrap();
+    let mut env = Environment::for_lean_replay();
+    clean_olean::declare_environment_world(&mut env, LeanWorld::ORACLE.tag()).unwrap();
+    let mut scope = clean_olean::LeanWorldScope::of_environment(&env);
+    let mut files = snapshot::Files::default();
+    snapshot::capture_imports(
+        &[n("Target")],
+        &[source.path().to_path_buf()],
+        captured.path(),
+        &mut files,
+        &mut scope,
+    )
+    .unwrap();
+    let copy = captured.path().join("Target.ir.sig");
+    assert_eq!(
+        std::fs::read(&copy).unwrap(),
+        std::fs::read(&signature).unwrap()
+    );
+    std::fs::write(&copy, b"changed owned signature").unwrap();
+    assert!(
+        files.check().is_err(),
+        "owned signature changes must refuse"
+    );
+
+    let mut output_files = snapshot::Files::default();
+    snapshot::observe_output(
+        &source.path().join("Target.olean"),
+        &mut output_files,
+        &mut scope,
+    )
+    .unwrap();
+    std::fs::write(&signature, b"changed producer signature").unwrap();
+    assert!(
+        output_files.check().is_err(),
+        "produced signatures must be bookended"
+    );
+}
+
+#[test]
+fn absent_ir_signature_cannot_appear_after_capture() {
+    let captured = tempfile::tempdir().unwrap();
+    let mut env = Environment::for_lean_replay();
+    clean_olean::declare_environment_world(&mut env, LeanWorld::ORACLE.tag()).unwrap();
+    let mut scope = clean_olean::LeanWorldScope::of_environment(&env);
+    let mut files = snapshot::Files::default();
+    snapshot::capture_imports(
+        &[n("Target")],
+        &[fixture()],
+        captured.path(),
+        &mut files,
+        &mut scope,
+    )
+    .unwrap();
+    std::fs::write(captured.path().join("Target.ir.sig"), b"new signature").unwrap();
+    assert!(
+        files.check().is_err(),
+        "new signature must break absence custody"
+    );
+}
+
+#[cfg(feature = "trust-ir-backend")]
+#[test]
+fn actual_scalar_source_context_rejects_foreign_custody_base_and_source() {
+    for kind in ["owner", "base", "source"] {
+        let owned = program(SOURCE);
+        let mut selected = owned.select(&n("handoff"), 0).unwrap();
+        match kind {
+            "owner" => selected.source_context.owner = program(SOURCE).custody,
+            "base" => {
+                selected.source_context.base = Arc::new((*selected.source_context.base).clone())
+            }
+            _ => {
+                selected.source_context.original =
+                    Arc::new((*selected.source_context.original).clone())
+            }
+        }
+        let error = match selected.load_scalar_call() {
+            Err(e) => e,
+            Ok(_) => panic!("foreign{kind}accepted"),
+        };
+        assert!(
+            error.to_string().contains("another source custody"),
+            "{kind}:{error}"
+        );
+    }
+}

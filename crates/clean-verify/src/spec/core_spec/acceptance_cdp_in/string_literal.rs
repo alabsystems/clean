@@ -245,7 +245,7 @@ fn witnesses() -> Vec<(String, String, String)> {
     let built = format!("(KExpr.app {mk} {list})");
     let valid = "(@Eq.refl Bool Bool.true)";
     // delta then beta: String.ofList L == String.mk L at the fixture.
-    let ofl = "(KExpr.const accepts_tc_string_of_list_name (ListType.nil Level))";
+    let ofl = "(KExpr.const accepts_tc_string_of_list_name (@ListType.nil Level))";
     let body = "accepts_tc_string_of_list_body";
     let delta = format!(
         "(accepts_tc_delta {env} tenv G {exp} accepts_tc_string_of_list_name {body} (@Eq.refl (OptionType Name) (@OptionType.some Name accepts_tc_string_of_list_name)) (@Eq.refl (OptionType KExpr) (@OptionType.some KExpr {body})))"
@@ -322,7 +322,7 @@ fn witnesses() -> Vec<(String, String, String)> {
         sound.push((
             format!("accepts_tc_{stem}_sound"),
             format!("forall {g}, TypingTcIn {env} tenv Bool.false G {rest}"),
-            format!("fun {g} => kernel_accepts_tc_in_sound {env} tenv Bool.false G {rest} ({name} tenv G)"),
+            format!("fun {g} => kernel_accepts_tc_in_sound {env} tenv Bool.false G {rest} (@{name} tenv G)"),
         ));
     }
     out.extend(sound);

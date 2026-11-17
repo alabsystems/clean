@@ -336,7 +336,7 @@ def checked_source(root, record):
 
 
 PRODUCTION_GIT_LOCAL_ENV = frozenset({
-    # Git's `rev-parse --local-env-vars` vocabulary, plus the namespace selector.
+    # Git's local-env vocabulary, namespace selector and pathspec selectors.
     # A caller's checkout (including an invoking Git hook) must not override
     # the repository passed to these committed-object reads. Config entry
     # siblings are removed below with their count/parameter advertisements.
@@ -345,11 +345,13 @@ PRODUCTION_GIT_LOCAL_ENV = frozenset({
     'GIT_IMPLICIT_WORK_TREE', 'GIT_GRAFT_FILE', 'GIT_INDEX_FILE',
     'GIT_NO_REPLACE_OBJECTS', 'GIT_REPLACE_REF_BASE', 'GIT_PREFIX',
     'GIT_SHALLOW_FILE', 'GIT_COMMON_DIR', 'GIT_NAMESPACE',
+    'GIT_LITERAL_PATHSPECS', 'GIT_GLOB_PATHSPECS', 'GIT_NOGLOB_PATHSPECS',
+    'GIT_ICASE_PATHSPECS',
 })
 
 
 def _production_env():
-    # Isolate only Git repository-local context; preserve native resource fields.
+    # Isolate Git repository/pathspec context; preserve native resource fields.
     env = {key: value for key, value in os.environ.items()
            if key not in PRODUCTION_GIT_LOCAL_ENV and
            not key.startswith(('GIT_CONFIG_KEY_', 'GIT_CONFIG_VALUE_'))}

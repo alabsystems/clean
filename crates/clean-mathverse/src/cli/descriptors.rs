@@ -193,37 +193,36 @@ const VALIDATE_REPLAY_REPORT_DESC: FeatureDescriptor = FeatureDescriptor {
 
 const STAMP_VERIFIED_DESC: FeatureDescriptor = FeatureDescriptor {
     path: &["mathverse", "stamp-verified"],
-    summary: "Convert .olean(s), re-verify in Clean's kernel, and stamp KernelVerified on disk",
-    description: "Productionizes the WS5 stamping pipeline. Converts one or more \
-         `.olean` files (or directories) to `.mathverse` shards via the heuristic \
-         importer — which stores zero KernelVerified — then re-verifies the merged \
-         corpus in Clean's own kernel and destructively stamps `KernelVerified` into \
-         the shard bytes for exactly the constants the kernel ACCEPTED. That is \
-         three arms, not one: a value re-checked through `add_decl`'s \
-         `infer_sort`/`check_type`; an inductive-family member admitted by a \
-         checked `add_inductive` replay or a type match against a member the \
-         kernel already built; and a value-LESS axiom discharged by a proof term \
-         Clean synthesizes for its stated type. All three are kernel-established \
-         — but only the first re-checks a value the shard carried. \
-         The stored KernelVerified count is re-read from disk and \
-         reported. Pass `--closure-root <lib/lean>` to load a target module's \
-         TRANSITIVE IMPORT CLOSURE (plus sibling lake packages) into the kernel \
-         environment first, so real Mathlib modules — whose proofs reference \
-         imported constants — can re-check; the closure is trusted imported \
-         context and is never stamped, only the target module's own decls are. \
-         SOUNDNESS: only kernel-accepted names are stamped; heuristic confidence \
-         is never promoted. Pure inductives may not verify under the current \
-         kernel — value-bearing definitions/theorems do.",
+    summary: "Convert .olean(s) and re-check them in Clean's kernel as a development run",
+    description: "Converts one or more `.olean` files (or directories) to `.mathverse` \
+         shards via the heuristic importer, which stores zero KernelVerified, then \
+         re-checks the corpus with a legacy checker entry under a legacy kernel \
+         profile. Under P6 that is a development run: its acceptances confer no \
+         label (P2 clause 1), so nothing is stamped and the shard bytes are the \
+         converter's. `--manifest` writes a `kernel-verified.json` (schema 2) that \
+         names the accepted constants and the identity of the theory and the \
+         checker that accepted them; the JSON summary reports `accepted`, `tier` \
+         (`development`) and `stored_reference_stamped`, the KernelVerified \
+         headers re-read from disk, which only a reference producer may raise. \
+         An acceptance is one of three arms: a value re-checked through \
+         `add_decl`'s `infer_sort`/`check_type`; an inductive-family member \
+         admitted by a checked `add_inductive` replay or a type match against a \
+         member the kernel already built; and a value-LESS axiom discharged by a \
+         proof term Clean synthesizes for its stated type. Only the first \
+         re-checks a value the shard carried. Pass `--closure-root <lib/lean>` to \
+         load a target module's TRANSITIVE IMPORT CLOSURE (plus sibling lake \
+         packages) into the kernel environment first, so real Mathlib modules can \
+         re-check; the closure is trusted imported context.",
     category: Category::Import,
     stability: Stability::Usable,
     examples: &[
         Example {
             cmd: "clean mathverse stamp-verified Init/SimpLemmas.olean --out-dir target/stamped --json",
-            what: "convert one real .olean, kernel-re-verify, and stamp KernelVerified on disk",
+            what: "convert one real .olean and re-check it (development tier, nothing stamped)",
         },
         Example {
             cmd: "clean mathverse stamp-verified .lake/build/lib/lean/Mathlib/Logic/Basic.olean --closure-root .lake/build/lib/lean --out-dir target/stamped --json",
-            what: "load a real Mathlib module's import closure, then kernel-re-verify and stamp its own decls",
+            what: "load a real Mathlib module's import closure, then re-check its own decls",
         },
     ],
     see_also: &["mathverse verify", "mathverse convert"],
@@ -1139,15 +1138,18 @@ const AXIOM_AUDIT_RELEASE_CHECK_DESC: FeatureDescriptor = FeatureDescriptor {
 
 const RATCHET_CHECK_DESC: FeatureDescriptor = FeatureDescriptor {
     path: &["mathverse", "ratchet", "check"],
-    summary: "Check a stamp-verified summary against the KernelVerified-count ratchet",
+    summary: "Check a stamp-verified summary against the accepted-count ratchet",
     description: "Monotonic-UP guardrail over a saved `clean mathverse stamp-verified \
          --json` summary. SKIPs green (exit 0) when the summary is absent, so dev \
          pushes stay green until an operator stamps the real corpus under the \
          memory governor. When present, fails closed if `heuristic_kernel_verified \
          != 0` (the soundness floor — the heuristic converter must never mint \
-         KernelVerified), if the summary is malformed, or if `kernel_verified` / \
-         `stored_kernel_verified` regressed below the baseline in \
-         `data/mathlib_kv_ratchet.json`. Pure read + integer comparison — never \
+         KernelVerified), if the summary is malformed or predates P6 (no `tier`), \
+         if the development `accepted` count regressed below \
+         `development_accepted_baseline` in `data/mathlib_kv_ratchet.json`, or if \
+         `stored_reference_stamped` is non-zero while the reference-stamp baseline \
+         is unarmed (no reference producer exists yet). A ratchet file that does \
+         not parse under that schema is refused. Pure read + integer comparison — never \
          touches the kernel or a shard byte, so it can only turn the gate RED, \
          never promote a constant. Subsumes the retired \
          the retired `scripts/check_kv_ratchet.py`.",
@@ -1166,14 +1168,14 @@ const RATCHET_CHECK_DESC: FeatureDescriptor = FeatureDescriptor {
 
 const RATCHET_UPDATE_DESC: FeatureDescriptor = FeatureDescriptor {
     path: &["mathverse", "ratchet", "update"],
-    summary: "Raise the KernelVerified-count ratchet baseline from a stamp summary",
+    summary: "Raise the accepted-count ratchet baseline from a stamp summary",
     description: "Raises `data/mathlib_kv_ratchet.json` from a saved `clean mathverse \
          stamp-verified --json` summary. Unlike `ratchet check`, REQUIRES the \
          summary (fails closed when absent rather than skipping) and re-asserts \
          the same `heuristic_kernel_verified == 0` soundness floor so an unsound \
          run can never be ratcheted. Rewrites the baseline JSON \
-         (`kernel_verified_baseline`, `stored_kernel_verified_baseline`, \
-         date-only `last_updated`) while preserving the existing operator \
+         (`development_accepted_baseline`, the reference-stamp baseline carried \
+         over unchanged, date-only `last_updated`) while preserving the existing operator \
          `notes`. Subsumes the retired `scripts/check_kv_ratchet.py --update`.",
     category: Category::Import,
     stability: Stability::Usable,
@@ -1190,15 +1192,16 @@ const RATCHET_UPDATE_DESC: FeatureDescriptor = FeatureDescriptor {
 
 const ELISION_GATE_DESC: FeatureDescriptor = FeatureDescriptor {
     path: &["mathverse", "elision-gate"],
-    summary: "Enforce KV(opaque) subset-of KV(opaque-and-theorem) across two manifests",
+    summary: "Enforce accepted(opaque) subset-of accepted(opaque-and-theorem) across two manifests",
     description: "Elision soundness gate over two `KernelVerifiedManifest` JSON files \
          produced by stamping the SAME fixed module set under `--closure-elide \
          opaque` and `--closure-elide opaque-and-theorem`. The `opaque-and-theorem` \
          policy is NOT statically sound (theorems can be δ-unfolded), so its only \
-         safe contract is that it may ADD KernelVerified constants relative to the \
+         safe contract is that it may ADD accepted constants relative to the \
          statically-sound `opaque` floor — never DROP one. Fails (naming the \
-         offenders) if any constant the opaque run kernel-verified is missing from \
-         the opaque-and-theorem run. The positional order encodes the soundness \
+         offenders) if any constant the opaque run accepted is missing from \
+         the opaque-and-theorem run, and refuses two manifests that are not the \
+         same checker but for exactly that elision. The positional order encodes the soundness \
          direction (opaque first = the floor) and must not be swapped. Fail-closed \
          on a missing/bad manifest. Subsumes the retired \
          `scripts/check_kv_elision_subset.py`.",
@@ -1206,7 +1209,7 @@ const ELISION_GATE_DESC: FeatureDescriptor = FeatureDescriptor {
     stability: Stability::Usable,
     examples: &[Example {
         cmd: "clean mathverse elision-gate data/kv_elision_opaque.json data/kv_elision_oat.json",
-        what: "fail closed if opaque-and-theorem dropped a KernelVerified constant opaque kept; both inputs are manifests the paired stamp runs write",
+        what: "fail closed if opaque-and-theorem dropped a constant opaque accepted; both inputs are manifests the paired stamp runs write",
     }],
     see_also: &["mathverse stamp-verified", "mathverse fingerprint"],
     references: &[MATHVERSE_DESIGN_REF, ISSUE_3436],
@@ -1217,21 +1220,21 @@ const ELISION_GATE_DESC: FeatureDescriptor = FeatureDescriptor {
 
 const FINGERPRINT_DESC: FeatureDescriptor = FeatureDescriptor {
     path: &["mathverse", "fingerprint"],
-    summary: "Print the recorded reproducibility StampEnvFingerprint from a manifest",
-    description: "Prints the `env_fingerprint` a `clean mathverse stamp-verified \
-         --manifest` run recorded in a `KernelVerifiedManifest`: the \
-         verification-env knobs (kernel version, toolchain, heartbeat, \
-         elision policy, max-closure-modules ceiling, prelude variant) a \
-         KernelVerified verdict is only reproducible against. Pure recorded \
-         metadata — nothing in the verify/stamp path reads it back, so printing \
-         it can never raise or lower a verdict. Fails closed if the manifest \
-         carries no fingerprint (a legacy manifest written before the field \
-         existed). Pass `--json` for machine-readable output.",
+    summary: "Print the identity record (theory, checker, tier) of a manifest",
+    description: "Prints the identity record a `clean mathverse stamp-verified \
+         --manifest` run wrote into a `kernel-verified.json` manifest (P6): the \
+         theory (kernel-theory profile and the measured base environment), the \
+         checker (entry, discipline, trusted or replayed imports, the settings \
+         that change which names are accepted, and the build with its \
+         executable sha256) and the tier, which is `development` for every \
+         manifest this build writes and confers no label. A manifest with no \
+         identity (schema 1) is refused when it is read. Pass `--json` for \
+         machine-readable output.",
     category: Category::Import,
     stability: Stability::Usable,
     examples: &[Example {
         cmd: "clean mathverse fingerprint reports/kv-manifest.json --json",
-        what: "print the recorded reproducibility env fingerprint of a manifest a stamp run writes, as JSON",
+        what: "print the identity record of a manifest a stamp run writes, as JSON",
     }],
     see_also: &["mathverse stamp-verified", "mathverse elision-gate"],
     references: &[MATHVERSE_DESIGN_REF, ISSUE_3436],

@@ -2,8 +2,11 @@
 Laws of the unchanged canonical SpecrPrelude used by native Size/Align calls.
 These facts are not a Rust library refinement: the actual primitive, source
 type/representation, effects and oracle bindings must still be supplied and
-checked. In particular canonical pow has a wider exponent domain than the
-pinned Rust test runtime's to_u32 conversion, so that missing duty must refuse.
+checked. Canonical pow follows libspecr 0.1.41's `to_u32().unwrap()`: an
+exponent outside `[0, u32::MAX]` panics with `Option::unwrap`'s message. Canonical
+right shift still has a wider amount domain than libspecr's `to_u128()`
+conversion (Trust's OPEN_ISSUES `SPECR-PRELUDE-FIDELITY`), so that missing duty
+must refuse.
 -/
 import MiniRust
 
@@ -95,15 +98,18 @@ theorem const_alignment_keeps_constructor_check (value : Int) :
 theorem successful_unwrap_is_exact {α : Type} (value : α) :
     SOption.unwrap (some value) = .ok value := rfl
 
-theorem canonical_one_power (exponent : Nat) : SInt.pow 1 (Int.ofNat exponent) = .ok 1 := by
-  change SOut.ok (Int.ofNat (Nat.pow 1 exponent)) = .ok 1
+theorem canonical_one_power (exponent : Nat) (h : exponent < 4294967296) :
+    SInt.pow 1 (Int.ofNat exponent) = .ok 1 := by
+  change (if exponent < 4294967296 then SOut.ok (Int.ofNat (Nat.pow 1 exponent))
+    else SOut.panic "called `Option::unwrap()` on a `None` value") = .ok 1
+  rw [if_pos h]
   have hpower : Nat.pow 1 exponent = 1 := Nat.one_pow exponent
   exact congrArg (fun value : Nat => SOut.ok (Int.ofNat value)) hpower
 
-/-- Deliberately outside the actual Rust exponent conversion domain. This model
-theorem cannot license that Rust call without its separate conversion duty. -/
-theorem canonical_wide_power_is_defined : SInt.pow 1 4294967296 = .ok 1 :=
-  canonical_one_power 4294967296
+/-- Just outside the Rust exponent conversion domain: libspecr's
+`to_u32().unwrap()` fails, and canonical pow panics with its message. -/
+theorem canonical_wide_power_panics :
+    SInt.pow 1 4294967296 = .panic "called `Option::unwrap()` on a `None` value" := rfl
 
 theorem wide_power_lacks_conversion_domain : ¬ PowDomain 4294967296 := by
   unfold PowDomain
@@ -131,11 +137,14 @@ theorem all_integers_are_sizes_goal_false : ¬ AllIntegersAreSizesGoal := by
   cases wrong
 
 def CanonicalWidePowerGoal : Prop := SInt.pow 1 4294967296 = .ok 1
-def CanonicalWidePowerPanicsGoal : Prop := ∃ message, SInt.pow 1 4294967296 = .panic message
+def CanonicalWidePowerPanicsGoal : Prop :=
+  SInt.pow 1 4294967296 = .panic "called `Option::unwrap()` on a `None` value"
 
-theorem canonical_wide_power_panics_goal_false : ¬ CanonicalWidePowerPanicsGoal := by
-  intro ⟨message, h⟩
-  rw [canonical_wide_power_is_defined] at h
+/-- The success claim the earlier prelude made for this exponent is false. -/
+theorem canonical_wide_power_goal_false : ¬ CanonicalWidePowerGoal := by
+  intro h
+  unfold CanonicalWidePowerGoal at h
+  rw [canonical_wide_power_panics] at h
   cases h
 
 end TrustSem.LibraryWrappers

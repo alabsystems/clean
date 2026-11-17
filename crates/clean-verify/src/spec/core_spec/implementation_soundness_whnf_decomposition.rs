@@ -197,7 +197,7 @@ impl Specification {
             name: "whnf_step_beta_sound".to_string(),
             type_src: concat!(
                 "forall (e : KExpr) (e' : KExpr) (h : beta_reduces e e'), ",
-                "whnf_step_def_eq_goal e e' (whnf_step.beta e e' h)"
+                "whnf_step_def_eq_goal e e' (@whnf_step.beta e e' h)"
             )
             .to_string(),
             value_src: Some(
@@ -225,7 +225,7 @@ impl Specification {
             name: "whnf_step_delta_sound".to_string(),
             type_src: concat!(
                 "forall (e : KExpr) (e' : KExpr) (h : delta_reduces e e'), ",
-                "whnf_step_def_eq_goal e e' (whnf_step.delta e e' h)"
+                "whnf_step_def_eq_goal e e' (@whnf_step.delta e e' h)"
             )
             .to_string(),
             value_src: Some(

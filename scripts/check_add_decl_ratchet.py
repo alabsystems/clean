@@ -323,7 +323,10 @@ def _cfg_body_is_test_only(body):
 
 def _cfg_is_test_only(attr):
     """`#[cfg(..)]` -> test-only?  Anything that is not a cfg is not a guard."""
-    m = re.search(r"\bcfg\s*\((.*)\)\s*\]?\s*$", attr, re.S)
+    # Anchored at the attribute head: `#[rustfmt::cfg(test)]` (any tool path) is
+    # inert to rustc, so `\bcfg` anywhere in the attribute read a production
+    # declaration as test-only (docs/issues/2026-11-16-python-rust-lexer-copies.md).
+    m = re.match(r"#!?\[\s*cfg\s*\((.*)\)\s*\]?\s*$", attr.strip(), re.S)
     if not m:
         return False
     return _cfg_body_is_test_only(m.group(1).strip())
@@ -356,10 +359,23 @@ _CFG_LATTICE_CASES = (
 )
 
 
+# The attribute HEAD as well as its predicate: a tool path makes `cfg` inert to
+# rustc (docs/issues/2026-11-16-python-rust-lexer-copies.md).
+_CFG_HEAD_CASES = (
+    ("#[cfg(test)]", True),
+    ("#[ cfg ( test ) ]", True),
+    ("#[rustfmt::cfg(test)]", False),
+    ("#[clippy::cfg(test)]", False),
+    ("#[diagnostic::cfg(test)]", False),
+    ("#[doc = \"cfg(test)\"]", False),
+)
+
+
 def cfg_lattice_failures():
     """Spellings this scanner's cfg rule answers backwards.  Empty is correct."""
     return [body for body, want in _CFG_LATTICE_CASES
-            if _cfg_is_test_only("#[cfg(" + body + ")]") is not want]
+            if _cfg_is_test_only("#[cfg(" + body + ")]") is not want] + [
+        attr for attr, want in _CFG_HEAD_CASES if _cfg_is_test_only(attr) is not want]
 
 # ---------------------------------------------------------------- module edges
 # AUDIT r16 M16-1.  The scope derivation recognised exactly two spellings of a
@@ -565,6 +581,166 @@ def _attribute_run_is_cfg_test(src, at):
         head = head[:m.start()]
 
 
+# ---------------------------------------------------------------------------
+# 2026-11-16: the MODULE TREE, resolved the way rustc resolves it.
+#
+# Until this date `mod x;` was looked up BESIDE the declaring file, any file
+# not named like a test contributed edges whether or not anything compiled it,
+# and a file named like a test contributed none. rustc looks beside a file only
+# from a crate root, a `mod.rs` or a `#[path]` target: an ordinary `foo.rs` owns
+# `foo/`. And a cfg(test) gate on a module covers every module it declares.
+# Measured on 61ccc12c14: 205 files rustc reaches ONLY through a cfg(test) gate
+# were scanned as production -- 116 made production by an unguarded `mod` in a
+# parent that is itself test-only (a `mod.rs` under a gated module), 89 reached
+# by no edge the old rule read. Among the 89:
+# tactic/mathverse_use_tests/trust_gate_tests/dependency_replay.rs, whose
+# test-only `add_decl_structural` reddened add-decl-ratchet once 79a1983740 moved
+# it out of an inline `#[cfg(test)] mod` (tactic/mod.rs declares
+# `#[cfg(test)] mod mathverse_use_tests;`, the tree's only route to it). No file
+# moved the other way.
+#
+# The rule, mirrored arm for arm by
+# crates/clean-cli/src/cmd_replacement/rust_source_scope.rs and held to the same
+# SET by `add_decl_scan_scope_matches_the_python_producer`:
+#   1. ROOTS by Cargo's target layout: `src/lib.rs`, `src/main.rs`,
+#      `src/bin/*.rs`, `src/bin/*/main.rs`, the same two shapes under `examples/`
+#      and `benches/`, and a `build.rs` beside a `src/` directory are PRODUCTION
+#      roots, whatever the file is named; the two shapes under `tests/`, and any
+#      root inside a `tests` directory, are TEST roots.
+#   2. A WALK from the roots carries, per module, the directory `mod x;` looks
+#      in and whether a cfg-requires-test gate has been crossed. Declarations are
+#      read from source with comments AND strings blanked; a `#[path]` or
+#      `include!` edge counts only where its first byte is code. `x.rs` reached by
+#      a plain `mod x;` owns `x/`; a `#[path]` target (resolved against the
+#      declaring file's directory) owns its own directory, as rustc treats every
+#      `#[path]` file as a `mod.rs`; `include!` text inherits the includer's
+#      directories. A `mod x;` whose attribute run names an unconditional
+#      `#[path]` has no default target. A declaration inside an inline `mod {}`
+#      (brace depth > 0) is NOT walked: its directory depends on the inline chain.
+#   3. PRODUCTION = reached by the walk with no gate crossed, plus every target
+#      of an UNGUARDED edge out of a file that is not test-only, looked up
+#      loosely (beside the file, in its own stem directory and in every walked
+#      directory, at any depth). Production wins over everything below.
+#   4. TEST-ONLY = reached by the walk only through a gate (or from a test root),
+#      or named like a test, and not production. A file the walk never reaches is
+#      never made test-only by a declaration -- that was the self-vouching orphan
+#      route of r13/r14 -- and is scanned unless its NAME says test.
+# ---------------------------------------------------------------------------
+
+_NOT_NEWLINE_RE = re.compile(r"[^\n]")
+_MOD_WORD_RE = re.compile(r"\bmod\b")
+_UNCONDITIONAL_PATH_ATTR_RE = re.compile(r"#\[\s*path\s*=")
+_ROOT_DIR_SHAPES = ((("src", "bin"), "prod"), (("examples",), "prod"),
+                    (("benches",), "prod"), (("tests",), "test"))
+
+
+def _blank_noncode_span(match):
+    """`_blank`, faster: the same spaces, the same newlines."""
+    text = match.group(0)
+    return _NOT_NEWLINE_RE.sub(" ", text) if "\n" in text else " " * len(text)
+
+
+def _blank_comment_span(match):
+    """`_blank_comment_only`, faster: comments blanked, literals kept verbatim."""
+    text = match.group(0)
+    return _blank_noncode_span(match) if text[:2] in ("//", "/*") else text
+
+
+def _target_root_kind(path, rel):
+    """'prod' / 'test' / None: the Cargo target this file's path SHAPE names.
+
+    A root inside a `tests` directory (an integration test, or a fixture crate
+    under one) is a TEST root; any other root is PRODUCTION whatever its file
+    name, because `cargo build` compiles `src/bin/test_tool.rs` as surely as
+    `src/bin/tool.rs`."""
+    kind = _target_shape(path)
+    if kind and any(part in ("tests", "tests2") for part in rel.parts[:-1]):
+        return "test"
+    return kind
+
+
+def _target_shape(path):
+    parts = path.parts
+    n = len(parts)
+    name = parts[-1]
+    if n >= 2 and parts[-2] == "src" and name in ("lib.rs", "main.rs"):
+        return "prod"
+    if name == "build.rs" and (path.parent / "src").is_dir():
+        return "prod"
+    for base, kind in _ROOT_DIR_SHAPES:
+        k = len(base)
+        if n >= k + 1 and tuple(parts[n - 1 - k:n - 1]) == base:
+            return kind
+        if n >= k + 2 and name == "main.rs" and tuple(parts[n - 2 - k:n - 2]) == base:
+            return kind
+    return None
+
+
+def _attribute_run_names_path(src, at):
+    """Does the attribute run ending at `at` carry an unconditional `#[path = ..]`?"""
+    head = src[:at]
+    while True:
+        m = _ATTR_RUN_RE.search(head)
+        if not m:
+            return False
+        if _UNCONDITIONAL_PATH_ATTR_RE.match(m.group(0)):
+            return True
+        head = head[:m.start()]
+
+
+def _depths_at(full, offsets):
+    """{offset: brace depth} over code-only text, for the requested offsets."""
+    out = {}
+    depth = 0
+    prev = 0
+    for off in sorted(set(offsets)):
+        seg = full[prev:off]
+        depth += seg.count("{") - seg.count("}")
+        prev = off
+        out[off] = depth
+    return out
+
+
+def _module_edges(raw, rel):
+    """(decls, path_edges, include_edges, unresolved) for one file.
+
+    decls:         (stem, gated, top_level, has_default_target)
+    path_edges:    (target, gated, top_level)
+    include_edges: (target, gated, top_level)
+    """
+    # A file with no `mod` word, no `path` and no `include!` anywhere has no edge:
+    # blanking only ever turns characters into spaces, so this is a superset test.
+    if not _MOD_WORD_RE.search(raw) and "path" not in raw and "include!" not in raw:
+        return [], [], [], []
+    full = NONCODE_RE.sub(_blank_noncode_span, raw)       # == strip_noncode(raw)
+    decl_hits = [(m.group(1), m.start()) for m in _MOD_DECL_ANY_RE.finditer(full)]
+    if not decl_hits and "path" not in raw and "include!" not in raw:
+        return [], [], [], []
+    keep = NONCODE_RE.sub(_blank_comment_span, raw)       # == strip_comments_keep_strings(raw)
+    path_hits = [(off, tgt, cond) for off, tgt, cond in _path_edges(keep)
+                 if full[off:off + 1] == "#"]
+    # An `include!` spelled inside a literal is not an edge, nor an unread one.
+    code_includes = keep
+    for m in reversed(list(_INCLUDE_CALL_RE.finditer(keep))):
+        if full[m.start():m.start() + 1] != "i":
+            code_includes = (code_includes[:m.start()] + " " * (m.end() - m.start())
+                             + code_includes[m.end():])
+    before = len(_UNRESOLVED_EDGES)
+    include_hits = list(_include_edges(code_includes, rel))
+    unresolved = _UNRESOLVED_EDGES[before:]
+    del _UNRESOLVED_EDGES[before:]
+    depth = _depths_at(full, [o for _, o in decl_hits] + [o for o, _, _ in path_hits]
+                       + [o for o, _ in include_hits])
+    decls = [(stem, _attribute_run_is_cfg_test(keep, off), depth[off] == 0,
+              not _attribute_run_names_path(keep, off))
+             for stem, off in decl_hits]
+    paths = [(tgt, cond or _attribute_run_is_cfg_test(keep, off), depth[off] == 0)
+             for off, tgt, cond in path_hits]
+    includes = [(tgt, _attribute_run_is_cfg_test(keep, off), depth[off] == 0)
+                for off, tgt in include_hits]
+    return decls, paths, includes, unresolved
+
+
 def classify_paths(root):
     """(production_paths, test_only_paths) for every .rs under crates/.
 
@@ -583,58 +759,222 @@ def classify_paths(root):
     if key in _CLASSIFY_CACHE:
         return _CLASSIFY_CACHE[key]
     scope = root / "crates"
-    prod, test_only, guarded = set(), set(), set()
     if not scope.is_dir():
-        _CLASSIFY_CACHE[key] = (prod, test_only)
-        return prod, test_only
+        _CLASSIFY_CACHE[key] = (set(), set())
+        return set(), set()
     sources = {}
     for rs in scope.rglob("*.rs"):
         try:
             sources[rs.resolve()] = rs.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
-    # every `mod x;` declared OUTSIDE a cfg(test) attribute run, plus every
-    # unguarded `#[path]`, is a PRODUCTION edge; comments and strings are
-    # blanked first, which is the rule CLAUDE.md states and r13's grep broke.
+    canon = {}
+
+    def known(candidate):
+        """The resolved source file `candidate` names, or None."""
+        if candidate not in canon:
+            resolved = candidate.resolve() if candidate.exists() else None
+            canon[candidate] = resolved if resolved in sources else None
+        return canon[candidate]
+
+    rels = {path: path.relative_to(root) for path in sources}
+    named = {path for path, rel in rels.items() if is_test_path(rel)}
+    # A file headed `#![cfg(test)]` (`headed_cfg_test`) is gated from its first
+    # item: no non-test build compiles it or anything it declares, whatever
+    # reaches it, so the walk gates it and the loose closure never reads it.
+    headed = {path for path, raw in sources.items() if headed_cfg_test(raw)}
+    edges, unresolved = {}, {}
     for path, raw in sources.items():
-        if is_test_path(path.relative_to(root)):
+        decls, paths, includes, unread = _module_edges(raw, rels[path])
+        edges[path] = (decls, paths, includes)
+        unresolved[path] = unread
+
+    # (2) the walk: state = (file, dir `#[path]` resolves in, dir `mod x;` looks in, gated)
+    work = [(path, path.parent, path.parent, kind == "test")
+            for path in sources for kind in (_target_root_kind(path, rels[path]),) if kind]
+    seen, gated_bits, walked_dirs, path_dirs = set(), {}, {}, {}
+    while work:
+        state = work.pop()
+        if state in seen:
             continue
-        src = strip_comments_keep_strings(raw)
-        for m in _MOD_DECL_ANY_RE.finditer(src):
-            sink = guarded if _attribute_run_is_cfg_test(src, m.start()) else prod
-            stem = m.group(1)
-            for cand in (path.parent / f"{stem}.rs", path.parent / stem / "mod.rs"):
-                if cand.resolve() in sources:
-                    sink.add(cand.resolve())
-        # AUDIT r14 M14-10: Rust has TWO inclusion mechanisms and the derivation
-        # knew one. Measured A/B on the same planted file: pulled in by
-        # `#[path] mod` -> rc=1 on both gates; pulled in by `include!(..)` ->
-        # rc=0 on both. The tree already uses include! 151 times, twice
-        # unconditionally from production (expr/mod.rs:428,431), so one line
-        # added to an already-included file outside its inner `mod` was
-        # production code invisible to all three fail-closed gates.
-        _rel_for_edges = path.relative_to(root)
-        _edges = [(off, tgt, cond) for off, tgt, cond in _path_edges(src)]
-        _edges += [(off, tgt, False) for off, tgt in _include_edges(src, _rel_for_edges)]
-        for off, tgt_s, cond_test_only in _edges:
-            guard = cond_test_only or _attribute_run_is_cfg_test(src, off)
-            sink = guarded if guard else prod
-            tgt = (path.parent / tgt_s).resolve()
-            if tgt in sources:
-                sink.add(tgt)
-    # A file is TEST-ONLY when the compiler reaches it only behind a cfg(test)
-    # gate, or its name says so -- and in BOTH cases only if no production edge
-    # reaches it. Collecting the guarded edges in the same pass is what makes
-    # this a partition rather than two unrelated questions; the first cut of
-    # this rewrite collected only production edges, so a cfg-test-included file
-    # with an ordinary name fell into NEITHER set and was scanned as production
-    # (measured on closure_load_v3_tests_binding.rs).
-    for path in sources:
-        rel = path.relative_to(root)
-        if path not in prod and (path in guarded or is_test_path(rel)):
-            test_only.add(path)
+        seen.add(state)
+        path, pdir, mdir, gated = state
+        gated = gated or path in headed
+        gated_bits.setdefault(path, set()).add(gated)
+        walked_dirs.setdefault(path, set()).add(mdir)
+        path_dirs.setdefault(path, set()).add(pdir)
+        decls, paths, includes = edges[path]
+        for stem, guard, top, has_default in decls:
+            if not (top and has_default):
+                continue
+            for cand in (mdir / f"{stem}.rs", mdir / stem / "mod.rs"):
+                target = known(cand)
+                if target is not None:
+                    work.append((target, target.parent, mdir / stem, gated or guard))
+        for tgt, guard, top in paths:
+            target = known(pdir / tgt) if top else None
+            if target is not None:
+                work.append((target, target.parent, target.parent, gated or guard))
+        for tgt, guard, top in includes:
+            target = known(path.parent / tgt) if top else None
+            if target is not None:
+                work.append((target, pdir, mdir, gated or guard))
+    reached_open = {path for path, bits in gated_bits.items() if False in bits}
+    reached_gated_only = {path for path, bits in gated_bits.items() if False not in bits}
+
+    # (3) production: the open walk, then every unguarded edge out of a file that
+    # is not test-only, looked up loosely.
+    def loose_targets(path):
+        decls, paths, includes = edges[path]
+        mdirs = {path.parent, path.parent / path.stem} | walked_dirs.get(path, set())
+        pdirs = {path.parent} | path_dirs.get(path, set())
+        for stem, guard, _top, _default in decls:
+            if not guard:
+                for d in mdirs:
+                    for cand in (d / f"{stem}.rs", d / stem / "mod.rs"):
+                        target = known(cand)
+                        if target is not None:
+                            yield target
+        for tgt, guard, _top in paths:
+            if not guard:
+                for d in pdirs:
+                    target = known(d / tgt)
+                    if target is not None:
+                        yield target
+        for tgt, guard, _top in includes:
+            if not guard:
+                target = known(path.parent / tgt)
+                if target is not None:
+                    yield target
+
+    prod = set(reached_open)
+    work = [path for path in sources if path not in headed and (
+            path in reached_open or (path not in reached_gated_only and path not in named))]
+    done = set()
+    while work:
+        path = work.pop()
+        if path in done:
+            continue
+        done.add(path)
+        for target in loose_targets(path):
+            prod.add(target)
+            if target not in done and target not in headed:
+                work.append(target)
+    # (4) test-only: gated-only or test-named, and never production; a headed
+    # file is test-only whatever reaches it.
+    test_only = ((reached_gated_only | named) - prod) | headed
+    prod -= headed
+    # An `include!` this cannot read is a red wherever the file is scanned.
+    for path in sorted(sources):
+        if path not in test_only:
+            _UNRESOLVED_EDGES.extend(unresolved[path])
     _CLASSIFY_CACHE[key] = (prod, test_only)
     return prod, test_only
+
+
+# Known answers for the MODULE TREE, beside the cfg lattice's and the edge
+# extractor's tables. Each case is (name, {crate-relative path: source},
+# crate-relative file, want): want "test" means test-only, "prod" means
+# production, "scan" means scanned (production, or reached by no route).
+_MODULE_TREE_CASES = (
+    ("a module under a cfg(test) gate is test code, through a non-mod.rs parent "
+     "that owns its directory (the 79a1983740 shape)",
+     {"src/lib.rs": "#[cfg(test)]\nmod a;\n", "src/a.rs": "mod b;\n", "src/a/b.rs": ""},
+     "src/a/b.rs", "test"),
+    ("the same file declared WITHOUT cfg(test) is production",
+     {"src/lib.rs": "mod a;\n", "src/a.rs": "mod b;\n", "src/a/b.rs": ""},
+     "src/a/b.rs", "prod"),
+    ("the gate is carried through a test-named module",
+     {"src/lib.rs": "#[cfg(test)]\nmod x_tests;\n", "src/x_tests.rs": "mod deep;\n",
+      "src/x_tests/deep.rs": ""},
+     "src/x_tests/deep.rs", "test"),
+    ("a test-named module declared without a gate is production, and so is its child",
+     {"src/lib.rs": "mod x_tests;\n", "src/x_tests.rs": "mod deep;\n",
+      "src/x_tests/deep.rs": ""},
+     "src/x_tests/deep.rs", "prod"),
+    ("a gated declaration in a non-mod.rs file does not mask the SIBLING of its target",
+     {"src/lib.rs": "mod a;\n", "src/a.rs": "#[cfg(test)]\nmod b;\n", "src/a/b.rs": "",
+      "src/b.rs": ""},
+     "src/b.rs", "scan"),
+    ("...while its real target is test code",
+     {"src/lib.rs": "mod a;\n", "src/a.rs": "#[cfg(test)]\nmod b;\n", "src/a/b.rs": "",
+      "src/b.rs": ""},
+     "src/a/b.rs", "test"),
+    ("a file nothing compiles cannot vouch a gate for another file",
+     {"src/lib.rs": "pub fn f() {}\n",
+      "src/orphan.rs": "#[cfg(test)]\n#[path = \"victim.rs\"]\nmod v;\n", "src/victim.rs": ""},
+     "src/victim.rs", "scan"),
+    ("nor can a test-named file nothing compiles",
+     {"src/lib.rs": "pub fn f() {}\n",
+      "src/zz_tests.rs": "#[path = \"victim.rs\"]\nmod v;\n", "src/victim.rs": ""},
+     "src/victim.rs", "scan"),
+    ("a cfg(test) `#[path]` cannot make a crate root test code",
+     {"src/lib.rs": "#[cfg(test)]\n#[path = \"bin/tool.rs\"]\nmod tool;\n",
+      "src/bin/tool.rs": "fn main() {}\n"},
+     "src/bin/tool.rs", "prod"),
+    ("a binary named like a test is a production root, and so is its module",
+     {"src/lib.rs": "", "src/bin/test_tool.rs": "mod helper;\nfn main() {}\n",
+      "src/bin/helper.rs": ""},
+     "src/bin/helper.rs", "prod"),
+    ("an integration test's module is test code",
+     {"src/lib.rs": "", "tests/it.rs": "mod helper;\n", "tests/helper_impl.rs": "",
+      "tests/helper.rs": ""},
+     "tests/helper.rs", "test"),
+    ("a `#[path]` target owns its own directory",
+     {"src/lib.rs": "#[cfg(test)]\n#[path = \"t/x_impl.rs\"]\nmod x;\n",
+      "src/t/x_impl.rs": "mod y;\n", "src/t/y.rs": ""},
+     "src/t/y.rs", "test"),
+    ("an `#[path]` declaration has no default target",
+     {"src/lib.rs": "#[cfg(test)]\n#[path = \"x_impl.rs\"]\nmod x;\n",
+      "src/x_impl.rs": "", "src/x.rs": ""},
+     "src/x.rs", "scan"),
+    ("`include!` text resolves `mod` where its includer does, under the include's gate",
+     {"src/lib.rs": "#[cfg(test)]\ninclude!(\"inc.rs\");\n", "src/inc.rs": "mod sub;\n",
+      "src/sub.rs": ""},
+     "src/sub.rs", "test"),
+    ("a declaration inside an inline module is not resolved as a gate",
+     {"src/lib.rs": "mod inner {\n    #[cfg(test)]\n    mod deep;\n}\n",
+      "src/inner/deep.rs": "", "src/deep.rs": ""},
+     "src/inner/deep.rs", "scan"),
+    ("a file headed `#![cfg(test)]` is test code even under an ungated `mod`",
+     {"src/lib.rs": "mod a;\n", "src/a.rs": "// c\n#![cfg(test)]\nmod b;\n", "src/a/b.rs": ""},
+     "src/a.rs", "test"),
+    ("...and so is every module it declares",
+     {"src/lib.rs": "mod a;\n", "src/a.rs": "// c\n#![cfg(test)]\nmod b;\n", "src/a/b.rs": ""},
+     "src/a/b.rs", "test"),
+    ("the head rule reads only a leading `#![cfg(test)]`: one after another inner "
+     "attribute (which rustc honours) is still scanned, the fail-safe direction",
+     {"src/lib.rs": "mod a;\n", "src/a.rs": "#![allow(dead_code)]\n#![cfg(test)]\nmod b;\n",
+      "src/a/b.rs": ""},
+     "src/a/b.rs", "scan"),
+    ("a declaration spelled inside a string literal is not an edge",
+     {"src/lib.rs": "pub const S: &str = \"\n#[cfg(test)]\nmod fake;\n\";\n",
+      "src/fake.rs": ""},
+     "src/fake.rs", "scan"),
+)
+
+
+def module_tree_failures():
+    """Cases the module-tree classification answers wrongly. Empty is correct."""
+    bad = []
+    for name, files, target, want in _MODULE_TREE_CASES:
+        tmp = Path(tempfile.mkdtemp(prefix="module_tree_case_")).resolve()
+        try:
+            (tmp / ".git").mkdir()
+            crate = tmp / "crates" / "c"
+            for rel, text in files.items():
+                (crate / rel).parent.mkdir(parents=True, exist_ok=True)
+                (crate / rel).write_text(text)
+            _CLASSIFY_CACHE.pop(str(tmp), None)
+            prod, test_only = classify_paths(tmp)
+            _CLASSIFY_CACHE.pop(str(tmp), None)
+            path = (crate / target).resolve()
+            got = "prod" if path in prod else "test" if path in test_only else "scan"
+            if got != want and not (want == "scan" and got == "prod"):
+                bad.append(f"{name}: {target} is {got}, want {want}")
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+    return bad
 
 
 def _repo_root_of(path):
@@ -831,7 +1171,9 @@ def cfg_test_included_paths(root):
             #     unguarded include (M13-6), which wins.
             # The remaining lexer routes (a NESTED block comment, a raw string)
             # are handled by strip_comments_keep_strings using the tested
-            # NONCODE_RE rather than an ad-hoc scan.
+            # NONCODE_RE rather than an ad-hoc scan. (Nesting only since
+            # 2026-11-16: until then the block-comment pattern closed at the
+            # first `*/`, whatever this comment said.)
             tgt = (rs.parent / m.group(1)).resolve()
             crate_root = None
             for anc in rs.parents:
@@ -859,14 +1201,170 @@ def cfg_test_included_paths(root):
 # string alternatives come after the comment ones only where they cannot
 # overlap — block and line comments first, then raw strings (whose `#`-fence
 # backreference makes them unambiguous), then plain strings, then chars.
-NONCODE_RE = re.compile(
-    r"/\*.*?\*/"                    # block comment (non-nested)
-    r"|//[^\n]*"                    # line comment
-    r'|(?:b?r)(#*)"(?:.|\n)*?"\1'   # raw string   r"..."  r#"..."#
-    r'|b?"(?:\\.|[^"\\])*"'         # string literal
-    r"|'(?:\\.|[^\\'])'",           # char literal
+#
+# BEGIN shared Rust lexer (2026-11-16; docs/issues/2026-11-16-python-rust-lexer-copies.md).
+# Kept byte-identical in every copy; the copies are listed in that issue.
+# Block comments NEST in Rust (`/* a /* b */ c */` is one comment), which no `re`
+# pattern matches, so the pattern matches only the OPENER and `_NestingLexer`
+# extends it to its balanced close. A raw-string prefix needs a token boundary:
+# to rustc, `1r"x"` (a suffixed integer), `'r"x"` (a lifetime) and `xr"x"` (an
+# edition-2018 identifier) are a token followed by an ordinary string.
+_NONCODE_TOKEN_RE = re.compile(
+    r"/\*"                                              # block comment OPENER (nests)
+    r"|//[^\n]*"                                        # line comment
+    r'|(?<![A-Za-z0-9_\'])[bc]?r(#*)"(?:.|\n)*?"\1'      # raw string   r"..."  r#"..."#
+    r'|b?"(?:\\.|[^"\\])*"'                             # string literal
+    # char literal; the `\x..` and `\u{..}` escapes rustc accepts (rust_modules.ESC_CHAR)
+    r"|'(?:\\(?:x[0-9A-Fa-f]{2}|u\{[0-9A-Fa-f](?:_*[0-9A-Fa-f]){0,5}_*\}|.)|[^\\'])'",
     re.DOTALL,
 )
+
+
+class _NestingLexer:
+    """`_NONCODE_TOKEN_RE` with each block-comment opener extended to its balanced close.
+
+    Answers `sub` and `finditer` as a compiled pattern does, so every caller
+    reads as before. Leftmost `/*` and `*/` tokens are rustc's own greedy
+    reading (`/*/` opens, `*/*` closes). An unterminated comment, which rustc
+    refuses, runs to the end of the text. A comment match has no groups that
+    participate: `group(1)` is None, as for every match but a raw string's.
+    A text with no `/*` at all holds no block comment, so the pattern alone is
+    exact there; that is 98% of the tree's bytes, and it keeps the old speed.
+    """
+
+    _BLOCK_RE = re.compile(r"/\*|\*/")
+    _SPAN_RE = re.compile(r"[\s\S]*(?:(x))?")
+
+    def finditer(self, text, pos=0, endpos=None):
+        """As `Pattern.finditer`: `endpos` ends the text, for a comment too."""
+        stop = len(text) if endpos is None else max(0, min(endpos, len(text)))
+        if "/*" not in text:
+            yield from _NONCODE_TOKEN_RE.finditer(text, pos, stop)
+            return
+        while True:
+            for m in _NONCODE_TOKEN_RE.finditer(text, pos, stop):
+                if m.group(0) != "/*":
+                    yield m
+                    continue
+                depth, end = 0, stop
+                for tok in self._BLOCK_RE.finditer(text, m.start(), stop):
+                    depth += 1 if tok.group(0) == "/*" else -1
+                    if depth == 0:
+                        end = tok.end()
+                        break
+                yield self._SPAN_RE.match(text, m.start(), end)
+                pos = end
+                break  # resume the token scan after the whole comment
+            else:
+                return
+
+    def sub(self, repl, text):
+        if "/*" not in text:
+            return _NONCODE_TOKEN_RE.sub(repl, text)
+        out, pos = [], 0
+        for m in self.finditer(text):
+            out.append(text[pos:m.start()])
+            out.append(repl(m))
+            pos = m.end()
+        out.append(text[pos:])
+        return "".join(out)
+
+
+NONCODE_RE = _NestingLexer()
+
+
+# A file-level `#![cfg(test)]` configures the whole module out of every
+# non-test build, whatever route reaches the file: a `mod` declaration, a
+# `#[path]`, a symlink, a case alias on a case-insensitive volume; `include!`
+# refuses an inner attribute outright (each probed with rustc on 2026-11-16,
+# docs/issues/2026-11-16-verdict-set-rmint-outlined-test-module.md). So it is
+# evidence the file carries itself, needing no module graph. Only blank lines
+# and `//` line comments may precede it: a line comment ends at `\n` alone (a
+# U+2028 inside one does not end it, so lines split on `\n`, never
+# `splitlines`), while a block comment nests and a string or another attribute
+# would need this lexer. Any other head keeps the file production.
+_HEAD_SKIP_RE = re.compile(r"[ \t\r]*(?://[^\n]*)?")
+_HEAD_CFG_TEST_RE = re.compile(r"[ \t\r]*#!\[[ \t]*cfg[ \t]*\([ \t]*test[ \t]*\)[ \t]*\][ \t\r]*")
+
+
+def headed_cfg_test(text):
+    """Is the file's first line that is not blank or a `//` comment exactly `#![cfg(test)]`?"""
+    for line in text.split("\n"):
+        if _HEAD_CFG_TEST_RE.fullmatch(line):
+            return True
+        if not _HEAD_SKIP_RE.fullmatch(line):
+            return False
+    return False
+
+
+_HEAD_CASES = (
+    ("// c\n//! doc\n\n#![cfg(test)]\nfn f() {}\n", True),
+    ("// c\r\n\r\n#![ cfg ( test ) ]\r\nfn f() {}\n", True),
+    ("/* c */\n#![cfg(test)]\n", False),
+    ("#![allow(dead_code)]\n#![cfg(test)]\n", False),
+    ('#![cfg(any(test, feature = "x"))]\n', False),
+    ("#![cfg(not(test))]\n", False),
+    ("#![rustfmt::cfg(test)]\n", False),
+    ("#[cfg(test)]\nmod m;\n", False),
+    ("fn f() {}\n#![cfg(test)]\n", False),
+    ("// c\u2028#![cfg(test)]\n", False),
+)
+
+
+def _lexer_blank(m):
+    return "".join("\n" if ch == "\n" else " " for ch in m.group(0))
+
+
+def _lexer_blank_comments(m):
+    return _lexer_blank(m) if m.group(0).startswith(("//", "/*")) else m.group(0)
+
+
+# (name, source, mode, must survive, must vanish), each a reading rustc makes.
+# The old pattern made every reading not marked "guard" wrongly; a guard pins one
+# it already made, against a regression in the new lexer.
+_LEXER_CASES = (
+    ("nested comment hides a cfg", "/* /* */ #[cfg(test)] // */\nmod m;\n", "comments",
+     ("mod m;",), ("cfg(test)",)),
+    ("nested comment holds a quote", '/* /* */ " */\nconst A: &str = "//"; #[path = "d.rs"] mod s;\n',
+     "comments", ('#[path = "d.rs"] mod s;',), ()),
+    ("three levels", "/* 1 /* 2 /* 3 */ 2 */ 1 */ fn f() {}\n", "all", ("fn f() {}",), ("1", "2", "3")),
+    ("unterminated runs to the end", "/* a /* b */\nfn f() {}\n", "all", (), ("fn",)),
+    ("guard: `/*/` opens", "/*/ c */ fn f() {}\n", "all", ("fn f() {}",), ("c",)),
+    ("guard: an opener in a string", 'let s = "/*"; fn f() {}\n', "all", ("fn f() {}",), ()),
+    ("guard: `//*` is a line comment", "//* c\nfn f() {}\n", "all", ("fn f() {}",), ("c",)),
+    ("`1r` is a suffixed integer", 'eat!(1r"\\" // "); #[path = "d.rs"] mod m;\n', "comments",
+     ('#[path = "d.rs"] mod m;',), ()),
+    ("`'r` is a lifetime", 'eat!(\'r"\\" // "); #[path = "d.rs"] mod m;\n', "comments",
+     ('#[path = "d.rs"] mod m;',), ()),
+    ("`xr` is an identifier", 'eat!(xr"\\" // "); #[path = "d.rs"] mod m;\n', "comments",
+     ('#[path = "d.rs"] mod m;',), ()),
+    ("guard: `cr` opens a raw C string", 'x(cr"\\" // "); #[path = "d.rs"] mod m;\n', "comments", (), ("#[path",)),
+    ("guard: `br` opens a raw byte string", 'x(br"\\" // "); #[path = "d.rs"] mod m;\n', "comments",
+     (), ("#[path",)),
+    ("`\\x..` and `\\u{..}` are char escapes",
+     "let c = ['\\x41', b'\\xFF', '\\u{1F_600}', '\\u{41_}', '\\u{10FFFF}']; fn f() {}\n", "all",
+     ("fn f() {}", ", b"), ("x41", "xFF", "1F_600", "41_", "10FFFF")),
+    ("guard: `\\'`, `\\\\` and `\\\"` are char escapes", "let q = ['\\'', '\\\\', '\\\"']; fn f() {}\n",
+     "all", ("fn f() {}", ", "), ("\\",)),
+)
+
+
+def lexer_failures():
+    """Cases this lexer reads differently from rustc. Empty is correct."""
+    bad = []
+    for name, src, mode, keep, gone in _LEXER_CASES:
+        out = NONCODE_RE.sub(_lexer_blank if mode == "all" else _lexer_blank_comments, src)
+        if len(out) != len(src) or any(k not in out for k in keep) or any(g in out for g in gone):
+            bad.append(name)
+    groups = [m.group(1) for m in NONCODE_RE.finditer('/* /* */ */ r#"x"# "y"')]
+    if groups != [None, "#", None]:
+        bad.append(f"group(1) per match: {groups}")
+    window = [m.span() for m in NONCODE_RE.finditer('a /* b /* c */ d */ "e"', 2, 15)]
+    if window != [(2, 15)]:
+        bad.append(f"pos/endpos window: {window}")
+    bad += [f"file head {src!r}" for src, want in _HEAD_CASES if headed_cfg_test(src) is not want]
+    return bad
+# END shared Rust lexer.
 
 
 def _blank(match: re.Match[str]) -> str:
@@ -1329,8 +1827,25 @@ def selftest() -> int:
         print(f"  [FAIL] cfg lattice: classified backwards: {_lattice_bad}")
         failed += 1
     else:
-        print(f"  [ok  ] cfg lattice: {len(_CFG_LATTICE_CASES)} spellings, "
-              f"including the five audit r15 M15-1 found inverted")
+        print(f"  [ok  ] cfg lattice: {len(_CFG_LATTICE_CASES) + len(_CFG_HEAD_CASES)} spellings, "
+              f"including the five audit r15 M15-1 found inverted and three tool paths")
+        passed += 1
+    _lexer_bad = lexer_failures()
+    if _lexer_bad:
+        print(f"  [FAIL] lexer: read differently from rustc: {_lexer_bad}")
+        failed += 1
+    else:
+        print(f"  [ok  ] lexer: {len(_LEXER_CASES)} readings, nested comments and raw-string "
+              f"prefixes among them")
+        passed += 1
+    _tree_bad = module_tree_failures()
+    if _tree_bad:
+        for _line in _tree_bad:
+            print(f"  [FAIL] module tree: {_line}")
+        failed += 1
+    else:
+        print(f"  [ok  ] module tree: {len(_MODULE_TREE_CASES)} layouts resolved as rustc "
+              f"resolves them, including the 79a1983740 cfg(test) chain")
         passed += 1
 
     def check(
@@ -1381,6 +1896,29 @@ def selftest() -> int:
                 want,
             )
         probe.unlink()
+        lib.write_text(baseline)
+
+        # 1c. The 79a1983740 shape, end to end: a bypass in a module the
+        # compiler reaches only through a cfg(test) gate one file up -- through
+        # an ordinary `chain.rs` that owns `chain/` -- is test code; the same
+        # files with that gate removed are production and RED.
+        chain = root / "crates" / "c" / "src" / "chain.rs"
+        chain_dir = root / "crates" / "c" / "src" / "chain"
+        chain_dir.mkdir()
+        chain.write_text("mod deep;\n")
+        (chain_dir / "deep.rs").write_text(
+            "pub fn smuggle(env: &mut E, d: D) { env.add_decl_unchecked(d); }\n"
+        )
+        for guard, want in (("#[cfg(test)]", 0), ("", 1)):
+            lib.write_text(baseline + "\n" + guard + "\nmod chain;\n")
+            check(
+                f"a bypass in chain/deep.rs under `{guard or '<no guard>'} mod chain;` is "
+                f"{'RED' if want else 'green'}",
+                root,
+                want,
+            )
+        shutil.rmtree(chain_dir)
+        chain.unlink()
         lib.write_text(baseline)
 
         # 2. a production bypass, unaccounted -> RED
@@ -1484,6 +2022,16 @@ def selftest() -> int:
         # 11. an unbalanced cfg(test) mod fails CLOSED, never skips
         lib.write_text("#[cfg(test)]\nmod tests {\n    fn t() { env.add_decl_unchecked(d); }\n")
         check("an unterminated cfg(test) block fails closed", root, 1)
+
+        # 11b-c. Test-ness a file carries (2026-11-16,
+        # docs/issues/2026-11-16-python-rust-lexer-copies.md).
+        src_dir = root / "crates" / "c" / "src"
+        lib.write_text(baseline + "\nmod headed;\n")
+        (src_dir / "headed.rs").write_text("// note\n\n#![cfg(test)]\n" + PLANT)
+        check("a file headed #![cfg(test)] is test code, whatever declares it", root, 0)
+        (src_dir / "headed.rs").write_text("// note\n\n#![cfg(any(test, feature = \"x\"))]\n" + PLANT)
+        check("a file headed by any other cfg stays production", root, 1)
+        (src_dir / "headed.rs").unlink()
 
         # 12. an unreadable ratchet fails closed
         lib.write_text(baseline)
@@ -1648,6 +2196,22 @@ def main(argv: list[str]) -> int:
     if "--dump-scope" in argv:
         for rel in dump_scope(REPO_ROOT):
             print(rel)
+        return 0
+    if "--module-tree-cases" in argv:
+        # The known-answer table, for the Rust producer's own arm to answer: one
+        # table, two producers, so neither can drift from it alone.
+        print(json.dumps([{"name": name, "files": files, "target": target, "want": want}
+                          for name, files, target, want in _MODULE_TREE_CASES], indent=1))
+        return 0
+    if "--lexer-cases" in argv:
+        # The shared lexer's, the file-head rule's and the cfg head's known
+        # answers, for the Rust producer's mirror to answer too.
+        print(json.dumps({
+            "lexer": [{"name": name, "source": src, "mode": mode, "survive": list(keep),
+                       "vanish": list(gone)} for name, src, mode, keep, gone in _LEXER_CASES],
+            "file_head": [{"source": src, "want": want} for src, want in _HEAD_CASES],
+            "cfg_head": [{"attr": attr, "want": want} for attr, want in _CFG_HEAD_CASES],
+        }, indent=1))
         return 0
     if "--selftest" in argv:
         return selftest()

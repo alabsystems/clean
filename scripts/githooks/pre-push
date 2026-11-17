@@ -256,6 +256,13 @@ PYLOCK
       else
         git worktree prune && git worktree add -q --detach --force "$checkout" "$sha"
       fi || { echo "clean pre-push: could not check out ${sha:0:12} at $checkout" >&2; exit 1; }
+      # Linked worktrees can inherit a sparse source's patterns, and a reused
+      # checkout retains its own. A clean status does not reveal omitted tracked
+      # inputs. Rehydrate under this same repository lock before any checker.
+      git -C "$checkout" sparse-checkout disable || {
+        echo "clean pre-push: could not restore the full tracked tree at $checkout" >&2
+        exit 1
+      }
       # 1. R10 by the PUSHER's copy of the registry check (see the header).
       CLEAN_PUSH_RANGES="$ZERO $sha" "$PY" "$HOOK_ROOT/scripts/check_gate_registry.py" \
         --pushed-in "$checkout" || rc=1
@@ -274,6 +281,11 @@ PYLOCK
 fi
 
 # ---------------------------------------- INNER: a pristine checkout of the sha
+if [ "$(git config --bool core.sparseCheckout 2>/dev/null)" = true ] \
+   || ! git ls-files -v | "$PY" -c 'import sys; rows = sys.stdin.read().splitlines(); sys.exit(any(row.startswith("S ") or row[:1].islower() for row in rows))'; then
+  echo "clean pre-push: $REPO_ROOT is not a full tracked tree (sparse or skipped index entries)." >&2
+  exit 1
+fi
 if [ "$(git rev-parse HEAD 2>/dev/null)" != "$CLEAN_PUSH_CHECKOUT" ] \
    || [ -n "$(git status --porcelain --ignored --untracked-files=all 2>&1)" ]; then
   echo "clean pre-push: CLEAN_PUSH_CHECKOUT=$CLEAN_PUSH_CHECKOUT, but $REPO_ROOT is not a" >&2

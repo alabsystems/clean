@@ -45,7 +45,7 @@
 //! Part of #1094.
 
 mod defaults;
-mod pipeline;
+pub(crate) mod pipeline;
 pub(crate) mod validate;
 
 use crate::lcnf::Decl;
@@ -71,6 +71,10 @@ pub use pipeline::compile_lcnf_to_trust_ir_with_report_for;
 pub use pipeline::{
     compile_lcnf_decls, compile_lcnf_decls_for, compile_lcnf_decls_in_runtime_closure,
     compile_lcnf_to_c, compile_lcnf_to_rust, PipelineArtifacts, PipelineConfig, PipelineError,
+};
+#[cfg(feature = "trust-ir-backend")]
+pub use pipeline::{
+    compile_lcnf_to_trust_ir_in_runtime_closure_with_artifacts, TrustIrPipelineData,
 };
 
 /// Compiler phases (progression is unidirectional).

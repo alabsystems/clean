@@ -173,16 +173,16 @@ impl Specification {
 
         self.add_inductive(
             r"inductive ZonoContainSound : forall (n : Nat), ZonoOp n → Type
-| t01_hull : forall (n : Nat), ZonoContainSound n (ZonoOp.hull n)
-| t02_affine : forall (n : Nat), ZonoContainSound n (ZonoOp.affine n)
-| t03_relu_overapprox : forall (n : Nat), ZonoContainSound n (ZonoOp.relu_overapprox n)
-| t04_relu_tight : forall (n : Nat), ZonoContainSound n (ZonoOp.relu_tight n)
-| t05_relu_active : forall (n : Nat), ZonoContainSound n (ZonoOp.relu_active n)
-| t06_relu_inactive : forall (n : Nat), ZonoContainSound n (ZonoOp.relu_inactive n)
-| t07_affine_relu : forall (n : Nat), ZonoContainSound n (ZonoOp.affine_relu n)
-| t08_minkowski : forall (n : Nat), ZonoContainSound n (ZonoOp.minkowski n)
-| t08a_minkowski_reduce : forall (n : Nat), ZonoContainSound n (ZonoOp.minkowski_reduce n)
-| t08b_minkowski_residual : forall (n : Nat), ZonoContainSound n (ZonoOp.minkowski_residual n)",
+| t01_hull : forall (n : Nat), ZonoContainSound n (@ZonoOp.hull n)
+| t02_affine : forall (n : Nat), ZonoContainSound n (@ZonoOp.affine n)
+| t03_relu_overapprox : forall (n : Nat), ZonoContainSound n (@ZonoOp.relu_overapprox n)
+| t04_relu_tight : forall (n : Nat), ZonoContainSound n (@ZonoOp.relu_tight n)
+| t05_relu_active : forall (n : Nat), ZonoContainSound n (@ZonoOp.relu_active n)
+| t06_relu_inactive : forall (n : Nat), ZonoContainSound n (@ZonoOp.relu_inactive n)
+| t07_affine_relu : forall (n : Nat), ZonoContainSound n (@ZonoOp.affine_relu n)
+| t08_minkowski : forall (n : Nat), ZonoContainSound n (@ZonoOp.minkowski n)
+| t08a_minkowski_reduce : forall (n : Nat), ZonoContainSound n (@ZonoOp.minkowski_reduce n)
+| t08b_minkowski_residual : forall (n : Nat), ZonoContainSound n (@ZonoOp.minkowski_residual n)",
             "Zonotope soundness witness for T01-T08 and T08A/B. Each constructor \
              witnesses that the corresponding zonotope operation preserves \
              containment of represented points. The inductive constructors \
@@ -198,11 +198,11 @@ impl Specification {
     /// type during promotion.
     fn add_zonotope_theorem(&mut self, thm: &ZonoTheorem) -> Result<(), SpecError> {
         let type_src = format!(
-            "forall (n : Nat), ZonoContainSound n (ZonoOp.{op} n)",
+            "forall (n : Nat), ZonoContainSound n (@ZonoOp.{op} n)",
             op = thm.op_ctor
         );
         let value_src = format!(
-            "fun (n : Nat) => ZonoContainSound.{sound} n",
+            "fun (n : Nat) => @ZonoContainSound.{sound} n",
             sound = thm.sound_ctor
         );
         self.add_definition(SpecDefinition {

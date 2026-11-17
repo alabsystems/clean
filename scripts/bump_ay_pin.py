@@ -226,7 +226,7 @@ def clean_owned(commands: Commands) -> None:
 def protected_inputs(commands: Commands) -> dict[str, Snapshot]:
     paths = commands.git_run(["ls-files", "-z", "--", "*Cargo.toml", "*Cargo.lock", *GUARDS]).split("\0")
     names = {path for path in paths if path}
-    mandatory = set(OWNED) | set(GUARDS) | {str(Path(lock).with_name(MANIFEST)) for lock in LOCKS}
+    mandatory = set(OWNED) | set(GUARDS) | {str(PurePosixPath(lock).with_name(MANIFEST)) for lock in LOCKS}
     require(mandatory <= names, "tracked transaction input inventory is incomplete")
     inputs = snapshot(commands.root, sorted(names - set(OWNED)))
     for relative, saved in inputs.items():
@@ -857,17 +857,20 @@ def transaction(root: Path, revision: str, commands: Commands,
         # The move lands only with its consumers tested at the new revision; the
         # dep-boundary leg holds that rule, and states the command once.
         print(f"Before this lands: `{boundary.AY_CONSUMER_QUALIFICATION_COMMAND}` "
-              f"(under scripts/heavy_gate.sh run 12), recorded for AY {revision} in "
+              f"(under build-slot and a measured scripts/heavy_gate.sh reservation), recorded for AY {revision} in "
               f"{boundary.AY_CONSUMER_QUALIFICATION.relative_to(boundary.ROOT)}; "
               "the dep-boundary leg refuses the move until then.")
 
 
 def selected_targo(raw: str) -> Path:
     path = Path(raw)
-    require(path.is_absolute() and path.name == "targo", "--targo must be an absolute path named targo")
+    executable = "targo.exe" if os.name == "nt" else "targo"
+    require(path.is_absolute() and os.path.normcase(path.name) == executable,
+            f"--targo must be an absolute path named {executable}")
     require(path.is_file() and os.access(path, os.X_OK), "selected Targo is not executable")
-    require(path.resolve().name == "targo", "selected Targo resolves to a different executable name")
-    return path.resolve()
+    resolved = path.resolve()
+    require(os.path.normcase(resolved.name) == executable, "selected Targo resolves to a different executable name")
+    return resolved
 
 
 def interrupted(signum, _frame):

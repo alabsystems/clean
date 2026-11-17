@@ -1,6 +1,7 @@
 /- Full captured native artifact and its original stored WP contract.
    Copyright 2026 Andrew Yates. Apache-2.0. -/
 import SemRNativeExecutionClaim
+import SemRBooleanWPBranches
 
 set_option maxRecDepth 8192
 namespace SemRNativeExecutionCapture
@@ -39,20 +40,20 @@ theorem empty_decoded : decode emptyModuleBytes = .ok emptyModule := rfl
 def expression : Expr := .binary .or
   (.binary .and (.var [99]) (.binary .eq (.var [114]) (.var [108])))
   (.binary .and (.not (.var [99])) (.binary .eq (.var [114]) (.var [113])))
-theorem contract_decoded : decodeText 4096 (bindings.map Prod.fst) contractBytes =
+theorem contract_decoded : decodeTypedText 4096 (booleanBindingNames bindings) (integerBindingNames bindings) contractBytes =
     some expression := rfl
 
 def modelPost (m : SemR.Module) (bound : List ContractBinding) (post : Expr)
     (inputs returned : List Val) : Prop :=
-  ∃ env, contractTypedEnv m bound inputs returned = some env ∧ eval env.1 post = some true
+  ∃ env, contractTypedEnv m bound inputs returned = some env ∧ evalTyped env.1 env.2 post = some true
 
 theorem contract_equiv (m : SemR.Module) (bound : List ContractBinding)
     (bytes : Bytes) (post : Expr)
-    (parsed : decodeText 4096 (bound.map Prod.fst) bytes = some post)
+    (parsed : decodeTypedText 4096 (booleanBindingNames bound) (integerBindingNames bound) bytes = some post)
     (inputs returned : List Val) :
     originalContractHolds 4096 m .booleanText bytes bound inputs returned ↔
       modelPost m bound post inputs returned := by
-  simp only [originalContractHolds, modelPost, checkedText, parsed, Option.bind_some]
+  simp only [originalContractHolds, modelPost, checkedContractText, checkedTypedText, parsed, Option.bind_some]
 
 def modelExecution (m : SemR.Module) (bound : List ContractBinding) (post : Expr) : Prop :=
   ∀ inputs depth, checkSig m.pointerBits inputs chooseSignature.params = .ok () →
@@ -65,7 +66,7 @@ theorem normalize (blob : Bytes) (m : SemR.Module) (f : Func)
     (found : m.functions.find? (fun candidate => candidate.id == 0) = some f)
     (signature : nth? m.funcTys f.ty = some chooseSignature)
     (inhabited : ∃ inputs, checkSig m.pointerBits inputs chooseSignature.params = .ok ())
-    (parsed : decodeText 4096 (bound.map Prod.fst) bytes = some post) :
+    (parsed : decodeTypedText 4096 (booleanBindingNames bound) (integerBindingNames bound) bytes = some post) :
     originalExecution 4096 blob 0 .booleanText bytes bound ↔ modelExecution m bound post := by
   simpa only [modelExecution, contract_equiv m bound bytes post parsed] using
     originalExecution_model_iff 4096 blob 0 .booleanText bytes bound m f
@@ -95,9 +96,29 @@ theorem program_equiv : WrongProgram ↔ ModelWrongProgram :=
 theorem false_equiv : WrongContract ↔ ModelWrongContract :=
   normalize moduleBytes chooseModule chooseFunction falseBytes bindings (.literal false)
     decoded (by rfl) (by rfl) ⟨[.bool false, .bool false, .bool false], rfl⟩ (by rfl)
-theorem width_equiv : WrongWidth ↔ ModelWrongWidth :=
-  normalize moduleBytes chooseModule chooseFunction contractBytes widthBindings expression
-    decoded (by rfl) (by rfl) ⟨[.bool false, .bool false, .bool false], rfl⟩ (by rfl)
+theorem wrong_width_text_refused :
+    decodeTypedText 4096 (booleanBindingNames widthBindings)
+      (integerBindingNames widthBindings) contractBytes = none := rfl
+
+/-- The wrong-width mutant already fails native binding and now also fails
+    sort decoding. Preserve both original execution/model refusal claims. -/
+theorem width_equiv : WrongWidth ↔ ModelWrongWidth := by
+  have bindingRefused (returned : List Val) :
+      contractTypedEnv chooseModule widthBindings
+        [.bool false, .bool false, .bool false] returned = none := rfl
+  constructor
+  · intro claim
+    obtain ⟨_, returned, _, env, bound, _⟩ := originalExecution_at 4096 moduleBytes 0
+      .booleanText contractBytes widthBindings claim chooseModule chooseFunction
+      chooseSignature decoded (by rfl) (by rfl)
+      [.bool false, .bool false, .bool false] 0 (by rfl)
+    rw [bindingRefused returned] at bound
+    cases bound
+  · intro claim
+    obtain ⟨_, returned, _, env, bound, _⟩ := claim
+      [.bool false, .bool false, .bool false] 0 (by rfl)
+    rw [bindingRefused returned] at bound
+    cases bound
 theorem place_equiv : WrongPlace ↔ ModelWrongPlace :=
   normalize moduleBytes chooseModule chooseFunction contractBytes placeBindings expression
     decoded (by rfl) (by rfl) ⟨[.bool false, .bool false, .bool false], rfl⟩ (by rfl)
@@ -139,7 +160,7 @@ theorem namespace_none (m : SemR.Module) (inputs returned : List Val) :
     originalContractHolds 4096 m .booleanText contractBytes namespaceBindings inputs returned ↔ False := by
   constructor
   · rintro ⟨env, _, checked⟩
-    have none : checkedText 4096 contractBytes (namespaceBindings.map Prod.fst) env.1 = none := rfl
+    have none : checkedContractText 4096 contractBytes namespaceBindings env = none := rfl
     rw [none] at checked
     cases checked
   · exact False.elim

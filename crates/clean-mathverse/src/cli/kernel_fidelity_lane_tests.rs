@@ -119,7 +119,7 @@ fn stamp(module: &str, mode: Option<&str>) -> BTreeSet<String> {
     cmd_stamp_verified(s).unwrap_or_else(|e| panic!("stamp-verified {module} {mode:?}: {e}"));
     let bytes = std::fs::read(&manifest).expect("manifest written");
     let m: KernelVerifiedManifest = serde_json::from_slice(&bytes).expect("manifest parses");
-    m.kernel_verified_names.into_iter().collect()
+    m.accepted_names().iter().cloned().collect()
 }
 
 /// The sharded worker over one fixture module.

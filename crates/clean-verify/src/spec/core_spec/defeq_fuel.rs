@@ -236,10 +236,10 @@ impl Specification {
              beta_reduces_bd_to_def_eq x y hb) \
              (fun (x : KExpr) (y : KExpr) (hd : @Eq (OptionType KExpr) \
              (delta_reduct (red_def the_red_env) x) (@OptionType.some KExpr y)) => \
-             DefEq.delta x y (delta_reduces.mk x y hd)) \
+             DefEq.delta x y (@delta_reduces.mk x y hd)) \
              (fun (x : KExpr) (y : KExpr) (hi : @Eq (OptionType KExpr) \
              (iota_reduct (red_rec the_red_env) x) (@OptionType.some KExpr y)) => \
-             DefEq.iota x y (iota_reduces.mk x y hi)) \
+             DefEq.iota x y (@iota_reduces.mk x y hi)) \
              (fun (f : KExpr) (f2 : KExpr) (a : KExpr) \
              (_ : whnf_red_step the_red_env f f2) (ih : DefEq f f2) => \
              DefEq.app_cong f f2 a a ih (DefEq.refl a)) \

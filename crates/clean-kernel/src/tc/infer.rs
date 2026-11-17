@@ -141,7 +141,7 @@ impl<'env> TypeChecker<'env> {
     /// The typing logic is identical between the debug and release bodies in
     /// check mode (`infer_only = false`). In infer-only mode (`infer_only =
     /// true`, the default for `infer_type`) the debug body is STRICTLY
-    /// STRICTER: certificate construction makes it infer the App argument,
+    /// STRICTER: the certificate-path traversal infers the App argument,
     /// the Lam domain, and the Let type/value unconditionally
     /// (`tc/cert/infer_core.rs` App/Lam/Let arms), while the release body
     /// guards each of those inferences behind `!infer_only`
@@ -162,7 +162,17 @@ impl<'env> TypeChecker<'env> {
     pub fn infer_type(&self, e: &Expr) -> Result<Expr, TypeError> {
         let _metered = self.begin_operation();
         self.tick_heartbeat()?;
-        let (ty, _cert) = self.infer_type_with_cert(e)?;
+        // Keep retained/replay/trace consumers on the original certificate
+        // path, including plain inference nested inside a retained operation.
+        // A configured collector may become enabled during the call.
+        let ty = if self.cert_retained.get()
+            || self.trace_collector.is_some()
+            || self.sharing_replay.is_some()
+        {
+            self.infer_type_with_cert(e)?.0
+        } else {
+            self.infer_type_discard_cert(e)?
+        };
 
         // Invariant (CIC): type of a type is always a Sort/SProp.
         // Check WHNF since result may not be syntactically a Sort.
@@ -229,7 +239,7 @@ impl<'env> TypeChecker<'env> {
     /// PERMISSIVE: it guards inference of the App argument, the Lam domain,
     /// and the Let type/value behind `!infer_only` (see the App/Lam/Let arms
     /// of `infer_type_fast_impl`), where the debug body infers all three
-    /// unconditionally for certificate construction
+    /// unconditionally in the certificate-path traversal
     /// (`tc/cert/infer_core.rs`). Debug can `Err` where this body `Ok`s.
     /// This release body is the deployed behavior.
     ///

@@ -3989,7 +3989,9 @@ theorem cellAddress_sound (k : Core) (ptr : Val) (ty : Ty)
   | unsupported id c hp hf ht hs => rw [hp]; simp [cellAddress, hf, ht, hs] <;> rfl
   | ready id c r hp hf ht hs hr =>
     rw [hp]
-    simpa [cellAddress, hf, ht, hs, ok_bind] using h c r hr
+    simp only [cellAddress, hf, ht, hs]
+    change ofR (f c) = r
+    exact h c r hr
 
 theorem expectCell_bind (k : Core) (ptr : Val) (ty : Ty) (f : Cell → R Core) :
     (expectCell k ptr ty >>= f) =

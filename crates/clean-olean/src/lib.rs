@@ -54,6 +54,7 @@ pub mod semr_scalar;
 // import's late-binding judgement read it.
 pub(crate) mod lean_ir;
 pub mod level;
+pub mod meaning_digest;
 pub mod metamath;
 pub mod module;
 pub mod ndjson;
@@ -93,7 +94,8 @@ pub use import::{
     convert_parsed_constant_to_declaration, convert_parsed_constant_to_type_stub,
     default_fn_binder_idx, default_search_paths, default_toolchain_versions, discover_olean_parts,
     find_module_olean, has_global_instance_entry, import_world_for_file, lean_accepts_restatement,
-    load_module_with_deps, load_module_with_deps_bounded, load_module_with_deps_bounded_shared,
+    load_module_with_deps, load_module_with_deps_and_completed_imports,
+    load_module_with_deps_bounded, load_module_with_deps_bounded_shared,
     load_module_with_deps_bounded_shared_with_policy, load_module_with_deps_cached,
     load_module_with_deps_cached_guarded, load_module_with_deps_parallel,
     load_module_with_deps_replaying_module, load_module_with_deps_shared,
@@ -110,12 +112,14 @@ pub use import::{
     resolve_typed_module_path, scoped_instance_idx, search_paths_in_world, source_world_for_file,
     source_world_for_snapshot, source_world_of, stored_family_members,
     toolchain_versions_from_search_paths, type_binder_name_idx, type_binder_names,
-    typed_module_rel_path, ActiveStdlibToolchain, ArtifactDepth, ArtifactRead, CapturedModuleBytes,
-    ConstantConvertSession, DefaultFnBinderState, DeferredRecursor, DeferredRecursorStatus,
-    ExprSharingStats, ImportError, ImportKinds, ImportWorld, ImportWorldRefusal, LeanWorldScope,
-    LoadSummary, ModuleCache, OleanImportPolicy, ScopedInstanceState, SearchPathBuilder,
-    SkippedConstant, SourceWorldDecision, SourceWorldRefusal, StoredFamilyMembers,
-    TypeBinderNameState, TypedImport, TypedImportFlags, UnpinnedOleanImportPolicy,
+    typed_module_rel_path, ActiveStdlibToolchain, ArtifactDeclaration, ArtifactDeclarationOrigin,
+    ArtifactDepth, ArtifactInventory, ArtifactInventoryError, ArtifactInventoryLimits,
+    ArtifactRead, CapturedModuleBytes, CompletedModuleImports, ConstantConvertSession,
+    DefaultFnBinderState, DeferredRecursor, DeferredRecursorStatus, ExprSharingStats, ImportError,
+    ImportKinds, ImportWorld, ImportWorldRefusal, LeanWorldScope, LoadSummary, ModuleCache,
+    OleanImportPolicy, ScopedInstanceState, SearchPathBuilder, SkippedConstant,
+    SourceWorldDecision, SourceWorldRefusal, StoredFamilyMembers, TypeBinderNameState, TypedImport,
+    TypedImportFlags, UnpinnedOleanImportPolicy,
 };
 pub use import::{load_modules_with_deps_checked_with_limits, ModuleCaptureLimits};
 pub use import_reverification_metric::{
@@ -126,6 +130,7 @@ pub use recheck_closed::reference_base::{reference_base_closed, ReferenceBase};
 pub use recheck_closed::{
     promote_origins_after_closed_recheck, recheck_closed, ClosedRecheck, ClosedRecheckOptions,
     ClosedRecheckRefusal, ClosedRecheckReport, ImportedConeGate, ImportedConeVerdict, RecheckLevel,
+    ReplayedImportedSource, ReplayedSourceError,
 };
 
 // Domain-prefixed alias for collision-free imports

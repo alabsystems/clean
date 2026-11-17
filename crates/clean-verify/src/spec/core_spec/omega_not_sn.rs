@@ -94,7 +94,7 @@ impl Specification {
         format!(
             "def omega_self_step : \
              whnf_step (KExpr.app {d} {d}) (KExpr.app {d} {d}) := \
-             whnf_step.beta (KExpr.app {d} {d}) (KExpr.app {d} {d}) \
+             @whnf_step.beta (KExpr.app {d} {d}) (KExpr.app {d} {d}) \
              (beta_reduces.beta (KExpr.bvar Nat.zero) {body} {d})",
             d = OMEGA_LAM,
             body = OMEGA_BODY,
@@ -121,11 +121,11 @@ impl Specification {
              (fun (A2 : KExpr) (hsA : beta_reduces (KExpr.bvar Nat.zero) A2) \
              (_he : @Eq KExpr e2 (KExpr.lam A2 {body})) => \
              no_whnf_step_bvar Nat.zero A2 (whnf_acc e2) \
-             (whnf_step.beta (KExpr.bvar Nat.zero) A2 hsA)) \
+             (@whnf_step.beta (KExpr.bvar Nat.zero) A2 hsA)) \
              (fun (b2 : KExpr) (hsb : beta_reduces {body} b2) \
              (_he : @Eq KExpr e2 (KExpr.lam (KExpr.bvar Nat.zero) b2)) => \
              whnf_step_app_inv (KExpr.bvar Nat.zero) (KExpr.bvar Nat.zero) b2 \
-             (whnf_acc e2) (whnf_step.beta {body} b2 hsb) \
+             (whnf_acc e2) (@whnf_step.beta {body} b2 hsb) \
              (fun (A0 : KExpr) (body0 : KExpr) \
              (hl : @Eq KExpr (KExpr.bvar Nat.zero) (KExpr.lam A0 body0)) \
              (_hb : @Eq KExpr b2 (instantiate body0 (KExpr.bvar Nat.zero))) => \
@@ -134,11 +134,11 @@ impl Specification {
              (fun (f2 : KExpr) (hsf : beta_reduces (KExpr.bvar Nat.zero) f2) \
              (_hb : @Eq KExpr b2 (KExpr.app f2 (KExpr.bvar Nat.zero))) => \
              no_whnf_step_bvar Nat.zero f2 (whnf_acc e2) \
-             (whnf_step.beta (KExpr.bvar Nat.zero) f2 hsf)) \
+             (@whnf_step.beta (KExpr.bvar Nat.zero) f2 hsf)) \
              (fun (a2 : KExpr) (hsa : beta_reduces (KExpr.bvar Nat.zero) a2) \
              (_hb : @Eq KExpr b2 (KExpr.app (KExpr.bvar Nat.zero) a2)) => \
              no_whnf_step_bvar Nat.zero a2 (whnf_acc e2) \
-             (whnf_step.beta (KExpr.bvar Nat.zero) a2 hsa)) \
+             (@whnf_step.beta (KExpr.bvar Nat.zero) a2 hsa)) \
              (fun (hir : iota_reduces {body} b2) => \
              kio_body b2 (whnf_acc e2) hir) \
              (fun (hdr : delta_reduces {body} b2) => \

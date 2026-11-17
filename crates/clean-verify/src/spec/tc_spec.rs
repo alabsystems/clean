@@ -89,7 +89,7 @@ impl Specification {
                     "(fun (h1 : KernelStateEnvValid st) ",
                     "(h2 : KernelStateLocalCtxWellFormed st) ",
                     "(h3 : KernelBinaryInputAdmissible st e e) => ",
-                    "DefEqJoinable.mk e e e e ",
+                    "@DefEqJoinable.mk e e e e ",
                     "(DefEq.refl e) (DefEq.refl e) (DefEq.refl e))"
                 )
                 .to_string(),
@@ -141,7 +141,7 @@ impl Specification {
                     "(fun (_j : DefEqJoinable a b) => DefEqJoinable b a) ",
                     "(fun (nl : KExpr) (nr : KExpr) ",
                     "(h1 : DefEq a nl) (h2 : DefEq b nr) (h3 : DefEq nl nr) => ",
-                    "DefEqJoinable.mk b a nr nl h2 h1 (DefEq.symm nl nr h3)) ",
+                    "@DefEqJoinable.mk b a nr nl h2 h1 (DefEq.symm nl nr h3)) ",
                     "(@KernelDefEqAccepts.rec st a b ",
                     "(fun (_k : KernelDefEqAccepts st a b) => DefEqJoinable a b) ",
                     "(fun (field : KernelStateEnvValid st -> KernelStateLocalCtxWellFormed st -> KernelBinaryInputAdmissible st a b -> DefEqJoinable a b) => ",

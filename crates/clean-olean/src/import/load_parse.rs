@@ -41,6 +41,8 @@ pub(crate) struct LoadModule {
     /// `constNames := constants.map (·.name)`; R113's artifact reader takes a
     /// part's declared names from here at its header depth.
     pub(crate) const_names: Vec<Name>,
+    /// Strict observation only; compatibility projections retain their old fallback.
+    pub(crate) inventory_arrays_valid: bool,
     /// Constants with raw expression pointers (empty at the header depth).
     pub(crate) constants: Vec<LoadConstant>,
     /// Runtime-only per-index results. Logical loading never uses this lane.
@@ -183,15 +185,15 @@ pub(crate) fn parse_header_module(bytes: Vec<u8>) -> OleanResult<LoadModule> {
 }
 
 /// Read a ModuleData `Array Name` (field 1, `constNames`) as typed names.
-fn read_typed_name_array(region: &CompactedRegion<'_>, ptr: u64) -> OleanResult<Vec<Name>> {
+fn read_typed_name_array(region: &CompactedRegion<'_>, ptr: u64) -> OleanResult<(Vec<Name>, bool)> {
     if !is_ptr(ptr) {
-        return Ok(Vec::new());
+        return Ok((Vec::new(), false));
     }
     let offset = region.ptr_to_offset(ptr)?;
     let header = region.read_header_at(offset)?;
     // As the `ParsedModule` reader reads it (`read_name_array_from_names`).
     if header.tag != tags::ARRAY && header.tag != tags::STRUCT_ARRAY {
-        return Ok(Vec::new());
+        return Ok((Vec::new(), false));
     }
     let size = region.read_usize_at(offset + 8, "constNames array")?;
     region.validate_array_bounds(offset, size)?;
@@ -200,7 +202,7 @@ fn read_typed_name_array(region: &CompactedRegion<'_>, ptr: u64) -> OleanResult<
         let elem_offset = region.array_elem_offset(offset, i, "constNames array")?;
         names.push(region.read_kernel_name_ptr(region.read_u64_at(elem_offset)?)?);
     }
-    Ok(names)
+    Ok((names, true))
 }
 
 /// A part's `constNames` (field 1). At the header depth they are the part's
@@ -212,9 +214,9 @@ fn read_const_names(
     num_fields: usize,
     field_offset: usize,
     mode: ParseMode,
-) -> OleanResult<Vec<Name>> {
+) -> OleanResult<(Vec<Name>, bool)> {
     if num_fields < 2 || mode == ParseMode::Runtime {
-        return Ok(Vec::new());
+        return Ok((Vec::new(), false));
     }
     let names = region
         .read_u64_at(field_offset + 8)
@@ -258,7 +260,8 @@ fn parse_load_module_mode(bytes: Vec<u8>, mode: ParseMode) -> OleanResult<LoadMo
     }
 
     // Field 1: constNames — the part's declared names (R113's artifact reader)
-    let const_names = read_const_names(&region, num_fields, field_offset, mode)?;
+    let (const_names, names_valid) = read_const_names(&region, num_fields, field_offset, mode)?;
+    let mut records_valid = false;
 
     // Field 2: constants — read with raw expression pointers
     if num_fields >= 3 && mode != ParseMode::Header {
@@ -266,7 +269,7 @@ fn parse_load_module_mode(bytes: Vec<u8>, mode: ParseMode) -> OleanResult<LoadMo
         if runtime {
             runtime_rows = Some(read_runtime_constant_rows(&region, constants_ptr)?);
         } else {
-            constants = read_load_constant_array(&region, constants_ptr)?;
+            (constants, records_valid) = read_load_constant_array(&region, constants_ptr)?;
         }
     }
 
@@ -288,6 +291,7 @@ fn parse_load_module_mode(bytes: Vec<u8>, mode: ParseMode) -> OleanResult<LoadMo
         imports,
         typed_imports,
         const_names,
+        inventory_arrays_valid: names_valid && records_valid,
         constants,
         runtime_rows,
         entries,
@@ -566,14 +570,15 @@ fn parse_load_module_incremental_mode(
         typed_imports = region.read_typed_import_array(imports_ptr)?;
     }
 
-    let const_names = read_const_names(&region, num_fields, field_offset, mode)?;
+    let (const_names, names_valid) = read_const_names(&region, num_fields, field_offset, mode)?;
+    let mut records_valid = false;
 
     if num_fields >= 3 && mode != ParseMode::Header {
         let constants_ptr = region.read_u64_at(field_offset + 16)?;
         if runtime {
             runtime_rows = Some(read_runtime_constant_rows(&region, constants_ptr)?);
         } else {
-            constants = read_load_constant_array(&region, constants_ptr)?;
+            (constants, records_valid) = read_load_constant_array(&region, constants_ptr)?;
         }
     }
 
@@ -600,6 +605,7 @@ fn parse_load_module_incremental_mode(
         imports,
         typed_imports,
         const_names,
+        inventory_arrays_valid: names_valid && records_valid,
         constants,
         runtime_rows,
         entries,

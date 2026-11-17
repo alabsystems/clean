@@ -382,6 +382,36 @@ fn test_deps_of_a_prelude_file() {
 }
 
 #[test]
+fn test_deps_of_a_module_prelude_preserve_quoted_components() {
+    let dir = scratch("module-prelude-deps");
+    let module_dir = dir.join("A B");
+    std::fs::create_dir(&module_dir).expect("create module directory");
+    write(&module_dir, "C.D.olean", "");
+    write(&module_dir, "C.D.lean", "prelude\n");
+    write(&dir, "p.lean", "module\nprelude\nimport «A B».«C.D»\n");
+    for (flag, extension) in [("--deps", "olean"), ("--src-deps", "lean")] {
+        let output = std::process::Command::new(front_door::clean_path())
+            .args(["lean", flag, "p.lean"])
+            .current_dir(&dir)
+            .env("CLEAN_LEAN_VERSION", V4_30_0_RC2)
+            .env("LEAN_PATH", &dir)
+            .env("LEAN_SRC_PATH", &dir)
+            .output()
+            .expect("run dependency listing");
+        assert_run(
+            &output,
+            0,
+            &format!(
+                "{}\n",
+                module_dir.join(format!("C.D.{extension}")).display()
+            ),
+            "",
+        );
+    }
+    std::fs::remove_dir_all(&dir).expect("remove dependency fixtures");
+}
+
+#[test]
 fn test_unmodelled_toolchain_is_refused_by_name() {
     let dir = scratch("toolchain");
     write(&dir, "a.lean", "def a := 1\n");

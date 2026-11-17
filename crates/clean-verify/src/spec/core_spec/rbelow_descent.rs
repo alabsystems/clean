@@ -134,7 +134,7 @@ impl Specification {
              (hstep : whnf_red_step the_red_env p q) \
              (_hstar : whnf_red_step_star the_red_env q s) \
              (ih : rbelow_rtc s q) => \
-             rbelow_rtc_snoc s q ih p (rbelow.red q p hstep)) \
+             rbelow_rtc_snoc s q ih p (@rbelow.red q p hstep)) \
              a r h",
             "whnf_red_step_star_to_rbelow_rtc: a multi-step weak-head reduction places its result \
              at or below its source in the algorithm's order. The motive is REVERSED on purpose \
@@ -182,7 +182,7 @@ impl Specification {
              (@OptionType.some KExpr r)) \
              (hc : subexpr_step c r) (hacc : rbelow_plus_acc a) : rbelow_plus_acc c := \
              rbelow_plus_acc_inv a hacc c \
-             (rbelow_plus_of_step_rtc c r a (rbelow.sub c r hc) \
+             (rbelow_plus_of_step_rtc c r a (@rbelow.sub c r hc) \
              (whnf_fuel_red_rbelow_rtc n a r hr))",
             "whnf_component_acc: DESCENT — if the executable loop takes a to r and c is an \
              immediate subexpression of r, then c inherits a's accessibility. This is what makes \

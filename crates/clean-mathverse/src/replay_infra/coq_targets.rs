@@ -188,8 +188,9 @@ pub fn build_graph_from_shard_dir(shard_dir: &Path) -> Result<CoqCorpusGraph, Co
     Ok(CoqCorpusGraph { present, deps_of })
 }
 
-/// Load the accepted (`kernel_verified_names`) set from a Coq
-/// `kernel-verified.json` manifest.
+/// Load the accepted names from a Coq `kernel-verified.json` manifest (P6
+/// reader R9). The manifest is validated (an identity-less one is refused) and
+/// its names are read as data: ranking rejected constants grants nothing.
 ///
 /// # Errors
 /// [`CoqTargetsError::Manifest`] on read/parse failure.
@@ -201,7 +202,7 @@ pub fn load_accepted_names(manifest: &Path) -> Result<HashSet<String>, CoqTarget
                 source,
             }
         })?;
-    Ok(m.kernel_verified_names.into_iter().collect())
+    Ok(m.accepted_names().iter().cloned().collect())
 }
 
 /// Compute the blocking-weight targeting report over an in-memory graph +

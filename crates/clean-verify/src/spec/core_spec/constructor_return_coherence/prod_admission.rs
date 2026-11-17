@@ -143,17 +143,17 @@ pub(super) const DECLARATIONS: &[DeclarationInput] = &[
     DeclarationInput::Proof(
         "rpa_fields_bounded",
         r"FieldsBounded rpa_u1 rpa_G0 rpa_two rpa_ctor_ty",
-        r"FieldsBounded.param rpa_u1 rpa_G0 rpa_one rpa_S rpa_b_pi rpa_u2 (CtxTyping.sort rpa_G0 rpa_u1)
-  (FieldsBounded.param rpa_u1 rpa_G1 Nat.zero rpa_S rpa_x_pi rpa_u2 (CtxTyping.sort rpa_G1 rpa_u1)
-   (FieldsBounded.field rpa_u1 rpa_G2 (KExpr.bvar rpa_one) rpa_y_pi rpa_u1 rpa_x_domain_typed (@Eq.refl Bool Bool.true)
-    (FieldsBounded.field rpa_u1 rpa_G3 (KExpr.bvar rpa_one) rpa_return rpa_u1 rpa_y_domain_typed (@Eq.refl Bool Bool.true)
-     (FieldsBounded.done_app rpa_u1 rpa_G4 (KExpr.app (KExpr.bvar rpa_four) (KExpr.bvar rpa_three)) (KExpr.bvar rpa_two)))))",
+        r"@FieldsBounded.param rpa_u1 rpa_G0 rpa_one rpa_S rpa_b_pi rpa_u2 (CtxTyping.sort rpa_G0 rpa_u1)
+  (@FieldsBounded.param rpa_u1 rpa_G1 Nat.zero rpa_S rpa_x_pi rpa_u2 (CtxTyping.sort rpa_G1 rpa_u1)
+   (@FieldsBounded.field rpa_u1 rpa_G2 (KExpr.bvar rpa_one) rpa_y_pi rpa_u1 rpa_x_domain_typed (@Eq.refl Bool Bool.true)
+    (@FieldsBounded.field rpa_u1 rpa_G3 (KExpr.bvar rpa_one) rpa_return rpa_u1 rpa_y_domain_typed (@Eq.refl Bool Bool.true)
+     (@FieldsBounded.done_app rpa_u1 rpa_G4 (KExpr.app (KExpr.bvar rpa_four) (KExpr.bvar rpa_three)) (KExpr.bvar rpa_two)))))",
     ),
     DeclarationInput::Proof(
         "rpa_ctors_typed",
         r"CtorsWellTyped rpa_u1 rpa_two rpa_ind_ty rpa_ctors",
-        r"CtorsWellTyped.cons rpa_u1 rpa_two rpa_ind_ty rpa_one rpa_ctor_ty rpa_ctor_level CtorDecls.nil
-  rpa_ctor_typed rpa_fields_bounded (CtorsWellTyped.nil rpa_u1 rpa_two rpa_ind_ty)",
+        r"@CtorsWellTyped.cons rpa_u1 rpa_two rpa_ind_ty rpa_one rpa_ctor_ty rpa_ctor_level CtorDecls.nil
+  rpa_ctor_typed rpa_fields_bounded (@CtorsWellTyped.nil rpa_u1 rpa_two rpa_ind_ty)",
     ),
     DeclarationInput::Proof(
         "rpa_well_formed",
@@ -169,7 +169,7 @@ pub(super) const DECLARATIONS: &[DeclarationInput] = &[
     DeclarationInput::Proof(
         "rpa_extension",
         r"InductiveExtension KEnv.empty rpa_env",
-        r"InductiveExtension.mk KEnv.empty Nat.zero rpa_two rpa_ind_ty rpa_ctors
+        r"@InductiveExtension.mk KEnv.empty Nat.zero rpa_two rpa_ind_ty rpa_ctors
   (Level.imax rpa_u2 (Level.imax rpa_u2 rpa_u2)) (@Eq.refl Bool Bool.true)
   rpa_family_typed rpa_positive rpa_well_formed",
     ),

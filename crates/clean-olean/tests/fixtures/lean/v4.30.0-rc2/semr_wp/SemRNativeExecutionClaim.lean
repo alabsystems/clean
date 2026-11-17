@@ -3,6 +3,7 @@
    vocabulary, not a proof grade or a source-ABI authority.
    Copyright 2026 Andrew Yates. Apache-2.0. -/
 import SemRBooleanClaimText
+import SemRScalarClaim
 
 namespace SemRNativeExecutionClaim
 open SemR SemRBooleanClaim
@@ -14,6 +15,30 @@ inductive ContractFormat where
   | booleanText
   | typedJson
 
+def booleanBindingNames (bindings : List ContractBinding) : List Name :=
+  bindings.filterMap fun (name, _, ty) => match ty with
+    | .bool => some name
+    | _ => none
+
+def integerBindingNames (bindings : List ContractBinding) : List Name :=
+  bindings.filterMap fun (name, _, ty) => match ty with
+    | .int _ => some name
+    | _ => none
+
+/-- The original place/type inventory selects the text codec's sorts. Actual
+    values still come only from contractTypedEnv and its native range checks. -/
+def checkedContractText (codecFuel : Nat) (bytes : Bytes)
+    (bindings : List ContractBinding) (env : TypedEnv) : Option Bool :=
+  checkedTypedText codecFuel bytes (booleanBindingNames bindings)
+    (integerBindingNames bindings) env
+
+theorem checked_contract_text_eval (fuel : Nat) (bytes : Bytes)
+    (bindings : List ContractBinding) (expression : Expr) (env : TypedEnv)
+    (decoded : decodeTypedText fuel (booleanBindingNames bindings)
+      (integerBindingNames bindings) bytes = some expression) :
+    checkedContractText fuel bytes bindings env = evalTyped env.1 env.2 expression := by
+  simp [checkedContractText, checkedTypedText, decoded]
+
 /-- Bind the original typed parameter/result places before interpreting the
     original contract bytes. A proposed JSON tree must encode to those bytes. -/
 def originalContractHolds (codecFuel : Nat) (m : SemR.Module)
@@ -22,7 +47,7 @@ def originalContractHolds (codecFuel : Nat) (m : SemR.Module)
   ∃ env, contractTypedEnv m typedBindings inputs returned = some env ∧
     match format with
     | .booleanText =>
-        checkedText codecFuel contractBytes (typedBindings.map Prod.fst) env.1 = some true
+        checkedContractText codecFuel contractBytes typedBindings env = some true
     | .typedJson =>
         ∃ proposed, checkedTypedJson codecFuel contractBytes proposed env = some true
 
@@ -56,11 +81,13 @@ theorem originalContractHolds_text_sound (codecFuel : Nat) (m : SemR.Module)
     (bytes : Bytes) (bindings : List ContractBinding) (inputs returned : List Val)
     (accepted : originalContractHolds codecFuel m .booleanText bytes bindings inputs returned) :
     ∃ env expression, contractTypedEnv m bindings inputs returned = some env ∧
-      decodeText codecFuel (bindings.map Prod.fst) bytes = some expression ∧
-      eval env.1 expression = some true := by
+      decodeTypedText codecFuel (booleanBindingNames bindings)
+        (integerBindingNames bindings) bytes = some expression ∧
+      evalTyped env.1 env.2 expression = some true := by
   obtain ⟨env, bound, checked⟩ := accepted
   obtain ⟨expression, decoded, evaluated⟩ :=
-    checked_text_sound codecFuel bytes (bindings.map Prod.fst) env.1 true checked
+    checked_typed_text_sound codecFuel bytes (booleanBindingNames bindings)
+      (integerBindingNames bindings) env true checked
   exact ⟨env, expression, bound, decoded, evaluated⟩
 
 theorem originalContractHolds_json_sound (codecFuel : Nat) (m : SemR.Module)

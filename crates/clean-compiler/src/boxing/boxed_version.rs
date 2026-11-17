@@ -144,29 +144,43 @@ fn build_unbox_tail(
 }
 
 pub fn mk_boxed_version(decl: &IRDecl) -> IRDecl {
-    let mangled = crate::mangle::mangle_name(&decl.name);
+    mk_boxed_version_from_signature(&decl.name, &decl.params, &decl.return_type)
+}
+
+/// Propose the ordinary boxed adapter DATA from a callable signature.
+///
+/// No placeholder or logical body is supplied for an external function. The
+/// result is ordinary untrusted IR and establishes neither an implementation
+/// owner nor source/ABI/ownership/NoUB evidence. Existing compilation entries
+/// still require their normal declaration and runtime-binding checks.
+#[must_use]
+pub fn mk_boxed_version_from_signature(
+    name: &Name,
+    params: &[(VarId, IRType)],
+    return_type: &IRType,
+) -> IRDecl {
+    let mangled = crate::mangle::mangle_name(name);
     let boxed_name = Name::from_string(&mangle_boxed_name(&mangled));
-    let boxed_params: Vec<_> = decl
-        .params
+    let boxed_params: Vec<_> = params
         .iter()
         .enumerate()
         .map(|(i, _)| (VarId(i as u32), IRType::Object))
         .collect();
     let mut next_var = boxed_params.len() as u32;
     let body = build_unbox_chain(
-        &decl.params,
+        params,
         &boxed_params,
         0,
         &mut next_var,
         Vec::new(),
         Vec::new(),
-        &decl.name,
-        &decl.return_type,
+        name,
+        return_type,
     );
     IRDecl {
         name: boxed_name,
         params: boxed_params,
-        return_type: decl.return_type.boxed(),
+        return_type: return_type.boxed(),
         body,
     }
 }

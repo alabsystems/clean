@@ -35,11 +35,25 @@ impl BigNat {
         }
         // Fast path: both fit in u64
         if let (BigNat::Small(a), BigNat::Small(b)) = (self, other) {
-            return Some((BigNat::Small(a / b), BigNat::Small(a % b)));
+            return Some((
+                BigNat::Small(nat_word_div(*a, *b)),
+                BigNat::Small(nat_word_mod(*a, *b)),
+            ));
         }
         // If dividend < divisor, quotient is 0, remainder is dividend
         if self < other {
             return Some((BigNat::Small(0), self.clone()));
+        }
+        // For d = 2^k in one limb (0 <= k < 64), the Euclidean
+        // decomposition is n = (n >> k) * d + (low_limb(n) & (d - 1)).
+        // The remainder is strictly below d. Reuse the existing arbitrary-
+        // length right shift; no unary/bit-at-a-time division is necessary.
+        // In particular this keeps byte decoding by /256 and %256 linear
+        // in the input limb count, without changing any Nat reduction limit.
+        if let Some(divisor) = other.to_u64().filter(|d| d.is_power_of_two()) {
+            let quotient = self.shr_big(divisor.trailing_zeros() as usize);
+            let remainder = self.limbs().first().copied().unwrap_or(0) & (divisor - 1);
+            return Some((quotient, BigNat::Small(remainder)));
         }
         // Use shift-subtract long division
         let mut remainder = self.clone();
@@ -251,4 +265,28 @@ impl BigNat {
         }
         Some(result)
     }
+}
+
+/// The existing word division leaf of `BigNat::checked_div_rem_big`.
+///
+/// Callers must establish `b != 0`, as the BigNat zero guard does before its
+/// Small×Small arm. This scalar leaf does not implement Nat's zero-divisor rule.
+///
+/// # Panics
+///
+/// Panics if `b == 0`.
+pub fn nat_word_div(a: u64, b: u64) -> u64 {
+    a / b
+}
+
+/// The existing word remainder leaf of `BigNat::checked_div_rem_big`.
+///
+/// Callers must establish `b != 0`, as the BigNat zero guard does before its
+/// Small×Small arm. This scalar leaf does not implement Nat's zero-divisor rule.
+///
+/// # Panics
+///
+/// Panics if `b == 0`.
+pub fn nat_word_mod(a: u64, b: u64) -> u64 {
+    a % b
 }

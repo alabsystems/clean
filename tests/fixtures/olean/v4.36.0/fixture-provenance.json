@@ -1,0 +1,148 @@
+{
+  "lean_release": {
+    "release": {
+      "html_url": "https://github.com/leanprover/lean4/releases/tag/v4.36.0",
+      "published_at": "2026-11-16T15:45:27Z",
+      "tag_name": "v4.36.0"
+    },
+    "commit": "611c117bfaf7b7ae1cfcf246ce6fba31e8f509e9",
+    "verified_archive": {
+      "digest": "sha256:49acada8749ad1343eff1224a3d2510ac61ed53363d37b5e738e8c587e7deabd",
+      "name": "lean-4.36.0-darwin_aarch64.tar.zst",
+      "size": 637952376
+    },
+    "lean": {
+      "version": "Lean (version 4.36.0, arm64-apple-darwin24.6.0, commit 611c117bfaf7b7ae1cfcf246ce6fba31e8f509e9, Release)",
+      "sha256": "a4c5d3dfc1672faf014e59bd17724035259ff0d22a4ffbdf5a75e142f564817e"
+    },
+    "lake": {
+      "version": "Lake version 5.0.0-src+611c117 (Lean version 4.36.0)",
+      "sha256": "a0e516de0ba03a26cb90c80f06666022ef9de3f0943f8b26e9b902d229b43ebe"
+    }
+  },
+  "matched_mathlib": {
+    "commit": "fc4f59e577feb1a4956671bc04ac18aaaf8cd842",
+    "files": {
+      "lean-toolchain": {
+        "sha256": "582a63f8f9c5128067b688778c1051cf1464c3ca9d57b9325025c051c29b774a",
+        "bytes": 25
+      },
+      "lake-manifest.json": {
+        "sha256": "11887e45895bc6c521059db7957e78e9fd7aec1884e8c931db4a42be6c1af9b5",
+        "bytes": 2811,
+        "packages": [
+          {
+            "name": "plausible",
+            "revision": "054b228ce0ac61d767c6e71ba73a24728f191b72"
+          },
+          {
+            "name": "LeanSearchClient",
+            "revision": "4fb58e749ef3fc0395fe274f6cab70c2ea85f1c9"
+          },
+          {
+            "name": "importGraph",
+            "revision": "8370c640afcd1cc3fb1cb9bf1560cc66eafee5e0"
+          },
+          {
+            "name": "proofwidgets",
+            "revision": "2f0f3520daeac2d9310ff25b7a877a0e5cdaa203"
+          },
+          {
+            "name": "aesop",
+            "revision": "66ff77cf0c4c898799e4b94d14db55f7a02d0c5a"
+          },
+          {
+            "name": "Qq",
+            "revision": "ff055a2fcc835935e0ae607339b455a5f5896b4b"
+          },
+          {
+            "name": "batteries",
+            "revision": "b4b25a3886a16daacaf6615c2eea7170a6e8f458"
+          },
+          {
+            "name": "Cli",
+            "revision": "50810f72af7618bee62fe9800dc26e806c188703"
+          }
+        ]
+      }
+    }
+  },
+  "fixtures": {
+    "matcher-metadata/MatcherParity.lean": {
+      "bytes": 845,
+      "sha256": "e716da41e22b93f751aa9e26c93e1e5c3a8311866fffaebc5426e5741d8b2ec3"
+    },
+    "matcher-metadata/MatcherParity.olean": {
+      "bytes": 95928,
+      "sha256": "edad168d2d9a19011597b2b96a591724721ef1f905b02187bd1c05286fccb19e"
+    },
+    "matcher-metadata/Inspect.lean": {
+      "bytes": 1232,
+      "sha256": "34a997b6be8a3dac3f70501ed15455bccf73a1d36ecf822d493fe7b30e06d30a"
+    },
+    "matcher-metadata/oracle.json": {
+      "bytes": 2595,
+      "sha256": "9b2a097b7d3db6d800116259018f1f98da2fcb0871a6d9107305c7c1497075e8"
+    },
+    "plain/StablePlain.lean": {
+      "bytes": 211,
+      "sha256": "88d6ca24f8dbd0896d3b0c4692ebec8f6f6ccedf6df9472b568f1c3966f74803"
+    },
+    "plain/StablePlain.olean": {
+      "bytes": 7136,
+      "sha256": "0560d67e5e5a350e5363a675c80b75afd21cb49d3fcd6d75b1e10adfd5bdcdb4"
+    },
+    "module-ir/lean-toolchain": {
+      "bytes": 25,
+      "sha256": "582a63f8f9c5128067b688778c1051cf1464c3ca9d57b9325025c051c29b774a"
+    },
+    "module-ir/lakefile.toml": {
+      "bytes": 135,
+      "sha256": "442c89c10d6ea3d2b035cb0c27b5745124ed9202486b8e67a17a611ed79130ea"
+    },
+    "module-ir/MetaUse.lean": {
+      "bytes": 129,
+      "sha256": "864ed95eca888b0078c847dbb5d3655c0caf0b3833b91920cdc633ec3dff6fff"
+    },
+    "module-ir/StableFixture/Defs.lean": {
+      "bytes": 333,
+      "sha256": "7f74d74d499da3e6a77f6f090ee32117700b840565325194dca8334954c17178"
+    },
+    "module-ir/App.lean": {
+      "bytes": 206,
+      "sha256": "ec373b2ac2cbdcec3318ac509ab7bff577a206f3f076a187256334aacb3fecf0"
+    },
+    "module-ir/run.stdout": {
+      "bytes": 3,
+      "sha256": "040316eca5e77dbb2212c1efe8b81cb23bc67ce0ac8cb5c9d902d98bd45ddfa1"
+    },
+    "module-ir/run.exit": {
+      "bytes": 3,
+      "sha256": "54183f4323f377b737433a1e98229ead0fdc686f93bab057ecb612daa94002b5"
+    },
+    "module-ir/meta.stdout": {
+      "bytes": 3,
+      "sha256": "93a73825c1b761d11bf2b3f4dff760d07888d3fde05dcf55f1da84aa6041a5a8"
+    },
+    "module-ir/StableFixture/Defs.olean": {
+      "bytes": 28704,
+      "sha256": "3ec49f7e3372df58916204c8bfada5881a51f2cb55e38f0ff21472da0b5bd72e"
+    },
+    "module-ir/StableFixture/Defs.olean.server": {
+      "bytes": 1864,
+      "sha256": "09458d683d09e2ed545a7e16f51406bbc08a75d02a67ef9df2dc87c592c30a30"
+    },
+    "module-ir/StableFixture/Defs.olean.private": {
+      "bytes": 34176,
+      "sha256": "9a51f97905dc69e7cbfee2c02e834e6a1385b5b8488b32ea713fa1e3f699acf5"
+    },
+    "module-ir/StableFixture/Defs.ir.sig": {
+      "bytes": 22808,
+      "sha256": "49b9bce17febc2a90f95edef2b511161d404da2e32aeb80413372c9807b11a99"
+    },
+    "module-ir/StableFixture/Defs.ir": {
+      "bytes": 27584,
+      "sha256": "4e891d3c459e47b813438103ff5fde552f3a2b0d9a48a8557e8506d1d63dabd0"
+    }
+  }
+}

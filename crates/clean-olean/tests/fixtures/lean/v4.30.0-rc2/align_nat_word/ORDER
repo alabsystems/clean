@@ -1,0 +1,5 @@
+# Compile complete existing CICL and the separate mathematical bridge.
+theory cic_l
+theory align_nat_word
+AlignNatWordContracts
+AlignNatWordQualification

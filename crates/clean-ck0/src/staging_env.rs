@@ -189,6 +189,10 @@ impl Env for MutualStagingEnv<'_> {
         }
         self.base.inductive_large_elim(name)
     }
+    fn delta_priority(&self, name: &Name) -> u64 {
+        self.base.delta_priority(name)
+    }
+
     fn const_def(&self, name: &Name) -> Option<crate::validate::ConstDef> {
         self.base.const_def(name)
     }
@@ -260,6 +264,10 @@ impl Env for StagingEnv<'_> {
         }
         self.base.inductive_large_elim(name)
     }
+    fn delta_priority(&self, name: &Name) -> u64 {
+        self.base.delta_priority(name)
+    }
+
     fn const_def(&self, name: &Name) -> Option<crate::validate::ConstDef> {
         self.base.const_def(name)
     }

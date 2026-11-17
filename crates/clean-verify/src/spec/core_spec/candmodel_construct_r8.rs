@@ -598,7 +598,7 @@ pub(super) fn ty_r8_let_body_fires() -> String {
 }
 
 pub(super) fn val_r8_let_body_fires() -> String {
-    format!("whnf_step.beta {LETREDEX} (instantiate {V0} {S0}) (beta_reduces.zeta {S1} {S0} {V0})")
+    format!("@whnf_step.beta {LETREDEX} (instantiate {V0} {S0}) (beta_reduces.zeta {S1} {S0} {V0})")
 }
 
 /// SN of a `pi` EXPRESSION, obtained THROUGH the capstone — a term R7's

@@ -29,6 +29,9 @@
 # running. Two memory-hungry stamps on one machine is how the 2026-08-01 run
 # lost chunks in the first place: the second job's pages evict the first's into
 # the compressor, and the evicted one thrashes at ~4% CPU until something dies.
+# P6 slice 1a: blocked until the reference producer (slice 1b); see scripts/lib/p6_blocked.sh.
+# shellcheck source=scripts/lib/p6_blocked.sh
+. "$(cd "$(dirname "$0")" && pwd)/lib/p6_blocked.sh" && p6_blocked "scripts/mathlib_stamp_rescue.sh"
 set -eu
 
 REPO="${CLEAN_REPO:-$HOME/clean}"

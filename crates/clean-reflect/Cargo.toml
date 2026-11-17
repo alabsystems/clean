@@ -22,6 +22,10 @@ serde = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
+# Exercise original typed-data goal relations against a real dependency-closed
+# Lean import, without putting a loader in the source-equation authority API.
+clean-olean = { workspace = true }
+sha2 = { workspace = true }
 serde_json = { workspace = true }
 # src/dispatch_exhaustive_tests.rs PARSES this crate's sources to find every
 # `trust_ir::Inst` dispatch and refuse a catch-all arm in it.

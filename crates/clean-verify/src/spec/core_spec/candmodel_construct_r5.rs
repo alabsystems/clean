@@ -220,7 +220,7 @@ pub(super) fn val_deltastep_app_gen() -> String {
 
 pub(super) const TY_WHNFSTEP_APP_LEFT: &str = "forall (f : KExpr) (f2 : KExpr) (a : KExpr), whnf_step f f2 -> whnf_step (KExpr.app f a) (KExpr.app f2 a)";
 
-pub(super) const VAL_WHNFSTEP_APP_LEFT: &str = "fun (f : KExpr) (f2 : KExpr) (a : KExpr) (hs : whnf_step f f2) => @whnf_step.rec f f2 (fun (_ : whnf_step f f2) => whnf_step (KExpr.app f a) (KExpr.app f2 a)) (fun (hbr : beta_reduces f f2) => whnf_step.beta (KExpr.app f a) (KExpr.app f2 a) (beta_reduces.app_left f f2 a hbr)) (fun (hdr : delta_reduces f f2) => whnf_step.delta (KExpr.app f a) (KExpr.app f2 a) (delta_step_to_reduces (KExpr.app f a) (KExpr.app f2 a) (deltaStep_app_gen (red_def the_red_env) f f2 a (delta_reduces_to_step f f2 hdr)))) hs";
+pub(super) const VAL_WHNFSTEP_APP_LEFT: &str = "fun (f : KExpr) (f2 : KExpr) (a : KExpr) (hs : whnf_step f f2) => @whnf_step.rec f f2 (fun (_ : whnf_step f f2) => whnf_step (KExpr.app f a) (KExpr.app f2 a)) (fun (hbr : beta_reduces f f2) => @whnf_step.beta (KExpr.app f a) (KExpr.app f2 a) (beta_reduces.app_left f f2 a hbr)) (fun (hdr : delta_reduces f f2) => @whnf_step.delta (KExpr.app f a) (KExpr.app f2 a) (delta_step_to_reduces (KExpr.app f a) (KExpr.app f2 a) (deltaStep_app_gen (red_def the_red_env) f f2 a (delta_reduces_to_step f f2 hdr)))) hs";
 
 pub(super) const TY_WHNFACC_APP_LEFT: &str =
     "forall (f : KExpr) (a : KExpr), whnf_acc (KExpr.app f a) -> whnf_acc f";
@@ -382,8 +382,8 @@ pub(super) fn ty_piset_cr3_aux() -> String {
 
 pub(super) fn val_piset_cr3_aux() -> String {
     let k_lam = "(fun (zA : KExpr) (zb : KExpr) (zeq : @Eq KExpr e (KExpr.lam zA zb)) => @Empty.rec (fun (_ : Empty) => CB qa0 qw) (@Eq.substType KExpr (fun (qz : KExpr) => Neutral qz) e (KExpr.lam zA zb) zeq hne))";
-    let k_fn = "(fun (zy : KExpr) (zst : beta_reduces e zy) (zeq : @Eq KExpr qw (KExpr.app zy qa0)) => @Eq.substType KExpr (fun (qz : KExpr) => CB qa0 qz) (KExpr.app zy qa0) qw (@Eq.symm KExpr qw (KExpr.app zy qa0) zeq) (hred zy (whnf_step.beta e zy zst) qa0 qhca))";
-    let k_arg = "(fun (zy : KExpr) (zst : beta_reduces qa0 zy) (zeq : @Eq KExpr qw (KExpr.app e zy)) => @Eq.substType KExpr (fun (qz : KExpr) => CB qa0 qz) (KExpr.app e zy) qw (@Eq.symm KExpr qw (KExpr.app e zy) zeq) (hinv qa0 zy (KExpr.app e zy) qhca (whnf_step.beta qa0 zy zst) (qiha zy (whnf_step.beta qa0 zy zst) (isCandHF_cr2 CA hCA qa0 zy qhca (whnf_step.beta qa0 zy zst)))))";
+    let k_fn = "(fun (zy : KExpr) (zst : beta_reduces e zy) (zeq : @Eq KExpr qw (KExpr.app zy qa0)) => @Eq.substType KExpr (fun (qz : KExpr) => CB qa0 qz) (KExpr.app zy qa0) qw (@Eq.symm KExpr qw (KExpr.app zy qa0) zeq) (hred zy (@whnf_step.beta e zy zst) qa0 qhca))";
+    let k_arg = "(fun (zy : KExpr) (zst : beta_reduces qa0 zy) (zeq : @Eq KExpr qw (KExpr.app e zy)) => @Eq.substType KExpr (fun (qz : KExpr) => CB qa0 qz) (KExpr.app e zy) qw (@Eq.symm KExpr qw (KExpr.app e zy) zeq) (hinv qa0 zy (KExpr.app e zy) qhca (@whnf_step.beta qa0 zy zst) (qiha zy (@whnf_step.beta qa0 zy zst) (isCandHF_cr2 CA hCA qa0 zy qhca (@whnf_step.beta qa0 zy zst)))))";
     let core = format!(
         "isCandHF_cr3 (CB qa0) (hCB qa0 qhca) (KExpr.app e qa0) hhf ConstFreeUnit.triv (fun (qw : KExpr) (qstep : whnf_step (KExpr.app e qa0) qw) => appHF_whnf_inv e qa0 qw (CB qa0 qw) hhf qstep {k_lam} {k_fn} {k_arg})"
     );
@@ -565,10 +565,10 @@ pub(super) fn val_r5_bvarapp_no_beta() -> String {
         "r5_lam_ne_bvar qA qb Nat.zero C (app_inj_fst (KExpr.lam qA qb) qarg {V0} {V0} heq)"
     );
     let live_appl = format!(
-        "no_whnf_step_bvar Nat.zero qf2 C (whnf_step.beta {V0} qf2 (@Eq.substType KExpr (fun (qz : KExpr) => beta_reduces qz qf2) qf {V0} (app_inj_fst qf qa {V0} {V0} heq) qstep))"
+        "no_whnf_step_bvar Nat.zero qf2 C (@whnf_step.beta {V0} qf2 (@Eq.substType KExpr (fun (qz : KExpr) => beta_reduces qz qf2) qf {V0} (app_inj_fst qf qa {V0} {V0} heq) qstep))"
     );
     let live_appr = format!(
-        "no_whnf_step_bvar Nat.zero qa2 C (whnf_step.beta {V0} qa2 (@Eq.substType KExpr (fun (qz : KExpr) => beta_reduces qz qa2) qa {V0} (app_inj_snd qf qa {V0} {V0} heq) qstep))"
+        "no_whnf_step_bvar Nat.zero qa2 C (@whnf_step.beta {V0} qa2 (@Eq.substType KExpr (fun (qz : KExpr) => beta_reduces qz qa2) qa {V0} (app_inj_snd qf qa {V0} {V0} heq) qstep))"
     );
     let live_iota = format!(
         "iota_step_head_none_absurd_type (red_rec the_red_env) {SELF_BODY} qe2 C (@Eq.refl (OptionType Name) (@OptionType.none Name)) (iota_reduces_to_step {SELF_BODY} qe2 (@Eq.substType KExpr (fun (qz : KExpr) => iota_reduces qz qe2) qe {SELF_BODY} heq qio))"
@@ -590,14 +590,14 @@ pub(super) const TY_R5_WHNFACC_OMEGALAM: &str = "whnf_acc r5_omegaLam";
 
 pub(super) fn val_r5_whnfacc_omegalam() -> String {
     format!(
-        "whnf_acc.intro r5_omegaLam (fun (qe2 : KExpr) (qhs : whnf_step r5_omegaLam qe2) => @whnf_step.rec r5_omegaLam qe2 (fun (_ : whnf_step r5_omegaLam qe2) => whnf_acc qe2) (fun (qhbr : beta_reduces r5_omegaLam qe2) => lamHead_beta_inv {V0} {SELF_BODY} qe2 (whnf_acc qe2) qhbr (fun (qt2 : KExpr) (qst : beta_reduces {V0} qt2) (_qeq : @Eq KExpr qe2 (KExpr.lam qt2 {SELF_BODY})) => no_whnf_step_bvar Nat.zero qt2 (whnf_acc qe2) (whnf_step.beta {V0} qt2 qst)) (fun (qb2 : KExpr) (qsb : beta_reduces {SELF_BODY} qb2) (_qeq : @Eq KExpr qe2 (KExpr.lam {V0} qb2)) => r5_bvarApp_no_beta qb2 (whnf_acc qe2) qsb)) (fun (qhdr : delta_reduces r5_omegaLam qe2) => delta_step_head_none_absurd_type (red_def the_red_env) r5_omegaLam qe2 (whnf_acc qe2) (@Eq.refl (OptionType Name) (@OptionType.none Name)) (delta_reduces_to_step r5_omegaLam qe2 qhdr)) qhs)"
+        "whnf_acc.intro r5_omegaLam (fun (qe2 : KExpr) (qhs : whnf_step r5_omegaLam qe2) => @whnf_step.rec r5_omegaLam qe2 (fun (_ : whnf_step r5_omegaLam qe2) => whnf_acc qe2) (fun (qhbr : beta_reduces r5_omegaLam qe2) => lamHead_beta_inv {V0} {SELF_BODY} qe2 (whnf_acc qe2) qhbr (fun (qt2 : KExpr) (qst : beta_reduces {V0} qt2) (_qeq : @Eq KExpr qe2 (KExpr.lam qt2 {SELF_BODY})) => no_whnf_step_bvar Nat.zero qt2 (whnf_acc qe2) (@whnf_step.beta {V0} qt2 qst)) (fun (qb2 : KExpr) (qsb : beta_reduces {SELF_BODY} qb2) (_qeq : @Eq KExpr qe2 (KExpr.lam {V0} qb2)) => r5_bvarApp_no_beta qb2 (whnf_acc qe2) qsb)) (fun (qhdr : delta_reduces r5_omegaLam qe2) => delta_step_head_none_absurd_type (red_def the_red_env) r5_omegaLam qe2 (whnf_acc qe2) (@Eq.refl (OptionType Name) (@OptionType.none Name)) (delta_reduces_to_step r5_omegaLam qe2 qhdr)) qhs)"
     )
 }
 
 pub(super) const TY_R5_OMEGAV_STEP_SELF: &str = "whnf_step r5_omegaV r5_omegaV";
 
 pub(super) fn val_r5_omegav_step_self() -> String {
-    format!("whnf_step.beta r5_omegaV r5_omegaV (beta_reduces.beta {V0} {SELF_BODY} r5_omegaLam)")
+    format!("@whnf_step.beta r5_omegaV r5_omegaV (beta_reduces.beta {V0} {SELF_BODY} r5_omegaLam)")
 }
 
 pub(super) const TY_R5_OMEGAV_NOT_WHNFACC: &str = "whnf_acc r5_omegaV -> Empty";
@@ -709,7 +709,7 @@ pub(super) fn val_r5_natrecv3_no_whnf_step() -> String {
         let mut slots: Vec<&str> = vec![V0, V0, V0];
         slots[i] = "qy";
         format!(
-            "(fun (qy : KExpr) (qst : beta_reduces {V0} qy) (_qeq : @Eq KExpr g2 {}) => no_whnf_step_bvar Nat.zero qy Empty (whnf_step.beta {V0} qy qst))",
+            "(fun (qy : KExpr) (qst : beta_reduces {V0} qy) (_qeq : @Eq KExpr g2 {}) => no_whnf_step_bvar Nat.zero qy Empty (@whnf_step.beta {V0} qy qst))",
             sp(&slots)
         )
     };

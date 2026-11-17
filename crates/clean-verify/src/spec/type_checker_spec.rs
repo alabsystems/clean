@@ -244,7 +244,7 @@ impl TypeCheckerSpec {
                             "(@KernelDefEqAccepts.mk st T T ",
                             "(fun (henv : KernelStateEnvValid st) (hctx : KernelStateLocalCtxWellFormed st) ",
                             "(hbadm : KernelBinaryInputAdmissible st T T) => ",
-                            "DefEqJoinable.mk T T T T (DefEq.refl T) (DefEq.refl T) (DefEq.refl T)))) ",
+                            "@DefEqJoinable.mk T T T T (DefEq.refl T) (DefEq.refl T) (DefEq.refl T)))) ",
                             "(fun (henv : KernelStateEnvValid st) (hctx : KernelStateLocalCtxWellFormed st) ",
                             "(hadm2 : KernelInputAdmissible st e) => ",
                             "infer_result_self_admissible i3 i4 i5 i6 st e T henv hctx hinfer hadm2)"
@@ -300,7 +300,7 @@ impl TypeCheckerSpec {
                             "(hpair : ProdType (KernelInferAccepts st e R) (KernelDefEqAccepts st R T)) ",
                             "(_hguard : KernelStateEnvValid st -> KernelStateLocalCtxWellFormed st -> ",
                             "KernelInputAdmissible st e -> KernelBinaryInputAdmissible st R T) => ",
-                            "CheckDecomp.mk st e T R hpair) ",
+                            "@CheckDecomp.mk st e T R hpair) ",
                             "hcheck"
                         )
                         .to_string(),

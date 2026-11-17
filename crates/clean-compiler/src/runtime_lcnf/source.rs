@@ -103,7 +103,10 @@ impl Write for HashWriter {
     }
 }
 
-fn bounded_hash(value: &impl Serialize, limit: usize) -> Result<([u8; 32], usize), String> {
+pub(super) fn bounded_hash(
+    value: &impl Serialize,
+    limit: usize,
+) -> Result<([u8; 32], usize), String> {
     use bincode::Options;
     let mut output = HashWriter {
         hash: blake3::Hasher::new(),
@@ -186,7 +189,24 @@ fn snapshot(
         names.insert(name.clone());
     }
     population.unique_names = Some(names.len());
-    let eager_constants: BTreeSet<_> = env.constants().map(|r| r.name.clone()).collect();
+    let (rows, hashes) = snapshot_names(env, names, limits, label, remaining, errors, failures);
+    (rows, hashes, population)
+}
+
+pub(super) fn snapshot_names(
+    env: &Environment,
+    names: BTreeSet<Name>,
+    limits: RuntimeSourceCaptureLimits,
+    label: &'static str,
+    remaining: &mut usize,
+    errors: &mut Vec<String>,
+    failures: &mut Vec<RuntimeEnvironmentRowFailure>,
+) -> (Vec<RuntimeEnvironmentRow>, BTreeMap<Name, [u8; 32]>) {
+    let eager_constants: BTreeSet<_> = env
+        .constants()
+        .filter(|r| names.contains(&r.name))
+        .map(|r| r.name.clone())
+        .collect();
     let mut rows = Vec::new();
     let mut hashes = BTreeMap::new();
     for name in names {
@@ -217,6 +237,22 @@ fn snapshot(
         let constructor = env.get_constructor(&name);
         let recursor = env.get_recursor(&name);
         let quotient = env.get_quot(&name);
+        if constant.is_none()
+            && inductive.is_none()
+            && constructor.is_none()
+            && recursor.is_none()
+            && quotient.is_none()
+        {
+            errors.push(format!(
+                "{label}: required eager row is absent; typed row failure retained"
+            ));
+            failures.push(RuntimeEnvironmentRowFailure {
+                phase: label,
+                name,
+                reason: "required eager row is absent".into(),
+            });
+            continue;
+        }
         let implementation = env.get_implemented_by(&name);
         let parents = env.get_structure_parents(&name);
         let verification = env.declaration_verification(&name);
@@ -283,7 +319,7 @@ fn snapshot(
             noncomputable: flags.2,
         });
     }
-    (rows, hashes, population)
+    (rows, hashes)
 }
 
 impl RuntimeEnvironmentCapture {

@@ -101,11 +101,59 @@ fn compile_and_count_steps(src: &str, stem: &str) -> u64 {
     std::fs::write(&src_path, src).expect("write source");
     compile_emitted(src, &src_path, &bin_path);
     let run = Command::new(&bin_path).output().expect("run");
+    steps_from_run(run)
+}
+
+/// A counter from a failed program is not a successful execution measurement.
+fn steps_from_run(run: std::process::Output) -> u64 {
+    assert!(
+        run.status.success(),
+        "the emitted program must run cleanly, stderr:\n{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
     let err = String::from_utf8_lossy(&run.stderr).to_string();
     err.lines()
         .find_map(|l| l.strip_prefix("STEPS="))
         .map(|n| n.trim().parse::<u64>().expect("numeric STEPS"))
         .unwrap_or_else(|| panic!("the emitted program reported no STEPS= counter:\n{err}"))
+}
+
+#[cfg(unix)]
+#[test]
+fn step_counter_reads_a_successful_process() {
+    let run = std::process::Command::new("/bin/sh")
+        .args(["-c", "printf 'STEPS=17\\n' >&2"])
+        .output()
+        .expect("run counter fixture");
+    assert_eq!(run.status.code(), Some(0));
+    assert_eq!(run.stderr, b"STEPS=17\n");
+    assert_eq!(steps_from_run(run), 17);
+}
+
+#[cfg(unix)]
+#[test]
+#[should_panic(expected = "the emitted program must run cleanly")]
+fn step_counter_rejects_a_failed_process_with_a_counter() {
+    let run = std::process::Command::new("/bin/sh")
+        .args(["-c", "printf 'STEPS=17\\n' >&2; exit 7"])
+        .output()
+        .expect("run failed counter fixture");
+    assert_eq!(run.status.code(), Some(7));
+    assert_eq!(run.stderr, b"STEPS=17\n");
+    steps_from_run(run);
+}
+
+#[cfg(unix)]
+#[test]
+#[should_panic(expected = "the emitted program reported no STEPS= counter")]
+fn step_counter_requires_a_counter_from_a_successful_process() {
+    let run = std::process::Command::new("/bin/sh")
+        .args(["-c", "printf 'other diagnostic\\n' >&2"])
+        .output()
+        .expect("run missing counter fixture");
+    assert_eq!(run.status.code(), Some(0));
+    assert_eq!(run.stderr, b"other diagnostic\n");
+    steps_from_run(run);
 }
 
 /// The emitted program reproduces the values the KERNEL proved.

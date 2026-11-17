@@ -79,7 +79,7 @@ def main():
                 'x1-mutation-run-route-test': ['the dispatched worker was named and observed'],
                 'x1-mutation-compile-route-test': ['the dispatched worker was named and observed'],
                 'x1-mutation-lower-cause-test': ['c28_r4_v_one_function_over_requests', 'native build cannot satisfy prelude extern'],
-                'x1-mutation-probe-cause-test': ['c03_nested_overlapping_patterns', 'native build cannot satisfy prelude extern'],
+                'x1-mutation-probe-cause-test': ['c23_nat_literal_of_129_bits', 'native build cannot satisfy prelude extern'],
             }
             for reason in reasons[label]:
                 assert reason in text, (label, reason, text)

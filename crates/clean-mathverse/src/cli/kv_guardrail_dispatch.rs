@@ -15,12 +15,18 @@
 //! missing fingerprint.
 //!
 //! * `ratchet check|update` — monotonic-UP ratchet over a saved `stamp-verified
-//!   --json` summary's KernelVerified counts, re-asserting the
+//!   --json` summary, split by P6 into a development `accepted` baseline and a
+//!   reference-stamp baseline (unarmed until the reference producer lands: a
+//!   development run must then stamp 0), re-asserting the
 //!   `heuristic_kernel_verified == 0` soundness floor on BOTH verbs.
 //! * `elision-gate` — fails if the statically-sound `--closure-elide opaque`
-//!   floor verified a constant the `opaque-and-theorem` run dropped (eliding may
-//!   only ADD KernelVerified, never drop one).
-//! * `fingerprint` — prints the recorded [`StampEnvFingerprint`] from a manifest.
+//!   run accepted a constant the `opaque-and-theorem` run dropped (eliding may
+//!   only ADD acceptances, never drop one). Both manifests must name the same
+//!   checker but for exactly that elision.
+//! * `fingerprint` — prints a manifest's identity record (theory, checker,
+//!   tier).
+//!
+//! [`StampEnvFingerprint`]: crate::verify::kernel_verified_manifest::StampEnvFingerprint
 
 use std::collections::BTreeSet;
 use std::io::{self, Write};
@@ -30,24 +36,21 @@ use serde::{Deserialize, Serialize};
 use crate::cli::{
     ElisionGateArgs, FingerprintArgs, MathverseCliError, RatchetCheckArgs, RatchetUpdateArgs,
 };
-use crate::verify::kernel_verified_manifest::KernelVerifiedManifest;
+use crate::verify::kernel_verified_manifest::{Elision, KernelVerifiedManifest, ManifestError};
 
 /// Default baseline notes written by `ratchet update` when the existing ratchet
 /// file carries none. Mirrors `check_kv_ratchet.py`'s `BASELINE_NOTES`.
-const BASELINE_NOTES: &str =
-    "Monotonic-UP floor for `clean mathverse stamp-verified` KernelVerified \
-     counts. Operator raises it from a real corpus stamp via \
+const BASELINE_NOTES: &str = "Monotonic-UP floor for `clean mathverse stamp-verified` development \
+     `accepted` counts. Operator raises it from a real corpus stamp via \
      `clean mathverse ratchet update`.";
 
-/// The three integer fields the ratchet reads from a saved `stamp-verified
-/// --json` summary.
+/// The fields the ratchet reads from a saved `stamp-verified --json` summary.
 ///
 /// Deliberately a SMALL purpose-built struct rather than the full (private,
 /// Serialize-only) `StampVerifiedSummary`: serde ignores unknown fields, so this
-/// reads exactly the three counts the gate needs without coupling to the rest of
-/// the summary schema or its `&'static str` fields (which cannot derive
-/// `Deserialize`). `Option` distinguishes a MISSING field (fail-closed
-/// `MalformedSummary`) from a present `0`.
+/// reads exactly the counts the gate needs. `Option` distinguishes a MISSING
+/// field (fail-closed `MalformedSummary`) from a present `0`; a pre-P6 summary
+/// (`kernel_verified`, no `tier`) is therefore refused, never read as 0.
 ///
 /// `i64` (not `u64`) means a JSON `true` deserializes as an ERROR rather than
 /// `1`, preserving the Python "bool is not int" fail-closed parity.
@@ -55,21 +58,30 @@ const BASELINE_NOTES: &str =
 struct RatchetCounts {
     #[serde(default)]
     heuristic_kernel_verified: Option<i64>,
-    kernel_verified: Option<i64>,
-    stored_kernel_verified: Option<i64>,
+    tier: Option<String>,
+    accepted: Option<i64>,
+    stored_reference_stamped: Option<i64>,
 }
 
-/// On-disk ratchet baseline file (`data/mathlib_kv_ratchet.json`). Owned by this
-/// tool: `check` reads it, `update` rewrites it.
+/// The counts [`load_counts`] returns.
+#[derive(Debug, Clone, Copy)]
+struct Counts {
+    accepted: i64,
+    stored_reference_stamped: i64,
+}
+
+/// On-disk ratchet baseline file (`data/mathlib_kv_ratchet.json`), schema
+/// split by P6 (docs/DECISIONS.md, 2026-11-16): the development `accepted`
+/// baseline keeps the measured count, and the reference-stamp baseline starts
+/// unarmed (`null`) because no producer in this build stamps a header. Unknown
+/// fields are refused, so a pre-P6 file (`kernel_verified_baseline`) is an
+/// error rather than an all-zero floor.
 #[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct RatchetBaseline {
-    #[serde(default)]
     last_updated: String,
-    #[serde(default)]
-    kernel_verified_baseline: i64,
-    #[serde(default)]
-    stored_kernel_verified_baseline: i64,
-    #[serde(default)]
+    development_accepted_baseline: i64,
+    reference_stamped_baseline: Option<i64>,
     notes: String,
 }
 
@@ -80,10 +92,10 @@ struct RatchetCheckSummary {
     generated_by: &'static str,
     skipped: bool,
     reason: Option<String>,
-    kernel_verified: Option<i64>,
-    stored_kernel_verified: Option<i64>,
-    kernel_verified_baseline: Option<i64>,
-    stored_kernel_verified_baseline: Option<i64>,
+    accepted: Option<i64>,
+    stored_reference_stamped: Option<i64>,
+    development_accepted_baseline: Option<i64>,
+    reference_stamped_baseline: Option<i64>,
     violations: Vec<String>,
 }
 
@@ -93,8 +105,8 @@ struct RatchetUpdateSummary {
     ok: bool,
     generated_by: &'static str,
     ratchet: String,
-    kernel_verified_baseline: i64,
-    stored_kernel_verified_baseline: i64,
+    development_accepted_baseline: i64,
+    reference_stamped_baseline: Option<i64>,
 }
 
 /// Machine-readable summary for `elision-gate`, emitted with `--json`.
@@ -153,10 +165,11 @@ fn json_fail(generated_by: &'static str, err: MathverseCliError) -> MathverseCli
 /// ratchet (or pass) a floor-breaching or malformed summary. Mirrors
 /// `_load_current` in `check_kv_ratchet.py`.
 ///
-/// Reads `summary_path`, enforces `heuristic_kernel_verified == 0`, and returns
-/// `(kernel_verified, stored_kernel_verified)`. Fail-closed: a missing/non-int
-/// field is a `MalformedSummary`, a nonzero floor is a `SoundnessFloor`.
-fn load_counts(summary_path: &std::path::Path) -> Result<(i64, i64), MathverseCliError> {
+/// Reads `summary_path`, enforces `heuristic_kernel_verified == 0` and
+/// `tier == "development"`, and returns the counts. Fail-closed: a
+/// missing/non-int field is a `MalformedSummary`, a nonzero floor is a
+/// `SoundnessFloor`.
+fn load_counts(summary_path: &std::path::Path) -> Result<Counts, MathverseCliError> {
     let data = std::fs::read_to_string(summary_path)?;
     let counts: RatchetCounts = serde_json::from_str(&data).map_err(|e| {
         MathverseCliError::RatchetMalformedSummary(format!("{}: {e}", summary_path.display()))
@@ -169,31 +182,60 @@ fn load_counts(summary_path: &std::path::Path) -> Result<(i64, i64), MathverseCl
         let breach = u32::try_from(heuristic).unwrap_or(u32::MAX);
         return Err(MathverseCliError::RatchetSoundnessFloor(breach));
     }
-
-    let kernel_verified = counts.kernel_verified.ok_or_else(|| {
-        MathverseCliError::RatchetMalformedSummary(format!(
-            "{}: missing integer field `kernel_verified`",
-            summary_path.display()
-        ))
-    })?;
-    let stored_kernel_verified = counts.stored_kernel_verified.ok_or_else(|| {
-        MathverseCliError::RatchetMalformedSummary(format!(
-            "{}: missing integer field `stored_kernel_verified`",
-            summary_path.display()
-        ))
-    })?;
-
-    Ok((kernel_verified, stored_kernel_verified))
+    let malformed = |what: &str| {
+        MathverseCliError::RatchetMalformedSummary(format!("{}: {what}", summary_path.display()))
+    };
+    if counts.tier.as_deref() != Some("development") {
+        return Err(malformed(
+            "`tier` is not \"development\" (a summary written before P6 names no tier)",
+        ));
+    }
+    Ok(Counts {
+        accepted: counts
+            .accepted
+            .ok_or_else(|| malformed("missing integer field `accepted`"))?,
+        stored_reference_stamped: counts
+            .stored_reference_stamped
+            .ok_or_else(|| malformed("missing integer field `stored_reference_stamped`"))?,
+    })
 }
 
-/// Read the on-disk ratchet baseline, defaulting to an all-zero identity floor
-/// when the file is absent or unparsable (mirrors the Python's tolerant load:
-/// missing baselines default to 0, which is always green).
-fn read_baseline(ratchet_path: &std::path::Path) -> RatchetBaseline {
-    std::fs::read_to_string(ratchet_path)
-        .ok()
-        .and_then(|data| serde_json::from_str(&data).ok())
-        .unwrap_or_default()
+/// Read the on-disk ratchet baseline. An ABSENT file is the all-zero identity
+/// floor, unarmed reference stamp (green on any honest summary). A PRESENT file
+/// must parse under the P6 schema: anything else is refused, because a
+/// renamed field read through a default would be a vacuous floor.
+fn read_baseline(ratchet_path: &std::path::Path) -> Result<RatchetBaseline, MathverseCliError> {
+    if !ratchet_path.exists() {
+        return Ok(RatchetBaseline::default());
+    }
+    let data = std::fs::read_to_string(ratchet_path)?;
+    serde_json::from_str(&data).map_err(|e| {
+        MathverseCliError::RatchetMalformedBaseline(format!("{}: {e}", ratchet_path.display()))
+    })
+}
+
+/// The violations of `counts` against `baseline`.
+fn ratchet_violations(counts: Counts, baseline: &RatchetBaseline) -> Vec<String> {
+    let mut violations = Vec::new();
+    if counts.accepted < baseline.development_accepted_baseline {
+        violations.push(format!(
+            "accepted: {} < baseline {} (development accepted count regressed)",
+            counts.accepted, baseline.development_accepted_baseline
+        ));
+    }
+    match baseline.reference_stamped_baseline {
+        None if counts.stored_reference_stamped != 0 => violations.push(format!(
+            "stored_reference_stamped: {} with no reference producer (P6): a development \
+             run must leave every shard header as the converter wrote it",
+            counts.stored_reference_stamped
+        )),
+        Some(floor) if counts.stored_reference_stamped < floor => violations.push(format!(
+            "stored_reference_stamped: {} < baseline {floor} (reference stamp count regressed)",
+            counts.stored_reference_stamped
+        )),
+        _ => {}
+    }
+    violations
 }
 
 /// `clean mathverse ratchet check`.
@@ -201,7 +243,7 @@ fn read_baseline(ratchet_path: &std::path::Path) -> RatchetBaseline {
 /// SKIP-green when the summary is absent (preserves the dev workflow: pushes
 /// stay green until an operator stamps the real corpus). Otherwise enforces the
 /// soundness floor and monotonic-UP ratchet, failing closed on any regression
-/// or malformed summary.
+/// or malformed summary or baseline.
 pub(crate) fn cmd_ratchet_check(args: RatchetCheckArgs) -> Result<(), MathverseCliError> {
     const GENERATED_BY: &str = "clean mathverse ratchet check";
 
@@ -220,10 +262,10 @@ pub(crate) fn cmd_ratchet_check(args: RatchetCheckArgs) -> Result<(), MathverseC
                 generated_by: GENERATED_BY,
                 skipped: true,
                 reason: Some(reason),
-                kernel_verified: None,
-                stored_kernel_verified: None,
-                kernel_verified_baseline: None,
-                stored_kernel_verified_baseline: None,
+                accepted: None,
+                stored_reference_stamped: None,
+                development_accepted_baseline: None,
+                reference_stamped_baseline: None,
                 violations: Vec::new(),
             })?;
         } else {
@@ -233,65 +275,43 @@ pub(crate) fn cmd_ratchet_check(args: RatchetCheckArgs) -> Result<(), MathverseC
     }
 
     // Soundness floor + extract; on a `--json` failure (floor breach / malformed
-    // summary) emit the uniform `ok:false` envelope to stdout before propagating.
-    let (kernel_verified, stored_kernel_verified) = match load_counts(&args.summary) {
-        Ok(counts) => counts,
+    // summary or baseline) emit the uniform `ok:false` envelope before
+    // propagating.
+    let loaded = load_counts(&args.summary).and_then(|c| Ok((c, read_baseline(&args.ratchet)?)));
+    let (counts, baseline) = match loaded {
+        Ok(pair) => pair,
         Err(err) if args.json => return Err(json_fail(GENERATED_BY, err)),
         Err(err) => return Err(err),
     };
-    let baseline = read_baseline(&args.ratchet);
-
-    let mut violations = Vec::new();
-    if kernel_verified < baseline.kernel_verified_baseline {
-        violations.push(format!(
-            "kernel_verified: {kernel_verified} < baseline {} (KernelVerified count regressed)",
-            baseline.kernel_verified_baseline
-        ));
-    }
-    if stored_kernel_verified < baseline.stored_kernel_verified_baseline {
-        violations.push(format!(
-            "stored_kernel_verified: {stored_kernel_verified} < baseline {} \
-             (KernelVerified count regressed)",
-            baseline.stored_kernel_verified_baseline
-        ));
-    }
-
-    if !violations.is_empty() {
-        if args.json {
-            // Computed-violation branch keeps the RICHER summary (counts +
-            // baselines + per-violation list) — a superset of the uniform
-            // envelope — then returns the typed Err.
-            emit_json(&RatchetCheckSummary {
-                ok: false,
-                generated_by: GENERATED_BY,
-                skipped: false,
-                reason: None,
-                kernel_verified: Some(kernel_verified),
-                stored_kernel_verified: Some(stored_kernel_verified),
-                kernel_verified_baseline: Some(baseline.kernel_verified_baseline),
-                stored_kernel_verified_baseline: Some(baseline.stored_kernel_verified_baseline),
-                violations: violations.clone(),
-            })?;
-        }
-        return Err(MathverseCliError::RatchetRegressed(violations));
-    }
-
+    let violations = ratchet_violations(counts, &baseline);
     if args.json {
+        // The violation branch keeps the RICHER summary (counts + baselines +
+        // per-violation list), a superset of the uniform envelope.
         emit_json(&RatchetCheckSummary {
-            ok: true,
+            ok: violations.is_empty(),
             generated_by: GENERATED_BY,
             skipped: false,
             reason: None,
-            kernel_verified: Some(kernel_verified),
-            stored_kernel_verified: Some(stored_kernel_verified),
-            kernel_verified_baseline: Some(baseline.kernel_verified_baseline),
-            stored_kernel_verified_baseline: Some(baseline.stored_kernel_verified_baseline),
-            violations: Vec::new(),
+            accepted: Some(counts.accepted),
+            stored_reference_stamped: Some(counts.stored_reference_stamped),
+            development_accepted_baseline: Some(baseline.development_accepted_baseline),
+            reference_stamped_baseline: baseline.reference_stamped_baseline,
+            violations: violations.clone(),
         })?;
-    } else {
+    }
+    if !violations.is_empty() {
+        return Err(MathverseCliError::RatchetRegressed(violations));
+    }
+    if !args.json {
         println!(
-            "OK: kernel_verified={kernel_verified} stored_kernel_verified={stored_kernel_verified} \
-             >= ratcheted baselines; soundness floor 0."
+            "OK: accepted={} (development) >= baseline {}; stored_reference_stamped={} \
+             (reference baseline {}); soundness floor 0.",
+            counts.accepted,
+            baseline.development_accepted_baseline,
+            counts.stored_reference_stamped,
+            baseline
+                .reference_stamped_baseline
+                .map_or_else(|| "unarmed".to_string(), |b| b.to_string()),
         );
     }
     Ok(())
@@ -308,11 +328,18 @@ pub(crate) fn cmd_ratchet_update(args: RatchetUpdateArgs) -> Result<(), Mathvers
         return Err(MathverseCliError::RatchetUpdateNoSummary(args.summary));
     }
 
-    let (kernel_verified, stored_kernel_verified) = load_counts(&args.summary)?;
+    let counts = load_counts(&args.summary)?;
 
-    // Preserve the operator's prose `notes` if the existing ratchet file parses
-    // and carries a non-empty one; else use the default.
-    let existing = read_baseline(&args.ratchet);
+    // Preserve the operator's prose `notes` if the existing ratchet file
+    // carries a non-empty one; else use the default. The reference-stamp
+    // baseline is carried over: no development summary can arm it, and while
+    // it is unarmed a summary that stamped anything is refused.
+    let existing = read_baseline(&args.ratchet)?;
+    if existing.reference_stamped_baseline.is_none() && counts.stored_reference_stamped != 0 {
+        return Err(MathverseCliError::RatchetRegressed(ratchet_violations(
+            counts, &existing,
+        )));
+    }
     let notes = if existing.notes.trim().is_empty() {
         BASELINE_NOTES.to_owned()
     } else {
@@ -328,8 +355,8 @@ pub(crate) fn cmd_ratchet_update(args: RatchetUpdateArgs) -> Result<(), Mathvers
 
     let updated = RatchetBaseline {
         last_updated,
-        kernel_verified_baseline: kernel_verified,
-        stored_kernel_verified_baseline: stored_kernel_verified,
+        development_accepted_baseline: counts.accepted,
+        reference_stamped_baseline: existing.reference_stamped_baseline,
         notes,
     };
     let json = serde_json::to_string_pretty(&updated)?;
@@ -340,17 +367,17 @@ pub(crate) fn cmd_ratchet_update(args: RatchetUpdateArgs) -> Result<(), Mathvers
             ok: true,
             generated_by: "clean mathverse ratchet update",
             ratchet: args.ratchet.display().to_string(),
-            kernel_verified_baseline: kernel_verified,
-            stored_kernel_verified_baseline: stored_kernel_verified,
+            development_accepted_baseline: updated.development_accepted_baseline,
+            reference_stamped_baseline: updated.reference_stamped_baseline,
         };
         let stdout = io::stdout();
         let mut out = stdout.lock();
         writeln!(out, "{}", serde_json::to_string_pretty(&summary)?)?;
     } else {
         println!(
-            "Wrote {}: kernel_verified_baseline={kernel_verified} \
-             stored_kernel_verified_baseline={stored_kernel_verified}.",
-            args.ratchet.display()
+            "Wrote {}: development_accepted_baseline={}.",
+            args.ratchet.display(),
+            updated.development_accepted_baseline
         );
     }
     Ok(())
@@ -359,15 +386,30 @@ pub(crate) fn cmd_ratchet_update(args: RatchetUpdateArgs) -> Result<(), Mathvers
 /// `clean mathverse elision-gate <opaque> <opaque-and-theorem>`.
 ///
 /// Fails (naming the offenders) if any constant the statically-sound `opaque`
-/// floor kernel-verified is missing from the `opaque-and-theorem` run. Eliding
-/// theorem values may only ADD KernelVerified, never drop one. Fail-closed on a
-/// missing/bad/malformed manifest via `from_file`'s typed error.
+/// run accepted is missing from the `opaque-and-theorem` run. Eliding theorem
+/// values may only ADD acceptances, never drop one. Fail-closed on a
+/// missing/bad/malformed manifest via `from_file`'s typed error, and on two
+/// manifests that are not the same checker but for exactly that elision (P6:
+/// a subset across two checkers or two theories says nothing about elision).
 pub(crate) fn cmd_elision_gate(args: ElisionGateArgs) -> Result<(), MathverseCliError> {
     let opaque = KernelVerifiedManifest::from_file(&args.opaque_manifest)?;
     let oat = KernelVerifiedManifest::from_file(&args.opaque_and_theorem_manifest)?;
+    let elisions = (
+        opaque.identity().settings().elision,
+        oat.identity().settings().elision,
+    );
+    if elisions != (Elision::Opaque, Elision::OpaqueAndTheorem) {
+        return Err(ManifestError::IdentityMismatch(format!(
+            "the elision gate compares an `opaque` run with an `opaque-and-theorem` run; \
+             got {:?} and {:?}",
+            elisions.0, elisions.1
+        ))
+        .into());
+    }
+    opaque.identity().same_checker_but_elision(oat.identity())?;
 
-    let opaque_names: BTreeSet<String> = opaque.kernel_verified_names.iter().cloned().collect();
-    let oat_names: BTreeSet<String> = oat.kernel_verified_names.iter().cloned().collect();
+    let opaque_names: BTreeSet<String> = opaque.accepted_names().iter().cloned().collect();
+    let oat_names: BTreeSet<String> = oat.accepted_names().iter().cloned().collect();
 
     let dropped: Vec<String> = opaque_names.difference(&oat_names).cloned().collect();
 
@@ -403,8 +445,8 @@ pub(crate) fn cmd_elision_gate(args: ElisionGateArgs) -> Result<(), MathverseCli
         writeln!(out, "{}", serde_json::to_string_pretty(&summary)?)?;
     } else {
         println!(
-            "OK: KV(opaque)={} subset-of KV(opaque-and-theorem)={} \
-             (+{gained} gained by eliding theorem values).",
+            "OK: accepted(opaque)={} subset-of accepted(opaque-and-theorem)={} \
+             (+{gained} gained by eliding theorem values; development tier).",
             opaque_names.len(),
             oat_names.len()
         );
@@ -414,29 +456,31 @@ pub(crate) fn cmd_elision_gate(args: ElisionGateArgs) -> Result<(), MathverseCli
 
 /// `clean mathverse fingerprint <manifest>`.
 ///
-/// Prints the recorded reproducibility [`StampEnvFingerprint`]. Fails when the
-/// manifest carries none (a legacy manifest written before the field existed),
-/// so the absence is visible rather than silently printing nothing.
+/// Prints the manifest's identity record: the theory (profile and measured
+/// base), the checker (entry, discipline, imports, settings, build) and the
+/// tier. Every manifest this build reads carries one (an identity-less file is
+/// refused by `from_file`), so the absence of an identity is an error, never
+/// an empty print.
 pub(crate) fn cmd_fingerprint(args: FingerprintArgs) -> Result<(), MathverseCliError> {
     let manifest = KernelVerifiedManifest::from_file(&args.manifest)?;
-    match manifest.env_fingerprint {
-        Some(fp) => {
-            if args.json {
-                let stdout = io::stdout();
-                let mut out = stdout.lock();
-                writeln!(out, "{}", serde_json::to_string_pretty(&fp)?)?;
-            } else {
-                println!("kernel_version: {}", fp.kernel_version);
-                println!("toolchain: {}", fp.toolchain);
-                println!("heartbeat: {}", fp.heartbeat);
-                println!("elision_policy: {}", fp.elision_policy);
-                println!("max_closure_modules: {}", fp.max_closure_modules);
-                println!("prelude_variant: {}", fp.prelude_variant);
-            }
-            Ok(())
-        }
-        None => Err(MathverseCliError::MissingEnvFingerprint(args.manifest)),
+    let identity = manifest.identity();
+    if args.json {
+        let stdout = io::stdout();
+        let mut out = stdout.lock();
+        writeln!(out, "{}", serde_json::to_string_pretty(identity)?)?;
+    } else {
+        let build = identity.build();
+        println!("tier: {}", identity.tier().as_str());
+        println!("entry: {}", identity.entry().as_str());
+        println!("discipline: {}", identity.discipline().as_str());
+        println!("imports: {:?}", identity.imports());
+        println!("settings: {:?}", identity.settings());
+        println!("theory: {:?}", identity.theory());
+        println!("kernel_version: {}", build.kernel_version());
+        println!("toolchain: {}", build.toolchain());
+        println!("exe_sha256: {}", build.exe().sha256());
     }
+    Ok(())
 }
 
 #[cfg(test)]

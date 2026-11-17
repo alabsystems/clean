@@ -219,3 +219,194 @@ fn capture(call: &ScalarCall, source: &Path, opt_level: u8, name: &str) {
         std::fs::copy(source, output.join("Scalar.lean")).unwrap();
     }
 }
+
+fn replay_fixture() -> (
+    std::sync::Arc<Environment>,
+    std::sync::Arc<Environment>,
+    BTreeSet<Name>,
+    clean_olean::ReplayedImportedSource,
+) {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("Replayed.lean");
+    std::fs::write(&file, SOURCE).unwrap();
+    let mut source = crate::compile::elaborate_file_to_env(&file).unwrap();
+    assert!(source.set_constant_origin(
+        Name::from_string("scalar"),
+        clean_kernel::ConstantOrigin::olean_import(Some("Replayed".into()))
+    ));
+    let base = std::sync::Arc::new(Environment::with_prelude());
+    let source = std::sync::Arc::new(source);
+    let mut roots = scalar_source_roots().unwrap();
+    roots.insert(Name::from_string("scalar"));
+    let replay = clean_olean::ReplayedImportedSource::check(
+        std::sync::Arc::clone(&base),
+        std::sync::Arc::clone(&source),
+        roots.clone(),
+    )
+    .unwrap();
+    (base, source, roots, replay)
+}
+#[test]
+fn scalar_replayed_source_uses_actual_proof_without_changing_original_origin() {
+    let (base, source, roots, replay) = replay_fixture();
+    let root = Name::from_string("scalar");
+    assert!(source.constant_needs_recheck(&root));
+    assert!(source_contract(&source, &root).is_err());
+    replay.require_context(&base, &source, &roots).unwrap();
+    source_contract_with_replay(&source, &root, Some(&replay)).unwrap();
+    assert!(source.constant_needs_recheck(&root));
+}
+#[test]
+fn scalar_replayed_source_preserves_original_flags_and_primitive_layout() {
+    let (_base, source, _roots, replay) = replay_fixture();
+    for primitive in ["UInt32", "UInt64", "BitVec"] {
+        let mut changed = (*source).clone();
+        let name = Name::from_string(primitive);
+        let mut info = changed.get_const(&name).unwrap().clone();
+        info.value = Some(Expr::const_str("Nat"));
+        changed.forget_decl(&name);
+        assert!(changed
+            .extend_constants_structural(std::iter::once(info))
+            .is_empty());
+        assert!(
+            source_contract_with_replay(&changed, &Name::from_string("scalar"), Some(&replay))
+                .is_err()
+        );
+    }
+    for partial in [false, true] {
+        let mut changed = (*source).clone();
+        if partial {
+            changed.mark_partial(Name::from_string("scalar"));
+        } else {
+            changed.mark_unsafe(Name::from_string("scalar"));
+        }
+        assert!(
+            source_contract_with_replay(&changed, &Name::from_string("scalar"), Some(&replay))
+                .is_err()
+        );
+    }
+}
+
+#[test]
+fn scalar_replayed_source_fresh_unsafe_and_partial_originals_refuse() {
+    for marker in ["unsafe", "partial"] {
+        let (base, source, roots, _earlier) = replay_fixture();
+        let root = Name::from_string("scalar");
+        let mut original = (*source).clone();
+        if marker == "unsafe" {
+            original.mark_unsafe(root.clone());
+        } else {
+            original.mark_partial(root.clone());
+        }
+        let error =
+            clean_olean::ReplayedImportedSource::check(base, std::sync::Arc::new(original), roots)
+                .unwrap_err();
+        let clean_olean::ReplayedSourceError::Replay(_, verdict) = error else {
+            panic!("expected actual fresh replay refusal for {marker}: {error:?}");
+        };
+        assert!(
+            verdict.refusals.iter().any(|refusal| matches!(
+                refusal,
+                clean_olean::ClosedRecheckRefusal::OutsideTrustedFragment { name, marker: found }
+                    if name == "scalar" && *found == marker
+            )),
+            "{marker}: {verdict:?}"
+        );
+    }
+}
+
+#[test]
+fn scalar_replayed_source_fresh_staged_original_cannot_borrow_replay_eligibility() {
+    let (base, source, roots, _earlier) = replay_fixture();
+    let root = Name::from_string("scalar");
+    let mut original = (*source).clone();
+    let info = original.get_const(&root).unwrap().clone();
+    original.forget_decl(&root);
+    original
+        .add_staged_header(clean_kernel::Declaration::Axiom {
+            name: root.clone(),
+            level_params: info.level_params,
+            type_: info.type_,
+        })
+        .unwrap();
+    assert!(original.is_staged_header(&root));
+    let original = std::sync::Arc::new(original);
+    let error =
+        clean_olean::ReplayedImportedSource::check(base, std::sync::Arc::clone(&original), roots)
+            .unwrap_err();
+    let clean_olean::ReplayedSourceError::Replay(_, verdict) = error else {
+        panic!("expected actual staged-source replay refusal: {error:?}");
+    };
+    assert_eq!(verdict.imported_axioms, vec!["scalar"]);
+    assert!(!verdict.passed(false));
+    let error = source_contract(&original, &root).unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("scalar source eligibility refused"),
+        "{error:#}"
+    );
+    assert!(original.is_staged_header(&root));
+}
+
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+#[test]
+fn scalar_replayed_source_actual_call_retains_original_pending_origin() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("ReplayedCall.lean");
+    std::fs::write(&file, SOURCE).unwrap();
+    let args = CompileArgs {
+        file: Some(file.clone()),
+        decl: Some("scalar".into()),
+        emit: EmitFormat::Obj,
+        opt_level: 0,
+        output: None,
+        link_artifact: vec![],
+    };
+    let (decls, mut env, pipeline) = crate::compile::select_lcnf_decl(&args).unwrap();
+    let root = Name::from_string("scalar");
+    assert!(env.set_constant_origin(
+        root.clone(),
+        clean_kernel::ConstantOrigin::olean_import(Some("ReplayedCall".into()))
+    ));
+    let source = std::sync::Arc::new(env);
+    let base = std::sync::Arc::new(Environment::with_prelude());
+    let mut roots = scalar_source_roots().unwrap();
+    roots.insert(root.clone());
+    roots.extend(
+        decls
+            .iter()
+            .filter(|d| source.get_const(&d.name).is_some())
+            .map(|d| d.name.clone()),
+    );
+    let replay = clean_olean::ReplayedImportedSource::check(
+        std::sync::Arc::clone(&base),
+        std::sync::Arc::clone(&source),
+        roots.clone(),
+    )
+    .unwrap();
+    replay.require_context(&base, &source, &roots).unwrap();
+    assert!(source.constant_needs_recheck(&root));
+    let mut call = ScalarCall::from_selected_with_replay(
+        &decls,
+        &source,
+        &pipeline,
+        &root,
+        Some(&file),
+        None,
+        Some(&replay),
+    )
+    .unwrap();
+    capture(&call, &file, 0, "replayed-scalar");
+    let cases: [(u32, u32, u64, u64); 3] =
+        [(0, 0, 0, 0), (u32::MAX, 1, u64::MAX, 0), (7, 11, 13, 17)];
+    for (a, b, c, d) in cases {
+        let expected = u64::from(a)
+            .wrapping_add(u64::from(b).wrapping_mul(65537))
+            .wrapping_add(c.wrapping_mul(3))
+            .wrapping_add(d.wrapping_mul(5));
+        assert_eq!(call.call(a, b, c, d), expected);
+    }
+    assert!(source.constant_needs_recheck(&root));
+    println!("actual source-bound imported-origin replay -> existing scalar object/runtime/in-process3cases PASS; originalpendingorigin retained");
+}

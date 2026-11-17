@@ -62,7 +62,8 @@ CALL = re.compile(rf"(?P<n>{IDENT}){WS}*!(?!=)")  # a macro named anywhere in co
 FN_SIG = re.compile(r"[{(\[;]")
 CONST_ARG = re.compile(rf"[<,=]{WS}*$")  # a `{` after these in a signature is a const generic argument
 # rustc_lexer nests block comments and reads `'\x7b'` / `'\u{7b}'` as ONE char
-# literal; the reference lexer does neither, so `_lex` repairs those spans.
+# literal. The reference lexer reads both since 2026-11-16; `_lex` still repairs
+# such spans, now a cross-check that fired in none of the 9,493 `crates` files.
 NEST = re.compile(r"/\*|\*/")
 ESC_CHAR = re.compile(r"'\\(?:x[0-9A-Fa-f]{2}|u\{[0-9A-Fa-f](?:_*[0-9A-Fa-f]){0,5}_*\})'")
 # libtest prints `r#type` for a raw keyword, `foo` for `r#foo`: measured on --list (2026-11-01, editions
@@ -149,8 +150,9 @@ class _Lexed:
 
 
 def _divergence(noncode: re.Pattern[str], text: str) -> int | None:
-    """Where the reference lexer first reads `text` otherwise than rustc_lexer: a block comment
-    holding another `/*`, or a `'\\` left in code."""
+    """Where the reference lexer may first read `text` otherwise than rustc_lexer: a block comment
+    holding another `/*` (the reference now nests, so the repair yields the same span), or a
+    `'\\` left in code (an escape the reference's char grammar does not accept)."""
     prev = 0
     for m in noncode.finditer(text):
         q = text.find("'\\", prev, m.start())

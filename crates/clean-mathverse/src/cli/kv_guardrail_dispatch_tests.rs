@@ -16,7 +16,7 @@ use super::*;
 use crate::cli::{
     ElisionGateArgs, FingerprintArgs, MathverseCliError, RatchetCheckArgs, RatchetUpdateArgs,
 };
-use crate::verify::kernel_verified_manifest::{KernelVerifiedManifest, StampEnvFingerprint};
+use crate::verify::kernel_verified_manifest::{test_run, Elision, KernelVerifiedManifest};
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -28,41 +28,57 @@ fn write_json(dir: &Path, name: &str, body: &str) -> std::path::PathBuf {
     path
 }
 
-fn write_summary(dir: &Path, kv: i64, stored: i64, heuristic: i64) -> std::path::PathBuf {
+fn write_summary(dir: &Path, accepted: i64, stored: i64, heuristic: i64) -> std::path::PathBuf {
     write_json(
         dir,
         "summary.json",
         &format!(
-            "{{\"kernel_verified\": {kv}, \"stored_kernel_verified\": {stored}, \
+            "{{\"tier\": \"development\", \"accepted\": {accepted}, \
+             \"stored_reference_stamped\": {stored}, \
              \"heuristic_kernel_verified\": {heuristic}, \"unrelated\": \"ignored\"}}"
         ),
     )
 }
 
-fn write_ratchet(dir: &Path, kv_base: i64, stored_base: i64, notes: &str) -> std::path::PathBuf {
+/// A P6 ratchet file; `reference` is the reference-stamp baseline (`None`:
+/// unarmed).
+fn write_ratchet(
+    dir: &Path,
+    accepted_base: i64,
+    reference: Option<i64>,
+    notes: &str,
+) -> std::path::PathBuf {
+    let reference = reference.map_or_else(|| "null".to_string(), |b| b.to_string());
     write_json(
         dir,
         "ratchet.json",
         &format!(
-            "{{\"last_updated\": \"2026-01-01\", \"kernel_verified_baseline\": {kv_base}, \
-             \"stored_kernel_verified_baseline\": {stored_base}, \"notes\": \"{notes}\"}}"
+            "{{\"last_updated\": \"2026-01-01\", \"development_accepted_baseline\": \
+             {accepted_base}, \"reference_stamped_baseline\": {reference}, \
+             \"notes\": \"{notes}\"}}"
         ),
     )
 }
 
-fn manifest_with_names(names: &[&str]) -> KernelVerifiedManifest {
-    KernelVerifiedManifest::from_worker_parts(
+fn manifest_with_names(names: &[&str], elision: Elision) -> KernelVerifiedManifest {
+    KernelVerifiedManifest::from_sharded_worker(
         "test-module",
         names.len(),
         0,
         0,
         0.0,
         names.iter().map(|s| (*s).to_owned()).collect(),
+        test_run(elision),
     )
 }
 
 fn write_manifest(dir: &Path, name: &str, names: &[&str]) -> std::path::PathBuf {
-    let m = manifest_with_names(names);
+    let elision = if name.starts_with("opaque") {
+        Elision::Opaque
+    } else {
+        Elision::OpaqueAndTheorem
+    };
+    let m = manifest_with_names(names, elision);
     let path = dir.join(name);
     m.write_to_file(&path).expect("write manifest");
     path
@@ -94,7 +110,7 @@ fn test_ratchet_check_absent_summary_skips_green() {
     // gate's green-on-absent contract.
     let dir = tempfile::tempdir().expect("tmp");
     let summary = dir.path().join("does-not-exist.json");
-    let ratchet = write_ratchet(dir.path(), 100, 100, "n");
+    let ratchet = write_ratchet(dir.path(), 100, None, "n");
     let res = cmd_ratchet_check(check_args(&summary, &ratchet));
     assert!(res.is_ok(), "absent summary must SKIP green, got {res:?}");
 }
@@ -104,7 +120,7 @@ fn test_ratchet_check_floor_breach_fails() {
     // soundness_floor_ok: heuristic_kernel_verified != 0 -> fail closed.
     let dir = tempfile::tempdir().expect("tmp");
     let summary = write_summary(dir.path(), 100, 100, 3);
-    let ratchet = write_ratchet(dir.path(), 0, 0, "n");
+    let ratchet = write_ratchet(dir.path(), 0, None, "n");
     let res = cmd_ratchet_check(check_args(&summary, &ratchet));
     assert!(
         matches!(res, Err(MathverseCliError::RatchetSoundnessFloor(3))),
@@ -119,13 +135,13 @@ fn test_ratchet_check_malformed_summary_fails_closed() {
     let summary = write_json(
         dir.path(),
         "summary.json",
-        "{\"kernel_verified\": 5, \"heuristic_kernel_verified\": 0}",
+        "{\"tier\": \"development\", \"accepted\": 5, \"heuristic_kernel_verified\": 0}",
     );
-    let ratchet = write_ratchet(dir.path(), 0, 0, "n");
+    let ratchet = write_ratchet(dir.path(), 0, None, "n");
     let res = cmd_ratchet_check(check_args(&summary, &ratchet));
     assert!(
         matches!(res, Err(MathverseCliError::RatchetMalformedSummary(_))),
-        "missing stored_kernel_verified must fail closed, got {res:?}"
+        "missing stored_reference_stamped must fail closed, got {res:?}"
     );
 }
 
@@ -136,10 +152,10 @@ fn test_ratchet_check_bool_field_fails_closed() {
     let summary = write_json(
         dir.path(),
         "summary.json",
-        "{\"kernel_verified\": true, \"stored_kernel_verified\": 1, \
-         \"heuristic_kernel_verified\": 0}",
+        "{\"tier\": \"development\", \"accepted\": true, \
+         \"stored_reference_stamped\": 0, \"heuristic_kernel_verified\": 0}",
     );
-    let ratchet = write_ratchet(dir.path(), 0, 0, "n");
+    let ratchet = write_ratchet(dir.path(), 0, None, "n");
     let res = cmd_ratchet_check(check_args(&summary, &ratchet));
     assert!(
         matches!(res, Err(MathverseCliError::RatchetMalformedSummary(_))),
@@ -151,14 +167,14 @@ fn test_ratchet_check_bool_field_fails_closed() {
 fn test_ratchet_check_regression_fails() {
     // compare: cur < baseline -> violation naming the regressed key.
     let dir = tempfile::tempdir().expect("tmp");
-    let summary = write_summary(dir.path(), 90, 100, 0);
-    let ratchet = write_ratchet(dir.path(), 100, 100, "n");
+    let summary = write_summary(dir.path(), 90, 0, 0);
+    let ratchet = write_ratchet(dir.path(), 100, None, "n");
     let res = cmd_ratchet_check(check_args(&summary, &ratchet));
     match res {
         Err(MathverseCliError::RatchetRegressed(violations)) => {
-            assert_eq!(violations.len(), 1, "exactly kernel_verified regressed");
+            assert_eq!(violations.len(), 1, "exactly accepted regressed");
             assert!(
-                violations[0].contains("kernel_verified"),
+                violations[0].contains("accepted"),
                 "violation names the key: {}",
                 violations[0]
             );
@@ -171,15 +187,15 @@ fn test_ratchet_check_regression_fails() {
 fn test_ratchet_check_equal_and_progress_pass() {
     // compare: equal and above-baseline both pass.
     let dir = tempfile::tempdir().expect("tmp");
-    let ratchet = write_ratchet(dir.path(), 100, 100, "n");
+    let ratchet = write_ratchet(dir.path(), 100, None, "n");
 
-    let equal = write_summary(dir.path(), 100, 100, 0);
+    let equal = write_summary(dir.path(), 100, 0, 0);
     assert!(
         cmd_ratchet_check(check_args(&equal, &ratchet)).is_ok(),
         "equal to baseline must pass"
     );
 
-    let progress = write_summary(dir.path(), 150, 175, 0);
+    let progress = write_summary(dir.path(), 150, 0, 0);
     assert!(
         cmd_ratchet_check(check_args(&progress, &ratchet)).is_ok(),
         "above baseline must pass"
@@ -191,7 +207,7 @@ fn test_ratchet_check_identity_floor_zero_baseline_always_green() {
     // test_identity_floor_zero_baseline_always_green: 0 baseline, 0 counts -> green.
     let dir = tempfile::tempdir().expect("tmp");
     let summary = write_summary(dir.path(), 0, 0, 0);
-    let ratchet = write_ratchet(dir.path(), 0, 0, "n");
+    let ratchet = write_ratchet(dir.path(), 0, None, "n");
     assert!(
         cmd_ratchet_check(check_args(&summary, &ratchet)).is_ok(),
         "identity floor must always be green"
@@ -203,7 +219,7 @@ fn test_ratchet_check_missing_ratchet_file_uses_zero_baseline() {
     // No ratchet file on disk -> default all-zero identity baseline -> any real
     // count is >= 0, so green.
     let dir = tempfile::tempdir().expect("tmp");
-    let summary = write_summary(dir.path(), 42, 42, 0);
+    let summary = write_summary(dir.path(), 42, 0, 0);
     let ratchet = dir.path().join("no-ratchet.json");
     assert!(
         cmd_ratchet_check(check_args(&summary, &ratchet)).is_ok(),
@@ -246,15 +262,18 @@ fn test_ratchet_update_floor_breach_refuses() {
 fn test_ratchet_update_writes_date_only_and_preserves_notes() {
     // write_ratchet: last_updated is DATE-ONLY (YYYY-MM-DD), existing notes round-trip.
     let dir = tempfile::tempdir().expect("tmp");
-    let summary = write_summary(dir.path(), 123, 456, 0);
-    let ratchet = write_ratchet(dir.path(), 0, 0, "operator prose to keep");
+    let summary = write_summary(dir.path(), 123, 0, 0);
+    let ratchet = write_ratchet(dir.path(), 0, None, "operator prose to keep");
 
     cmd_ratchet_update(update_args(&summary, &ratchet)).expect("update should succeed");
 
     let written = std::fs::read_to_string(&ratchet).expect("read back");
     let parsed: serde_json::Value = serde_json::from_str(&written).expect("parse back");
-    assert_eq!(parsed["kernel_verified_baseline"], 123);
-    assert_eq!(parsed["stored_kernel_verified_baseline"], 456);
+    assert_eq!(parsed["development_accepted_baseline"], 123);
+    assert_eq!(
+        parsed["reference_stamped_baseline"],
+        serde_json::Value::Null
+    );
     assert_eq!(
         parsed["notes"], "operator prose to keep",
         "existing operator notes must be preserved"
@@ -273,7 +292,7 @@ fn test_ratchet_update_writes_date_only_and_preserves_notes() {
 fn test_ratchet_update_default_notes_when_absent() {
     // No existing ratchet file -> default BASELINE_NOTES written.
     let dir = tempfile::tempdir().expect("tmp");
-    let summary = write_summary(dir.path(), 1, 2, 0);
+    let summary = write_summary(dir.path(), 1, 0, 0);
     let ratchet = dir.path().join("fresh-ratchet.json");
 
     cmd_ratchet_update(update_args(&summary, &ratchet)).expect("update should succeed");
@@ -385,68 +404,151 @@ fn test_elision_gate_bad_shape_fails_closed() {
 }
 
 // ---------------------------------------------------------------------------
+// P6 controls: the split ratchet, the elision gate's identity check
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_ratchet_check_pre_p6_summary_refused() {
+    // A summary written before P6 (`kernel_verified`, no `tier`) is refused,
+    // never read as accepted 0.
+    let dir = tempfile::tempdir().expect("tmp");
+    let summary = write_json(
+        dir.path(),
+        "summary.json",
+        "{\"kernel_verified\": 686, \"stored_kernel_verified\": 686, \
+         \"heuristic_kernel_verified\": 0}",
+    );
+    let ratchet = write_ratchet(dir.path(), 0, None, "n");
+    let res = cmd_ratchet_check(check_args(&summary, &ratchet));
+    assert!(
+        matches!(res, Err(MathverseCliError::RatchetMalformedSummary(_))),
+        "a pre-P6 summary must fail closed, got {res:?}"
+    );
+}
+
+#[test]
+fn test_ratchet_check_pre_p6_baseline_refused() {
+    // A pre-P6 ratchet file read through defaults would be a zero floor: refused.
+    let dir = tempfile::tempdir().expect("tmp");
+    let summary = write_summary(dir.path(), 686, 0, 0);
+    let ratchet = write_json(
+        dir.path(),
+        "ratchet.json",
+        "{\"last_updated\": \"2026-10-07\", \"kernel_verified_baseline\": 686, \
+         \"stored_kernel_verified_baseline\": 686, \"notes\": \"n\"}",
+    );
+    let res = cmd_ratchet_check(check_args(&summary, &ratchet));
+    assert!(
+        matches!(res, Err(MathverseCliError::RatchetMalformedBaseline(_))),
+        "a pre-P6 baseline must fail closed, got {res:?}"
+    );
+}
+
+#[test]
+fn test_ratchet_check_stamp_without_reference_producer_fails() {
+    // While the reference-stamp baseline is unarmed, a development run that
+    // left any KernelVerified header is a violation, in check and in update.
+    let dir = tempfile::tempdir().expect("tmp");
+    let summary = write_summary(dir.path(), 686, 1, 0);
+    let ratchet = write_ratchet(dir.path(), 686, None, "n");
+    let res = cmd_ratchet_check(check_args(&summary, &ratchet));
+    assert!(
+        matches!(&res, Err(MathverseCliError::RatchetRegressed(v)) if v[0].contains("no reference producer")),
+        "got {res:?}"
+    );
+    let res = cmd_ratchet_update(update_args(&summary, &ratchet));
+    assert!(
+        matches!(res, Err(MathverseCliError::RatchetRegressed(_))),
+        "got {res:?}"
+    );
+}
+
+#[test]
+fn test_ratchet_check_armed_reference_baseline_regression_fails() {
+    let dir = tempfile::tempdir().expect("tmp");
+    let summary = write_summary(dir.path(), 686, 5, 0);
+    let ratchet = write_ratchet(dir.path(), 686, Some(6), "n");
+    let res = cmd_ratchet_check(check_args(&summary, &ratchet));
+    assert!(
+        matches!(res, Err(MathverseCliError::RatchetRegressed(_))),
+        "got {res:?}"
+    );
+}
+
+#[test]
+fn test_elision_gate_wrong_elision_pair_refused() {
+    let dir = tempfile::tempdir().expect("tmp");
+    let a = dir.path().join("a.json");
+    let b = dir.path().join("b.json");
+    manifest_with_names(&["a"], Elision::Opaque)
+        .write_to_file(&a)
+        .expect("write");
+    manifest_with_names(&["a"], Elision::Opaque)
+        .write_to_file(&b)
+        .expect("write");
+    let res = cmd_elision_gate(elision_args(&a, &b));
+    assert!(
+        matches!(res, Err(MathverseCliError::Manifest(_))),
+        "got {res:?}"
+    );
+}
+
+#[test]
+fn test_elision_gate_different_checkers_refused() {
+    // Same elision pair, but the two runs are not the same checker (another
+    // kernel theory): a subset across two theories says nothing about elision.
+    let dir = tempfile::tempdir().expect("tmp");
+    let opaque = write_manifest(dir.path(), "opaque.json", &["a"]);
+    let mut env = clean_kernel::Environment::for_lean_replay();
+    env.set_kernel_theory(clean_kernel::env::KernelTheory::Extended);
+    let run = crate::verify::kernel_verified_manifest::test_run_in(
+        &env,
+        crate::verify::kernel_verified_manifest::BaseVariant::LeanReplay,
+        Elision::OpaqueAndTheorem,
+    );
+    let oat = dir.path().join("oat.json");
+    KernelVerifiedManifest::from_sharded_worker("m", 1, 0, 0, 0.0, vec!["a".into()], run)
+        .write_to_file(&oat)
+        .expect("write");
+    let res = cmd_elision_gate(elision_args(&opaque, &oat));
+    assert!(
+        matches!(res, Err(MathverseCliError::Manifest(_))),
+        "got {res:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
 // fingerprint
 // ---------------------------------------------------------------------------
 
-fn sample_fingerprint() -> StampEnvFingerprint {
-    StampEnvFingerprint {
-        kernel_version: "1.2.3".into(),
-        toolchain: "rustc 1.90.0".into(),
-        heartbeat: "default".into(),
-        elision_policy: "opaque".into(),
-        max_closure_modules: 1500,
-        prelude_variant: "closure-root".into(),
+#[test]
+fn test_fingerprint_prints_identity_json_and_human() {
+    let dir = tempfile::tempdir().expect("tmp");
+    let path = write_manifest(dir.path(), "m.json", &["x"]);
+    for json in [true, false] {
+        cmd_fingerprint(FingerprintArgs {
+            manifest: path.clone(),
+            json,
+        })
+        .expect("a manifest always carries its identity");
     }
 }
 
-fn write_manifest_with_fingerprint(
-    dir: &Path,
-    name: &str,
-    fp: Option<StampEnvFingerprint>,
-) -> std::path::PathBuf {
-    let mut m = manifest_with_names(&["x"]);
-    m.env_fingerprint = fp;
-    let path = dir.join(name);
-    m.write_to_file(&path).expect("write manifest");
-    path
-}
-
 #[test]
-fn test_fingerprint_prints_json() {
+fn test_fingerprint_schema1_manifest_refused() {
     let dir = tempfile::tempdir().expect("tmp");
-    let fp = sample_fingerprint();
-    let path = write_manifest_with_fingerprint(dir.path(), "m.json", Some(fp.clone()));
-    let args = FingerprintArgs {
-        manifest: path,
-        json: true,
-    };
-    cmd_fingerprint(args).expect("fingerprint with env should succeed (json)");
-}
-
-#[test]
-fn test_fingerprint_human_lines_ok() {
-    let dir = tempfile::tempdir().expect("tmp");
-    let path = write_manifest_with_fingerprint(dir.path(), "m.json", Some(sample_fingerprint()));
-    let args = FingerprintArgs {
+    let path = write_json(
+        dir.path(),
+        "m.json",
+        "{\"schema_version\": 1, \"kernel_verified_names\": [\"x\"]}",
+    );
+    let res = cmd_fingerprint(FingerprintArgs {
         manifest: path,
         json: false,
-    };
-    cmd_fingerprint(args).expect("fingerprint with env should succeed (human)");
-}
-
-#[test]
-fn test_fingerprint_missing_field_fails() {
-    // Legacy manifest with env_fingerprint=None -> Err MissingEnvFingerprint.
-    let dir = tempfile::tempdir().expect("tmp");
-    let path = write_manifest_with_fingerprint(dir.path(), "m.json", None);
-    let args = FingerprintArgs {
-        manifest: path,
-        json: false,
-    };
-    let res = cmd_fingerprint(args);
+    });
     assert!(
-        matches!(res, Err(MathverseCliError::MissingEnvFingerprint(_))),
-        "a manifest without env_fingerprint must fail, got {res:?}"
+        matches!(res, Err(MathverseCliError::Mathverse(_))),
+        "a manifest without an identity must fail, got {res:?}"
     );
 }
 

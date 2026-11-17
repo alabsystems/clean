@@ -76,7 +76,7 @@ impl ProofLibrary {
                     "(hpair : ProdType (KernelInferAccepts st e R) (KernelDefEqAccepts st R T)) ",
                     "(_hguard : KernelStateEnvValid st -> KernelStateLocalCtxWellFormed st -> ",
                     "KernelInputAdmissible st e -> KernelBinaryInputAdmissible st R T) => ",
-                    "CheckDecomp.mk st e T R hpair) ",
+                    "@CheckDecomp.mk st e T R hpair) ",
                     "hcheck"
                 ),
                 "Check completeness: eliminate KernelCheckAccepts.rec (bind the inferred type R) and repackage into the CheckDecomp existential.",

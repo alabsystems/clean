@@ -87,7 +87,9 @@ use extension_binding::{encode_hex, extension_hook};
 use family_index::FamilyIndex;
 use fingerprint::Fingerprinter;
 pub use imported::{ImportedConeGate, ImportedConeVerdict};
+mod source;
 pub use level::RecheckLevel;
+pub use source::{ReplayedImportedSource, ReplayedSourceError};
 
 /// Every extension key `cone` declares, with its dependency-closed fingerprint
 /// over `env`.

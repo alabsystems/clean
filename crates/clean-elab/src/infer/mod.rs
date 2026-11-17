@@ -156,7 +156,6 @@ mod wf_recursion;
 // `preprocess` to the elaboration of the declaration it was made for.
 pub(crate) mod section_prune;
 pub(in crate::infer) use elab_app::ArgsFollow;
-pub(in crate::infer) use elab_types::{is_out_param_type, is_semi_out_param_type};
 // `pub(crate)`: `register::register_param_names` (B01) converts surface binder
 // kinds when recording named-argument parameter info.
 pub(crate) use deriving_log::split_logged_deriving_failures;
@@ -614,7 +613,7 @@ pub struct ElabCtx<'a> {
     /// `attribute [class] X` targets collected for register-time class
     /// registration (the ctx holds `&Environment`, so it cannot register
     /// directly; mirrors every other collected_* attribute).
-    collected_class_attrs: Vec<Name>,
+    collected_class_attrs: Vec<crate::class_attribute::ClassAttribute>,
     /// Collected @[derive_handler] registrations.
     collected_derive_handler: Vec<Name>,
     /// Collected file-scope attribute removals (decl name, attribute name)

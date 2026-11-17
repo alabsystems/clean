@@ -1,0 +1,9 @@
+# Actual Bool island canonical fixture
+
+Uses the maintained pinned `compiled_fixture_dir` recipe, compiling every prerequisite package and every owned ORDER root. The generated `CleanQualification` aggregate, the production package root and the fixture qualification root must all declare zero names. The fresh Lean replay starts from the fixture root, which imports the complete aggregate and independent literal data.
+
+The associated separate Rust qualification test selects owned declarations by actual artifact/module origin, replays their dependency closure through the fenced reference entry and checks all theorem bodies against original full statements and False. It pins every owned signature, every non-theorem type/value, selected imported meaning definitions and their generated auxiliaries, independent literals, raw ownership and compiler-copy classification. It retains fifty-seven independent public propositions, five rebuilt data values, three exact binder deletions and the exact constructor-name output mutation. No private/name-prefix subject filter, Choice exception or skip-on-failure is introduced.
+
+These fixtures are source preparation only. Actual Clean observation must mint `statement_pins.json` and `axiom_closures.json` after all required replay/control checks, followed by a normal default run. Those missing files deliberately fail closed; no placeholder hashes or empty censuses are committed. Existing native receipts do not qualify these fixtures or the Rust path. The Bool constructor mutation previously timed out natively and remains required here.
+
+This package-local qualification does not edit the global E7 roster or establish runtime Bool admission, compiled lineage, self-admission or authority. Independent quorum and per-bound/base-consistency limits remain.

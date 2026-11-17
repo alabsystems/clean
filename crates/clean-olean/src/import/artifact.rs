@@ -66,6 +66,12 @@ use crate::ConstantKind;
 use clean_kernel::env::ProofValueElision;
 use clean_kernel::name::Name;
 
+mod inventory;
+pub use inventory::{
+    ArtifactDeclaration, ArtifactDeclarationOrigin, ArtifactInventory, ArtifactInventoryError,
+    ArtifactInventoryLimits,
+};
+
 /// How much of an artifact a reader needs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
@@ -97,6 +103,9 @@ pub struct ArtifactRead {
     pub clean_payload_parts: bool,
     /// The authoritative part's declared constant names (`constNames`).
     pub names: Vec<Name>,
+    /// Separate strict Records inventory. Compatibility names and ownership
+    /// remain unchanged; unavailable metadata never becomes an empty success.
+    pub inventory: Option<Result<ArtifactInventory, ArtifactInventoryError>>,
 }
 
 /// Read the artifact whose `.olean` is `path` (labelled `module` in a refusal)
@@ -156,6 +165,8 @@ pub fn read_artifact(
         typed_imports: part.typed_imports.clone(),
         clean_payload_parts,
         names: part.const_names.clone(),
+        inventory: (depth == ArtifactDepth::Records)
+            .then(|| inventory::build(part, ArtifactInventoryLimits::default())),
     })
 }
 
@@ -352,27 +363,23 @@ fn raw_stub_of(stub: &LoadConstant, full: &LoadConstant) -> bool {
         && stub.kernel_name == full.kernel_name
         && stub.kernel_level_params == full.kernel_level_params
         && stub.type_ptr == full.type_ptr
+        && super::artifact_ledger::stub_safety_agrees(
+            stub.definition_safety,
+            &full.kind,
+            full.definition_safety,
+        )
 }
 
 /// The kernel constant names a part declares — its Lean-format records (or, at
-/// [`ArtifactDepth::Names`], its `constNames`) and its Clean payload's — skipping
-/// code-generator artifacts, which are not kernel declarations.
+/// [`ArtifactDepth::Names`], its `constNames`) and its Clean payload's, with
+/// no name-based exclusions. Unsafe auxiliaries are still source records.
 fn part_declared_names(
     part: &LoadModule,
     depth: ArtifactDepth,
 ) -> std::collections::BTreeSet<Name> {
-    let lean: Box<dyn Iterator<Item = &Name>> = match depth {
-        ArtifactDepth::Names => Box::new(part.const_names.iter()),
-        ArtifactDepth::Records => Box::new(part.constants.iter().map(|c| &c.kernel_name)),
-    };
-    let mut names: std::collections::BTreeSet<Name> = lean
-        .filter(|n| !super::load_register::is_typed_compiler_ir_name(n))
-        .cloned()
-        .collect();
-    if let Some(payload) = part.clean_payload.as_ref() {
-        names.extend(payload.declared_names::<std::collections::BTreeSet<Name>>());
-    }
-    names
+    inventory::occurrences(part, depth)
+        .map(|(name, _)| name.clone())
+        .collect()
 }
 
 /// Rule 3 of [`check_artifact_parts`]: refuse a name the authoritative part

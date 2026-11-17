@@ -107,14 +107,19 @@ theorem half_twice (w : Nat) (hw : 0 < w) : modulus w = 2 * half w := by
   obtain ⟨v, rfl⟩ : ∃ v, w = v + 1 := ⟨w - 1, by omega⟩
   rw [Nat.pow_succ]; simp; omega
 
-theorem bib (x : Int) (s : Bool) (B : Nat) (hB : 0 < B) :
+/-- The successful branch retains libspecr's exponent conversion domain. -/
+theorem bib_in_domain (x : Int) (s : Bool) (B : Nat) (hB : 0 < B)
+    (hwidth : B * 8 < 4294967296) :
     SInt.bring_in_bounds x (sgnOf s) (Int.ofNat B) =
       SOut.ok (readAt s (B * 8) (x % Int.ofNat (modulus (B * 8))).toNat) := by
   have hb : SInt.beq (Int.ofNat B) 0 = false := by
     simp only [SInt.beq, decide_eq_false_iff_not, Int.ofNat_eq_natCast]; omega
   have hm : 0 < modulus (B * 8) := Nat.pow_pos (by decide)
   have hh := half_twice (B * 8) (by omega)
-  have hpow : SInt.pow 2 (Int.ofNat B * 8) = SOut.ok (Int.ofNat (modulus (B * 8))) := rfl
+  have hpow : SInt.pow 2 (Int.ofNat B * 8) = SOut.ok (Int.ofNat (modulus (B * 8))) := by
+    change (if B * 8 < 4294967296 then _ else _) = _
+    rw [if_pos hwidth]
+    rfl
   have hdiv : SInt.div (Int.ofNat (modulus (B * 8))) 2 = SOut.ok (Int.ofNat (half (B * 8))) := by
     simp only [SInt.div, SInt.beq, SInt.ofSignedNat, SInt.isNeg, SInt.abs, SBool.xor]
     have : decide ((2 : Int) = 0) = false := by decide
@@ -138,6 +143,52 @@ theorem bib (x : Int) (s : Bool) (B : Nat) (hB : 0 < B) :
     · have : decide (half (B * 8) ≤ r.toNat) = false := by simp [Int.ofNat_eq_natCast] at hc ⊢; omega
       simp only [hc, decide_false, this, ↓reduceIte, Bool.false_eq_true]
       congr 1; simp only [Int.ofNat_eq_natCast]; omega
+
+/-- A positive raw width can still fail the conversion before any residue
+    arithmetic. This is an outcome, not an allocation-room premise. -/
+theorem bib_conversion_overflow (x : Int) (s : Bool) (B : Nat)
+    (hwidth : 4294967296 ≤ B * 8) :
+    SInt.bring_in_bounds x (sgnOf s) (Int.ofNat B) =
+      SOut.panic "called `Option::unwrap()` on a `None` value" := by
+  have hB : 0 < B := by omega
+  have hb : SInt.beq (Int.ofNat B) 0 = false := by
+    simp only [SInt.beq, decide_eq_false_iff_not, Int.ofNat_eq_natCast]; omega
+  have hpow : SInt.pow 2 (Int.ofNat B * 8) =
+      SOut.panic "called `Option::unwrap()` on a `None` value" := by
+    change (if B * 8 < 4294967296 then _ else _) = _
+    rw [if_neg (by omega)]
+  unfold SInt.bring_in_bounds
+  rw [hb, hpow]
+  rfl
+
+/-- The original positive-width domain is retained, with both actual outcomes. -/
+theorem bib (x : Int) (s : Bool) (B : Nat) (hB : 0 < B) :
+    SInt.bring_in_bounds x (sgnOf s) (Int.ofNat B) =
+      if B * 8 < 4294967296 then
+        SOut.ok (readAt s (B * 8) (x % Int.ofNat (modulus (B * 8))).toNat)
+      else SOut.panic "called `Option::unwrap()` on a `None` value" := by
+  by_cases hwidth : B * 8 < 4294967296
+  · rw [if_pos hwidth]
+    exact bib_in_domain x s B hB hwidth
+  · rw [if_neg hwidth]
+    exact bib_conversion_overflow x s B (by omega)
+
+def BoundsDomainGoal : Prop := ∀ (x : Int) (s : Bool) (B : Nat), 0 < B →
+  SInt.bring_in_bounds x (sgnOf s) (Int.ofNat B) =
+    if B * 8 < 4294967296 then
+      SOut.ok (readAt s (B * 8) (x % Int.ofNat (modulus (B * 8))).toNat)
+    else SOut.panic "called `Option::unwrap()` on a `None` value"
+
+/-- The previous unconditional success claim is retained as a false goal. -/
+def WrongBoundsDomainGoal : Prop := ∀ (x : Int) (s : Bool) (B : Nat), 0 < B →
+  SInt.bring_in_bounds x (sgnOf s) (Int.ofNat B) =
+    SOut.ok (readAt s (B * 8) (x % Int.ofNat (modulus (B * 8))).toNat)
+
+theorem old_bounds_domain_goal_false : ¬ WrongBoundsDomainGoal := by
+  intro old
+  have success := old 0 false 536870912 (by decide)
+  rw [bib_conversion_overflow 0 false 536870912 (by decide)] at success
+  cases success
 
 /-! ### The reading of a residue -/
 
@@ -167,6 +218,8 @@ end
 
 theorem IntTy.bits_eq (t : IntTy) : (t.bits 64) = t.bytes * 8 := by cases t <;> rfl
 theorem IntTy.bytes_pos (t : IntTy) : 0 < t.bytes := by cases t <;> decide
+theorem IntTy.power_domain (t : IntTy) : t.bytes * 8 < 4294967296 := by
+  cases t <;> decide
 
 def mrIntTy (s : Bool) (t : IntTy) : MR_IntType := ⟨sgnOf s, Int.ofNat t.bytes⟩
 
@@ -177,7 +230,7 @@ theorem mr_bib (fuel : Nat) (s : Bool) (t : IntTy) (x : Int) :
     MRf.IntType.bring_in_bounds (fuel + 1) (mrIntTy s t) x =
       SOut.ok (readAt s (t.bits 64) (x % Int.ofNat (modulus (t.bits 64))).toNat) := by
   simp only [MRf.IntType.bring_in_bounds, mrIntTy]
-  rw [IntTy.bits_eq, bib x s t.bytes t.bytes_pos]
+  rw [IntTy.bits_eq, bib_in_domain x s t.bytes t.bytes_pos t.power_domain]
   rfl
 
 theorem resid_add (w : Nat) (s : Bool) (a b : Nat) (ha : a < modulus w) (hb : b < modulus w) :
@@ -253,7 +306,7 @@ theorem mr_can_represent (fuel : Nat) (s : Bool) (t : IntTy) (x : Int) :
       SOut.ok (inRange s (t.bits 64) x) := by
   have hw : 0 < (t.bits 64) := by rw [IntTy.bits_eq]; have := t.bytes_pos; omega
   simp only [MRf.IntType.can_represent, SInt.in_bounds, mrIntTy]
-  rw [IntTy.bits_eq, bib x s t.bytes t.bytes_pos, ← IntTy.bits_eq]
+  rw [IntTy.bits_eq, bib_in_domain x s t.bytes t.bytes_pos t.power_domain, ← IntTy.bits_eq]
   simp only [SOut.bind_ok', SInt.beq]
   congr 1
   by_cases hr : inRange s (t.bits 64) x = true

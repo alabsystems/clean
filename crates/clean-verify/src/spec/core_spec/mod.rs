@@ -292,6 +292,7 @@ mod eval_ir_lzd_fresh;
 mod eval_ir_machine;
 mod eval_ir_meta_tag;
 mod eval_ir_mode;
+mod eval_ir_nat_bool_reflection_v1;
 mod eval_ir_node_id_index;
 mod eval_ir_ops;
 mod eval_ir_path_step;

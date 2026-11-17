@@ -83,6 +83,13 @@ const SRC_EQB_SOUND_WALK: &str = "def ir_nat_eqb_sound_walk (a : Nat) : forall (
 
 const SRC_EQB_SOUND: &str = "def ir_nat_eqb_sound (a : Nat) (b : Nat) (h : @Eq Bool (ir_nat_eqb a b) Bool.true) : @Eq Nat a b := ir_nat_eqb_sound_walk a b (@Eq.trans Bool (ir_nat_eqb_walk a b) (ir_nat_eqb a b) Bool.true (@Eq.symm Bool (ir_nat_eqb a b) (ir_nat_eqb_walk a b) (ir_nat_eqb_walk_eq a b)) h)";
 
+pub(super) fn nat_eqb_soundness_sources() -> [(&'static str, &'static str); 2] {
+    [
+        ("ir_nat_eqb_sound_walk", SRC_EQB_SOUND_WALK),
+        ("ir_nat_eqb_sound", SRC_EQB_SOUND),
+    ]
+}
+
 const SRC_EQB_NE_TRANS: &str = "def ir_nat_eqb_ne_trans (i : Nat) (a : Nat) (x : Nat) (h1 : @Eq Bool (ir_nat_eqb i a) Bool.true) (h2 : @Eq Bool (ir_nat_eqb a x) Bool.false) : @Eq Bool (ir_nat_eqb i x) Bool.false := @Eq.subst Nat (fun (k : Nat) => @Eq Bool (ir_nat_eqb k x) Bool.false) a i (@Eq.symm Nat i a (ir_nat_eqb_sound i a h1)) h2";
 
 const SRC_LT_GE_NE: &str = "def ir_nat_lt_ge_ne (a : Nat) (x : Nat) (n : Nat) (hx : @Eq Bool (ir_nat_ltb x n) Bool.true) (ha : @Eq Bool (ir_nat_ltb a n) Bool.false) : @Eq Bool (ir_nat_eqb a x) Bool.false := @Bool.rec (fun (v : Bool) => @Eq Bool (ir_nat_eqb a x) v -> @Eq Bool (ir_nat_eqb a x) Bool.false) (fun (h : @Eq Bool (ir_nat_eqb a x) Bool.false) => h) (fun (h : @Eq Bool (ir_nat_eqb a x) Bool.true) => ir_bool_false_ne_true (@Eq Bool (ir_nat_eqb a x) Bool.false) (@Eq.trans Bool Bool.false (ir_nat_ltb x n) Bool.true (@Eq.symm Bool (ir_nat_ltb x n) Bool.false (@Eq.subst Nat (fun (k : Nat) => @Eq Bool (ir_nat_ltb k n) Bool.false) a x (ir_nat_eqb_sound a x h) ha)) hx)) (ir_nat_eqb a x) (@Eq.refl Bool (ir_nat_eqb a x))";

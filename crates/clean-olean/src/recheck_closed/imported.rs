@@ -280,6 +280,19 @@ impl ImportedConeGate {
         Ok(gate)
     }
 
+    pub(super) fn admitted_names(&self) -> impl Iterator<Item = &Name> {
+        self.admitted.iter()
+    }
+
+    /// Source-value evidence for a frozen source checked by this fresh gate.
+    /// A type-only base-stub upgrade supports logical replay, not its source
+    /// value. Given records need the same logical declaration and family;
+    /// freshly admitted family records retain their actual replay evidence.
+    /// The consuming witness still requires actual kernel verification.
+    pub(super) fn has_source_record_evidence(&self, source: &Environment, name: &Name) -> bool {
+        self.admitted.contains(name) || same_as_replayed(source, &self.replay, name)
+    }
+
     /// Read-only access to the declarations actually admitted into this gate.
     #[must_use]
     pub fn environment(&self) -> &Environment {

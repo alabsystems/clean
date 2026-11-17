@@ -91,6 +91,26 @@ fn metadata_roles_keep_every_original_literal_visible() {
 }
 
 #[test]
+fn audited_matcher_namespace_does_not_exempt_a_lookup_in_another_source_file() {
+    // The manual audit is local to the real storage implementation. It must
+    // neither erase the occurrence nor become a global spelling exemption.
+    assert_refused(
+        &plant(
+            "env/exposure.rs",
+            r#"self.get_const(&Name::from_string("Clean.matcherInfo.v1"));"#,
+        ),
+        "env/exposure.rs",
+        "Clean.matcherInfo.v1",
+    );
+    assert!(Census::build()
+        .literal_sites()
+        .iter()
+        .any(|((file, _), (literal, role))| file == "env/matcher.rs"
+            && literal == "Clean.matcherInfo.v1"
+            && *role == Role::Candidate));
+}
+
+#[test]
 fn same_spelling_lookups_and_dispatch_beside_metadata_are_refused() {
     for (literal, file, _) in METADATA {
         let body = format!(

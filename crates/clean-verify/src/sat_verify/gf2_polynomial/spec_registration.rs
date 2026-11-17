@@ -50,10 +50,10 @@ impl Specification {
         // the clause is satisfied iff the polynomial evaluates to 0.
         self.add_inductive(
             r"inductive ClausePolySoundness : forall (nv : Nat), ClausePolyEncoding nv → Type
-| single_pos : forall (nv : Nat) (var : Nat), ClausePolySoundness nv (ClausePolyEncoding.single_pos nv var)
-| single_neg : forall (nv : Nat) (var : Nat), ClausePolySoundness nv (ClausePolyEncoding.single_neg nv var)
-| extend_pos : forall (nv : Nat) (var : Nat) (prev : ClausePolyEncoding nv) (h : ClausePolySoundness nv prev), ClausePolySoundness nv (ClausePolyEncoding.extend_pos nv var prev)
-| extend_neg : forall (nv : Nat) (var : Nat) (prev : ClausePolyEncoding nv) (h : ClausePolySoundness nv prev), ClausePolySoundness nv (ClausePolyEncoding.extend_neg nv var prev)",
+| single_pos : forall (nv : Nat) (var : Nat), ClausePolySoundness nv (@ClausePolyEncoding.single_pos nv var)
+| single_neg : forall (nv : Nat) (var : Nat), ClausePolySoundness nv (@ClausePolyEncoding.single_neg nv var)
+| extend_pos : forall (nv : Nat) (var : Nat) (prev : ClausePolyEncoding nv) (h : ClausePolySoundness nv prev), ClausePolySoundness nv (@ClausePolyEncoding.extend_pos nv var prev)
+| extend_neg : forall (nv : Nat) (var : Nat) (prev : ClausePolyEncoding nv) (h : ClausePolySoundness nv prev), ClausePolySoundness nv (@ClausePolyEncoding.extend_neg nv var prev)",
             "Clause-polynomial soundness witness for GF01. Base cases: \
              a single positive literal x satisfies the clause iff (1+x)=0 \
              iff x=1; a single negative literal satisfies iff x=0. \
@@ -110,9 +110,9 @@ impl Specification {
         // terminates over GF(2) with boolean axioms.
         self.add_inductive(
             r"inductive GroebnerTerminates : forall (mp : Nat), GroebnerStep mp → Type
-| initial : forall (mp : Nat), GroebnerTerminates mp (GroebnerStep.initial mp)
-| s_reduce : forall (mp : Nat) (i : Nat) (j : Nat) (prev : GroebnerStep mp) (h : GroebnerTerminates mp prev), GroebnerTerminates mp (GroebnerStep.s_reduce mp i j prev)
-| add_to_basis : forall (mp : Nat) (prev : GroebnerStep mp) (h : GroebnerTerminates mp prev), GroebnerTerminates mp (GroebnerStep.add_to_basis mp prev)",
+| initial : forall (mp : Nat), GroebnerTerminates mp (@GroebnerStep.initial mp)
+| s_reduce : forall (mp : Nat) (i : Nat) (j : Nat) (prev : GroebnerStep mp) (h : GroebnerTerminates mp prev), GroebnerTerminates mp (@GroebnerStep.s_reduce mp i j prev)
+| add_to_basis : forall (mp : Nat) (prev : GroebnerStep mp) (h : GroebnerTerminates mp prev), GroebnerTerminates mp (@GroebnerStep.add_to_basis mp prev)",
             "Groebner termination witness for GF03. Boolean axioms \
              (x^2=x) ensure all polynomials are multilinear. The ring \
              GF(2)[x1,...,xn]/(x1^2-x1,...,xn^2-xn) has at most 2^n \
@@ -134,14 +134,14 @@ impl Specification {
                 "fun (nv : Nat) (enc : ClausePolyEncoding nv) => \
                  @ClausePolyEncoding.rec nv \
                    (fun (e : ClausePolyEncoding nv) => ClausePolySoundness nv e) \
-                   (fun (var : Nat) => ClausePolySoundness.single_pos nv var) \
-                   (fun (var : Nat) => ClausePolySoundness.single_neg nv var) \
+                   (fun (var : Nat) => @ClausePolySoundness.single_pos nv var) \
+                   (fun (var : Nat) => @ClausePolySoundness.single_neg nv var) \
                    (fun (var : Nat) (prev : ClausePolyEncoding nv) \
                         (ih : ClausePolySoundness nv prev) => \
-                     ClausePolySoundness.extend_pos nv var prev ih) \
+                     @ClausePolySoundness.extend_pos nv var prev ih) \
                    (fun (var : Nat) (prev : ClausePolyEncoding nv) \
                         (ih : ClausePolySoundness nv prev) => \
-                     ClausePolySoundness.extend_neg nv var prev ih) \
+                     @ClausePolySoundness.extend_neg nv var prev ih) \
                    enc"
                 .to_string(),
             ),
@@ -203,12 +203,12 @@ impl Specification {
                 "fun (mp : Nat) (step : GroebnerStep mp) => \
                  @GroebnerStep.rec mp \
                    (fun (s : GroebnerStep mp) => GroebnerTerminates mp s) \
-                   (GroebnerTerminates.initial mp) \
+                   (@GroebnerTerminates.initial mp) \
                    (fun (i : Nat) (j : Nat) \
                         (prev : GroebnerStep mp) (ih : GroebnerTerminates mp prev) => \
-                     GroebnerTerminates.s_reduce mp i j prev ih) \
+                     @GroebnerTerminates.s_reduce mp i j prev ih) \
                    (fun (prev : GroebnerStep mp) (ih : GroebnerTerminates mp prev) => \
-                     GroebnerTerminates.add_to_basis mp prev ih) \
+                     @GroebnerTerminates.add_to_basis mp prev ih) \
                    step"
                     .to_string(),
             ),

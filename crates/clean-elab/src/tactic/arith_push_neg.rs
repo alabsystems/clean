@@ -196,6 +196,26 @@ pub fn match_not(expr: &Expr) -> Option<Expr> {
     None
 }
 
+/// Match the `Not` HEAD only, as Mathlib's `push_neg` does
+/// (`transformNegationStep`: `whnfR e` then `Expr.not?`, which is
+/// `e.app1? ``Not`). `whnfR` never turns an arrow into `Not`, so a
+/// hypothesis or goal written `P → False` is not a negation to `push_neg`:
+/// Mathlib leaves it as written. [`match_not`] reads both spellings and stays
+/// for the tactics that want both.
+/// REQUIRES: `expr` is a well-formed expression tree.
+/// ENSURES: Returns `Some(P)` exactly for `Not P`, `None` otherwise. An
+/// `MData` wrapper is not looked through here: the caller's traversal
+/// descends into it and keeps it around the rewritten proposition.
+pub(crate) fn match_not_head(expr: &Expr) -> Option<Expr> {
+    match expr.kind() {
+        ExprKind::App(f, arg) => match f.kind() {
+            ExprKind::Const(name, _) if name.to_string() == "Not" => Some((**arg).clone()),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
 /// Match an And expression
 /// REQUIRES: `expr` is a well-formed expression tree.
 /// ENSURES: Returns `(lhs, rhs)` only for fully-applied `And lhs rhs` spines.
@@ -252,6 +272,7 @@ pub fn match_iff(expr: &Expr) -> Option<(Expr, Expr)> {
 /// ENSURES: Returns `Some((P, Q))` only for proposition-domain `Pi`
 /// expressions whose codomain is not `False`.
 /// ENSURES: Negation encodings `P -> False` are rejected.
+#[cfg_attr(not(test), allow(dead_code))]
 fn match_implies(expr: &Expr) -> Option<(Expr, Expr)> {
     if let ExprKind::Pi(_, dom, cod) = expr.kind() {
         if is_prop(dom) && !is_false(cod) {
@@ -266,6 +287,7 @@ fn match_implies(expr: &Expr) -> Option<(Expr, Expr)> {
 /// ENSURES: Returns `(binder_ty, body)` only for `Pi` binders over
 /// non-`Prop` domains.
 /// ENSURES: Implication-style `Pi` nodes over propositions are rejected.
+#[cfg_attr(not(test), allow(dead_code))]
 fn match_forall_push_neg(expr: &Expr) -> Option<(Expr, Expr)> {
     if let ExprKind::Pi(_, dom, cod) = expr.kind() {
         if !is_prop(dom) {
@@ -546,6 +568,7 @@ fn make_forall_push_neg(ty: &Expr, body: &Expr) -> Expr {
 /// `state`'s environment.
 /// ENSURES: Returns `Exists ty (fun _ => body)` using
 /// `state.mk_const_str("Exists")`.
+#[cfg_attr(not(test), allow(dead_code))]
 fn make_exists_push_neg(ty: &Expr, body: &Expr, state: &mut ProofState) -> Expr {
     let exists_const = state.mk_const_str("Exists");
     let lam = Expr::lam(BinderInfo::Default, ty.clone(), body.clone());

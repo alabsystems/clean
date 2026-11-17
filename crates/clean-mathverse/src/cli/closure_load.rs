@@ -1305,6 +1305,8 @@ fn build_kernel_faithful_shard(
 
     let parsed = crate::lean4::olean::olean_bridge::parse_target_module_with_proofs(olean)
         .map_err(|e| stamp_err(format!("parse: {e}")))?;
+    crate::lean4::olean::require_lean_records_only(&parsed)
+        .map_err(|error| stamp_err(error.to_string()))?;
 
     // Convert each of the module's OWN non-inductive declarations through the
     // SAME `convert_expr` path the eager olean import uses, WITHOUT environment
@@ -1326,9 +1328,9 @@ fn build_kernel_faithful_shard(
     // build-time round-trip oracle after serialization.
     let mut served: Vec<(u32, clean_kernel::env::ConstantInfo)> = Vec::new();
     for constant in &parsed.constants {
-        // Skip Lean compiler-IR stage decls (`._cstage1`/`._cstage2`): not
-        // kernel-checkable, never enter the shard (matches the legacy builder).
-        if clean_olean::import::is_compiler_ir_name(&constant.name) {
+        // Keep safe compiler-looking kernel records. Only the record
+        // itself can supply unsafe/partial replay-exclusion authority.
+        if clean_olean::import::is_nonreplayable_compiler_constant(constant) {
             continue;
         }
         // Convert to a kernel ConstantInfo (carries the TRUE reducibility from
@@ -2319,4 +2321,23 @@ mod sibling_discovery_tests {
             "self-contained project must still discover its built deps; got {roots:?}"
         );
     }
+}
+
+#[cfg(test)]
+#[test]
+fn compiler_record_roles_kernel_faithful_shard_refuses_payload() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("PayloadRoles.olean");
+    std::fs::write(
+        &path,
+        crate::lean4::olean::compiler_record_roles_tests::fixture_bytes(),
+    )
+    .unwrap();
+    let error = build_kernel_faithful_shard(&path, "PayloadRoles")
+        .expect_err("a raw-record shard cannot substitute payload mirrors");
+    assert!(matches!(error, MathverseCliError::StampClosure { .. }));
+    assert!(
+        error.to_string().contains("Clean payload declarations"),
+        "{error}"
+    );
 }

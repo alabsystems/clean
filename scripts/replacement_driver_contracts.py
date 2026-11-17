@@ -21,22 +21,33 @@ PINS = {
     RUNNER: 'a9f5df3c760826bac21e5719bac746d9ad661c0b',
 }
 
+PINS_436 = {**PINS, DOC: 'd7d16d6cb338d3a1e496a29ea67789c46f470ccf'}
+
+
+def pins_for_world(world):
+    if world == 'v4.35.0':
+        return PINS
+    if world == 'v4.36.0':
+        return PINS_436
+    raise ValueError('unreviewed driver world: ' + world)
+
 
 def blob(text):
     raw = text.encode()
     return hashlib.sha1(b'blob ' + str(len(raw)).encode() + b'\0' + raw).hexdigest()
 
 
-def require(path, sources):
+def require(path, sources, pins=None):
+    pins = PINS if pins is None else pins
     if path not in sources:
         raise ValueError('driver source not archived: ' + path)
-    if path in PINS and blob(sources[path]) != PINS[path]:
+    if path in pins and blob(sources[path]) != pins[path]:
         raise ValueError('unreviewed driver grammar: ' + path)
     return sources[path]
 
 
-def evidence(path, sources, targets, start=0, end=None):
-    text = require(path, sources)
+def evidence(path, sources, targets, start=0, end=None, *, pins=None):
+    text = require(path, sources, pins)
     if end is None:
         end = len(text)
     return dict(path=path, **targets[path], sha256=hashlib.sha256(text.encode()).hexdigest(),
@@ -115,19 +126,25 @@ def server_directives(text, handlers):
     return sessions
 
 
-def driver_contract(path, driver, sources, targets):
-    text = require(path, sources)
-    driver_text = require(driver, sources)
-    contract = dict(schema='clean-source-driver-contract-v1', input=evidence(path, sources, targets),
-        driver=evidence(driver, sources, targets),
+def driver_contract(path, driver, sources, targets, world='v4.35.0'):
+    pins = pins_for_world(world)
+    text = require(path, sources, pins)
+    driver_text = require(driver, sources, pins)
+    def source_evidence(p, start=0, end=None):
+        return evidence(p, sources, targets, start, end, pins=pins)
+    contract = dict(schema='clean-source-driver-contract-v1', input=source_evidence(path),
+        driver=source_evidence(driver),
         invocation=dict(cwd=str(PurePosixPath(path).parent), argv=['lean', '-Dlinter.all=false', '--run', 'run_test.lean', PurePosixPath(path).name]),
         environment=dict(ASAN_OPTIONS='detect_leaks=0', stage='configured upstream stage', TEST_CTEST='1 under CTest',
             configured_variables=['LEAN_TEST_VARS', 'STAGE', 'SRC_DIR', 'TEST_DIR', 'BUILD_DIR', 'SCRIPT_DIR', 'PATH=stage bin before inherited PATH', 'LEANC_OPTS', 'CXX'],
             platform_condition='CMake WIN32 rewrites drive-letter paths for bash; see pinned catalog'),
-        catalog_environment=evidence('tests/CMakeLists.txt', sources, targets),
+        catalog_environment=source_evidence('tests/CMakeLists.txt'),
         imports=dict(state='direct-header-statements; transitive closure requires module resolution',
                      input=import_records(text) if path.endswith('.lean') else [], driver=import_records(driver_text)),
         measured=False)
+    if driver == DOC and world == 'v4.36.0':
+        from replacement_docparse_436 import docparse_contract
+        return docparse_contract(contract, path, driver_text, sources, targets)
     if driver == DOC:
         configs = driver_text.split('def testConfigs', 1)[1].split('\ndef main', 1)[0]
         entries = list(re.finditer(r'^  \("([^"]+)",', configs, re.M))
@@ -154,8 +171,8 @@ def driver_contract(path, driver, sources, targets):
         else:
             contract['expected_driver_exit'] = 0
     elif driver == SERVER:
-        runner = require(RUNNER, sources); defs = definitions(runner)
-        ipc = require(IPC, sources)
+        runner = require(RUNNER, sources, pins); defs = definitions(runner)
+        ipc = require(IPC, sources, pins)
         dispatch = runner[slice(*defs['processDirective'])]
         handlers = {}
         for m in re.finditer(r'^  \| ((?:"[^"]+"\s*(?:\|\s*)?)+) => (\w+)', dispatch, re.M):
@@ -183,11 +200,11 @@ def driver_contract(path, driver, sources, targets):
         helper_names = sorted(set(used) | {'processDirective', 'processLine', 'main', 'reset', 'request',
             'rpcRequest', 'requestWithLoggedResponse', 'rpcRequestWithLoggedResponse', 'logResponse',
             'logRpcResponse', 'printOutputLn', 'patchUri', 'patchUris', 'waitForMessage', 'expandTraces'})
-        contract.update(kind='interactive-server', runner=evidence(RUNNER, sources, targets), ipc=evidence(IPC, sources, targets),
+        contract.update(kind='interactive-server', runner=source_evidence(RUNNER), ipc=source_evidence(IPC),
             imports=dict(contract['imports'], runner=import_records(runner), ipc=import_records(ipc)),
             directive_grammar=dict(session_separator='-- RESET', line_separator='newline', line_selection='exactly two components after splitting on --; second starts immediately with ^, v, or ⬑', method='remove marker; trimAscii before first colon', params='trimAscii after first colon, otherwise {}', target='v: next line; ^/⬑: last non-directive line; ⬑ column is marker start; other columns after --; UTF-8 byte offsets'),
             sessions=sessions, directive_count=sum(len(x['directives']) for x in sessions),
-            handler_contracts={name:evidence(RUNNER, sources, targets, *defs[name]) for name in helper_names},
+            handler_contracts={name:source_evidence(RUNNER, *defs[name]) for name in helper_names},
             server_invocation=dict(command='lean', args=['--server', '-DstderrAsMessages=false', '-Dexperimental.module=true'],
                 alternative=dict(condition='first driver argument == -p (not selected by this shell runner)', command='lake', args=['serve','--','-DstderrAsMessages=false','-Dexperimental.module=true'])),
             initialization=dict(request_id=0, method='initialize', hasWidgets=True, insertReplaceSupport=True,

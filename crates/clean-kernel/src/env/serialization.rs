@@ -15,19 +15,7 @@ use serde::{Deserialize, Serialize};
 
 use super::origin::ConstantOrigin;
 use super::types::ConstantInfo;
-use super::{Environment, EnvironmentDeserialize};
-
-// Only the private field carrier derives Deserialize. Direct calls to
-// `Environment::deserialize` and generic/nested serde restores therefore use
-// this trait implementation. Skipped validation stamps stay at their defaults;
-// the matcher index is re-derived solely from its persisted storage.
-impl<'de> Deserialize<'de> for Environment {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let mut environment = EnvironmentDeserialize::deserialize(deserializer)?.into_environment();
-        environment.rebuild_matcher_index();
-        Ok(environment)
-    }
-}
+use super::Environment;
 
 /// JSON-friendly intermediate representation of Environment
 /// Uses Vec instead of HashMap for JSON compatibility

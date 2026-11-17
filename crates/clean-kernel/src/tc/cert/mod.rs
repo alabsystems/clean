@@ -43,6 +43,32 @@ impl Drop for ClearRebindMemo<'_> {
     }
 }
 
+// The public Expr-only debug query is the sole owner of this scope. A nested
+// retained API overrides it with cert_retained; a private certificate consumer
+// outside the scope keeps its existing full-mode behavior.
+#[cfg(debug_assertions)]
+struct DiscardCertificateOutput<'a> {
+    flag: &'a std::cell::Cell<bool>,
+    previous: bool,
+}
+
+#[cfg(debug_assertions)]
+impl<'a> DiscardCertificateOutput<'a> {
+    fn enter(flag: &'a std::cell::Cell<bool>) -> Self {
+        Self {
+            flag,
+            previous: flag.replace(true),
+        }
+    }
+}
+
+#[cfg(debug_assertions)]
+impl Drop for DiscardCertificateOutput<'_> {
+    fn drop(&mut self) {
+        self.flag.set(self.previous);
+    }
+}
+
 /// Pre-interned names for type inference (avoids repeated allocation).
 static NAME_ZFC_SET: LazyLock<Name> = LazyLock::new(|| Name::from_string("ZFC.Set"));
 
@@ -132,6 +158,51 @@ impl<'env> TypeChecker<'env> {
         result
     }
 
+    /// Strict debug inference with no retained certificate output.
+    ///
+    /// This uses the SAME inference implementation as the retained path, not
+    /// release-mode fast inference: App arguments, binder domains and Let
+    /// annotations/values are still visited. Only certificate construction and
+    /// certificate-only rebinding may be elided. Returning only Expr keeps an
+    /// internal discard placeholder from escaping as public evidence.
+    #[cfg(debug_assertions)]
+    pub(super) fn infer_type_discard_cert(&self, e: &Expr) -> Result<Expr, TypeError> {
+        let _metered = self.begin_operation();
+        debug_assert!(!self.cert_retained.get());
+        debug_assert!(self.trace_collector.is_none());
+        debug_assert!(self.sharing_replay.is_none());
+        let _discard = DiscardCertificateOutput::enter(&self.cert_output_discarded);
+        stack_safe(|| self.infer_type_with_cert_impl(e)).map(|(ty, _)| ty)
+    }
+
+    #[cfg(debug_assertions)]
+    fn discards_certificate_output(&self) -> bool {
+        self.cert_output_discarded.get()
+            && !self.cert_retained.get()
+            && self.trace_collector.is_none()
+            && self.sharing_replay.is_none()
+    }
+
+    /// Omit output only inside the explicit debug Expr-only query scope.
+    /// Full checking still performs every typing operation. Retained, trace,
+    /// sharing and private full-certificate consumers obtain real output.
+    /// Placeholder output is never memoized as Some evidence.
+    fn inference_certificate(
+        &self,
+        build: impl FnOnce() -> crate::cert::ProofCert,
+    ) -> crate::cert::ProofCert {
+        // The repair changes debug type-only inference only. Release retains
+        // its existing certificate-construction behavior, including internal
+        // infer-only callers; its separate fast inference remains unchanged.
+        #[cfg(debug_assertions)]
+        if self.discards_certificate_output() {
+            return crate::cert::ProofCert::Sort {
+                level: crate::level::Level::zero(),
+            };
+        }
+        build()
+    }
+
     /// Implementation of type inference with certificates (called via stacker::maybe_grow).
     ///
     /// Every recursive call goes through `stack_safe` to prevent stack overflow
@@ -193,6 +264,13 @@ impl<'env> TypeChecker<'env> {
         }
         let infer_only = self.infer_only.get();
         let needs_cert = !infer_only || self.cert_retained.get();
+        // Debug has no fast-inference producer. A None entry under this scope
+        // was derived by the SAME strict certificate traversal, with the same
+        // infer_only bit in its key. Outside the scope, full/retained callers
+        // keep the existing real-certificate upgrade requirement. Release is
+        // unchanged and never reuses a weaker fast None entry as evidence.
+        #[cfg(debug_assertions)]
+        let needs_cert = needs_cert && !self.discards_certificate_output();
         let key = self.infer_arc_memo_key(arc);
         if let Some((_pin, ty, cert)) = self.infer_arc_memo.borrow().get(&key) {
             if let Some(cert) = cert {
@@ -211,8 +289,9 @@ impl<'env> TypeChecker<'env> {
         }
         let (ty, cert) = self.infer_type_with_cert_impl(arc.as_ref())?;
         let cert = Arc::new(cert);
-        // A fast-inference re-entry can have cached only a type. Full checking
-        // and retained inference must derive a REAL certificate and upgrade
+        // A type-only query can have cached only a type. A full certificate
+        // consumer outside the explicit discard scope, or retained inference,
+        // must derive a REAL certificate and upgrade
         // that entry in either window, before considering any new-admission
         // rotation. No certificate is weakened or replaced by a placeholder.
         let mut memo = self.infer_arc_memo.borrow_mut();

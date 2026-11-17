@@ -48,6 +48,7 @@ impl MinimalEnv {
         self.export_hidden.extend(delta.export_hidden);
         self.types.extend(delta.types);
         self.defs.extend(delta.defs);
+        self.delta_priorities.extend(delta.delta_priorities);
         self.inductives.extend(delta.inductives);
         self.quots.extend(delta.quots);
         self.recursors.extend(delta.recursors);

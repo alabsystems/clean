@@ -19,8 +19,8 @@ impl Specification {
                 &format!(
                     "def ir_byte_literal_{name}_v1 (tenv : KDeclEnv)
   (G : ListType KExpr) (input : KExpr) (result : IROption KExpr) : Type :=
-IROption.rec KExpr (fun (_ : IROption KExpr) => Type) Empty
-  (fun (T : KExpr) => {judgment} tenv G input T) result"
+@IROption.rec KExpr (fun (_ : IROption KExpr) => Type) Empty
+  (fun (T : KExpr) => @{judgment} tenv G input T) result"
                 ),
                 "Lift the existing model judgment over the actual optional observation: rejection is Empty and a successful value is the judgment's exact result type. No source execution or fallback type is asserted.",
             )?;
@@ -30,7 +30,7 @@ IROption.rec KExpr (fun (_ : IROption KExpr) => Type) Empty
   (G : ListType KExpr) (input : KExpr) (result : IROption KExpr) :
   ir_byte_literal_infers_v1 tenv G input result ->
   ir_byte_literal_typing_v1 tenv G input result :=
-IROption.rec KExpr
+@IROption.rec KExpr
   (fun (observed : IROption KExpr) =>
     ir_byte_literal_infers_v1 tenv G input observed ->
     ir_byte_literal_typing_v1 tenv G input observed)
@@ -47,7 +47,7 @@ IROption.rec KExpr
             let mut byte_arguments = String::new();
             for (index, byte) in bytes.iter().enumerate() {
                 premises.push_str(&format!(
-                    "\n  (byte{index} : Eq (IROption Nat) (bytes ({address})) (IROption.some Nat {byte}))"
+                    "\n  (byte{index} : Eq (IROption Nat) (bytes ({address})) (@IROption.some Nat {byte}))"
                 ));
                 byte_arguments.push_str(&format!(" byte{index}"));
                 address = format!("Nat.succ ({address})");
@@ -63,7 +63,7 @@ IROption.rec KExpr
                 "ir_byte_literal_type_v1 (IRByteMemoryV1.mk allocs bytes next)
     IRTy.fatstr_ (IRScalar.fat_ data {length})"
             );
-            let expected = format!("IROption.some KExpr literal_{kind}_type");
+            let expected = format!("@IROption.some KExpr literal_{kind}_type");
             let arguments = format!("allocs bytes next data bounded access {byte_arguments}");
 
             self.add_recursive_def(

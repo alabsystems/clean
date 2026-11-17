@@ -13,7 +13,8 @@
 use clean_kernel::env::Environment;
 use clean_kernel::name::Name;
 
-use crate::error::OleanResult;
+use super::binder_spine::BinderSpine;
+use super::ImportError;
 use crate::expr::{expr_tags, ParsedExpr};
 use crate::module::{ConstantKind, ParsedConstant};
 use crate::region::{is_ptr, CompactedRegion};
@@ -24,10 +25,13 @@ use crate::region::{is_ptr, CompactedRegion};
 fn read_value_shape(
     region: &CompactedRegion<'_>,
     mut ptr: u64,
-) -> OleanResult<(usize, Vec<String>)> {
+    constant: &str,
+) -> Result<(usize, Vec<String>), ImportError> {
     let mut lambdas = 0;
     let mut names = Vec::new();
+    let mut spine = BinderSpine::new(region, constant)?;
     while is_ptr(ptr) {
+        spine.visit(ptr)?;
         let offset = region.ptr_to_offset(ptr)?;
         let header = region.read_header_at(offset)?;
         CompactedRegion::require_expr_fields(&header, offset)?;
@@ -87,21 +91,15 @@ pub(crate) fn record_value_binder_names_from_region<'a>(
     env: &mut Environment,
     region: &CompactedRegion<'_>,
     constants: impl IntoIterator<Item = (&'a str, &'a ConstantKind, u64)>,
-) {
+) -> Result<(), ImportError> {
     for (name, kind, value_ptr) in constants {
         if !matches!(kind, ConstantKind::Definition) || value_ptr == 0 {
             continue;
         }
-        match read_value_shape(region, value_ptr) {
-            Ok((lambdas, names)) => record_strings(env, name, lambdas, &names),
-            Err(e) => {
-                tracing::warn!(
-                    target: "clean_olean::import",
-                    "value binder names of `{name}` could not be read: {e}"
-                );
-            }
-        }
+        let (lambdas, names) = read_value_shape(region, value_ptr, name)?;
+        record_strings(env, name, lambdas, &names);
     }
+    Ok(())
 }
 
 /// `ParsedModule` path: the same table, read off the parsed values.

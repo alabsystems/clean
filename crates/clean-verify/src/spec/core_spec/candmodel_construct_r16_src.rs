@@ -385,7 +385,7 @@ pub(super) fn ty_conv_step2() -> String {
     format!("whnf_step r16_convRedex2 {INST0}")
 }
 pub(super) fn val_conv_step2() -> String {
-    format!("whnf_step.beta r16_convRedex2 {INST0} (beta_reduces.beta {V1} {V0} {S0})")
+    format!("@whnf_step.beta r16_convRedex2 {INST0} (beta_reduces.beta {V1} {V0} {S0})")
 }
 
 pub(super) fn src_conv_star1() -> String {

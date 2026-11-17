@@ -1,0 +1,28 @@
+{
+  "lean_tag": "v4.36.0",
+  "lean_commit": "611c117bfaf7b7ae1cfcf246ce6fba31e8f509e9",
+  "sdk": "lean-4.36.0-darwin_aarch64",
+  "producer": {
+    "command": "lake build StableFixture.Defs:c",
+    "repeated_in_fresh_workspace": true,
+    "replacement_sha256": {
+      "Defs.ir": "6f0129b6e8e6365712e22756d234af2fc4daf07e75e15e7a7f0e405ef87e048f",
+      "Defs.ir.sig": "f2a765b926a8ecffcabe8b373d86eca8d4224c51a1d6df52cd152b9604264deb"
+    }
+  },
+  "sha256_in_both_worlds": {
+    "Defs.olean": "3ec49f7e3372df58916204c8bfada5881a51f2cb55e38f0ff21472da0b5bd72e",
+    "Defs.olean.server": "09458d683d09e2ed545a7e16f51406bbc08a75d02a67ef9df2dc87c592c30a30",
+    "Defs.olean.private": "9a51f97905dc69e7cbfee2c02e834e6a1385b5b8488b32ea713fa1e3f699acf5"
+  },
+  "observations": {
+    "baseline": {
+      "lean CapturedNat.lean": {"exit": 0, "stdout": "41\n"},
+      "lean --run App.lean": {"exit": 17, "stdout": "41\n"}
+    },
+    "replaced_ir": {
+      "lean CapturedNat.lean": {"exit": 0, "stdout": "42\n"},
+      "lean --run App.lean": {"exit": 17, "stdout": "42\n"}
+    }
+  }
+}

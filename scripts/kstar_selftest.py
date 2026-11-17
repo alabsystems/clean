@@ -2,8 +2,11 @@
 # Copyright 2026 The Clean contributors
 # SPDX-License-Identifier: Apache-2.0
 """Local controls for Q4's orchestration rules. No stub ever becomes a vote."""
+import contextlib
 import copy
+import io
 import json
+import subprocess
 import tempfile
 import sys
 from pathlib import Path
@@ -11,6 +14,94 @@ from unittest.mock import patch
 import kstar_recheck as k
 import lean4lean_selftest
 from kstar_subjects_selftest import restriction_controls
+
+
+# A tree with one file of each kind a member's build can read. `expected` must be
+# inputs and `unnamed` must not; each `refusals` edit (path, text) must make the
+# input rule refuse rather than name fewer files.
+SOURCE_TREE = {
+    'crates/m/Cargo.toml': '[package]\nname = "m"\n\n[dependencies]\nv = { path = "../../vendor/v" }\n',
+    'crates/m/build.rs': 'fn main() { let _ = std::fs::read_to_string("table.tsv"); let _ = "lean-toolchain"; }\n',
+    'crates/m/table.tsv': '# world\tfixture\nw\tfixtures/w.bin\n',
+    'crates/m/notes.md': 'tracked under crates/ and named by nothing\n',
+    'crates/m/src/lib.rs': (
+        'pub const T: &str = include_str!("../../../data/t.json");\n'
+        'pub const G: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../data/g.json"));\n'
+        'macro_rules! fx { ($n:literal) => { include_str!(concat!("../../../fx/", $n)) }; }\n'
+        '// include_str!("../../../data/mentioned.json"), include_str!("absent.json")\n'
+        'pub const S: &str = r#"include_str!("../../../data/quoted.json")"#;\n'
+        '#[path = "../../../island/model.clean"]\nmod model;\n'
+        'include!(concat!(env!("OUT_DIR"), "/generated.rs"));\n'),
+    'data/t.json': '{}', 'data/g.json': '{}', 'data/mentioned.json': '{}', 'data/quoted.json': '{}',
+    'data/unnamed.json': '{}', 'data/c.bin': 'c', 'fx/a.lean': 'a', 'fx/sub/b.lean': 'b',
+    'island/model.clean': 'mod child;\n',
+    'island/child.rs': 'pub const C: &[u8] = include_bytes!("../data/c.bin");\n',
+    'lean-toolchain': 'leanprover/lean4:v0\n', 'fixtures/w.bin': 'w',
+    'vendor/v/Cargo.toml': '[package]\nname = "v"\n', 'vendor/v/README': 'r',
+    'vendor/v/src/lib.rs': 'pub const D: &str = include_str!("../data.txt");\n', 'vendor/v/data.txt': 'd',
+}
+EXPECTED = ['data/t.json', 'data/g.json', 'fx/a.lean', 'fx/sub/b.lean', 'data/mentioned.json',
+            'data/quoted.json', 'island/model.clean', 'island/child.rs', 'data/c.bin',
+            'crates/m/table.tsv', 'crates/m/notes.md', 'lean-toolchain', 'fixtures/w.bin',
+            'vendor/v/Cargo.toml', 'vendor/v/README', 'vendor/v/src/lib.rs', 'vendor/v/data.txt']
+REFUSALS = [
+    ('an include_str! in code naming no file', 'crates/m/src/lib.rs',
+     'pub const X: &str = include_str!("absent.json");\n'),
+    ('a wildcard include matching no file', 'crates/m/src/lib.rs',
+     'macro_rules! y { ($n:literal) => { include_str!(concat!("../../../none/", $n)) }; }\n'),
+    ('a #[path] naming no file', 'crates/m/src/lib.rs', '#[path = "absent.rs"]\nmod absent;\n'),
+    ('OUT_DIR without a build script', 'vendor/v/src/lib.rs',
+     'include!(concat!(env!("OUT_DIR"), "/generated.rs"));\n'),
+    ('a path dependency outside the repository', 'crates/m/Cargo.toml',
+     'w = { path = "../../../elsewhere" }\n'),
+]
+
+
+def source_tree(root):
+    for rel, text in [*((p, p) for p in k.FIXED_INPUTS), *SOURCE_TREE.items(),
+                      ('../elsewhere/Cargo.toml', '[package]\nname = "w"\n')]:
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        (root / rel).write_text(text)
+    for argv in (['init', '-q'], ['add', '-A']):
+        subprocess.run(['git', '-C', str(root), *argv], check=True, capture_output=True)
+
+
+def input_controls(check):
+    """The input rule: a file a member's build reads moves the record; a use it cannot name refuses."""
+    def verdict(path):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = k.check_record(path)
+        return code, out.getvalue()
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td).resolve() / 'repository'
+        source_tree(root)
+        record = root / 'record.json'
+        with patch.object(k, 'ROOT', root):
+            inputs = k.source_inputs()
+            record.write_text(json.dumps(dict(source_inputs=inputs, success=False)))
+            code, before = verdict(record)
+            (root / 'data/t.json').write_text('{"moved": true}')
+            code_after, after = verdict(record)
+            check('an include_str! target outside crates/ makes the record stale',
+                  'stale source inputs' not in before and code_after == 1 and 'stale source inputs' in after)
+            for rel in EXPECTED:
+                check('input: ' + rel, rel in inputs)
+            check('a file nothing names is no input', 'data/unnamed.json' not in inputs)
+            old_rule = set(k.FIXED_INPUTS) | {p.relative_to(root).as_posix() for p in (root / 'crates').rglob('*')
+                                               if p.suffix in ('.rs', '.toml')}
+            check('no input of the 2026-11-13 rule is dropped', old_rule <= set(inputs))
+            for name, rel, text in REFUSALS:
+                original = (root / rel).read_text()
+                (root / rel).write_text(original + text)
+                try:
+                    k.source_inputs()
+                    refused = False
+                except ValueError:
+                    refused = True
+                code, out = verdict(record)
+                check('refuses ' + name, refused and code == 1 and 'not knowable here' in out)
+                (root / rel).write_text(original)
 
 
 def selftest():
@@ -91,6 +182,7 @@ def selftest():
             candidate['identities'] = {}
             p.write_text(json.dumps(candidate))
             check('missing member identity cannot green the standing record', k.check_record(p) == 1)
+    input_controls(check)
     l4l_checks = []
     lean4lean_selftest.selftest(l4l_checks)
     checks += len(l4l_checks)

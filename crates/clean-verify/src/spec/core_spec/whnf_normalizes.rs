@@ -556,7 +556,7 @@ fn whnf_normalizes_bd_proof() -> String {
         "(fun (x : KExpr) (hw : is_whnf x) ",
         "(_rec : forall (y : KExpr), beta_reduces_bd x y -> whnf_normalizes_result y) => ",
         "@whnf_normalizes_result.intro x x ",
-        "(beta_bd_to.refl x (beta_bd_normal.whnf x hw))) ",
+        "(beta_bd_to.refl x (@beta_bd_normal.whnf x hw))) ",
         // step arm: e ~> x'; recurse on x' via the per-reduct recursion, prepend.
         "(fun (x : KExpr) (x' : KExpr) (hs : beta_reduces_bd x x') ",
         "(recx : forall (y : KExpr), beta_reduces_bd x y -> whnf_normalizes_result y) => ",
@@ -567,7 +567,7 @@ fn whnf_normalizes_bd_proof() -> String {
         "beta_reduces_bd (KExpr.app f a) y -> whnf_normalizes_result y) => ",
         "@whnf_normalizes_result.intro (KExpr.app f a) (KExpr.app f a) ",
         "(beta_bd_to.refl (KExpr.app f a) ",
-        "(beta_bd_normal.stuck (KExpr.app f a) (whnf_stuck_head.app f a hsf)))) ",
+        "(@beta_bd_normal.stuck (KExpr.app f a) (whnf_stuck_head.app f a hsf)))) ",
         // stuck_proj arm (proj/lit rung): e = proj s i sub with a stuck scrutinee; the
         // projection is a normal form (whnf_stuck_head.proj over the stuck scrutinee).
         "(fun (ps : Name) (pidx : Nat) (psub : KExpr) (hsp : whnf_stuck_head psub) ",
@@ -575,7 +575,7 @@ fn whnf_normalizes_bd_proof() -> String {
         "beta_reduces_bd (KExpr.proj ps pidx psub) y -> whnf_normalizes_result y) => ",
         "@whnf_normalizes_result.intro (KExpr.proj ps pidx psub) (KExpr.proj ps pidx psub) ",
         "(beta_bd_to.refl (KExpr.proj ps pidx psub) ",
-        "(beta_bd_normal.stuck (KExpr.proj ps pidx psub) (whnf_stuck_head.proj ps pidx psub hsp)))) ",
+        "(@beta_bd_normal.stuck (KExpr.proj ps pidx psub) (whnf_stuck_head.proj ps pidx psub hsp)))) ",
         // index + major for whnf_progress_result.rec, then the per-reduct recursion.
         "e (whnf_progress_bd e hceil hcf) ",
         "(fun (y : KExpr) (hsy : beta_reduces_bd e y) => ",

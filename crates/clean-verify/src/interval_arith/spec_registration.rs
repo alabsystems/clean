@@ -40,14 +40,14 @@ impl Specification {
 
         self.add_inductive(
             r"inductive IvContainSound : forall (n : Nat), IvArithOp n → Type
-| add : forall (n : Nat), IvContainSound n (IvArithOp.add n)
-| sub : forall (n : Nat), IvContainSound n (IvArithOp.sub n)
-| neg : forall (n : Nat), IvContainSound n (IvArithOp.neg n)
-| mul : forall (n : Nat), IvContainSound n (IvArithOp.mul n)
-| div : forall (n : Nat), IvContainSound n (IvArithOp.div n)
-| abs : forall (n : Nat), IvContainSound n (IvArithOp.abs n)
-| pow : forall (n : Nat) (exp : Nat), IvContainSound n (IvArithOp.pow n exp)
-| sqrt : forall (n : Nat), IvContainSound n (IvArithOp.sqrt n)",
+| add : forall (n : Nat), IvContainSound n (@IvArithOp.add n)
+| sub : forall (n : Nat), IvContainSound n (@IvArithOp.sub n)
+| neg : forall (n : Nat), IvContainSound n (@IvArithOp.neg n)
+| mul : forall (n : Nat), IvContainSound n (@IvArithOp.mul n)
+| div : forall (n : Nat), IvContainSound n (@IvArithOp.div n)
+| abs : forall (n : Nat), IvContainSound n (@IvArithOp.abs n)
+| pow : forall (n : Nat) (exp : Nat), IvContainSound n (@IvArithOp.pow n exp)
+| sqrt : forall (n : Nat), IvContainSound n (@IvArithOp.sqrt n)",
             "Containment soundness witness for T01-T08. Each constructor \
              witnesses that the corresponding operation preserves containment: \
              if inputs are contained in input intervals, the output is contained \
@@ -72,12 +72,12 @@ impl Specification {
 
         self.add_inductive(
             r"inductive IvStructSound : forall (n : Nat), IvStructOp n → Type
-| intersect : forall (n : Nat), IvStructSound n (IvStructOp.intersect n)
-| hull : forall (n : Nat), IvStructSound n (IvStructOp.hull n)
-| subset_trans : forall (n : Nat), IvStructSound n (IvStructOp.subset_trans n)
-| contain_trans : forall (n : Nat), IvStructSound n (IvStructOp.contain_trans n)
-| point : forall (n : Nat), IvStructSound n (IvStructOp.point n)
-| reflexive : forall (n : Nat), IvStructSound n (IvStructOp.reflexive n)",
+| intersect : forall (n : Nat), IvStructSound n (@IvStructOp.intersect n)
+| hull : forall (n : Nat), IvStructSound n (@IvStructOp.hull n)
+| subset_trans : forall (n : Nat), IvStructSound n (@IvStructOp.subset_trans n)
+| contain_trans : forall (n : Nat), IvStructSound n (@IvStructOp.contain_trans n)
+| point : forall (n : Nat), IvStructSound n (@IvStructOp.point n)
+| reflexive : forall (n : Nat), IvStructSound n (@IvStructOp.reflexive n)",
             "Structural property soundness witness for T09-T14. Each constructor \
              witnesses the corresponding structural property: intersection \
              preserves membership, hull contains both inputs, subset/containment \
@@ -100,9 +100,9 @@ impl Specification {
 
         self.add_inductive(
             r"inductive IvWidthSound : forall (n : Nat), IvWidthOp n → Type
-| add_width : forall (n : Nat), IvWidthSound n (IvWidthOp.add_width n)
-| sub_width : forall (n : Nat), IvWidthSound n (IvWidthOp.sub_width n)
-| neg_width : forall (n : Nat), IvWidthSound n (IvWidthOp.neg_width n)",
+| add_width : forall (n : Nat), IvWidthSound n (@IvWidthOp.add_width n)
+| sub_width : forall (n : Nat), IvWidthSound n (@IvWidthOp.sub_width n)
+| neg_width : forall (n : Nat), IvWidthSound n (@IvWidthOp.neg_width n)",
             "Width bound soundness witness for T15-T17. Each constructor \
              witnesses the exact width formula for the corresponding operation. \
              Part of #3362.",
@@ -122,9 +122,9 @@ impl Specification {
 
         self.add_inductive(
             r"inductive IvAlgebraSound : forall (n : Nat), IvAlgebraOp n → Type
-| add_comm : forall (n : Nat), IvAlgebraSound n (IvAlgebraOp.add_comm n)
-| mul_comm : forall (n : Nat), IvAlgebraSound n (IvAlgebraOp.mul_comm n)
-| add_assoc : forall (n : Nat), IvAlgebraSound n (IvAlgebraOp.add_assoc n)",
+| add_comm : forall (n : Nat), IvAlgebraSound n (@IvAlgebraOp.add_comm n)
+| mul_comm : forall (n : Nat), IvAlgebraSound n (@IvAlgebraOp.mul_comm n)
+| add_assoc : forall (n : Nat), IvAlgebraSound n (@IvAlgebraOp.add_assoc n)",
             "Algebraic property soundness witness for T18-T20. Each constructor \
              witnesses the corresponding algebraic identity on intervals. \
              Part of #3362.",
@@ -134,8 +134,8 @@ impl Specification {
 
         self.add_definition(SpecDefinition {
             name: "ia_t01_add_containment".to_string(),
-            type_src: "forall (n : Nat), IvContainSound n (IvArithOp.add n)".to_string(),
-            value_src: Some("fun (n : Nat) => IvContainSound.add n".to_string()),
+            type_src: "forall (n : Nat), IvContainSound n (@IvArithOp.add n)".to_string(),
+            value_src: Some("fun (n : Nat) => @IvContainSound.add n".to_string()),
             is_axiom: false,
             category: AxiomCategory::DerivedLemma,
             proof_status: ProofStatus::DerivedPending,
@@ -153,8 +153,8 @@ impl Specification {
 
         self.add_definition(SpecDefinition {
             name: "ia_t02_sub_containment".to_string(),
-            type_src: "forall (n : Nat), IvContainSound n (IvArithOp.sub n)".to_string(),
-            value_src: Some("fun (n : Nat) => IvContainSound.sub n".to_string()),
+            type_src: "forall (n : Nat), IvContainSound n (@IvArithOp.sub n)".to_string(),
+            value_src: Some("fun (n : Nat) => @IvContainSound.sub n".to_string()),
             is_axiom: false,
             category: AxiomCategory::DerivedLemma,
             proof_status: ProofStatus::DerivedPending,
@@ -172,8 +172,8 @@ impl Specification {
 
         self.add_definition(SpecDefinition {
             name: "ia_t03_neg_containment".to_string(),
-            type_src: "forall (n : Nat), IvContainSound n (IvArithOp.neg n)".to_string(),
-            value_src: Some("fun (n : Nat) => IvContainSound.neg n".to_string()),
+            type_src: "forall (n : Nat), IvContainSound n (@IvArithOp.neg n)".to_string(),
+            value_src: Some("fun (n : Nat) => @IvContainSound.neg n".to_string()),
             is_axiom: false,
             category: AxiomCategory::DerivedLemma,
             proof_status: ProofStatus::DerivedPending,
@@ -190,8 +190,8 @@ impl Specification {
 
         self.add_definition(SpecDefinition {
             name: "ia_t04_mul_containment".to_string(),
-            type_src: "forall (n : Nat), IvContainSound n (IvArithOp.mul n)".to_string(),
-            value_src: Some("fun (n : Nat) => IvContainSound.mul n".to_string()),
+            type_src: "forall (n : Nat), IvContainSound n (@IvArithOp.mul n)".to_string(),
+            value_src: Some("fun (n : Nat) => @IvContainSound.mul n".to_string()),
             is_axiom: false,
             category: AxiomCategory::DerivedLemma,
             proof_status: ProofStatus::DerivedPending,
@@ -209,8 +209,8 @@ impl Specification {
 
         self.add_definition(SpecDefinition {
             name: "ia_t05_div_containment".to_string(),
-            type_src: "forall (n : Nat), IvContainSound n (IvArithOp.div n)".to_string(),
-            value_src: Some("fun (n : Nat) => IvContainSound.div n".to_string()),
+            type_src: "forall (n : Nat), IvContainSound n (@IvArithOp.div n)".to_string(),
+            value_src: Some("fun (n : Nat) => @IvContainSound.div n".to_string()),
             is_axiom: false,
             category: AxiomCategory::DerivedLemma,
             proof_status: ProofStatus::DerivedPending,
@@ -228,8 +228,8 @@ impl Specification {
 
         self.add_definition(SpecDefinition {
             name: "ia_t06_abs_containment".to_string(),
-            type_src: "forall (n : Nat), IvContainSound n (IvArithOp.abs n)".to_string(),
-            value_src: Some("fun (n : Nat) => IvContainSound.abs n".to_string()),
+            type_src: "forall (n : Nat), IvContainSound n (@IvArithOp.abs n)".to_string(),
+            value_src: Some("fun (n : Nat) => @IvContainSound.abs n".to_string()),
             is_axiom: false,
             category: AxiomCategory::DerivedLemma,
             proof_status: ProofStatus::DerivedPending,
@@ -247,9 +247,9 @@ impl Specification {
 
         self.add_definition(SpecDefinition {
             name: "ia_t07_pow_containment".to_string(),
-            type_src: "forall (n : Nat) (exp : Nat), IvContainSound n (IvArithOp.pow n exp)"
+            type_src: "forall (n : Nat) (exp : Nat), IvContainSound n (@IvArithOp.pow n exp)"
                 .to_string(),
-            value_src: Some("fun (n : Nat) (exp : Nat) => IvContainSound.pow n exp".to_string()),
+            value_src: Some("fun (n : Nat) (exp : Nat) => @IvContainSound.pow n exp".to_string()),
             is_axiom: false,
             category: AxiomCategory::DerivedLemma,
             proof_status: ProofStatus::DerivedPending,
@@ -267,8 +267,8 @@ impl Specification {
 
         self.add_definition(SpecDefinition {
             name: "ia_t08_sqrt_containment".to_string(),
-            type_src: "forall (n : Nat), IvContainSound n (IvArithOp.sqrt n)".to_string(),
-            value_src: Some("fun (n : Nat) => IvContainSound.sqrt n".to_string()),
+            type_src: "forall (n : Nat), IvContainSound n (@IvArithOp.sqrt n)".to_string(),
+            value_src: Some("fun (n : Nat) => @IvContainSound.sqrt n".to_string()),
             is_axiom: false,
             category: AxiomCategory::DerivedLemma,
             proof_status: ProofStatus::DerivedPending,
@@ -286,8 +286,8 @@ impl Specification {
 
         self.add_definition(SpecDefinition {
             name: "ia_t09_intersection_containment".to_string(),
-            type_src: "forall (n : Nat), IvStructSound n (IvStructOp.intersect n)".to_string(),
-            value_src: Some("fun (n : Nat) => IvStructSound.intersect n".to_string()),
+            type_src: "forall (n : Nat), IvStructSound n (@IvStructOp.intersect n)".to_string(),
+            value_src: Some("fun (n : Nat) => @IvStructSound.intersect n".to_string()),
             is_axiom: false,
             category: AxiomCategory::DerivedLemma,
             proof_status: ProofStatus::DerivedPending,
@@ -305,8 +305,8 @@ impl Specification {
 
         self.add_definition(SpecDefinition {
             name: "ia_t10_hull_containment".to_string(),
-            type_src: "forall (n : Nat), IvStructSound n (IvStructOp.hull n)".to_string(),
-            value_src: Some("fun (n : Nat) => IvStructSound.hull n".to_string()),
+            type_src: "forall (n : Nat), IvStructSound n (@IvStructOp.hull n)".to_string(),
+            value_src: Some("fun (n : Nat) => @IvStructSound.hull n".to_string()),
             is_axiom: false,
             category: AxiomCategory::DerivedLemma,
             proof_status: ProofStatus::DerivedPending,
@@ -324,8 +324,8 @@ impl Specification {
 
         self.add_definition(SpecDefinition {
             name: "ia_t11_subset_transitivity".to_string(),
-            type_src: "forall (n : Nat), IvStructSound n (IvStructOp.subset_trans n)".to_string(),
-            value_src: Some("fun (n : Nat) => IvStructSound.subset_trans n".to_string()),
+            type_src: "forall (n : Nat), IvStructSound n (@IvStructOp.subset_trans n)".to_string(),
+            value_src: Some("fun (n : Nat) => @IvStructSound.subset_trans n".to_string()),
             is_axiom: false,
             category: AxiomCategory::DerivedLemma,
             proof_status: ProofStatus::DerivedPending,
@@ -343,8 +343,8 @@ impl Specification {
 
         self.add_definition(SpecDefinition {
             name: "ia_t12_containment_transitivity".to_string(),
-            type_src: "forall (n : Nat), IvStructSound n (IvStructOp.contain_trans n)".to_string(),
-            value_src: Some("fun (n : Nat) => IvStructSound.contain_trans n".to_string()),
+            type_src: "forall (n : Nat), IvStructSound n (@IvStructOp.contain_trans n)".to_string(),
+            value_src: Some("fun (n : Nat) => @IvStructSound.contain_trans n".to_string()),
             is_axiom: false,
             category: AxiomCategory::DerivedLemma,
             proof_status: ProofStatus::DerivedPending,
@@ -362,8 +362,8 @@ impl Specification {
 
         self.add_definition(SpecDefinition {
             name: "ia_t13_point_interval".to_string(),
-            type_src: "forall (n : Nat), IvStructSound n (IvStructOp.point n)".to_string(),
-            value_src: Some("fun (n : Nat) => IvStructSound.point n".to_string()),
+            type_src: "forall (n : Nat), IvStructSound n (@IvStructOp.point n)".to_string(),
+            value_src: Some("fun (n : Nat) => @IvStructSound.point n".to_string()),
             is_axiom: false,
             category: AxiomCategory::DerivedLemma,
             proof_status: ProofStatus::DerivedPending,
@@ -380,8 +380,8 @@ impl Specification {
 
         self.add_definition(SpecDefinition {
             name: "ia_t14_contains_reflexive".to_string(),
-            type_src: "forall (n : Nat), IvStructSound n (IvStructOp.reflexive n)".to_string(),
-            value_src: Some("fun (n : Nat) => IvStructSound.reflexive n".to_string()),
+            type_src: "forall (n : Nat), IvStructSound n (@IvStructOp.reflexive n)".to_string(),
+            value_src: Some("fun (n : Nat) => @IvStructSound.reflexive n".to_string()),
             is_axiom: false,
             category: AxiomCategory::DerivedLemma,
             proof_status: ProofStatus::DerivedPending,
@@ -399,8 +399,8 @@ impl Specification {
 
         self.add_definition(SpecDefinition {
             name: "ia_t15_add_width".to_string(),
-            type_src: "forall (n : Nat), IvWidthSound n (IvWidthOp.add_width n)".to_string(),
-            value_src: Some("fun (n : Nat) => IvWidthSound.add_width n".to_string()),
+            type_src: "forall (n : Nat), IvWidthSound n (@IvWidthOp.add_width n)".to_string(),
+            value_src: Some("fun (n : Nat) => @IvWidthSound.add_width n".to_string()),
             is_axiom: false,
             category: AxiomCategory::DerivedLemma,
             proof_status: ProofStatus::DerivedPending,
@@ -418,8 +418,8 @@ impl Specification {
 
         self.add_definition(SpecDefinition {
             name: "ia_t16_sub_width".to_string(),
-            type_src: "forall (n : Nat), IvWidthSound n (IvWidthOp.sub_width n)".to_string(),
-            value_src: Some("fun (n : Nat) => IvWidthSound.sub_width n".to_string()),
+            type_src: "forall (n : Nat), IvWidthSound n (@IvWidthOp.sub_width n)".to_string(),
+            value_src: Some("fun (n : Nat) => @IvWidthSound.sub_width n".to_string()),
             is_axiom: false,
             category: AxiomCategory::DerivedLemma,
             proof_status: ProofStatus::DerivedPending,
@@ -437,8 +437,8 @@ impl Specification {
 
         self.add_definition(SpecDefinition {
             name: "ia_t17_neg_width".to_string(),
-            type_src: "forall (n : Nat), IvWidthSound n (IvWidthOp.neg_width n)".to_string(),
-            value_src: Some("fun (n : Nat) => IvWidthSound.neg_width n".to_string()),
+            type_src: "forall (n : Nat), IvWidthSound n (@IvWidthOp.neg_width n)".to_string(),
+            value_src: Some("fun (n : Nat) => @IvWidthSound.neg_width n".to_string()),
             is_axiom: false,
             category: AxiomCategory::DerivedLemma,
             proof_status: ProofStatus::DerivedPending,
@@ -455,8 +455,8 @@ impl Specification {
 
         self.add_definition(SpecDefinition {
             name: "ia_t18_add_commutativity".to_string(),
-            type_src: "forall (n : Nat), IvAlgebraSound n (IvAlgebraOp.add_comm n)".to_string(),
-            value_src: Some("fun (n : Nat) => IvAlgebraSound.add_comm n".to_string()),
+            type_src: "forall (n : Nat), IvAlgebraSound n (@IvAlgebraOp.add_comm n)".to_string(),
+            value_src: Some("fun (n : Nat) => @IvAlgebraSound.add_comm n".to_string()),
             is_axiom: false,
             category: AxiomCategory::DerivedLemma,
             proof_status: ProofStatus::DerivedPending,
@@ -474,8 +474,8 @@ impl Specification {
 
         self.add_definition(SpecDefinition {
             name: "ia_t19_mul_commutativity".to_string(),
-            type_src: "forall (n : Nat), IvAlgebraSound n (IvAlgebraOp.mul_comm n)".to_string(),
-            value_src: Some("fun (n : Nat) => IvAlgebraSound.mul_comm n".to_string()),
+            type_src: "forall (n : Nat), IvAlgebraSound n (@IvAlgebraOp.mul_comm n)".to_string(),
+            value_src: Some("fun (n : Nat) => @IvAlgebraSound.mul_comm n".to_string()),
             is_axiom: false,
             category: AxiomCategory::DerivedLemma,
             proof_status: ProofStatus::DerivedPending,
@@ -493,8 +493,8 @@ impl Specification {
 
         self.add_definition(SpecDefinition {
             name: "ia_t20_add_associativity".to_string(),
-            type_src: "forall (n : Nat), IvAlgebraSound n (IvAlgebraOp.add_assoc n)".to_string(),
-            value_src: Some("fun (n : Nat) => IvAlgebraSound.add_assoc n".to_string()),
+            type_src: "forall (n : Nat), IvAlgebraSound n (@IvAlgebraOp.add_assoc n)".to_string(),
+            value_src: Some("fun (n : Nat) => @IvAlgebraSound.add_assoc n".to_string()),
             is_axiom: false,
             category: AxiomCategory::DerivedLemma,
             proof_status: ProofStatus::DerivedPending,

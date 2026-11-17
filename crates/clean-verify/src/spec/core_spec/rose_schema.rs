@@ -256,7 +256,7 @@ impl Specification {
             "rose_iota_fires_gen: the Rose iota FIRES by rfl (rec C m (node cs) -> roseRecRhs C m cs). THE loud validation gate for the nested object-layer wiring. Rose rung.",
         )?;
         self.add_recursive_def(
-            "def roseREnv_ok (u : Level) : RoseRecEnvOK u (roseREnv u) := RoseRecEnvOK.mk u (roseREnv u) (@Eq.refl (OptionType RecMeta) (@OptionType.some RecMeta roseRecMeta)) (@Eq.refl (OptionType RecRule) (@OptionType.some RecRule (RecRule.mk nodeName (Nat.succ Nat.zero) (roseRecRhs (Level.param Name.anonymous)))))",
+            "def roseREnv_ok (u : Level) : RoseRecEnvOK u (roseREnv u) := @RoseRecEnvOK.mk u (roseREnv u) (@Eq.refl (OptionType RecMeta) (@OptionType.some RecMeta roseRecMeta)) (@Eq.refl (OptionType RecRule) (@OptionType.some RecRule (RecRule.mk nodeName (Nat.succ Nat.zero) (roseRecRhs (Level.param Name.anonymous)))))",
             "roseREnv_ok u: RoseRecEnvOK holds for roseREnv by rfl. Rose rung.",
         )?;
         // SN via the fundamental-theorem one-liner (mirror mutTEnv/wTEnv).
@@ -602,7 +602,7 @@ impl Specification {
         )?;
 
         self.add_recursive_def(
-            "def whnfAccAll_of_memL (l : ListType KExpr) (h : forall (x : KExpr), MemL x l -> whnf_acc x) : WhnfAccAll l := @ListType.rec KExpr (fun (l0 : ListType KExpr) => (forall (x : KExpr), MemL x l0 -> whnf_acc x) -> WhnfAccAll l0) (fun (_h0 : forall (x : KExpr), MemL x (@ListType.nil KExpr) -> whnf_acc x) => WhnfAccAll.nil) (fun (y : KExpr) (rest : ListType KExpr) (ih : (forall (x : KExpr), MemL x rest -> whnf_acc x) -> WhnfAccAll rest) => fun (hall : forall (x : KExpr), MemL x (@ListType.cons KExpr y rest) -> whnf_acc x) => WhnfAccAll.cons y rest (hall y (MemL.head y rest)) (ih (fun (x : KExpr) (hm : MemL x rest) => hall x (MemL.tail x y rest hm)))) l h",
+            "def whnfAccAll_of_memL (l : ListType KExpr) (h : forall (x : KExpr), MemL x l -> whnf_acc x) : WhnfAccAll l := @ListType.rec KExpr (fun (l0 : ListType KExpr) => (forall (x : KExpr), MemL x l0 -> whnf_acc x) -> WhnfAccAll l0) (fun (_h0 : forall (x : KExpr), MemL x (@ListType.nil KExpr) -> whnf_acc x) => WhnfAccAll.nil) (fun (y : KExpr) (rest : ListType KExpr) (ih : (forall (x : KExpr), MemL x rest -> whnf_acc x) -> WhnfAccAll rest) => fun (hall : forall (x : KExpr), MemL x (@ListType.cons KExpr y rest) -> whnf_acc x) => WhnfAccAll.cons y rest (hall y (@MemL.head y rest)) (ih (fun (x : KExpr) (hm : MemL x rest) => hall x (@MemL.tail x y rest hm)))) l h",
             "whnfAccAll_of_memL: rose SN-open support (lane did NOT close; see header). Rung 10.",
         )?;
 

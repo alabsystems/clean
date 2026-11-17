@@ -103,14 +103,14 @@ pub enum MathverseError {
     #[error("baseline index invalid at `{path}`: {reason}")]
     BaselineIndexCorrupt { path: String, reason: String },
 
-    #[error(
-        "kernel-verified stamp count mismatch: manifest lists {manifest} verified names, \
-         but {stored} constants carry KernelVerified in the shard bytes under `{shard_dir}`"
-    )]
-    KernelVerifiedStampMismatch {
-        shard_dir: String,
-        manifest: usize,
-        stored: usize,
+    /// A `kernel-verified.json` manifest was refused (unit P6): no identity,
+    /// a forged or reference identity, or a development manifest offered
+    /// where a grant needs a reference acceptance.
+    #[error("manifest `{path}` refused: {source}")]
+    Manifest {
+        path: String,
+        #[source]
+        source: crate::verify::kernel_verified_manifest::ManifestError,
     },
 
     #[error("io: {0}")]

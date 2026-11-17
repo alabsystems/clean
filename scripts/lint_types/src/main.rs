@@ -137,9 +137,12 @@
 //! lints are forbidden over this crate too.
 
 #![feature(rustc_private)]
+#![cfg_attr(test, feature(test, custom_test_frameworks, exitcode_exit_method))]
+#![cfg_attr(test, test_runner(lint_types_native_test_entry))]
 
 extern crate rustc_abi;
 extern crate rustc_ast;
+extern crate rustc_attr_ir;
 extern crate rustc_data_structures;
 extern crate rustc_driver;
 extern crate rustc_hir;
@@ -149,6 +152,7 @@ extern crate rustc_session;
 extern crate rustc_span;
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+#[cfg(not(test))]
 use std::process::ExitCode;
 use std::sync::{Mutex, OnceLock, PoisonError};
 use std::thread::ThreadId;
@@ -167,6 +171,8 @@ use rustc_middle::ty::{self, AdtDef, Ty, TyCtxt, TypeVisitableExt};
 use rustc_span::def_id::{DefId, LocalDefId};
 use rustc_span::hygiene::{ExpnKind, MacroKind};
 use rustc_span::{sym, ErrorGuaranteed, Span, Symbol};
+
+mod native_entry;
 
 /// The crates whose enums the rule holds a pattern to, beside the crate being
 /// compiled.
@@ -3289,10 +3295,11 @@ impl Callbacks for Driver {
             .env_depinfo
             .lock()
             .insert((Symbol::intern(RUN_VAR), run));
+        native_entry::record_context_inputs(compiler);
         Compilation::Continue
     }
 
-    fn after_analysis(&mut self, _: &Compiler, tcx: TyCtxt<'_>) -> Compilation {
+    fn after_analysis(&mut self, compiler: &Compiler, tcx: TyCtxt<'_>) -> Compilation {
         // A body no pass lowered (nothing built its MIR) is lowered now.
         for def in tcx.hir_body_owners() {
             if !found(|found| found.scanned.contains(&def.local_def_index.as_u32())) {
@@ -3342,10 +3349,14 @@ impl Callbacks for Driver {
             }
             diag.emit();
         }
+        if let Err(error) = native_entry::check(compiler, tcx) {
+            let _ = tcx.dcx().err(error);
+        }
         Compilation::Continue
     }
 }
 
+#[cfg(not(test))]
 fn main() -> ExitCode {
     // FIRST native-main operation, as the installed Trust SDK's own drivers
     // (trustdoc, tippy-driver, miri) do: capture the inherited compiler
@@ -3363,11 +3374,19 @@ fn main() -> ExitCode {
     let mut args: Vec<String> = std::env::args().collect();
     // Cargo runs a workspace wrapper as `<wrapper> <rustc> <args>`: this
     // process is the compiler, so the rustc it names is dropped.
-    let names_rustc = args.get(1).is_some_and(|arg| {
-        std::path::Path::new(arg)
-            .file_stem()
-            .is_some_and(|stem| stem == "rustc" || stem == "trustc")
-    });
+    let owned_native_entry = match native_entry::prepare(&mut args) {
+        Ok(owned) => owned,
+        Err(error) => {
+            eprintln!("error: {error}");
+            return ExitCode::from(1);
+        }
+    };
+    let names_rustc = !owned_native_entry
+        && args.get(1).is_some_and(|arg| {
+            std::path::Path::new(arg)
+                .file_stem()
+                .is_some_and(|stem| stem == "rustc" || stem == "trustc")
+        });
     if names_rustc {
         args.remove(1);
     }
@@ -3378,6 +3397,36 @@ fn main() -> ExitCode {
         collected: None,
     };
     rustc_driver::catch_with_exit_code(|| rustc_driver::run_compiler(&args, &mut driver))
+}
+
+#[cfg(test)]
+extern crate test;
+
+#[cfg(test)]
+fn lint_types_native_test_entry(tests: &[&test::TestDescAndFn]) {
+    // SAFETY: compiler-generated test main passes only static descriptor
+    // references before this first operation; no host callback, argument read,
+    // logging, descriptor operation or libtest worker has run.
+    if let Err(error) =
+        unsafe { rustc_data_structures::jobserver::capture_early_for_test_harness() }
+    {
+        eprintln!("lint-types test entry: inherited compiler scheduler refused: {error}");
+        std::process::exit(75);
+    }
+    // SDK-reported policy data only. The SDK owns any permitted loan/narrowing;
+    // this caller never edits scheduler advertisements, descriptors or threads.
+    let sdk_loan = rustc_data_structures::jobserver::lends_own_execution();
+    let test_threads = std::env::var_os("RUST_TEST_THREADS");
+    eprintln!(
+        "lint-types test entry policy: sdk_loan={sdk_loan}, RUST_TEST_THREADS={test_threads:?}"
+    );
+    #[cfg(panic = "unwind")]
+    let result = test::test_main_env_args(tests);
+    #[cfg(not(panic = "unwind"))]
+    let result = test::test_main_env_args_abort(tests);
+    // A custom runner's generated main returns unit. Preserve real libtest's
+    // opaque ExitCode by diverging; returning unit would erase a failed suite.
+    result.exit_process();
 }
 
 #[cfg(test)]

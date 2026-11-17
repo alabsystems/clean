@@ -22,8 +22,8 @@ pub(super) fn install(spec: &mut Specification) -> Result<(), SpecError> {
 
 const DEFINITIONS: &[&str] = &[
     r"def ir_clean_tag32_helper_provider_v1 (W : Type) (unbox : Nat) (boxer : Nat) (fid : Nat) (args : IRList IRScalar) (mem : IRByteMemoryV1) (host : W) : IRByteImportResultV1 W :=
-let bad : IRByteImportResultV1 W := IRByteImportResultV1.mk W (IROutcome.type_error IRFault.bad_field) mem host;
-Bool.rec (fun (_ : Bool) => IRByteImportResultV1 W)
+let bad : IRByteImportResultV1 W := @IRByteImportResultV1.mk W (IROutcome.type_error IRFault.bad_field) mem host;
+@Bool.rec (fun (_ : Bool) => IRByteImportResultV1 W)
   (ir_clean_tag32_provider_v1 W unbox fid args mem host)
   (match args with
    | IRList.nil => bad
@@ -33,8 +33,8 @@ Bool.rec (fun (_ : Bool) => IRByteImportResultV1 W)
      | IRList.nil =>
        match value with
        | IRScalar.int_ n =>
-         Bool.rec (fun (_ : Bool) => IRByteImportResultV1 W) bad
-           (IRByteImportResultV1.mk W (IROutcome.ret (IRList.cons IRScalar (IRScalar.ptr_ (ir_clean_tag32_encode_v1 n)) (IRList.nil IRScalar))) mem host)
+         @Bool.rec (fun (_ : Bool) => IRByteImportResultV1 W) bad
+           (@IRByteImportResultV1.mk W (IROutcome.ret (@IRList.cons IRScalar (IRScalar.ptr_ (ir_clean_tag32_encode_v1 n)) (@IRList.nil IRScalar))) mem host)
            (ir_nat_ltb n 4294967296)
        | _ => bad)
   (ir_nat_eqb fid boxer)",
@@ -45,9 +45,9 @@ match ir_mach_frames machine with
   Bool.and (ir_nat_eqb (ir_frame_func frame) wrapper)
     (Bool.and (ir_nat_eqb (ir_frame_block frame) block) (ir_nat_ltb (ir_frame_pc frame) 4))",
     r"def ir_clean_tag32_helper_tail_v1 (W : Type) (ctx : IRByteContextV1) (unbox : Nat) (boxer : Nat) (machine : IRMachine) (world : IRByteWorldV1 W) (left : Bool) (right : Bool) : IRCleanTag32PrefixV1 W :=
-Bool.rec (fun (_ : Bool) => IRCleanTag32PrefixV1 W)
+@Bool.rec (fun (_ : Bool) => IRCleanTag32PrefixV1 W)
   (ir_clean_tag32_fault_v1 W world left right)
-  (IRCleanTag32PrefixV1.mk W (ir_byte_step_machine_v1 W ctx (ir_clean_tag32_helper_provider_v1 W unbox boxer) machine world) Bool.false Bool.false)
+  (@IRCleanTag32PrefixV1.mk W (ir_byte_step_machine_v1 W ctx (ir_clean_tag32_helper_provider_v1 W unbox boxer) machine world) Bool.false Bool.false)
   (Bool.and (Bool.not left) (Bool.not right))",
     r"def ir_clean_tag32_helper_step_v1 (W : Type) (ctx : IRByteContextV1) (wrapper : Nat) (block : Nat) (unbox : Nat) (boxer : Nat) (p0 : Nat) (p1 : Nat) (state : IRCleanTag32PrefixV1 W) : IRCleanTag32PrefixV1 W :=
 match state with
@@ -55,9 +55,9 @@ match state with
   match config with
   | IRByteConfigV1.halted outcome world => state
   | IRByteConfigV1.running machine world =>
-    Bool.rec (fun (_ : Bool) => IRCleanTag32PrefixV1 W)
-      (Bool.rec (fun (_ : Bool) => IRCleanTag32PrefixV1 W)
-        (IRCleanTag32PrefixV1.mk W (IRByteConfigV1.halted W (IROutcome.type_error IRFault.bad_addr) world) left right)
+    @Bool.rec (fun (_ : Bool) => IRCleanTag32PrefixV1 W)
+      (@Bool.rec (fun (_ : Bool) => IRCleanTag32PrefixV1 W)
+        (@IRCleanTag32PrefixV1.mk W (@IRByteConfigV1.halted W (IROutcome.type_error IRFault.bad_addr) world) left right)
         (ir_clean_tag32_helper_tail_v1 W ctx unbox boxer machine world left right)
         (ir_byte_world_valid_v1 W machine world))
       (ir_clean_tag32_step_v1 W ctx wrapper block unbox p0 p1 state)
@@ -65,12 +65,12 @@ match state with
     r"def ir_clean_tag32_helper_init_v1 (W : Type) (ctx : IRByteContextV1) (wrapper : Nat) (args : IRList IRScalar) (mem : IRByteMemoryV1) (host : W) : IRCleanTag32PrefixV1 W :=
 ir_clean_tag32_init_v1 W ctx wrapper args mem host",
     r"def ir_clean_tag32_helper_run_v1 (W : Type) (ctx : IRByteContextV1) (wrapper : Nat) (block : Nat) (unbox : Nat) (boxer : Nat) (p0 : Nat) (p1 : Nat) (fuel : Nat) (state : IRCleanTag32PrefixV1 W) : IRCleanTag32HelperRunV1 W :=
-Nat.rec (fun (_ : Nat) => IRCleanTag32PrefixV1 W -> IRCleanTag32HelperRunV1 W)
-  (fun (p : IRCleanTag32PrefixV1 W) => IRCleanTag32HelperRunV1.mk W p 0)
+@Nat.rec (fun (_ : Nat) => IRCleanTag32PrefixV1 W -> IRCleanTag32HelperRunV1 W)
+  (fun (p : IRCleanTag32PrefixV1 W) => @IRCleanTag32HelperRunV1.mk W p 0)
   (fun (remaining : Nat) (again : IRCleanTag32PrefixV1 W -> IRCleanTag32HelperRunV1 W) =>
     fun (p : IRCleanTag32PrefixV1 W) =>
-      Bool.rec (fun (_ : Bool) => IRCleanTag32HelperRunV1 W)
+      @Bool.rec (fun (_ : Bool) => IRCleanTag32HelperRunV1 W)
         (again (ir_clean_tag32_helper_step_v1 W ctx wrapper block unbox boxer p0 p1 p))
-        (IRCleanTag32HelperRunV1.mk W p (Nat.succ remaining))
+        (@IRCleanTag32HelperRunV1.mk W p (Nat.succ remaining))
         (ir_byte_halted_v1 W (ir_clean_tag32_config_v1 W p))) fuel state",
 ];

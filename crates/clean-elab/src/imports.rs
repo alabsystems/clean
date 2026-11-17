@@ -29,7 +29,7 @@ use std::path::{Path, PathBuf};
 /// discovery. The backend [`clean_olean::load_module_with_deps`] itself is
 /// already unbounded and independently tested; this constant only governs the
 /// frontend's fail-closed policy and its stub-fallback decision.
-const FRONTEND_OLEAN_IMPORT_MODULE_LIMIT: usize = 16_384;
+pub(crate) const FRONTEND_OLEAN_IMPORT_MODULE_LIMIT: usize = 16_384;
 
 // NOTE (plan decision 1 — Clean-native meta shim): the previous
 // `unsupported_frontend_import_reason` wall hard-rejected `import Lean` /
@@ -150,13 +150,28 @@ pub(crate) fn process_imports_clean_native_with_satisfied(
     policy: ImportPolicy,
     satisfied_from_source: &HashSet<Name>,
 ) -> Result<(), ElabError> {
+    process_imports_clean_native_with_provided(env, paths, policy, satisfied_from_source, None)
+}
+
+/// The source-module initializer's completed artifacts already inhabit this
+/// environment. Honor that same-run DATA without searching or fabricating a
+/// module. The caller's source refusal check retains precedence.
+pub(crate) fn process_imports_clean_native_with_provided(
+    env: &mut clean_kernel::Environment,
+    paths: &[SurfaceName],
+    policy: ImportPolicy,
+    satisfied_from_source: &HashSet<Name>,
+    provided: Option<&clean_olean::CompletedModuleImports>,
+) -> Result<(), ElabError> {
     let resolution = ImportResolution {
         policy,
         satisfied_from_source,
     };
     for path in paths {
         let module = path.name().clone();
-        if resolution.is_satisfied_from_source(&module) {
+        if resolution.is_satisfied_from_source(&module)
+            || provided.is_some_and(|completed| completed.contains_module(&module))
+        {
             continue;
         }
         if serve_from_prelude(env, &module, resolution)? {
@@ -958,6 +973,65 @@ mod tests {
         assert!(
             env.get_const(&Name::from_string("Real")).is_some(),
             "Real stub should be defined via fallback when no .olean is found",
+        );
+    }
+
+    #[test]
+    fn preloaded_artifact_imports_preserve_fail_closed_and_source_refusal_precedence() {
+        let dir = tempfile::tempdir().unwrap();
+        let bytes = clean_olean::OleanExporter::export_with_env(
+            &clean_kernel::Environment::default(),
+            &[],
+            &[],
+            "0000000000000000000000000000000000000000",
+        )
+        .unwrap();
+        fs::write(dir.path().join("ActualSnapshot.olean"), bytes).unwrap();
+        let mut env = clean_kernel::Environment::with_prelude();
+        let (_, completed) = clean_olean::load_module_with_deps_and_completed_imports(
+            &mut env,
+            "ActualSnapshot",
+            &[dir.path().to_path_buf()],
+        )
+        .unwrap();
+        let paths = module_path("ActualSnapshot");
+        super::process_imports_clean_native(&mut env, &paths, super::ImportPolicy::FailClosed)
+            .expect_err("legacy no-artifact context remains refused");
+        super::process_imports_clean_native_with_provided(
+            &mut env,
+            &paths,
+            super::ImportPolicy::FailClosed,
+            super::no_source_resolved(),
+            Some(&completed),
+        )
+        .expect("the exact successfully loaded zero-declaration snapshot is present");
+        super::process_imports_clean_native_with_provided(
+            &mut env,
+            &module_path("ActualSnapshot.Missing"),
+            super::ImportPolicy::FailClosed,
+            super::no_source_resolved(),
+            Some(&completed),
+        )
+        .expect_err("a namespace prefix supplies no other module");
+        let mut context = crate::FileContext::new();
+        context.disable_external_import_search();
+        context.set_preloaded_artifact_imports(completed);
+        let declarations = clean_parser::parse_file("import ActualSnapshot").unwrap();
+        crate::elaborate_decl_and_register_with_context(&mut env, &declarations[0], &mut context)
+            .expect("same-run actual artifact availability reaches the ordinary import handler");
+        context.mark_import_refused_from_source(
+            &Name::from_string("ActualSnapshot"),
+            "original source failure".into(),
+        );
+        let error = crate::elaborate_decl_and_register_with_context(
+            &mut env,
+            &declarations[0],
+            &mut context,
+        )
+        .expect_err("source refusal must win over an actual completed artifact");
+        assert!(
+            error.to_string().contains("original source failure"),
+            "{error}"
         );
     }
 

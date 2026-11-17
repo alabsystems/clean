@@ -9,22 +9,22 @@
     "UNKNOWN is a first-class value, never 0; it neither satisfies nor violates a direction.",
     "Quoting any row of this file from prose is a bug: read the artifact."
   ],
-  "generated_at_utc": "2026-11-16T15:59:53Z",
+  "generated_at_utc": "2026-11-17T18:38:20Z",
   "generator": "scripts/spine_scoreboard.py",
   "inputs": {
     "spine_set": "ABSENT",
     "a0_census": "sha256:f1acedfd852f29023474404a75d7dfc6c4aaad4af52052faa0f45e1de81f054f",
     "axiom_ratchet": "sha256:cca27c20be9d4a38ef4d6008beae43231ed359a68a55fb3ed9a403ee44dd1fc0",
     "unchecked_decl_ratchet": "sha256:0a0a26bef7832b0261015068743896e7c6edb02537647acde26c19a083ee1d76",
-    "env_bypass_census": "sha256:0bcd921a2d6121c79ab04e0c6a1d195b139109ad1374f1638ab7683800648f57",
-    "assumption_ledger": "sha256:1e2a55a393d4d53b17629186bc8c6b4c231338fe5dd8d60347b7fad617ff56c3",
+    "env_bypass_census": "sha256:556ec4d360725263dd3bfec5a43e907540060034ca92275e06ddded20d20c2df",
+    "assumption_ledger": "sha256:e50b3832190d361ec56c8d4c61aed61c382d917135ad6fc8fdcbce4a4a9ee5f4",
     "parity_tiers": "sha256:2d2d501572050b8c0589d7ec9864be9213231c3447a74d4be895905edf4eecfb",
     "evalir_coverage": "sha256:eaa072140d77bab3fb3f500f13cb4fb253289aef7d3bb25938925956331c38cc",
-    "evalir_adequacy_grid": "sha256:fc7bbb4c9eb08af2ef8cf840cb978e9ff5f1d40f1401360f0833b72d6a987221",
+    "evalir_adequacy_grid": "sha256:63fe91f5b64a2165833ca4d67f3523d10df95926ca3ddfbe4f3cde64ea36bf87",
     "evalir_census_src": "sha256:2d785520100aacd746da40082cd733947ebe4890ef1f4feabbf21e5b647da602",
     "evalir_syntax_src": "sha256:0f8331a872afdcecd399178c4a3b0f4aff9964520b62e66f83ce2a5d1a235a26",
-    "verdict_io_contracts": "sha256:5362e9eb253a45bb5858cc62b9cfb8e9b2ff1d918f0de8976435f87675d084e2",
-    "verdict_set": "sha256:1f50ee9fce64529ed3dd07fb2f4483f3836f389e25c8da045a5ea35d19f25ffb"
+    "verdict_io_contracts": "sha256:6c034c635d656062a6379badc70b0690cd70a6b22f7bb451a85dbf803a32a8be",
+    "verdict_set": "sha256:2fbf3a2fb5720cb43c4ad88cf629a28d08f980ecd2104eff2c4ccb33bc7e4811"
   },
   "rebases": [
     {
@@ -777,12 +777,12 @@
     },
     {
       "id": "verdict_io.site_total",
-      "value": 317,
+      "value": 326,
       "direction": "none",
       "producer": "data/verdict_io_contracts.json",
       "provenance": {
         "cross_checked_against": "data/verdict_set.json:partitions.b_io_bearing.io_site_total",
-        "authoritative_value": 317
+        "authoritative_value": 326
       }
     },
     {
@@ -793,13 +793,13 @@
     },
     {
       "id": "verdict_io.sites_issuing_io",
-      "value": 211,
+      "value": 217,
       "direction": "none",
       "producer": "data/verdict_io_contracts.json"
     },
     {
       "id": "verdict_io.content_bearing",
-      "value": 171,
+      "value": 177,
       "direction": "none",
       "producer": "data/verdict_io_contracts.json"
     },

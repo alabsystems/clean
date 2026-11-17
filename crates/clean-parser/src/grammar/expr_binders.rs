@@ -801,10 +801,15 @@ impl Parser {
                 // Only the kinds whose scoping the elaborator models are
                 // lifted, plus the custom-eliminator attributes it refuses by
                 // name (`is_lifted_eliminator_attr`); see [`Attribute::Local`].
+                // `class` is retained too, so its global-only handler can
+                // refuse this scope rather than silently dropping the whole use.
                 if name == "local"
                     && !self.current().ident_escaped
-                    && (matches!(self.peek_kind(1), Some(TokenKind::Ident(next)) if next == "simp" || next == "csimp" || is_lifted_eliminator_attr(next))
-                        || matches!(self.peek_kind(1), Some(TokenKind::Instance)))
+                    && (matches!(self.peek_kind(1), Some(TokenKind::Ident(next)) if next == "simp" || next == "csimp" || next == "class" || is_lifted_eliminator_attr(next))
+                        || matches!(
+                            self.peek_kind(1),
+                            Some(TokenKind::Instance | TokenKind::Class)
+                        ))
                 {
                     self.advance();
                     let inner = self.single_attribute()?;
@@ -1000,10 +1005,13 @@ impl Parser {
             // command became a raw declaration, and the declarations after it
             // were still checked and credited against a state without `c`
             // (Lean 4.8.0 activates it on `open N`; round-25 random battery).
-            // Lift the scoped attributes whose activation the elaborator models.
+            // Lift the scoped attributes whose activation the elaborator models,
+            // and retain `class` for its global-only semantic refusal as well.
             TokenKind::Scoped
-                if matches!(self.peek_kind(1), Some(TokenKind::Instance))
-                    || matches!(self.peek_kind(1), Some(TokenKind::Ident(name)) if name == "csimp" || is_lifted_eliminator_attr(name)) =>
+                if matches!(
+                    self.peek_kind(1),
+                    Some(TokenKind::Instance | TokenKind::Class)
+                ) || matches!(self.peek_kind(1), Some(TokenKind::Ident(name)) if name == "csimp" || name == "class" || is_lifted_eliminator_attr(name)) =>
             {
                 self.advance();
                 let inner = self.single_attribute()?;

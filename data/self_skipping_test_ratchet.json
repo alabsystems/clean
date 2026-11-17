@@ -11,11 +11,11 @@
     "GUARDED_ASSERTIONS",
     "EARLY_RETURN"
   ],
-  "budget_total": 966,
+  "budget_total": 945,
   "shape_caps": {
     "SILENT_MATCH_ARM": 65,
-    "GUARDED_ASSERTIONS": 153,
-    "EARLY_RETURN": 748
+    "GUARDED_ASSERTIONS": 151,
+    "EARLY_RETURN": 729
   },
   "per_file_caps": {
     "crates/clean-auto/src/bridge/ay_backend/proof_reconstruct/tests/farkas_certificate.rs": 2,
@@ -64,7 +64,6 @@
     "crates/clean-compiler/tests/wf_recursion_e2e.rs": 1,
     "crates/clean-discovery/src/proof_repair.rs": 1,
     "crates/clean-elab/src/attribute_wiring_tests.rs": 2,
-    "crates/clean-elab/src/infer/tests/cache_reuse.rs": 1,
     "crates/clean-elab/src/infer/tests/do_notation_control.rs": 2,
     "crates/clean-elab/src/infer/tests/projection.rs": 1,
     "crates/clean-elab/src/infer/tests/property_tests.rs": 1,
@@ -113,7 +112,6 @@
     "crates/clean-kernel/src/env/gamma_crown_verify.rs": 3,
     "crates/clean-kernel/src/env/soundness_certificate.rs": 1,
     "crates/clean-kernel/src/env/tests_add_decl_audit.rs": 1,
-    "crates/clean-kernel/src/env/tests_algebra_rat_add_comm.rs": 3,
     "crates/clean-kernel/src/env/tests_algebra_rat_mul_assoc.rs": 2,
     "crates/clean-kernel/src/env/tests_axiom_audit.rs": 1,
     "crates/clean-kernel/src/env/tests_builder_migration_regression.rs": 1,
@@ -134,7 +132,6 @@
     "crates/clean-kernel/tests/nn_verification_c006_blockwise.rs": 1,
     "crates/clean-kernel/tests/verify_axiom_audit_integration.rs": 3,
     "crates/clean-lake/tests/module_trust/metadata.rs": 4,
-    "crates/clean-lsp/src/backend/import_loading_tests.rs": 1,
     "crates/clean-lsp/src/backend/tests.rs": 1,
     "crates/clean-lsp/src/report_validation.rs": 70,
     "crates/clean-mathverse/src/build_library.rs": 4,
@@ -156,7 +153,7 @@
     "crates/clean-mathverse/src/hol/isabelle_capture_chain/spec.rs": 1,
     "crates/clean-mathverse/src/hol/isabelle_flip_gate/tests.rs": 1,
     "crates/clean-mathverse/src/hol/isabelle_import.rs": 1,
-    "crates/clean-mathverse/src/integration.rs": 22,
+    "crates/clean-mathverse/src/integration.rs": 19,
     "crates/clean-mathverse/src/lean4/axiom_replacement_tests.rs": 15,
     "crates/clean-mathverse/src/lean4/kernel_verify_tests.rs": 6,
     "crates/clean-mathverse/src/lean4/mathlib_import_tests.rs": 18,
@@ -196,7 +193,6 @@
     "crates/clean-olean/src/recheck_closed/by_name_census_tests.rs": 1,
     "crates/clean-olean/src/test_support/pinned_lean_tests.rs": 1,
     "crates/clean-olean/src/toolchain_identity.rs": 1,
-    "crates/clean-olean/src/verify_batch.rs": 10,
     "crates/clean-olean/src/verify_batch_full.rs": 2,
     "crates/clean-olean/tests/import_ac1_tests.rs": 39,
     "crates/clean-olean/tests/import_advanced_tests.rs": 39,
@@ -206,7 +202,7 @@
     "crates/clean-olean/tests/import_loading_tests.rs": 27,
     "crates/clean-olean/tests/import_mathlib_tests.rs": 6,
     "crates/clean-olean/tests/import_rat_tests.rs": 7,
-    "crates/clean-olean/tests/import_recursor_order_tests.rs": 3,
+    "crates/clean-olean/tests/import_recursor_order_tests.rs": 1,
     "crates/clean-olean/tests/import_sharing_tests.rs": 2,
     "crates/clean-olean/tests/import_type_tests.rs": 68,
     "crates/clean-olean/tests/native_fold_canon_lean_v4_8_0.rs": 4,
@@ -256,7 +252,6 @@
     "crates/clean-verify/tests/premise_witness_gate.rs": 1,
     "crates/clean-verify/tests/spec_scratchpad.rs": 2,
     "crates/clean/tests/compat_shim.rs": 5,
-    "crates/clean/tests/e2e_pipeline.rs": 1,
     "crates/clean/tests/lake_path_stripped.rs": 2,
     "crates/clean/tests/run_argv_passthrough.rs": 4
   },
@@ -612,5 +607,5 @@
       "recorded_in": "docs/DECISIONS.md"
     }
   ],
-  "last_updated": "2026-10-22"
+  "last_updated": "2026-11-16"
 }

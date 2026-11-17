@@ -188,3 +188,49 @@ fn instance_unknown_or_duplicate_field_cannot_discard_an_assignment() {
         assert!(env.get_const(&Name::anon().str("witness")).is_none());
     }
 }
+
+#[test]
+fn class_output_dependency_refusal_restores_the_typed_local_scope() {
+    let env = Environment::with_prelude();
+    let mut ctx = ElabCtx::new(&env);
+    let kept = clean_kernel::FVarId::new(40);
+    ctx.push_local_let_with_fvar(
+        SurfaceName::from_name(Name::from_string("kept")),
+        kept,
+        Expr::const_(Name::from_string("Nat"), vec![]),
+        Expr::nat_lit(7),
+    );
+    let old_values = ctx.locals.let_values().clone();
+    assert_eq!(old_values.get(&kept), Some(&Expr::nat_lit(7)));
+    let old_binders = ctx.locals.binder_infos().clone();
+    let bad =
+        clean_parser::parse_file("class Retry (α : outParam Type) (x : α) where\n  val : α\n")
+            .unwrap()
+            .pop()
+            .unwrap();
+    let error = ctx
+        .elab_decl(&bad)
+        .expect_err("invalid class must refuse before publication");
+    assert!(error
+        .to_string()
+        .contains("parameter #2 depends on `outParam`"));
+    assert_eq!(ctx.locals.len(), 1);
+    assert_eq!(ctx.locals[0].1, kept);
+    assert_eq!(ctx.locals.let_values(), &old_values);
+    assert_eq!(ctx.locals.binder_infos(), &old_binders);
+    assert!(ctx.local_instances.is_empty());
+    assert!(ctx
+        .instances
+        .get_class(&Name::from_string("Retry"))
+        .is_none());
+    let good = clean_parser::parse_file(
+        "class Retry (α : outParam Type) (x : outParam α) where\n  val : α\n",
+    )
+    .unwrap()
+    .pop()
+    .unwrap();
+    ctx.elab_decl(&good)
+        .expect("valid retry sees no leaked class locals");
+    assert_eq!(ctx.locals.len(), 1);
+    assert_eq!(ctx.locals[0].1, kept);
+}

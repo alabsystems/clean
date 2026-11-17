@@ -262,8 +262,8 @@ pub(super) fn src_wkc_step() -> String {
     let ihp_a = "(qihA : forall (qz : KExpr), whnf_step qA qz -> WKC qD qz qsA)";
     let ihp_b =
         "(qihB : forall (qz : KExpr), whnf_step qB qz -> WKC (skcons (domSk qsA) qD) qz qsB)";
-    let p1 = "(fun (zy : KExpr) (zst : beta_reduces qA zy) (zeq : @Eq KExpr qe2 (KExpr.pi zy qB)) => r17_wkcCastT qD (KExpr.pi zy qB) qe2 (piShape qsA qsB) (@Eq.symm KExpr qe2 (KExpr.pi zy qB) zeq) (WKC.pi qD zy qB qsA qsB (qihA zy (whnf_step.beta qA zy zst)) qhB))";
-    let p2 = "(fun (zy : KExpr) (zst : beta_reduces qB zy) (zeq : @Eq KExpr qe2 (KExpr.pi qA zy)) => r17_wkcCastT qD (KExpr.pi qA zy) qe2 (piShape qsA qsB) (@Eq.symm KExpr qe2 (KExpr.pi qA zy) zeq) (WKC.pi qD qA zy qsA qsB qhA (qihB zy (whnf_step.beta qB zy zst))))";
+    let p1 = "(fun (zy : KExpr) (zst : beta_reduces qA zy) (zeq : @Eq KExpr qe2 (KExpr.pi zy qB)) => r17_wkcCastT qD (KExpr.pi zy qB) qe2 (piShape qsA qsB) (@Eq.symm KExpr qe2 (KExpr.pi zy qB) zeq) (WKC.pi qD zy qB qsA qsB (qihA zy (@whnf_step.beta qA zy zst)) qhB))";
+    let p2 = "(fun (zy : KExpr) (zst : beta_reduces qB zy) (zeq : @Eq KExpr qe2 (KExpr.pi qA zy)) => r17_wkcCastT qD (KExpr.pi qA zy) qe2 (piShape qsA qsB) (@Eq.symm KExpr qe2 (KExpr.pi qA zy) zeq) (WKC.pi qD qA zy qsA qsB qhA (qihB zy (@whnf_step.beta qB zy zst))))";
     let m_pi = format!(
         "(fun (qD : Nat -> Sk) (qA : KExpr) (qB : KExpr) (qsA : Sk) (qsB : Sk) (qhA : WKC qD qA qsA) (qhB : WKC (skcons (domSk qsA) qD) qB qsB) {ihp_a} {ihp_b} (qe2 : KExpr) (qst : whnf_step (KExpr.pi qA qB) qe2) => r15_whnf_stepT_inv (WKC qD qe2 (piShape qsA qsB)) (KExpr.pi qA qB) qe2 {HF_REFL} qst {p1} {p2})"
     );
@@ -271,8 +271,8 @@ pub(super) fn src_wkc_step() -> String {
     let ihl_a = "(qihA : forall (qz : KExpr), whnf_step qA qz -> WKC qD qz qsA)";
     let ihl_b =
         "(qihb : forall (qz : KExpr), whnf_step qb qz -> WKC (skcons (domSk qsA) qD) qz qc)";
-    let l1 = "(fun (zy : KExpr) (zst : beta_reduces qA zy) (zeq : @Eq KExpr qe2 (KExpr.lam zy qb)) => r17_wkcCastT qD (KExpr.lam zy qb) qe2 (Sk.arr (domSk qsA) qc) (@Eq.symm KExpr qe2 (KExpr.lam zy qb) zeq) (WKC.lam qD zy qb qsA qc (qihA zy (whnf_step.beta qA zy zst)) qhb))";
-    let l2 = "(fun (zy : KExpr) (zst : beta_reduces qb zy) (zeq : @Eq KExpr qe2 (KExpr.lam qA zy)) => r17_wkcCastT qD (KExpr.lam qA zy) qe2 (Sk.arr (domSk qsA) qc) (@Eq.symm KExpr qe2 (KExpr.lam qA zy) zeq) (WKC.lam qD qA zy qsA qc qhA (qihb zy (whnf_step.beta qb zy zst))))";
+    let l1 = "(fun (zy : KExpr) (zst : beta_reduces qA zy) (zeq : @Eq KExpr qe2 (KExpr.lam zy qb)) => r17_wkcCastT qD (KExpr.lam zy qb) qe2 (Sk.arr (domSk qsA) qc) (@Eq.symm KExpr qe2 (KExpr.lam zy qb) zeq) (WKC.lam qD zy qb qsA qc (qihA zy (@whnf_step.beta qA zy zst)) qhb))";
+    let l2 = "(fun (zy : KExpr) (zst : beta_reduces qb zy) (zeq : @Eq KExpr qe2 (KExpr.lam qA zy)) => r17_wkcCastT qD (KExpr.lam qA zy) qe2 (Sk.arr (domSk qsA) qc) (@Eq.symm KExpr qe2 (KExpr.lam qA zy) zeq) (WKC.lam qD qA zy qsA qc qhA (qihb zy (@whnf_step.beta qb zy zst))))";
     let m_lam = format!(
         "(fun (qD : Nat -> Sk) (qA : KExpr) (qb : KExpr) (qsA : Sk) (qc : Sk) (qhA : WKC qD qA qsA) (qhb : WKC (skcons (domSk qsA) qD) qb qc) {ihl_a} {ihl_b} (qe2 : KExpr) (qst : whnf_step (KExpr.lam qA qb) qe2) => r15_whnf_stepT_inv (WKC qD qe2 (Sk.arr (domSk qsA) qc)) (KExpr.lam qA qb) qe2 {HF_REFL} qst {l1} {l2})"
     );
@@ -281,8 +281,8 @@ pub(super) fn src_wkc_step() -> String {
     let iha_a = "(qiha : forall (qz : KExpr), whnf_step qa qz -> WKC qD qz qd)";
     let hf = "(headFree_app qf qa (r17_headFree_wkc_arr qD qf (Sk.arr qd qcc) qhf qd qcc (@Eq.refl Sk (Sk.arr qd qcc))))";
     let a1 = "(fun (zA : KExpr) (zb : KExpr) (zlam : @Eq KExpr qf (KExpr.lam zA zb)) (zcon : @Eq KExpr qe2 (instantiate zb qa)) => r17_wkc_lam_inv qD (WKC qD qe2 qcc) (KExpr.lam zA zb) (Sk.arr qd qcc) (r17_wkcCastT qD qf (KExpr.lam zA zb) (Sk.arr qd qcc) zlam qhf) (fun (zhb : WKC (skcons qd qD) zb qcc) => r17_wkcCastT qD (instantiate zb qa) qe2 qcc (@Eq.symm KExpr qe2 (instantiate zb qa) zcon) (wkc_inst qD zb qa qd qcc zhb qha)))";
-    let a2 = "(fun (zy : KExpr) (zst : beta_reduces qf zy) (zeq : @Eq KExpr qe2 (KExpr.app zy qa)) => r17_wkcCastT qD (KExpr.app zy qa) qe2 qcc (@Eq.symm KExpr qe2 (KExpr.app zy qa) zeq) (WKC.app qD zy qa qd qcc (qihf zy (whnf_step.beta qf zy zst)) qha))";
-    let a3 = "(fun (zy : KExpr) (zst : beta_reduces qa zy) (zeq : @Eq KExpr qe2 (KExpr.app qf zy)) => r17_wkcCastT qD (KExpr.app qf zy) qe2 qcc (@Eq.symm KExpr qe2 (KExpr.app qf zy) zeq) (WKC.app qD qf zy qd qcc qhf (qiha zy (whnf_step.beta qa zy zst))))";
+    let a2 = "(fun (zy : KExpr) (zst : beta_reduces qf zy) (zeq : @Eq KExpr qe2 (KExpr.app zy qa)) => r17_wkcCastT qD (KExpr.app zy qa) qe2 qcc (@Eq.symm KExpr qe2 (KExpr.app zy qa) zeq) (WKC.app qD zy qa qd qcc (qihf zy (@whnf_step.beta qf zy zst)) qha))";
+    let a3 = "(fun (zy : KExpr) (zst : beta_reduces qa zy) (zeq : @Eq KExpr qe2 (KExpr.app qf zy)) => r17_wkcCastT qD (KExpr.app qf zy) qe2 qcc (@Eq.symm KExpr qe2 (KExpr.app qf zy) zeq) (WKC.app qD qf zy qd qcc qhf (qiha zy (@whnf_step.beta qa zy zst))))";
     let m_app = format!(
         "(fun (qD : Nat -> Sk) (qf : KExpr) (qa : KExpr) (qd : Sk) (qcc : Sk) (qhf : WKC qD qf (Sk.arr qd qcc)) (qha : WKC qD qa qd) {iha_f} {iha_a} (qe2 : KExpr) (qst : whnf_step (KExpr.app qf qa) qe2) => r15_whnf_stepT_inv (WKC qD qe2 qcc) (KExpr.app qf qa) qe2 {hf} qst {a1} {a2} {a3})"
     );
@@ -297,9 +297,9 @@ pub(super) fn src_wkc_step() -> String {
     let ihv = "(qihv : forall (qz : KExpr), whnf_step qv qz -> WKC qD qz qsv)";
     let ihb = "(qihb : forall (qz : KExpr), whnf_step qb qz -> WKC (skcons qsv qD) qz qc)";
     let z0 = "(fun (zeq : @Eq KExpr qe2 (instantiate qb qv)) => r17_wkcCastT qD (instantiate qb qv) qe2 qc (@Eq.symm KExpr qe2 (instantiate qb qv) zeq) (wkc_inst qD qb qv qsv qc qhb qhv))";
-    let z1 = "(fun (zy : KExpr) (zst : beta_reduces qt zy) (zeq : @Eq KExpr qe2 (KExpr.let_ zy qv qb)) => r17_wkcCastT qD (KExpr.let_ zy qv qb) qe2 qc (@Eq.symm KExpr qe2 (KExpr.let_ zy qv qb) zeq) (WKC.let_ qD zy qv qb qst qsv qc (qiht zy (whnf_step.beta qt zy zst)) qhv qhb))";
-    let z2 = "(fun (zy : KExpr) (zst : beta_reduces qv zy) (zeq : @Eq KExpr qe2 (KExpr.let_ qt zy qb)) => r17_wkcCastT qD (KExpr.let_ qt zy qb) qe2 qc (@Eq.symm KExpr qe2 (KExpr.let_ qt zy qb) zeq) (WKC.let_ qD qt zy qb qst qsv qc qht (qihv zy (whnf_step.beta qv zy zst)) qhb))";
-    let z3 = "(fun (zy : KExpr) (zst : beta_reduces qb zy) (zeq : @Eq KExpr qe2 (KExpr.let_ qt qv zy)) => r17_wkcCastT qD (KExpr.let_ qt qv zy) qe2 qc (@Eq.symm KExpr qe2 (KExpr.let_ qt qv zy) zeq) (WKC.let_ qD qt qv zy qst qsv qc qht qhv (qihb zy (whnf_step.beta qb zy zst))))";
+    let z1 = "(fun (zy : KExpr) (zst : beta_reduces qt zy) (zeq : @Eq KExpr qe2 (KExpr.let_ zy qv qb)) => r17_wkcCastT qD (KExpr.let_ zy qv qb) qe2 qc (@Eq.symm KExpr qe2 (KExpr.let_ zy qv qb) zeq) (WKC.let_ qD zy qv qb qst qsv qc (qiht zy (@whnf_step.beta qt zy zst)) qhv qhb))";
+    let z2 = "(fun (zy : KExpr) (zst : beta_reduces qv zy) (zeq : @Eq KExpr qe2 (KExpr.let_ qt zy qb)) => r17_wkcCastT qD (KExpr.let_ qt zy qb) qe2 qc (@Eq.symm KExpr qe2 (KExpr.let_ qt zy qb) zeq) (WKC.let_ qD qt zy qb qst qsv qc qht (qihv zy (@whnf_step.beta qv zy zst)) qhb))";
+    let z3 = "(fun (zy : KExpr) (zst : beta_reduces qb zy) (zeq : @Eq KExpr qe2 (KExpr.let_ qt qv zy)) => r17_wkcCastT qD (KExpr.let_ qt qv zy) qe2 qc (@Eq.symm KExpr qe2 (KExpr.let_ qt qv zy) zeq) (WKC.let_ qD qt qv zy qst qsv qc qht qhv (qihb zy (@whnf_step.beta qb zy zst))))";
     let m_let = format!(
         "(fun (qD : Nat -> Sk) (qt : KExpr) (qv : KExpr) (qb : KExpr) (qst : Sk) (qsv : Sk) (qc : Sk) (qht : WKC qD qt qst) (qhv : WKC qD qv qsv) (qhb : WKC (skcons qsv qD) qb qc) {iht} {ihv} {ihb} (qe2 : KExpr) (qst2 : whnf_step (KExpr.let_ qt qv qb) qe2) => letRedex_whnf_inv qt qv qb qe2 (WKC qD qe2 qc) qst2 {z0} {z1} {z2} {z3})"
     );
@@ -357,7 +357,7 @@ pub(super) const SRC_ZERO_T: &str = "def r17_zeroT (n : Nat) : Type := @Nat.rec 
 /// The SECOND derivation of a judgment that already has one: the identity
 /// conversion applied to `WKV.var`. It proves nothing new and it is not equal to
 /// what it was built from.
-pub(super) const SRC_CONV_DERIV: &str = "def r17_convDeriv (D : Nat -> Sk) (i : Nat) : WKV D (KExpr.bvar i) (D i) := WKV.conv D (KExpr.bvar i) (D i) (D i) (WKV.var D i) (@Eq.refl Sk (D i))";
+pub(super) const SRC_CONV_DERIV: &str = "def r17_convDeriv (D : Nat -> Sk) (i : Nat) : WKV D (KExpr.bvar i) (D i) := @WKV.conv D (KExpr.bvar i) (D i) (D i) (@WKV.var D i) (@Eq.refl Sk (D i))";
 
 /// **A CONVERSION RULE BREAKS THE SUBSINGLETON — PROVED, not conjectured.**
 /// `WKV.var D i` and `r17_convDeriv D i` derive the SAME judgment and are
@@ -365,15 +365,15 @@ pub(super) const SRC_CONV_DERIV: &str = "def r17_convDeriv (D : Nat -> Sk) (i : 
 /// system with a conversion rule. Note where the refutation lands: the relation
 /// here is `Eq Sk`, the FINEST possible, so this is not an artefact of a coarse
 /// conversion — no weakening of the relation rescues uniqueness.
-pub(super) const TY_CONV_BREAKS_SUBSINGLETON: &str = "forall (D : Nat -> Sk) (i : Nat), @Eq (WKV D (KExpr.bvar i) (D i)) (WKV.var D i) (r17_convDeriv D i) -> Empty";
-pub(super) const VAL_CONV_BREAKS_SUBSINGLETON: &str = "fun (D : Nat -> Sk) (i : Nat) (h : @Eq (WKV D (KExpr.bvar i) (D i)) (WKV.var D i) (r17_convDeriv D i)) => @Eq.substType Nat r17_zeroT (r17_wkv_tag D (KExpr.bvar i) (D i) (WKV.var D i)) (r17_wkv_tag D (KExpr.bvar i) (D i) (r17_convDeriv D i)) (@Eq.cong (WKV D (KExpr.bvar i) (D i)) Nat (fun (zx : WKV D (KExpr.bvar i) (D i)) => r17_wkv_tag D (KExpr.bvar i) (D i) zx) (WKV.var D i) (r17_convDeriv D i) h) ConstFreeUnit.triv";
+pub(super) const TY_CONV_BREAKS_SUBSINGLETON: &str = "forall (D : Nat -> Sk) (i : Nat), @Eq (WKV D (KExpr.bvar i) (D i)) (@WKV.var D i) (r17_convDeriv D i) -> Empty";
+pub(super) const VAL_CONV_BREAKS_SUBSINGLETON: &str = "fun (D : Nat -> Sk) (i : Nat) (h : @Eq (WKV D (KExpr.bvar i) (D i)) (@WKV.var D i) (r17_convDeriv D i)) => @Eq.substType Nat r17_zeroT (r17_wkv_tag D (KExpr.bvar i) (D i) (@WKV.var D i)) (r17_wkv_tag D (KExpr.bvar i) (D i) (r17_convDeriv D i)) (@Eq.cong (WKV D (KExpr.bvar i) (D i)) Nat (fun (zx : WKV D (KExpr.bvar i) (D i)) => r17_wkv_tag D (KExpr.bvar i) (D i) zx) (@WKV.var D i) (r17_convDeriv D i) h) ConstFreeUnit.triv";
 
 /// The two halves in ONE kernel-checked constant, the ladder's contrast idiom:
 /// under a conversion rule the SHAPE is still unique and the DERIVATION is not.
 /// `PropBox` is the non-cumulativity bridge — the first half is a `forall` into
 /// `Eq`, hence a Prop, and `AndType` takes `Type`s.
-pub(super) const TY_CONV_VERDICT: &str = "AndType (PropBox (forall (D : Nat -> Sk) (e : KExpr) (s1 : Sk) (h1 : WKV D e s1) (s2 : Sk) (h2 : WKV D e s2), @Eq Sk s1 s2)) (forall (D : Nat -> Sk) (i : Nat), @Eq (WKV D (KExpr.bvar i) (D i)) (WKV.var D i) (r17_convDeriv D i) -> Empty)";
-pub(super) const VAL_CONV_VERDICT: &str = "@AndType.intro (PropBox (forall (D : Nat -> Sk) (e : KExpr) (s1 : Sk) (h1 : WKV D e s1) (s2 : Sk) (h2 : WKV D e s2), @Eq Sk s1 s2)) (forall (D : Nat -> Sk) (i : Nat), @Eq (WKV D (KExpr.bvar i) (D i)) (WKV.var D i) (r17_convDeriv D i) -> Empty) (r16_propBox_intro (forall (D : Nat -> Sk) (e : KExpr) (s1 : Sk) (h1 : WKV D e s1) (s2 : Sk) (h2 : WKV D e s2), @Eq Sk s1 s2) r17_conv_shape_unique) r17_conv_breaks_subsingleton";
+pub(super) const TY_CONV_VERDICT: &str = "AndType (PropBox (forall (D : Nat -> Sk) (e : KExpr) (s1 : Sk) (h1 : WKV D e s1) (s2 : Sk) (h2 : WKV D e s2), @Eq Sk s1 s2)) (forall (D : Nat -> Sk) (i : Nat), @Eq (WKV D (KExpr.bvar i) (D i)) (@WKV.var D i) (r17_convDeriv D i) -> Empty)";
+pub(super) const VAL_CONV_VERDICT: &str = "@AndType.intro (PropBox (forall (D : Nat -> Sk) (e : KExpr) (s1 : Sk) (h1 : WKV D e s1) (s2 : Sk) (h2 : WKV D e s2), @Eq Sk s1 s2)) (forall (D : Nat -> Sk) (i : Nat), @Eq (WKV D (KExpr.bvar i) (D i)) (@WKV.var D i) (r17_convDeriv D i) -> Empty) (r16_propBox_intro (forall (D : Nat -> Sk) (e : KExpr) (s1 : Sk) (h1 : WKV D e s1) (s2 : Sk) (h2 : WKV D e s2), @Eq Sk s1 s2) r17_conv_shape_unique) r17_conv_breaks_subsingleton";
 
 // ================================================================
 // Group I — WITNESSES, at REAL reflected constants and REAL terms.
@@ -440,7 +440,7 @@ pub(super) fn val_zeta_reads_value() -> String {
 /// `wkc_step` run on the ζ redex, through the whole `letRedex_whnf_inv` and out
 /// at `wkc_inst`. The `let_` arm's real exercise.
 pub(super) fn src_wkc_step_let_witness() -> String {
-    format!("def r17_wkc_step_let_witness : WKC r12_betaEnv (instantiate {V0} {S0}) {KDTY} := wkc_step r12_betaEnv r17_letTerm {KDTY} r17_let_witness (instantiate {V0} {S0}) (whnf_step.beta r17_letTerm (instantiate {V0} {S0}) (beta_reduces.zeta {S0} {S0} {V0}))")
+    format!("def r17_wkc_step_let_witness : WKC r12_betaEnv (instantiate {V0} {S0}) {KDTY} := wkc_step r12_betaEnv r17_letTerm {KDTY} r17_let_witness (instantiate {V0} {S0}) (@whnf_step.beta r17_letTerm (instantiate {V0} {S0}) (beta_reduces.zeta {S0} {S0} {V0}))")
 }
 
 /// Weakening at the `konst` arm: lifting does not move a constant, and the

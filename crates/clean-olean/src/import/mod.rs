@@ -27,6 +27,7 @@ pub(crate) use restatement_evidence::{
     CompletedCanonicalTheorem, PendingRestatement, TheoremRestatementCertificate,
 };
 mod authoritative_values;
+mod binder_spine;
 mod convert;
 mod convert_direct;
 mod convert_expr;
@@ -97,11 +98,15 @@ use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
 // Re-export public API
-pub use artifact::{read_artifact, ArtifactDepth, ArtifactRead};
+pub use artifact::{
+    read_artifact, ArtifactDeclaration, ArtifactDeclarationOrigin, ArtifactDepth,
+    ArtifactInventory, ArtifactInventoryError, ArtifactInventoryLimits, ArtifactRead,
+};
 pub use convert::is_projection_fn_body;
 pub(crate) use convert::{infer_recursor_arg_order, is_aux_recursor_suffix, ConvertedConstant};
 pub use load::{
-    load_module_with_deps, load_module_with_deps_bounded, load_module_with_deps_bounded_shared,
+    load_module_with_deps, load_module_with_deps_and_completed_imports,
+    load_module_with_deps_bounded, load_module_with_deps_bounded_shared,
     load_module_with_deps_bounded_shared_with_policy, load_module_with_deps_cached,
     load_module_with_deps_cached_guarded, load_module_with_deps_parallel,
     load_module_with_deps_replaying_module, load_module_with_deps_shared,
@@ -114,8 +119,9 @@ pub use load::{
 };
 pub(crate) use load_register::register_front_end_constants;
 pub use load_register::{
-    is_compiler_ir_name, load_parsed_module, load_parsed_module_at_index,
-    load_parsed_module_at_index_with_import_policy, load_parsed_module_with_import_policy,
+    is_compiler_ir_name, is_nonreplayable_compiler_constant, load_parsed_module,
+    load_parsed_module_at_index, load_parsed_module_at_index_with_import_policy,
+    load_parsed_module_with_import_policy,
 };
 pub use load_shadowing::lean_accepts_restatement;
 pub(crate) use parse::assemble_incremental_part;
@@ -190,6 +196,16 @@ pub enum ImportError {
         name: String,
         /// Exact binding failure.
         reason: String,
+    },
+    /// The legacy string-named API cannot preserve this exact payload Name.
+    /// The artifact may be valid for the direct typed reader; nothing registers
+    /// before this interface refusal.
+    #[error("legacy ParsedModule cannot represent payload declaration `{name}` without losing Name components; use the direct typed reader")]
+    LossyParsedPayloadName {
+        /// Display label for diagnostics only.
+        name: String,
+        /// Exact source identity, not a reparsed display alias.
+        identity: clean_kernel::name::Name,
     },
     /// Error parsing the .olean file.
     #[error("parse error: {0}")]
@@ -626,6 +642,7 @@ impl ImportError {
             | Self::ExprConversion { name, .. }
             | Self::LevelConversion { name, .. }
             | Self::DuplicateDeclaration { name, .. }
+            | Self::LossyParsedPayloadName { name, .. }
             | Self::ConflictingDeclaration { name, .. }
             | Self::PartsDisagree { name, .. }
             | Self::ForwardReference { name, .. }
@@ -784,6 +801,35 @@ pub struct DeferredRecursor {
     pub initial_refusal: String,
     /// Staging is not proof or executable authority.
     pub status: DeferredRecursorStatus,
+}
+
+/// Completed module-availability DATA from one successful dependency load.
+///
+/// The keys are the loader's existing injective completed-module memo, never
+/// display-name parsing, declarations or proof/admission evidence. There is no
+/// caller constructor or deserializer; a failed walk returns no completed set.
+#[derive(Clone, Debug)]
+pub struct CompletedModuleImports {
+    keys: Arc<hashbrown::HashSet<String>>,
+}
+
+impl CompletedModuleImports {
+    /// Whether that exact typed module completed in this load. This is only
+    /// availability bookkeeping for the associated produced environment.
+    #[must_use]
+    pub fn contains_module(&self, module: &clean_kernel::Name) -> bool {
+        path::module_visit_key(module).is_ok_and(|key| self.keys.contains(&key))
+    }
+
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.keys.len()
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.keys.is_empty()
+    }
 }
 
 /// Summary of an import attempt.

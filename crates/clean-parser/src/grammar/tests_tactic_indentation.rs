@@ -442,3 +442,52 @@ fn test_try_dedent_terminates_sub_block() {
         other => panic!("Expected ByTactic, got {other:?}"),
     }
 }
+
+fn location_hyp_names(tactic: &SurfaceTactic) -> Vec<String> {
+    let SurfaceTactic::Named { args, .. } = tactic else {
+        panic!("expected a named tactic, got {tactic:?}");
+    };
+    args.iter()
+        .map(|arg| match arg {
+            SurfaceExpr::Ident(_, name) => name.to_string(),
+            other => panic!("expected a hypothesis name, got {other:?}"),
+        })
+        .collect()
+}
+
+/// Lean's `locationHyp` is `(ppSpace colGt term:max)+`: the names of `at`
+/// end at a line that starts at the tactic block's column. `obtain` and
+/// `rcases` are neither keywords nor tactic names here, so they used to be
+/// read as further hypotheses of `push_neg at h`.
+#[test]
+fn test_parse_location_hyps_stop_at_the_next_line_of_the_block() {
+    for next in ["obtain ⟨x, hx⟩ := h", "rcases h with ⟨x, hx⟩"] {
+        let src = format!("by\n  push_neg at h\n  {next}\n  exact ⟨x, hx⟩");
+        let expr = Parser::parse_expr(&src).unwrap_or_else(|e| panic!("{src}: {e:?}"));
+        let SurfaceExpr::ByTactic(_, tactics) = expr else {
+            panic!("expected ByTactic, got {expr:?}");
+        };
+        assert_eq!(tactics.len(), 3, "{src}: {tactics:?}");
+        assert_eq!(
+            location_hyp_names(&tactics[0]),
+            vec!["h".to_string()],
+            "{src}"
+        );
+    }
+}
+
+/// A name on a later line RIGHT of the block's column continues the list,
+/// as `colGt` allows.
+#[test]
+fn test_parse_location_hyps_continue_on_a_deeper_line() {
+    let src = "by\n  push_neg at h\n    h2\n  exact h";
+    let expr = Parser::parse_expr(src).unwrap_or_else(|e| panic!("{src}: {e:?}"));
+    let SurfaceExpr::ByTactic(_, tactics) = expr else {
+        panic!("expected ByTactic, got {expr:?}");
+    };
+    assert_eq!(tactics.len(), 2, "{tactics:?}");
+    assert_eq!(
+        location_hyp_names(&tactics[0]),
+        vec!["h".to_string(), "h2".to_string()]
+    );
+}

@@ -221,7 +221,7 @@ fn actual(alias: bool) -> String {
 
 fn expected(alias: bool) -> String {
     format!(
-        "{RESULT}.value ({}) ({})",
+        "@{RESULT}.value ({}) ({})",
         pair("n", second_count(alias)),
         final_memory(alias)
     )
@@ -263,11 +263,11 @@ fn execution_source(alias: bool) -> (String, String) {
   {bound} layoutFound {access} ({rep}) (ir_byte_arc_clone_increment_bounded_v1 ({m}) secondAllowed)");
     let first_actual =
         "ir_byte_fetch_add_relaxed_usize_seq_v1 64 ctx (IRScalar.ptr_ p) (IRScalar.int_ 1) mem";
-    let first_expected = format!("{RESULT}.value (IRScalar.int_ n) ({first})");
+    let first_expected = format!("@{RESULT}.value (IRScalar.int_ n) ({first})");
     let after = format!("ir_byte_arc_count_pair_after_first_v1 ctx ({q})");
     let middle = format!("{after} ({first_expected})");
     let second_actual = format!("ir_byte_fetch_add_relaxed_usize_seq_v1 64 ctx (IRScalar.ptr_ ({q})) (IRScalar.int_ 1) ({first})");
-    let second_expected = format!("{RESULT}.value (IRScalar.int_ ({m})) ({last})");
+    let second_expected = format!("@{RESULT}.value (IRScalar.int_ ({m})) ({last})");
     let proof = trans(
         RESULT,
         &actual(alias),

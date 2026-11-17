@@ -852,13 +852,3 @@ pub(crate) fn convert_binder_info(info: SurfaceBinderInfo) -> BinderInfo {
         SurfaceBinderInfo::Instance => BinderInfo::InstImplicit,
     }
 }
-
-/// Check if a surface expression is an outParam wrapper
-pub(in crate::infer) fn is_out_param_type(expr: &SurfaceExpr) -> bool {
-    matches!(expr, SurfaceExpr::OutParam(_, _))
-}
-
-/// Check if a surface expression is a semiOutParam wrapper
-pub(in crate::infer) fn is_semi_out_param_type(expr: &SurfaceExpr) -> bool {
-    matches!(expr, SurfaceExpr::SemiOutParam(_, _))
-}

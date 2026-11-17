@@ -23,14 +23,14 @@ impl ProofLibrary {
                 "fun (nv : Nat) (enc : ClausePolyEncoding nv) => \
                  @ClausePolyEncoding.rec nv \
                    (fun (e : ClausePolyEncoding nv) => ClausePolySoundness nv e) \
-                   (fun (var : Nat) => ClausePolySoundness.single_pos nv var) \
-                   (fun (var : Nat) => ClausePolySoundness.single_neg nv var) \
+                   (fun (var : Nat) => @ClausePolySoundness.single_pos nv var) \
+                   (fun (var : Nat) => @ClausePolySoundness.single_neg nv var) \
                    (fun (var : Nat) (prev : ClausePolyEncoding nv) \
                         (ih : ClausePolySoundness nv prev) => \
-                     ClausePolySoundness.extend_pos nv var prev ih) \
+                     @ClausePolySoundness.extend_pos nv var prev ih) \
                    (fun (var : Nat) (prev : ClausePolyEncoding nv) \
                         (ih : ClausePolySoundness nv prev) => \
-                     ClausePolySoundness.extend_neg nv var prev ih) \
+                     @ClausePolySoundness.extend_neg nv var prev ih) \
                    enc",
                 "GF01 Clause-polynomial soundness: the GF(2) polynomial \
                  encoding of a CNF clause equals zero iff the clause is \
@@ -66,12 +66,12 @@ impl ProofLibrary {
                 "fun (mp : Nat) (step : GroebnerStep mp) => \
                  @GroebnerStep.rec mp \
                    (fun (s : GroebnerStep mp) => GroebnerTerminates mp s) \
-                   (GroebnerTerminates.initial mp) \
+                   (@GroebnerTerminates.initial mp) \
                    (fun (i : Nat) (j : Nat) \
                         (prev : GroebnerStep mp) (ih : GroebnerTerminates mp prev) => \
-                     GroebnerTerminates.s_reduce mp i j prev ih) \
+                     @GroebnerTerminates.s_reduce mp i j prev ih) \
                    (fun (prev : GroebnerStep mp) (ih : GroebnerTerminates mp prev) => \
-                     GroebnerTerminates.add_to_basis mp prev ih) \
+                     @GroebnerTerminates.add_to_basis mp prev ih) \
                    step",
                 "GF03 Boolean Groebner termination: Buchberger's algorithm \
                  terminates over GF(2) with boolean axioms (x^2=x). \

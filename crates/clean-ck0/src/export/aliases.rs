@@ -1,6 +1,6 @@
-//! A checked opaque declaration with a reserved helper name stays opaque. A
-//! private transparent forwarding constant lets it cross the unchanged raw
-//! recursor-name gate, without unfolding its proof or granting an iota rule.
+//! Transport a checked ordinary helper across the unchanged raw recursor-name
+//! gate. A private forwarding constant preserves the original declaration's
+//! opacity or delta scheduling; it never grants a recursor or iota rule.
 use super::*;
 use crate::validate::Env;
 use crate::Level;
@@ -24,25 +24,22 @@ impl Env for Arity<'_> {
 impl Replay {
     pub(super) fn prepare_alias(
         &self,
-        kind: &str,
         name: &Name,
         arity: u32,
     ) -> Result<Option<CheckedAlias>, Refusal> {
-        if kind == "def"
-            || !matches!(
-                name.last_str(),
-                Some(
-                    "rec"
-                        | "recOn"
-                        | "casesOn"
-                        | "below"
-                        | "ibelow"
-                        | "brecOn"
-                        | "binductionOn"
-                        | "brecOnEq"
-                )
+        if !matches!(
+            name.last_str(),
+            Some(
+                "rec"
+                    | "recOn"
+                    | "casesOn"
+                    | "below"
+                    | "ibelow"
+                    | "brecOn"
+                    | "binductionOn"
+                    | "brecOnEq"
             )
-        {
+        ) {
             return Ok(None);
         }
         if arity > 256 {

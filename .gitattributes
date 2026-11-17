@@ -74,3 +74,35 @@ reports/isabelle-emitter-current-intake-source-2026-11-15/owned-code-intake.diff
 reports/isabelle-emitter-e6-failed78-2026-11-15/logs/elab-goal-universes-run.stdout.log whitespace=-blank-at-eof
 reports/isabelle-emitter-e6-failed78-2026-11-15/logs/mathverse-term-resolution-run.stdout.log whitespace=-blank-at-eof
 reports/merged-source-qualification-2026-11-16/registry-progress/widest/stdout whitespace=-blank-at-eol
+# Exact hashed terminal evidence keeps its original padding and final blanks.
+reports/original-formula-source-goals-2026-11-16/completed-nat-data-diagnostic.log whitespace=-blank-at-eof
+reports/original-formula-source-goals-2026-11-16/default-local-gate-refusal.log whitespace=-blank-at-eol
+reports/original-formula-source-goals-2026-11-16/kernel-controls.log whitespace=-blank-at-eof
+reports/original-formula-source-goals-2026-11-16/source-goal-controls.log whitespace=-blank-at-eof
+
+# Preserve exact native terminal output in this qualification packet.
+reports/original-formula-source-goals-2026-11-16/current-main-qualification/clean-093-kernel-controls.log whitespace=-blank-at-eof
+reports/original-formula-source-goals-2026-11-16/current-main-qualification/clean-093-source-goal-controls.log whitespace=-blank-at-eof
+reports/original-formula-source-goals-2026-11-16/current-main-qualification/clean-2300-source-goal-controls.log whitespace=-blank-at-eof
+reports/original-formula-source-goals-2026-11-16/current-main-qualification/clean-f39-combined-certification.log whitespace=-blank-at-eof
+reports/original-formula-source-goals-2026-11-16/current-main-qualification/clean-f39-retained-certification.log whitespace=-blank-at-eof
+reports/original-formula-source-goals-2026-11-16/current-main-qualification/clean-f39-retained-profiler.log whitespace=-blank-at-eof
+reports/original-formula-source-goals-2026-11-16/current-main-qualification/clean-proof-path-applicability.diff whitespace=-blank-at-eol
+
+# Exact helper-custody review gate output retains aligned terminal padding.
+reports/helper-custody-optimization-2026-11-16/gate/stdout whitespace=-blank-at-eol
+reports/helper-custody-optimization-2026-11-16/gate-final/stdout whitespace=-blank-at-eol
+
+# Preserve byte-exact environment-census diagnostic captures and their seals.
+reports/env-bypass-census-accounting-2026-11-16/wide/expanded.stdout whitespace=-blank-at-eol
+reports/env-bypass-census-accounting-2026-11-16/wide-joined/expanded.stdout whitespace=-blank-at-eol
+reports/env-bypass-census-accounting-2026-11-16/wide-publication/expanded.stdout whitespace=-blank-at-eol
+reports/env-bypass-census-accounting-2026-11-16/wide-frontend-restricted/expanded.stdout whitespace=-blank-at-eol
+
+# Preserve the exact failed scalar-proof terminal capture.
+reports/align-nat-word-semr-2026-11-16/executions/producer-1/command.log whitespace=-blank-at-eol
+reports/align-nat-word-semr-2026-11-16/executions/producer-2/command.log whitespace=-blank-at-eol
+reports/align-nat-word-semr-2026-11-16/executions/producer-3/command.log whitespace=-blank-at-eol
+reports/align-nat-word-semr-2026-11-16/executions/producer-4/command.log whitespace=-blank-at-eol
+reports/align-nat-word-semr-2026-11-16/executions/producer-5/command.log whitespace=-blank-at-eol
+reports/canonical-eleven-cohort-2026-11-16/executions/word-leaves-current-full-1/command.log whitespace=-blank-at-eol

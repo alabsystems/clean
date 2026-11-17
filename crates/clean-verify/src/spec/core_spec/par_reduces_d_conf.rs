@@ -394,11 +394,11 @@ impl Specification {
             let star_call = |a: &str, b: &str, hab: &str| {
                 if vary_first {
                     format!(
-                        "({star_cong} env {a} {b} {fixed} {fixed} {hab} (@delta_cong_star.refl env {fixed}))"
+                        "(@{star_cong} env {a} {b} {fixed} {fixed} {hab} (@delta_cong_star.refl env {fixed}))"
                     )
                 } else {
                     format!(
-                        "({star_cong} env {fixed} {fixed} {a} {b} (@delta_cong_star.refl env {fixed}) {hab})"
+                        "(@{star_cong} env {fixed} {fixed} {a} {b} (@delta_cong_star.refl env {fixed}) {hab})"
                     )
                 }
             };

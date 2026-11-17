@@ -166,6 +166,7 @@ Usage:
                                                    # account for a row nothing can replay
     scripts/check_gate_registry.py --wiring-audit  # REPORTING ONLY, always 0
     scripts/check_gate_registry.py --wiring-audit --wiring-audit-out <path>
+    scripts/check_gate_registry.py --pinned-inputs # the files besides this one R7 pins
 """
 
 from __future__ import annotations
@@ -188,6 +189,17 @@ import time
 import types
 from datetime import date, timedelta
 from pathlib import Path
+
+# The reference Rust lexer, executed from its source: ignored bytecode is not an input.
+_reference_lexer = types.ModuleType("check_gate_registry_reference_lexer")
+_reference_lexer.__file__ = str(Path(__file__).resolve().parent / "check_add_decl_ratchet.py")
+exec(compile(Path(_reference_lexer.__file__).read_bytes(), _reference_lexer.__file__, "exec", dont_inherit=True),
+     _reference_lexer.__dict__)
+
+# check_gate_registry.py R7 pins what `--pinned-inputs` prints: the reference
+# lexer this gate runs over Rust rows (`script_code_only`).
+ANSWERS_PINNED_INPUTS = True
+PINNED_INPUTS = ("scripts/check_add_decl_ratchet.py",)
 
 ROOT = Path(__file__).resolve().parent.parent
 REGISTRY = ROOT / "data/gate_registry.json"
@@ -381,8 +393,10 @@ READS_SOURCE = re.compile(
     r"""|blank_noncode_lean\("""
 )
 
-# Rust COMMENT spans, for `script_code_only` below: block comments (with their
-# string-literal bodies) and line comments, blanked so line geometry survives.
+# Rust COMMENT spans, for `script_code_only` below, are blanked by the reference
+# lexer's `strip_comments_keep_strings`, imported and pinned above: block
+# comments nest, a `//` inside a string literal is not a comment, and line
+# geometry survives.
 #
 # COMMENTS ONLY, and that is deliberate (lane LOOSE, 2026-08-25). The first cut
 # blanked string literals too and made things WORSE, not better: every
@@ -393,6 +407,10 @@ READS_SOURCE = re.compile(
 # .py/.sh treatment exactly, where docstrings (prose) are blanked and inline
 # string literals are kept. The rule being enforced is "do not read PROSE as
 # code"; a string literal in an expression is code.
+#
+# `.lean` rows keep this older pattern, unchanged (2026-11-16): it matches
+# `/* */` and `//` spans, not Lean's `/- -/` and `--`, and it neither nests nor
+# sees strings. Routing Lean text through the Rust lexer would be another change.
 RUST_COMMENT_RE = re.compile(r"/\*.*?\*/|//[^\n]*", re.DOTALL)
 
 # A recognised comment/literal stripper. Adding a new one here is a deliberate
@@ -455,13 +473,15 @@ def script_code_only(rel: str, text: str) -> str:
     prose is wrong -- and duly reported that this file scans Rust source. A
     rule against reading prose as code cannot itself read prose as code.
     """
-    if rel.endswith((".rs", ".lean")):
+    if rel.endswith(".rs"):
         # 2026-08-25 (lane LOOSE). Rust rows used to reach the detectors as RAW
         # TEXT -- so a doc comment naming `collect_rust_source_files`, or a
         # `// SOUNDNESS:`-style note naming a stripper, decided an R9 verdict.
         # A rule against reading prose as code may not read prose as code, and
         # that applies to the Rust rows too, not only to the .py/.sh ones.
         # Comments only: see RUST_COMMENT_RE for why string literals stay.
+        return _reference_lexer.strip_comments_keep_strings(text)
+    if rel.endswith(".lean"):
         return RUST_COMMENT_RE.sub(
             lambda m: "".join("\n" if ch == "\n" else " " for ch in m.group(0)),
             text,
@@ -5321,6 +5341,25 @@ def _selftest_sandbox_cache() -> tuple[int, int]:
     return count, failures
 
 
+def _selftest_reference_lexer() -> tuple[int, int]:
+    """Rust rows reach R9's detectors through the reference lexer, which
+    `--pinned-inputs` names, so this demonstration goes red when that lexer
+    regresses (its own `lexer_failures`) or when `script_code_only` stops
+    using it: a nested comment hiding a cfg, and a `//` inside a string."""
+    bad = list(_reference_lexer.lexer_failures())
+    src = '/* /* */ #[cfg(test)] // */\nconst A: &str = "//"; mod m;\n'
+    got = script_code_only("crates/x/src/lib.rs", src)
+    if (got != _reference_lexer.strip_comments_keep_strings(src) or "cfg(test)" in got
+            or 'const A: &str = "//"; mod m;' not in got):
+        bad.append(f"script_code_only over a .rs row: {got!r}")
+    name = "75 the Rust rows' comment blanker is the reference lexer, read as rustc does"
+    if bad:
+        print(f"  [FAIL] {name}: {bad}")
+    else:
+        print(f"  [ok]   {name}")
+    return 1, int(bool(bad))
+
+
 def selftest() -> int:
     """`--selftest`. Its arms re-pin and demonstrate MINI repositories whose
     commands are trivial scripts, so they run inside one notional reservation
@@ -5796,9 +5835,11 @@ def _selftest_body() -> int:
     rep_arms, rep_failures = _selftest_repin()
     cnt_arms, cnt_failures = _selftest_recorded_arms()
     hg_arms, hg_failures = _selftest_heavy_gated()
-    total = len(arms) + git_arms + wire_arms + mut_arms + rep_arms + cnt_arms + hg_arms
+    lex_arms, lex_failures = _selftest_reference_lexer()
+    total = (len(arms) + git_arms + wire_arms + mut_arms + rep_arms + cnt_arms + hg_arms
+             + lex_arms)
     failures += (git_failures + wire_failures + mut_failures + rep_failures + cnt_failures
-                 + hg_failures)
+                 + hg_failures + lex_failures)
     print(f"GATE_REGISTRY_LEGACY_SELFTEST arms={total} failed={failures}")
     cache_tests, cache_failures = _selftest_sandbox_cache()
     total += cache_tests
@@ -6722,6 +6763,9 @@ def _sub(root: Path, rel: str, old: str, new: str) -> None:
 
 
 def main(argv: list[str]) -> int:
+    if PINNED_INPUTS_FLAG in argv:
+        print(*PINNED_INPUTS, sep="\n")
+        return 0
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--selftest", action="store_true",
                     help="mutation arms on this checker; the count is the live "

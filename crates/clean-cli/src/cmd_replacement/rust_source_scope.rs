@@ -20,12 +20,25 @@
 //!
 //! This module is the Rust half of that one rule, mirroring `classify_paths`
 //! in the Python sibling arm for arm. The two are held to the SAME SET, not to
-//! the same outcome, by `add_decl_scan_scope_matches_the_python_producer`.
+//! the same outcome, by `add_decl_scan_scope_matches_the_python_producer`, and
+//! each to the same table of known module-tree answers
+//! (`the_module_tree_answers_every_layout_correctly`), which a parity arm
+//! cannot replace: two producers blind in the same place agree.
+//!
+//! 2026-11-16: both halves resolve the MODULE TREE from Cargo's target roots
+//! ([`module_tree`]) instead of looking for `mod x;` beside the declaring file.
+//! Beside-the-file lookup cannot see that an ordinary `foo.rs` owns `foo/`, so
+//! a module reached only through `#[cfg(test)] mod foo;` one file up was
+//! scanned as production.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-use walkdir::WalkDir;
+mod lexer;
+mod module_tree;
+
+#[cfg(test)]
+pub(crate) use lexer::{blank_both, headed_cfg_test};
 
 /// A partition of `crates/**/*.rs` into what the compiler reaches without a
 /// `test` gate and what it reaches only behind one.
@@ -59,97 +72,6 @@ pub(crate) fn is_test_named(relative_path: &str) -> bool {
         || name == "tests.rs"
         || name.ends_with("_test.rs")
         || name.ends_with("_tests.rs")
-}
-
-/// Comment bytes blanked, string literals kept.
-///
-/// Mirrors `strip_comments_keep_strings`. A gate that reads Rust source must
-/// blank comments first or it moves the WRONG WAY on a genuine fix, because
-/// CLAUDE.md requires a `// SOUNDNESS:` comment naming the very call the site
-/// makes.
-pub(crate) fn blank_comments_keep_strings(src: &str) -> String {
-    let b = src.as_bytes();
-    let mut out = b.to_vec();
-    let mut i = 0usize;
-    let blank = |out: &mut Vec<u8>, from: usize, to: usize| {
-        for byte in out.iter_mut().take(to).skip(from) {
-            if *byte != b'\n' {
-                *byte = b' ';
-            }
-        }
-    };
-    while i < b.len() {
-        if b[i] == b'/' && i + 1 < b.len() && b[i + 1] == b'/' {
-            let end = b[i..]
-                .iter()
-                .position(|&c| c == b'\n')
-                .map_or(b.len(), |p| i + p);
-            blank(&mut out, i, end);
-            i = end;
-        } else if b[i] == b'/' && i + 1 < b.len() && b[i + 1] == b'*' {
-            let mut depth = 1usize;
-            let mut j = i + 2;
-            while j + 1 < b.len() && depth > 0 {
-                if b[j] == b'/' && b[j + 1] == b'*' {
-                    depth += 1;
-                    j += 2;
-                } else if b[j] == b'*' && b[j + 1] == b'/' {
-                    depth -= 1;
-                    j += 2;
-                } else {
-                    j += 1;
-                }
-            }
-            let end = if depth == 0 { j } else { b.len() };
-            blank(&mut out, i, end);
-            i = end;
-        } else if b[i] == b'r' && i + 1 < b.len() && (b[i + 1] == b'"' || b[i + 1] == b'#') {
-            let mut hashes = 0usize;
-            let mut j = i + 1;
-            while j < b.len() && b[j] == b'#' {
-                hashes += 1;
-                j += 1;
-            }
-            if j < b.len() && b[j] == b'"' {
-                j += 1;
-                'raw: while j < b.len() {
-                    if b[j] == b'"' {
-                        let mut k = j + 1;
-                        let mut seen = 0usize;
-                        while k < b.len() && b[k] == b'#' && seen < hashes {
-                            seen += 1;
-                            k += 1;
-                        }
-                        if seen == hashes {
-                            j = k;
-                            break 'raw;
-                        }
-                    }
-                    j += 1;
-                }
-                i = j;
-            } else {
-                i += 1;
-            }
-        } else if b[i] == b'"' {
-            let mut j = i + 1;
-            while j < b.len() {
-                if b[j] == b'\\' {
-                    j += 2;
-                    continue;
-                }
-                if b[j] == b'"' {
-                    j += 1;
-                    break;
-                }
-                j += 1;
-            }
-            i = j;
-        } else {
-            i += 1;
-        }
-    }
-    String::from_utf8_lossy(&out).into_owned()
 }
 
 /// Split on commas at paren depth zero.
@@ -278,16 +200,44 @@ pub(crate) fn cfg_body_is_test_only(body: &str) -> bool {
     true
 }
 
-fn cfg_attr_is_test_only(attr: &str) -> bool {
-    let s = attr.trim_end().trim_end_matches(']').trim_end();
-    let Some(cpos) = s.find("cfg") else {
+/// Is this attribute a `cfg` whose predicate requires `test`? Anchored at the
+/// attribute head (`#!?\[\s*cfg\s*\((.*)\)\s*\]?\s*$`): a tool path makes
+/// `cfg` inert to rustc, so `#[rustfmt::cfg(test)]` is not a guard
+/// (docs/issues/2026-11-16-python-rust-lexer-copies.md).
+pub(crate) fn cfg_attr_is_test_only(attr: &str) -> bool {
+    let s = attr.trim();
+    let Some(rest) = s.strip_prefix("#!").or_else(|| s.strip_prefix('#')) else {
         return false;
     };
-    let rest = s[cpos + 3..].trim_start();
-    if !rest.starts_with('(') || !rest.ends_with(')') {
+    let Some(rest) = rest.strip_prefix('[') else {
         return false;
+    };
+    let Some(rest) = rest.trim_start().strip_prefix("cfg") else {
+        return false;
+    };
+    let Some(rest) = rest.trim_start().strip_prefix('(') else {
+        return false;
+    };
+    let tail = rest.trim_end();
+    let tail = tail.strip_suffix(']').unwrap_or(tail).trim_end();
+    let Some(body) = tail.strip_suffix(')') else {
+        return false;
+    };
+    cfg_body_is_test_only(body.trim())
+}
+
+/// The last attribute of the run that ends `head`, as (offset, text): the
+/// Python sibling's `_ATTR_RUN_RE.search` (`#\[[^\]]*\]\s*\Z`), whose match
+/// starts at the LEFTMOST `#[` after the previous `]`.
+pub(crate) fn last_attribute(head: &str) -> Option<(usize, &str)> {
+    let trimmed = head.trim_end();
+    let close = trimmed.len().checked_sub(1)?;
+    if trimmed.as_bytes()[close] != b']' {
+        return None;
     }
-    cfg_body_is_test_only(&rest[1..rest.len() - 1])
+    let from = trimmed[..close].rfind(']').map_or(0, |p| p + 1);
+    let open = from + trimmed[from..close].find("#[")?;
+    Some((open, &trimmed[open..]))
 }
 
 /// Is the item at `at` inside a contiguous attribute run that requires `test`?
@@ -298,181 +248,17 @@ fn cfg_attr_is_test_only(attr: &str) -> bool {
 /// pair made a test include read as production.
 pub(crate) fn attribute_run_is_cfg_test(src: &str, at: usize) -> bool {
     let mut head = &src[..at];
-    loop {
-        let trimmed = head.trim_end();
-        if !trimmed.ends_with(']') {
-            return false;
-        }
-        let Some(open) = trimmed.rfind("#[") else {
-            return false;
-        };
-        let attr = &trimmed[open..];
-        if attr[2..attr.len() - 1].contains(']') {
-            return false;
-        }
+    while let Some((open, attr)) = last_attribute(head) {
         if cfg_attr_is_test_only(attr) {
             return true;
         }
-        head = &trimmed[..open];
+        head = &head[..open];
     }
+    false
 }
 
-/// `mod NAME;` declarations, as (offset of the line start, name).
-fn mod_declarations(src: &str) -> Vec<(usize, String)> {
-    let mut out = Vec::new();
-    let mut offset = 0usize;
-    for line in src.split_inclusive('\n') {
-        let body = line.trim_end_matches(['\n', '\r']);
-        let stripped = body.trim_start_matches([' ', '\t']);
-        let mut rest = stripped;
-        if let Some(after) = rest.strip_prefix("pub") {
-            let after = if after.starts_with('(') {
-                match after.find(')') {
-                    Some(close) => &after[close + 1..],
-                    None => after,
-                }
-            } else {
-                after
-            };
-            if after.starts_with([' ', '\t']) {
-                rest = after.trim_start_matches([' ', '\t']);
-            }
-        }
-        if let Some(after) = rest.strip_prefix("mod") {
-            if after.starts_with([' ', '\t']) {
-                let name: String = after
-                    .trim_start_matches([' ', '\t'])
-                    .chars()
-                    .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
-                    .collect();
-                let tail =
-                    after.trim_start_matches([' ', '\t'])[name.len()..].trim_matches([' ', '\t']);
-                if !name.is_empty() && tail == ";" {
-                    out.push((offset, name));
-                }
-            }
-        }
-        offset += line.len();
-    }
-    out
-}
-
-/// A quoted target and the offset of the construct that names it, for every
-/// `#[path = ".."]` and every `include!("..")`.
-fn include_edges(src: &str) -> Vec<(usize, String)> {
-    let mut out = Vec::new();
-    for (marker, opener) in [("#[", "path"), ("include!", "")] {
-        let mut from = 0usize;
-        while let Some(rel) = src[from..].find(marker) {
-            let at = from + rel;
-            from = at + marker.len();
-            let mut cursor = &src[at + marker.len()..];
-            if marker == "#[" {
-                cursor = cursor.trim_start();
-                let Some(after) = cursor.strip_prefix(opener) else {
-                    continue;
-                };
-                let after = after.trim_start();
-                let Some(after) = after.strip_prefix('=') else {
-                    continue;
-                };
-                cursor = after.trim_start();
-            } else {
-                cursor = cursor.trim_start();
-                let Some(after) = cursor.strip_prefix('(') else {
-                    continue;
-                };
-                cursor = after.trim_start();
-            }
-            if !cursor.starts_with('"') {
-                continue;
-            }
-            let Some(close) = cursor[1..].find('"') else {
-                continue;
-            };
-            out.push((at, cursor[1..1 + close].to_string()));
-        }
-    }
-    out
-}
-
-/// Classify every `crates/**/*.rs` under `root`.
+/// Classify every `crates/**/*.rs` under `root` by the module tree rustc
+/// compiles from each Cargo target root ([`module_tree`]).
 pub(crate) fn classify(root: &Path) -> SourceScope {
-    let root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
-    let mut sources: BTreeMap<PathBuf, String> = BTreeMap::new();
-    for entry in WalkDir::new(root.join("crates"))
-        .into_iter()
-        .filter_map(Result::ok)
-        .filter(|e| e.path().extension().is_some_and(|x| x == "rs"))
-    {
-        let Ok(canon) = entry.path().canonicalize() else {
-            continue;
-        };
-        let Ok(bytes) = std::fs::read(&canon) else {
-            continue;
-        };
-        sources.insert(canon, String::from_utf8_lossy(&bytes).into_owned());
-    }
-
-    let mut production = BTreeSet::new();
-    let mut guarded = BTreeSet::new();
-    for (path, raw) in &sources {
-        let Ok(rel) = path.strip_prefix(&root) else {
-            continue;
-        };
-        if is_test_named(&rel.to_string_lossy().replace('\\', "/")) {
-            continue;
-        }
-        let src = blank_comments_keep_strings(raw);
-        let parent = match path.parent() {
-            Some(p) => p.to_path_buf(),
-            None => continue,
-        };
-        for (at, name) in mod_declarations(&src) {
-            let guard = attribute_run_is_cfg_test(&src, at);
-            for cand in [
-                parent.join(format!("{name}.rs")),
-                parent.join(&name).join("mod.rs"),
-            ] {
-                if let Ok(canon) = cand.canonicalize() {
-                    if sources.contains_key(&canon) {
-                        if guard {
-                            guarded.insert(canon);
-                        } else {
-                            production.insert(canon);
-                        }
-                    }
-                }
-            }
-        }
-        for (at, target) in include_edges(&src) {
-            let guard = attribute_run_is_cfg_test(&src, at);
-            if let Ok(canon) = parent.join(&target).canonicalize() {
-                if sources.contains_key(&canon) {
-                    if guard {
-                        guarded.insert(canon);
-                    } else {
-                        production.insert(canon);
-                    }
-                }
-            }
-        }
-    }
-
-    let mut test_only = BTreeSet::new();
-    for path in sources.keys() {
-        let rel = path
-            .strip_prefix(&root)
-            .map(|r| r.to_string_lossy().replace('\\', "/"))
-            .unwrap_or_default();
-        if !production.contains(path) && (guarded.contains(path) || is_test_named(&rel)) {
-            test_only.insert(path.clone());
-        }
-    }
-
-    SourceScope {
-        all: sources.keys().cloned().collect(),
-        production,
-        test_only,
-    }
+    module_tree::classify(root)
 }

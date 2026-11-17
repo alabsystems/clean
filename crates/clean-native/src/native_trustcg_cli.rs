@@ -14,10 +14,20 @@ pub(super) fn compile_object_with_cli(
     module: &Module,
     dir: &Path,
 ) -> Result<PathBuf, LaneError> {
+    compile_object_with_cli_recording(tcg, target, module, dir, None).map(|(path, _)| path)
+}
+
+pub(super) fn compile_object_with_cli_recording(
+    tcg: &TrustCg,
+    target: &str,
+    module: &Module,
+    dir: &Path,
+    observation: Option<&crate::primitive_uses::NativeRecorder>,
+) -> Result<(PathBuf, Option<crate::primitive_uses::NativeArtifactId>), LaneError> {
     let tmbc = dir.join("module.tmbc");
     let object = dir.join("module.o");
     let bytes = serialize_tmbc(module).map_err(|e| LaneError::core("serialize")(e.into()))?;
-    std::fs::write(&tmbc, bytes)
+    std::fs::write(&tmbc, &bytes)
         .map_err(|e| LaneError::TrustCg(format!("could not write {}: {e}", tmbc.display())))?;
     let args = [
         "-c",
@@ -42,12 +52,15 @@ pub(super) fn compile_object_with_cli(
             .map_err(|e| LaneError::TrustCg(format!("could not render diagnostic command: {e}")))?;
         retain(dir, "trust-cg-command.json", &bytes)?;
     }
-    let out = Command::new(&tcg.path)
-        .args(args)
-        .arg(&object)
-        .arg(&tmbc)
+    let mut command = Command::new(&tcg.path);
+    command.args(args).arg(&object).arg(&tmbc);
+    let invocation =
+        observation.and_then(|observer| observer.before_backend(&command, &tmbc, bytes));
+    let out = command
         .output()
         .map_err(|e| LaneError::TrustCg(format!("could not run {}: {e}", tcg.path.display())))?;
+    let object_artifact =
+        observation.and_then(|observer| observer.after_backend(invocation.as_ref(), &object, &out));
     let diagnostics = if tcg.retention == ScratchRetention::Keep {
         retain(dir, "trust-cg.stdout", &out.stdout)
             .and_then(|()| retain(dir, "trust-cg.stderr", &out.stderr))
@@ -76,7 +89,7 @@ pub(super) fn compile_object_with_cli(
             "trust-cg exited 0 but wrote no object".to_owned(),
         ));
     }
-    Ok(object)
+    Ok((object, object_artifact))
 }
 
 fn retain(dir: &Path, name: &str, bytes: &[u8]) -> Result<(), LaneError> {

@@ -433,7 +433,6 @@ fn test_push_neg_at_used_hypothesis_closes_as_in_lean() {
         ],
     );
 }
-
 const PRELUDE_NEGATIONS: &str = r#"theorem w_dite (c : Prop) [Decidable c] : c ∨ c = False :=
   if h : c then Or.inl h else Or.inr (by simp only [h])
 theorem w_dite_exact_tac (c : Prop) [Decidable c] : c ∨ c = False := by
@@ -469,4 +468,100 @@ theorem w_arrow (c : Prop) (h : c → False) : c = False := by simp only [h]
 #[test]
 fn test_simp_prelude_negation_hypothesis_rewrites_to_false() {
     assert_refused_exactly(PRELUDE_NEGATIONS, &[("w_arrow", "NoProgress")]);
+}
+
+const PUSH_NEG_AT_QUANTIFIERS: &str = r#"theorem w_pn_forall (p : Nat → Prop) (h : ¬ ∀ x, p x) : ∃ x, ¬ p x := by
+  push_neg at h
+  exact h
+theorem w_pn_exists (p : Nat → Prop) (h : ¬ ∃ x, p x) : ∀ x, ¬ p x := by
+  push_neg at h
+  exact h
+theorem w_pn_forall_elim (p : Nat → Prop) (h : ¬ ∀ x, p x) : ∃ x, ¬ p x := by
+  push_neg at h
+  exact Exists.elim h (fun x hx => Exists.intro x hx)
+theorem w_pn_exists_apply (p : Nat → Prop) (h : ¬ ∃ x, p x) : ¬ p 3 := by
+  push_neg at h
+  exact h 3
+theorem w_pn_nested (p : Nat → Nat → Prop) (h : ∀ y, ¬ ∀ x, p x y) : ∀ y, ∃ x, ¬ p x y := by
+  push_neg at h
+  exact h
+theorem w_pn_obtain (p : Nat → Prop) (h : ¬ ∀ x, p x) : ∃ x, ¬ p x := by
+  push_neg at h
+  obtain ⟨x, hx⟩ := h
+  exact ⟨x, hx⟩
+theorem w_pn_rcases (p : Nat → Prop) (h : ¬ ∀ x, p x) : ∃ x, ¬ p x := by
+  push_neg at h
+  rcases h with ⟨x, hx⟩
+  exact ⟨x, hx⟩
+theorem w_pn_imp (P Q : Prop) (h : ¬ (P → Q)) : P ∧ ¬ Q := by
+  push_neg at h
+  exact h
+theorem w_pn_dep_prop (P : Prop) (q : P → Prop) (h : ¬ ∀ (hp : P), q hp) : ∃ (hp : P), ¬ q hp := by
+  push_neg at h
+  exact h
+theorem w_pn_goal_forall (p : Nat → Prop) (h : ∃ x, ¬ p x) : ¬ ∀ x, p x := by
+  push_neg
+  exact h
+theorem w_pn_goal_imp (P Q : Prop) (h : P ∧ ¬ Q) : ¬ (P → Q) := by
+  push_neg
+  exact h
+theorem w_pn_forall_wrong (p : Nat → Prop) (h : ¬ ∀ x, p x) : ∀ x, ¬ p x := by
+  push_neg at h
+  exact h
+theorem w_pn_exists_wrong (p : Nat → Prop) (h : ¬ ∃ x, p x) : ∃ x, ¬ p x := by
+  push_neg at h
+  exact h
+theorem w_pn_imp_wrong (P Q : Prop) (h : ¬ (P → Q)) : ∃ (_ : P), ¬ Q := by
+  push_neg at h
+  exact h
+theorem w_pn_goal_imp_wrong (P Q : Prop) (h : ∃ (_ : P), ¬ Q) : ¬ (P → Q) := by
+  push_neg
+  exact h
+theorem w_pn_arrow_hyp (P Q : Prop) (h : (P ∨ Q) → False) : ¬ P ∧ ¬ Q := by
+  push_neg at h
+  exact h
+theorem w_pn_arrow_goal (P Q : Prop) (h : ¬ P ∧ ¬ Q) : (P ∨ Q) → False := by
+  push_neg
+  exact h
+"#;
+
+/// Mathlib's `push_neg` at a hypothesis that is then USED, over the
+/// quantifier and implication rows of `transformNegationStep`:
+/// `h : ¬ ∀ x, p x` becomes `h : ∃ x, ¬ p x` (`not_forall_eq`), `h : ¬ ∃ x,
+/// p x` becomes `h : ∀ x, ¬ p x` (`not_exists_eq`), under an outer `∀` too,
+/// and `h : ¬ (P → Q)` becomes `h : P ∧ ¬ Q` (`not_implies_eq`, taken when the
+/// binder type is a proposition the body does not mention). The pushed
+/// hypothesis replaces `h` in the local context through a cast, so `exact h`,
+/// `Exists.elim`, `obtain`, `rcases` and application all see the pushed type,
+/// and the term kernel-checks. A proposition binder the body DOES mention is
+/// a quantifier (`w_pn_dep_prop`: `∃ (hp : P), ¬ q hp`). `obtain`/`rcases`
+/// on the line after `push_neg at h` used to be parsed as further hypothesis
+/// names of the `at` list. The negative controls are what Lean with Mathlib refuses:
+/// - `exact h` against the other quantifier's pushed form, and `∃ (_ : P),
+///   ¬ Q` against the pushed `P ∧ ¬ Q`, at `h` (`w_pn_imp_wrong`) and at the
+///   goal (`w_pn_goal_imp_wrong`). That `∃` is the shape Clean's push_neg
+///   produced before 2026-11-16, when it took "the binder is a proposition"
+///   to mean "the binder is the sort `Prop`" and so read every `P → Q` as a
+///   quantifier;
+/// - the arrow spelling `(P ∨ Q) → False`, which is not a negation to
+///   `push_neg` (`whnfR` then `Expr.not?` reads the `Not` head only). At the
+///   goal Mathlib fails with "push_neg made no progress"; at `h` the hypothesis
+///   stays as written, so `exact h` is a type mismatch.
+///
+/// Core Lean has no `push_neg` (pinned v4.35.0 and v4.36.0-rc2 report
+/// "unknown tactic", 2026-11-16) and no Mathlib checkout is on this machine,
+/// so these verdicts are read from Mathlib's `Mathlib/Tactic/PushNeg.lean`.
+#[test]
+fn test_push_neg_at_used_quantified_hypothesis_closes_as_in_lean() {
+    assert_refused_exactly(
+        PUSH_NEG_AT_QUANTIFIERS,
+        &[
+            ("w_pn_forall_wrong", "TypeMismatch"),
+            ("w_pn_exists_wrong", "TypeMismatch"),
+            ("w_pn_imp_wrong", "TypeMismatch"),
+            ("w_pn_goal_imp_wrong", "TypeMismatch"),
+            ("w_pn_arrow_hyp", "TypeMismatch"),
+            ("w_pn_arrow_goal", "NoProgress"),
+        ],
+    );
 }

@@ -53,9 +53,7 @@ fn current_source_spelling_v1(line: &str) -> String {
             let after_head = start + head.len();
             let next = out.as_bytes().get(after_head).copied();
             // A longer qualified identifier is not this constructor.
-            if next.map_or(false, |b| {
-                b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b'\'')
-            }) {
+            if next.is_some_and(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b'\'')) {
                 cursor = after_head;
                 continue;
             }

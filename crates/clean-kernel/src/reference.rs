@@ -195,7 +195,7 @@ use crate::env::{
     closed_term_content_digest, declaration_content_digest, inductive_content_digest,
     is_canonical_foundational_constant, mm_axiom_only, mm_two_pass_active, quotient_content_digest,
     CheckerSettings, ConstantInfo, ConstantKind, Declaration, DeclarationVerification, EnvError,
-    Environment, KernelTheory, LeanTheoryExclusion, LEAN_KERNEL_NAT_EXTENSIONS,
+    Environment, KernelTheory, LeanTheoryExclusion, Reducibility, LEAN_KERNEL_NAT_EXTENSIONS,
 };
 use crate::expr::{Expr, ExprKind, UsedConstants};
 use crate::inductive::InductiveDecl;
@@ -659,6 +659,26 @@ impl ReferenceKernel {
     /// [`ReferenceRefusal::TheoryExclusion`] or [`ReferenceRefusal::Kernel`]
     /// when the kernel refuses. Nothing is added on any refusal.
     pub fn add_checked(&mut self, d: Declaration) -> Result<ReferenceAccepted, ReferenceRefusal> {
+        self.add_checked_inner(d, None)
+    }
+
+    /// Check a definition through the same fenced entry and preserve its exact
+    /// ordinary reducibility hint. Both the declaration and the explicit hint
+    /// are bound into the returned token and environment chain. No mutable
+    /// environment is exposed, and all ordinary entry refusals remain in force.
+    pub fn add_checked_with_reducibility(
+        &mut self,
+        d: Declaration,
+        hint: Reducibility,
+    ) -> Result<ReferenceAccepted, ReferenceRefusal> {
+        self.add_checked_inner(d, Some(hint))
+    }
+
+    fn add_checked_inner(
+        &mut self,
+        d: Declaration,
+        hint: Option<Reducibility>,
+    ) -> Result<ReferenceAccepted, ReferenceRefusal> {
         if mm_two_pass_active() || mm_axiom_only() {
             return Err(ReferenceRefusal::MmTwoPassActive);
         }
@@ -708,8 +728,26 @@ impl ReferenceKernel {
                 });
             }
         }
-        let decl_digest = declaration_content_digest(&d);
-        self.env.add_decl(d).map_err(|e| self.classify(e, &exprs))?;
+        let mut decl_digest = declaration_content_digest(&d);
+        if let Some(hint) = hint {
+            let mut h = Sha256::new();
+            put(&mut h, b"clean.reference.decl.reducibility.v1");
+            put(&mut h, &decl_digest);
+            let (tag, height) = match hint {
+                Reducibility::Reducible => (0u8, 0u32),
+                Reducibility::Regular(height) => (1, height),
+                Reducibility::Irreducible => (2, 0),
+                Reducibility::Opaque => (3, 0),
+            };
+            put(&mut h, &[tag]);
+            put(&mut h, &height.to_le_bytes());
+            decl_digest = h.finalize().into();
+        }
+        match hint {
+            Some(hint) => self.env.add_decl_with_reducibility(d, hint),
+            None => self.env.add_decl(d),
+        }
+        .map_err(|e| self.classify(e, &exprs))?;
         if !provenance_full(&self.env, &name) {
             // `add_decl` records `FullKernelCheck` on every success outside
             // the two-pass refused above; anything else is not a reference

@@ -213,7 +213,7 @@ impl Specification {
          (fun (_h : whnf_step e e2) => \
          forall (s : Nat -> KExpr), whnf_step (psubst s e) (psubst s e2)) \
          (fun (hb : beta_reduces e e2) (s : Nat -> KExpr) => \
-         whnf_step.beta (psubst s e) (psubst s e2) \
+         @whnf_step.beta (psubst s e) (psubst s e2) \
          (beta_reduces_psubst_congr hiota e e2 hb s)) \
          (fun (hd : delta_reduces e e2) (s : Nat -> KExpr) => hdelta e e2 s hd) \
          h"
@@ -562,7 +562,7 @@ impl Specification {
          forall (x : KExpr), whnf_acc x -> whnf_acc (instantiate b2 x) := \
          fun (x : KExpr) (hx : whnf_acc x) => \
          whnf_acc_step (instantiate b x) (instantiate b2 x) (hyp x hx) \
-         (whnf_step.beta (instantiate b x) (instantiate b2 x) \
+         (@whnf_step.beta (instantiate b x) (instantiate b2 x) \
          (beta_reduces_instantiate_congr hiota b b2 hs x))"
             .to_string()
     }
@@ -694,7 +694,7 @@ impl Specification {
          (fun (_h : whnf_step f f2) => \
          whnf_step (KExpr.app f aa) (KExpr.app f2 aa)) \
          (fun (hb : beta_reduces f f2) => \
-         whnf_step.beta (KExpr.app f aa) (KExpr.app f2 aa) \
+         @whnf_step.beta (KExpr.app f aa) (KExpr.app f2 aa) \
          (beta_reduces.app_left f f2 aa hb)) \
          (fun (hd : delta_reduces f f2) => hdapp f f2 aa hd) \
          s"

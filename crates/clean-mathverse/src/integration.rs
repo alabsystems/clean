@@ -2462,48 +2462,29 @@ fn test_real_olean_cross_fixture_names() {
     }
 }
 
-// -- Test 31: WS5 — real .olean -> stamped KernelVerified on disk ------------
+// -- Test 31: WS5 under P6 — a real .olean's development run stamps nothing --
 
-/// WS5 end-to-end on a REAL fixture `.olean`: convert `Minimal.olean` to a
-/// shard (the importer stamps only the honest heuristic — `SourceVerified` /
-/// `Axiomatized`, never `KernelVerified`), write it to disk, re-verify the
-/// corpus in Clean's kernel to obtain the GENUINE `kernel_verified_names`, stamp
-/// that verdict into the shard BYTES on disk, reload from disk, and assert the
-/// stored `KernelVerified` count is non-zero.
-///
-/// `Minimal.olean` yields several value-bearing definitions whose values pass
-/// `check_type` under the corpus verifier, so this exercises a real non-zero
-/// on-disk stamp (not merely the graceful-skip path).
-///
-/// SOUNDNESS: only names returned by `verify_corpus_incremental` — i.e. decls
-/// whose value passed the kernel's `check_type` — are stamped. The heuristic
-/// converter never emits `KernelVerified`, so the pre-stamp on-disk count is 0;
-/// every stamped header is a genuine kernel verdict, never a heuristic.
+/// WS5 end-to-end on a REAL fixture `.olean`, as unit P6 left it: convert
+/// `Minimal.olean` to a shard (the importer stores only the honest heuristic —
+/// `SourceVerified` / `Axiomatized`, never `KernelVerified`), write it to disk,
+/// re-verify the corpus in Clean's legacy kernel, and write the development
+/// manifest. The run accepts constants, and the shard bytes on disk are
+/// byte-identical afterwards: a development acceptance confers no label (P2
+/// clause 1), so the stored `KernelVerified` count stays 0. Before P6 this
+/// test asserted the opposite (an on-disk stamp from the name list).
 #[cfg(test)]
 #[test]
-fn test_ws5_real_olean_stamps_kernel_verified_on_disk() {
+fn test_ws5_real_olean_development_run_stamps_nothing() {
     use crate::lean4::olean::olean_bridge::convert_olean_to_mathverse;
-    use crate::library::{
-        count_stored_kernel_verified, stamp_shard_dir_kernel_verified, MathverseLibrary,
-    };
+    use crate::library::{count_stored_kernel_verified, MathverseLibrary};
     use crate::verify::incremental::verify_corpus_incremental;
-    use crate::verify::kernel_verified_manifest::KernelVerifiedManifest;
+    use crate::verify::kernel_verified_manifest::{
+        test_run_in, AcceptanceTier, BaseVariant, Elision, KernelVerifiedManifest,
+    };
 
     let path = olean_fixtures_dir().join("custom/Minimal.olean");
-    if !path.exists() {
-        eprintln!("SKIP: fixture not found: {}", path.display());
-        return;
-    }
-
-    // (1) Convert the real .olean to a complete shard via the heuristic path.
-    let (buf, convert) = match convert_olean_to_mathverse(&path) {
-        Ok(out) => out,
-        Err(e) => {
-            eprintln!("SKIP: convert failed: {e}");
-            return;
-        }
-    };
-    // The heuristic converter must NOT have minted any KernelVerified bytes.
+    let (buf, convert) = convert_olean_to_mathverse(&path)
+        .unwrap_or_else(|e| panic!("convert tracked fixture {}: {e}", path.display()));
     assert_eq!(
         convert.kernel_verified_from_tc, 0,
         "heuristic conversion must not type-check anything itself"
@@ -2512,58 +2493,43 @@ fn test_ws5_real_olean_stamps_kernel_verified_on_disk() {
     let dir = tempfile::tempdir().expect("tempdir");
     let shard_path = dir.path().join("Minimal.mathverse");
     std::fs::write(&shard_path, &buf).expect("write shard");
-
-    // Pre-condition: stored KernelVerified == 0 (the status quo WS5 fixes).
     let (before, unreadable) = count_stored_kernel_verified(dir.path()).expect("count before");
     assert!(unreadable.is_empty(), "shard readable: {unreadable:?}");
     assert_eq!(before, 0, "converter must store KernelVerified = 0");
 
-    // (2) Re-verify the corpus in the Clean kernel for the GENUINE verdict.
     let shard = ShardReader::from_bytes(&buf).expect("decode shard");
     let mut lib = MathverseLibrary::new(TrustPolicy::permissive());
     lib.load_shard(&shard).expect("load shard");
     let prelude =
         clean_kernel::Environment::try_with_prelude().expect("kernel prelude environment");
+    let run = test_run_in(&prelude, BaseVariant::Prelude, Elision::None);
     let report = verify_corpus_incremental(&lib, prelude);
-    eprintln!(
-        "Minimal.olean corpus: total={}, kernel_verified={}, axiom_accepted={}, \
-         axiom_fallback={}, failed={}, reconstruct_failed={}",
-        report.total,
-        report.kernel_verified,
-        report.axiom_accepted,
-        report.axiom_fallback,
-        report.failed,
-        report.reconstruct_failed,
-    );
-    assert_eq!(
-        report.kernel_verified_names.len(),
-        report.kernel_verified,
-        "verdict-name set length must match the kernel_verified count"
-    );
-    if report.kernel_verified == 0 {
-        eprintln!(
-            "SKIP: this fixture yielded no genuine kernel-verified decls under the \
-             current kernel; the deterministic synthetic round-trip test covers count > 0"
-        );
-        return;
-    }
-
-    // (3) DESTRUCTIVE on-disk stamp from the kernel's verdict.
-    let manifest =
-        KernelVerifiedManifest::from_report(&dir.path().display().to_string(), 1, &report);
-    let stamp = stamp_shard_dir_kernel_verified(dir.path(), &manifest).expect("stamp on disk");
-    assert_eq!(stamp.shards_rewritten, 1);
-    assert_eq!(
-        stamp.constants_stamped, report.kernel_verified,
-        "every genuine verdict in this single shard is stamped"
+    assert_eq!(report.kernel_verified_names.len(), report.kernel_verified);
+    assert!(
+        report.kernel_verified > 0,
+        "the control needs accepted constants to mean anything"
     );
 
-    // (4) Reload from DISK and assert the stamp persisted into the bytes.
-    let (after, unreadable_after) = count_stored_kernel_verified(dir.path()).expect("count after");
-    assert!(unreadable_after.is_empty());
-    assert_eq!(
-        after, report.kernel_verified,
-        "stored KernelVerified must equal the kernel verdict after the on-disk stamp"
+    let manifest = KernelVerifiedManifest::from_incremental_report(
+        "test",
+        &dir.path().display().to_string(),
+        1,
+        &report,
+        run,
     );
-    assert!(after > 0, "WS5 success metric: stored KernelVerified > 0");
+    let manifest_path = dir.path().join("kernel-verified.json");
+    manifest
+        .write_to_file(&manifest_path)
+        .expect("write manifest");
+    let reread = KernelVerifiedManifest::from_file(&manifest_path).expect("re-read manifest");
+    assert_eq!(reread.tier(), AcceptanceTier::Development);
+    assert_eq!(reread.accepted(), report.kernel_verified);
+
+    assert_eq!(
+        std::fs::read(&shard_path).expect("re-read shard"),
+        buf,
+        "a development run leaves the shard bytes byte-identical"
+    );
+    let (after, _) = count_stored_kernel_verified(dir.path()).expect("count after");
+    assert_eq!(after, 0, "no header is raised by a development acceptance");
 }

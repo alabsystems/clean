@@ -50,6 +50,27 @@ pub(crate) const PINNED_WORLDS: &[PinnedWorld] = &[
         label: "clean-import+lean-v4.30.0-rc2-core",
         rows: CLEAN_IMPORT_LEAN_V4_30_0_RC2,
     },
+    PinnedWorld {
+        label: "lean-v4.35.0-literals-div-mod",
+        rows: LEAN_V4_35_0_PRIMITIVES,
+    },
+];
+
+/// A deliberately partial 4.35 world, reviewed against the official release's
+/// actual decoded definitions and ordinary production checker. It qualifies
+/// only these five keys, not every primitive in that release. The report
+/// `reports/lean435-primitive-bindings/2026-11-16/README.md` retains the
+/// reference review's skipped deep D/P legs, additional actual large-Nat and
+/// literal production legs, official positive/negative source checks, and
+/// computational-helper/head mutations. The genuine `Init.Prelude` and full
+/// `Init` closures re-derive each row independently, including query order.
+#[rustfmt::skip]
+const LEAN_V4_35_0_PRIMITIVES: &[(&str, &str)] = &[
+    ("Char.ofNat", "22d7b4b211530abc668488704af1475d71a1d9224d52d8def1ea2e7cc9748f04"),
+    ("Nat.div", "2e16483f581889a8a688521901d0efa6156f1c4771f5e8da86018787ddad327e"),
+    ("Nat.mod", "86c4c86b3f767a1167cdc106758b6922ace75943a1612747893bafe6122189cb"),
+    ("String", "2177aa56a0d85210fecc5497043bdf0bea74eb6802211854081a6f52a682eee8"),
+    ("String.ofList", "a9e871d50baa15cc0ed7edcfc9feb2eca2eb22825e7c2c74d7a225858dbc6a68"),
 ];
 
 /// `(name, fingerprint)` for the Lean v4.8.0 core declarations, as produced by

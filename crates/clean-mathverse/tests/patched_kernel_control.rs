@@ -8,7 +8,8 @@
 //!
 //! Each site is handed `theorem planted : False := Nat.zero` the way its
 //! production caller hands it a declaration: as a shard constant (the engine of
-//! `stamp-verified` and the Coq lane), as a `Declaration` (trust-sign
+//! `stamp-verified` and the Coq lane, whose development manifest names what it
+//! accepted; P6 deleted the header stamp that followed), as a `Declaration` (trust-sign
 //! attestation), as a resident imported constant (the sharded lane's
 //! per-constant check) and as a closed `(term, goal)` pair (the CleanCic payload
 //! Trust's router requests from clean-auto).
@@ -21,14 +22,17 @@ use clean_kernel::env::TrustedEnvExt;
 use clean_kernel::flat::{FlatExpr, FlatLevel};
 use clean_kernel::{Environment, Expr, LocalContext};
 use clean_mathverse::lean4::kernel_verify::{kernel_verify_const, KernelVerifyError};
-use clean_mathverse::library::{count_stored_kernel_verified, stamp_shard_dir_kernel_verified};
+use clean_mathverse::library::count_stored_kernel_verified;
 use clean_mathverse::shard::{ShardReader, ShardWriter};
 use clean_mathverse::trust_sign::{attest, AttestError};
 use clean_mathverse::types::{
     AxiomProfile, ContentDomain, DeclKind, ImportConfidence, MathverseConstantHeader, SourceSystem,
 };
 use clean_mathverse::verify::incremental::verify_shard_incremental_with_env;
-use clean_mathverse::verify::kernel_verified_manifest::KernelVerifiedManifest;
+use clean_mathverse::verify::kernel_verified_manifest::{
+    AcceptanceTier, BaseEnvironment, BaseVariant, BuildIdentity, CheckSettings, DevelopmentRun,
+    Elision, Imports, InductiveReplay, KernelVerifiedManifest,
+};
 use control::{by, Observed, Outcome, Pin};
 
 const PACKAGE: &str = "clean-mathverse";
@@ -38,10 +42,10 @@ const CERTIFY_MISMATCH: &str = "NotCertified::KernelRejected([TermRejected: Type
 
 const PINS: &[Pin] = &[
     Pin {
-        site: "mathverse.stamp_kernel_verified",
-        mints: "a stored ImportConfidence::KernelVerified shard header: verify_shard_incremental_with_env, KernelVerifiedManifest::from_report and stamp_shard_dir_kernel_verified, the tail of `stamp-verified` and of the Coq lane",
-        unmodified: Outcome::refused(by::CLEAN_KERNEL, "axiom fallback: TypeMismatch; 0 stamped, 0 stored"),
-        mutant: Outcome::minted("kernel_verified_names [p3_planted]; 1 stamped, 1 stored"),
+        site: "mathverse.development_manifest",
+        mints: "a development-tier KernelVerifiedManifest naming the constant in accepted_names: verify_shard_incremental_with_env and KernelVerifiedManifest::from_incremental_report, the tail of `stamp-verified` and of the Coq lane (P6: it confers no label and no header is stamped)",
+        unmodified: Outcome::refused(by::CLEAN_KERNEL, "axiom fallback: TypeMismatch; 0 accepted, 0 stored"),
+        mutant: Outcome::minted("development accepted_names [p3_planted]; 0 stored"),
     },
     Pin {
         site: "mathverse.trust_sign.attest",
@@ -93,53 +97,80 @@ fn shard_bytes(name: &str, ty: &str, value: &str) -> Vec<u8> {
     bytes
 }
 
-/// Verify the shard over Clean's prelude, write it to a directory, build the
-/// manifest from the report and stamp the directory, as `stamp-verified` does.
-/// Returns (kernel-verified names, axiom-fallback errors, stamped, stored).
-fn verify_and_stamp(
+/// Verify the shard over Clean's prelude, write it to a directory and write
+/// the development manifest from the report, as `stamp-verified` does since P6.
+/// Returns (manifest accepted names, axiom-fallback errors, stored
+/// `KernelVerified` headers), the shard bytes asserted unchanged.
+fn verify_and_write_manifest(
     name: &str,
     ty: &str,
     value: &str,
-) -> (Vec<String>, Vec<(String, String)>, usize, usize) {
+) -> (Vec<String>, Vec<(String, String)>, usize) {
     let bytes = shard_bytes(name, ty, value);
     let reader = ShardReader::from_bytes(&bytes).expect("read shard");
-    let report = verify_shard_incremental_with_env(&reader, Environment::with_prelude());
+    let env = Environment::with_prelude();
+    let run = DevelopmentRun::new(
+        env.checker_settings(),
+        BaseEnvironment::measure(&env, BaseVariant::Prelude),
+        Imports::Replayed,
+        CheckSettings {
+            elision: Elision::None,
+            inductive_replay: InductiveReplay::Generate,
+            level_repair: false,
+            heartbeat_limit: env.checker_settings().max_heartbeats,
+            max_closure_modules: None,
+        },
+        BuildIdentity::current().expect("hash the test executable"),
+    )
+    .expect("a nameable development run");
+    let report = verify_shard_incremental_with_env(&reader, env);
     let dir = tempfile::tempdir().expect("tempdir");
-    std::fs::write(dir.path().join("p3.mathverse"), &bytes).expect("write shard file");
-    let manifest =
-        KernelVerifiedManifest::from_report(&dir.path().display().to_string(), 1, &report);
-    let stamped = stamp_shard_dir_kernel_verified(dir.path(), &manifest).expect("stamp");
+    let shard_path = dir.path().join("p3.mathverse");
+    std::fs::write(&shard_path, &bytes).expect("write shard file");
+    let manifest_path = dir.path().join("kernel-verified.json");
+    KernelVerifiedManifest::from_incremental_report(
+        "p3",
+        &dir.path().display().to_string(),
+        1,
+        &report,
+        run,
+    )
+    .write_to_file(&manifest_path)
+    .expect("write manifest");
+    let manifest = KernelVerifiedManifest::from_file(&manifest_path).expect("read manifest");
+    assert_eq!(manifest.tier(), AcceptanceTier::Development);
+    assert_eq!(
+        std::fs::read(&shard_path).expect("re-read shard"),
+        bytes,
+        "the shard bytes are unchanged"
+    );
     let (stored, unreadable) = count_stored_kernel_verified(dir.path()).expect("count");
     assert!(unreadable.is_empty(), "unreadable shards: {unreadable:?}");
     (
-        report.kernel_verified_names,
+        manifest.accepted_names().to_vec(),
         report.axiom_fallback_names,
-        stamped.constants_stamped,
         stored,
     )
 }
 
-fn probe_stamp() -> Observed {
-    const SITE: &str = "mathverse.stamp_kernel_verified";
-    let (names, fallbacks, stamped, stored) = verify_and_stamp(HONEST, "True", "True.intro");
+fn probe_development_manifest() -> Observed {
+    const SITE: &str = "mathverse.development_manifest";
+    let (names, fallbacks, stored) = verify_and_write_manifest(HONEST, "True", "True.intro");
     assert_eq!(
-        (names, fallbacks, stamped, stored),
-        (vec![HONEST.to_owned()], vec![], 1, 1),
-        "{SITE}: the honest theorem must be kernel-verified and stamped"
+        (names, fallbacks, stored),
+        (vec![HONEST.to_owned()], vec![], 0),
+        "{SITE}: the honest theorem must be accepted and nothing stamped"
     );
-    let (names, fallbacks, stamped, stored) = verify_and_stamp(PLANTED, "False", "Nat.zero");
-    if names == [PLANTED] && fallbacks.is_empty() && (stamped, stored) == (1, 1) {
-        return Observed::minted(
-            SITE,
-            "kernel_verified_names [p3_planted]; 1 stamped, 1 stored",
-        );
+    let (names, fallbacks, stored) = verify_and_write_manifest(PLANTED, "False", "Nat.zero");
+    if names == [PLANTED] && fallbacks.is_empty() && stored == 0 {
+        return Observed::minted(SITE, "development accepted_names [p3_planted]; 0 stored");
     }
-    match (names.as_slice(), fallbacks.as_slice(), stamped, stored) {
-        ([], [(name, error)], 0, 0) if name == PLANTED && control::is_planted_mismatch(error) => {
+    match (names.as_slice(), fallbacks.as_slice(), stored) {
+        ([], [(name, error)], 0) if name == PLANTED && control::is_planted_mismatch(error) => {
             Observed::refused(
                 SITE,
                 by::CLEAN_KERNEL,
-                "axiom fallback: TypeMismatch; 0 stamped, 0 stored",
+                "axiom fallback: TypeMismatch; 0 accepted, 0 stored",
             )
         }
         other => panic!("{SITE}: unexpected outcome {other:?}"),
@@ -248,7 +279,7 @@ fn probe_certify_kernel_term() -> Observed {
 #[test]
 fn patched_kernel_control() {
     let observed = [
-        probe_stamp(),
+        probe_development_manifest(),
         probe_attest(),
         probe_kernel_verify_const(),
         probe_certify_kernel_term(),

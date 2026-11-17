@@ -14,6 +14,9 @@
 # so `mathverse_use` (Strict / KernelVerified-only) resolves premises from it.
 #
 # Usage: scripts/finalize_kv_corpus.sh [VERSION]
+# P6 slice 1a: blocked until the reference producer (slice 1b); see scripts/lib/p6_blocked.sh.
+# shellcheck source=scripts/lib/p6_blocked.sh
+. "$(cd "$(dirname "$0")" && pwd)/lib/p6_blocked.sh" && p6_blocked "scripts/finalize_kv_corpus.sh"
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"

@@ -68,19 +68,17 @@ use clean_mathverse::types::{DeclKind, ImportConfidence};
 fn main() {
     let shard_dir: PathBuf = std::env::var("MATHVERSE_SHARD_DIR")
         .expect(
-            "set MATHVERSE_SHARD_DIR to a directory produced by \
-             `clean mathverse stamp-verified --out-dir <dir> --manifest <dir>/kernel-verified.json`",
+            "set MATHVERSE_SHARD_DIR to a directory whose shard headers store \
+             KernelVerified (P6: no lane in this build stamps one from a development run)",
         )
         .into();
 
-    // The manifest is one of TWO ways a constant reaches `KernelVerified`:
-    // `stamp-verified` also rewrites the shard BYTES destructively, so an
-    // already-stamped shard needs no sidecar. Warn rather than assert, and let
-    // the actual KernelVerified count below be the real gate.
-    if !shard_dir.join("kernel-verified.json").is_file() {
+    // Under P6 a `kernel-verified.json` grants nothing: `load_built_library`
+    // validates one if present and applies none. The only source of
+    // `KernelVerified` is the stored header byte, counted below.
+    if shard_dir.join("kernel-verified.json").is_file() {
         eprintln!(
-            "citation: note — no kernel-verified.json in {}; relying on confidence \
-             stamped directly in the shard bytes",
+            "citation: note — the kernel-verified.json in {} is validated and grants nothing",
             shard_dir.display()
         );
     }
@@ -119,8 +117,8 @@ fn main() {
     );
     assert!(
         !kv_names.is_empty(),
-        "shard dir has 0 KernelVerified constants — TrustGate::Strict would admit nothing. \
-         Did the kernel-verified.json manifest apply?"
+        "shard dir has 0 KernelVerified header bytes — TrustGate::Strict would admit nothing. \
+         Under P6 no development run stamps one; a reference producer (P6 slice 1b) will."
     );
 
     // ---------------------------------------------------------------------

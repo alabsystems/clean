@@ -1198,7 +1198,7 @@ impl Environment {
     }
 
     /// Build the strict checker for the root judgment using the same immutable
-    /// environment resource options as the dependency declaration rechecks.
+    /// environment resource and diagnostic options as the dependency declaration rechecks.
     fn certification_root_type_checker(&self) -> crate::tc::TypeChecker<'_> {
         let mut tc = crate::tc::TypeChecker::new(self);
         tc.set_allow_unsafe(false);
@@ -1212,6 +1212,9 @@ impl Environment {
             if let Ok(max) = value.parse::<usize>() {
                 tc.set_max_cache_entries(max);
             }
+        }
+        if self.checker_settings().profile_heartbeats {
+            tc.enable_heartbeat_profiler();
         }
         tc
     }
@@ -1233,6 +1236,8 @@ impl Environment {
     /// (the latter a cache trimming threshold), not an aggregate audit work or
     /// memory budget. Absent or invalid values preserve checker defaults;
     /// parsed zero values retain the setters' existing semantics.
+    /// The existing `profileHeartbeats` option also enables diagnostic tick attribution
+    /// for the root judgment; it changes neither these limits nor acceptance.
     #[must_use]
     pub fn audit_certification(&self, goal: &Expr, term: &Expr) -> CertificationAudit {
         let mut audit = CertificationAudit::default();
@@ -1752,6 +1757,77 @@ mod certification_tests {
             }),
             "{audit:#?}"
         );
+    }
+
+    #[test]
+    fn certification_audit_root_profiles_heartbeat_refusals_without_dependencies() {
+        let mut env = Environment::new();
+        let (goal, term) = constant_free_identity();
+        env.set_option("maxHeartbeats".to_string(), Some("1".to_string()));
+        let baseline = env.audit_certification(&goal, &term);
+        assert!(!baseline.is_certified());
+        assert!(baseline.dependencies.is_empty());
+        assert!(
+            baseline.issues.iter().any(|issue| match issue {
+                CertificationIssue::GoalNotProposition { error }
+                | CertificationIssue::TermRejected { error } => {
+                    error.contains("HeartbeatExceeded") && error.contains("profile: None")
+                }
+                _ => false,
+            }),
+            "{baseline:#?}"
+        );
+
+        for option in ["true", "1"] {
+            env.set_option("profileHeartbeats".to_string(), Some(option.to_string()));
+            let audit = env.audit_certification(&goal, &term);
+            assert!(!audit.is_certified(), "profiling cannot enlarge the budget");
+            assert!(audit.dependencies.is_empty());
+            assert!(
+                audit.issues.iter().any(|issue| match issue {
+                    CertificationIssue::GoalNotProposition { error }
+                    | CertificationIssue::TermRejected { error } => {
+                        error.contains("HeartbeatExceeded") && error.contains("profile: Some")
+                    }
+                    _ => false,
+                }),
+                "option {option}: {audit:#?}"
+            );
+        }
+    }
+
+    #[test]
+    fn certification_audit_root_profiling_preserves_judgments_and_resource_settings() {
+        let (goal, term) = constant_free_identity();
+        for option in [
+            None,
+            Some("false"),
+            Some("0"),
+            Some("invalid"),
+            Some("true"),
+            Some("1"),
+        ] {
+            let mut env = Environment::new();
+            env.set_option("maxHeartbeats".to_string(), Some("5000".to_string()));
+            env.set_option("tcMaxCacheEntries".to_string(), Some("17".to_string()));
+            env.set_option("profileHeartbeats".to_string(), option.map(str::to_string));
+            let tc = env.certification_root_type_checker();
+            assert_eq!(tc.heartbeat_limit(), 5000);
+            assert_eq!(tc.max_cache_entries(), 17);
+            assert_eq!(
+                tc.heartbeat_profiler_enabled(),
+                matches!(option, Some("true" | "1"))
+            );
+            let accepted = env.audit_certification(&goal, &term);
+            assert!(accepted.is_certified(), "option {option:?}: {accepted:#?}");
+            assert!(accepted.dependencies.is_empty());
+            let rejected = env.audit_certification(&goal, &Expr::prop());
+            assert!(
+                !rejected.is_certified(),
+                "profiling cannot admit a bad proof"
+            );
+            assert!(rejected.dependencies.is_empty());
+        }
     }
 
     #[test]

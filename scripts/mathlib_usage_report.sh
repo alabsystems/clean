@@ -27,6 +27,9 @@
 # never batches names into one process. Batching is UNSOUND here — the per-thread
 # `MathverseEnvironment` memo carries state between citations and corrupts later
 # verdicts, so a batched probe returns wrong answers while looking faster.
+# P6 slice 1a: blocked until the reference producer (slice 1b); see scripts/lib/p6_blocked.sh.
+# shellcheck source=scripts/lib/p6_blocked.sh
+. "$(cd "$(dirname "$0")" && pwd)/lib/p6_blocked.sh" && p6_blocked "scripts/mathlib_usage_report.sh"
 set -eu
 
 REPO="${CLEAN_REPO:-$HOME/clean}"
@@ -105,22 +108,26 @@ if [ -n "$NAMES" ]; then
   cp "$NAMES" "$ALL"
   say "      fixed set from $NAMES: $(wc -l < "$ALL" | tr -d ' ') names"
 else
-  python3 - "$EVID" "$ALL" "$SEED" "$SAMPLE" <<'PY' || die "could not build the name set"
-import json, glob, os, random, sys
+  python3 - "$EVID" "$ALL" "$SEED" "$SAMPLE" "$(cd "$(dirname "$0")" && pwd)" <<'PY' || die "could not build the name set"
+import glob, os, random, sys
 evid, out, seed, n = sys.argv[1], sys.argv[2], int(sys.argv[3]), int(sys.argv[4])
-names, minted = set(), 0
+sys.path.insert(0, sys.argv[5])
+from acceptance_manifest import Refused, read_manifest
+# P6 (F10): every chunk manifest is validated; an unreadable or refused one
+# stops the report instead of being skipped, which would shrink the name set.
+names, accepted = set(), 0
 for p in sorted(glob.glob(os.path.join(evid, "kv_*.json"))):
     try:
-        d = json.load(open(p))
-    except Exception:
-        continue
-    minted += d.get("kernel_verified", 0)
-    names.update(d.get("kernel_verified_names", []))
+        d = read_manifest(p)
+    except Refused as error:
+        raise SystemExit(f"refused chunk manifest: {error}")
+    accepted += d["accepted"]
+    names.update(d["accepted_names"])
 names = sorted(names)
-print(f"      minted KernelVerified (sum over chunks): {minted:,}")
+print(f"      accepted (development, sum over chunks): {accepted:,}")
 print(f"      distinct names available to probe:       {len(names):,}")
 if not names:
-    raise SystemExit("no kernel_verified_names found — has any chunk finished?")
+    raise SystemExit("no accepted names found — has any chunk finished?")
 random.Random(seed).shuffle(names)
 open(out, "w").write("\n".join(names[:n]) + "\n")
 PY

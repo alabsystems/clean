@@ -186,6 +186,44 @@ fn remap_index_for_minor(
                 n_pis.saturating_add(1),
             )?,
         )),
-        _ => Ok(expr.clone()),
+        TermKind::Lam(bi, d, c) => Ok(Term::lam(
+            *bi,
+            remap_index_for_minor(d, num_fields, field_idx, ih_in_scope, num_motives, n_pis)?,
+            remap_index_for_minor(
+                c,
+                num_fields,
+                field_idx,
+                ih_in_scope,
+                num_motives,
+                n_pis.saturating_add(1),
+            )?,
+        )),
+        TermKind::Let(ty, val, body) => Ok(Term::let_(
+            remap_index_for_minor(ty, num_fields, field_idx, ih_in_scope, num_motives, n_pis)?,
+            remap_index_for_minor(val, num_fields, field_idx, ih_in_scope, num_motives, n_pis)?,
+            remap_index_for_minor(
+                body,
+                num_fields,
+                field_idx,
+                ih_in_scope,
+                num_motives,
+                n_pis.saturating_add(1),
+            )?,
+        )),
+        TermKind::Proj(name, index, inner) => Ok(Term::proj(
+            name.clone(),
+            *index,
+            remap_index_for_minor(
+                inner,
+                num_fields,
+                field_idx,
+                ih_in_scope,
+                num_motives,
+                n_pis,
+            )?,
+        )),
+        TermKind::Sort(_) | TermKind::Const(_) | TermKind::Elim(_) | TermKind::Lit(_) => {
+            Ok(expr.clone())
+        }
     }
 }

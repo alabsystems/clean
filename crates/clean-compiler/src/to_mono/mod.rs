@@ -60,6 +60,7 @@ pub struct ToMonoState {
     type_params: HashSet<FVarId>,
     /// Cached mono declarations from earlier top-level transforms.
     mono_decls: HashMap<Name, MonoDeclInfo>,
+    observation: Option<crate::primitive_uses::ObservationFrame>,
 }
 
 impl ToMonoState {
@@ -369,7 +370,18 @@ fn to_mono_type_with_depth(ty: &Expr, depth: usize) -> Expr {
 /// * `decl` - The declaration to transform
 /// * `env` - Environment for type lookups (used by cases handlers)
 pub fn to_mono(decl: &Decl, env: &Environment) -> Decl {
-    let mut state = ToMonoState::new();
+    to_mono_recording(decl, env, None)
+}
+
+pub(crate) fn to_mono_recording(
+    decl: &Decl,
+    env: &Environment,
+    observation: Option<&crate::primitive_uses::ObservationFrame>,
+) -> Decl {
+    let mut state = ToMonoState {
+        observation: observation.cloned(),
+        ..ToMonoState::new()
+    };
     to_mono_with_state(decl, env, &mut state)
 }
 

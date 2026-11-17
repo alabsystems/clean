@@ -59,7 +59,7 @@ def _source_module(name, path):
 
 def _helper_source_controls():
     controls = _source_module('generator_source_controls', REPO / 'scripts/test_generator_source_helpers.py')
-    controls.run_generator_controls(Path(__file__).name)
+    controls.self_test_generator(Path(__file__).name)
 
 
 XP = _source_module("explicit_prefix", REPO / "scripts/explicit_prefix.py")
@@ -578,27 +578,42 @@ def main() -> int:
     ap.add_argument("--pin", action="store_true")
     ap.add_argument("--pinned-inputs", action="store_true", help="list exact source/control inputs")
     a = ap.parse_args()
+    actions = [a.name is not None, a.emit, a.check, a.selftest, a.digests, a.pin, a.pinned_inputs]
+    if sum(actions) > 1:
+        ap.error("primary actions cannot be combined")
     if a.pinned_inputs:
-        if any(value for key, value in vars(a).items() if key != "pinned_inputs"):
-            ap.error("--pinned-inputs cannot be combined with another action")
         print("\n".join(HELPER_INPUTS))
         return 0
+    if a.name == "":
+        ap.error("--print requires a nonempty const name")
     built = {k: spell(k, f()) for k, f in LEMMAS.items()}
     if a.name:
         key = a.name if a.name.startswith("SRC_") else "SRC_" + a.name.upper()
         print(built[key])
         return 0
     if a.emit:
-        n = 0
-        for f in (ACTIVATION_RS, CORRECT_RS):
-            src = f.read_text()
-            for k, v in built.items():
-                pat = re.compile(r'const %s: &str = ".*?";\n' % k, re.S)
-                if pat.search(src):
-                    src = pat.sub(lambda _m: f'const {k}: &str = "{v}";\n', src)
-                    n += 1
+        sources = {f: f.read_text() for f in (ACTIVATION_RS, CORRECT_RS)}
+        edits = {f: [] for f in sources}
+        for k, v in built.items():
+            pat = re.compile(r'const %s: &str = ".*?";\n' % re.escape(k), re.S)
+            matches = [(f, m) for f, src in sources.items() for m in pat.finditer(src)]
+            if len(matches) != 1:
+                ap.error(f"--emit requires exactly one binding for {k}; found {len(matches)}")
+            for f, match in matches:
+                edits[f].append((match.start(), match.end(), f'const {k}: &str = "{v}";\n'))
+        rendered = {}
+        for f, src in sources.items():
+            cursor = 0
+            pieces = []
+            for start, end, replacement in sorted(edits[f]):
+                if start < cursor:
+                    ap.error("--emit bindings overlap")
+                pieces.extend((src[cursor:start], replacement))
+                cursor = end
+            rendered[f] = "".join((*pieces, src[cursor:]))
+        for f, src in rendered.items():
             f.write_text(src)
-        print(f"emitted {n} terms")
+        print(f"emitted {len(built)} terms")
         return 0
     if a.pin:
         import re as _re

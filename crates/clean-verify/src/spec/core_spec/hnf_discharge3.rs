@@ -53,7 +53,7 @@ use crate::spec::Specification;
 /// without any other change to its statement.
 #[allow(dead_code)]
 pub(super) const HNF3: &str = "(hnf3 : forall (m : Nat) (e : KExpr) (r : KExpr), \
-     Eq (OptionType KExpr) (whnf_fuel_red_wh3 the_red_env m e) (OptionType.some KExpr r) -> \
+     Eq (OptionType KExpr) (whnf_fuel_red_wh3 the_red_env m e) (@OptionType.some KExpr r) -> \
      nf_head r) ";
 
 impl Specification {

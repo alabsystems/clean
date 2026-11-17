@@ -241,14 +241,14 @@
       {
         "arm": "the kernel tree --emit reads is NOT the one the record measured (its digest differs from the record's clean_kernel_src_sha256) (--emit --check)",
         "mutate": {
-          "file": "data/crystal_chain_revalidation_2026-11-15_athead_35f090bb3.json",
+          "file": "data/crystal_chain_revalidation_2026-11-16_athead_a97c0ec27.json",
           "op": "regex-sub",
-          "pattern": "\"clean_kernel_src_sha256\": \"86b0e8816245243e",
+          "pattern": "\"clean_kernel_src_sha256\": \"d8077bc93fc41277",
           "replacement": "\"clean_kernel_src_sha256\": \"0000000000000000"
         },
         "command": "python3 scripts/crystal_freshness_scope.py --emit --check",
         "expect_contains": "not the record's",
-        "why": "Added 2026-09-24 as the WITNESS arm (a kernel_tree_read_at commit whose kernel is not the record's); restated 2026-10-07, when the bound record became a strict v3 record measured at 047ebd051 -- a commit here, so the witness path is unreachable and the scope file carries no kernel_tree_read_at for the old pattern to mutate. The refusal it exercised is the same `emit` equality, reached directly: the tree read at the record's rev must digest to the record's clean_kernel_src_sha256, and a record naming any other digest is refused with `not the record's`. Restated 2026-10-18 onto the AT-HEAD record the scope binds since then (measured at bba5da779, also a commit here). Restated 2026-11-14 onto the appended-cache at-head record, measured at merged source 6e2c1dab4 with a fresh byte-exact producer control. Restated 2026-11-15 onto the plain-index at-head record, measured at 35f090bb3 against the same control."
+        "why": "Added 2026-09-24 as the WITNESS arm (a kernel_tree_read_at commit whose kernel is not the record's); restated 2026-10-07, when the bound record became a strict v3 record measured at 047ebd051 -- a commit here, so the witness path is unreachable and the scope file carries no kernel_tree_read_at for the old pattern to mutate. The refusal it exercised is the same `emit` equality, reached directly: the tree read at the record's rev must digest to the record's clean_kernel_src_sha256, and a record naming any other digest is refused with `not the record's`. Restated 2026-10-18 onto the AT-HEAD record the scope binds since then (measured at bba5da779, also a commit here). Restated 2026-11-14 onto the appended-cache at-head record, measured at merged source 6e2c1dab4 with a fresh byte-exact producer control. Restated 2026-11-15 onto the plain-index at-head record, measured at 35f090bb3 against the same control. Restated 2026-11-16 onto the storage-held-index at-head record, measured at a97c0ec27 against the same control."
       },
       {
         "arm": "a pinned body digest in the committed scope file is typed over, so the file no longer re-derives (--emit --check)",
@@ -359,7 +359,8 @@
           "replacement": "scripts/rust_frontend.sh clippy --locked --all-targets"
         },
         "command": "python3 scripts/check_lint_coverage.py",
-        "expect_contains": "FAIL"
+        "expect_contains": "scripts/local_gate.sh no longer contains the full gate `clippy --locked --workspace --all-targets`",
+        "why": "The needle is the refusal check_gate_sites prints for exactly this site and this gate string. Until 2026-11-16 it was the bare word FAIL, which any failure of the check (a fetch error, a red self-test, a projector test) prints too, so the arm could pass for a reason other than the dropped --workspace."
       },
       {
         "arm": "a failing test is appended to the projector -- and there is no record to re-pin by hand",
@@ -1256,6 +1257,18 @@
         "command": "bash scripts/kv_invariance_gate.sh",
         "expect_contains": "independent-parity unit tests FAILED:",
         "why": "The ALWAYS-ON seed leg, not the corpus leg -- and deliberately NOT KVINV_GATE_REQUIRE_MEASURED=1, which would only prove the gate refuses a deferral. This plants a real defect in the production serve path: `verify_one_closure_shard` stops comparing the recomputed blake3 of the on-disk .olean against the shard header, so a shard that is stale or swapped relative to its module is marked verified and its constants are served. `test_load_time_hash_mismatch_refuses` flips one byte of the on-disk olean and requires not-verified => not-served; with the binding gone it is served, the seed leg goes red, and the gate exits 1. LIMIT, stated because the verdict line states it too: at HEAD on this machine the gate then reports `KVINV_GATE=seed-only:no-target` -- the corpus-scale eager-vs-lazy stamp is NOT measured here and this arm does not claim it. | PIN UPDATED 2026-09-15. It read `always-on v3 closure-binding / independent-parity unit tests failed`, which was the seed step's ONLY failure message when that step discarded cargo's output and could not tell a failing test from a cargo that never ran. The step now has two refusals, so the pin has to name which one: `independent-parity unit tests FAILED:` (with the colon, and the capitals libtest's own verdict branch prints) appears only when libtest actually reported. Deliberately NOT pinned on the verdict line `KVINV_GATE=failed:seed-unit-tests`, which is a PREFIX of `...-unrunnable` and would match a cargo that never ran -- exactly the confusion this arm now has to survive."
+      },
+      {
+        "arm": "the eager-vs-lazy comparison stops refusing two empty accepted sets, so a renamed or missing name key could make the corpus leg pass over nothing",
+        "mutate": {
+          "file": "scripts/acceptance_manifest.py",
+          "op": "regex-sub",
+          "pattern": "    _require\\(bool\\(e or l\\), \"both accepted sets are empty;",
+          "replacement": "    _require(True or bool(e or l), \"both accepted sets are empty;"
+        },
+        "command": "bash scripts/kv_invariance_gate.sh",
+        "expect_contains": "the eager-vs-lazy comparison self-test FAILED",
+        "why": "MEASURED 2026-11-16 (P6 slice 1a, reader R11): the comparison left this script for scripts/acceptance_manifest.py, whose `invariance` refuses a schema-1, identity-less or reference-tier manifest, any divergence, and two EMPTY sets. The pre-P6 inline reader took `d.get(\"kernel_verified_names\", [])`, so after the P6 rename both legs would have read as empty and compared IDENTICAL. The gate now runs the comparison's self-test before the seed leg; with the empty-set refusal removed the self-test reports `invariance both empty: accepted` and the gate exits 1 before any build. The corpus leg itself still needs KV_GATE_TARGET and closure shards, absent on this host, so this arm reaches the refusal through the self-test, not through a corpus run."
       }
     ],
     "check_env_bypass_census": [
@@ -1290,8 +1303,30 @@
           "text": "\n// Census replay: one extra production call in an accounted file.\npub fn gate_demo_extra_matcher_extension(env: &mut Environment) {\n    env.register_persistent_extension(Name::from_string(\"Census.demo.extra\"));\n}\n"
         },
         "command": "python3 scripts/check_env_bypass_census.py",
-        "expect_contains": "census row 'persistent-extension-state' measures 11 production occurrences, above its max_occurrences baseline 10",
-        "why": "The newly named file is a three-call account, not a blanket exemption. An extra watched call in that file must hit the unchanged occurrence cap even though file-based site accounting recognizes its path. This source-only scanner arm compiles no Rust and grants no proof authority."
+        "expect_contains": "census row 'persistent-extension-state' measures 9 production occurrences, above its max_occurrences baseline 8",
+        "why": "The newly named file is a two-call account (three until 52b9317c99; the cap followed the measurement to 8 on 2026-11-16), not a blanket exemption. An extra watched call in that file must hit the unchanged occurrence cap even though file-based site accounting recognizes its path. This source-only scanner arm compiles no Rust and grants no proof authority."
+      },
+      {
+        "arm": "a second diagnostic DAG restore exceeds its exact one-call account",
+        "mutate": {
+          "file": "crates/clean-reflect/examples/original_formula_profile.rs",
+          "op": "append",
+          "text": "\n// Census control: an additional DATA restore in the accounted example.\n#[allow(dead_code)]\nfn gate_demo_extra_dag_restore(bytes: &[u8]) {\n    let _ = Environment::from_dag_bincode(bytes);\n}\n"
+        },
+        "command": "python3 scripts/check_env_bypass_census.py",
+        "expect_contains": "census row 'env-dag-data-restore' measures 2 production occurrences, above its max_occurrences baseline 1",
+        "why": "The reviewed diagnostic example is one scanner-counted untrusted DATA restore, not a file-wide exemption. This source-only control must fail at the unchanged occurrence guard; it executes no Rust and confers no admission or proof grade."
+      },
+      {
+        "arm": "an eighth reducibility write exceeds the reviewed seven-call census",
+        "mutate": {
+          "file": "crates/clean-kernel/src/env/checked_metadata.rs",
+          "op": "append",
+          "text": "\n// Census control: an additional hint write in an accounted file.\n#[allow(dead_code)]\nfn gate_demo_extra_hint(env: &mut Environment, name: &Name) {\n    env.set_reducibility(name, Reducibility::Irreducible);\n}\n"
+        },
+        "command": "python3 scripts/check_env_bypass_census.py",
+        "expect_contains": "census row 'reducibility-hints' measures 8 production occurrences, above its max_occurrences baseline 7",
+        "why": "The reviewed seven calls include both distinct checked_metadata paths; their file account must not hide another raw write. This scanner control compiles no Rust and leaves the unclassified R1-REDUC semantic/budget obligation open."
       }
     ],
     "a0a6_probe_transcription": [
@@ -3857,7 +3892,7 @@
           "file": "data/mathlib_kv_ratchet.json",
           "op": "json-set",
           "path": [
-            "kernel_verified_baseline"
+            "development_accepted_baseline"
           ],
           "value": 687
         },
@@ -5290,11 +5325,11 @@
         "owner": "crystal audit lane (r12)",
         "expires": "2027-03-01",
         "sites": 16,
-        "arms": 1,
+        "arms": 2,
         "sites_measured_by": "effect-based count (audit r13 M13-8): Python returns that can yield non-zero incl. IfExp, any exit-shaped call; shell exit with any operand and non-zero/variable return",
         "owed": "one arm per independent refusal beyond the one recorded",
         "first_recorded": "2026-09-02",
-        "why_now": "Invisible until audit r12 M12-8 replaced R12's prefix grep with a parse: the old counter saw 1 refusal here and the real count is 12. RE-DERIVED 2026-09-15, 13 -> 16: the unguarded three-line binary resolution (release, then debug, then `command -v clean`) was replaced by scripts/lib/clean_binary_under_test.sh, which adds two refusal sites -- `fail stale-binary` for a binary that does not carry this checkout's HEAD, and a defensive arm for an unexpected resolver status. NEITHER IS ARMABLE ON THIS HOST and the reason is the property itself: reaching them needs KV_GATE_TARGET, KV_GATE_CLOSURE_ROOT and a closure-shard directory, none of which exist here, so an arm would go red for absence rather than for staleness. The refusal IS covered by the library's own 5-arm self-test (`bash scripts/lib/clean_binary_under_test.sh --selftest`), which exercises absent, unstamped, correctly-stamped, override-is-not-an-exemption and override-not-executable -- including the acceptance control, without which a resolver that refused everything would pass. That is a unit-level proof of the resolver, not a gate-level arm through this script, which is why the debt goes UP rather than down. A sixteenth site landed in the same change and is the one worth naming: the always-on seed step used to run `cargo test ... >/dev/null 2>&1 || fail seed-unit-tests`, which reported a TEST FAILURE whenever cargo could not run at all. Measured that day -- a concurrent demonstration held the build-directory lock, the gate said \"unit tests failed\", and --repin refused the row on that basis; run alone minutes later the same command is 15 passed / 0 failed. The two outcomes are now separate refusals (`seed-unit-tests` when libtest actually reported, `seed-unit-tests-unrunnable` when there is no libtest verdict at all), and BOTH are covered by negative controls with a fake cargo on PATH -- one exiting 1 with a lock error, one printing a real `test result: FAILED`. Those controls are shell-level and not recorded arms, which is why this site also raises the debt rather than lowering it."
+        "why_now": "Invisible until audit r12 M12-8 replaced R12's prefix grep with a parse: the old counter saw 1 refusal here and the real count is 12. RE-DERIVED 2026-09-15, 13 -> 16: the unguarded three-line binary resolution (release, then debug, then `command -v clean`) was replaced by scripts/lib/clean_binary_under_test.sh, which adds two refusal sites -- `fail stale-binary` for a binary that does not carry this checkout's HEAD, and a defensive arm for an unexpected resolver status. NEITHER IS ARMABLE ON THIS HOST and the reason is the property itself: reaching them needs KV_GATE_TARGET, KV_GATE_CLOSURE_ROOT and a closure-shard directory, none of which exist here, so an arm would go red for absence rather than for staleness. The refusal IS covered by the library's own 5-arm self-test (`bash scripts/lib/clean_binary_under_test.sh --selftest`), which exercises absent, unstamped, correctly-stamped, override-is-not-an-exemption and override-not-executable -- including the acceptance control, without which a resolver that refused everything would pass. That is a unit-level proof of the resolver, not a gate-level arm through this script, which is why the debt goes UP rather than down. A sixteenth site landed in the same change and is the one worth naming: the always-on seed step used to run `cargo test ... >/dev/null 2>&1 || fail seed-unit-tests`, which reported a TEST FAILURE whenever cargo could not run at all. Measured that day -- a concurrent demonstration held the build-directory lock, the gate said \"unit tests failed\", and --repin refused the row on that basis; run alone minutes later the same command is 15 passed / 0 failed. The two outcomes are now separate refusals (`seed-unit-tests` when libtest actually reported, `seed-unit-tests-unrunnable` when there is no libtest verdict at all), and BOTH are covered by negative controls with a fake cargo on PATH -- one exiting 1 with a lock error, one printing a real `test result: FAILED`. Those controls are shell-level and not recorded arms, which is why this site also raises the debt rather than lowering it. RE-DERIVED 2026-11-16, 16/1 -> 16/2 (P6 slice 1a): the inline Python comparison (one refusal site) moved into scripts/acceptance_manifest.py's `invariance`, and the seed leg gained `fail comparison-selftest` (one site), which the new arm demonstrates; the count of sites is unchanged and one more of them is armed."
       },
       "model_islands": {
         "owner": "crystal/lzd (probe fix 2026-09-14) + the host's Trust toolchain",

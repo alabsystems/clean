@@ -1971,7 +1971,7 @@ fn dev_self_proof() -> String {
              @Eq.substType KExpr \
              (fun (x : KExpr) => par_reduces_p env ({head} ty b) x) \
              ({head} (dev env ty) (dev env b)) (dev env ({head} ty b)) \
-             (@Eq.symm KExpr (dev env ({head} ty b)) ({head} (dev env ty) (dev env b)) ({unfold} env ty b)) \
+             (@Eq.symm KExpr (dev env ({head} ty b)) ({head} (dev env ty) (dev env b)) (@{unfold} env ty b)) \
              (@{ctor} env ty (dev env ty) b (dev env b) ihty ihb))"
         )
     };

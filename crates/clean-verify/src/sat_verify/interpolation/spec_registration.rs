@@ -43,11 +43,11 @@ impl Specification {
         // A implies I and I AND B is unsatisfiable.
         self.add_inductive(
             r"inductive CraigWitness : forall (nv : Nat), InterpNode nv → Type
-| a_input : forall (nv : Nat) (clause_idx : Nat), CraigWitness nv (InterpNode.a_input nv clause_idx)
-| b_input : forall (nv : Nat) (clause_idx : Nat), CraigWitness nv (InterpNode.b_input nv clause_idx)
-| resolve_a_pivot : forall (nv : Nat) (pivot : Nat) (left : InterpNode nv) (right : InterpNode nv) (hl : CraigWitness nv left) (hr : CraigWitness nv right), CraigWitness nv (InterpNode.resolve_a_pivot nv pivot left right)
-| resolve_b_pivot : forall (nv : Nat) (pivot : Nat) (left : InterpNode nv) (right : InterpNode nv) (hl : CraigWitness nv left) (hr : CraigWitness nv right), CraigWitness nv (InterpNode.resolve_b_pivot nv pivot left right)
-| resolve_shared : forall (nv : Nat) (pivot : Nat) (left : InterpNode nv) (right : InterpNode nv) (hl : CraigWitness nv left) (hr : CraigWitness nv right), CraigWitness nv (InterpNode.resolve_shared nv pivot left right)",
+| a_input : forall (nv : Nat) (clause_idx : Nat), CraigWitness nv (@InterpNode.a_input nv clause_idx)
+| b_input : forall (nv : Nat) (clause_idx : Nat), CraigWitness nv (@InterpNode.b_input nv clause_idx)
+| resolve_a_pivot : forall (nv : Nat) (pivot : Nat) (left : InterpNode nv) (right : InterpNode nv) (hl : CraigWitness nv left) (hr : CraigWitness nv right), CraigWitness nv (@InterpNode.resolve_a_pivot nv pivot left right)
+| resolve_b_pivot : forall (nv : Nat) (pivot : Nat) (left : InterpNode nv) (right : InterpNode nv) (hl : CraigWitness nv left) (hr : CraigWitness nv right), CraigWitness nv (@InterpNode.resolve_b_pivot nv pivot left right)
+| resolve_shared : forall (nv : Nat) (pivot : Nat) (left : InterpNode nv) (right : InterpNode nv) (hl : CraigWitness nv left) (hr : CraigWitness nv right), CraigWitness nv (@InterpNode.resolve_shared nv pivot left right)",
             "Craig interpolation existence witness for I01. Base cases: \
              A-input nodes produce the clause itself as partial interpolant, \
              B-input nodes produce True. Inductive cases: A-pivot resolution \
@@ -62,11 +62,11 @@ impl Specification {
         // I02: Algorithmic construction yields a valid interpolant at root.
         self.add_inductive(
             r"inductive McMillanExtracted : forall (nv : Nat), InterpNode nv → Type
-| a_input : forall (nv : Nat) (clause_idx : Nat), McMillanExtracted nv (InterpNode.a_input nv clause_idx)
-| b_input : forall (nv : Nat) (clause_idx : Nat), McMillanExtracted nv (InterpNode.b_input nv clause_idx)
-| resolve_a_pivot : forall (nv : Nat) (pivot : Nat) (left : InterpNode nv) (right : InterpNode nv) (hl : McMillanExtracted nv left) (hr : McMillanExtracted nv right), McMillanExtracted nv (InterpNode.resolve_a_pivot nv pivot left right)
-| resolve_b_pivot : forall (nv : Nat) (pivot : Nat) (left : InterpNode nv) (right : InterpNode nv) (hl : McMillanExtracted nv left) (hr : McMillanExtracted nv right), McMillanExtracted nv (InterpNode.resolve_b_pivot nv pivot left right)
-| resolve_shared : forall (nv : Nat) (pivot : Nat) (left : InterpNode nv) (right : InterpNode nv) (hl : McMillanExtracted nv left) (hr : McMillanExtracted nv right), McMillanExtracted nv (InterpNode.resolve_shared nv pivot left right)",
+| a_input : forall (nv : Nat) (clause_idx : Nat), McMillanExtracted nv (@InterpNode.a_input nv clause_idx)
+| b_input : forall (nv : Nat) (clause_idx : Nat), McMillanExtracted nv (@InterpNode.b_input nv clause_idx)
+| resolve_a_pivot : forall (nv : Nat) (pivot : Nat) (left : InterpNode nv) (right : InterpNode nv) (hl : McMillanExtracted nv left) (hr : McMillanExtracted nv right), McMillanExtracted nv (@InterpNode.resolve_a_pivot nv pivot left right)
+| resolve_b_pivot : forall (nv : Nat) (pivot : Nat) (left : InterpNode nv) (right : InterpNode nv) (hl : McMillanExtracted nv left) (hr : McMillanExtracted nv right), McMillanExtracted nv (@InterpNode.resolve_b_pivot nv pivot left right)
+| resolve_shared : forall (nv : Nat) (pivot : Nat) (left : InterpNode nv) (right : InterpNode nv) (hl : McMillanExtracted nv left) (hr : McMillanExtracted nv right), McMillanExtracted nv (@InterpNode.resolve_shared nv pivot left right)",
             "McMillan extraction witness for I02. The bottom-up construction \
              traverses the resolution DAG exactly once: A-input nodes yield \
              the disjunction of shared-variable literals from the clause, \
@@ -81,11 +81,11 @@ impl Specification {
         // I03: The shared-variable property.
         self.add_inductive(
             r"inductive SharedVarsWitness : forall (nv : Nat), InterpNode nv → Type
-| a_input : forall (nv : Nat) (clause_idx : Nat), SharedVarsWitness nv (InterpNode.a_input nv clause_idx)
-| b_input : forall (nv : Nat) (clause_idx : Nat), SharedVarsWitness nv (InterpNode.b_input nv clause_idx)
-| resolve_a_pivot : forall (nv : Nat) (pivot : Nat) (left : InterpNode nv) (right : InterpNode nv) (hl : SharedVarsWitness nv left) (hr : SharedVarsWitness nv right), SharedVarsWitness nv (InterpNode.resolve_a_pivot nv pivot left right)
-| resolve_b_pivot : forall (nv : Nat) (pivot : Nat) (left : InterpNode nv) (right : InterpNode nv) (hl : SharedVarsWitness nv left) (hr : SharedVarsWitness nv right), SharedVarsWitness nv (InterpNode.resolve_b_pivot nv pivot left right)
-| resolve_shared : forall (nv : Nat) (pivot : Nat) (left : InterpNode nv) (right : InterpNode nv) (hl : SharedVarsWitness nv left) (hr : SharedVarsWitness nv right), SharedVarsWitness nv (InterpNode.resolve_shared nv pivot left right)",
+| a_input : forall (nv : Nat) (clause_idx : Nat), SharedVarsWitness nv (@InterpNode.a_input nv clause_idx)
+| b_input : forall (nv : Nat) (clause_idx : Nat), SharedVarsWitness nv (@InterpNode.b_input nv clause_idx)
+| resolve_a_pivot : forall (nv : Nat) (pivot : Nat) (left : InterpNode nv) (right : InterpNode nv) (hl : SharedVarsWitness nv left) (hr : SharedVarsWitness nv right), SharedVarsWitness nv (@InterpNode.resolve_a_pivot nv pivot left right)
+| resolve_b_pivot : forall (nv : Nat) (pivot : Nat) (left : InterpNode nv) (right : InterpNode nv) (hl : SharedVarsWitness nv left) (hr : SharedVarsWitness nv right), SharedVarsWitness nv (@InterpNode.resolve_b_pivot nv pivot left right)
+| resolve_shared : forall (nv : Nat) (pivot : Nat) (left : InterpNode nv) (right : InterpNode nv) (hl : SharedVarsWitness nv left) (hr : SharedVarsWitness nv right), SharedVarsWitness nv (@InterpNode.resolve_shared nv pivot left right)",
             "Shared-variable witness for I03. At each node, the partial \
              interpolant mentions only variables in Vars(A) intersect Vars(B). \
              A-input: only shared literals from the clause are kept. B-input: \
@@ -102,11 +102,11 @@ impl Specification {
         // (pivot AND I_left) OR (NOT pivot AND I_right).
         self.add_inductive(
             r"inductive PudlakWitness : forall (nv : Nat), InterpNode nv → Type
-| a_input : forall (nv : Nat) (clause_idx : Nat), PudlakWitness nv (InterpNode.a_input nv clause_idx)
-| b_input : forall (nv : Nat) (clause_idx : Nat), PudlakWitness nv (InterpNode.b_input nv clause_idx)
-| resolve_a_pivot : forall (nv : Nat) (pivot : Nat) (left : InterpNode nv) (right : InterpNode nv) (hl : PudlakWitness nv left) (hr : PudlakWitness nv right), PudlakWitness nv (InterpNode.resolve_a_pivot nv pivot left right)
-| resolve_b_pivot : forall (nv : Nat) (pivot : Nat) (left : InterpNode nv) (right : InterpNode nv) (hl : PudlakWitness nv left) (hr : PudlakWitness nv right), PudlakWitness nv (InterpNode.resolve_b_pivot nv pivot left right)
-| resolve_shared : forall (nv : Nat) (pivot : Nat) (left : InterpNode nv) (right : InterpNode nv) (hl : PudlakWitness nv left) (hr : PudlakWitness nv right), PudlakWitness nv (InterpNode.resolve_shared nv pivot left right)",
+| a_input : forall (nv : Nat) (clause_idx : Nat), PudlakWitness nv (@InterpNode.a_input nv clause_idx)
+| b_input : forall (nv : Nat) (clause_idx : Nat), PudlakWitness nv (@InterpNode.b_input nv clause_idx)
+| resolve_a_pivot : forall (nv : Nat) (pivot : Nat) (left : InterpNode nv) (right : InterpNode nv) (hl : PudlakWitness nv left) (hr : PudlakWitness nv right), PudlakWitness nv (@InterpNode.resolve_a_pivot nv pivot left right)
+| resolve_b_pivot : forall (nv : Nat) (pivot : Nat) (left : InterpNode nv) (right : InterpNode nv) (hl : PudlakWitness nv left) (hr : PudlakWitness nv right), PudlakWitness nv (@InterpNode.resolve_b_pivot nv pivot left right)
+| resolve_shared : forall (nv : Nat) (pivot : Nat) (left : InterpNode nv) (right : InterpNode nv) (hl : PudlakWitness nv left) (hr : PudlakWitness nv right), PudlakWitness nv (@InterpNode.resolve_shared nv pivot left right)",
             "Pudlak rule witness for I04. At shared-pivot nodes, the \
              interpolant is (pivot AND I_left) OR (NOT pivot AND I_right). \
              This guarded disjunction ensures: (1) the interpolant implies the \
@@ -125,17 +125,17 @@ impl Specification {
                 "fun (nv : Nat) (node : InterpNode nv) => \
                  @InterpNode.rec nv \
                    (fun (n : InterpNode nv) => CraigWitness nv n) \
-                   (fun (clause_idx : Nat) => CraigWitness.a_input nv clause_idx) \
-                   (fun (clause_idx : Nat) => CraigWitness.b_input nv clause_idx) \
+                   (fun (clause_idx : Nat) => @CraigWitness.a_input nv clause_idx) \
+                   (fun (clause_idx : Nat) => @CraigWitness.b_input nv clause_idx) \
                    (fun (pivot : Nat) (left : InterpNode nv) (right : InterpNode nv) \
                         (ih_left : CraigWitness nv left) (ih_right : CraigWitness nv right) => \
-                     CraigWitness.resolve_a_pivot nv pivot left right ih_left ih_right) \
+                     @CraigWitness.resolve_a_pivot nv pivot left right ih_left ih_right) \
                    (fun (pivot : Nat) (left : InterpNode nv) (right : InterpNode nv) \
                         (ih_left : CraigWitness nv left) (ih_right : CraigWitness nv right) => \
-                     CraigWitness.resolve_b_pivot nv pivot left right ih_left ih_right) \
+                     @CraigWitness.resolve_b_pivot nv pivot left right ih_left ih_right) \
                    (fun (pivot : Nat) (left : InterpNode nv) (right : InterpNode nv) \
                         (ih_left : CraigWitness nv left) (ih_right : CraigWitness nv right) => \
-                     CraigWitness.resolve_shared nv pivot left right ih_left ih_right) \
+                     @CraigWitness.resolve_shared nv pivot left right ih_left ih_right) \
                    node"
                     .to_string(),
             ),
@@ -165,17 +165,17 @@ impl Specification {
                 "fun (nv : Nat) (node : InterpNode nv) => \
                  @InterpNode.rec nv \
                    (fun (n : InterpNode nv) => McMillanExtracted nv n) \
-                   (fun (clause_idx : Nat) => McMillanExtracted.a_input nv clause_idx) \
-                   (fun (clause_idx : Nat) => McMillanExtracted.b_input nv clause_idx) \
+                   (fun (clause_idx : Nat) => @McMillanExtracted.a_input nv clause_idx) \
+                   (fun (clause_idx : Nat) => @McMillanExtracted.b_input nv clause_idx) \
                    (fun (pivot : Nat) (left : InterpNode nv) (right : InterpNode nv) \
                         (ih_left : McMillanExtracted nv left) (ih_right : McMillanExtracted nv right) => \
-                     McMillanExtracted.resolve_a_pivot nv pivot left right ih_left ih_right) \
+                     @McMillanExtracted.resolve_a_pivot nv pivot left right ih_left ih_right) \
                    (fun (pivot : Nat) (left : InterpNode nv) (right : InterpNode nv) \
                         (ih_left : McMillanExtracted nv left) (ih_right : McMillanExtracted nv right) => \
-                     McMillanExtracted.resolve_b_pivot nv pivot left right ih_left ih_right) \
+                     @McMillanExtracted.resolve_b_pivot nv pivot left right ih_left ih_right) \
                    (fun (pivot : Nat) (left : InterpNode nv) (right : InterpNode nv) \
                         (ih_left : McMillanExtracted nv left) (ih_right : McMillanExtracted nv right) => \
-                     McMillanExtracted.resolve_shared nv pivot left right ih_left ih_right) \
+                     @McMillanExtracted.resolve_shared nv pivot left right ih_left ih_right) \
                    node"
                     .to_string(),
             ),
@@ -203,17 +203,17 @@ impl Specification {
                 "fun (nv : Nat) (node : InterpNode nv) => \
                  @InterpNode.rec nv \
                    (fun (n : InterpNode nv) => SharedVarsWitness nv n) \
-                   (fun (clause_idx : Nat) => SharedVarsWitness.a_input nv clause_idx) \
-                   (fun (clause_idx : Nat) => SharedVarsWitness.b_input nv clause_idx) \
+                   (fun (clause_idx : Nat) => @SharedVarsWitness.a_input nv clause_idx) \
+                   (fun (clause_idx : Nat) => @SharedVarsWitness.b_input nv clause_idx) \
                    (fun (pivot : Nat) (left : InterpNode nv) (right : InterpNode nv) \
                         (ih_left : SharedVarsWitness nv left) (ih_right : SharedVarsWitness nv right) => \
-                     SharedVarsWitness.resolve_a_pivot nv pivot left right ih_left ih_right) \
+                     @SharedVarsWitness.resolve_a_pivot nv pivot left right ih_left ih_right) \
                    (fun (pivot : Nat) (left : InterpNode nv) (right : InterpNode nv) \
                         (ih_left : SharedVarsWitness nv left) (ih_right : SharedVarsWitness nv right) => \
-                     SharedVarsWitness.resolve_b_pivot nv pivot left right ih_left ih_right) \
+                     @SharedVarsWitness.resolve_b_pivot nv pivot left right ih_left ih_right) \
                    (fun (pivot : Nat) (left : InterpNode nv) (right : InterpNode nv) \
                         (ih_left : SharedVarsWitness nv left) (ih_right : SharedVarsWitness nv right) => \
-                     SharedVarsWitness.resolve_shared nv pivot left right ih_left ih_right) \
+                     @SharedVarsWitness.resolve_shared nv pivot left right ih_left ih_right) \
                    node"
                     .to_string(),
             ),
@@ -242,17 +242,17 @@ impl Specification {
                 "fun (nv : Nat) (node : InterpNode nv) => \
                  @InterpNode.rec nv \
                    (fun (n : InterpNode nv) => PudlakWitness nv n) \
-                   (fun (clause_idx : Nat) => PudlakWitness.a_input nv clause_idx) \
-                   (fun (clause_idx : Nat) => PudlakWitness.b_input nv clause_idx) \
+                   (fun (clause_idx : Nat) => @PudlakWitness.a_input nv clause_idx) \
+                   (fun (clause_idx : Nat) => @PudlakWitness.b_input nv clause_idx) \
                    (fun (pivot : Nat) (left : InterpNode nv) (right : InterpNode nv) \
                         (ih_left : PudlakWitness nv left) (ih_right : PudlakWitness nv right) => \
-                     PudlakWitness.resolve_a_pivot nv pivot left right ih_left ih_right) \
+                     @PudlakWitness.resolve_a_pivot nv pivot left right ih_left ih_right) \
                    (fun (pivot : Nat) (left : InterpNode nv) (right : InterpNode nv) \
                         (ih_left : PudlakWitness nv left) (ih_right : PudlakWitness nv right) => \
-                     PudlakWitness.resolve_b_pivot nv pivot left right ih_left ih_right) \
+                     @PudlakWitness.resolve_b_pivot nv pivot left right ih_left ih_right) \
                    (fun (pivot : Nat) (left : InterpNode nv) (right : InterpNode nv) \
                         (ih_left : PudlakWitness nv left) (ih_right : PudlakWitness nv right) => \
-                     PudlakWitness.resolve_shared nv pivot left right ih_left ih_right) \
+                     @PudlakWitness.resolve_shared nv pivot left right ih_left ih_right) \
                    node"
                     .to_string(),
             ),

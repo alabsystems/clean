@@ -7,6 +7,7 @@
 //! ```text
 //! measure_recheck_closed --root <Module> [--search <dir>]... \
 //!     [--base default|lean-replay|import-prelude] \
+//!     [--world <Lean-version>] \
 //!     [--target <Const.Name>]... [--all-theorems-of <Module>] [--max-targets N] \
 //!     [--dump-refusals <file>] [--print-extension-bindings]
 //! ```
@@ -40,6 +41,7 @@
 
 use clean_kernel::env::Environment;
 use clean_kernel::name::Name;
+use clean_kernel::LeanWorld;
 use clean_olean::import::{load_module_with_deps, parse_module_file, ImportError};
 use clean_olean::recheck_closed::{recheck_closed, ClosedRecheckOptions, RecheckLevel};
 use clean_olean::verify_batch_full::typecheck_constants_full;
@@ -75,6 +77,7 @@ fn peak_rss_bytes() -> u64 {
 struct Args {
     root: String,
     base: String,
+    world: Option<LeanWorld>,
     search: Vec<PathBuf>,
     targets: Vec<String>,
     all_theorems_of: Option<String>,
@@ -88,6 +91,7 @@ fn parse_args() -> Args {
     let mut args = Args {
         root: "Init".to_string(),
         base: "default".to_string(),
+        world: None,
         search: Vec::new(),
         targets: Vec::new(),
         all_theorems_of: None,
@@ -101,6 +105,14 @@ fn parse_args() -> Args {
         match flag.as_str() {
             "--root" => args.root = it.next().expect("--root needs a value"),
             "--base" => args.base = it.next().expect("--base needs a value"),
+            "--world" => {
+                args.world = Some(
+                    it.next()
+                        .expect("--world needs a value")
+                        .parse()
+                        .expect("--world must name a supported Lean world"),
+                );
+            }
             "--search" => args
                 .search
                 .push(PathBuf::from(it.next().expect("--search needs a value"))),
@@ -150,6 +162,7 @@ fn main() {
     println!("root       : {}", args.root);
     println!("search     : {:?}", args.search);
     println!("base       : {}", args.base);
+    println!("world      : {:?}", args.world);
 
     let load_started = Instant::now();
     let mut env = match args.base.as_str() {
@@ -160,6 +173,10 @@ fn main() {
         }
         other => panic!("unknown --base {other} (default | lean-replay | import-prelude)"),
     };
+    if let Some(world) = args.world {
+        clean_olean::declare_environment_world(&mut env, world.tag())
+            .expect("the explicit world must agree with the chosen base");
+    }
     let summaries: Result<Vec<_>, ImportError> =
         load_module_with_deps(&mut env, &args.root, &args.search);
     let summaries = summaries.expect("closure must load");

@@ -31,6 +31,7 @@ pub struct MinimalEnv {
     types: std::collections::HashMap<Name, Term>,
     string_literal_view: bool,
     defs: std::collections::HashMap<Name, ConstDef>,
+    delta_priorities: std::collections::HashMap<Name, u64>,
     inductives: std::collections::HashMap<Name, bool>,
     quots: std::collections::HashMap<Name, QuotKind>,
     recursors: std::collections::HashSet<Name>,
@@ -138,6 +139,11 @@ impl MinimalEnv {
         self.types.insert(name.clone(), ty);
         self.defs.insert(name, ConstDef { body, transparency });
         self
+    }
+
+    #[cfg(feature = "export")]
+    pub(crate) fn set_delta_priority(&mut self, name: Name, priority: u64) {
+        self.delta_priorities.insert(name, priority);
     }
 
     /// Register an inductive with its declared `num_level_params` and its
@@ -272,6 +278,18 @@ impl Env for MinimalEnv {
             .copied()
             .or_else(|| self.admission_base.as_deref()?.inductive_large_elim(name))
     }
+    fn delta_priority(&self, name: &Name) -> u64 {
+        self.delta_priorities
+            .get(name)
+            .copied()
+            .or_else(|| {
+                self.admission_base
+                    .as_deref()
+                    .map(|base| base.delta_priority(name))
+            })
+            .unwrap_or(0)
+    }
+
     fn const_def(&self, name: &Name) -> Option<ConstDef> {
         self.defs
             .get(name)

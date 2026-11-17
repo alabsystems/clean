@@ -67,8 +67,8 @@ pub(crate) struct CtxAttributes {
     instance_attrs: Vec<(Name, u32)>,
     /// `attribute [local instance]` / `attribute [scoped instance]`.
     scoped_instance_attrs: Vec<(Name, u32, crate::infer::ScopedInstanceAttr)>,
-    /// `attribute [class] X` — register X as a type class at register time.
-    class_attrs: Vec<Name>,
+    /// Declaration/standalone class attributes, retaining global/local/scoped origin.
+    class_attrs: Vec<crate::class_attribute::ClassAttribute>,
     derive_handler_attrs: Vec<Name>,
     attribute_removals: Vec<(Name, String)>,
     /// Parameter names of the `where` / `let rec` auxiliaries the declaration
@@ -176,6 +176,12 @@ impl CtxAttributes {
             mutual_lift_entries,
             mutual_eq_lemmas,
         } = self;
+
+        // Class refusal must not leave an earlier attribute or an earlier
+        // target of the same command partially registered. Registration of the
+        // declaration itself has already happened, but every attribute effect
+        // below remains untouched if any class target/scope is invalid.
+        let class_infos = crate::class_attribute::prepare_attributes(env, &class_attrs)?;
 
         crate::definition_attrs::apply(env, file_ctx.as_deref(), definition_attrs)?;
 
@@ -451,10 +457,10 @@ impl CtxAttributes {
         // read off the target type's conclusion; a non-class conclusion is a LOUD
         // error, exactly like Lean's "invalid 'instance' attribute". Duplicate
         // registration (e.g. re-running the attribute command) is a no-op.
-        // Both source forms validate the actual registered declaration and
-        // retain its complete class parameter metadata.
-        for name in class_attrs {
-            crate::class_attribute::register(env, &name)?;
+        // All targets were validated before any attribute effects. Classes
+        // must be visible before the instance attributes below are applied.
+        for info in class_infos {
+            env.register_class(info);
         }
 
         // The instance attributes change Lean's INSTANCE STATE, which is

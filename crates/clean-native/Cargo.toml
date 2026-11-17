@@ -38,3 +38,7 @@ clean-kernel = { workspace = true, features = ["test-fixtures"] }
 # `.olean` the imported `@[implemented_by]` tests run against
 # (`src/compile_implemented_by_import_tests.rs`).
 clean-olean = { workspace = true, features = ["test-support"] }
+
+[[example]]
+name = "external_lean_scalar435"
+required-features = ["trust-ir-backend"]

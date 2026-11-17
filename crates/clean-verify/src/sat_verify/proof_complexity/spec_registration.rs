@@ -36,8 +36,8 @@ impl Specification {
         // variable x, then sigma satisfies R.
         self.add_inductive(
             r"inductive ResolvSound : forall (nc : Nat), ResolvStep nc → Type
-| input : forall (nc : Nat) (idx : Nat), ResolvSound nc (ResolvStep.input nc idx)
-| resolve : forall (nc : Nat) (pivot : Nat) (left : ResolvStep nc) (right : ResolvStep nc) (hl : ResolvSound nc left) (hr : ResolvSound nc right), ResolvSound nc (ResolvStep.resolve nc pivot left right)",
+| input : forall (nc : Nat) (idx : Nat), ResolvSound nc (@ResolvStep.input nc idx)
+| resolve : forall (nc : Nat) (pivot : Nat) (left : ResolvStep nc) (right : ResolvStep nc) (hl : ResolvSound nc left) (hr : ResolvSound nc right), ResolvSound nc (@ResolvStep.resolve nc pivot left right)",
             "Resolution soundness witness for PC01. Base case: input clauses \
              are trivially sound. Inductive case: resolving two sound clauses \
              on a pivot variable — by case analysis on sigma(pivot), sigma \
@@ -85,10 +85,10 @@ impl Specification {
         // PC03: Non-negative linear combination preserves validity.
         self.add_inductive(
             r"inductive CPSound : forall (ni : Nat), CPStep ni → Type
-| input : forall (ni : Nat) (idx : Nat), CPSound ni (CPStep.input ni idx)
-| addition : forall (ni : Nat) (left : CPStep ni) (right : CPStep ni) (hl : CPSound ni left) (hr : CPSound ni right), CPSound ni (CPStep.addition ni left right)
-| scalar_mul : forall (ni : Nat) (coeff : Nat) (inner : CPStep ni) (h : CPSound ni inner), CPSound ni (CPStep.scalar_mul ni coeff inner)
-| division : forall (ni : Nat) (divisor : Nat) (inner : CPStep ni) (h : CPSound ni inner), CPSound ni (CPStep.division ni divisor inner)",
+| input : forall (ni : Nat) (idx : Nat), CPSound ni (@CPStep.input ni idx)
+| addition : forall (ni : Nat) (left : CPStep ni) (right : CPStep ni) (hl : CPSound ni left) (hr : CPSound ni right), CPSound ni (@CPStep.addition ni left right)
+| scalar_mul : forall (ni : Nat) (coeff : Nat) (inner : CPStep ni) (h : CPSound ni inner), CPSound ni (@CPStep.scalar_mul ni coeff inner)
+| division : forall (ni : Nat) (divisor : Nat) (inner : CPStep ni) (h : CPSound ni inner), CPSound ni (@CPStep.division ni divisor inner)",
             "Cutting planes soundness witness for PC03. Base: input \
              inequalities are axioms. Addition: sum of two valid inequalities \
              is valid (by arithmetic). Scalar multiplication: multiplying a \
@@ -117,8 +117,8 @@ impl Specification {
         // CPSimResolvSound: inductive witness that the CP simulation is correct.
         self.add_inductive(
             r"inductive CPSimResolvSound : forall (nc : Nat), CPSimResolvStep nc → Type
-| encode_clause : forall (nc : Nat) (idx : Nat), CPSimResolvSound nc (CPSimResolvStep.encode_clause nc idx)
-| sim_resolve : forall (nc : Nat) (pivot : Nat) (left : CPSimResolvStep nc) (right : CPSimResolvStep nc) (hl : CPSimResolvSound nc left) (hr : CPSimResolvSound nc right), CPSimResolvSound nc (CPSimResolvStep.sim_resolve nc pivot left right)",
+| encode_clause : forall (nc : Nat) (idx : Nat), CPSimResolvSound nc (@CPSimResolvStep.encode_clause nc idx)
+| sim_resolve : forall (nc : Nat) (pivot : Nat) (left : CPSimResolvStep nc) (right : CPSimResolvStep nc) (hl : CPSimResolvSound nc left) (hr : CPSimResolvSound nc right), CPSimResolvSound nc (@CPSimResolvStep.sim_resolve nc pivot left right)",
             "CP simulation soundness witness for PC04. Base: encoding a \
              clause as a 0-1 inequality is sound (the inequality is satisfied \
              iff the clause is). Inductive case: simulating resolution by \
@@ -135,10 +135,10 @@ impl Specification {
                 "fun (nc : Nat) (step : ResolvStep nc) => \
                  @ResolvStep.rec nc \
                    (fun (s : ResolvStep nc) => ResolvSound nc s) \
-                   (fun (idx : Nat) => ResolvSound.input nc idx) \
+                   (fun (idx : Nat) => @ResolvSound.input nc idx) \
                    (fun (pivot : Nat) (left : ResolvStep nc) (right : ResolvStep nc) \
                         (ih_left : ResolvSound nc left) (ih_right : ResolvSound nc right) => \
-                     ResolvSound.resolve nc pivot left right ih_left ih_right) \
+                     @ResolvSound.resolve nc pivot left right ih_left ih_right) \
                    step"
                     .to_string(),
             ),
@@ -199,14 +199,14 @@ impl Specification {
                 "fun (ni : Nat) (step : CPStep ni) => \
                  @CPStep.rec ni \
                    (fun (s : CPStep ni) => CPSound ni s) \
-                   (fun (idx : Nat) => CPSound.input ni idx) \
+                   (fun (idx : Nat) => @CPSound.input ni idx) \
                    (fun (left : CPStep ni) (right : CPStep ni) \
                         (ih_left : CPSound ni left) (ih_right : CPSound ni right) => \
-                     CPSound.addition ni left right ih_left ih_right) \
+                     @CPSound.addition ni left right ih_left ih_right) \
                    (fun (coeff : Nat) (inner : CPStep ni) (ih : CPSound ni inner) => \
-                     CPSound.scalar_mul ni coeff inner ih) \
+                     @CPSound.scalar_mul ni coeff inner ih) \
                    (fun (divisor : Nat) (inner : CPStep ni) (ih : CPSound ni inner) => \
-                     CPSound.division ni divisor inner ih) \
+                     @CPSound.division ni divisor inner ih) \
                    step"
                     .to_string(),
             ),
@@ -236,10 +236,10 @@ impl Specification {
                 "fun (nc : Nat) (step : CPSimResolvStep nc) => \
                  @CPSimResolvStep.rec nc \
                    (fun (s : CPSimResolvStep nc) => CPSimResolvSound nc s) \
-                   (fun (idx : Nat) => CPSimResolvSound.encode_clause nc idx) \
+                   (fun (idx : Nat) => @CPSimResolvSound.encode_clause nc idx) \
                    (fun (pivot : Nat) (left : CPSimResolvStep nc) (right : CPSimResolvStep nc) \
                         (ih_left : CPSimResolvSound nc left) (ih_right : CPSimResolvSound nc right) => \
-                     CPSimResolvSound.sim_resolve nc pivot left right ih_left ih_right) \
+                     @CPSimResolvSound.sim_resolve nc pivot left right ih_left ih_right) \
                    step"
                     .to_string(),
             ),

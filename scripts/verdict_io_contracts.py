@@ -1309,6 +1309,9 @@ pub fn go(p: &Path) -> Result<Vec<u8>, E> {
 def _synthetic_tree(base: Path, vs_script: Path) -> Path:
     root = base / "tree"
     _write(root / "scripts" / "verdict_set.py", vs_script.read_text())
+    # verdict_set.py executes the reference lexer from beside itself.
+    lexer = vs_script.parent / "check_add_decl_ratchet.py"
+    _write(root / "scripts" / lexer.name, lexer.read_text())
     member = "crates/synth/src/lib.rs"
     _write(root / member, SYNTH_MEMBER)
     digest = sha256_file(root / member)

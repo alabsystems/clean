@@ -1,0 +1,12 @@
+# Complete adopted graph and the held equality-header proof; each theory contributes full ORDER.
+theory cic_l
+theory cic_l_model
+theory kcheck_spec
+theory kcheck_labelled
+theory kcheck_rule_certificates
+theory kcheck_bool_island
+theory kcheck_bool_admission
+theory kcheck_eq_headers
+KCheckEqHeaders
+EqHeaderContracts
+EqHeadersQualification

@@ -144,7 +144,7 @@ impl Specification {
                  ({ctor}_reduct ({envsel}) (KExpr.app f a)) \
                  (@OptionType.some KExpr {var}2) \
                  (Eq.symm (OptionType KExpr) ({ctor}_reduct ({envsel}) (KExpr.app f a)) \
-                 (@OptionType.none KExpr) ({immune} env (KExpr.app f a) hr)) \
+                 (@OptionType.none KExpr) (@{immune} env (KExpr.app f a) hr)) \
                  (Eq.substType KExpr \
                  (fun (z : KExpr) => @Eq (OptionType KExpr) ({ctor}_reduct ({envsel}) z) \
                  (@OptionType.some KExpr {var}2)) {var} (KExpr.app f a) heq hst))) ",

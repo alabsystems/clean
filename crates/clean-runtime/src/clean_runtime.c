@@ -220,12 +220,17 @@ clean_obj* clean_box_uint64(uint64_t n) {
 }
 
 clean_obj* clean_box_uint32(uint32_t n) {
+#if SIZE_MAX > UINT32_MAX
+    /* Every uint32 fits the tagged payload when size_t is wider. */
+    return clean_box(n);
+#else
     if (n <= CLEAN_MAX_SMALL) {
         return clean_box(n);
     }
     clean_obj* o = clean_alloc_ctor_uninit(0, 0, sizeof(uint32_t));
     *(uint32_t*)(o->fields) = n;
     return o;
+#endif
 }
 
 clean_obj* clean_box_float(double f) {

@@ -1203,11 +1203,11 @@
       },
       {
         "path": "data/evalir_adequacy_grid.json",
-        "sha256": "fc7bbb4c9eb08af2ef8cf840cb978e9ff5f1d40f1401360f0833b72d6a987221"
+        "sha256": "63fe91f5b64a2165833ca4d67f3523d10df95926ca3ddfbe4f3cde64ea36bf87"
       },
       {
         "path": "data/verdict_io_contracts.json",
-        "sha256": "5362e9eb253a45bb5858cc62b9cfb8e9b2ff1d918f0de8976435f87675d084e2"
+        "sha256": "6c034c635d656062a6379badc70b0690cd70a6b22f7bb451a85dbf803a32a8be"
       }
     ],
     "consumers": [

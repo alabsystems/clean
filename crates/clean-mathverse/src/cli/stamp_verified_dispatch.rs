@@ -2,31 +2,30 @@
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 // SPDX-License-Identifier: Apache-2.0
 
-//! `clean mathverse stamp-verified` — productionized WS5 stamping pipeline.
+//! `clean mathverse stamp-verified` — convert `.olean` input to shards and
+//! re-check it with a legacy checker, as a development run.
 //!
-//! Runs the full convert → re-verify → stamp flow against real `.olean`
-//! input and persists the kernel's `KernelVerified` verdict into the shard
-//! bytes on disk:
+//! Under P6 (`designs/2026-11-16-p6-acceptance-identity.md`, writers W2 and
+//! W3) this verb stamps nothing: its checker is a legacy entry under a legacy
+//! profile, so its acceptances are development tier and confer no
+//! `KernelVerified` header (P2 clause 1). The shard bytes it writes are the
+//! converter's, byte for byte. The flow:
 //!
 //! 1. Convert each input `.olean` to a heuristic `.mathverse` shard via
 //!    [`convert_olean_to_mathverse`]. The heuristic importer never mints
 //!    `KernelVerified`, so the on-disk stored count is 0 at this point.
 //! 2. Load every shard into one [`MathverseLibrary`] and re-verify the merged
 //!    corpus in Clean's kernel with
-//!    [`verify_corpus_incremental`], seeded by `Environment::try_with_prelude`.
-//!    The report's `kernel_verified_names` are exactly the constants whose
-//!    value passed the kernel's `check_type` through `add_decl`.
-//! 3. Build a [`KernelVerifiedManifest`] from that report and destructively
-//!    stamp `KernelVerified` into the shard headers for those names via
-//!    [`stamp_shard_dir_kernel_verified`].
-//! 4. Re-read the stored `KernelVerified` count from disk with
-//!    [`count_stored_kernel_verified`] and print a JSON summary.
-//!
-//! SOUNDNESS: a constant is stamped `KernelVerified` ONLY if it appears in
-//! `report.kernel_verified_names` — i.e. the kernel accepted its value. The
-//! heuristic converter's confidence is never promoted. Axioms, axiom
-//! fallbacks, reconstruction failures, and outright failures are excluded
-//! upstream by `verify_corpus_incremental` and are therefore never stamped.
+//!    [`verify_corpus_incremental`], seeded by `Environment::for_lean_replay`
+//!    (with the `--closure-root` closure loaded on it, trusted). The report's
+//!    `kernel_verified_names` are the constants the incremental replay entry
+//!    accepted.
+//! 3. With `--manifest`, write a development [`KernelVerifiedManifest`] naming
+//!    the accepted names and the identity of the theory and the checker
+//!    (captured before the first check).
+//! 4. Re-read the stored `KernelVerified` header count from disk with
+//!    [`count_stored_kernel_verified`] (`stored_reference_stamped`: nothing in
+//!    this verb raises it) and print a JSON summary.
 
 use std::collections::{BTreeSet, HashSet};
 use std::io::{self, Write};
@@ -42,16 +41,17 @@ use crate::cli::parallel_verify::cross::{demote_users_of_not_admitted, RunModule
 use crate::cli::stamp_family_audit::refuse_forged_family_members;
 use crate::cli::{MathverseCliError, StampVerifiedArgs};
 use crate::lean4::olean::olean_bridge::convert_olean_to_mathverse;
-use crate::library::{
-    count_stored_kernel_verified, stamp_shard_dir_kernel_verified, MathverseLibrary,
-};
+use crate::library::{count_stored_kernel_verified, MathverseLibrary};
 use crate::manifest::{MathverseManifest, ShardEntry};
 use crate::shard::ShardReader;
 use crate::trust::policy::TrustPolicy;
 use crate::verify::incremental::{
     verify_corpus_incremental_with_env_policy, IncrementalVerifyReport, InductiveReplayPolicy,
 };
-use crate::verify::kernel_verified_manifest::{KernelVerifiedManifest, StampEnvFingerprint};
+use crate::verify::kernel_verified_manifest::{
+    BaseEnvironment, BuildIdentity, CheckSettings, CheckerEntry, DevelopmentRun, Elision, Imports,
+    InductiveReplay, KernelVerifiedManifest, StampEnvFingerprint,
+};
 
 /// Machine-readable summary emitted by `clean mathverse stamp-verified`.
 #[derive(Debug, Serialize)]
@@ -67,15 +67,19 @@ struct StampVerifiedSummary {
     /// KernelVerified headers the heuristic converter stored BEFORE the kernel
     /// re-verification (soundness floor — must be 0).
     heuristic_kernel_verified: u32,
+    /// The tier of this run's acceptances: always `development` (P6), which
+    /// confers no label.
+    tier: &'static str,
     /// Total constants the corpus re-verification considered.
     total: usize,
-    /// Constants the kernel genuinely proof-checked (the stamp source).
-    kernel_verified: usize,
+    /// Value-bearing constants the legacy checker accepted (development tier:
+    /// data for gates and diffs, never a label).
+    accepted: usize,
     /// `NO_VALUE` constants accepted as well-formed axioms (not proof-checked).
     axiom_accepted: usize,
     /// Value-bearing Lean `unsafe def`s accepted TYPE-ONLY in trusted context
     /// (Lean bars unsafe consts from proofs, so they can never be
-    /// proof-checked). Excluded from `kernel_verified`; not failures.
+    /// proof-checked). Excluded from `accepted`; not failures.
     unsafe_accepted: usize,
     /// Value-bearing constants that fell back to an axiom (not proof-checked).
     axiom_fallback: usize,
@@ -94,17 +98,16 @@ struct StampVerifiedSummary {
     /// L2 inductive-fail-closed, reconstruction coverage, cycles, or kernel
     /// TypeMismatch. Diagnostic only.
     failed_by_class: FailedHistogram,
-    /// Shards rewritten with at least one raised header.
-    shards_rewritten: usize,
-    /// Headers raised to KernelVerified by the on-disk stamp.
-    constants_stamped: usize,
-    /// KernelVerified headers re-read from the shard bytes AFTER stamping.
-    stored_kernel_verified: usize,
+    /// `KernelVerified` headers re-read from the shard bytes at the end of the
+    /// run. This verb stamps none, so the count is what the converter wrote,
+    /// which its soundness floor holds at 0; only a reference producer (P6
+    /// slice 1b) may raise it.
+    stored_reference_stamped: usize,
     /// Optional manifest path written.
     manifest: Option<String>,
     /// Path to the emitted MathverseManifest (`<out_dir>/manifest.json`) that
     /// makes the output dir loadable via `MATHVERSE_LIBRARY_PATH`. Distinct from
-    /// `manifest` above (the optional KernelVerified-verdict sidecar).
+    /// `manifest` above (the optional development accepted-names sidecar).
     library_manifest: String,
     /// `--closure-root` mode: the dependency-closure context loaded BEFORE
     /// re-verifying the target module(s). `None` for the legacy prelude-only
@@ -134,7 +137,7 @@ struct StampVerifiedSummary {
     /// failed the Tier-1 (`CLEAN_KERNEL_HEARTBEAT`) cap SPECIFICALLY on
     /// `HeartbeatExceeded` and then PASSED the escalated Tier-2
     /// (`CLEAN_KERNEL_HEARTBEAT_ESCALATE`) cap — the count of genuine
-    /// KernelVerified recovered by escalation (a subset of `kernel_verified`).
+    /// acceptances recovered by escalation (a subset of `accepted`).
     /// `None` when escalation was disabled or on the sequential paths.
     #[serde(skip_serializing_if = "Option::is_none")]
     heartbeat_escalated_recovered: Option<usize>,
@@ -631,6 +634,9 @@ pub(crate) fn cmd_stamp_verified(args: StampVerifiedArgs) -> Result<(), Mathvers
     }
 
     std::fs::create_dir_all(&args.out_dir)?;
+    // P6: hash the executable before the first check, so the identity names
+    // the bytes that ran even if the path is rebuilt during a long run.
+    let build = BuildIdentity::current()?;
 
     // PARAGON PARALLEL PATH (takes precedence): build ONE shared immutable base
     // env (every module + its dep closure, proof values elided) ONCE, then
@@ -641,7 +647,7 @@ pub(crate) fn cmd_stamp_verified(args: StampVerifiedArgs) -> Result<(), Mathvers
     // soundness floor as the sequential path; only the verification fan-out
     // differs.
     if args.parallel {
-        return cmd_stamp_verified_parallel(args, &oleans);
+        return cmd_stamp_verified_parallel(args, &oleans, build);
     }
 
     // (1) Load the re-verification environment FIRST — it needs only `oleans`, so
@@ -777,6 +783,9 @@ pub(crate) fn cmd_stamp_verified(args: StampVerifiedArgs) -> Result<(), Mathvers
     if std::env::var("CLEAN_PROFILE_HEARTBEATS").is_ok_and(|v| v == "1" || v == "true") {
         initial_env.set_option("profileHeartbeats".to_string(), Some("true".to_string()));
     }
+    // P6: the theory profile is the settings of the environment every check
+    // runs in, snapshotted before it moves into the verifier.
+    let env_settings = initial_env.checker_settings();
     // (2) Convert + verify. STREAMING single-pass converts each target JUST-IN-TIME
     // in import-topological order against the persistent closure env, writing its
     // shard and freeing it before the next — ONE closure load for the whole corpus,
@@ -850,7 +859,7 @@ pub(crate) fn cmd_stamp_verified(args: StampVerifiedArgs) -> Result<(), Mathvers
     // Env-gated per-decl faildump (WS13 triage hook). When CLEAN_WS13_FAILDUMP
     // names a file, write every masked / rejected decl with its error so the
     // residual completeness gaps can be ranked. Diagnostic-only: it does not
-    // influence what gets stamped (only `kernel_verified_names` is stamped).
+    // influence which names the run accepts (and nothing is stamped).
     if let Ok(dump_path) = std::env::var("CLEAN_WS13_FAILDUMP") {
         let mut buf = String::new();
         buf.push_str("# kind\tname\terror\n");
@@ -876,42 +885,40 @@ pub(crate) fn cmd_stamp_verified(args: StampVerifiedArgs) -> Result<(), Mathvers
         }
     }
 
-    // (3) Stamp the kernel's verdict into the shard bytes on disk. Only names
-    // in report.kernel_verified_names are stamped — never heuristic confidence.
-    let manifest = KernelVerifiedManifest::from_report(
+    // (3) The acceptances are development tier: nothing is stamped (P6). The
+    // manifest names the theory (Lean's replay environment, the closure loaded
+    // on it trusted) and the checker (the incremental replay entry).
+    let run = DevelopmentRun::new(
+        env_settings,
+        BaseEnvironment::lean_replay(),
+        if args.closure_root.is_some() {
+            Imports::Trusted
+        } else {
+            Imports::Replayed
+        },
+        CheckSettings {
+            elision: if args.closure_root.is_some() {
+                Elision::of(args.closure_elide.to_kernel())?
+            } else {
+                Elision::None
+            },
+            inductive_replay: InductiveReplay::LeanFaithful,
+            level_repair: false,
+            heartbeat_limit: env_settings.max_heartbeats,
+            max_closure_modules: args
+                .closure_root
+                .as_ref()
+                .map(|_| crate::cli::closure_load::max_closure_modules()),
+        },
+        build,
+    )?;
+    let manifest = KernelVerifiedManifest::from_incremental_report(
+        "clean mathverse stamp-verified",
         &args.out_dir.display().to_string(),
         converted,
         &report,
-    )
-    .with_env_fingerprint(StampEnvFingerprint {
-        kernel_version: clean_kernel::VERSION.to_string(),
-        // Captured at build time by build.rs
-        // (`cargo:rustc-env=CLEAN_MATHVERSE_TOOLCHAIN_VERSION`),
-        // so a toolchain bump re-keys the incremental cache; "unknown" only if
-        // the build-time query failed.
-        toolchain: option_env!("CLEAN_MATHVERSE_TOOLCHAIN_VERSION")
-            .unwrap_or("unknown")
-            .to_string(),
-        heartbeat: std::env::var("CLEAN_KERNEL_HEARTBEAT")
-            .ok()
-            .filter(|s| !s.is_empty())
-            .unwrap_or_else(|| "default".to_string()),
-        elision_policy: match args.closure_elide.to_kernel() {
-            clean_kernel::env::ProofValueElision::None => "none",
-            clean_kernel::env::ProofValueElision::OpaqueOnly => "opaque",
-            clean_kernel::env::ProofValueElision::OpaqueAndTheorem => "opaque-and-theorem",
-            _ => "unknown",
-        }
-        .to_string(),
-        max_closure_modules: crate::cli::closure_load::max_closure_modules(),
-        prelude_variant: if args.closure_root.is_some() {
-            "closure-root"
-        } else {
-            "prelude-only"
-        }
-        .to_string(),
-    });
-    let stamp = stamp_shard_dir_kernel_verified(&args.out_dir, &manifest)?;
+        run,
+    );
 
     if let Some(manifest_path) = &args.manifest {
         if let Some(parent) = manifest_path.parent() {
@@ -923,23 +930,23 @@ pub(crate) fn cmd_stamp_verified(args: StampVerifiedArgs) -> Result<(), Mathvers
     }
 
     // (4) Re-read the stored KernelVerified count from the shard bytes on disk.
-    let (stored_kernel_verified, unreadable) = count_stored_kernel_verified(&args.out_dir)?;
+    let (stored_reference_stamped, unreadable) = count_stored_kernel_verified(&args.out_dir)?;
 
-    // (5) Package: emit <out_dir>/manifest.json describing the already-stamped
-    //     flat shards IN PLACE so `MATHVERSE_LIBRARY_PATH=<out_dir>` resolves via
-    //     `load_built_library`. Packaging-only — shards are already final (the
-    //     in-place stamp at step 3 ran before this), so it cannot change a verdict.
+    // (5) Package: emit <out_dir>/manifest.json describing the flat shards IN
+    //     PLACE so `MATHVERSE_LIBRARY_PATH=<out_dir>` resolves via
+    //     `load_built_library`. Packaging-only: it cannot change a verdict.
     let library_manifest = write_flat_manifest(&args.out_dir)?;
 
     let summary = StampVerifiedSummary {
-        ok: unreadable.is_empty(),
+        ok: unreadable.is_empty() && stored_reference_stamped == 0,
         generated_by: "clean mathverse stamp-verified",
         oleans_converted: converted,
         oleans_failed: failed,
         out_dir: args.out_dir.display().to_string(),
         heuristic_kernel_verified,
+        tier: crate::verify::kernel_verified_manifest::AcceptanceTier::Development.as_str(),
         total: report.total,
-        kernel_verified: report.kernel_verified,
+        accepted: report.kernel_verified,
         axiom_accepted: report.axiom_accepted,
         unsafe_accepted: report.unsafe_accepted,
         axiom_fallback: report.axiom_fallback,
@@ -950,9 +957,7 @@ pub(crate) fn cmd_stamp_verified(args: StampVerifiedArgs) -> Result<(), Mathvers
         failed_by_class: FailedHistogram::from_messages(
             report.failures.iter().map(|(_, e)| e.as_str()),
         ),
-        shards_rewritten: stamp.shards_rewritten,
-        constants_stamped: stamp.constants_stamped,
-        stored_kernel_verified,
+        stored_reference_stamped,
         manifest: args.manifest.as_ref().map(|p| p.display().to_string()),
         library_manifest: library_manifest.display().to_string(),
         closure: closure_summary,
@@ -982,13 +987,12 @@ pub(crate) fn cmd_stamp_verified(args: StampVerifiedArgs) -> Result<(), Mathvers
         writeln!(out, "{}", serde_json::to_string_pretty(&summary)?)?;
     } else {
         eprintln!(
-            "stamp-verified: {} olean(s) -> {} shard(s) in {}; \
-             kernel_verified={} stored_kernel_verified={} (heuristic floor={})",
+            "stamp-verified: {} olean(s) in {}; accepted={} (development tier: no label) \
+             stored_reference_stamped={} (heuristic floor={})",
             summary.oleans_converted,
-            summary.shards_rewritten,
             summary.out_dir,
-            summary.kernel_verified,
-            summary.stored_kernel_verified,
+            summary.accepted,
+            summary.stored_reference_stamped,
             summary.heuristic_kernel_verified,
         );
         let fc = &summary.failed_by_class;
@@ -1041,11 +1045,11 @@ pub(crate) fn cmd_stamp_verified(args: StampVerifiedArgs) -> Result<(), Mathvers
     Ok(())
 }
 
-/// TURNKEY `--receipt`: after stamping, mint a trust receipt over the
-/// KernelVerified constants now in `--out-dir` — the same read
-/// `trust-receipt from-shards` does, folded into the stamp command so `stamp →
-/// certify` is one invocation. No-op unless `--receipt` is set. A receipt failure
-/// is surfaced but does NOT fail the stamp (the shards are already written).
+/// TURNKEY `--receipt`: mint a trust receipt over the constants whose headers in
+/// `--out-dir` store `KernelVerified` — the same read `trust-receipt
+/// from-shards` does. Since P6 this run stamps nothing, so it covers only
+/// headers already stored. No-op unless `--receipt` is set. A receipt failure
+/// is surfaced but does NOT fail the run (the shards are already written).
 fn maybe_emit_stamp_receipt(args: &StampVerifiedArgs) {
     let Some(receipt_path) = args.receipt.as_deref() else {
         return;
@@ -1073,12 +1077,13 @@ fn maybe_emit_stamp_receipt(args: &StampVerifiedArgs) {
 ///
 /// Builds the shared immutable base (Phase A), re-verifies every target module's
 /// value-bearing constants in parallel against it (Phase B), then runs the SAME
-/// soundness-floor check, on-disk stamp, manifest emission, and JSON summary as
+/// soundness-floor check, stored-header audit, manifest emission, and JSON summary as
 /// the sequential path (Phase C). `--closure-root` is required: the base loader
 /// resolves modules and computes module names beneath the root.
 fn cmd_stamp_verified_parallel(
     args: StampVerifiedArgs,
     oleans: &[PathBuf],
+    build: BuildIdentity,
 ) -> Result<(), MathverseCliError> {
     let Some(root) = args.closure_root.clone() else {
         return Err(MathverseCliError::StampClosure {
@@ -1140,10 +1145,10 @@ fn cmd_stamp_verified_parallel(
         );
     }
 
-    // Build the env fingerprint up front: it is BOTH the incremental-cache key
-    // prefix (folded into every module's closure hash) AND the manifest's
-    // reproducibility record — one source of truth, so a re-import after a
-    // kernel change re-keys every module and honestly re-verifies.
+    // The incremental-cache key prefix (folded into every module's closure
+    // hash): a re-import after a kernel change, under another checker entry or
+    // by another executable re-keys every module and honestly re-verifies, so
+    // every cache hit was minted by these bytes under these settings (P6).
     let fingerprint = StampEnvFingerprint {
         kernel_version: clean_kernel::VERSION.to_string(),
         // Captured at build time by build.rs so a toolchain bump re-keys the
@@ -1165,6 +1170,8 @@ fn cmd_stamp_verified_parallel(
         .to_string(),
         max_closure_modules: crate::cli::closure_load::max_closure_modules(),
         prelude_variant: "closure-root-parallel".to_string(),
+        checker_entry: CheckerEntry::ParallelReadonlyReplay.as_str().to_string(),
+        exe_sha256: build.exe().sha256().to_string(),
     };
     let cache_key = fingerprint.cache_key();
     let cache_path = args.out_dir.join(".import_cache.json");
@@ -1193,6 +1200,7 @@ fn cmd_stamp_verified_parallel(
         phase_b_secs,
         cache_hits,
         cache_misses,
+        checker_settings,
     } = crate::cli::parallel_verify::parallel_convert_and_verify(
         oleans,
         &args.out_dir,
@@ -1250,16 +1258,29 @@ fn cmd_stamp_verified_parallel(
         }
     }
 
-    // Stamp the kernel's verdict into the shard bytes on disk. Only names in
-    // report.kernel_verified_names are stamped — exactly the constants whose
-    // value `check_decl_readonly` accepted.
-    let manifest = KernelVerifiedManifest::from_report(
+    // Development tier: nothing is stamped (P6). The manifest names Lean's
+    // replay environment with the closure loaded on it trusted, and the
+    // read-only parallel entry; families came from the `.olean` loader.
+    let run = DevelopmentRun::new(
+        checker_settings,
+        BaseEnvironment::lean_replay(),
+        Imports::Trusted,
+        CheckSettings {
+            elision: Elision::of(elide)?,
+            inductive_replay: InductiveReplay::OleanLoader,
+            level_repair: false,
+            heartbeat_limit: checker_settings.max_heartbeats,
+            max_closure_modules: Some(crate::cli::closure_load::max_closure_modules()),
+        },
+        build,
+    )?;
+    let manifest = KernelVerifiedManifest::from_parallel_report(
         &args.out_dir.display().to_string(),
         converted,
         &report,
-    )
-    .with_env_fingerprint(fingerprint);
-    let stamp = stamp_shard_dir_kernel_verified(&args.out_dir, &manifest)?;
+        run,
+        if args.incremental { cache_hits } else { 0 },
+    );
 
     if let Some(manifest_path) = &args.manifest {
         if let Some(parent) = manifest_path.parent() {
@@ -1270,7 +1291,7 @@ fn cmd_stamp_verified_parallel(
         manifest.write_to_file(manifest_path)?;
     }
 
-    let (stored_kernel_verified, unreadable) = count_stored_kernel_verified(&args.out_dir)?;
+    let (stored_reference_stamped, unreadable) = count_stored_kernel_verified(&args.out_dir)?;
     let library_manifest = write_flat_manifest(&args.out_dir)?;
 
     let closure_summary = ClosureSummary {
@@ -1299,14 +1320,15 @@ fn cmd_stamp_verified_parallel(
     };
 
     let summary = StampVerifiedSummary {
-        ok: unreadable.is_empty(),
+        ok: unreadable.is_empty() && stored_reference_stamped == 0,
         generated_by: "clean mathverse stamp-verified --parallel",
         oleans_converted: converted,
         oleans_failed: failed,
         out_dir: args.out_dir.display().to_string(),
         heuristic_kernel_verified,
+        tier: crate::verify::kernel_verified_manifest::AcceptanceTier::Development.as_str(),
         total: report.total,
-        kernel_verified: report.kernel_verified,
+        accepted: report.kernel_verified,
         axiom_accepted: report.axiom_accepted,
         unsafe_accepted: report.unsafe_accepted,
         axiom_fallback: report.axiom_fallback,
@@ -1317,9 +1339,7 @@ fn cmd_stamp_verified_parallel(
         failed_by_class: FailedHistogram::from_messages(
             report.failures.iter().map(|(_, e)| e.as_str()),
         ),
-        shards_rewritten: stamp.shards_rewritten,
-        constants_stamped: stamp.constants_stamped,
-        stored_kernel_verified,
+        stored_reference_stamped,
         manifest: args.manifest.as_ref().map(|p| p.display().to_string()),
         library_manifest: library_manifest.display().to_string(),
         closure: Some(closure_summary),
@@ -1339,15 +1359,15 @@ fn cmd_stamp_verified_parallel(
         writeln!(out, "{}", serde_json::to_string_pretty(&summary)?)?;
     } else {
         eprintln!(
-            "stamp-verified --parallel: {} olean(s) -> {} shard(s) in {}; \
-             kernel_verified={} stored_kernel_verified={} (heuristic floor={}); \
+            "stamp-verified --parallel: {} olean(s) in {}; \
+             accepted={} (development tier: no label) stored_reference_stamped={} \
+             (heuristic floor={}); \
              base: {} modules, {} constants, {} proof values elided; \
              phaseA={:.2}s phaseB={:.2}s ({jobs} jobs)",
             summary.oleans_converted,
-            summary.shards_rewritten,
             summary.out_dir,
-            summary.kernel_verified,
-            summary.stored_kernel_verified,
+            summary.accepted,
+            summary.stored_reference_stamped,
             summary.heuristic_kernel_verified,
             base_modules_loaded,
             base_constants,
@@ -1357,7 +1377,7 @@ fn cmd_stamp_verified_parallel(
         );
         if let Some(recovered) = summary.heartbeat_escalated_recovered {
             eprintln!(
-                "  two-tier heartbeat escalation recovered {recovered} constant(s) to KernelVerified (Tier-1 HeartbeatExceeded -> Tier-2 pass)"
+                "  two-tier heartbeat escalation recovered {recovered} accepted constant(s) (Tier-1 HeartbeatExceeded -> Tier-2 pass)"
             );
         }
         if !summary.oleans_failed.is_empty() {

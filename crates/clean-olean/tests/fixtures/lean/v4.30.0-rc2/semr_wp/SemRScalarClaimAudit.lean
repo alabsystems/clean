@@ -1,6 +1,8 @@
 /- Scalar claim interpretation and hostile binding/encoding controls.
    Copyright 2026 Andrew Yates. Apache-2.0. -/
 import SemRBooleanClaimText
+import SemRScalarClaim
+import SemRUnsignedSelect
 
 set_option maxRecDepth 8192
 
@@ -104,5 +106,77 @@ theorem duplicate_entry_name_refused (m : SemR.Module) (k : SemR.Core) :
 theorem cross_sort_contract_binding_refused (m : SemR.Module) :
     contractTypedEnv m [(x, .param 0, .bool), (x, .result 0, .int .u64)]
       [.bool true] [.int .u64 0] = none := rfl
+
+/-- The original declared divisor guard is decoded as integer comparison,
+    without rewriting its bytes into another formula format. -/
+theorem divisor_text_decoded :
+    decodeTypedText 4096 [] [ascii "d"] (ascii "d != 0") =
+      some (.intCompare .ne (.var (ascii "d")) (.literal 0)) := rfl
+
+theorem divisor_text_interpretation (value : Int) :
+    checkedTypedText 4096 (ascii "d != 0") [] [ascii "d"]
+      ([], [(ascii "d", value)]) = some (value != 0) := rfl
+
+theorem zero_divisor_guard_is_false :
+    checkedTypedText 4096 (ascii "d != 0") [] [ascii "d"]
+      ([], [(ascii "d", 0)]) = some false := rfl
+
+theorem full_unsigned_divisor_guard_is_true :
+    checkedTypedText 4096 (ascii "d != 0") [] [ascii "d"]
+      ([], [(ascii "d", 18446744073709551615)]) = some true := rfl
+
+theorem integer_text_precedence :
+    checkedTypedText 4096 (ascii "d + 2 * 3 == 9") [] [ascii "d"]
+      ([], [(ascii "d", 3)]) = some true := rfl
+
+theorem parenthesized_integer_text :
+    checkedTypedText 4096 (ascii "(d + 2) * 3 == 9") [] [ascii "d"]
+      ([], [(ascii "d", 1)]) = some true := rfl
+
+theorem integer_text_associativity :
+    checkedTypedText 4096 (ascii "8 - 3 - 2 == 3") [] [] ([], []) = some true := rfl
+
+theorem negative_integer_text :
+    checkedTypedText 4096 (ascii "-2 * 3 < -1") [] [] ([], []) = some true := rfl
+
+theorem mixed_boolean_integer_text :
+    checkedTypedText 4096 (ascii "c ==> d != 0") [c] [ascii "d"]
+      ([(c, true)], [(ascii "d", 1)]) = some true := rfl
+
+theorem wrong_text_binding_sort_refused :
+    decodeTypedText 4096 [ascii "d"] [] (ascii "d != 0") = none := rfl
+
+theorem unbound_text_integer_refused :
+    checkedTypedText 4096 (ascii "d != 0") [] [ascii "d"] ([], []) = none := rfl
+
+theorem hidden_unknown_text_name_refused :
+    decodeTypedText 4096 [] [] (ascii "false && d != 0") = none := rfl
+
+theorem cross_sort_text_name_refused :
+    decodeTypedText 4096 [ascii "d"] [ascii "d"] (ascii "true") = none := rfl
+
+theorem duplicate_text_integer_name_refused :
+    decodeTypedText 4096 [] [ascii "d", ascii "d"] (ascii "true") = none := rfl
+
+theorem unsupported_text_division_refused :
+    decodeTypedText 4096 [] [ascii "d"] (ascii "d / 0 == 1") = none := rfl
+
+theorem trailing_text_bytes_refused :
+    decodeTypedText 4096 [] [ascii "d"] (ascii "d != 0 junk") = none := rfl
+
+theorem integer_as_boolean_text_refused :
+    decodeTypedText 4096 [] [ascii "d"] (ascii "d") = none := rfl
+
+theorem cross_sort_text_equality_refused :
+    decodeTypedText 4096 [c] [ascii "d"] (ascii "c == d") = none := rfl
+
+theorem boolean_text_ordering_refused :
+    decodeTypedText 4096 [c] [] (ascii "c < true") = none := rfl
+
+theorem unsupported_text_annotation_refused :
+    decodeTypedText 4096 [] [ascii "d"] (ascii "(d : bool) != 0") = none := rfl
+
+theorem zero_text_fuel_refused :
+    decodeTypedText 0 [] [ascii "d"] (ascii "d != 0") = none := rfl
 
 end SemRScalarClaimAudit

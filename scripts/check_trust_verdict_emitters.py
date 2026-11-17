@@ -19,7 +19,13 @@ enforced invariant: it fails CI if
      `// SOUNDNESS:` comment (an un-justified own-authority accept);
   4. the clean-kernel `asserts-own-authority` count in the ratchet does not equal
      the number of such registry entries, or is RAISED above the recorded
-     baseline (the count only ratchets DOWN).
+     baseline (the count only ratchets DOWN);
+  5. the Rust lexer it blanks comments and literals with (the reference's,
+     scripts/check_add_decl_ratchet.py) reads one of its cases differently
+     from rustc.
+
+`--pinned-inputs` prints the reference lexer this gate imports, for
+check_gate_registry.py R7.
 
 Registry: data/trust_verdict_emitters.json (seeded from the 127-emitter audit in
 docs/PILLAR_1_TRUST_MAP.md). ENFORCEMENT SCOPE: only `repo:clean` entries and the
@@ -34,7 +40,18 @@ from __future__ import annotations
 import json
 import re
 import sys
+import types
 from pathlib import Path
+
+# The reference Rust lexer, executed from its source: ignored bytecode is not an input.
+_reference_lexer = types.ModuleType("check_trust_verdict_emitters_reference_lexer")
+_reference_lexer.__file__ = str(Path(__file__).resolve().parent / "check_add_decl_ratchet.py")
+exec(compile(Path(_reference_lexer.__file__).read_bytes(), _reference_lexer.__file__, "exec", dont_inherit=True),
+     _reference_lexer.__dict__)
+
+# check_gate_registry.py R7 pins what --pinned-inputs prints: the reference lexer this gate runs.
+ANSWERS_PINNED_INPUTS = True
+PINNED_INPUTS = ("scripts/check_add_decl_ratchet.py",)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 REGISTRY = REPO_ROOT / "data" / "trust_verdict_emitters.json"
@@ -75,20 +92,13 @@ def is_test_path(rel: Path) -> bool:
             or bool(re.search(r"(^test_|_tests?\.rs$|^tests?\.rs$|^tests_)", name)))
 
 
-# Rust non-code spans — same construction and rationale as
-# check_add_decl_ratchet.py / check_env_bypass_census.py. Blanking these BEFORE
-# matching is what keeps arm (1) from charging an engineer for DOCUMENTING a
-# verdict: this file's own subject matter is the token it greps for, so a
-# trailing `// ... = TrustLevel::KernelVerified` in an explanation used to read
-# as a new unclassified emitter. Lane ANTICORR, 2026-08-25.
-NONCODE_RE = re.compile(
-    r"/\*.*?\*/"                    # block comment (non-nested)
-    r"|//[^\n]*"                    # line comment
-    r'|(?:b?r)(#*)"(?:.|\n)*?"\1'   # raw string   r"..."  r#"..."#
-    r'|b?"(?:\\.|[^"\\])*"'         # string literal
-    r"|'(?:\\.|[^\\'])'",           # char literal
-    re.DOTALL,
-)
+# Rust non-code spans. The lexer is the reference's, imported and pinned.
+# Blanking these BEFORE matching is what keeps arm (1) from charging an
+# engineer for DOCUMENTING a verdict: this file's own subject matter is the
+# token it greps for, so a trailing `// ... = TrustLevel::KernelVerified` in
+# an explanation used to read as a new unclassified emitter. Lane ANTICORR,
+# 2026-08-25.
+NONCODE_RE = _reference_lexer.NONCODE_RE
 
 
 def _blank(match: re.Match[str]) -> str:
@@ -175,6 +185,9 @@ def entry_file(entry: dict) -> Path | None:
 
 
 def main() -> int:  # noqa: C901 (single linear gate)
+    if "--pinned-inputs" in sys.argv[1:]:
+        print(*PINNED_INPUTS, sep="\n")
+        return 0
     data = load_registry()
     emitters = data["emitters"]
     primitives = data.get("kernel_recheck_primitives", [])
@@ -182,6 +195,16 @@ def main() -> int:  # noqa: C901 (single linear gate)
     recorded_count = int(ratchet.get("clean_kernel_count", -1))
 
     ok = True
+
+    # ── (5) the lexer arm (1) blanks through reads Rust as rustc does ──
+    lexer_bad = _reference_lexer.lexer_failures()
+    if lexer_bad:
+        ok = False
+        print(
+            f"FAIL: the reference lexer (scripts/check_add_decl_ratchet.py) reads "
+            f"Rust differently from rustc: {lexer_bad}",
+            file=sys.stderr,
+        )
 
     # ── (0) registry self-consistency: clean entries must resolve to a file ──
     construction_sites: set[str] = set()

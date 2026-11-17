@@ -40,9 +40,9 @@ impl Specification {
         // at least 2^{(w - W(F))^2 / n}.
         self.add_inductive(
             r"inductive WidthSizeLower : forall (n : Nat) (w : Nat), WidthBound n w → Type
-| empty : forall (n : Nat) (w : Nat), WidthSizeLower n w (WidthBound.empty n w)
-| narrow : forall (n : Nat) (w : Nat) (cw : Nat) (prev : WidthBound n w) (h : WidthSizeLower n w prev), WidthSizeLower n w (WidthBound.narrow n w cw prev)
-| wide : forall (n : Nat) (w : Nat) (cw : Nat) (prev : WidthBound n w) (h : WidthSizeLower n w prev), WidthSizeLower n w (WidthBound.wide n w cw prev)",
+| empty : forall (n : Nat) (w : Nat), WidthSizeLower n w (@WidthBound.empty n w)
+| narrow : forall (n : Nat) (w : Nat) (cw : Nat) (prev : WidthBound n w) (h : WidthSizeLower n w prev), WidthSizeLower n w (@WidthBound.narrow n w cw prev)
+| wide : forall (n : Nat) (w : Nat) (cw : Nat) (prev : WidthBound n w) (h : WidthSizeLower n w prev), WidthSizeLower n w (@WidthBound.wide n w cw prev)",
             "Width-size lower bound witness for PG01. Proof by induction on \
              WidthBound: tracks the accumulated width cost. Each wide clause \
              contributes exponentially to the proof size lower bound. \
@@ -69,9 +69,9 @@ impl Specification {
         // produce proofs of bounded size on formulas with narrow refutations.
         self.add_inductive(
             r"inductive RestartOptimal : forall (n : Nat), RestartSeq n → Type
-| done : forall (n : Nat), RestartOptimal n (RestartSeq.done n)
-| continue_narrow : forall (n : Nat) (cw : Nat) (prev : RestartSeq n) (h : RestartOptimal n prev), RestartOptimal n (RestartSeq.continue_narrow n cw prev)
-| restart_wide : forall (n : Nat) (cw : Nat) (prev : RestartSeq n) (h : RestartOptimal n prev), RestartOptimal n (RestartSeq.restart_wide n cw prev)",
+| done : forall (n : Nat), RestartOptimal n (@RestartSeq.done n)
+| continue_narrow : forall (n : Nat) (cw : Nat) (prev : RestartSeq n) (h : RestartOptimal n prev), RestartOptimal n (@RestartSeq.continue_narrow n cw prev)
+| restart_wide : forall (n : Nat) (cw : Nat) (prev : RestartSeq n) (h : RestartOptimal n prev), RestartOptimal n (@RestartSeq.restart_wide n cw prev)",
             "Restart optimality witness for PG02. Proof by induction on \
              RestartSeq: done is trivially bounded, continue_narrow preserves \
              the narrow refutation path, restart_wide abandons an exponentially \
@@ -97,9 +97,9 @@ impl Specification {
         // SpaceWidthValid: inductive witness for the space-width inequality.
         self.add_inductive(
             r"inductive SpaceWidthValid : forall (n : Nat), SpaceWidth n → Type
-| init : forall (n : Nat), SpaceWidthValid n (SpaceWidth.init n)
-| add_clause : forall (n : Nat) (cw : Nat) (prev : SpaceWidth n) (h : SpaceWidthValid n prev), SpaceWidthValid n (SpaceWidth.add_clause n cw prev)
-| remove_clause : forall (n : Nat) (prev : SpaceWidth n) (h : SpaceWidthValid n prev), SpaceWidthValid n (SpaceWidth.remove_clause n prev)",
+| init : forall (n : Nat), SpaceWidthValid n (@SpaceWidth.init n)
+| add_clause : forall (n : Nat) (cw : Nat) (prev : SpaceWidth n) (h : SpaceWidthValid n prev), SpaceWidthValid n (@SpaceWidth.add_clause n cw prev)
+| remove_clause : forall (n : Nat) (prev : SpaceWidth n) (h : SpaceWidthValid n prev), SpaceWidthValid n (@SpaceWidth.remove_clause n prev)",
             "Space-width inequality witness for PG03. Proof by induction on \
              SpaceWidth: init trivially satisfies the inequality, add_clause \
              increases space (maintaining the bound), remove_clause decreases \
@@ -119,11 +119,11 @@ impl Specification {
                 "fun (n : Nat) (w : Nat) (bound : WidthBound n w) => \
                  @WidthBound.rec n w \
                    (fun (b : WidthBound n w) => WidthSizeLower n w b) \
-                   (WidthSizeLower.empty n w) \
+                   (@WidthSizeLower.empty n w) \
                    (fun (cw : Nat) (prev : WidthBound n w) (ih : WidthSizeLower n w prev) => \
-                     WidthSizeLower.narrow n w cw prev ih) \
+                     @WidthSizeLower.narrow n w cw prev ih) \
                    (fun (cw : Nat) (prev : WidthBound n w) (ih : WidthSizeLower n w prev) => \
-                     WidthSizeLower.wide n w cw prev ih) \
+                     @WidthSizeLower.wide n w cw prev ih) \
                    bound"
                     .to_string(),
             ),
@@ -152,11 +152,11 @@ impl Specification {
                 "fun (n : Nat) (seq : RestartSeq n) => \
                  @RestartSeq.rec n \
                    (fun (s : RestartSeq n) => RestartOptimal n s) \
-                   (RestartOptimal.done n) \
+                   (@RestartOptimal.done n) \
                    (fun (cw : Nat) (prev : RestartSeq n) (ih : RestartOptimal n prev) => \
-                     RestartOptimal.continue_narrow n cw prev ih) \
+                     @RestartOptimal.continue_narrow n cw prev ih) \
                    (fun (cw : Nat) (prev : RestartSeq n) (ih : RestartOptimal n prev) => \
-                     RestartOptimal.restart_wide n cw prev ih) \
+                     @RestartOptimal.restart_wide n cw prev ih) \
                    seq"
                 .to_string(),
             ),
@@ -185,11 +185,11 @@ impl Specification {
                 "fun (n : Nat) (sw : SpaceWidth n) => \
                  @SpaceWidth.rec n \
                    (fun (s : SpaceWidth n) => SpaceWidthValid n s) \
-                   (SpaceWidthValid.init n) \
+                   (@SpaceWidthValid.init n) \
                    (fun (cw : Nat) (prev : SpaceWidth n) (ih : SpaceWidthValid n prev) => \
-                     SpaceWidthValid.add_clause n cw prev ih) \
+                     @SpaceWidthValid.add_clause n cw prev ih) \
                    (fun (prev : SpaceWidth n) (ih : SpaceWidthValid n prev) => \
-                     SpaceWidthValid.remove_clause n prev ih) \
+                     @SpaceWidthValid.remove_clause n prev ih) \
                    sw"
                 .to_string(),
             ),
@@ -230,9 +230,9 @@ impl Specification {
         // RestartSatPreserving inductive witness.
         self.add_inductive(
             r"inductive RestartSatPreserving : forall (n : Nat), RestartSeq n → Type
-| done : forall (n : Nat), RestartSatPreserving n (RestartSeq.done n)
-| continue_narrow : forall (n : Nat) (cw : Nat) (prev : RestartSeq n) (h : RestartSatPreserving n prev), RestartSatPreserving n (RestartSeq.continue_narrow n cw prev)
-| restart_wide : forall (n : Nat) (cw : Nat) (prev : RestartSeq n) (h : RestartSatPreserving n prev), RestartSatPreserving n (RestartSeq.restart_wide n cw prev)",
+| done : forall (n : Nat), RestartSatPreserving n (@RestartSeq.done n)
+| continue_narrow : forall (n : Nat) (cw : Nat) (prev : RestartSeq n) (h : RestartSatPreserving n prev), RestartSatPreserving n (@RestartSeq.continue_narrow n cw prev)
+| restart_wide : forall (n : Nat) (cw : Nat) (prev : RestartSeq n) (h : RestartSatPreserving n prev), RestartSatPreserving n (@RestartSeq.restart_wide n cw prev)",
             "Restart satisfiability preservation witness for PG04. Proof by \
              induction on RestartSeq: done is trivially preserving (identity \
              transition), continue_narrow adds a learned clause that is a \
@@ -253,11 +253,11 @@ impl Specification {
                 "fun (n : Nat) (seq : RestartSeq n) => \
                  @RestartSeq.rec n \
                    (fun (s : RestartSeq n) => RestartSatPreserving n s) \
-                   (RestartSatPreserving.done n) \
+                   (@RestartSatPreserving.done n) \
                    (fun (cw : Nat) (prev : RestartSeq n) (ih : RestartSatPreserving n prev) => \
-                     RestartSatPreserving.continue_narrow n cw prev ih) \
+                     @RestartSatPreserving.continue_narrow n cw prev ih) \
                    (fun (cw : Nat) (prev : RestartSeq n) (ih : RestartSatPreserving n prev) => \
-                     RestartSatPreserving.restart_wide n cw prev ih) \
+                     @RestartSatPreserving.restart_wide n cw prev ih) \
                    seq"
                 .to_string(),
             ),

@@ -90,7 +90,7 @@ What remains is carried as TWO SEPARATE premises rather than one lumped one, so 
 
 const SRC_LE_ANTISYMM: &str = "def le_antisymm (a : Nat) (b : Nat) (hab : Le a b) (hba : Le b a) : @Eq Nat a b := nat_le_succ_or a b hab (@Eq Nat a b) (fun (h : @Eq Nat a b) => h) (fun (hlt : Le (Nat.succ a) b) => @Empty.rec (fun (_e : Empty) => @Eq Nat a b) (le_succ_self_empty a (le_trans (Nat.succ a) b a hlt hba)))";
 
-const SRC_LE_ANTISYMM_REFL_WITNESS: &str = "def le_antisymm_refl_witness : @Eq Nat Nat.zero Nat.zero := le_antisymm Nat.zero Nat.zero (Le.refl Nat.zero) (Le.refl Nat.zero)";
+const SRC_LE_ANTISYMM_REFL_WITNESS: &str = "def le_antisymm_refl_witness : @Eq Nat Nat.zero Nat.zero := le_antisymm Nat.zero Nat.zero (@Le.refl Nat.zero) (@Le.refl Nat.zero)";
 
 const SRC_NAT_LE_TRICHOTOMY_T: &str = "def nat_le_trichotomy_t (a : Nat) (b : Nat) (C : Type) (klt : Le (Nat.succ a) b -> C) (keq : @Eq Nat a b -> C) (kgt : Le (Nat.succ b) a -> C) : C := @NatLtLeDichotomy.rec a b (fun (_d : NatLtLeDichotomy a b) => C) (fun (hlt : Lt a b) => klt (lt_to_le_succ a b hlt)) (fun (hge : Le b a) => @NatLtLeDichotomy.rec b a (fun (_d2 : NatLtLeDichotomy b a) => C) (fun (hgt : Lt b a) => kgt (lt_to_le_succ b a hgt)) (fun (hle : Le a b) => keq (le_antisymm a b hle hge)) (nat_lt_le_dichotomy b a)) (nat_lt_le_dichotomy a b)";
 

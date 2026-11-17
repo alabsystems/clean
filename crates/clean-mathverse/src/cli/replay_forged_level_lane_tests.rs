@@ -159,7 +159,7 @@ fn stamp_with(module: &str, mode: Option<&str>, closure_shards: Option<&Path>) -
     cmd_stamp_verified(s).unwrap_or_else(|e| panic!("stamp-verified {module} {mode:?}: {e}"));
     let bytes = std::fs::read(&manifest).expect("manifest written");
     let m: KernelVerifiedManifest = serde_json::from_slice(&bytes).expect("manifest parses");
-    m.kernel_verified_names.into_iter().collect()
+    m.accepted_names().iter().cloned().collect()
 }
 
 fn sharded(module: &str) -> crate::verify::sharded::ModuleVerifyResult {

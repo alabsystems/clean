@@ -1,0 +1,501 @@
+{
+  "schema": "clean.level_bound_n/v1",
+  "plan_unit": "M6",
+  "tracked_bound_n": 5,
+  "bound_rationale": "TRACKED_BOUND_N = 5 equals the exact global maximum C2 level-report bound at zero universe instantiation [0, ..., 0] across all 64,003 declarations in the 590 Init modules of pinned Lean v4.30.0-rc2 (attained by ShareCommon.StateFactory.get and ShareCommon.StateFactory.mkImpl).",
+  "lean_gate_package": "theories/kcheck_m5_m6",
+  "lean_gate_definitions": [
+    "KCheckM5M6.checkReportWithinBound",
+    "KCheckM5M6.checkReceiptWithinBound",
+    "KCheckM5M6.checkArityReceiptWithinBound",
+    "KCheckM5M6.consumer_gate_receipt_sound",
+    "KCheckM5M6.consumer_gate_widened_holds",
+    "KCheckM5M6.run_consumer_gate_widened_holds"
+  ],
+  "pinned_init_census": {
+    "lean_toolchain": "leanprover/lean4:v4.30.0-rc2",
+    "lean_githash": "3dc1a088b6d2d8eafe25a7cd7ec7b58d731bd7cc",
+    "boundary_declarations": [
+      {
+        "eval_at_zero": 5,
+        "kind": "definition",
+        "module": "Init.Data.Array.Basic",
+        "name": "Array.mapMUnsafe",
+        "num_params": 3,
+        "report": {
+          "base": 5,
+          "offsets": [
+            [
+              0,
+              5
+            ],
+            [
+              1,
+              5
+            ],
+            [
+              2,
+              5
+            ]
+          ]
+        }
+      },
+      {
+        "eval_at_zero": 5,
+        "kind": "definition",
+        "module": "Init.Data.Array.Basic",
+        "name": "Array.modifyMUnsafe",
+        "num_params": 2,
+        "report": {
+          "base": 5,
+          "offsets": [
+            [
+              0,
+              5
+            ],
+            [
+              1,
+              3
+            ]
+          ]
+        }
+      },
+      {
+        "eval_at_zero": 5,
+        "kind": "definition",
+        "module": "Init.Data.Nat.Fold",
+        "name": "Nat.dfoldRev",
+        "num_params": 1,
+        "report": {
+          "base": 5,
+          "offsets": [
+            [
+              0,
+              5
+            ]
+          ]
+        }
+      },
+      {
+        "eval_at_zero": 5,
+        "kind": "definition",
+        "module": "Init.Data.Nat.Fold",
+        "name": "Nat.dfoldRev._f",
+        "num_params": 1,
+        "report": {
+          "base": 4,
+          "offsets": [
+            [
+              0,
+              5
+            ]
+          ]
+        }
+      },
+      {
+        "eval_at_zero": 5,
+        "kind": "definition",
+        "module": "Init.Data.Nat.Fold",
+        "name": "Nat.dfoldRev._sunfold",
+        "num_params": 1,
+        "report": {
+          "base": 5,
+          "offsets": [
+            [
+              0,
+              5
+            ]
+          ]
+        }
+      },
+      {
+        "eval_at_zero": 5,
+        "kind": "theoremDecl",
+        "module": "Init.Data.Nat.Fold",
+        "name": "Nat.dfoldRev_add",
+        "num_params": 1,
+        "report": {
+          "base": 5,
+          "offsets": [
+            [
+              0,
+              5
+            ]
+          ]
+        }
+      },
+      {
+        "eval_at_zero": 5,
+        "kind": "theoremDecl",
+        "module": "Init.Data.Nat.Fold",
+        "name": "Nat.dfoldRev_congr",
+        "num_params": 1,
+        "report": {
+          "base": 5,
+          "offsets": [
+            [
+              0,
+              5
+            ]
+          ]
+        }
+      },
+      {
+        "eval_at_zero": 5,
+        "kind": "theoremDecl",
+        "module": "Init.Data.Nat.Fold",
+        "name": "Nat.dfoldRev_succ",
+        "num_params": 1,
+        "report": {
+          "base": 5,
+          "offsets": [
+            [
+              0,
+              5
+            ]
+          ]
+        }
+      },
+      {
+        "eval_at_zero": 5,
+        "kind": "theoremDecl",
+        "module": "Init.Data.Nat.Fold",
+        "name": "Nat.dfoldRev_zero",
+        "num_params": 1,
+        "report": {
+          "base": 5,
+          "offsets": [
+            [
+              0,
+              5
+            ]
+          ]
+        }
+      },
+      {
+        "eval_at_zero": 5,
+        "kind": "definition",
+        "module": "Init.ShareCommon",
+        "name": "ShareCommon.StateFactory.get",
+        "num_params": 0,
+        "report": {
+          "base": 5,
+          "offsets": []
+        }
+      },
+      {
+        "eval_at_zero": 5,
+        "kind": "definition",
+        "module": "Init.ShareCommon",
+        "name": "ShareCommon.StateFactory.mkImpl",
+        "num_params": 0,
+        "report": {
+          "base": 5,
+          "offsets": []
+        }
+      },
+      {
+        "eval_at_zero": 5,
+        "kind": "definition",
+        "module": "Init.ShareCommon",
+        "name": "ShareCommon.mkStateImpl",
+        "num_params": 1,
+        "report": {
+          "base": 5,
+          "offsets": [
+            [
+              0,
+              5
+            ]
+          ]
+        }
+      },
+      {
+        "eval_at_zero": 5,
+        "kind": "definition",
+        "module": "Init.Data.Array.Attach",
+        "name": "_private.Init.Data.Array.Attach.0.Array.attachWithImpl",
+        "num_params": 1,
+        "report": {
+          "base": 4,
+          "offsets": [
+            [
+              0,
+              5
+            ]
+          ]
+        }
+      },
+      {
+        "eval_at_zero": 5,
+        "kind": "definition",
+        "module": "Init.Data.Array.Basic",
+        "name": "_private.Init.Data.Array.Basic.0.Array.mapMUnsafe.map",
+        "num_params": 3,
+        "report": {
+          "base": 4,
+          "offsets": [
+            [
+              0,
+              5
+            ],
+            [
+              1,
+              5
+            ],
+            [
+              2,
+              3
+            ]
+          ]
+        }
+      },
+      {
+        "eval_at_zero": 5,
+        "kind": "definition",
+        "module": "Init.Data.Array.Basic",
+        "name": "_private.Init.Data.Array.Basic.0.Array.modifyMUnsafe._proof_1",
+        "num_params": 1,
+        "report": {
+          "base": 4,
+          "offsets": [
+            [
+              0,
+              5
+            ]
+          ]
+        }
+      },
+      {
+        "eval_at_zero": 5,
+        "kind": "definition",
+        "module": "Init.Data.List.Attach",
+        "name": "_private.Init.Data.List.Attach.0.List.attachWithImpl",
+        "num_params": 1,
+        "report": {
+          "base": 4,
+          "offsets": [
+            [
+              0,
+              5
+            ]
+          ]
+        }
+      },
+      {
+        "eval_at_zero": 5,
+        "kind": "theoremDecl",
+        "module": "Init.Data.Nat.Fold",
+        "name": "_private.Init.Data.Nat.Fold.0.Nat.dfoldRev.eq_1",
+        "num_params": 1,
+        "report": {
+          "base": 5,
+          "offsets": [
+            [
+              0,
+              5
+            ]
+          ]
+        }
+      },
+      {
+        "eval_at_zero": 5,
+        "kind": "theoremDecl",
+        "module": "Init.Data.Nat.Fold",
+        "name": "_private.Init.Data.Nat.Fold.0.Nat.dfoldRev.eq_2",
+        "num_params": 1,
+        "report": {
+          "base": 5,
+          "offsets": [
+            [
+              0,
+              5
+            ]
+          ]
+        }
+      },
+      {
+        "eval_at_zero": 5,
+        "kind": "theoremDecl",
+        "module": "Init.Data.Nat.Fold",
+        "name": "_private.Init.Data.Nat.Fold.0.Nat.dfoldRev.eq_def",
+        "num_params": 1,
+        "report": {
+          "base": 5,
+          "offsets": [
+            [
+              0,
+              5
+            ]
+          ]
+        }
+      },
+      {
+        "eval_at_zero": 5,
+        "kind": "definition",
+        "module": "Init.Data.Option.Attach",
+        "name": "_private.Init.Data.Option.Attach.0.Option.attachWithImpl",
+        "num_params": 1,
+        "report": {
+          "base": 4,
+          "offsets": [
+            [
+              0,
+              5
+            ]
+          ]
+        }
+      },
+      {
+        "eval_at_zero": 5,
+        "kind": "definition",
+        "module": "Init.Data.Vector.Attach",
+        "name": "_private.Init.Data.Vector.Attach.0.Vector.attachWithImpl",
+        "num_params": 1,
+        "report": {
+          "base": 4,
+          "offsets": [
+            [
+              0,
+              5
+            ]
+          ]
+        }
+      },
+      {
+        "eval_at_zero": 5,
+        "kind": "definition",
+        "module": "Init.Dynamic",
+        "name": "_private.Init.Dynamic.0.Dynamic.get?Impl",
+        "num_params": 1,
+        "report": {
+          "base": 4,
+          "offsets": [
+            [
+              0,
+              5
+            ]
+          ]
+        }
+      },
+      {
+        "eval_at_zero": 5,
+        "kind": "definition",
+        "module": "Init.Dynamic",
+        "name": "_private.Init.Dynamic.0.Dynamic.mkImpl",
+        "num_params": 1,
+        "report": {
+          "base": 4,
+          "offsets": [
+            [
+              0,
+              5
+            ]
+          ]
+        }
+      }
+    ],
+    "constant_count": 64003,
+    "eval_at_zero_histogram": {
+      "1": 207,
+      "2": 5987,
+      "3": 12528,
+      "4": 45258,
+      "5": 23
+    },
+    "max_base": 5,
+    "max_eval_at_zero": 5,
+    "max_offset": 5,
+    "max_params": 7,
+    "module_count": 590,
+    "all_reports_sha256": "5fa2d3f2997ff8b7e59a8b51575aa2dbe0b5a944c40b6d595ef78980e096d8f0",
+    "scope_note": "Static topological C2-report upper-bound census over all compiled Init constants of pinned Lean (Sort u -> shift 1 (ofLevel u), const c us -> Report.subst). Full advice-replayed Init receipts remain owed by C4/C5."
+  },
+  "certified_rows_census": {
+    "trust_census_ref": "reports/m5-quotation-2026-11-14/CENSUS.md",
+    "active_certified_row_count": 0,
+    "certified_rows": [],
+    "status_note": "Today's repository carries zero live Certified calculus rows (PINNED_VF5_ENV_DIGESTS is empty). Any Certified row added here or passed via --receipts is gated fail-closed against tracked_bound_n = 5."
+  },
+  "kcheck_ground_receipts": [
+    {
+      "name": "eqz",
+      "source": "KCheckM5M6.eqzRunResult",
+      "kind": "theoremDecl",
+      "expected_params": 0,
+      "bound": {
+        "base": 2,
+        "offsets": []
+      },
+      "values": [],
+      "instantiated_bound": 2
+    },
+    {
+      "name": "triv",
+      "source": "KCheck.CheckerCases.triv",
+      "kind": "theoremDecl",
+      "expected_params": 0,
+      "bound": {
+        "base": 2,
+        "offsets": []
+      },
+      "values": [],
+      "instantiated_bound": 2
+    },
+    {
+      "name": "rflNat",
+      "source": "KCheck.CheckerCases.rflNat",
+      "kind": "theoremDecl",
+      "expected_params": 0,
+      "bound": {
+        "base": 2,
+        "offsets": []
+      },
+      "values": [],
+      "instantiated_bound": 2
+    },
+    {
+      "name": "polyThm_at_one",
+      "source": "KCheckM5M6.oneParamOffsetReceipt",
+      "kind": "theoremDecl",
+      "expected_params": 1,
+      "bound": {
+        "base": 1,
+        "offsets": [
+          [
+            0,
+            1
+          ]
+        ]
+      },
+      "values": [
+        1
+      ],
+      "instantiated_bound": 2
+    },
+    {
+      "name": "polyThm_at_boundary_four",
+      "source": "KCheckM5M6.oneParamOffsetReceipt",
+      "kind": "theoremDecl",
+      "expected_params": 1,
+      "bound": {
+        "base": 1,
+        "offsets": [
+          [
+            0,
+            1
+          ]
+        ]
+      },
+      "values": [
+        4
+      ],
+      "instantiated_bound": 5
+    }
+  ],
+  "standing_limits": [
+    "Soundness is per explicit finite universe bound N (tracked_bound_n = 5).",
+    "No generation proves more consistency than its base theory (Ax0).",
+    "By design KCheck.checker is to become the proved checker once all five Plan \u00a72.1 gates hold in fact; the independent re-checker quorum stays."
+  ]
+}

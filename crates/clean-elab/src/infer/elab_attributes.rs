@@ -200,6 +200,9 @@ impl<'a> ElabCtx<'a> {
         not_yet_declared: &[Name],
     ) {
         for attr in attrs {
+            if let Some(class_attr) = crate::class_attribute::ClassAttribute::collect(name, attr) {
+                self.collected_class_attrs.push(class_attr);
+            }
             match attr {
                 Attribute::Aesop(aesop_attr) => {
                     self.collected_aesop_attrs
@@ -287,7 +290,9 @@ impl<'a> ElabCtx<'a> {
                     self.collected_instance_attrs
                         .push((name.clone(), *priority));
                 }
-                Attribute::Class => self.collected_class_attrs.push(name.clone()),
+                // Collected above, including scope wrappers, for authoritative
+                // target validation before any attribute effects are applied.
+                Attribute::Class => {}
                 Attribute::Unknown(attr_name)
                     if crate::definition_attrs::modeled_name(attr_name) =>
                 {
@@ -476,6 +481,7 @@ impl<'a> ElabCtx<'a> {
                         self.ensure_known_attributes(std::slice::from_ref(attr))?;
                         // Class attributes follow the same register-time
                         // validation as declaration-form attributes.
+
                         self.collect_attributes_at(
                             &resolved_name,
                             std::slice::from_ref(attr),

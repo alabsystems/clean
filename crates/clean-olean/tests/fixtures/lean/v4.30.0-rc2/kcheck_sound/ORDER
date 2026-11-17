@@ -1,0 +1,8 @@
+# Plan unit C3's first slice over the kcheck specification, for
+# `crates/clean-olean/tests/kcheck_sound.rs`. The package imports `CICL.*`,
+# `CICLModel.*` and `KCheckSpec.*`, so all three are compiled first. The family
+# has no module of its own.
+theory cic_l
+theory cic_l_model
+theory kcheck_spec
+theory kcheck_sound

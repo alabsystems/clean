@@ -90,7 +90,7 @@ fn test_requires_boxed_version_no_params() {
 }
 #[test]
 fn test_requires_boxed_version_many_params() {
-    let params: Vec<_> = (0..=config::CLOSURE_MAX_ARGS as u32)
+    let params: Vec<_> = (0..=CLOSURE_MAX_ARGS as u32)
         .map(|i| (VarId(i), IRType::Object))
         .collect();
     let decl = make_test_decl(

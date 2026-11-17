@@ -17,24 +17,28 @@
 //! (β, ζ) plus the env-light ones (proj-of-constructor, native literal
 //! reduction). δ (transparency-gated unfolding) and the `Quot.lift/ind` ι-rules
 //! are applied in the outer loop and then re-fed to `whnf_core`. There is
-//! exactly one relation, budget-threaded and `Result`-returning; **recursor**
-//! (inductive ι) reduction is **M2** — a recursor application is left *stuck*.
+//! budget-threaded and `Result`-returning. Inductive recursors use their checked
+//! iota rules; conversion separately delays delta, native and projection work.
 
 use crate::budget::{Budget, BudgetError};
-use crate::infer::{infer_in_context, infer_sort_in_context, InferError};
+use crate::infer::{infer_sort_in_context, InferError};
 use crate::level::Level;
 use crate::name::Name;
 use crate::term::{Lit, Term, TermKind};
 use crate::term_dag::NodeKey;
 mod context;
-use crate::validate::{Env, QuotKind, Transparency};
-use context::context_key;
+use crate::validate::{Env, Transparency};
+pub(crate) use context::context_key;
 
+mod conversion;
 mod iota;
 mod native_nat;
+mod quotient;
 mod string;
+pub(crate) use conversion::{conversion_native, conversion_project, conversion_whnf};
 use iota::*;
 use native_nat::*;
+use quotient::try_quot;
 
 /// Weak-head-normalize `e` to a fixpoint (or until the budget is exhausted).
 ///
@@ -158,9 +162,11 @@ pub(crate) fn remember_infer(ctx: &[Term], e: &Term, ty: &Term) {
 pub(crate) fn cached_def_eq(ctx: &[Term], a: &Term, b: &Term) -> Option<bool> {
     let key = context_key(ctx, a.loose.max(b.loose));
     DEFEQ_CACHE.with(|c| {
-        c.borrow()
-            .get(&key)
-            .and_then(|m| m.get(&(NodeKey(a.clone()), NodeKey(b.clone()))).copied())
+        c.borrow().get(&key).and_then(|m| {
+            m.get(&(NodeKey(a.clone()), NodeKey(b.clone())))
+                .or_else(|| m.get(&(NodeKey(b.clone()), NodeKey(a.clone()))))
+                .copied()
+        })
     })
 }
 
@@ -194,6 +200,8 @@ impl DecisionScope {
                 WHNF_CACHE.with(|c| c.borrow_mut().clear());
                 INFER_CACHE.with(|c| c.borrow_mut().clear());
                 DEFEQ_CACHE.with(|c| c.borrow_mut().clear());
+                crate::infer::clear_type_query_cache();
+                conversion::clear();
             }
             d.set(d.get().saturating_add(1));
         });
@@ -211,6 +219,8 @@ impl Drop for DecisionScope {
                 WHNF_CACHE.with(|c| c.borrow_mut().clear());
                 INFER_CACHE.with(|c| c.borrow_mut().clear());
                 DEFEQ_CACHE.with(|c| c.borrow_mut().clear());
+                crate::infer::clear_type_query_cache();
+                conversion::clear();
             }
         });
     }
@@ -310,6 +320,17 @@ fn whnf_core(
     e: &Term,
     budget: &mut Budget,
 ) -> Result<Term, BudgetError> {
+    whnf_core_mode(env, ctx, e, budget, false, false)
+}
+
+fn whnf_core_mode(
+    env: &dyn Env,
+    ctx: &[Term],
+    e: &Term,
+    budget: &mut Budget,
+    cheap: bool,
+    cheap_proj: bool,
+) -> Result<Term, BudgetError> {
     // `whnf_core` recurses into an applied projection or `let` head itself.
     let _frame = ReductionFrame::enter()?;
     let mut cur = e.clone();
@@ -323,7 +344,7 @@ fn whnf_core(
             return Err(BudgetError::OutOfBudget);
         }
         match cur.kind() {
-            TermKind::Lit(Lit::Str(value)) if env.string_literal_view() => {
+            TermKind::Lit(Lit::Str(value)) if !cheap && env.string_literal_view() => {
                 cur = string::constructor_view(env, value, budget)?;
             }
             // ζ: let _ : ty := val; body  ~>  body[val]
@@ -346,14 +367,27 @@ fn whnf_core(
                 // reduce the head, then re-apply the arguments (R162). Without
                 // this an applied projection of a constructor stayed stuck.
                 if matches!(head.kind(), TermKind::Proj(..) | TermKind::Let(..)) {
-                    let reduced = whnf_core(env, ctx, &head, budget)?;
+                    let reduced = whnf_core_mode(env, ctx, &head, budget, cheap, cheap_proj)?;
                     if reduced != head {
                         cur = Term::apply(reduced, &args);
                         continue;
                     }
                 }
                 // native Nat reduction (succ / binary ops on literals).
-                if let Some(reduced) = try_native_nat(env, ctx, &head, &args, budget)? {
+                if !cheap {
+                    if let Some(reduced) = try_native_nat(env, ctx, &head, &args, budget)? {
+                        cur = reduced;
+                        continue;
+                    }
+                }
+                // Recursor/quotient iota belongs to head reduction too. In
+                // particular a cheap projection subject can expose a constructor
+                // without full-whnf forcing its unused recursive fields.
+                if let Some(reduced) = try_quot(env, ctx, &cur, budget)? {
+                    cur = reduced;
+                    continue;
+                }
+                if let Some(reduced) = try_iota(env, ctx, &cur, budget)? {
                     cur = reduced;
                     continue;
                 }
@@ -361,7 +395,11 @@ fn whnf_core(
             }
             // proj-of-constructor: S.i (C p.. f..)  ~>  f_i
             TermKind::Proj(struct_name, idx, inner) => {
-                let inner_whnf = whnf_in_context(env, ctx, inner, budget)?;
+                let inner_whnf = if cheap_proj {
+                    whnf_core_mode(env, ctx, inner, budget, true, true)?
+                } else {
+                    whnf_in_context(env, ctx, inner, budget)?
+                };
                 if let Some(field) = try_proj_ctor(env, struct_name, *idx, &inner_whnf) {
                     cur = field;
                     continue;
@@ -377,7 +415,7 @@ fn whnf_core(
 /// δ: if the head is a `Const` with a [`Transparency::Transparent`] definition,
 /// substitute its level args into the body and replace the head. Returns the
 /// whole spine with the head unfolded, or `None` if the head is δ-stuck.
-fn try_delta(env: &dyn Env, e: &Term) -> Result<Option<Term>, BudgetError> {
+pub(crate) fn try_delta(env: &dyn Env, e: &Term) -> Result<Option<Term>, BudgetError> {
     let (head, args) = e.unfold_apps();
     let TermKind::Const(cref) = head.kind() else {
         return Ok(None);
@@ -392,64 +430,18 @@ fn try_delta(env: &dyn Env, e: &Term) -> Result<Option<Term>, BudgetError> {
     Ok(Some(Term::apply(body, &args)))
 }
 
-/// The `Quot.lift`/`Quot.ind` ι-rules (design §5.1):
-/// `Quot.lift α r β f h (Quot.mk α r a) ~> f a`
-/// `Quot.ind  α r β f   (Quot.mk α r a) ~> f a`
-/// The head and the `Quot.mk` are recognized via the *closed* [`QuotKind`]
-/// classification, never by free name lookup.
-fn try_quot(
-    env: &dyn Env,
-    ctx: &[Term],
-    e: &Term,
-    budget: &mut Budget,
-) -> Result<Option<Term>, BudgetError> {
-    let (head, args) = e.unfold_apps();
-    let TermKind::Const(cref) = head.kind() else {
-        return Ok(None);
-    };
-    let Some(kind) = env.quot_kind(cref.name()) else {
-        return Ok(None);
-    };
-    // Argument layout (Lean): lift = [α, r, β, f, h, q]; ind = [α, r, β, f, q].
-    // The major premise `q` is the last argument; `f` sits two before it for
-    // lift (after `h`) and one before for ind.
-    let (f_idx, q_idx) = match kind {
-        QuotKind::Lift => (3usize, 5usize),
-        QuotKind::Ind => (3usize, 4usize),
-        QuotKind::Type | QuotKind::Mk => return Ok(None),
-    };
-    if args.len() <= q_idx {
-        return Ok(None);
-    }
-    // The major premise must whnf to `Quot.mk α r a`.
-    let q = whnf_in_context(env, ctx, &args[q_idx], budget)?;
-    let (q_head, q_args) = q.unfold_apps();
-    let TermKind::Const(q_cref) = q_head.kind() else {
-        return Ok(None);
-    };
-    if env.quot_kind(q_cref.name()) != Some(QuotKind::Mk) {
-        return Ok(None);
-    }
-    // Quot.mk layout: [α, r, a]; the value `a` is the last argument.
-    let Some(a) = q_args.last() else {
-        return Ok(None);
-    };
-    let f = args[f_idx].clone();
-    // f a, then re-apply any trailing args beyond the major premise.
-    let mut result = Term::app(f, a.clone());
-    if let Some(trailing) = args.get(q_idx.saturating_add(1)..) {
-        result = Term::apply(result, trailing);
-    }
-    Ok(Some(result))
-}
-
 /// proj-of-constructor: if `inner` (already whnf'd) is a constructor application
 /// `C p_0..p_{k-1} f_0..f_{m-1}`, return field `idx` (`f_idx`). Uses the env's
 /// recorded `(num_params, num_fields)` so the field offset is `num_params+idx`.
 /// `C` must be the constructor of `struct_name` (Lean v4.33.1 `reduce_proj_core`,
 /// leanprover/lean4#14632; decision R147): another inductive's constructor is
 /// not projected, and the projection stays stuck.
-fn try_proj_ctor(env: &dyn Env, struct_name: &Name, idx: u32, inner: &Term) -> Option<Term> {
+pub(crate) fn try_proj_ctor(
+    env: &dyn Env,
+    struct_name: &Name,
+    idx: u32,
+    inner: &Term,
+) -> Option<Term> {
     let (head, args) = inner.unfold_apps();
     let TermKind::Const(cref) = head.kind() else {
         return None;

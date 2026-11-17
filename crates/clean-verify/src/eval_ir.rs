@@ -273,6 +273,32 @@ pub fn build_prelude_spec_with_stack() -> Result<Specification, SpecError> {
     build_owned(EvalIrVocabulary::Prelude)
 }
 
+/// Identity of the opt-in production-Prelude Nat/Bool reflection package.
+/// This is distinct from every legacy/default vocabulary and is no proof receipt.
+pub const NAT_BOOL_REFLECTION_PRELUDE_PROFILE_V1: &str = "clean-nat-bool-reflection-prelude-v1";
+
+/// Build the fixed Nat equality and Boolean elimination proofs over production Prelude.
+///
+/// Reuses Clean's authoritative comparison and Boolean sources, without historical
+/// Crystal examples or the dependency-scoped foundation. Every installed root and
+/// its complete dependency closure is strictly rechecked with empty axiom and trust
+/// closures, under ordinary finite kernel limits. Only the underlying Prelude may
+/// be reused; this package is checked anew and returns an independent owned value.
+/// No caller declaration, borrowed receipt or stored admission verdict is accepted.
+/// Consumers must still check their own endpoint and retain this profile identity.
+/// This does not establish source/Core/native execution or Rust verification.
+///
+/// # Errors
+/// Returns the original Prelude construction error, or a package installation,
+/// stored-declaration, rooted certification or worker error. Failure returns no package.
+pub fn build_nat_bool_reflection_prelude_spec_v1_with_stack() -> Result<Specification, SpecError> {
+    build_on_stack(
+        "clean-nat-bool-reflection-prelude-v1",
+        "Nat/Bool reflection PreludeV1",
+        || build_owned(EvalIrVocabulary::Prelude)?.into_nat_bool_reflection_prelude_v1(),
+    )
+}
+
 /// Build the versioned, byte-addressed EvalIR profile in the production prelude.
 ///
 /// The shared execution driver is the same driver used by legacy `ir_steps`.

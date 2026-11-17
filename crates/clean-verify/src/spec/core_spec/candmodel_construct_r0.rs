@@ -170,7 +170,7 @@ pub(super) const TY_OMEGA_INST_PIN: &str = "@Eq KExpr (instantiate (KExpr.app (K
 pub(super) const VAL_OMEGA_INST_PIN: &str = "@Eq.refl KExpr omegaLoop";
 
 pub(super) const TY_OMEGA_STEP_SELF: &str = "whnf_step omegaLoop omegaLoop";
-pub(super) const VAL_OMEGA_STEP_SELF: &str = "whnf_step.beta omegaLoop omegaLoop (beta_reduces.beta (KExpr.sort Level.zero) (KExpr.app (KExpr.bvar Nat.zero) (KExpr.bvar Nat.zero)) selfApp)";
+pub(super) const VAL_OMEGA_STEP_SELF: &str = "@whnf_step.beta omegaLoop omegaLoop (beta_reduces.beta (KExpr.sort Level.zero) (KExpr.app (KExpr.bvar Nat.zero) (KExpr.bvar Nat.zero)) selfApp)";
 
 pub(super) const TY_OMEGA_NOT_WHNFACC: &str = "whnf_acc omegaLoop -> Empty";
 pub(super) const VAL_OMEGA_NOT_WHNFACC: &str = "fun (h : whnf_acc omegaLoop) => @whnf_acc.rec (fun (e : KExpr) (_h : whnf_acc e) => @Eq KExpr omegaLoop e -> Empty) (fun (e : KExpr) (_hsteps : forall (e1 : KExpr), whnf_step e e1 -> whnf_acc e1) (ih : forall (e1 : KExpr), whnf_step e e1 -> @Eq KExpr omegaLoop e1 -> Empty) (heq : @Eq KExpr omegaLoop e) => ih omegaLoop (@Eq.substType KExpr (fun (z : KExpr) => whnf_step z omegaLoop) omegaLoop e heq omega_step_self) (@Eq.refl KExpr omegaLoop)) omegaLoop h (@Eq.refl KExpr omegaLoop)";

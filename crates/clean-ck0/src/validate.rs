@@ -92,6 +92,12 @@ pub trait Env {
         None
     }
 
+    /// Untrusted scheduling hint for lazy delta reduction. Larger priorities
+    /// unfold first; it changes resource use only, never an equality rule.
+    fn delta_priority(&self, _name: &Name) -> u64 {
+        0
+    }
+
     /// Whether this environment licenses the named native Nat computation.
     /// Existing host environments retain their previous behavior by default.
     /// An untrusted byte reader must fence names until their closure is checked.

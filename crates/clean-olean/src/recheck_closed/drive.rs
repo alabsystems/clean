@@ -10,7 +10,7 @@
 //! a unit is already in the replay environment as the SAME declaration and
 //! may therefore be skipped. For the closed replay nothing is ever given.
 
-use clean_kernel::env::{Declaration, Environment};
+use clean_kernel::env::{Declaration, Environment, Reducibility};
 use clean_kernel::inductive::InductiveDecl;
 use clean_kernel::name::Name;
 use std::collections::{BTreeMap, BTreeSet};
@@ -32,7 +32,7 @@ pub(super) trait ReplayTarget {
     /// The environment admissions so far have built.
     fn env(&self) -> &Environment;
     /// Admit an ordinary declaration (`add_decl`).
-    fn admit_decl(&mut self, decl: Declaration) -> Result<(), String>;
+    fn admit_decl(&mut self, decl: Declaration, hint: Option<Reducibility>) -> Result<(), String>;
     /// Admit an inductive family block: `add_inductive_core`, or Clean's
     /// `add_inductive` when `clean_built`.
     fn admit_family(&mut self, decl: InductiveDecl, clean_built: bool) -> Result<(), String>;
@@ -45,8 +45,12 @@ impl ReplayTarget for Environment {
         self
     }
 
-    fn admit_decl(&mut self, decl: Declaration) -> Result<(), String> {
-        self.add_decl(decl).map_err(|e| e.to_string())
+    fn admit_decl(&mut self, decl: Declaration, hint: Option<Reducibility>) -> Result<(), String> {
+        match hint {
+            Some(hint) => self.add_decl_with_reducibility(decl, hint),
+            None => self.add_decl(decl),
+        }
+        .map_err(|e| e.to_string())
     }
 
     fn admit_family(&mut self, decl: InductiveDecl, clean_built: bool) -> Result<(), String> {

@@ -19,12 +19,12 @@ const SHARED_DRIVER: &str = "def ir_drive_v1 (C : Type) (halted : C -> Bool) (st
 const NEGATIVES: &[(&str, &str, &str)] = &[
     (
         "ir_steps_false_driver_endpoint",
-        "forall (m : IRModule) (s : IRMachine) (o : IROutcome), Eq IRConfig (ir_steps Nat.zero m (IRConfig.running s)) (IRConfig.halted o)",
+        "forall (m : IRModule) (s : IRMachine) (o : IROutcome), @Eq IRConfig (ir_steps Nat.zero m (IRConfig.running s)) (IRConfig.halted o)",
         "fun (m : IRModule) (s : IRMachine) (o : IROutcome) => ir_steps_shared_driver_agreement m Nat.zero (IRConfig.running s)",
     ),
     (
         "ir_steps_false_no_step",
-        "forall (m : IRModule) (s : IRMachine), Eq IRConfig (ir_steps (Nat.succ Nat.zero) m (IRConfig.running s)) (IRConfig.running s)",
+        "forall (m : IRModule) (s : IRMachine), @Eq IRConfig (ir_steps (Nat.succ Nat.zero) m (IRConfig.running s)) (IRConfig.running s)",
         "fun (m : IRModule) (s : IRMachine) => @Eq.refl IRConfig (IRConfig.running s)",
     ),
 ];
@@ -86,15 +86,15 @@ fn specialization_agreement_is_a_checked_universal_prop() {
         for (source, expected) in [
             (
                 "fun (m : IRModule) (c : IRConfig) => ir_steps_shared_driver_agreement m Nat.zero c",
-                "forall (m : IRModule) (c : IRConfig), Eq IRConfig (ir_steps Nat.zero m c) c",
+                "forall (m : IRModule) (c : IRConfig), @Eq IRConfig (ir_steps Nat.zero m c) c",
             ),
             (
                 "fun (m : IRModule) (s : IRMachine) => ir_steps_shared_driver_agreement m (Nat.succ Nat.zero) (IRConfig.running s)",
-                "forall (m : IRModule) (s : IRMachine), Eq IRConfig (ir_steps (Nat.succ Nat.zero) m (IRConfig.running s)) (ir_step m s)",
+                "forall (m : IRModule) (s : IRMachine), @Eq IRConfig (ir_steps (Nat.succ Nat.zero) m (IRConfig.running s)) (ir_step m s)",
             ),
             (
                 "fun (m : IRModule) (o : IROutcome) => ir_steps_shared_driver_agreement m (Nat.succ Nat.zero) (IRConfig.halted o)",
-                "forall (m : IRModule) (o : IROutcome), Eq IRConfig (ir_steps (Nat.succ Nat.zero) m (IRConfig.halted o)) (IRConfig.halted o)",
+                "forall (m : IRModule) (o : IROutcome), @Eq IRConfig (ir_steps (Nat.succ Nat.zero) m (IRConfig.halted o)) (IRConfig.halted o)",
             ),
         ] {
             let value = spec.elaborate_source(source, "agreement caller").expect("caller");

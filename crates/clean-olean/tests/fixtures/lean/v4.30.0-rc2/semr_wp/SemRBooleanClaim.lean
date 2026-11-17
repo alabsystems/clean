@@ -3,7 +3,7 @@
   This is a claim codec, not another program semantics.
   Copyright 2026 Andrew Yates. Apache-2.0.
 -/
-import SemRScalarClaim
+import NativeContractSyntax
 
 namespace SemRBooleanClaim
 

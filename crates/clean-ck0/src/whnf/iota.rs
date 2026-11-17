@@ -267,7 +267,7 @@ pub(super) fn major_is_k_constructor(
     if !matches!(ind_ty.kind(), TermKind::Sort(l) if l.is_zero()) {
         return Ok(false);
     }
-    let major_ty = match infer_in_context(env, ctx, major, budget) {
+    let major_ty = match crate::infer::infer_for_conversion(env, ctx, major, budget) {
         Ok(ty) => ty,
         Err(InferError::OutOfBudget) => return Err(BudgetError::OutOfBudget),
         Err(_) => return Ok(false),
@@ -289,7 +289,7 @@ pub(super) fn major_is_k_constructor(
         return Ok(false);
     };
     let ctor_app = Term::apply(Term::const_ref(ctor), params);
-    let ctor_ty = match infer_in_context(env, ctx, &ctor_app, budget) {
+    let ctor_ty = match crate::infer::infer_for_conversion(env, ctx, &ctor_app, budget) {
         Ok(ty) => ty,
         Err(InferError::OutOfBudget) => return Err(BudgetError::OutOfBudget),
         Err(_) => return Ok(false),
@@ -312,7 +312,7 @@ pub(super) fn major_admits_structure_eta(
     major: &Term,
     budget: &mut Budget,
 ) -> Result<bool, BudgetError> {
-    let major_ty = match infer_in_context(env, ctx, major, budget) {
+    let major_ty = match crate::infer::infer_for_conversion(env, ctx, major, budget) {
         Ok(ty) => ty,
         Err(InferError::OutOfBudget) => return Err(BudgetError::OutOfBudget),
         Err(_) => return Ok(false),

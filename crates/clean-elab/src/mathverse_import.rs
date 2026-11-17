@@ -259,11 +259,11 @@ mod enabled {
             }
         };
         // `load_built_library`, NOT `MathverseProvider::from_dir`: only the
-        // former applies `kernel-verified.json`, which is what mints the
-        // `KernelVerified` confidences `TrustGate::Strict` requires. Loading
-        // through the provider would leave every header `SourceVerified` and
-        // Strict would then admit nothing, presenting a trust configuration
-        // mistake as "constant not found".
+        // former validates a `kernel-verified.json` beside the shards and
+        // refuses one that names no theory or no checker (P6 reader R4). It
+        // applies none: the `KernelVerified` confidences `TrustGate::Strict`
+        // requires come only from the header bytes, and no lane in this build
+        // stamps them from a development run (P2 clause 1).
         let library =
             clean_mathverse::build_library::load_built_library(std::path::Path::new(dir.as_str()))
                 .map_err(|e| ElabError::MathverseImportFailed {

@@ -279,11 +279,11 @@ fn sort_bounds_helpers_recheck_with_pins_and_refutations() {
         "dependency equation census"
     );
     let mut artifact_equations = BTreeSet::new();
-    for module in modules
-        .iter()
-        .map(String::as_str)
-        .chain(["KCheckSpec.Term", "KCheckSpec.Env"])
-    {
+    for module in modules.iter().map(String::as_str).chain([
+        "CICL.CoreTyping",
+        "KCheckSpec.Term",
+        "KCheckSpec.Env",
+    ]) {
         let artifact = read_artifact(
             module,
             &compiled.join(format!("{}.olean", module.replace('.', "/"))),

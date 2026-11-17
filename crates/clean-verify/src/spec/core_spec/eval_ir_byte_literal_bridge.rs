@@ -29,14 +29,14 @@ Eq.subst Nat (fun (n : Nat) => Nat.le a n) (Nat.add a b) (Nat.add b a)
   (@Nat.add_comm a b) (@Nat.le_add_right a b)",
             r"def Nat.add_sub_cancel (a : Nat) (b : Nat) :
 Eq Nat (Nat.sub (Nat.add a b) b) a :=
-Nat.rec (fun (k : Nat) => Eq Nat (Nat.sub (Nat.add a k) k) a)
-  (Eq.refl Nat a)
+@Nat.rec (fun (k : Nat) => Eq Nat (Nat.sub (Nat.add a k) k) a)
+  (@Eq.refl Nat a)
   (fun (k : Nat) (ih : Eq Nat (Nat.sub (Nat.add a k) k) a) =>
     Eq.trans Nat (Nat.sub (Nat.add a (Nat.succ k)) (Nat.succ k))
       (Nat.sub (Nat.add a k) k) a (nat_sub_succ_succ (Nat.add a k) k) ih) b",
             r"def Nat.ulpRound.le_of_add_le_add_right (a b k : Nat)
   (h : Nat.le (Nat.add a k) (Nat.add b k)) : Nat.le a b :=
-Nat.rec (fun (n : Nat) => Nat.le (Nat.add a n) (Nat.add b n) -> Nat.le a b)
+@Nat.rec (fun (n : Nat) => Nat.le (Nat.add a n) (Nat.add b n) -> Nat.le a b)
   (fun (base : Nat.le a b) => base)
   (fun (n : Nat)
     (ih : Nat.le (Nat.add a n) (Nat.add b n) -> Nat.le a b)
@@ -78,11 +78,11 @@ match atom with
 | IRBuiltinNameAtomV1.string_ => literal_string_type",
             r"def ir_byte_literal_type_result_v1
   (result : IROption IRBuiltinNameAtomV1) : IROption KExpr :=
-IROption.rec IRBuiltinNameAtomV1
+@IROption.rec IRBuiltinNameAtomV1
   (fun (_ : IROption IRBuiltinNameAtomV1) => IROption KExpr)
-  (IROption.none KExpr)
+  (@IROption.none KExpr)
   (fun (atom : IRBuiltinNameAtomV1) =>
-    IROption.some KExpr (ir_byte_builtin_literal_type_v1 atom)) result",
+    @IROption.some KExpr (ir_byte_builtin_literal_type_v1 atom)) result",
             r"def ir_byte_literal_type_v1 (mem : IRByteMemoryV1)
   (declaredTy : IRTy) (value : IRScalar) : IROption KExpr :=
 ir_byte_literal_type_result_v1 (ir_byte_builtin_name_atom_v1 mem declaredTy value)",
@@ -99,7 +99,7 @@ ir_byte_literal_type_result_v1 (ir_byte_builtin_name_atom_v1 mem declaredTy valu
             let mut arguments = String::new();
             for (index, byte) in bytes.iter().enumerate() {
                 premises.push_str(&format!(
-                    "\n  (byte{index} : Eq (IROption Nat) (bytes ({address})) (IROption.some Nat {byte}))"
+                    "\n  (byte{index} : Eq (IROption Nat) (bytes ({address})) (@IROption.some Nat {byte}))"
                 ));
                 arguments.push_str(&format!(" byte{index}"));
                 address = format!("Nat.succ ({address})");
@@ -113,12 +113,12 @@ ir_byte_literal_type_result_v1 (ir_byte_builtin_name_atom_v1 mem declaredTy valu
 Eq (IROption KExpr)
   (ir_byte_literal_type_v1 (IRByteMemoryV1.mk allocs bytes next)
     IRTy.fatstr_ (IRScalar.fat_ data {length}))
-  (IROption.some KExpr literal_{kind}_type) :=
+  (@IROption.some KExpr literal_{kind}_type) :=
 ir_eq_cong (IROption IRBuiltinNameAtomV1) (IROption KExpr)
   ir_byte_literal_type_result_v1
   (ir_byte_builtin_name_atom_v1 (IRByteMemoryV1.mk allocs bytes next)
     IRTy.fatstr_ (IRScalar.fat_ data {length}))
-  (IROption.some IRBuiltinNameAtomV1 IRBuiltinNameAtomV1.{kind}_)
+  (@IROption.some IRBuiltinNameAtomV1 IRBuiltinNameAtomV1.{kind}_)
   (ir_byte_builtin_{kind}_input_v1 allocs bytes next data bounded access {arguments})"),
                 "Existing literal-model type derived from the actual accessible initialized builtin-name bytes, not assumed decoder output. Reflection tags are never copied or hardcoded.",
             )?;

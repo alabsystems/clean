@@ -778,16 +778,23 @@ pub struct TypeChecker<'env> {
     /// by the caller (the public `infer_type_with_cert` entry point) and will be
     /// replayed / serialized, so it MUST be structurally complete.
     ///
-    /// SOUNDNESS: a type-only Arc memo entry has no certificate. Only an
-    /// infer-only, discard-only internal hit may return a placeholder; it is
-    /// never stored as evidence. When this flag is set (or full checking is
-    /// active), `infer_type_with_cert_arc` must obtain a REAL certificate and
-    /// upgrade any type-only entry. This also covers fast-inference re-entry
-    /// from projection validation during a retained certificate traversal.
+    /// SOUNDNESS: a type-only Arc memo entry has no certificate. It is never
+    /// stored as evidence. When this flag is set, a real certificate is
+    /// mandatory even inside a nested Expr-only query. Full certificate
+    /// consumers outside the private debug output-discard scope also upgrade
+    /// type-only entries. Release keeps its existing full-mode upgrade rule,
+    /// including weaker fast-inference re-entry from projection validation.
     ///
     /// Default: `false`. Set to `true` for the duration of a public
     /// `infer_type_with_cert` call.
     cert_retained: Cell<bool>,
+    /// Explicit private output lifetime, not an inference/checking mode.
+    /// Only the debug public Expr-only query enters it; all strict full-mode
+    /// checks still run. Nested retained, trace and sharing consumers override
+    /// suppression. Debug None entries come only from the strict traversal;
+    /// this field and its full-mode optimization do not exist in release.
+    #[cfg(debug_assertions)]
+    cert_output_discarded: Cell<bool>,
     /// The constant whose universe instantiation, on a path that cannot
     /// return an error (δ-unfolding, ι-reduction), depended on `.olean` object
     /// sharing under the Lean kernel theory (`tc/level_profile.rs`). Once set
@@ -871,6 +878,8 @@ impl<'env> TypeChecker<'env> {
             #[cfg(debug_assertions)]
             in_infer_type_assert: Cell::new(false),
             cert_retained: Cell::new(false),
+            #[cfg(debug_assertions)]
+            cert_output_discarded: Cell::new(false),
             level_sharing_hazard: RefCell::new(None),
             sharing_replay: None,
             expr_loc: RefCell::new(ExprLocation::new()),
@@ -931,6 +940,8 @@ impl<'env> TypeChecker<'env> {
             #[cfg(debug_assertions)]
             in_infer_type_assert: Cell::new(false),
             cert_retained: Cell::new(false),
+            #[cfg(debug_assertions)]
+            cert_output_discarded: Cell::new(false),
             level_sharing_hazard: RefCell::new(None),
             sharing_replay: None,
             expr_loc: RefCell::new(ExprLocation::new()),
@@ -991,6 +1002,8 @@ impl<'env> TypeChecker<'env> {
             #[cfg(debug_assertions)]
             in_infer_type_assert: Cell::new(false),
             cert_retained: Cell::new(false),
+            #[cfg(debug_assertions)]
+            cert_output_discarded: Cell::new(false),
             level_sharing_hazard: RefCell::new(None),
             sharing_replay: None,
             expr_loc: RefCell::new(ExprLocation::new()),
@@ -1056,6 +1069,8 @@ impl<'env> TypeChecker<'env> {
             #[cfg(debug_assertions)]
             in_infer_type_assert: Cell::new(false),
             cert_retained: Cell::new(false),
+            #[cfg(debug_assertions)]
+            cert_output_discarded: Cell::new(false),
             level_sharing_hazard: RefCell::new(None),
             sharing_replay: None,
             expr_loc: RefCell::new(ExprLocation::new()),

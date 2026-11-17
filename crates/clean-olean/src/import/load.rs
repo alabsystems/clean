@@ -15,7 +15,7 @@
 use super::load_parse::{parse_load_module, parse_load_module_incremental, LoadModule};
 use super::load_register::{
     load_module_direct_with_cache_and_policy, load_module_part_direct, refresh_artifact_families,
-    DeferredRecursors, PartEntries,
+    ArtifactRecordRoles, DeferredRecursors, PartEntries,
 };
 use super::module_cache_direct::read_optional;
 use super::path::{
@@ -40,6 +40,8 @@ pub use cached::{
     load_typed_module_with_deps_parallel, CapturedModuleBytes, ModuleCaptureLimits,
 };
 
+#[cfg(test)]
+mod compiler_name_tests;
 #[cfg(test)]
 mod deadline_load_tests;
 mod graph_limit;
@@ -150,6 +152,25 @@ pub fn load_module_with_deps(
     )
 }
 
+/// Load the same dependency closure and retain its completed-module memo.
+///
+/// This is untrusted producer availability DATA, not kernel/source/proof credit.
+/// The ordinary loader, policies and every post-load fixup are identical. Only
+/// a successful complete walk returns the immutable memo with its environment.
+pub fn load_module_with_deps_and_completed_imports(
+    env: &mut Environment,
+    module: &str,
+    search_paths: &[PathBuf],
+) -> Result<(Vec<LoadSummary>, super::CompletedModuleImports), ImportError> {
+    load_typed_module_with_deps_with_import_policy_and_completed(
+        env,
+        &legacy_module_name(module)?,
+        search_paths,
+        OleanImportPolicy::default(),
+        OleanImportPolicy::default(),
+    )
+}
+
 /// Load a module by name along with all imports using an explicit import
 /// policy.
 ///
@@ -182,6 +203,23 @@ fn load_typed_module_with_deps_with_import_policy(
     policy: OleanImportPolicy,
     own_policy: OleanImportPolicy,
 ) -> Result<Vec<LoadSummary>, ImportError> {
+    let (summaries, _) = load_typed_module_with_deps_with_import_policy_and_completed(
+        env,
+        module,
+        search_paths,
+        policy,
+        own_policy,
+    )?;
+    Ok(summaries)
+}
+
+fn load_typed_module_with_deps_with_import_policy_and_completed(
+    env: &mut Environment,
+    module: &Name,
+    search_paths: &[PathBuf],
+    policy: OleanImportPolicy,
+    own_policy: OleanImportPolicy,
+) -> Result<(Vec<LoadSummary>, super::CompletedModuleImports), ImportError> {
     // Ensure native reducers are registered. These are critical for type
     // checking .olean constants that depend on native functions like
     // System.Platform.getNumBits, Nat.decEq, String.decEq, etc.
@@ -254,7 +292,12 @@ fn load_typed_module_with_deps_with_import_policy(
     if policy.defer_global_instance_backfill() {
         super::load_register::finalize_global_instance_backfill(env);
     }
-    Ok(summaries)
+    Ok((
+        summaries,
+        super::CompletedModuleImports {
+            keys: std::sync::Arc::new(visited),
+        },
+    ))
 }
 
 /// [`load_module_with_deps`] but sharing the caller's `visited` set ACROSS calls
@@ -723,6 +766,22 @@ fn load_artifact_parts(
     policy: OleanImportPolicy,
 ) -> Result<(), ImportError> {
     let roles = read_plan(module, base, server, private)?;
+    // read_plan has authenticated the authoritative part and its full roster.
+    // Use its stored safety for all exported/server stubs, not their spelling
+    // or an earlier part's potentially erased partial flag.
+    let authoritative = if base.is_module {
+        private.ok_or_else(|| ImportError::MissingModulePart {
+            module: module.to_owned(),
+            part: ".olean.private",
+        })?
+    } else {
+        base
+    };
+    let parts: Vec<_> = [Some(base), server, private]
+        .into_iter()
+        .flatten()
+        .collect();
+    let record_roles = ArtifactRecordRoles::from_parts(authoritative, &parts);
     // Check every actual parsed part before beginning any artifact mutation.
     super::clean_payload_requirement::check_artifact_parts(env, module, base, server, private)?;
     let artifact = Some(module.to_string());
@@ -775,6 +834,7 @@ fn load_artifact_parts(
             } else {
                 None
             },
+            &record_roles,
         )?);
     }
     if let Some(private) = private.filter(|_| base.is_module) {

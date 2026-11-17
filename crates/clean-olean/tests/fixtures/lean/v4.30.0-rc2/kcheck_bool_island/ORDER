@@ -1,0 +1,12 @@
+# Complete prerequisite packages and exact Bool ORDER; no legacy KCheck graph is mixed in.
+theory cic_l
+theory cic_l_model
+theory kcheck_spec
+theory kcheck_labelled
+theory kcheck_rule_certificates
+theory kcheck_bool_island
+KCheckBoolIsland
+OperationalLiteralContracts
+BoolPacketContracts
+BoolMeaningContracts
+BoolIslandQualification

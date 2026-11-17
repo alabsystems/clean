@@ -12,16 +12,16 @@ use super::*;
 pub(super) fn read_load_constant_array(
     region: &CompactedRegion<'_>,
     ptr: u64,
-) -> OleanResult<Vec<LoadConstant>> {
+) -> OleanResult<(Vec<LoadConstant>, bool)> {
     if !is_ptr(ptr) {
-        return Ok(Vec::new());
+        return Ok((Vec::new(), false));
     }
 
     let offset = region.ptr_to_offset(ptr)?;
     let header = region.read_header_at(offset)?;
 
     if header.tag != tags::ARRAY && header.tag != tags::STRUCT_ARRAY {
-        return Ok(Vec::new());
+        return Ok((Vec::new(), false));
     }
 
     let size = region.read_usize_at(offset + 8, "Constant array")?;
@@ -35,7 +35,7 @@ pub(super) fn read_load_constant_array(
         constants.push(constant);
     }
 
-    Ok(constants)
+    Ok((constants, true))
 }
 
 /// Read a single ConstantInfo, storing raw expression pointers.

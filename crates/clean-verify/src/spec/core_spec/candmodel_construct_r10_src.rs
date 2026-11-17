@@ -94,7 +94,7 @@ pub(super) const TY_R10_OMEGALAM_NO_BETA: &str =
 
 pub(super) fn val_r10_omegalam_no_beta() -> String {
     format!(
-        "fun (g2 : KExpr) (C : Type) (qhbr : beta_reduces r5_omegaLam g2) => lamHead_beta_inv {V0} {SELF_BODY} g2 C qhbr (fun (qt2 : KExpr) (qst : beta_reduces {V0} qt2) (_qeq : @Eq KExpr g2 (KExpr.lam qt2 {SELF_BODY})) => no_whnf_step_bvar Nat.zero qt2 C (whnf_step.beta {V0} qt2 qst)) (fun (qb2 : KExpr) (qsb : beta_reduces {SELF_BODY} qb2) (_qeq : @Eq KExpr g2 (KExpr.lam {V0} qb2)) => r5_bvarApp_no_beta qb2 C qsb)"
+        "fun (g2 : KExpr) (C : Type) (qhbr : beta_reduces r5_omegaLam g2) => lamHead_beta_inv {V0} {SELF_BODY} g2 C qhbr (fun (qt2 : KExpr) (qst : beta_reduces {V0} qt2) (_qeq : @Eq KExpr g2 (KExpr.lam qt2 {SELF_BODY})) => no_whnf_step_bvar Nat.zero qt2 C (@whnf_step.beta {V0} qt2 qst)) (fun (qb2 : KExpr) (qsb : beta_reduces {SELF_BODY} qb2) (_qeq : @Eq KExpr g2 (KExpr.lam {V0} qb2)) => r5_bvarApp_no_beta qb2 C qsb)"
     )
 }
 
@@ -188,7 +188,7 @@ pub(super) fn val_r10_stuckomega_no_whnf_step() -> String {
         let kill = if i == 1 {
             "r10_omegaLam_no_beta qy Empty qst".to_string()
         } else {
-            format!("no_whnf_step_bvar Nat.zero qy Empty (whnf_step.beta {V0} qy qst)")
+            format!("no_whnf_step_bvar Nat.zero qy Empty (@whnf_step.beta {V0} qy qst)")
         };
         format!(
             "(fun (qy : KExpr) (qst : beta_reduces {src} qy) (_qeq : @Eq KExpr g2 {}) => {kill})",
@@ -236,7 +236,7 @@ pub(super) fn val_r10_appstuck_not_whnfacc() -> String {
     let (x0, x1, x2, x3, x4) = (w0(), w1(), w2(), w3(), w4());
     // Step 0: the real ι fire, lifted under the outer application.
     let st0 = format!(
-        "(whnfStep_app_left {s4} {zc} {OM} (whnf_step.beta {s4} {zc} (beta_reduces.iota {s4} {zc} (iota_step_to_reduces {s4} {zc} (natRecZ_iota_fires {V0} {OM} {V0})))))"
+        "(whnfStep_app_left {s4} {zc} {OM} (@whnf_step.beta {s4} {zc} (beta_reduces.iota {s4} {zc} (iota_step_to_reduces {s4} {zc} (natRecZ_iota_fires {V0} {OM} {V0})))))"
     );
     // Steps 1-3: the three head betas of `rhsZero`, each lifted through the
     // remaining application spine and then under the outer application.
@@ -248,11 +248,11 @@ pub(super) fn val_r10_appstuck_not_whnfacc() -> String {
         "(beta_reduces.app_left {head1} {t1om} {V0} (beta_reduces.app_left {head0} {t1} {OM} {}))",
         bh(RHSZ, V0)
     );
-    let st1 = format!("(whnfStep_app_left {zc} {y1} {OM} (whnf_step.beta {zc} {y1} {inner1}))");
+    let st1 = format!("(whnfStep_app_left {zc} {y1} {OM} (@whnf_step.beta {zc} {y1} {inner1}))");
     let inner2 = format!("(beta_reduces.app_left {t1om} {t2} {V0} {})", bh(&t1, OM));
-    let st2 = format!("(whnfStep_app_left {y1} {y2} {OM} (whnf_step.beta {y1} {y2} {inner2}))");
+    let st2 = format!("(whnfStep_app_left {y1} {y2} {OM} (@whnf_step.beta {y1} {y2} {inner2}))");
     let st3 = format!(
-        "(whnfStep_app_left {y2} {t3} {OM} (whnf_step.beta {y2} {t3} {}))",
+        "(whnfStep_app_left {y2} {t3} {OM} (@whnf_step.beta {y2} {t3} {}))",
         bh(&t2, V0)
     );
     let acc = format!(

@@ -1,0 +1,843 @@
+{
+ "schema": "clean.crystal.chain_revalidation_at_head/v1",
+ "measured_utc": "2026-11-16T22:55:35Z",
+ "what_this_is": "A mechanically generated live-trustc revalidation of every committed Crystal chain AT HEAD against fixtures cut at an earlier rev: the exact Clean source measured, the producer proved by a byte-for-byte control, the per-body verdict (IDENTICAL or NUMBERING-ONLY, zero instructions moved), whole-crate invariants, and all executable links. It rewrites no fixture and no historical record.",
+ "supersedes_for_current_source_scope": "data/crystal_chain_revalidation_2026-10-07_047ebd051.json",
+ "provenance": {
+  "clean_source_rev": "a97c0ec279346c8a68bd985c2e7d25fc92e41569",
+  "clean_source_tree": "4a5d83e2b14ec9aafc09bfef98933de1d0241a05",
+  "clean_kernel_src_sha256": "d8077bc93fc412771c379a004a2e9f4f51bc428b97c95e475260e96f04a241ea",
+  "trust_worktree_rev": "321aaeda75478038420d97830f14724c33c8dc39",
+  "trustc_version": "rustc 1.99.0-dev (321aaeda7 2026-09-17) (trustc 0.1.0)",
+  "trustc_sha256": "6c513314d5c99778345a2c2a60feef521b2ece2952149095bc9beded93b1206e",
+  "librustc_driver_sha256": "13997326c927b73e5768c42844564d18d7828ab83be55112a8ca62ebc98f446f",
+  "toolchain_pairing": "Immutable aterm package trust/9192 compiler and its own package sysroot (trustc and driver hashes above), driven by Targo 16387, as in the 2026-11-14 env-cache record and the 2026-11-15 at-head record. The measurement driver (scripts/trust_ir_build.sh 3d0f5504...) is unchanged since the control it names, which reproduced the 047ebd051 rebaseline's binary IR, text IR and coverage JSON byte for byte. No compiler was rebuilt.",
+  "recipe": "At a97c0ec279 (the envplain follow-up, the matcher index held inside PersistentExtensions, merged over origin/main eccedc3dc5) in the envplain-followup worktree: PATH=<16387>/bin:$PATH TRUST_STAGE1_BIN=<9192>/bin TRUSTC=<9192>/bin/trustc; dependencies prewarmed by RUSTC=$TRUSTC targo --unverified build --locked --release -p clean-kernel --lib into an owned target; then TRUST_IR_BUILD_TARGET_DIR=<same> TRUST_IR_BUILD_DUMP=<dump> scripts/trust_ir_build.sh --print-only, inside the envplain-batch reservation of scripts/heavy_gate.sh (16 GB); then scripts/crystal_fixture_freshness.py <dump> --json data/crystal_fixture_freshness_2026-11-16_envplain.json.",
+  "dependency_prewarm": "The target dependency graph was built by this exact trustc/sysroot pair with in-compilation verification disabled before the measurement. trust_ir_build.sh then used that same compiler to cargo-clean clean-kernel and recompiled the subject non-incrementally with lowering and flip enabled.",
+  "profile": "release, -Cdebuginfo=0, -Cdebug-assertions=off; release-only inference spine present 6/6",
+  "measurement_driver": "scripts/trust_ir_build.sh",
+  "measurement_driver_sha256": "3d0f55041d62ce1e346618b56c6ded35335344249b684d7a9b460758a389c128",
+  "at_head": {
+   "fixtures_cut_at_clean_rev": "047ebd0512cd5b1fd9146edb8506a182b09de2ec",
+   "fixtures_cut_at_kernel_src_sha256": "0bf6d530ac72c6883a444dfe1d88772f5c430c80be9214f8bdd1e996b2a8d78b",
+   "fixtures_rebaseline_record": "data/crystal_fixture_rebaseline_2026-10-07_047ebd051.json",
+   "control_record": "data/crystal_revalidation_at_head_2026-11-14_env_cache.json",
+   "control_verdict": "MATCH on clean_kernel.trust-ir.bin and clean_kernel.trust-ir.txt at the rebaseline's rev -- this driver reproduces the rebaseline's producer",
+   "trust_worktree_rev_source": "control record `producer.rebuilt_from_trust_rev`; the -vV stamp below names the same commit"
+  }
+ },
+ "artifacts": {
+  "clean_kernel.trust-ir.bin": {
+   "sha256": "4cf2776e96ce671cafb574b531c58e606e519817040af91367bb55cf2f7f5d60",
+   "bytes": 4767769
+  },
+  "clean_kernel.trust-ir.txt": {
+   "sha256": "282fb14100293194ab777db619b53f1cdd6d1373dab1aba1f0154e94202e1c0d",
+   "bytes": 5828450
+  },
+  "clean_kernel.coverage.json": {
+   "sha256": "f61b123e4a566dfc3d6dde5b449fda5f32ec514cd42b51c9bba69ad78258b70f",
+   "bytes": 21755128
+  },
+  "clean_kernel.build.log": {
+   "sha256": "6712160b390419eeed6d03f7332c82df274f133904429846580465eb94743013",
+   "bytes": 138858
+  },
+  "clean_kernel.axes.json": {
+   "sha256": "8654ea6ca2f6437455b3e8bdc5fae79518a7d8dc527487603340e7eb59c76cca",
+   "bytes": 120032
+  },
+  "clean_kernel.argv": {
+   "sha256": "208f33d9f9fefc945f7033825c714d09fa81c44f9742dfc38fc08878dc8ab14f",
+   "bytes": 10557
+  },
+  "crystal_fixture_freshness_2026-11-16_envplain.json": {
+   "sha256": "3b2cd53a45199699b002d374ac9360fc1733048aefe6f6ee05a2fd9a75f20632",
+   "bytes": 74685
+  },
+  "crystal_fixture_rebaseline_2026-10-07_047ebd051.json": {
+   "sha256": "1dda609e8798bc0234e19cfb7ec781879024a873b89217193eacefb58f54c16b",
+   "bytes": 148963
+  }
+ },
+ "generator": {
+  "script": "scripts/crystal_chain_revalidation.py",
+  "append_only": true,
+  "freshness_schema": "clean.crystal.fixture_freshness/v1",
+  "axes_schema": "clean.trust_ir_build.measured.v1",
+  "fixture_rebaseline_record": "data/crystal_fixture_rebaseline_2026-10-07_047ebd051.json",
+  "fixture_rebaseline_schema": "clean.crystal.fixture_rebaseline/v1"
+ },
+ "measurement": {
+  "bodies": 17250,
+  "lowered": 9283,
+  "spliced": 5112,
+  "derived_mir_agreed": 1601,
+  "derived_mir_mismatch": 0,
+  "interpreter_agreed": 1572,
+  "interpreter_mismatch": 0,
+  "seam_agreed": 3,
+  "seam_mismatch": 0,
+  "lineage_rows": 17195,
+  "flip_events_total": 464,
+  "flip_events_codegen": 412,
+  "flip_events_ctfe": 52,
+  "flip_backed_total": 385,
+  "mode": "print-only; pre-existing whole-crate axis reds are recorded, not re-baselined"
+ },
+ "fatal_invariants": {
+  "foreign_flip_events": 0,
+  "flip_events_unparsed": 0,
+  "flip_events_unjoinable": 0,
+  "flip_lineage_mismatch": 0,
+  "flip_lineage_row_absent": 0,
+  "flip_lineage_digest_unknown": 0,
+  "flip_events_unspliced": 0,
+  "lineage_digest_collisions": 0,
+  "lineage_rows_malformed": 0
+ },
+ "chains": {
+  "has_cubical_layer": {
+   "def_path": "mode::CleanMode::has_cubical_layer",
+   "emitted_body_vs_committed_fixture": {
+    "verdict": "NUMBERING-ONLY",
+    "drift_classes": [
+     "loc-file-index"
+    ],
+    "instructions_moved": 0
+   },
+   "links_at_head": {
+    "instr_count": 10,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir": {
+     "verdict": "agreed",
+     "markers_exact": true
+    },
+    "flip_fired": true
+   },
+   "lineage": {
+    "pinned_in_fixture": "sha256:2654a8b2d6f53f3d1e206b59c90f0ceb6c1da1664632b7f04bbde6fb1b56613d",
+    "pinned_def_index": 19695,
+    "at_head": "sha256:00410aaf6fa6677ad7d3f38466873b9d575533ebd233740ee7f9c38399a2e559",
+    "def_index_at_head": 22202,
+    "func_id_at_head": 2496,
+    "moved": true
+   }
+  },
+  "level_kind_ord": {
+   "def_path": "level::Level::kind_ord",
+   "emitted_body_vs_committed_fixture": {
+    "verdict": "NUMBERING-ONLY",
+    "drift_classes": [
+     "functy-index",
+     "loc-file-index"
+    ],
+    "instructions_moved": 0
+   },
+   "links_at_head": {
+    "instr_count": 14,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir": {
+     "verdict": "agreed",
+     "markers_exact": true
+    },
+    "flip_fired": true
+   },
+   "lineage": {
+    "pinned_in_fixture": "sha256:f1b3086e88ef8f79095b468a3e38ac76d02d0bf198608480f4f1ba1ce67606ba",
+    "pinned_def_index": 18808,
+    "at_head": "sha256:5201ad569da9b5dbc630e20bb0b8759a8a263265d6ef0f66603951400e4bf061",
+    "def_index_at_head": 21254,
+    "func_id_at_head": 2354,
+    "moved": true
+   }
+  },
+  "from_source_system": {
+   "def_path": "mode::CleanMode::from_source_system",
+   "emitted_body_vs_committed_fixture": {
+    "verdict": "NUMBERING-ONLY",
+    "drift_classes": [
+     "functy-index",
+     "loc-file-index",
+     "type-table-index"
+    ],
+    "instructions_moved": 0
+   },
+   "links_at_head": {
+    "instr_count": 27,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir": {
+     "verdict": "agreed",
+     "markers_exact": true
+    },
+    "flip_fired": true
+   },
+   "lineage": {
+    "pinned_in_fixture": "sha256:4a27f6a167ef2ec5aee35a1741d307045032a9139cdc406552cf752558529a35",
+    "pinned_def_index": 19690,
+    "at_head": "sha256:5315c9cbc536f3463a522c1d48cd45a971a377547259f56bbe013cb27e6331f9",
+    "def_index_at_head": 22197,
+    "func_id_at_head": 2493,
+    "moved": true
+   }
+  },
+  "flat_flags_contains": {
+   "def_path": "flat::types::FlatFlags::contains",
+   "emitted_body_vs_committed_fixture": {
+    "verdict": "NUMBERING-ONLY",
+    "drift_classes": [
+     "functy-index",
+     "loc-file-index",
+     "type-table-index"
+    ],
+    "instructions_moved": 0
+   },
+   "links_at_head": {
+    "instr_count": 6,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir": {
+     "verdict": "agreed",
+     "markers_exact": true
+    },
+    "flip_fired": true
+   },
+   "lineage": {
+    "pinned_in_fixture": "sha256:a4d7670bf5b1fefac2714ceb7a5d2a4843905f3ddcfba812f0889a13db1b7f6b",
+    "pinned_def_index": 18558,
+    "at_head": "sha256:25636ea633b5f6c8e6ccdf56b9ebe0089ea677ff325db803f38a93c6d8c8cfdd",
+    "def_index_at_head": 20971,
+    "func_id_at_head": 2274,
+    "moved": true
+   }
+  },
+  "bvar_in_range": {
+   "def_path": "expr::bvar_in_range",
+   "emitted_body_vs_committed_fixture": {
+    "verdict": "NUMBERING-ONLY",
+    "drift_classes": [
+     "functy-index",
+     "loc-file-index"
+    ],
+    "instructions_moved": 0
+   },
+   "links_at_head": {
+    "instr_count": 13,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir": {
+     "verdict": "agreed",
+     "markers_exact": true
+    },
+    "flip_fired": true
+   },
+   "lineage": {
+    "pinned_in_fixture": "sha256:3b2faceae49b1afe0bc4e3e03f44ad764685330578a7ae429599bb28699b6026",
+    "pinned_def_index": 18282,
+    "at_head": "sha256:62ce31555ff9fa5d658525dfad6e11895a8c70914911f3ce666e8bebaacbc5fc",
+    "def_index_at_head": 20692,
+    "func_id_at_head": 2198,
+    "moved": true
+   }
+  },
+  "is_valid_char": {
+   "def_path": "env::native_reducers_char::is_valid_char",
+   "emitted_body_vs_committed_fixture": {
+    "verdict": "NUMBERING-ONLY",
+    "drift_classes": [
+     "functy-index",
+     "loc-file-index"
+    ],
+    "instructions_moved": 0
+   },
+   "links_at_head": {
+    "instr_count": 15,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir": {
+     "verdict": "agreed",
+     "markers_exact": true
+    },
+    "flip_fired": true
+   },
+   "lineage": {
+    "pinned_in_fixture": "sha256:da935567c5724781faa6452e47cfad70f384d98e8af6e60444280c219ee4512a",
+    "pinned_def_index": 16674,
+    "at_head": "sha256:ac70a37721f377c63ea0a923384cdc94cecbfefa8b78dc26b4d09b2ec57b2408",
+    "def_index_at_head": 18042,
+    "func_id_at_head": 1694,
+    "moved": true
+   }
+  },
+  "expr_path_step_clone": {
+   "def_path": "<tc::expr_location::ExprPathStep as std::clone::Clone>::clone",
+   "emitted_body_vs_committed_fixture": {
+    "verdict": "NUMBERING-ONLY",
+    "drift_classes": [
+     "functy-index",
+     "loc-file-index",
+     "type-table-index"
+    ],
+    "instructions_moved": 0
+   },
+   "links_at_head": {
+    "instr_count": 26,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir": {
+     "verdict": "agreed",
+     "markers_exact": true
+    },
+    "flip_fired": true
+   },
+   "lineage": {
+    "pinned_in_fixture": "sha256:f1787a2586d3874cf46f599e3967cf5002c5f6eda44c053775e253f710089271",
+    "pinned_def_index": 38656,
+    "at_head": "sha256:a2b98ac66b891771e3497a687b71a206d91bdd3728d3a3195877279681cb4046",
+    "def_index_at_head": 46043,
+    "func_id_at_head": 4973,
+    "moved": true
+   }
+  },
+  "float_div": {
+   "def_path": "env::native_reducers_float::reduce_float_div::{closure#0}",
+   "emitted_body_vs_committed_fixture": {
+    "verdict": "NUMBERING-ONLY",
+    "drift_classes": [
+     "functy-index",
+     "loc-file-index"
+    ],
+    "instructions_moved": 0
+   },
+   "links_at_head": {
+    "instr_count": 2,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir": {
+     "verdict": "agreed",
+     "markers_exact": true
+    },
+    "flip_fired": true
+   },
+   "lineage": {
+    "pinned_in_fixture": "sha256:2c2b7aaa8d93e8ca7353080e0ea4e6c019fbde01ef1412d14ba0dca8a225d5f0",
+    "pinned_def_index": 16882,
+    "at_head": "sha256:9684e026df94d9ff504cd47109b99d055e969b57550f55b312c818502623535b",
+    "def_index_at_head": 18250,
+    "func_id_at_head": 1750,
+    "moved": true
+   }
+  },
+  "get_char_val_trunc": {
+   "def_path": "env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}",
+   "emitted_body_vs_committed_fixture": {
+    "verdict": "NUMBERING-ONLY",
+    "drift_classes": [
+     "functy-index",
+     "loc-file-index"
+    ],
+    "instructions_moved": 0
+   },
+   "links_at_head": {
+    "instr_count": 2,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir": {
+     "verdict": "agreed",
+     "markers_exact": true
+    },
+    "flip_fired": true
+   },
+   "lineage": {
+    "pinned_in_fixture": "sha256:2bc788de73894ba42da5eea9e28a3ce9782c8acfc9c9d3c307784ce1aa9d5933",
+    "pinned_def_index": 16507,
+    "at_head": "sha256:268840310c10f60d26472575c5902e66ae50865530a22a6634ecc540fd608077",
+    "def_index_at_head": 17875,
+    "func_id_at_head": 1661,
+    "moved": true
+   }
+  },
+  "meta_tag_shl": {
+   "def_path": "tc::local_context::LocalContext::push_low_local::META_TAG",
+   "emitted_body_vs_committed_fixture": {
+    "verdict": "NUMBERING-ONLY",
+    "drift_classes": [
+     "functy-index",
+     "loc-file-index"
+    ],
+    "instructions_moved": 0
+   },
+   "links_at_head": {
+    "instr_count": 9,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir": {
+     "verdict": "agreed",
+     "markers_exact": true
+    },
+    "flip_fired": true
+   },
+   "lineage": {
+    "pinned_in_fixture": "sha256:63a448e3459cecaa6bad428c8e4abc19bdcd45a4911f27062b3b882ed82dccbd",
+    "pinned_def_index": 21628,
+    "at_head": "sha256:5f1f1946e4c2b2a65784fe7b8ec6cea1cc46d6be298dce03f7cbeba7f5e53cb8",
+    "def_index_at_head": 24438,
+    "func_id_at_head": 2881,
+    "moved": true
+   }
+  },
+  "level_is_zero": {
+   "def_path": "level::Level::is_zero",
+   "emitted_body_vs_committed_fixture": {
+    "verdict": "NUMBERING-ONLY",
+    "drift_classes": [
+     "callee-index",
+     "loc-file-index"
+    ],
+    "instructions_moved": 0
+   },
+   "links_at_head": {
+    "instr_count": 28,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 6,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir": {
+     "verdict": "agreed",
+     "markers_exact": true
+    },
+    "flip_fired": true
+   },
+   "lineage": {
+    "pinned_in_fixture": "sha256:72bace631bad67e0cee6c76802b0697d0af3c3e882507c1e73b71fd2a5f94c97",
+    "pinned_def_index": 18802,
+    "at_head": "sha256:2d922ad0255d0a6332706a579d91d0df353844b01c581696413b1e1ee3468aac",
+    "def_index_at_head": 21248,
+    "func_id_at_head": 2351,
+    "moved": true
+   }
+  },
+  "float_add": {
+   "def_path": "env::native_reducers_float::reduce_float_add::{closure#0}",
+   "emitted_body_vs_committed_fixture": {
+    "verdict": "NUMBERING-ONLY",
+    "drift_classes": [
+     "functy-index",
+     "loc-file-index"
+    ],
+    "instructions_moved": 0
+   },
+   "links_at_head": {
+    "instr_count": 2,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir": {
+     "verdict": "agreed",
+     "markers_exact": true
+    },
+    "flip_fired": true
+   },
+   "lineage": {
+    "pinned_in_fixture": "sha256:6ea882530d7228e4995bb57437266c86d8264f2a88cdc1135b271b4de7d6171b",
+    "pinned_def_index": 16876,
+    "at_head": "sha256:54289aa4f03898c876a16e24ba631f4d8223d2a433e38e8c24a5ebfbe6a67efd",
+    "def_index_at_head": 18244,
+    "func_id_at_head": 1747,
+    "moved": true
+   }
+  },
+  "float_sub": {
+   "def_path": "env::native_reducers_float::reduce_float_sub::{closure#0}",
+   "emitted_body_vs_committed_fixture": {
+    "verdict": "NUMBERING-ONLY",
+    "drift_classes": [
+     "functy-index",
+     "loc-file-index"
+    ],
+    "instructions_moved": 0
+   },
+   "links_at_head": {
+    "instr_count": 2,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir": {
+     "verdict": "agreed",
+     "markers_exact": true
+    },
+    "flip_fired": true
+   },
+   "lineage": {
+    "pinned_in_fixture": "sha256:9bee539bf3dc9990f2eb9c353d73aef8f04fa9b67395de580ab6ffeeee6ca351",
+    "pinned_def_index": 16878,
+    "at_head": "sha256:1388d6aeca7994b4b5cf037e9ff24c04235f944b3274dc67275268f3393598b3",
+    "def_index_at_head": 18246,
+    "func_id_at_head": 1748,
+    "moved": true
+   }
+  },
+  "float_mul": {
+   "def_path": "env::native_reducers_float::reduce_float_mul::{closure#0}",
+   "emitted_body_vs_committed_fixture": {
+    "verdict": "NUMBERING-ONLY",
+    "drift_classes": [
+     "functy-index",
+     "loc-file-index"
+    ],
+    "instructions_moved": 0
+   },
+   "links_at_head": {
+    "instr_count": 2,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir": {
+     "verdict": "agreed",
+     "markers_exact": true
+    },
+    "flip_fired": true
+   },
+   "lineage": {
+    "pinned_in_fixture": "sha256:e2f0153fbae5987d381bf26a753b140b52eb07c4e796664ef99ee0846a6789d0",
+    "pinned_def_index": 16880,
+    "at_head": "sha256:ddd93ae3cc30dad269cc2ba4f37c0e8e20051c336afb670e6461abc9e9cdc651",
+    "def_index_at_head": 18248,
+    "func_id_at_head": 1749,
+    "moved": true
+   }
+  },
+  "strict_monads": {
+   "def_path": "env::Environment::set_lean4_core_strict_monads",
+   "emitted_body_vs_committed_fixture": {
+    "verdict": "NUMBERING-ONLY",
+    "drift_classes": [
+     "functy-index",
+     "loc-file-index",
+     "type-table-index"
+    ],
+    "instructions_moved": 0
+   },
+   "links_at_head": {
+    "instr_count": 4,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir": {
+     "verdict": "agreed",
+     "markers_exact": true
+    },
+    "flip_fired": true
+   },
+   "lineage": {
+    "pinned_in_fixture": "sha256:c2ef759ef3b24431ca65eb7dd1679a9d50e65d697083b180caefc38374d4440b",
+    "pinned_def_index": 17525,
+    "at_head": "sha256:5d34c8562e32835497ff0cbc46564baa67498f8701155f1aa6f81a22fab095d6",
+    "def_index_at_head": 18898,
+    "func_id_at_head": 1887,
+    "moved": true
+   }
+  },
+  "flat_flags_with": {
+   "def_path": "flat::types::FlatFlags::with",
+   "emitted_body_vs_committed_fixture": {
+    "verdict": "NUMBERING-ONLY",
+    "drift_classes": [
+     "functy-index",
+     "loc-file-index",
+     "type-table-index"
+    ],
+    "instructions_moved": 0
+   },
+   "links_at_head": {
+    "instr_count": 6,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir": {
+     "verdict": "agreed",
+     "markers_exact": true
+    },
+    "flip_fired": true
+   },
+   "lineage": {
+    "pinned_in_fixture": "sha256:e9ffc1768651272207f777e45be49449ff07a35f1ab2e7cd46208f1e7daf39ed",
+    "pinned_def_index": 18559,
+    "at_head": "sha256:d0ddf2b12ad09e0edc9e862f01c21e1a611aaba43206adca8c415840440ab77d",
+    "def_index_at_head": 20972,
+    "func_id_at_head": 2275,
+    "moved": true
+   }
+  },
+  "node_id_index": {
+   "def_path": "cert::builder::state::NodeId::index",
+   "emitted_body_vs_committed_fixture": {
+    "verdict": "NUMBERING-ONLY",
+    "drift_classes": [
+     "functy-index",
+     "type-table-index"
+    ],
+    "instructions_moved": 0
+   },
+   "links_at_head": {
+    "instr_count": 3,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir": {
+     "verdict": "agreed",
+     "markers_exact": true
+    },
+    "flip_fired": true
+   },
+   "lineage": {
+    "pinned_in_fixture": "sha256:e4d331e09f028b6c08d01c569699ea9757245ad8f9c7538008c03e947734ca73",
+    "pinned_def_index": 1925,
+    "at_head": "sha256:c0b94a6e973350a4d7c0c3cad43ca08342dc3672eafebaabcdc5038935a9052c",
+    "def_index_at_head": 1930,
+    "func_id_at_head": 338,
+    "moved": true
+   }
+  },
+  "has_loose_bvars": {
+   "def_path": "expr::meta::ExprMeta::has_loose_bvars",
+   "emitted_body_vs_committed_fixture": {
+    "verdict": "NUMBERING-ONLY",
+    "drift_classes": [
+     "callee-index",
+     "functy-index",
+     "loc-file-index",
+     "type-table-index"
+    ],
+    "instructions_moved": 0
+   },
+   "links_at_head": {
+    "instr_count": 4,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 1,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir": {
+     "verdict": "agreed",
+     "markers_exact": true
+    },
+    "flip_fired": true
+   },
+   "lineage": {
+    "pinned_in_fixture": "sha256:11b479743e4383464de6f566026adfab0c9847e2916029cff7495fd85d531c97",
+    "pinned_def_index": 17842,
+    "at_head": "sha256:4abcacaaf47b938ec3f728db51d445816aa5d4a4d357353617facf1282a4588b",
+    "def_index_at_head": 20197,
+    "func_id_at_head": 2103,
+    "moved": true
+   }
+  },
+  "simp_priority_value": {
+   "def_path": "env::types::SimpPriority::value",
+   "emitted_body_vs_committed_fixture": {
+    "verdict": "NUMBERING-ONLY",
+    "drift_classes": [
+     "functy-index",
+     "loc-file-index",
+     "type-table-index"
+    ],
+    "instructions_moved": 0
+   },
+   "links_at_head": {
+    "instr_count": 10,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir": {
+     "verdict": "agreed",
+     "markers_exact": true
+    },
+    "flip_fired": true
+   },
+   "lineage": {
+    "pinned_in_fixture": "sha256:88cbd3c53f5338595d41875b66e0f54fa6eb62dc9878935a8c4579e014354982",
+    "pinned_def_index": 14490,
+    "at_head": "sha256:5586b3ea96662b89a9d358cbbf45ded66ed388154431098704e0b4584b3169c7",
+    "def_index_at_head": 15535,
+    "func_id_at_head": 1266,
+    "moved": true
+   }
+  }
+ },
+ "extra_fixtures": {
+  "level_is_zero_deref_callee": {
+   "def_path": "<level::LevelArc as std::ops::Deref>::deref",
+   "emitted_body_vs_committed_fixture": {
+    "verdict": "NUMBERING-ONLY",
+    "drift_classes": [
+     "callee-index",
+     "functy-index",
+     "global-index",
+     "loc-file-index"
+    ],
+    "instructions_moved": 0
+   },
+   "links_at_head": {
+    "instr_count": 6,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 2
+    },
+    "derived_mir": {
+     "verdict": "unsupported",
+     "markers_exact": false
+    },
+    "flip_fired": false
+   },
+   "lineage": {
+    "at_head": "sha256:77de54a06e701877b76f5d3cd617905fccb7cf45637fa2c3b13bc67c33ee67ca",
+    "def_index_at_head": 21197,
+    "func_id_at_head": 2337
+   }
+  },
+  "loose_bvar_range_callee": {
+   "def_path": "expr::meta::ExprMeta::loose_bvar_range",
+   "emitted_body_vs_committed_fixture": {
+    "verdict": "NUMBERING-ONLY",
+    "drift_classes": [
+     "functy-index",
+     "loc-file-index",
+     "type-table-index"
+    ],
+    "instructions_moved": 0
+   },
+   "links_at_head": {
+    "instr_count": 9,
+    "lowered": true,
+    "spliced": true,
+    "unsupported": [],
+    "calls": {
+     "resolved": 0,
+     "extern_decls": 0,
+     "unresolved": 0
+    },
+    "derived_mir": {
+     "verdict": "unsupported",
+     "markers_exact": false
+    },
+    "flip_fired": false
+   },
+   "lineage": {
+    "at_head": "sha256:38df71139bf6654ce385cef15ebfe93ed77c27c0abf9fff0a3bb3e11a915a299",
+    "def_index_at_head": 20196,
+    "func_id_at_head": 2102
+   }
+  }
+ },
+ "finding": "All 19 primary Crystal bodies retain their exact instruction graphs: 0 identical and 19 numbering-only against fixtures cut at 047ebd051; zero structural. Every primary remains lowered, spliced, derived-MIR agreed, marker-exact, and flipped."
+}

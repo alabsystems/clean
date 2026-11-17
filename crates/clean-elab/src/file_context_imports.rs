@@ -35,6 +35,18 @@ impl FileContext {
     ) {
         self.set_import_context(path, decision.import_world());
     }
+    /// Bind captured source to its selected world without discovering a
+    /// project from a diagnostic path. Only that world's library is searched.
+    pub(crate) fn set_captured_source_world(
+        &mut self,
+        decision: &clean_olean::SourceWorldDecision,
+        paths: Vec<PathBuf>,
+    ) {
+        self.import_world = Some(decision.import_world());
+        self.import_search_paths.clear();
+        self.captured_import_paths = Some(paths);
+    }
+
     /// Replace the file-level import search paths used for `.olean` loading.
     pub fn set_import_search_paths(&mut self, paths: Vec<PathBuf>) {
         self.import_search_paths = paths;
@@ -68,6 +80,7 @@ impl FileContext {
         world: Result<clean_olean::ImportWorld, clean_olean::ImportWorldRefusal>,
     ) {
         self.import_search_paths = crate::lake_import_search_paths_for_file(path);
+        self.captured_import_paths = None;
         self.import_world = Some(world);
     }
 
@@ -89,6 +102,12 @@ impl FileContext {
     pub fn effective_import_search_paths(
         &self,
     ) -> Result<Vec<PathBuf>, clean_olean::ImportWorldRefusal> {
+        if let Some(paths) = &self.captured_import_paths {
+            if let Some(Err(refusal)) = &self.import_world {
+                return Err(refusal.clone());
+            }
+            return Ok(paths.clone());
+        }
         let defaults = match &self.import_world {
             None => clean_olean::default_search_paths(),
             Some(Ok(world)) => clean_olean::search_paths_in_world(world),
@@ -171,6 +190,22 @@ impl FileContext {
         // Loader availability is shared across the import walk. Only the
         // file's actual Import declarations authorize compiler visibility.
         self.imports_satisfied_from_source.insert(module.clone());
+    }
+
+    /// Only the maintained source-module initializer supplies this immutable
+    /// memo alongside the environment it actually loaded. It is name-resolution
+    /// DATA, not proof credit; external import search and policy are unchanged.
+    pub(crate) fn set_preloaded_artifact_imports(
+        &mut self,
+        imports: clean_olean::CompletedModuleImports,
+    ) {
+        self.preloaded_artifact_imports = Some(imports);
+    }
+
+    pub(crate) fn preloaded_artifact_imports(
+        &self,
+    ) -> Option<&clean_olean::CompletedModuleImports> {
+        self.preloaded_artifact_imports.as_ref()
     }
 
     /// Record a source import's refusal, retaining its first diagnostic.

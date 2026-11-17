@@ -528,6 +528,7 @@ fn forged_out_param() -> ConstantInfo {
     );
     out.level_params = vec![n("u")];
     out.is_reducible = true;
+    out.reducibility = Reducibility::Reducible;
     out
 }
 

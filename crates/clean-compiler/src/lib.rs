@@ -333,6 +333,7 @@ pub(crate) mod pass_manager_ext;
 #[cfg(test)]
 #[path = "pass_manager_ext_tests.rs"]
 mod pass_manager_ext_tests;
+pub mod primitive_uses;
 pub mod probing;
 #[cfg(test)]
 pub(crate) mod probing_ext;
@@ -428,7 +429,7 @@ pub use to_lcnf::{
 
 pub use implemented_by::{CodeMeaning, CompiledBefore};
 mod runtime_binding;
-pub use runtime_binding::RuntimeBindingClosure;
+pub use runtime_binding::{RuntimeBindingClosure, RuntimeBindingPlan};
 
 /// One recorded constant of the ORDER record ([`implemented_by_order`]) as
 /// the order refusals print it: "`r` names `d`", "`r` reaches `d` through

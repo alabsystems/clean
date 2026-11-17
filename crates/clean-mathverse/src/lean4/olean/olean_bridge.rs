@@ -101,6 +101,7 @@ pub fn import_module_with_provenance_verified(
     module_name: Option<&str>,
     verified_names: Option<&HashSet<String>>,
 ) -> MathverseResult<ImportStats> {
+    super::require_lean_records_only(module)?;
     let mut stats = ImportStats::default();
     let mut ctx = LoweringCtx::new(writer);
     let mut added_names: HashSet<String> = HashSet::new();
@@ -110,13 +111,9 @@ pub fn import_module_with_provenance_verified(
         .as_secs();
 
     for constant in &module.constants {
-        // SOUNDNESS: skip Lean compiler-IR stage decls (`._cstage1`/`._cstage2`).
-        // These are code-generator artifacts whose types reference the runtime
-        // pseudo-types `_obj`/`_neutral`; they are never kernel-checkable and
-        // must not enter the shard (they would re-verify as UnknownConst and
-        // pollute the KernelVerified accounting). See
-        // `clean_olean::import::is_compiler_ir_name`.
-        if clean_olean::import::is_compiler_ir_name(&constant.name) {
+        // Keep safe compiler-looking kernel records. Only the record
+        // itself can supply unsafe/partial replay-exclusion authority.
+        if clean_olean::import::is_nonreplayable_compiler_constant(constant) {
             continue;
         }
         if !added_names.insert(constant.name.clone()) {

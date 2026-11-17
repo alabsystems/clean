@@ -13,6 +13,26 @@ Clean's ReferenceKernel rechecks the theorem closure and rejects the same proof
 for a wrong postcondition and a body with swapped selection arms. None of this
 grants compiler publication authority, proves the entire WP implementation, or
 replaces source-to-IR refinement.
+
+Original text contracts use one sort-checked parser for Boolean expressions
+and exact mathematical integer comparisons and addition/subtraction/multiplication.
+It constructs the existing `Expr`/`IntExpr` vocabulary and uses `evalTyped`.
+The shared scalar syntax and mathematical environments live in import-light
+`NativeContractSyntax`, retaining their `SemRBooleanClaim` public names. The
+Boolean and text codecs import that common vocabulary without importing the WP
+calculus or a program model. `NativeContractSyntaxAudit` rejects any such
+transitive dependency. Native place/type/value extraction remains in
+`SemRScalarClaim`; program-bound claims import that owner explicitly.
+`originalContractHolds` derives name sorts from the original native binding
+inventory and retains both halves of `contractTypedEnv`; `d != 0` therefore
+uses the original unsigned parameter after its native type/range check.
+Unknown names, duplicate names, mixed sorts and unsupported syntax refuse,
+including in a branch whose Boolean guard is false. The Boolean-only wrapper
+retains its API type; integer constant comparisons and deeper bounded parser
+fuel are deliberate grammar/resource changes, not an old-grammar equivalence.
+This does not supply a declared-entry implication, a canonical trust-ir
+translation, or a qualified full native question consumer. Mathematical integer
+arithmetic also makes no wrapping machine arithmetic claim.
 The program theorem covers the exact four-instruction Boolean-negation body,
 for every Boolean argument and call-depth parameter. Scalar Boolean `UnOp::Not`
 is separately shown to be a type error in the shared model.

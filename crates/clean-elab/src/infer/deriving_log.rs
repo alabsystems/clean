@@ -158,9 +158,9 @@ collected_attribute_lens!(
     collected_attribute_removals,
 );
 
-/// The elaborator state a failed handler may have left half-changed, so the
-/// next class — and the next declaration a `namespace` block elaborates in
-/// the same context — starts from exactly what the type left.
+/// The elaborator state a failed handler or class validation may have left
+/// half-changed, so the next declaration in the same context starts from the
+/// prior local state. Class elaboration separately snapshots its class table.
 ///
 /// The local-scope snapshot is the one every transactional elaboration uses
 /// (`ElabCtx::with_local_scope_rollback`): locals with their `let` values,
@@ -170,7 +170,7 @@ collected_attribute_lens!(
 /// type-checker caches. Beside it: every metavariable, the auto-bound
 /// implicits, the postponed open-carrier instance goals, the structural
 /// recursion sites and the collected attributes.
-struct DeriveRollback {
+pub(super) struct DeclarationRollback {
     metas: crate::unify::MetaState,
     scope: super::elab_ctx::LocalScopeSnapshot,
     auto_implicits: Vec<(SurfaceName, clean_kernel::FVarId, clean_kernel::Expr)>,
@@ -180,8 +180,8 @@ struct DeriveRollback {
     attributes: AttributeLens,
 }
 
-impl DeriveRollback {
-    fn take(ctx: &ElabCtx<'_>) -> Self {
+impl DeclarationRollback {
+    pub(super) fn take(ctx: &ElabCtx<'_>) -> Self {
         Self {
             metas: ctx.metas.clone(),
             scope: ctx.local_scope_snapshot(),
@@ -193,7 +193,7 @@ impl DeriveRollback {
         }
     }
 
-    fn restore(self, ctx: &mut ElabCtx<'_>) {
+    pub(super) fn restore(self, ctx: &mut ElabCtx<'_>) {
         ctx.metas = self.metas;
         ctx.restore_local_scope(self.scope, true);
         ctx.auto_implicits = self.auto_implicits;
@@ -214,7 +214,7 @@ impl ElabCtx<'_> {
         &mut self,
         deriving: impl IntoIterator<Item = &'s SurfaceName>,
     ) -> Result<(), ElabError> {
-        let rollback = DeriveRollback::take(self);
+        let rollback = DeclarationRollback::take(self);
         let resolved = deriving
             .into_iter()
             .try_for_each(|class| self.resolve_derive_class(class).map(drop));
@@ -265,7 +265,7 @@ impl ElabCtx<'_> {
                 });
                 break;
             }
-            let rollback = DeriveRollback::take(self);
+            let rollback = DeclarationRollback::take(self);
             match derive_one(self, class) {
                 Ok(derived) => instances.extend(derived),
                 Err(error) => {

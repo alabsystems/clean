@@ -71,7 +71,8 @@ pub(super) fn replay_constant(
         });
         return;
     };
-    match replay.admit_decl(decl) {
+    let hint = (info.kind == ConstantKind::Definition).then_some(info.reducibility);
+    match replay.admit_decl(decl, hint) {
         Ok(()) => {
             stats.constants_admitted += 1;
             stats.admitted_names.insert(name.clone());

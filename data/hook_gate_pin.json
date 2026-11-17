@@ -2,7 +2,7 @@
   "_comment": "Digests of scripts/local_gate.sh, split at its GATE-FULL-ONLY markers (comments and blank lines stripped). BOTH halves are pinned: pinning only the fast half meant the single edit that changes a leg's mode -- moving it into a full-only region -- was also the edit that stopped watching its body. Refreshed only by `python3 scripts/check_hook_coverage.py --update`, and only when the leg tables already agree. A moved digest means a leg changed and its classification needs a human.",
   "fast_region_sha256": "f6cec9d5eacfb03275b953c985bcb91fab09163171f9c76f81802fd45291abdb",
   "full_region_sha256": "05cc879fe8aaadba4db508f79092af6d5eb6efdea709571c3378df93c432b573",
-  "hook_body_sha256": "db42747af0cb6e41032b461db868116609985cfc89c47051b166fdd28ab50c44",
+  "hook_body_sha256": "ad5f0955dfa9652d21902d9b061704762c840d86b551d58da25aa33510b8eda5",
   "fast_leg_ids": [
     "gate-registry",
     "cargo-test-selectors",

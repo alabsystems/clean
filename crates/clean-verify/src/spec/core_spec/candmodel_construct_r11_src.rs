@@ -391,7 +391,7 @@ pub(super) const VAL_R11_CANDINTERP_CONV_EQ_REFUTED: &str = "fun (heq : forall (
 pub(super) const TY_R11_CANDINTERP_STEP_CONV_REFUTED: &str = "(forall (A : KExpr) (B : KExpr) (e : KExpr), whnf_step A B -> candInterp A e -> candInterp B e) -> Empty";
 
 pub(super) fn val_r11_candinterp_step_conv_refuted() -> String {
-    format!("fun (hstep : forall (A : KExpr) (B : KExpr) (e : KExpr), whnf_step A B -> candInterp A e -> candInterp B e) => candInterp_pi_not_total (hstep {CONV_REDEX} {PI00} r5_omegaLam (whnf_step.beta {CONV_REDEX} {PI00} (beta_reduces.beta {S0} {V0} {PI00})) r5_whnfAcc_omegaLam)")
+    format!("fun (hstep : forall (A : KExpr) (B : KExpr) (e : KExpr), whnf_step A B -> candInterp A e -> candInterp B e) => candInterp_pi_not_total (hstep {CONV_REDEX} {PI00} r5_omegaLam (@whnf_step.beta {CONV_REDEX} {PI00} (beta_reduces.beta {S0} {V0} {PI00})) r5_whnfAcc_omegaLam)")
 }
 
 /// The three measured facts of the conversion counterexample in one

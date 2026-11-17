@@ -133,7 +133,7 @@ pub(super) fn val_xval_step_sem() -> String {
     let rhs1 = format!("(xval qD (KExpr.pi qA qB) {pshape} {pderiv} zr)");
     let step1 = format!("(r20_xval_cast_term qD (KExpr.pi zy qB) qe2 {pshape} (@Eq.symm KExpr qe2 (KExpr.pi zy qB) zeq) {nd1} zr)");
     let cong1 = format!("(r14_sval_pi_congr qsA qsB (xval qD zy qsA zh2 zr) (xval qD qA qsA qhA zr) {vb} {vb} (zhv zr) (@Eq.refl (VD qsB) {vb}))");
-    let p1 = format!("(fun (zy : KExpr) (zst : beta_reduces qA zy) (zeq : @Eq KExpr qe2 (KExpr.pi zy qB)) => qihA zy (whnf_step.beta qA zy zst) qC (fun (zh2 : WKC qD zy qsA) (zhv : forall (zr : VEnvD qD), @Eq (VD qsA) (xval qD zy qsA zh2 zr) (xval qD qA qsA qhA zr)) => qk {cast1} (fun (zr : VEnvD qD) => @Eq.trans (VD {pshape}) {lhs1} {mid1} {rhs1} {step1} {cong1})))");
+    let p1 = format!("(fun (zy : KExpr) (zst : beta_reduces qA zy) (zeq : @Eq KExpr qe2 (KExpr.pi zy qB)) => qihA zy (@whnf_step.beta qA zy zst) qC (fun (zh2 : WKC qD zy qsA) (zhv : forall (zr : VEnvD qD), @Eq (VD qsA) (xval qD zy qsA zh2 zr) (xval qD qA qsA qhA zr)) => qk {cast1} (fun (zr : VEnvD qD) => @Eq.trans (VD {pshape}) {lhs1} {mid1} {rhs1} {step1} {cong1})))");
     let nd2 = "(WKC.pi qD qA zy qsA qsB qhA zh2)";
     let cast2 = format!("(r17_wkcCastT qD (KExpr.pi qA zy) qe2 {pshape} (@Eq.symm KExpr qe2 (KExpr.pi qA zy) zeq) {nd2})");
     let lhs2 = format!("(xval qD qe2 {pshape} {cast2} zr)");
@@ -144,7 +144,7 @@ pub(super) fn val_xval_step_sem() -> String {
     let cong2 = format!(
         "(r14_sval_pi_congr qsA qsB {va} {va} {vb2} {vb} (@Eq.refl (VD qsA) {va}) (zhv {jenv}))"
     );
-    let p2 = format!("(fun (zy : KExpr) (zst : beta_reduces qB zy) (zeq : @Eq KExpr qe2 (KExpr.pi qA zy)) => qihB zy (whnf_step.beta qB zy zst) qC (fun (zh2 : WKC {dsa} zy qsB) (zhv : forall (zr : VEnvD {dsa}), @Eq (VD qsB) (xval {dsa} zy qsB zh2 zr) (xval {dsa} qB qsB qhB zr)) => qk {cast2} (fun (zr : VEnvD qD) => @Eq.trans (VD {pshape}) {lhs2} {mid2} {rhs1} {step2} {cong2})))");
+    let p2 = format!("(fun (zy : KExpr) (zst : beta_reduces qB zy) (zeq : @Eq KExpr qe2 (KExpr.pi qA zy)) => qihB zy (@whnf_step.beta qB zy zst) qC (fun (zh2 : WKC {dsa} zy qsB) (zhv : forall (zr : VEnvD {dsa}), @Eq (VD qsB) (xval {dsa} zy qsB zh2 zr) (xval {dsa} qB qsB qhB zr)) => qk {cast2} (fun (zr : VEnvD qD) => @Eq.trans (VD {pshape}) {lhs2} {mid2} {rhs1} {step2} {cong2})))");
     let m_pi = format!("(fun (qD : Nat -> Sk) (qA : KExpr) (qB : KExpr) (qsA : Sk) (qsB : Sk) (qhA : WKC qD qA qsA) (qhB : WKC {dsa} qB qsB) {ih_a} {ih_pb} (qe2 : KExpr) (qst : whnf_step (KExpr.pi qA qB) qe2) (qC : Type) (qk : {kpi}) => r15_whnf_stepT_inv qC (KExpr.pi qA qB) qe2 {HF_REFL} qst {p1} {p2})");
 
     // ---- lam ----
@@ -171,14 +171,14 @@ pub(super) fn val_xval_step_sem() -> String {
     let lmid1 = format!("(xval qD (KExpr.lam zy qb) {lshape} {lnd1} zr)");
     let lrhs = format!("(xval qD (KExpr.lam qA qb) {lshape} {lderiv} zr)");
     let lstep1 = format!("(r20_xval_cast_term qD (KExpr.lam zy qb) qe2 {lshape} (@Eq.symm KExpr qe2 (KExpr.lam zy qb) zeq) {lnd1} zr)");
-    let l1 = format!("(fun (zy : KExpr) (zst : beta_reduces qA zy) (zeq : @Eq KExpr qe2 (KExpr.lam zy qb)) => qihA zy (whnf_step.beta qA zy zst) qC (fun (zh2 : WKC qD zy qsA) (zhv : forall (zr : VEnvD qD), @Eq (VD qsA) (xval qD zy qsA zh2 zr) (xval qD qA qsA qhA zr)) => qk {lcast1} (fun (zr : VEnvD qD) => @Eq.trans (VD {lshape}) {llhs1} {lmid1} {lrhs} {lstep1} (@Eq.refl (VD {lshape}) {lrhs}))))");
+    let l1 = format!("(fun (zy : KExpr) (zst : beta_reduces qA zy) (zeq : @Eq KExpr qe2 (KExpr.lam zy qb)) => qihA zy (@whnf_step.beta qA zy zst) qC (fun (zh2 : WKC qD zy qsA) (zhv : forall (zr : VEnvD qD), @Eq (VD qsA) (xval qD zy qsA zh2 zr) (xval qD qA qsA qhA zr)) => qk {lcast1} (fun (zr : VEnvD qD) => @Eq.trans (VD {lshape}) {llhs1} {lmid1} {lrhs} {lstep1} (@Eq.refl (VD {lshape}) {lrhs}))))");
     let lnd2 = "(WKC.lam qD qA zy qsA qc qhA zh2)";
     let lcast2 = format!("(r17_wkcCastT qD (KExpr.lam qA zy) qe2 {lshape} (@Eq.symm KExpr qe2 (KExpr.lam qA zy) zeq) {lnd2})");
     let llhs2 = format!("(xval qD qe2 {lshape} {lcast2} zr)");
     let lmid2 = format!("(xval qD (KExpr.lam qA zy) {lshape} {lnd2} zr)");
     let lstep2 = format!("(r20_xval_cast_term qD (KExpr.lam qA zy) qe2 {lshape} (@Eq.symm KExpr qe2 (KExpr.lam qA zy) zeq) {lnd2} zr)");
     let lfun = format!("(r13_vd_arr_funext (domSk qsA) qc {lmid2} {lrhs} (fun (zx : VD (domSk qsA)) => zhv (vconsD (domSk qsA) qD zx zr)))");
-    let l2 = format!("(fun (zy : KExpr) (zst : beta_reduces qb zy) (zeq : @Eq KExpr qe2 (KExpr.lam qA zy)) => qihb zy (whnf_step.beta qb zy zst) qC (fun (zh2 : WKC {dsa} zy qc) (zhv : forall (zr : VEnvD {dsa}), @Eq (VD qc) (xval {dsa} zy qc zh2 zr) (xval {dsa} qb qc qhb zr)) => qk {lcast2} (fun (zr : VEnvD qD) => @Eq.trans (VD {lshape}) {llhs2} {lmid2} {lrhs} {lstep2} {lfun})))");
+    let l2 = format!("(fun (zy : KExpr) (zst : beta_reduces qb zy) (zeq : @Eq KExpr qe2 (KExpr.lam qA zy)) => qihb zy (@whnf_step.beta qb zy zst) qC (fun (zh2 : WKC {dsa} zy qc) (zhv : forall (zr : VEnvD {dsa}), @Eq (VD qc) (xval {dsa} zy qc zh2 zr) (xval {dsa} qb qc qhb zr)) => qk {lcast2} (fun (zr : VEnvD qD) => @Eq.trans (VD {lshape}) {llhs2} {lmid2} {lrhs} {lstep2} {lfun})))");
     let m_lam = format!("(fun (qD : Nat -> Sk) (qA : KExpr) (qb : KExpr) (qsA : Sk) (qc : Sk) (qhA : WKC qD qA qsA) (qhb : WKC {dsa} qb qc) {ih_la} {ih_lb} (qe2 : KExpr) (qst : whnf_step (KExpr.lam qA qb) qe2) (qC : Type) (qk : {klam}) => r15_whnf_stepT_inv qC (KExpr.lam qA qb) qe2 {HF_REFL} qst {l1} {l2})");
 
     // ---- app ----
@@ -227,7 +227,7 @@ pub(super) fn val_xval_step_sem() -> String {
     let al2 = format!("(xval qD (KExpr.app zy qa) qcc {and2} zr)");
     let as1 = format!("(r20_xval_cast_term qD (KExpr.app zy qa) qe2 qcc (@Eq.symm KExpr qe2 (KExpr.app zy qa) zeq) {and2} zr)");
     let ac1 = format!("(r14_vapply_congr qd qcc (xval qD zy (Sk.arr qd qcc) zh2 zr) (xval qD qf (Sk.arr qd qcc) qhf zr) {xv} {xv} (zhv zr) (@Eq.refl (VD qd) {xv}))");
-    let a2 = format!("(fun (zy : KExpr) (zst : beta_reduces qf zy) (zeq : @Eq KExpr qe2 (KExpr.app zy qa)) => qihf zy (whnf_step.beta qf zy zst) qC (fun (zh2 : WKC qD zy (Sk.arr qd qcc)) (zhv : forall (zr : VEnvD qD), @Eq (VD (Sk.arr qd qcc)) (xval qD zy (Sk.arr qd qcc) zh2 zr) (xval qD qf (Sk.arr qd qcc) qhf zr)) => qk {acast2} (fun (zr : VEnvD qD) => @Eq.trans (VD qcc) {al1} {al2} {arhs} {as1} {ac1})))");
+    let a2 = format!("(fun (zy : KExpr) (zst : beta_reduces qf zy) (zeq : @Eq KExpr qe2 (KExpr.app zy qa)) => qihf zy (@whnf_step.beta qf zy zst) qC (fun (zh2 : WKC qD zy (Sk.arr qd qcc)) (zhv : forall (zr : VEnvD qD), @Eq (VD (Sk.arr qd qcc)) (xval qD zy (Sk.arr qd qcc) zh2 zr) (xval qD qf (Sk.arr qd qcc) qhf zr)) => qk {acast2} (fun (zr : VEnvD qD) => @Eq.trans (VD qcc) {al1} {al2} {arhs} {as1} {ac1})))");
     let and3 = "(WKC.app qD qf zy qd qcc qhf zh2)";
     let acast3 = format!("(r17_wkcCastT qD (KExpr.app qf zy) qe2 qcc (@Eq.symm KExpr qe2 (KExpr.app qf zy) zeq) {and3})");
     let ar1 = format!("(xval qD qe2 qcc {acast3} zr)");
@@ -235,7 +235,7 @@ pub(super) fn val_xval_step_sem() -> String {
     let as2 = format!("(r20_xval_cast_term qD (KExpr.app qf zy) qe2 qcc (@Eq.symm KExpr qe2 (KExpr.app qf zy) zeq) {and3} zr)");
     let ffv = "(xval qD qf (Sk.arr qd qcc) qhf zr)";
     let ac2 = format!("(r14_vapply_congr qd qcc {ffv} {ffv} (xval qD zy qd zh2 zr) {xv} (@Eq.refl (VD (Sk.arr qd qcc)) {ffv}) (zhv zr))");
-    let a3 = format!("(fun (zy : KExpr) (zst : beta_reduces qa zy) (zeq : @Eq KExpr qe2 (KExpr.app qf zy)) => qiha zy (whnf_step.beta qa zy zst) qC (fun (zh2 : WKC qD zy qd) (zhv : forall (zr : VEnvD qD), @Eq (VD qd) (xval qD zy qd zh2 zr) (xval qD qa qd qha zr)) => qk {acast3} (fun (zr : VEnvD qD) => @Eq.trans (VD qcc) {ar1} {ar2} {arhs} {as2} {ac2})))");
+    let a3 = format!("(fun (zy : KExpr) (zst : beta_reduces qa zy) (zeq : @Eq KExpr qe2 (KExpr.app qf zy)) => qiha zy (@whnf_step.beta qa zy zst) qC (fun (zh2 : WKC qD zy qd) (zhv : forall (zr : VEnvD qD), @Eq (VD qd) (xval qD zy qd zh2 zr) (xval qD qa qd qha zr)) => qk {acast3} (fun (zr : VEnvD qD) => @Eq.trans (VD qcc) {ar1} {ar2} {arhs} {as2} {ac2})))");
     let m_app = format!("(fun (qD : Nat -> Sk) (qf : KExpr) (qa : KExpr) (qd : Sk) (qcc : Sk) (qhf : WKC qD qf (Sk.arr qd qcc)) (qha : WKC qD qa qd) {ih_f} {ih_ar} (qe2 : KExpr) (qst : whnf_step (KExpr.app qf qa) qe2) (qC : Type) (qk : {kapp}) => r15_whnf_stepT_inv qC (KExpr.app qf qa) qe2 {hf} qst {a1} {a2} {a3})");
 
     // ---- konst: REFUTED, an inert constant admits no step at all ----
@@ -289,7 +289,7 @@ pub(super) fn val_xval_step_sem() -> String {
     let tx1 = format!("(xval qD qe2 qc {tcast} zr)");
     let tx2 = format!("(xval qD (KExpr.let_ zy qv qb) qc {tnd} zr)");
     let ts1 = format!("(r20_xval_cast_term qD (KExpr.let_ zy qv qb) qe2 qc (@Eq.symm KExpr qe2 (KExpr.let_ zy qv qb) zeq) {tnd} zr)");
-    let z1 = format!("(fun (zy : KExpr) (zst2 : beta_reduces qtt zy) (zeq : @Eq KExpr qe2 (KExpr.let_ zy qv qb)) => qiht zy (whnf_step.beta qtt zy zst2) qC (fun (zh2 : WKC qD zy qst) (zhv : forall (zr : VEnvD qD), @Eq (VD qst) (xval qD zy qst zh2 zr) (xval qD qtt qst qht zr)) => qk {tcast} (fun (zr : VEnvD qD) => @Eq.trans (VD qc) {tx1} {tx2} {lrhs2} {ts1} (@Eq.refl (VD qc) {lrhs2}))))");
+    let z1 = format!("(fun (zy : KExpr) (zst2 : beta_reduces qtt zy) (zeq : @Eq KExpr qe2 (KExpr.let_ zy qv qb)) => qiht zy (@whnf_step.beta qtt zy zst2) qC (fun (zh2 : WKC qD zy qst) (zhv : forall (zr : VEnvD qD), @Eq (VD qst) (xval qD zy qst zh2 zr) (xval qD qtt qst qht zr)) => qk {tcast} (fun (zr : VEnvD qD) => @Eq.trans (VD qc) {tx1} {tx2} {lrhs2} {ts1} (@Eq.refl (VD qc) {lrhs2}))))");
     // congruence in the VALUE: one Eq.cong in the extension value.
     let vnd = "(WKC.let_ qD qtt zy qb qst qsv qc qht zh2 qhb)";
     let vcast = format!("(r17_wkcCastT qD (KExpr.let_ qtt zy qb) qe2 qc (@Eq.symm KExpr qe2 (KExpr.let_ qtt zy qb) zeq) {vnd})");
@@ -297,14 +297,14 @@ pub(super) fn val_xval_step_sem() -> String {
     let vx2 = format!("(xval qD (KExpr.let_ qtt zy qb) qc {vnd} zr)");
     let vs1 = format!("(r20_xval_cast_term qD (KExpr.let_ qtt zy qb) qe2 qc (@Eq.symm KExpr qe2 (KExpr.let_ qtt zy qb) zeq) {vnd} zr)");
     let vcong = format!("(@Eq.cong (VD qsv) (VD qc) (fun (zw : VD qsv) => xval {ldd} qb qc qhb (vconsD qsv qD zw zr)) (xval qD zy qsv zh2 zr) (xval qD qv qsv qhv zr) (zhv zr))");
-    let z2 = format!("(fun (zy : KExpr) (zst2 : beta_reduces qv zy) (zeq : @Eq KExpr qe2 (KExpr.let_ qtt zy qb)) => qihv zy (whnf_step.beta qv zy zst2) qC (fun (zh2 : WKC qD zy qsv) (zhv : forall (zr : VEnvD qD), @Eq (VD qsv) (xval qD zy qsv zh2 zr) (xval qD qv qsv qhv zr)) => qk {vcast} (fun (zr : VEnvD qD) => @Eq.trans (VD qc) {vx1} {vx2} {lrhs2} {vs1} {vcong})))");
+    let z2 = format!("(fun (zy : KExpr) (zst2 : beta_reduces qv zy) (zeq : @Eq KExpr qe2 (KExpr.let_ qtt zy qb)) => qihv zy (@whnf_step.beta qv zy zst2) qC (fun (zh2 : WKC qD zy qsv) (zhv : forall (zr : VEnvD qD), @Eq (VD qsv) (xval qD zy qsv zh2 zr) (xval qD qv qsv qhv zr)) => qk {vcast} (fun (zr : VEnvD qD) => @Eq.trans (VD qc) {vx1} {vx2} {lrhs2} {vs1} {vcong})))");
     // congruence in the BODY: the body hypothesis at the value-extended valuation.
     let bnd = "(WKC.let_ qD qtt qv zy qst qsv qc qht qhv zh2)";
     let bcast = format!("(r17_wkcCastT qD (KExpr.let_ qtt qv zy) qe2 qc (@Eq.symm KExpr qe2 (KExpr.let_ qtt qv zy) zeq) {bnd})");
     let bbx1 = format!("(xval qD qe2 qc {bcast} zr)");
     let bbx2 = format!("(xval qD (KExpr.let_ qtt qv zy) qc {bnd} zr)");
     let bbs1 = format!("(r20_xval_cast_term qD (KExpr.let_ qtt qv zy) qe2 qc (@Eq.symm KExpr qe2 (KExpr.let_ qtt qv zy) zeq) {bnd} zr)");
-    let z3 = format!("(fun (zy : KExpr) (zst2 : beta_reduces qb zy) (zeq : @Eq KExpr qe2 (KExpr.let_ qtt qv zy)) => qihb zy (whnf_step.beta qb zy zst2) qC (fun (zh2 : WKC {ldd} zy qc) (zhv : forall (zr : VEnvD {ldd}), @Eq (VD qc) (xval {ldd} zy qc zh2 zr) (xval {ldd} qb qc qhb zr)) => qk {bcast} (fun (zr : VEnvD qD) => @Eq.trans (VD qc) {bbx1} {bbx2} {lrhs2} {bbs1} (zhv (vconsD qsv qD (xval qD qv qsv qhv zr) zr)))))");
+    let z3 = format!("(fun (zy : KExpr) (zst2 : beta_reduces qb zy) (zeq : @Eq KExpr qe2 (KExpr.let_ qtt qv zy)) => qihb zy (@whnf_step.beta qb zy zst2) qC (fun (zh2 : WKC {ldd} zy qc) (zhv : forall (zr : VEnvD {ldd}), @Eq (VD qc) (xval {ldd} zy qc zh2 zr) (xval {ldd} qb qc qhb zr)) => qk {bcast} (fun (zr : VEnvD qD) => @Eq.trans (VD qc) {bbx1} {bbx2} {lrhs2} {bbs1} (zhv (vconsD qsv qD (xval qD qv qsv qhv zr) zr)))))");
     let m_let = format!("(fun (qD : Nat -> Sk) (qtt : KExpr) (qv : KExpr) (qb : KExpr) (qst : Sk) (qsv : Sk) (qc : Sk) (qht : WKC qD qtt qst) (qhv : WKC qD qv qsv) (qhb : WKC {ldd} qb qc) {iht} {ihv} {ihb} (qe2 : KExpr) (qstep : whnf_step (KExpr.let_ qtt qv qb) qe2) (qC : Type) (qk : {klet}) => letRedex_whnf_inv qtt qv qb qe2 qC qstep {z0} {z1} {z2} {z3})");
 
     format!("fun (D : Nat -> Sk) (e : KExpr) (s : Sk) (h : WKC D e s) => @WKC.rec {mot} {m_var} {m_sort} {m_pi} {m_lam} {m_app} {m_konst} {m_let} D e s h")
@@ -342,7 +342,7 @@ pub(super) fn val_step_reaches_let() -> String {
     let inst = "(instantiate (KExpr.bvar Nat.zero) (KExpr.sort Level.zero))";
     let s0 = "(KExpr.sort Level.zero)";
     let v0 = "(KExpr.bvar Nat.zero)";
-    format!("fun (r : VEnvD r12_betaEnv) => r21_xval_step r12_betaEnv r17_letTerm {KDTY} r17_let_witness {inst} (whnf_step.beta r17_letTerm {inst} (beta_reduces.zeta {s0} {s0} {v0})) r17_wkc_step_let_witness r")
+    format!("fun (r : VEnvD r12_betaEnv) => r21_xval_step r12_betaEnv r17_letTerm {KDTY} r17_let_witness {inst} (@whnf_step.beta r17_letTerm {inst} (beta_reduces.zeta {s0} {s0} {v0})) r17_wkc_step_let_witness r")
 }
 
 // ================================================================

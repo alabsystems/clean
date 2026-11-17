@@ -46,27 +46,59 @@ fn existing_logical_import_policy_still_refuses_runtime_artifacts_and_unpinned_a
         .constants
         .iter()
         .any(|row| row.name == generated().to_string() && row.value.is_some()));
-    let mut env = Environment::default();
-    let summary = clean_olean::load_parsed_module_with_import_policy(
-        &mut env,
+    // This compatibility projection has lost the distinction between the
+    // generated three-component name and the safe quoted two-component twin.
+    // Names alone used to hide both rows as compiler artifacts. Refuse the
+    // collision; do not manufacture typed identity from a display string.
+    let mut projected = Environment::default();
+    let error = clean_olean::load_parsed_module_with_import_policy(
+        &mut projected,
         &parsed,
         Some("RuntimeProbe".into()),
         clean_olean::OleanImportPolicy::allow_unpinned_legacy(),
     )
-    .unwrap();
+    .expect_err("the legacy projection cannot represent both exact Names");
     assert!(
-        summary
-            .skipped_constants
-            .iter()
-            .any(|row| row.name == generated().to_string()
-                && row.reason == "compiler/code-generator artifact (not kernel-checkable)"),
-        "{:?}",
-        summary.skipped_constants
+        matches!(error, clean_olean::ImportError::DuplicateDeclaration { .. }),
+        "{error}"
     );
+    assert_eq!(projected.constants().count(), 0);
+
+    // The authenticated direct reader retains exact Names and uses the final
+    // partial record consistently across its Safe exported axiom stubs.
+    let mut env = Environment::default();
+    let summaries = clean_olean::load_module_with_deps(
+        &mut env,
+        "RuntimeProbe",
+        &[
+            fixture_dir(),
+            clean_olean::require_pinned_lean_lib_path().unwrap(),
+        ],
+    )
+    .expect("the typed artifact preserves the distinct compiler/user records");
+    assert!(summaries.iter().any(|summary| summary
+        .skipped_constants
+        .iter()
+        .any(|row| row.name == generated().to_string()
+            && row.reason == "compiler/code-generator artifact (not kernel-checkable)")));
     assert!(
         env.get_const(&generated()).is_none(),
-        "separate extraction must not bypass logical refusal"
+        "partial helper gains no logical authority"
     );
+    for name in [
+        Name::anon().str("RuntimeProbe").str("count._unsafe_rec"),
+        Name::anon()
+            .str("RuntimeProbe")
+            .str("safe")
+            .str("_unsafe_rec"),
+    ] {
+        assert!(
+            env.get_const(&name)
+                .is_some_and(|constant| constant.value.is_some()),
+            "{name}"
+        );
+        assert!(!env.is_unsafe(&name) && !env.is_partial(&name));
+    }
     let dir = fixture_dir();
     let mut fresh = Environment::default();
     assert!(clean_olean::load_olean_file_with_import_policy(

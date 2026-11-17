@@ -26,7 +26,7 @@ use clean_kernel::{
     ReferenceRefusal, TypeChecker,
 };
 
-const THEORY_ROOT: &str = "CICL.ListSupportCases";
+const THEORY_ROOT: &str = "CleanQualification.cic_l";
 
 #[path = "cic_l_level/negative_controls.rs"]
 mod negative_controls;
@@ -313,6 +313,8 @@ fn rule_witnesses_and_forged_controls(
                 ),
                 ("metadata", "CICL.HeaderTraceCases.metadata_step"),
                 ("application", "CICL.HeaderTraceCases.application_step"),
+                ("quotLift", "CICL.QuotientHeadCases.lift_step"),
+                ("quotInd", "CICL.QuotientHeadCases.ind_step"),
             ],
         ),
         (

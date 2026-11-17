@@ -9,7 +9,7 @@
 //!
 //! What a green run shows: a cold `lake build` of the package succeeds, and the
 //! lakefile Revision 3 landed (one root) fails cold; every constant the
-//! package's thirteen modules declare is admitted by two kernels; each pinned
+//! package's 105 ORDER modules declare is admitted by two kernels; each pinned
 //! theorem's axiom closure is the committed one; each contract theorem proves
 //! the statement pinned for it and not `False`; seven selected proofs are also
 //! refused at forged statements; and the definitions units C2 and C3 are
@@ -57,7 +57,7 @@ use std::path::Path;
 use std::process::Command;
 
 use clean_kernel::env::{Declaration, Environment};
-use clean_kernel::{Expr, KernelEnvError, KernelTypeError, Name, ReferenceRefusal};
+use clean_kernel::{ConstantKind, Expr, KernelEnvError, KernelTypeError, Name, ReferenceRefusal};
 use clean_olean::recheck_closed::ClosedRecheckOptions;
 use clean_olean::test_support::compiled_fixture_dir;
 use clean_olean::{
@@ -66,8 +66,8 @@ use clean_olean::{
 };
 use meaning_digest::{MeaningDigests, Package};
 
-/// The module that imports every other module of the package.
-const ROOT: &str = "KCheckSpec.Contracts";
+/// Import-only fixture aggregate generated from every specification ORDER root.
+const ROOT: &str = "CleanQualification.kcheck_spec";
 
 /// `(theorem, statement pin in KCheckSpec.Contracts)`.
 const CONTRACTS: &[(&str, &str)] = &[
@@ -212,8 +212,10 @@ const SPECIFICATION: &[&str] = &[
     "KCheckSpec.Term.lam",
     "KCheckSpec.Term.pi",
     "KCheckSpec.Term.letE",
+    "KCheckSpec.Term.proj",
     "KCheckSpec.Term.toExpr",
     "KCheckSpec.Term.Scoped",
+    "KCheckSpec.Term.scopedB",
     "KCheckSpec.Term.openAt",
     "KCheckSpec.Term.inst",
     "KCheckSpec.Term.instLevels",
@@ -270,7 +272,7 @@ const SPECIFICATION: &[&str] = &[
     "KCheckSpec.Checker.mk",
     "KCheckSpec.Loader.mk",
     "KCheckSpec.Checker.step",
-    "KCheckSpec.Checker.StartsAtBase",
+    "KCheckSpec.Checker.StartsAt",
     "KCheckSpec.Checker.runStep",
     "KCheckSpec.Checker.run",
     "KCheckSpec.whnf_sound",
@@ -341,21 +343,69 @@ fn pin_roots() -> Vec<(&'static str, Name)> {
         .collect()
 }
 
-/// Pin key → meaning digest over `env`, and one line describing the closures.
-fn pin_digests(env: &Environment, package: &Package) -> (BTreeMap<String, String>, String) {
+/// Meaning digests for the exact union of legacy named roots and every
+/// owned theorem/Definition, including private and generated declarations.
+fn pin_digests(
+    env: &Environment,
+    package: &Package,
+    owned_theorems: &BTreeSet<Name>,
+    owned_data: &BTreeSet<Name>,
+) -> (BTreeMap<String, String>, String) {
     let digests = MeaningDigests::new(env, package);
+    let mut subjects = BTreeMap::new();
+    for (key, root) in pin_roots() {
+        assert!(
+            subjects.insert(key.to_owned(), root).is_none(),
+            "{key} is listed twice in the legacy named index"
+        );
+    }
+    for subject in owned_theorems.iter().chain(owned_data) {
+        let key = subject.to_unambiguous_string();
+        if let Some(previous) = subjects.insert(key, subject.clone()) {
+            assert_eq!(
+                previous, *subject,
+                "a named and owned pin key must denote the same constant: {subject}"
+            );
+        }
+    }
+    let expected_keys: BTreeSet<String> = pin_roots()
+        .into_iter()
+        .map(|(key, _)| key.to_owned())
+        .chain(owned_theorems.iter().map(Name::to_unambiguous_string))
+        .chain(owned_data.iter().map(Name::to_unambiguous_string))
+        .collect();
+    assert_eq!(
+        subjects.keys().cloned().collect::<BTreeSet<_>>(),
+        expected_keys,
+        "pin keys must equal the complete named-plus-module-origin registration index"
+    );
     let mut pins = BTreeMap::new();
     let mut roots = Vec::new();
-    for (key, root) in pin_roots() {
+    for (key, root) in subjects {
         let digest = digests
             .digest(&root)
             .unwrap_or_else(|error| panic!("{error}"));
-        assert!(
-            pins.insert(key.to_owned(), digest).is_none(),
-            "{key} is listed twice"
-        );
+        assert!(pins.insert(key, digest).is_none());
         roots.push(root);
     }
+    let expected_pin_keys: BTreeSet<String> = CONTRACTS
+        .iter()
+        .chain(FORGED_STATEMENTS)
+        .map(|(_, pin)| (*pin).to_owned())
+        .chain(SPECIFICATION.iter().map(|object| (*object).to_owned()))
+        .chain(
+            IMPORTED_SPECIFICATION
+                .iter()
+                .map(|(object, _)| (*object).to_owned()),
+        )
+        .chain(owned_theorems.iter().map(Name::to_unambiguous_string))
+        .chain(owned_data.iter().map(Name::to_unambiguous_string))
+        .collect();
+    assert_eq!(
+        pins.keys().cloned().collect::<BTreeSet<_>>(),
+        expected_pin_keys,
+        "pin keys must equal the complete named-plus-module-origin registration index"
+    );
     let described = digests
         .describe(package, &roots)
         .unwrap_or_else(|error| panic!("{error}"));
@@ -470,11 +520,33 @@ fn kcheck_spec_rechecks_through_two_kernels_with_pinned_statements() {
     let stems = order_stems();
     assert_eq!(
         stems.len(),
-        17,
+        105,
         "module denominator of theories/kcheck_spec/ORDER"
     );
     let lib = require_pinned_lean_lib_path().expect("install the repository-pinned Lean toolchain");
     let compiled = compiled_fixture_dir("kcheck_spec");
+    let aggregate = read_artifact(
+        ROOT,
+        &compiled.join("CleanQualification/kcheck_spec.olean"),
+        ArtifactDepth::Names,
+    )
+    .expect("read exact specification aggregate");
+    assert!(
+        aggregate.names.is_empty(),
+        "qualification aggregate declares subjects"
+    );
+    assert_eq!(
+        aggregate
+            .imports
+            .iter()
+            .map(|import| import.module_name.clone())
+            .collect::<Vec<_>>(),
+        stems
+            .iter()
+            .map(|stem| stem.replace('/', "."))
+            .collect::<Vec<_>>(),
+        "qualification aggregate must import every specification ORDER root in order"
+    );
     let lean = clean_olean::pinned_lean_binary().expect("pinned Lean binary");
     let bin = lean.parent().expect("Lean bin directory");
     let mut paths = vec![bin.to_path_buf()];
@@ -506,6 +578,17 @@ fn kcheck_spec_rechecks_through_two_kernels_with_pinned_statements() {
     let mut loaded = Environment::for_lean_replay();
     let summaries = load_module_with_deps(&mut loaded, ROOT, &[compiled.clone(), lib])
         .expect("load the compiled specification");
+    let expected_modules: BTreeSet<_> = stems.iter().map(|stem| stem.replace('/', ".")).collect();
+    let loaded_modules: BTreeSet<_> = summaries
+        .iter()
+        .filter_map(|summary| summary.module_name.as_ref())
+        .filter(|module| module.starts_with("KCheckSpec."))
+        .cloned()
+        .collect();
+    assert_eq!(
+        expected_modules, loaded_modules,
+        "all and only specification ORDER modules must be loaded"
+    );
     let package = Package::of_fixture(
         &compiled,
         "kcheck_spec",
@@ -562,11 +645,33 @@ fn kcheck_spec_rechecks_through_two_kernels_with_pinned_statements() {
             "{copy} has no definition among the subjects"
         );
     }
+    let owned_theorems: BTreeSet<_> = targets
+        .iter()
+        .filter(|subject| {
+            loaded
+                .get_const(subject)
+                .is_some_and(|constant| constant.kind == ConstantKind::Theorem)
+        })
+        .cloned()
+        .collect();
+    let owned_data: BTreeSet<_> = targets
+        .iter()
+        // Every own Definition contributes its type/value and reachable
+        // package meaning, including private helpers and non-Prop control
+        // data. Separate inductive/constructor/recursor roots are not added
+        // by this selection; their reached records use the shared digest.
+        .filter(|subject| {
+            loaded
+                .get_const(subject)
+                .is_some_and(|constant| constant.kind == ConstantKind::Definition)
+        })
+        .cloned()
+        .collect();
 
     // Untrusted calibration metadata, emitted before the expensive reference
-    // replay: the meaning digests over the loaded environment. It never grants
-    // a pass or skips any gate below.
-    let (calibration_pins, _) = pin_digests(&loaded, &package);
+    // replay: meaning digests for the complete named-plus-owned index over
+    // the loaded environment. It never grants a pass or skips any gate below.
+    let (calibration_pins, _) = pin_digests(&loaded, &package, &owned_theorems, &owned_data);
     eprintln!(
         "spec-calibration-pins {}",
         serde_json::to_string(&calibration_pins).expect("candidate pins")
@@ -635,6 +740,11 @@ fn kcheck_spec_rechecks_through_two_kernels_with_pinned_statements() {
             closure_of(kernel.environment(), &subject),
         );
     }
+    for subject in &owned_theorems {
+        observed_closures
+            .entry(subject.to_unambiguous_string())
+            .or_insert_with(|| closure_of(kernel.environment(), subject));
+    }
     for (subject, closure) in &observed_closures {
         eprintln!("axiom-closure {subject} {closure:?}");
     }
@@ -675,8 +785,12 @@ fn kcheck_spec_rechecks_through_two_kernels_with_pinned_statements() {
             assert!(targets.contains(&subject), "{object} is not a subject");
         }
     }
-    // Over what the reference kernel admitted.
-    let (observed_pins, described) = pin_digests(kernel.environment(), &package);
+    // Over what the reference kernel admitted, preserving every legacy named
+    // key and every module-origin theorem/Definition key under one digest.
+    let old_pin_count = pin_roots().len();
+    let (observed_pins, described) =
+        pin_digests(kernel.environment(), &package, &owned_theorems, &owned_data);
+    let added_pin_count = observed_pins.len() - old_pin_count;
     for (pin, value) in &observed_pins {
         eprintln!("statement-pin {pin} {value}");
     }
@@ -703,12 +817,12 @@ fn kcheck_spec_rechecks_through_two_kernels_with_pinned_statements() {
         }
     }
     assert_eq!(
-        observed_pins.len(),
+        old_pin_count,
         CONTRACTS.len()
             + FORGED_STATEMENTS.len()
             + SPECIFICATION.len()
             + IMPORTED_SPECIFICATION.len(),
-        "pin denominator"
+        "preserved named pin denominator"
     );
     let committed_closures: BTreeMap<String, BTreeSet<String>> = serde_json::from_str(
         include_str!("../../../theories/kcheck_spec/axiom_closures.json"),
@@ -771,6 +885,39 @@ fn kcheck_spec_rechecks_through_two_kernels_with_pinned_statements() {
             "{theorem} at {forged} must fail by type mismatch: {bad:?}"
         );
     }
+
+    // The named independent contracts and all original forgeries above remain.
+    // Every other own theorem, including private/generated proofs in newly
+    // reached modules, also re-enters at its exact type and fails at False.
+    for (index, subject) in owned_theorems.iter().enumerate() {
+        if CONTRACTS
+            .iter()
+            .any(|(theorem, _)| *theorem == subject.to_string())
+        {
+            continue;
+        }
+        let proof = loaded.get_const(subject).expect("owned theorem");
+        let value = proof.value.clone().expect("owned theorem proof");
+        kernel
+            .add_checked(Declaration::Theorem {
+                name: name(&format!("KCheckSpec.Controls.owned_{index}_positive")),
+                level_params: proof.level_params.clone(),
+                type_: proof.type_.clone(),
+                value: value.clone(),
+            })
+            .unwrap_or_else(|refusal| panic!("{subject} at its own statement: {refusal:?}"));
+        let bad = kernel.add_checked(Declaration::Theorem {
+            name: name(&format!("KCheckSpec.Controls.owned_{index}_false")),
+            level_params: proof.level_params.clone(),
+            type_: Expr::const_(name("False"), vec![]),
+            value,
+        });
+        assert!(
+            is_type_mismatch(&bad),
+            "{subject} at False must fail by type mismatch: {bad:?}"
+        );
+    }
+    eprintln!("specification full index: {} owned theorem statements, {} owned Definition type/value records, {added_pin_count} additional pin rows", owned_theorems.len(), owned_data.len());
 
     eprintln!(
         "kcheck_spec subjects {}, modules {}, contracts {}, forged statements {}, \

@@ -9,6 +9,11 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 
+// Modern Lean requires the signature to discover a module's IR parts. Keeping
+// only `.ir` makes IR-only imports disappear during ordinary elaboration.
+pub(super) const ARTIFACT_EXTENSIONS: [&str; 5] =
+    ["olean", "olean.server", "olean.private", "ir.sig", "ir"];
+
 /// Computed from actual files read by this run; never caller-provided hashes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InputObservation {
@@ -28,17 +33,52 @@ fn present(path: &Path) -> Result<bool, std::io::Error> {
 }
 
 fn observe(path: &Path) -> Result<InputObservation, ExternalLeanError> {
+    observe_stream(path, None).map_err(|error| match error {
+        ObserveError::Io(error) => ExternalLeanError::Io(error),
+        ObserveError::Limit => ExternalLeanError::Input("input observation byte limit".into()),
+    })
+}
+
+enum ObserveError {
+    Io(std::io::Error),
+    Limit,
+}
+impl From<std::io::Error> for ObserveError {
+    fn from(error: std::io::Error) -> Self {
+        Self::Io(error)
+    }
+}
+
+// The existing streaming observation, with optional new-work bounds. A failure
+// may read one overflow byte to detect concurrent growth; it is never hashed.
+fn observe_stream(
+    path: &Path,
+    mut remaining: Option<&mut usize>,
+) -> Result<InputObservation, ObserveError> {
     let mut file = std::fs::File::open(path)?;
+    if let Some(left) = remaining.as_deref() {
+        if file.metadata()?.len() > *left as u64 {
+            return Err(ObserveError::Limit);
+        }
+    }
     let mut hash = Sha256::new();
     let mut bytes = 0u64;
     let mut buffer = [0u8; 65536];
     loop {
-        let n = file.read(&mut buffer)?;
+        let capacity = remaining.as_deref().map_or(buffer.len(), |left| {
+            buffer.len().min(left.saturating_add(1))
+        });
+        let n = file.read(&mut buffer[..capacity])?;
         if n == 0 {
             break;
         }
+        if let Some(left) = remaining.as_deref_mut() {
+            *left = left.checked_sub(n).ok_or(ObserveError::Limit)?;
+        }
         hash.update(&buffer[..n]);
-        bytes += n as u64;
+        bytes = bytes
+            .checked_add(n as u64)
+            .ok_or_else(|| ObserveError::Io(std::io::Error::other("input byte count overflow")))?;
     }
     Ok(InputObservation {
         path: path.to_path_buf(),
@@ -47,9 +87,53 @@ fn observe(path: &Path) -> Result<InputObservation, ExternalLeanError> {
     })
 }
 
+/// Reuse actual Files hashing/presence rules for one retained owned association.
+pub(super) fn check_owned_input(
+    path: &Path,
+    expected: Option<&InputObservation>,
+    remaining: &mut usize,
+) -> Result<(), super::PrimaryArtifactError> {
+    use super::PrimaryArtifactError;
+    if !present(path)? {
+        return if expected.is_none() {
+            Ok(())
+        } else {
+            Err(PrimaryArtifactError::ChangedOwnedInput)
+        };
+    }
+    let Some(expected) = expected else {
+        return Err(PrimaryArtifactError::ChangedOwnedInput);
+    };
+    let actual = observe_stream(path, Some(remaining)).map_err(|e| match e {
+        ObserveError::Io(error) => PrimaryArtifactError::from(error),
+        ObserveError::Limit => PrimaryArtifactError::ByteLimit,
+    })?;
+    if &actual != expected {
+        return Err(PrimaryArtifactError::ChangedOwnedInput);
+    }
+    Ok(())
+}
+
 #[derive(Default)]
 pub(super) struct Files(BTreeMap<PathBuf, InputObservation>, BTreeSet<PathBuf>);
 impl Files {
+    pub(super) fn recorded_presence(
+        &self,
+        path: &Path,
+        work: &mut super::primary_artifact::Work,
+    ) -> Result<bool, super::PrimaryArtifactError> {
+        for candidate in self.0.keys() {
+            if super::primary_artifact::path_equal(candidate, path, work)? {
+                return Ok(true);
+            }
+        }
+        for candidate in &self.1 {
+            if super::primary_artifact::path_equal(candidate, path, work)? {
+                return Ok(false);
+            }
+        }
+        Err(super::PrimaryArtifactError::MissingAssociation)
+    }
     pub(super) fn observe(&mut self, path: &Path) -> Result<(), ExternalLeanError> {
         let input = observe(path)?;
         if let Some(old) = self.0.get(path) {
@@ -162,7 +246,7 @@ pub(super) fn observe_output(
     scope
         .admit_artifact(&path.display().to_string(), path)
         .map_err(|e| ExternalLeanError::Input(e.to_string()))?;
-    for extension in ["olean", "olean.server", "olean.private", "ir"] {
+    for extension in ARTIFACT_EXTENSIONS {
         let part = path.with_extension(extension);
         if present(&part)? {
             files.observe(&part)?;
@@ -197,14 +281,14 @@ pub(super) fn capture_imports(
         if let Some(parent) = target.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        for extension in ["olean", "olean.server", "olean.private", "ir"] {
+        for extension in ARTIFACT_EXTENSIONS {
             let path = input.with_extension(extension);
             if present(&path)? {
                 let copied = target.with_extension(extension);
                 files.copy(&path, &copied)?;
                 // Follow each part's typed imports. Artifact consistency is
                 // subsequently checked by the actual production import loader.
-                if extension != "ir" {
+                if matches!(extension, "olean" | "olean.server" | "olean.private") {
                     let bytes = std::fs::read(&copied)?;
                     scope
                         .admit_part(&format!("{module:?} ({extension})"), &bytes)

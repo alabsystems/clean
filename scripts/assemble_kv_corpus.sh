@@ -14,6 +14,9 @@
 # Shard stems collide across Mathlib chunks (e.g. Basic.mathverse appears in
 # many modules), so every shard is copied under a path-derived unique name.
 # Prints `clean mathverse stats` over the assembled corpus.
+# P6 slice 1a: blocked until the reference producer (slice 1b); see scripts/lib/p6_blocked.sh.
+# shellcheck source=scripts/lib/p6_blocked.sh
+. "$(cd "$(dirname "$0")" && pwd)/lib/p6_blocked.sh" && p6_blocked "scripts/assemble_kv_corpus.sh"
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"

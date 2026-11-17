@@ -46,6 +46,8 @@ const DEPENDENCY_DEFINITIONS: &[&str] = &[
     "KCheck.base",
     "KCheck.kcheckRun",
     "KCheck.checker",
+    "KCheckSpec.PSigmaSeed.seed",
+    "KCheckSpec.PSigmaBase.base",
     "KCheckSpec.Extends",
     "KCheckSpec.Env.Valid",
     "KCheckSpec.Rooted",

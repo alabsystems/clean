@@ -247,50 +247,58 @@ fn test_every_tripwire_is_refused_on_every_path_and_a_plain_axiom_is_not() {
     }
 }
 
-/// Clean's trust markers over `with_prelude()` (the base the KR0 switch and
-/// commit M use): `@m.{0} False` as a closed term, and `theorem _ : False :=
-/// @m.{0} False` through `add_checked`, are refused as tripwires for every
-/// marker. Measured before the fix: `sorry`, `trustedArith` and `trustedAy`
-/// were accepted (`Ok(LeanReferenceV1)`), only `sorryAx` refused. Control:
-/// `True.intro : True` over the same entry is accepted.
+/// Default prelude admission markers stay absent after F3, while the
+/// explicitly requested admission fragment contains their actual signatures.
+/// Both bases refuse every marker through the direct and declaration entries;
+/// the opt-in case keeps the well-typed closed-False controls. True.intro is
+/// accepted over each same base, so these controls do not merely refuse all.
 #[test]
 fn test_trust_markers_are_refused_over_with_prelude() {
-    let mut k = ReferenceKernel::new(Environment::with_prelude()).expect("with_prelude is a base");
-    let false_ = c("False");
-    for marker in ["sorry", "sorryAx", "trustedArith", "trustedAy"] {
-        assert!(
-            k.environment().get_const(&name(marker)).is_some(),
-            "with_prelude declares `{marker}`"
-        );
-        let head = Expr::app(
-            Expr::const_(name(marker), vec![Level::zero()]),
-            false_.clone(),
-        );
-        let val = if marker == "sorryAx" {
-            Expr::app(head, c("Bool.false"))
-        } else {
-            head
-        };
-        match k.check_closed_term(&false_, &val) {
-            Err(ReferenceRefusal::Tripwire { reached, .. }) => {
-                assert_eq!(reached, name(marker), "{marker}");
-            }
-            other => panic!("{marker}: a closed proof of False: {other:?}"),
+    for opt_in in [false, true] {
+        let mut env = Environment::with_prelude();
+        if opt_in {
+            env.init_admission_stub_theory()
+                .expect("explicit admission fragment fixture");
         }
-        match k.add_checked(Declaration::Theorem {
-            name: name(&format!("kr1_probe_false_{marker}")),
-            level_params: vec![],
-            type_: false_.clone(),
-            value: val,
-        }) {
-            Err(ReferenceRefusal::Tripwire { reached, .. }) => {
-                assert_eq!(reached, name(marker), "{marker}");
+        let mut k =
+            ReferenceKernel::new(env).expect("quarantined markers keep the base admissible");
+        let false_ = c("False");
+        for marker in ["sorry", "sorryAx", "trustedArith", "trustedAy"] {
+            assert_eq!(
+                k.environment().get_const(&name(marker)).is_some(),
+                opt_in,
+                "{marker}: admission markers belong only to the explicit fragment"
+            );
+            let head = Expr::app(
+                Expr::const_(name(marker), vec![Level::zero()]),
+                false_.clone(),
+            );
+            let val = if marker == "sorryAx" {
+                Expr::app(head, c("Bool.false"))
+            } else {
+                head
+            };
+            match k.check_closed_term(&false_, &val) {
+                Err(ReferenceRefusal::Tripwire { reached, .. }) => {
+                    assert_eq!(reached, name(marker), "{marker}, opt_in={opt_in}");
+                }
+                other => panic!("{marker}, opt_in={opt_in}: a closed proof of False: {other:?}"),
             }
-            other => panic!("{marker}: theorem False: {other:?}"),
+            match k.add_checked(Declaration::Theorem {
+                name: name(&format!("kr1_probe_false_{marker}")),
+                level_params: vec![],
+                type_: false_.clone(),
+                value: val,
+            }) {
+                Err(ReferenceRefusal::Tripwire { reached, .. }) => {
+                    assert_eq!(reached, name(marker), "{marker}, opt_in={opt_in}");
+                }
+                other => panic!("{marker}, opt_in={opt_in}: theorem False: {other:?}"),
+            }
         }
+        k.check_closed_term(&c("True"), &c("True.intro"))
+            .expect("control: True.intro over the same entry");
     }
-    k.check_closed_term(&c("True"), &c("True.intro"))
-        .expect("control: True.intro over the same entry");
 }
 
 /// A tripwire the base does not hold is still refused by name, before the

@@ -433,8 +433,21 @@ pub(super) fn code_to_mono_with_depth(
         Code::Let(decl, body) => {
             let ty = to_mono_type(&decl.ty);
 
+            let observed_before = state
+                .observation
+                .as_ref()
+                .and_then(|frame| frame.value("to_mono value", &decl.value));
             match letvalue_to_mono(&decl.value, state, env) {
                 LetValueTransform::Simple(value) => {
+                    if let Some(frame) = &state.observation {
+                        let after = frame.value("to_mono value", &value);
+                        frame.decision(
+                            "to_mono value",
+                            observed_before,
+                            after,
+                            "actual Simple transform",
+                        );
+                    }
                     let mono_decl = LetDecl {
                         fvar_id: decl.fvar_id,
                         name: decl.name.clone(),
@@ -478,6 +491,22 @@ pub(super) fn code_to_mono_with_depth(
                         },
                     };
 
+                    if let Some(frame) = &state.observation {
+                        let literal = frame.value("to_mono introduced literal", &lit_decl.value);
+                        frame.decision(
+                            "to_mono introduced literal",
+                            observed_before.clone(),
+                            literal,
+                            "actual NatSucc literal introduction",
+                        );
+                        let add = frame.value("to_mono introduced call", &add_decl.value);
+                        frame.decision(
+                            "to_mono introduced call",
+                            observed_before,
+                            add,
+                            "actual NatSucc call introduction",
+                        );
+                    }
                     Code::Let(
                         lit_decl,
                         Box::new(Code::Let(

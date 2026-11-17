@@ -281,9 +281,9 @@ const SRC_IR_SM_ON_NULL_RECEIVER_IS_UB: &str = "def ir_sm_on_null_receiver_is_ub
 
 const SRC_IR_SM_ON_INT_RECEIVER_IS_TYPE_ERROR: &str = "def ir_sm_on_int_receiver_is_type_error : @Eq IROutcome (ir_eval ir_d4 ir_sm_module ir_d0 (ir_vl2 (IRScalar.int_ ir_d5) (IRScalar.bool_ Bool.true)) ir_sm_heap0 ir_d1) (IROutcome.type_error IRFault.not_ptr) := @Eq.refl IROutcome (IROutcome.type_error IRFault.not_ptr)";
 
-const SRC_IR_SM_CORRECT_WITNESS: &str = "def ir_sm_correct_witness : @Eq IROutcome (ir_eval ir_d4 ir_sm_module ir_d0 (ir_vl2 (IRScalar.ptr_ ir_d0) (IRScalar.bool_ Bool.true)) ir_sm_heap0 ir_d1) (IROutcome.ret ir_vl0) := ir_sm_correct ir_sm_heap0 ir_d4 ir_d1 (IRScalar.ptr_ ir_d0) ir_sm_env0 Bool.true encodesenvref_witness (Le.refl ir_d4)";
+const SRC_IR_SM_CORRECT_WITNESS: &str = "def ir_sm_correct_witness : @Eq IROutcome (ir_eval ir_d4 ir_sm_module ir_d0 (ir_vl2 (IRScalar.ptr_ ir_d0) (IRScalar.bool_ Bool.true)) ir_sm_heap0 ir_d1) (IROutcome.ret ir_vl0) := ir_sm_correct ir_sm_heap0 ir_d4 ir_d1 (IRScalar.ptr_ ir_d0) ir_sm_env0 Bool.true encodesenvref_witness (@Le.refl ir_d4)";
 
-const SRC_IR_SM_MACHINE_SOUND_WITNESS: &str = "def ir_sm_machine_sound_witness : @Eq (IRList IRScalar) ir_vl0 ir_vl0 := ir_sm_machine_sound ir_sm_heap0 ir_d4 ir_d1 (IRScalar.ptr_ ir_d0) ir_sm_env0 Bool.true ir_vl0 encodesenvref_witness (Le.refl ir_d4) (@Eq.refl IROutcome (IROutcome.ret ir_vl0))";
+const SRC_IR_SM_MACHINE_SOUND_WITNESS: &str = "def ir_sm_machine_sound_witness : @Eq (IRList IRScalar) ir_vl0 ir_vl0 := ir_sm_machine_sound ir_sm_heap0 ir_d4 ir_d1 (IRScalar.ptr_ ir_d0) ir_sm_env0 Bool.true ir_vl0 encodesenvref_witness (@Le.refl ir_d4) (@Eq.refl IROutcome (IROutcome.ret ir_vl0))";
 
 impl Specification {
     /// Register the strict_monads chain: the first over a MUTATING body,

@@ -93,7 +93,7 @@ def _source_module(name, path):
 
 def _helper_source_controls():
     controls = _source_module('generator_source_controls', REPO / 'scripts/test_generator_source_helpers.py')
-    controls.run_generator_controls(Path(__file__).name)
+    controls.self_test_generator(Path(__file__).name)
 
 SCTR_RS = REPO / "crates/clean-verify/src/spec/core_spec/eval_ir_lzd_sctr.rs"
 
@@ -736,11 +736,16 @@ def main() -> int:
                     help="with --print: the nested 2026-09-24 form")
     ap.add_argument("--pinned-inputs", action="store_true", help="list exact source/control inputs")
     a = ap.parse_args()
+    actions = [a.name is not None, a.emit, a.check, a.selftest, a.pin, a.pinned_inputs]
+    if sum(actions) > 1:
+        ap.error("primary actions cannot be combined")
     if a.pinned_inputs:
-        if any(value for key, value in vars(a).items() if key != "pinned_inputs"):
+        if a.legacy:
             ap.error("--pinned-inputs cannot be combined with another action")
         print("\n".join(HELPER_INPUTS))
         return 0
+    if a.name == "":
+        ap.error("--print requires a nonempty const name")
     built = legacy() if a.legacy else minted()
     printed = built if a.legacy else {k: spell(k, v) for k, v in built.items()}
     if a.name:

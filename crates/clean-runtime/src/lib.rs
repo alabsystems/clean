@@ -288,6 +288,18 @@ pub fn runtime_extern_source() -> &'static str {
     include_str!("runtime_extern.c")
 }
 
+/// Optional source DATA for the scalar UInt64 externs in a retained Lean header.
+///
+/// Materialize this separate translation unit with that header's actual include
+/// directory. The external functions forward its inline definitions, following
+/// the same materialization pattern as [`runtime_extern_source`]. This accessor
+/// does not choose a toolchain, compile/link a runtime, supply boxed adapters,
+/// change the default runtime, or establish source/ABI/ownership/NoUB evidence.
+#[must_use]
+pub fn lean_word64_extern_source() -> &'static str {
+    include_str!("lean_word64_extern.c")
+}
+
 /// Get the runtime object file path (if compiled).
 pub fn runtime_lib() -> Option<PathBuf> {
     let lib_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))

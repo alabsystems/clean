@@ -285,6 +285,103 @@ fn matcher_details_refuse_duplicate_or_out_of_range_overlap_rows() {
     }
 }
 
+fn definition(env: &mut Environment, name: &str, alternatives: u32) -> Name {
+    let name = Name::from_string(name);
+    let prop = Expr::prop();
+    env.add_decl(Declaration::Definition {
+        name: name.clone(),
+        level_params: vec![],
+        type_: (0..=alternatives).fold(prop.clone(), |body, _| {
+            Expr::pi(BinderInfo::Default, prop.clone(), body)
+        }),
+        value: (0..=alternatives).fold(Expr::bvar(alternatives), |body, _| {
+            Expr::lam(BinderInfo::Default, prop.clone(), body)
+        }),
+        is_reducible: false,
+    })
+    .unwrap();
+    name
+}
+
+fn alternatives(count: u32) -> MatcherInfo {
+    MatcherInfo {
+        num_params: 0,
+        num_discrs: 0,
+        alt_num_params: vec![0; count as usize],
+        u_elim_pos: None,
+        discr_names: vec![],
+        details: None,
+    }
+}
+
+fn stored(name: &Name, info: &MatcherInfo) -> EnvExtensionEntry {
+    let mut bytes = b"Clean.matcherInfo.v1\0".to_vec();
+    bytes.extend(serde_json::to_vec(info).unwrap());
+    EnvExtensionEntry {
+        name: name.clone(),
+        data: EnvExtensionEntryData::Object(bytes),
+    }
+}
+
+/// The `.olean` import appends each module's rows to the matcher storage in
+/// ONE call through `TrustedEnvExt` (`clean-olean` `load_register.rs`). Every
+/// row of such a call must reach the lookup, and a restore, which derives the
+/// index from the stored rows, must answer every lookup the same way.
+#[test]
+fn a_multi_entry_trait_append_reaches_every_lookup_and_every_restore() {
+    let mut env = Environment::default();
+    let names: Vec<Name> = (1..=6)
+        .map(|k| definition(&mut env, &format!("matcher_import_row_{k}"), k))
+        .collect();
+    let key = Name::from_string(STORAGE_KEY);
+    TrustedEnvExt::register_persistent_extension(&mut env, key.clone());
+    TrustedEnvExt::add_persistent_extension_entries(
+        &mut env,
+        &key,
+        0,
+        names
+            .iter()
+            .zip(1..)
+            .map(|(name, k)| stored(name, &alternatives(k)))
+            .collect(),
+    );
+    let mut expected: Vec<Option<MatcherInfo>> = (1..=6).map(|k| Some(alternatives(k))).collect();
+    // A second call poisons the third name and confirms the fifth.
+    TrustedEnvExt::add_persistent_extension_entries(
+        &mut env,
+        &key,
+        2,
+        vec![
+            stored(&names[4], &alternatives(5)),
+            EnvExtensionEntry {
+                name: names[2].clone(),
+                data: EnvExtensionEntryData::Object(b"malformed".to_vec()),
+            },
+        ],
+    );
+    expected[2] = None;
+    let restored = [
+        (
+            "serde",
+            Environment::from_bincode(&env.to_bincode().unwrap()).unwrap(),
+        ),
+        (
+            "DAG",
+            Environment::from_dag_bincode(&env.to_dag_bincode().unwrap()).unwrap(),
+        ),
+    ];
+    for (name, want) in names.iter().zip(&expected) {
+        assert_eq!(env.get_matcher_info(name), want.as_ref(), "`{name}`");
+        for (path, restored) in &restored {
+            assert_eq!(
+                restored.get_matcher_info(name),
+                want.as_ref(),
+                "`{name}` after a {path} restore"
+            );
+        }
+    }
+}
+
 #[test]
 fn alternative_arity_reconstruction_refuses_overflow() {
     let mut details = detailed_info();

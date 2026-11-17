@@ -1,10 +1,10 @@
 {
  "schema": "clean.crystal.freshness_scope/v2",
  "what_this_is": "The clean-kernel SOURCE the newest crystal revalidation record was measured at. Whether a chained BODY drifted is a question only trustc can answer, and the record is its DATED answer; this pins the tree that answer covers, so a pre-push gate and a suite row can decide -- with no Trust compiler and no dump -- whether it still covers the tree in front of them. Derivable: `scripts/crystal_freshness_scope.py --emit`, checked by `--emit --check`. When the record's rev is not a commit here, the kernel tree is read at `kernel_tree_read_at`, a pushed commit whose kernel source digests to the record's clean_kernel_src_sha256 (named once with --witness).",
- "record": "data/crystal_chain_revalidation_2026-11-15_athead_35f090bb3.json",
- "covered_clean_rev": "35f090bb3680e89b8636c40bacb9e9c9408bd88d",
- "clean_kernel_src_sha256": "86b0e8816245243e89b75961922d79c83e4cf24bdc8b372e53aa312acfc8648a",
- "clean_kernel_src_file_count": 2127,
+ "record": "data/crystal_chain_revalidation_2026-11-16_athead_a97c0ec27.json",
+ "covered_clean_rev": "a97c0ec279346c8a68bd985c2e7d25fc92e41569",
+ "clean_kernel_src_sha256": "d8077bc93fc412771c379a004a2e9f4f51bc428b97c95e475260e96f04a241ea",
+ "clean_kernel_src_file_count": 2134,
  "digest_definition": "sha256 over, in sorted path order, `<repo-relative path>\\0<sha256 of file bytes>\\n` for every crates/clean-kernel/src/**/*.rs plus crates/clean-kernel/Cargo.toml, walked from the filesystem.",
  "body_digest_definition": "Per chained def_path, sha256 over, in the order `items` lists them, `<anchors joined by ::>\\0<the item's CODE text>\\n`. An item is located by finding its anchor in a string-, char- and comment-MASKED copy of the file (so a brace in a literal or a comment cannot cut the span), taking the anchor's line start extended back over any #[...] attributes, and ending at the `}` matching the first depth-0 `{` or at the first depth-0 `;`. The item's CODE text is that span with COMMENTS blanked, blank lines dropped and trailing whitespace stripped -- a comment cannot move an emitted instruction -- while string and char literals are kept byte-for-byte, because those are data the compiler emits. `items` pins the body's own item plus the items in that file whose layout or signature its emitted code depends on; `items_why` says which and why. If any item cannot be located UNAMBIGUOUSLY the entry records body_sha256: null and body_extraction: \"file-fallback: <reason>\", and the check compares `sha256` -- the whole FILE -- for that def_path instead.",
  "chained_body_sources": {
@@ -303,7 +303,7 @@
   },
   "strict_monads": {
    "file": "crates/clean-kernel/src/env/mod.rs",
-   "sha256": "48aac01c2b33aee1988468db66c177b78227db84edbbb578be63cb27952cddd8",
+   "sha256": "c5f7a8a91c7346cb999cd9c594c08d9b922c3a5cbfd6ae03386fdda646fa4340",
    "must_contain": "fn set_lean4_core_strict_monads",
    "items": [
     [
@@ -314,7 +314,7 @@
     ]
    ],
    "items_why": "one field store into Environment, at an offset chosen by that struct's layout -- a field added there moves this body with its own text unchanged",
-   "body_sha256": "234fb9c731e7b54cbcef5386b8d5e10114bddf71c9c47dbee524240809ea9f90",
+   "body_sha256": "fe201973dfa7c9bb67b4a0c13c85fd3f8fcc44741da7cebcd129e27e8182c9a8",
    "body_extraction": "item"
   }
  },

@@ -9,6 +9,7 @@
 //! `DefEqCacheKey` (unordered pair cache), `is_def_eq_proof_irrel`.
 
 mod binding;
+mod cached_nat;
 mod cubical;
 mod delta;
 mod delta_helpers;
@@ -297,6 +298,10 @@ impl<'env> TypeChecker<'env> {
         // See #1052 for the complexity analysis.
         if a == b {
             return true;
+        }
+
+        if let Some(equal) = self.cached_nat_def_eq(a, b) {
+            return equal;
         }
 
         // Check def_eq cache. Key uses O(1) hash_cached() with hash-based

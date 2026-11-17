@@ -468,16 +468,14 @@ pub fn import_module_verified(
     writer: &mut ShardWriter,
     verified_names: Option<&HashSet<String>>,
 ) -> MathverseResult<ImportStats> {
+    super::require_lean_records_only(module)?;
     let mut stats = ImportStats::default();
     let mut ctx = LoweringCtx::new(writer);
 
     for constant in &module.constants {
-        // SOUNDNESS: skip Lean compiler/code-generator artifacts (`._cstage*`,
-        // `_elambda*`/`_lambda*`, `_rarg`, `_spec*`, `_unsafe_rec`). They are not
-        // kernel-checkable (types reference the undeclared `_obj`/`_neutral`
-        // pseudo-types or carry empty level-params) and must not enter the shard.
-        // See `clean_olean::import::is_compiler_ir_name`.
-        if clean_olean::import::is_compiler_ir_name(&constant.name) {
+        // Keep safe compiler-looking kernel records. Only the record
+        // itself can supply unsafe/partial replay-exclusion authority.
+        if clean_olean::import::is_nonreplayable_compiler_constant(constant) {
             stats.total += 1;
             stats.skipped += 1;
             continue;
@@ -851,15 +849,15 @@ pub(crate) fn import_with_provenance(
     writer: &mut ShardWriter,
     config: &Lean4ImportConfig,
 ) -> MathverseResult<(ImportStats, Vec<ProvenanceRecord>)> {
+    super::require_lean_records_only(module)?;
     let mut stats = ImportStats::default();
     let mut records = Vec::with_capacity(module.constants.len());
     let mut ctx = LoweringCtx::new(writer);
 
     for constant in &module.constants {
-        // SOUNDNESS: skip Lean compiler/code-generator artifacts — not
-        // kernel-checkable; they must not enter the shard. See
-        // `clean_olean::import::is_compiler_ir_name`.
-        if clean_olean::import::is_compiler_ir_name(&constant.name) {
+        // Keep safe compiler-looking kernel records. Only the record
+        // itself can supply unsafe/partial replay-exclusion authority.
+        if clean_olean::import::is_nonreplayable_compiler_constant(constant) {
             stats.total += 1;
             stats.skipped += 1;
             records.push(
@@ -1082,27 +1080,27 @@ mod tests {
     }
 
     #[test]
-    fn test_import_module_verified_skips_compiler_ir() {
-        // SOUNDNESS regression guard: the production shard-write path must drop
-        // compiler/code-generator artifacts and keep genuine declarations
-        // (including the match-equation compiler's `match_N`, which is real).
+    fn test_import_module_verified_uses_record_safety_not_compiler_spelling() {
+        // Names cannot establish producer role. Safe and missing-safety rows
+        // stay in the shard population; explicitly unsafe/partial hints skip.
+        let mut unsafe_aux = mock_constant("Nat.bitwise._cstage2", ConstantKind::Definition, true);
+        unsafe_aux.definition_safety = Some(clean_olean::DefinitionSafety::Unsafe);
+        let mut partial_aux = mock_constant("Loop._unsafe_rec", ConstantKind::Definition, true);
+        partial_aux.definition_safety = Some(clean_olean::DefinitionSafety::Partial);
+        let mut safe = mock_constant("Ordinary._specFinalizedAt", ConstantKind::Definition, true);
+        safe.definition_safety = Some(clean_olean::DefinitionSafety::Safe);
         let module = mock_module(vec![
-            mock_constant("Nat.add_comm", ConstantKind::Theorem, true), // kept
-            mock_constant("Nat.bitwise._cstage2", ConstantKind::Definition, true), // skip
-            mock_constant("Equiv.Set.rangeInl._elambda_1", ConstantKind::Axiom, false), // skip
-            mock_constant("List.foldr._rarg", ConstantKind::Definition, true), // skip
-            mock_constant("Foo.match_1", ConstantKind::Definition, true), // kept (genuine)
+            unsafe_aux,
+            partial_aux,
+            safe,
+            mock_constant("Ordinary._spec_1", ConstantKind::Definition, true),
+            mock_constant("Foo.match_1", ConstantKind::Definition, true),
         ]);
         let mut writer = ShardWriter::new();
-        let stats = import_module_verified(&module, &mut writer, None)
-            .expect("import_module_verified should succeed");
-        assert_eq!(stats.total, 5, "all 5 constants processed");
-        assert_eq!(stats.skipped, 3, "the 3 code-gen artifacts skipped");
-        assert_eq!(
-            writer.constant_count(),
-            2,
-            "only the 2 genuine declarations (Nat.add_comm, Foo.match_1) reach the shard"
-        );
+        let stats = import_module_verified(&module, &mut writer, None).expect("import");
+        assert_eq!(stats.total, 5);
+        assert_eq!(stats.skipped, 2);
+        assert_eq!(writer.constant_count(), 3);
     }
 
     #[test]

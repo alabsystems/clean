@@ -217,7 +217,24 @@ fn remap_index_for_rhs(
             let c2 = remap_index_for_rhs(c, nf, field_idx, num_minors, n_pis.saturating_add(1))?;
             Ok(Term::pi(*bi, d2, c2))
         }
-        _ => Ok(expr.clone()),
+        TermKind::Lam(bi, d, c) => Ok(Term::lam(
+            *bi,
+            remap_index_for_rhs(d, nf, field_idx, num_minors, n_pis)?,
+            remap_index_for_rhs(c, nf, field_idx, num_minors, n_pis.saturating_add(1))?,
+        )),
+        TermKind::Let(ty, val, body) => Ok(Term::let_(
+            remap_index_for_rhs(ty, nf, field_idx, num_minors, n_pis)?,
+            remap_index_for_rhs(val, nf, field_idx, num_minors, n_pis)?,
+            remap_index_for_rhs(body, nf, field_idx, num_minors, n_pis.saturating_add(1))?,
+        )),
+        TermKind::Proj(name, index, inner) => Ok(Term::proj(
+            name.clone(),
+            *index,
+            remap_index_for_rhs(inner, nf, field_idx, num_minors, n_pis)?,
+        )),
+        TermKind::Sort(_) | TermKind::Const(_) | TermKind::Elim(_) | TermKind::Lit(_) => {
+            Ok(expr.clone())
+        }
     }
 }
 

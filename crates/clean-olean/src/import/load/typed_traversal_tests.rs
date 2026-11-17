@@ -141,3 +141,131 @@ fn test_load_module_with_deps_cached_guarded_asks_before_each_read_and_stops_at_
     }
     assert_eq!(env.constants().count(), 0, "nothing is registered");
 }
+
+#[test]
+fn completed_import_data_includes_zero_declaration_aggregators_and_exact_names() {
+    let dir = tempfile::tempdir().unwrap();
+    let export = |path: &str, imports: &[(&str, bool)]| {
+        let bytes = OleanExporter::export_with_env(
+            &Environment::default(),
+            imports,
+            &[],
+            "0000000000000000000000000000000000000000",
+        )
+        .unwrap();
+        let path = dir.path().join(path);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, bytes).unwrap();
+    };
+    export("Root.olean", &[("Nested.Leaf", false)]);
+    export("Nested/Leaf.olean", &[]);
+    let mut env = Environment::default();
+    let (_, completed) =
+        load_module_with_deps_and_completed_imports(&mut env, "Root", &[dir.path().to_path_buf()])
+            .unwrap();
+    assert_eq!(
+        env.constants().count(),
+        0,
+        "availability must not be inferred from declarations"
+    );
+    assert_eq!(completed.len(), 2);
+    assert!(!completed.is_empty());
+    assert!(completed.contains_module(&Name::from_string("Root")));
+    assert!(completed.contains_module(&Name::from_string("Nested.Leaf")));
+    assert!(
+        !completed.contains_module(&Name::anon().str("Nested.Leaf")),
+        "one quoted component is distinct from two components"
+    );
+    for name in [
+        Name::from_string("Nested"),
+        Name::from_string("Root.Missing"),
+        Name::anon(),
+        Name::anon().num(7),
+    ] {
+        assert!(
+            !completed.contains_module(&name),
+            "no namespace or malformed-name completion: {name:?}"
+        );
+    }
+}
+
+#[test]
+fn failed_or_cyclic_load_returns_no_completed_import_receipt() {
+    let dir = tempfile::tempdir().unwrap();
+    let export = |name: &str, imports: &[(&str, bool)]| {
+        let bytes = OleanExporter::export_with_env(
+            &Environment::default(),
+            imports,
+            &[],
+            "0000000000000000000000000000000000000000",
+        )
+        .unwrap();
+        std::fs::write(dir.path().join(format!("{name}.olean")), bytes).unwrap();
+    };
+    export("Root", &[("Child", false), ("Missing", false)]);
+    export("Child", &[]);
+    let failed = load_module_with_deps_and_completed_imports(
+        &mut Environment::default(),
+        "Root",
+        &[dir.path().to_path_buf()],
+    )
+    .expect_err("a completed child cannot certify a failed aggregate");
+    assert!(failed.to_string().contains("Missing"), "{failed}");
+    export("CycleA", &[("CycleB", false)]);
+    export("CycleB", &[("CycleA", false)]);
+    let cycle = load_module_with_deps_and_completed_imports(
+        &mut Environment::default(),
+        "CycleA",
+        &[dir.path().to_path_buf()],
+    )
+    .expect_err("a cycle supplies no successful completed-import receipt");
+    assert!(cycle.to_string().contains("cycle"), "{cycle}");
+}
+
+#[test]
+fn completed_import_data_preserves_ordinary_loader_definition_bindings() {
+    use clean_kernel::{Declaration, Expr};
+    let dir = tempfile::tempdir().unwrap();
+    let mut source = Environment::default();
+    let name = Name::from_string("Snapshot.value");
+    source
+        .add_decl(Declaration::Definition {
+            name: name.clone(),
+            level_params: vec![],
+            type_: Expr::type_(),
+            value: Expr::prop(),
+            is_reducible: false,
+        })
+        .unwrap();
+    let bytes = OleanExporter::export_with_env(
+        &source,
+        &[],
+        &[],
+        "0000000000000000000000000000000000000000",
+    )
+    .unwrap();
+    std::fs::write(dir.path().join("Snapshot.olean"), bytes).unwrap();
+    let mut ordinary = Environment::default();
+    load_module_with_deps(&mut ordinary, "Snapshot", &[dir.path().to_path_buf()]).unwrap();
+    let mut tracked = Environment::default();
+    let (_, completed) = load_module_with_deps_and_completed_imports(
+        &mut tracked,
+        "Snapshot",
+        &[dir.path().to_path_buf()],
+    )
+    .unwrap();
+    let left = ordinary.get_const(&name).unwrap();
+    let right = tracked.get_const(&name).unwrap();
+    assert!(
+        right.value.is_some(),
+        "nonvacuous original definition payload"
+    );
+    assert_eq!(left.name, right.name);
+    assert_eq!(left.level_params, right.level_params);
+    assert_eq!(left.type_, right.type_);
+    assert_eq!(left.value, right.value);
+    assert_eq!(left.kind, right.kind);
+    assert_eq!(left.is_reducible, right.is_reducible);
+    assert_eq!(left.reducibility, right.reducibility);
+    assert!(completed.contains_module(&Name::from_string("Snapshot")));
+}

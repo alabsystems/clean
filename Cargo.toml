@@ -62,7 +62,7 @@ default-members = [
 ]
 
 [workspace.package]
-version = "0.9.3"
+version = "0.9.4"
 edition = "2021"
 # Minimum Supported Rust Version. The codebase uses if-let chains (1.87),
 # the `[lints]` workspace inheritance (1.74), and various clippy lints
@@ -323,13 +323,13 @@ tla-core = { git = "https://github.com/alabsystems/ty.git", rev = "aa96570ae5923
 # pure-Rust num_rational overflow fallback is functionally identical and adds no
 # native `-lgmp` link, so the Trust rustc_driver link (which pulls clean-auto
 # through trust-certify) has no undefined `___gmpq_*` symbols.
-ay = { package = "ay", version = "0.28.2", git = "https://github.com/alabsystems/ay.git", rev = "8bbc43108643d475a81a89b2b4f262e817ee1724", default-features = false }
-ay-dpll = { package = "ay-dpll", version = "0.28.2", git = "https://github.com/alabsystems/ay.git", rev = "8bbc43108643d475a81a89b2b4f262e817ee1724" }
-ay-core = { package = "ay-core", version = "0.28.2", git = "https://github.com/alabsystems/ay.git", rev = "8bbc43108643d475a81a89b2b4f262e817ee1724" }
-ay-lean-bridge = { package = "ay-lean-bridge", version = "0.28.2", git = "https://github.com/alabsystems/ay.git", rev = "8bbc43108643d475a81a89b2b4f262e817ee1724" }
-ay-proof = { package = "ay-proof", version = "0.28.2", git = "https://github.com/alabsystems/ay.git", rev = "8bbc43108643d475a81a89b2b4f262e817ee1724" }
-ay-frontend = { package = "ay-frontend", version = "0.28.2", git = "https://github.com/alabsystems/ay.git", rev = "8bbc43108643d475a81a89b2b4f262e817ee1724" }
-ay-translate = { package = "ay-translate", version = "0.28.2", git = "https://github.com/alabsystems/ay.git", rev = "8bbc43108643d475a81a89b2b4f262e817ee1724" }
+ay = { package = "ay", version = "0.28.4", git = "https://github.com/alabsystems/ay.git", rev = "12d411d420e27eea05099f8cd277eb288e8622c9", default-features = false }
+ay-dpll = { package = "ay-dpll", version = "0.28.4", git = "https://github.com/alabsystems/ay.git", rev = "12d411d420e27eea05099f8cd277eb288e8622c9" }
+ay-core = { package = "ay-core", version = "0.28.4", git = "https://github.com/alabsystems/ay.git", rev = "12d411d420e27eea05099f8cd277eb288e8622c9" }
+ay-lean-bridge = { package = "ay-lean-bridge", version = "0.28.4", git = "https://github.com/alabsystems/ay.git", rev = "12d411d420e27eea05099f8cd277eb288e8622c9" }
+ay-proof = { package = "ay-proof", version = "0.28.4", git = "https://github.com/alabsystems/ay.git", rev = "12d411d420e27eea05099f8cd277eb288e8622c9" }
+ay-frontend = { package = "ay-frontend", version = "0.28.4", git = "https://github.com/alabsystems/ay.git", rev = "12d411d420e27eea05099f8cd277eb288e8622c9" }
+ay-translate = { package = "ay-translate", version = "0.28.4", git = "https://github.com/alabsystems/ay.git", rev = "12d411d420e27eea05099f8cd277eb288e8622c9" }
 
 [profile.dev]
 # Reduce debug binary sizes to mitigate macOS _dyld_start stalls (#1388).

@@ -242,7 +242,7 @@ impl Specification {
              (@OptionType.some KExpr r)) => \
              @WhnfFuelReaches.mk x0 (Nat.succ n) r \
              (whnf_fuel_red_succ_of_step x0 x2 n r hs hr)) \
-             (ih x2 (rbelow_plus.base x2 x0 (rbelow.red x2 x0 \
+             (ih x2 (rbelow_plus.base x2 x0 (@rbelow.red x2 x0 \
              (reduce_once_red_sound the_red_env x0 x2 hs))))) \
              (reduce_once_red the_red_env x0) \
              (@Eq.refl (OptionType KExpr) (reduce_once_red the_red_env x0))) \

@@ -224,13 +224,13 @@ bool_false_ne_true C (@Eq.trans Bool Bool.false (kenv_fresh env id) Bool.true
         r"forall (id : Nat),
 CtorsWellTyped (Level.succ Level.zero) Nat.zero env_freshness_type (env_freshness_ctors id)",
         r"fun (id : Nat) =>
-CtorsWellTyped.cons (Level.succ Level.zero) Nat.zero env_freshness_type
+@CtorsWellTyped.cons (Level.succ Level.zero) Nat.zero env_freshness_type
  id (KExpr.bvar Nat.zero) (Level.succ Level.zero) CtorDecls.nil
  (CtxTyping.var (@ListType.cons KExpr env_freshness_type (@ListType.nil KExpr))
    Nat.zero env_freshness_type (CtxLookup.here env_freshness_type (@ListType.nil KExpr)))
- (FieldsBounded.done_bvar (Level.succ Level.zero)
+ (@FieldsBounded.done_bvar (Level.succ Level.zero)
    (@ListType.cons KExpr env_freshness_type (@ListType.nil KExpr)) Nat.zero)
- (CtorsWellTyped.nil (Level.succ Level.zero) Nat.zero env_freshness_type)",
+ (@CtorsWellTyped.nil (Level.succ Level.zero) Nat.zero env_freshness_type)",
     ),
     (
         "env_freshness_well_formed",
@@ -250,7 +250,7 @@ FreshDeclName env family -> FreshCtorDecls env family (env_freshness_ctors id) -
 InductiveExtension env (KEnv.addInductive env family Nat.zero env_freshness_type (env_freshness_ctors id))",
         r"fun (env : KEnv) (family : Nat) (id : Nat) (hf : FreshDeclName env family)
  (hc : FreshCtorDecls env family (env_freshness_ctors id)) =>
-InductiveExtension.mk env family Nat.zero env_freshness_type (env_freshness_ctors id)
+@InductiveExtension.mk env family Nat.zero env_freshness_type (env_freshness_ctors id)
  (Level.succ (Level.succ Level.zero)) hf (Typing.sort (Level.succ Level.zero))
  (@Eq.refl Bool Bool.true) (env_freshness_well_formed env family id hc)",
     ),
@@ -274,7 +274,7 @@ InductiveExtension.mk env family Nat.zero env_freshness_type (env_freshness_ctor
     (
         "env_freshness_second_accepted",
         r"KernelAddDeclAccepts env_freshness_first env_freshness_second",
-        r"KernelAddDeclAccepts.inductive_case env_freshness_first env_freshness_second env_freshness_second_extension",
+        r"@KernelAddDeclAccepts.inductive_case env_freshness_first env_freshness_second env_freshness_second_extension",
     ),
     (
         "env_freshness_acceptance_extends",
@@ -290,14 +290,14 @@ InductiveExtension.mk env family Nat.zero env_freshness_type (env_freshness_ctor
     (
         "env_freshness_const_extension",
         r"ConstantExtension env_freshness_first env_freshness_const_result",
-        r"ConstantExtension.mk env_freshness_first ConstExtensionKind.reducible_ env_freshness_two
+        r"@ConstantExtension.mk env_freshness_first ConstExtensionKind.reducible_ env_freshness_two
  env_freshness_type (KExpr.sort Level.zero) (Level.succ (Level.succ Level.zero))
  (@Eq.refl Bool Bool.true) (Typing.sort (Level.succ Level.zero)) (Typing.sort Level.zero)",
     ),
     (
         "env_freshness_const_accepted",
         r"KernelAddDeclAccepts env_freshness_first env_freshness_const_result",
-        r"KernelAddDeclAccepts.const_case env_freshness_first env_freshness_const_result env_freshness_const_extension",
+        r"@KernelAddDeclAccepts.const_case env_freshness_first env_freshness_const_result env_freshness_const_extension",
     ),
     (
         "env_freshness_const_preserves_sound",

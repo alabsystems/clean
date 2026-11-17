@@ -746,6 +746,9 @@ FEATURE_LIB_ROWS: list[dict[str, Any]] = [
     _lib_row("clean-kernel", "inference-stats",
              ["tc::infer_arc_memo::window_tests::", "tc::reduction_stats::inference::"]),
     _lib_row("clean-kernel", "geometry-tools", ["cert::"]),
+    # The kcheck advice encoder's golden and framing tests (2026-11-15, unit C4's
+    # advice emitter), behind the producer-only `kcheck-trace`.
+    _lib_row("clean-kernel", "kcheck-trace", ["kcheck_trace::"]),
 ]
 
 # The packages whose lib tests `lib_test_coverage_problems` derives. Another
@@ -1630,14 +1633,14 @@ WORKSPACE_GATES = [
         "package": "__workspace__",
         "kind": "gate",
         "argv": ["scripts/kstar_recheck.sh", "--check-record",
-                 "reports/self-proof-q4-residuals-2026-11-15/replay/replay.json"],
+                 "reports/self-proof-q4-ck0-2026-11-16/replay/replay.json"],
         "_extra_paths": ["scripts/kstar_recheck.sh", "scripts/kstar_recheck.py",
                          "scripts/kstar_selftest.py", "scripts/kstar_subjects.py",
                          "scripts/kstar_subjects_selftest.py",
                          "scripts/lean4lean_recheck.py", "scripts/lean4lean_selftest.py",
                          "scripts/nanoda_recheck.py", "scripts/lean_export_replay",
                          "data/lean4lean_q4_pin.json", "data/lean4lean_q4_arena_reasons.json",
-                         "theories/cic_l", "reports/self-proof-q4-residuals-2026-11-15/replay/replay.json"],
+                         "theories/cic_l", "reports/self-proof-q4-ck0-2026-11-16/replay/replay.json"],
     },
     {
         "id": "gate::fence",
@@ -2169,12 +2172,12 @@ TARGET_EXTRA_PATHS: dict[str, list[str]] = {
         "data/crystal_fixture_rebaseline_2026-10-07_047ebd051.json",
         "data/crystal_fixture_rebaseline_bindings_2026-10-07_047ebd051.json",
         "data/crystal_fixture_freshness_2026-10-07_047ebd051_strict.json",
-        # The 2026-11-15 AT-HEAD record the scope binds (read through the scope
+        # The 2026-11-16 AT-HEAD record the scope binds (read through the scope
         # file's `record` field, so listed by hand like the 2026-09-20 one), the
         # freshness report it was minted from, and the byte-for-byte control it
         # names (the 2026-11-14 env-cache one).
-        "data/crystal_chain_revalidation_2026-11-15_athead_35f090bb3.json",
-        "data/crystal_fixture_freshness_2026-11-15_kepd.json",
+        "data/crystal_chain_revalidation_2026-11-16_athead_a97c0ec27.json",
+        "data/crystal_fixture_freshness_2026-11-16_envplain.json",
         "data/crystal_revalidation_at_head_2026-11-14_env_cache.json",
         "scripts/crystal_chain_revalidation.py",
         "scripts/crystal_fixture_freshness.py",
@@ -2403,6 +2406,120 @@ TARGET_EXTRA_PATHS: dict[str, list[str]] = {
         "lean-toolchain",
         "theories/cic_l",
         "theories/cic_l_universe_translation",
+    ],
+    # C3's proof package over the specification: the same cold lake-build
+    # control, with kcheck_spec as a third required package.
+    "clean-olean::test::kcheck_sound": [
+        "lean-toolchain",
+        "theories/cic_l",
+        "theories/cic_l_model",
+        "theories/kcheck_spec",
+        "theories/kcheck_sound",
+        "theories/kcheck_sound/ORDER",
+        "theories/kcheck_sound/axiom_closures.json",
+        "theories/kcheck_sound/statement_pins.json",
+    ],
+    # Compiled fixture recipes stage whole theory sources, not only embedded pins.
+    "clean-olean::test::align_nat_word": [
+        "lean-toolchain",
+        "theories/cic_l",
+        "theories/align_nat_word",
+        "theories/cic_l/ORDER",
+        "theories/align_nat_word/ORDER",
+        "theories/align_nat_word/lakefile.toml",
+        "theories/align_nat_word/checked_inventory.json",
+    ],
+    "clean-olean::test::align_nat_word_semr": [
+        "lean-toolchain",
+        "theories/cic_l",
+        "theories/align_nat_word",
+        "theories/cic_l/ORDER",
+        "theories/align_nat_word/ORDER",
+    ],
+    "clean-olean::test::kcheck_rule_certificates": [
+        "lean-toolchain",
+        "theories/cic_l",
+        "theories/cic_l_model",
+        "theories/kcheck_spec",
+        "theories/kcheck_rule_certificates",
+    ],
+    "clean-olean::test::kcheck_bool_island": [
+        "lean-toolchain",
+        "theories/cic_l",
+        "theories/cic_l_model",
+        "theories/kcheck_spec",
+        "theories/kcheck_labelled",
+        "theories/kcheck_rule_certificates",
+        "theories/kcheck_bool_island",
+    ],
+    "clean-olean::test::kcheck_bool_admission": [
+        "lean-toolchain",
+        "theories/cic_l",
+        "theories/cic_l_model",
+        "theories/kcheck_spec",
+        "theories/kcheck_labelled",
+        "theories/kcheck_rule_certificates",
+        "theories/kcheck_bool_island",
+        "theories/kcheck_bool_admission",
+    ],
+    "clean-olean::test::kcheck_eq_headers": [
+        "lean-toolchain",
+        "theories/cic_l",
+        "theories/cic_l_model",
+        "theories/kcheck_spec",
+        "theories/kcheck_labelled",
+        "theories/kcheck_rule_certificates",
+        "theories/kcheck_bool_island",
+        "theories/kcheck_bool_admission",
+        "theories/kcheck_eq_headers",
+    ],
+    "clean-olean::test::level_bound_n_gate": [
+        "data/level_bound_n.json",
+        "lean-toolchain",
+    ],
+    "clean-olean::test::kcheck_loader": [
+        "lean-toolchain",
+        "theories/cic_l",
+        "theories/cic_l_model",
+        "theories/kcheck_spec",
+        "theories/kcheck_labelled",
+        "theories/kcheck_loader",
+    ],
+    "clean-olean::test::kcheck_eval": [
+        "lean-toolchain",
+        "theories/cic_l",
+        "theories/cic_l_model",
+        "theories/kcheck_spec",
+        "theories/kcheck_labelled",
+        "theories/kcheck_eval",
+    ],
+    "clean-olean::test::kcheck_m5_m6": [
+        "lean-toolchain",
+        "theories/cic_l",
+        "theories/cic_l_model",
+        "theories/kcheck_spec",
+        "theories/kcheck_labelled",
+        "theories/kcheck_m5_m6",
+    ],
+    "clean-olean::test::kcheck_c7_p2": [
+        "lean-toolchain",
+        "theories/cic_l",
+        "theories/cic_l_model",
+        "theories/kcheck_spec",
+        "theories/kcheck_labelled",
+        "theories/kcheck_c7_p2",
+    ],
+    "clean-olean::test::kcheck_capstone": [
+        "lean-toolchain",
+        "theories/cic_l",
+        "theories/cic_l_model",
+        "theories/kcheck_spec",
+        "theories/kcheck_labelled",
+        "theories/kcheck_loader",
+        "theories/kcheck_eval",
+        "theories/kcheck_m5_m6",
+        "theories/kcheck_c7_p2",
+        "theories/kcheck_capstone",
     ],
     # Bounded compiled-byte qualification of `theories/binding_not_review` across
     # pinned Lean, fenced Clean, and the hash-qualified stock ck0 binary.
@@ -2942,6 +3059,15 @@ def _blank_rust_comments(src: str) -> str:
 # matched `data/crystal_*.json`. Four source families cover those ten targets.
 RESOLVE_RELATIVE = "@resolve-relative"
 
+_FIXTURE_THEORY_FAMILIES = (
+    "align_nat_word",
+    "align_nat_word_semr",
+    "kcheck_rule_certificates",
+    "kcheck_bool_island",
+    "kcheck_bool_admission",
+    "kcheck_eq_headers",
+)
+
 _EXTRA_PATH_SOURCES: tuple[tuple[str, tuple[str, ...], str], ...] = (
     (
         "clean-verify::test::crystal_a1_lineage",
@@ -3020,6 +3146,7 @@ _EXTRA_PATH_SOURCES: tuple[tuple[str, tuple[str, ...], str], ...] = (
             "kcheck_spec",
             "kcheck_sort_bounds",
             "kcheck_labelled",
+            "kcheck_sound",
             "cic_l_base_bridge",
             "cic_l_nat_model",
             "cic_l_universe_zero",
@@ -3031,6 +3158,44 @@ _EXTRA_PATH_SOURCES: tuple[tuple[str, tuple[str, ...], str], ...] = (
             "cic_l_level_scope",
             "cic_l_universe_translation",
         )
+    ),
+    *(
+        (
+            f"clean-olean::test::{family}",
+            (f"@reach:crates/clean-olean/tests/{family}.rs",),
+            r"(theories/[A-Za-z0-9_./-]+|lean-toolchain)",
+        )
+        for family in _FIXTURE_THEORY_FAMILIES
+    ),
+    (
+        "clean-olean::test::level_bound_n_gate",
+        ("@reach:crates/clean-olean/tests/level_bound_n_gate.rs",),
+        r'root\.join\(\s*"([A-Za-z0-9_./-]+)"',
+    ),
+    (
+        "clean-olean::test::kcheck_loader",
+        ("@reach:crates/clean-olean/tests/kcheck_loader.rs",),
+        r"(?:\.\./)+(theories/[A-Za-z0-9_./-]+|lean-toolchain)",
+    ),
+    (
+        "clean-olean::test::kcheck_eval",
+        ("@reach:crates/clean-olean/tests/kcheck_eval.rs",),
+        r"(?:\.\./)+(theories/[A-Za-z0-9_./-]+|lean-toolchain)",
+    ),
+    (
+        "clean-olean::test::kcheck_m5_m6",
+        ("@reach:crates/clean-olean/tests/kcheck_m5_m6.rs",),
+        r"(?:\.\./)+(theories/[A-Za-z0-9_./-]+|lean-toolchain)",
+    ),
+    (
+        "clean-olean::test::kcheck_c7_p2",
+        ("@reach:crates/clean-olean/tests/kcheck_c7_p2.rs",),
+        r"(?:\.\./)+(theories/[A-Za-z0-9_./-]+|lean-toolchain)",
+    ),
+    (
+        "clean-olean::test::kcheck_capstone",
+        ("@reach:crates/clean-olean/tests/kcheck_capstone.rs",),
+        r"(?:\.\./)+(theories/[A-Za-z0-9_./-]+|lean-toolchain)",
     ),
     (
         "clean-olean::test::binding_not_review",
@@ -3176,6 +3341,200 @@ def _resolved_scan_rows(base: Path) -> list[tuple[str, tuple[str, ...], str]]:
     return rows
 
 
+def _fixture_rust_owner(family: str, raw: str) -> tuple[str, bool]:
+    """Read the supported fixture-owner syntax, refusing unread owner expressions.
+
+    Code and literal offsets come from the same Rust lexer as the module walk.
+    Every owner field counts, including one whose value is not a string; an
+    unrelated literal constant cannot stand in for an opaque actual owner.
+    Supported selectors are ordinary direct calls, outside macros, using an
+    unqualified name or the exact known path at a complete lexical boundary.
+    Macro expansion, aliases and other spellings require a new explicit rule.
+    """
+    lx = _rust_modules()._lex(raw)
+    if lx is None:
+        raise ValueError(f"{family}: cannot lex fixture input family declarations")
+    if "$" in lx.code or re.search(r"\bmacro_rules\s*!|\bmacro\b", lx.code):
+        raise ValueError(f"{family}: unsupported fixture family selector macro context")
+    fields = list(re.finditer(r"\bfamily\s*:", lx.code))
+    package_fields: list[int] = []
+    for package in re.finditer(r"\bPackage\s*\{", lx.code):
+        at = start = package.end()
+        end = lx.pairs[at - 1]
+        members: list[tuple[int, int]] = []
+        while at < end:
+            if lx.code[at] in "{([":
+                at = lx.pairs[at] + 1
+            elif lx.code[at] == ",":
+                members.append((start, at))
+                at += 1
+                start = at
+            else:
+                at += 1
+        members.append((start, end))
+        owners = []
+        theory_fields = 0
+        for lo, hi in members:
+            member = lx.code[lo:hi]
+            if member.lstrip().startswith(".."):
+                raise ValueError(f"{family}: fixture input family cannot use a Package update")
+            if re.match(r"\s*family\b", member):
+                field = re.match(r"\s*(family\s*:)", member)
+                if field is None:
+                    raise ValueError(f"{family}: fixture input family must be an explicit literal field")
+                owners.append(lo + field.start(1))
+            if re.match(r"\s*theories\b", member):
+                if re.match(r"\s*theories\s*:", member) is None:
+                    raise ValueError(f"{family}: fixture theories must be an explicit literal field")
+                theory_fields += 1
+        if len(owners) != 1:
+            raise ValueError(f"{family}: Package requires one explicit fixture input family")
+        if theory_fields != 1:
+            raise ValueError(f"{family}: Package requires one explicit fixture theories field")
+        package_fields.extend(owners)
+    if sorted(package_fields) != [field.start() for field in fields]:
+        raise ValueError(f"{family}: unread fixture input family declaration")
+    constants = list(re.finditer(r"\bconst\s+FAMILY\s*:", lx.code))
+    constant_span: tuple[int, int] | None = None
+    if len(constants) > 1:
+        raise ValueError(f"{family}: ambiguous fixture input FAMILY declarations")
+    if constants:
+        declaration = constants[0]
+        end = lx.code.find(";", declaration.end())
+        # Only a root declaration can name the fixture read below. Nested
+        # constants and local bindings cannot substitute for that owner.
+        nested = any(lo < declaration.start() < hi for lo, hi in lx.pairs.items())
+        literal = re.fullmatch(r'\s*&\s*str\s*=\s*"([^"\\]*)"\s*;',
+                               lx.kept[declaration.end():end + 1])
+        if nested or literal is None or literal[1] != family:
+            raise ValueError(f"{family}: fixture input FAMILY must be a literal root owner")
+        constant_span = (declaration.start(), end + 1)
+    for field in fields:
+        literal = re.match(r'\s*"([^"\\]*)"\s*(?=[,}])', lx.kept[field.end():])
+        if literal is None or literal[1] != family:
+            raise ValueError(f"{family}: fixture input family must match its literal Rust owner")
+
+    def require_callee(call: re.Match[str], qualified: str) -> None:
+        leading = lx.code[:call.start()]
+        before = leading.rstrip()
+        path = re.search(r"(?:(?:r#)?[A-Za-z_][A-Za-z0-9_]*\s*::\s*)+$", before)
+        prefix = before[:path.start()] if path is not None else ""
+        # A supported path starts at a lexical separator, never partway
+        # through an identifier (including Unicode/combining characters).
+        boundary = (not prefix or prefix[-1].isspace()
+                    or prefix[-1] in ";{([=,&!|?+-*/%<>^~")
+        unqualified_boundary = (not leading or leading[-1].isspace()
+                                or leading[-1] in ";{([=,&!|?+-*/%<>^~")
+        if ((path is not None and (re.sub(r"\s", "", path[0]) != qualified
+                                   or not boundary))
+                or (path is None and (not unqualified_boundary or before.endswith(("::", "."))))):
+            raise ValueError(f"{family}: unsupported qualified fixture family selector")
+        if any(lo < call.start() < hi and lx.code[:lo].rstrip().endswith("!")
+               for lo, hi in lx.pairs.items()):
+            raise ValueError(f"{family}: unsupported fixture family selector macro context")
+
+    qualification_references = set()
+    for call in re.finditer(r"\bqualify\s*\(", lx.code):
+        require_callee(call, "standalone_theory::")
+        end = lx.pairs[call.end() - 1]
+        argument = re.match(r"\s*&\s*Package\s*\{", lx.code[call.end():end])
+        if argument is None:
+            raise ValueError(f"{family}: fixture family qualification requires a literal Package")
+        package_end = lx.pairs[call.end() + argument.end() - 1]
+        if package_end >= end or lx.code[package_end + 1:end].strip() not in {"", ","}:
+            raise ValueError(f"{family}: unsupported fixture family qualification arguments")
+        qualification_references.add(call.start())
+    if qualification_references != {
+            token.start() for token in re.finditer(r"\b(?:r#)?qualify\b", lx.code)}:
+        raise ValueError(f"{family}: unsupported fixture family qualification reference")
+
+    owner_uses: list[tuple[int, int]] = []
+    directory_references = {
+        match.start(1) for match in re.finditer(
+            r"\buse\s+clean_olean::test_support::(compiled_fixture_dir)\s*;", lx.code)
+    }
+    for call in re.finditer(r"\bcompiled_fixture_dir\s*\(", lx.code):
+        require_callee(call, "clean_olean::test_support::")
+        directory_references.add(call.start())
+        end = lx.pairs[call.end() - 1]
+        argument = lx.kept[call.end():end].strip()
+        if argument == "FAMILY" and constant_span is not None:
+            owner_uses.append((call.end(), end))
+        elif argument != f'"{family}"':
+            raise ValueError(f"{family}: fixture directory requires its literal Rust family owner")
+    if directory_references != {
+            token.start() for token in re.finditer(r"\b(?:r#)?compiled_fixture_dir\b", lx.code)}:
+        raise ValueError(f"{family}: unsupported fixture family directory reference")
+    # Reject shadowed/aliased uses instead of resolving arbitrary Rust bindings.
+    # The maintained constant form is one root constant, passed directly to
+    # compiled_fixture_dir; the standalone form has literal family fields.
+    allowed = owner_uses + ([constant_span] if constant_span is not None else [])
+    if any(not any(lo <= token.start() < hi for lo, hi in allowed)
+           for token in re.finditer(r"\bFAMILY\b", lx.code)):
+        raise ValueError(f"{family}: unsupported or shadowed fixture input FAMILY use")
+    if not fields and not owner_uses:
+        raise ValueError(f"{family}: fixture input family has no supported literal Rust owner")
+    return lx.kept, bool(fields)
+
+
+def _fixture_theory_paths_owed(base: Path) -> dict[str, set[str]]:
+    """Derive dynamic fixture reads from ORDER and literal Rust declarations.
+
+    The helper's config.family and config.theories name whole source trees.
+    They cannot be discovered by looking only for literal ../theories paths.
+    This reads independent source declarations, never TARGET_EXTRA_PATHS.
+    """
+    active = [family for family in _FIXTURE_THEORY_FAMILIES
+              if (base / "crates/clean-olean/tests" / f"{family}.rs").is_file()]
+    if not active:
+        return {}
+    pin = (base / "lean-toolchain").read_text().strip().split(":")[-1]
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.+-]*", pin):
+        raise ValueError("fixture theory inputs require a literal safe Lean pin")
+    fixtures = base / "crates/clean-olean/tests/fixtures/lean" / pin
+    result: dict[str, set[str]] = {}
+    for family in active:
+        source = base / "crates/clean-olean/tests" / f"{family}.rs"
+        code, standalone_owner = _fixture_rust_owner(family, source.read_text())
+        names: set[str] = set()
+
+        def add_package(name: str) -> None:
+            if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", name):
+                raise ValueError(f"{family}: malformed fixture theory package {name!r}")
+            names.add(name)
+
+        order = fixtures / family / "ORDER"
+        for line in order.read_text().splitlines():
+            parts = line.partition("#")[0].split()
+            if parts and parts[0] == "theory":
+                if len(parts) != 2:
+                    raise ValueError(f"{family}: malformed fixture theory ORDER row")
+                add_package(parts[1])
+        # The standalone helper reads its owned package even when it is not
+        # repeated in a config list. A fixture-only FAMILY, such as SemR's,
+        # does not invent a corresponding theories/<family> directory.
+        if standalone_owner:
+            add_package(family)
+        arrays = re.findall(r"\btheories\s*:\s*&\s*\[([^\]]*)\]", code, re.S)
+        if len(arrays) != len(re.findall(r"\btheories\s*:", code)):
+            raise ValueError(f"{family}: fixture theories must be literal Rust arrays")
+        for array in arrays:
+            literals = re.findall(r'"([^"]*)"', array)
+            if re.sub(r'"[^"]*"|[\s,]', "", array):
+                raise ValueError(f"{family}: fixture theories must be literal Rust arrays")
+            for name in literals:
+                add_package(name)
+        # Direct runtime PIN_FILE/source paths can be non-relative literals.
+        # Leaf obligations are independently scanned by _EXTRA_PATH_SOURCES;
+        # their package roots also cover new source and metadata files.
+        for name in re.findall(r"theories/([A-Za-z][A-Za-z0-9_]*)(?:/|\")", code):
+            add_package(name)
+        result[f"clean-olean::test::{family}"] = {
+            "lean-toolchain", *(f"theories/{name}" for name in names)
+        }
+    return result
+
+
 def _crystal_extra_paths_owed(root: Path | None = None) -> dict[str, set[str]]:
     """Re-derive, per crystal target, the `data/crystal_*.json` files it reads.
 
@@ -3230,6 +3589,8 @@ def _crystal_extra_paths_owed(root: Path | None = None) -> dict[str, set[str]]:
     visible = _git_visible(base, set().union(*resolved.values()) if resolved else set())
     for target, found in resolved.items():
         owed[target] = owed.get(target, set()) | (found & visible)
+    for target, paths in _fixture_theory_paths_owed(base).items():
+        owed.setdefault(target, set()).update(paths)
     return owed
 
 

@@ -58,7 +58,7 @@ const DECLARATIONS: &[DeclarationInput] = &[
    (fresh : FreshDeclName env id) (ht : Typing ty (KExpr.sort u)) (hv : Typing value ty)
    (entries : sfa_entries env) =>
    @ProdType.mk (sfa_entries env) (ConstantExtension env (KEnv.addConst env kind id ty value))
-    entries (ConstantExtension.mk env kind id ty value u fresh ht hv)) out ext",
+    entries (@ConstantExtension.mk env kind id ty value u fresh ht hv)) out ext",
     ),
     DeclarationInput::Proof(
         "sfa_inductive_entries",
@@ -71,7 +71,7 @@ const DECLARATIONS: &[DeclarationInput] = &[
    (positive : StrictlyPositiveCtorDecls ty ctors) (wf : WellFormedCtorDecls env id np ty ctors)
    (entries : sfa_entries env) =>
    @ProdType.mk (sfa_entries env) (InductiveExtension env (KEnv.addInductive env id np ty ctors))
-    entries (InductiveExtension.mk env id np ty ctors u fresh ht positive wf)) out ext",
+    entries (@InductiveExtension.mk env id np ty ctors u fresh ht positive wf)) out ext",
     ),
     DeclarationInput::Proof(
         "sfa_extension_entries",

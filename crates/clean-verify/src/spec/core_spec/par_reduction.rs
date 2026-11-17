@@ -2988,7 +2988,7 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (e : KExpr) (e2 : KExpr) (h : par_reduces_bd e e2) => ",
-                    "par_strips_witness_bd.intro e e2 e2 h (par_reduces_bd.refl e2)"
+                    "@par_strips_witness_bd.intro e e2 e2 h (par_reduces_bd.refl e2)"
                 )
                 .to_string(),
             ),
@@ -3027,7 +3027,7 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (e : KExpr) (e1 : KExpr) (h : par_reduces_bd e e1) => ",
-                    "par_strips_witness_bd.intro e1 e e1 (par_reduces_bd.refl e1) h"
+                    "@par_strips_witness_bd.intro e1 e e1 (par_reduces_bd.refl e1) h"
                 )
                 .to_string(),
             ),
@@ -3233,7 +3233,7 @@ impl Specification {
                     "par_strips_witness_bd (KExpr.proj s i sub1) (KExpr.proj s i sub2)) ",
                     "(fun (s3 : KExpr) ",
                     "(ps1 : par_reduces_bd sub1 s3) (ps2 : par_reduces_bd sub2 s3) => ",
-                    "par_strips_witness_bd.intro ",
+                    "@par_strips_witness_bd.intro ",
                     "(KExpr.proj s i sub1) (KExpr.proj s i sub2) (KExpr.proj s i s3) ",
                     "(par_reduces_bd.proj s i sub1 s3 ps1) ",
                     "(par_reduces_bd.proj s i sub2 s3 ps2)) ",
@@ -3288,7 +3288,7 @@ impl Specification {
                     "(fun (_w : par_strips_witness_bd e1 e2) => par_strips_witness_bd e2 e1) ",
                     "(fun (a3 : KExpr) ",
                     "(h1 : par_reduces_bd e1 a3) (h2 : par_reduces_bd e2 a3) => ",
-                    "par_strips_witness_bd.intro e2 e1 a3 h2 h1) ",
+                    "@par_strips_witness_bd.intro e2 e1 a3 h2 h1) ",
                     "w"
                 )
                 .to_string(),
@@ -4027,7 +4027,7 @@ impl Specification {
                     "(fun (_w : par_strips_witness_bd e1 e2) => par_strips_witness e1 e2) ",
                     "(fun (e3 : KExpr) ",
                     "(h1 : par_reduces_bd e1 e3) (h2 : par_reduces_bd e2 e3) => ",
-                    "par_strips_witness.intro e1 e2 e3 ",
+                    "@par_strips_witness.intro e1 e2 e3 ",
                     "(par_reduces_bd_subsumes_par e1 e3 h1) ",
                     "(par_reduces_bd_subsumes_par e2 e3 h2)) ",
                     "w"
@@ -4128,7 +4128,7 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (e : KExpr) (e' : KExpr) (h : iota_reduces e e') => ",
-                    "par_strips_witness.intro e' e e' ",
+                    "@par_strips_witness.intro e' e e' ",
                     "(par_reduces.refl e') (par_reduces.iota e e' h)"
                 )
                 .to_string(),
@@ -4176,7 +4176,7 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (e : KExpr) (e' : KExpr) (h : iota_reduces e e') => ",
-                    "par_strips_witness.intro e e' e' ",
+                    "@par_strips_witness.intro e e' e' ",
                     "(par_reduces.iota e e' h) (par_reduces.refl e')"
                 )
                 .to_string(),
@@ -4821,7 +4821,7 @@ fn par_strips_bd_app_proof() -> String {
         "par_strips_witness_bd (KExpr.app f1 a1) (KExpr.app f2 a2)) ",
         "(fun (a3 : KExpr) ",
         "(pa1 : par_reduces_bd a1 a3) (pa2 : par_reduces_bd a2 a3) => ",
-        "par_strips_witness_bd.intro ",
+        "@par_strips_witness_bd.intro ",
         "(KExpr.app f1 a1) (KExpr.app f2 a2) (KExpr.app f3 a3) ",
         "(par_reduces_bd.app f1 f3 a1 a3 pf1 pa1) ",
         "(par_reduces_bd.app f2 f3 a2 a3 pf2 pa2)) ",
@@ -4873,7 +4873,7 @@ fn par_strips_bd_binder_proof(ctor: &str, head: &str) -> String {
             "par_strips_witness_bd ({head} t1 b1) ({head} t2 b2)) ",
             "(fun (b3 : KExpr) ",
             "(pb1 : par_reduces_bd b1 b3) (pb2 : par_reduces_bd b2 b3) => ",
-            "par_strips_witness_bd.intro ",
+            "@par_strips_witness_bd.intro ",
             "({head} t1 b1) ({head} t2 b2) ({head} t3 b3) ",
             "({ctor} t1 t3 b1 b3 pt1 pb1) ",
             "({ctor} t2 t3 b2 b3 pt2 pb2)) ",
@@ -4921,7 +4921,7 @@ fn par_strips_bd_let_proof() -> String {
         "par_strips_witness_bd (KExpr.let_ t1 v1 b1) (KExpr.let_ t2 v2 b2)) ",
         "(fun (b3 : KExpr) ",
         "(pb1 : par_reduces_bd b1 b3) (pb2 : par_reduces_bd b2 b3) => ",
-        "par_strips_witness_bd.intro ",
+        "@par_strips_witness_bd.intro ",
         "(KExpr.let_ t1 v1 b1) (KExpr.let_ t2 v2 b2) (KExpr.let_ t3 v3 b3) ",
         "(par_reduces_bd.let_cong t1 t3 v1 v3 b1 b3 pt1 pv1 pb1) ",
         "(par_reduces_bd.let_cong t2 t3 v2 v3 b2 b3 pt2 pv2 pb2)) ",
@@ -6736,7 +6736,7 @@ fn par_strips_bd_proof() -> String {
                     "par_strips_witness_bd (instantiate {lb} {la}) (instantiate {rb} {ra})) ",
                     "(fun (a3 : KExpr) ",
                     "(pa1 : par_reduces_bd {la} a3) (pa2 : par_reduces_bd {ra} a3) => ",
-                    "par_strips_witness_bd.intro ",
+                    "@par_strips_witness_bd.intro ",
                     "(instantiate {lb} {la}) (instantiate {rb} {ra}) (instantiate b3 a3) ",
                     "(par_subst_bd {lb} b3 {la} a3 pb1 pa1) ",
                     "(par_subst_bd {rb} b3 {ra} a3 pb2 pa2)) ",
@@ -6981,7 +6981,7 @@ fn par_strips_bd_proof() -> String {
         "par_strips_witness_bd (instantiate bdy' valp) (KExpr.let_ ty2 val2 body2)) ",
         "(fun (v3 : KExpr) ",
         "(pv1 : par_reduces_bd valp v3) (pv2 : par_reduces_bd val2 v3) => ",
-        "par_strips_witness_bd.intro ",
+        "@par_strips_witness_bd.intro ",
         "(instantiate bdy' valp) (KExpr.let_ ty2 val2 body2) (instantiate b3 v3) ",
         "(par_subst_bd bdy' b3 valp v3 pb1 pv1) ",
         "(par_reduces_bd.let_ ty2 ty2 val2 v3 body2 b3 ",
@@ -7053,7 +7053,7 @@ fn par_strips_bd_proof() -> String {
         "par_strips_witness_bd (KExpr.let_ Ap valp bdy') (instantiate body2p val2p)) ",
         "(fun (v3 : KExpr) ",
         "(pv1 : par_reduces_bd valp v3) (pv2 : par_reduces_bd val2p v3) => ",
-        "par_strips_witness_bd.intro ",
+        "@par_strips_witness_bd.intro ",
         "(KExpr.let_ Ap valp bdy') (instantiate body2p val2p) (instantiate b3 v3) ",
         "(par_reduces_bd.let_ Ap Ap valp v3 bdy' b3 ",
         "(par_reduces_bd.refl Ap) pv1 pb1) ",
@@ -7380,7 +7380,7 @@ fn par_strips_witness_bd_lam_meet_proof() -> String {
         "(fun (tB : KExpr) (bB : KExpr) ",
         "(eqB : @Eq KExpr g3 (KExpr.lam tB bB)) ",
         "(_ht2 : par_reduces_bd t2 tB) (hb2 : par_reduces_bd b2 bB) => ",
-        "par_strips_witness_bd.intro b1 b2 bA hb1 ",
+        "@par_strips_witness_bd.intro b1 b2 bA hb1 ",
         "(@Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd b2 x) bB bA ",
         "(lam_inj_snd tB bB tA bA ",
         "(@Eq.trans KExpr (KExpr.lam tB bB) g3 (KExpr.lam tA bA) ",
@@ -7436,7 +7436,7 @@ fn par_strips_bd_app_beta_proof() -> String {
         "par_strips_witness_bd (KExpr.app (KExpr.lam Af bodyf) a0p) (instantiate bodyq argp)) ",
         "(fun (a3 : KExpr) ",
         "(pa1 : par_reduces_bd a0p a3) (pa2 : par_reduces_bd argp a3) => ",
-        "par_strips_witness_bd.intro ",
+        "@par_strips_witness_bd.intro ",
         "(KExpr.app (KExpr.lam Af bodyf) a0p) (instantiate bodyq argp) ",
         "(instantiate b3 a3) ",
         "(par_reduces_bd.beta Af Af bodyf b3 a0p a3 ",
@@ -7497,7 +7497,7 @@ fn par_strips_bd_star_strip_proof() -> String {
     let refl_arm = concat!(
         "(fun (e : KExpr) => ",
         "fun (e2 : KExpr) (h2 : par_reduces_bd e e2) => ",
-        "par_strips_witness_bd_star.intro e e2 e2 ",
+        "@par_strips_witness_bd_star.intro e e2 e2 ",
         "(par_subsumes_bd_star e e2 h2) ",
         "(par_reduces_bd_star.refl e2))"
     );
@@ -7514,7 +7514,7 @@ fn par_strips_bd_star_strip_proof() -> String {
         "par_strips_witness_bd_star e'' e2) ",
         "(fun (e3 : KExpr) ",
         "(pe2e3 : par_reduces_bd_star e'' e3) (pme3 : par_reduces_bd_star m e3) => ",
-        "par_strips_witness_bd_star.intro e'' e2 e3 pe2e3 ",
+        "@par_strips_witness_bd_star.intro e'' e2 e3 pe2e3 ",
         "(par_reduces_bd_star_trans e2 m e3 ",
         "(par_subsumes_bd_star e2 m pe2m) pme3)) ",
         "(ih m pe1m))"
@@ -7580,7 +7580,7 @@ fn par_reduces_bd_star_diamond_proof() -> String {
     let refl_arm = concat!(
         "(fun (e : KExpr) => ",
         "fun (e2 : KExpr) (h2 : par_reduces_bd_star e e2) => ",
-        "par_strips_witness_bd_star.intro e e2 e2 h2 ",
+        "@par_strips_witness_bd_star.intro e e2 e2 h2 ",
         "(par_reduces_bd_star.refl e2))"
     );
     // step arm: hstep : e ⇒ e', htail : e' ⇒* e'', ih : forall x,
@@ -7596,7 +7596,7 @@ fn par_reduces_bd_star_diamond_proof() -> String {
         "par_strips_witness_bd_star e'' e2) ",
         "(fun (e3 : KExpr) ",
         "(pe2e3 : par_reduces_bd_star e'' e3) (pme3 : par_reduces_bd_star m e3) => ",
-        "par_strips_witness_bd_star.intro e'' e2 e3 pe2e3 ",
+        "@par_strips_witness_bd_star.intro e'' e2 e3 pe2e3 ",
         "(par_reduces_bd_star_trans e2 m e3 pe2m pme3)) ",
         "(ih m pe1m))"
     );
@@ -8004,7 +8004,7 @@ fn par_bd_pi_injectivity_proof(
         concat!(
             "(fun (a2' : KExpr) (b2' : KExpr) (eq2 : @Eq KExpr e3 (KExpr.pi a2' b2')) ",
             "(hda2 : par_reduces_bd_star a2 a2') (hdb2 : par_reduces_bd_star b2 b2') => ",
-            "par_strips_witness_bd_star.intro {clhs} {crhs} {meet1} {leg1} ",
+            "@par_strips_witness_bd_star.intro {clhs} {crhs} {meet1} {leg1} ",
             "(@Eq.substType KExpr (fun (x : KExpr) => par_reduces_bd_star {crhs} x) {meet2} {meet1} ",
             "(@Eq.symm KExpr {meet1} {meet2} ",
             "({pi_inj} a1' b1' a2' b2' ",
@@ -8179,41 +8179,41 @@ fn bd_star_congruence_specs(relation: BdStarRelation) -> Vec<BdStarCongruenceSpe
         String,
     ) = match relation {
         BdStarRelation::Beta => (
-            format!("{step}.app_left {{e}} {{ep}} a hstep"),
-            format!("{step}.app_right f {{e}} {{ep}} hstep"),
-            format!("{step}.lam_ty {{e}} {{ep}} body hstep"),
-            format!("{step}.lam_body ty {{e}} {{ep}} hstep"),
-            format!("{step}.pi_dom {{e}} {{ep}} body hstep"),
-            format!("{step}.pi_cod dom {{e}} {{ep}} hstep"),
-            format!("{step}.let_ty {{e}} {{ep}} val body hstep"),
-            format!("{step}.let_val ty {{e}} {{ep}} body hstep"),
-            format!("{step}.let_body ty val {{e}} {{ep}} hstep"),
+            format!("@{step}.app_left {{e}} {{ep}} a hstep"),
+            format!("@{step}.app_right f {{e}} {{ep}} hstep"),
+            format!("@{step}.lam_ty {{e}} {{ep}} body hstep"),
+            format!("@{step}.lam_body ty {{e}} {{ep}} hstep"),
+            format!("@{step}.pi_dom {{e}} {{ep}} body hstep"),
+            format!("@{step}.pi_cod dom {{e}} {{ep}} hstep"),
+            format!("@{step}.let_ty {{e}} {{ep}} val body hstep"),
+            format!("@{step}.let_val ty {{e}} {{ep}} body hstep"),
+            format!("@{step}.let_body ty val {{e}} {{ep}} hstep"),
         ),
         BdStarRelation::Par => (
-            format!("{step}.app {{e}} {{ep}} a a hstep ({step}.refl a)"),
-            format!("{step}.app f f {{e}} {{ep}} ({step}.refl f) hstep"),
-            format!("{step}.lam {{e}} {{ep}} body body hstep ({step}.refl body)"),
-            format!("{step}.lam ty ty {{e}} {{ep}} ({step}.refl ty) hstep"),
-            format!("{step}.pi {{e}} {{ep}} body body hstep ({step}.refl body)"),
-            format!("{step}.pi dom dom {{e}} {{ep}} ({step}.refl dom) hstep"),
+            format!("@{step}.app {{e}} {{ep}} a a hstep (@{step}.refl a)"),
+            format!("@{step}.app f f {{e}} {{ep}} (@{step}.refl f) hstep"),
+            format!("@{step}.lam {{e}} {{ep}} body body hstep (@{step}.refl body)"),
+            format!("@{step}.lam ty ty {{e}} {{ep}} (@{step}.refl ty) hstep"),
+            format!("@{step}.pi {{e}} {{ep}} body body hstep (@{step}.refl body)"),
+            format!("@{step}.pi dom dom {{e}} {{ep}} (@{step}.refl dom) hstep"),
             format!(
-                "{step}.let_cong {{e}} {{ep}} val val body body hstep \
-                 ({step}.refl val) ({step}.refl body)"
+                "@{step}.let_cong {{e}} {{ep}} val val body body hstep \
+                 (@{step}.refl val) (@{step}.refl body)"
             ),
             format!(
-                "{step}.let_cong ty ty {{e}} {{ep}} body body ({step}.refl ty) \
-                 hstep ({step}.refl body)"
+                "@{step}.let_cong ty ty {{e}} {{ep}} body body (@{step}.refl ty) \
+                 hstep (@{step}.refl body)"
             ),
             format!(
-                "{step}.let_cong ty ty val val {{e}} {{ep}} ({step}.refl ty) \
-                 ({step}.refl val) hstep"
+                "@{step}.let_cong ty ty val val {{e}} {{ep}} (@{step}.refl ty) \
+                 (@{step}.refl val) hstep"
             ),
         ),
     };
     // proj is a single-position congruence for BOTH relations (KExpr.proj has
     // one KExpr sub-position; s/i are fixed), so its per-step witness is
     // identical in shape across Par/Beta: `<step>.proj s i {e} {ep} hstep`.
-    let proj_step = format!("{step}.proj s i {{e}} {{ep}} hstep");
+    let proj_step = format!("@{step}.proj s i {{e}} {{ep}} hstep");
     // For Par, the bi/tri-position constructor witnesses each touch the
     // siblings, so the dependency-tracked constructor is
     // `app`/`lam`/`pi`/`let_cong`; for Beta it is the
@@ -8337,12 +8337,12 @@ fn bd_star_congruence_proof(spec: &BdStarCongruenceSpec) -> String {
             "@{star}.rec ",
             "(fun (x : KExpr) (y : KExpr) (_ : {star} x y) => ",
             "{star} {frame_x} {frame_y}) ",
-            "(fun (e : KExpr) => {star}.refl {frame_e}) ",
+            "(fun (e : KExpr) => @{star}.refl {frame_e}) ",
             "(fun (e : KExpr) (e' : KExpr) (e'' : KExpr) ",
             "(hstep : {step} e e') ",
             "(_htail : {star} e' e'') ",
             "(ih : {star} {frame_ep} {frame_epp}) => ",
-            "{star}.step {frame_e} {frame_ep} {frame_epp} ",
+            "@{star}.step {frame_e} {frame_ep} {frame_epp} ",
             "({step_term}) ih) ",
             "{src_lhs} {src_rhs} h"
         ),
@@ -8600,7 +8600,7 @@ fn beta_bd_confluent_proof() -> String {
         "(fun (_w : par_strips_witness_bd_star e1 e2) => beta_bd_join_witness e1 e2) ",
         "(fun (e3 : KExpr) ",
         "(pe1e3 : par_reduces_bd_star e1 e3) (pe2e3 : par_reduces_bd_star e2 e3) => ",
-        "beta_bd_join_witness.intro e1 e2 e3 ",
+        "@beta_bd_join_witness.intro e1 e2 e3 ",
         "(par_bd_star_subsumes_beta_bd_star e1 e3 pe1e3) ",
         "(par_bd_star_subsumes_beta_bd_star e2 e3 pe2e3)) ",
         "(par_reduces_bd_star_diamond e e1 e2 ",

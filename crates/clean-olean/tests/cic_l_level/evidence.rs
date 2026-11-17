@@ -114,15 +114,18 @@ pub(crate) mod meaning_digest;
 
 use meaning_digest::{MeaningDigests, Package};
 
-/// The digest's source, which this file pins (see [`check_digest_source`]).
-const MEANING_DIGEST_SOURCE: &[u8] = include_bytes!("../support/meaning_digest.rs");
+/// The production implementation's source, pinned before any fixture compiles.
+const MEANING_DIGEST_SOURCE: &[u8] = include_bytes!("../../src/meaning_digest.rs");
 
-/// The SHA-256 of `../support/meaning_digest.rs`. The registry row
-/// `cic-l-qualification` pins this file and no other, so this file pins that
-/// one: an edit to what a pin means refuses here until this line moves, and
-/// moving it stales the row, whose re-pin replays its arms.
+/// The fixture-discovery and pin-write support remains separately byte-bound.
+const MEANING_DIGEST_FIXTURE_SOURCE: &[u8] = include_bytes!("../support/meaning_digest.rs");
+
+/// These separate hashes bind both files and their boundary. Moving either
+/// pin stales the registry row `cic-l-qualification`, which pins this file.
 const MEANING_DIGEST_SOURCE_SHA256: &str =
-    "0a53b73d9d0932c17f8955432fcd20ecde87b124622bee998fe1db03dd15eacb";
+    "0d583f6abf7c831bf61fc773423ced0c21651b0257ff1884e1811c72f1fadcec";
+const MEANING_DIGEST_FIXTURE_SOURCE_SHA256: &str =
+    "e6c834f2c10f2720a3fde512aa80878269264a8b78f374d39d5ab9d5bd155371";
 
 /// The fixture family whose compiled directory the test loads.
 const FAMILY: &str = "cic_l_level";
@@ -257,10 +260,10 @@ impl fmt::Display for Refusal {
             ),
             Self::DigestSource { measured, pinned } => write!(
                 f,
-                "tests/support/meaning_digest.rs has SHA-256 {measured}, this file pins \
-                 {pinned}: what a statement pin means changed; move MEANING_DIGEST_SOURCE_SHA256 \
-                 with a decision entry, re-pin the four pin files and the registry row \
-                 `cic-l-qualification`"
+                "a production meaning-digest or fixture-support source component has SHA-256 \
+                 {measured}, this file pins {pinned}: inspect the implementation change and move \
+                 MEANING_DIGEST_SOURCE_SHA256 with a decision entry and the registry row \
+                 `cic-l-qualification`; a semantic change also requires the affected pin migrations"
             ),
             Self::CensusToolchain { census, theory } => write!(
                 f,
@@ -402,6 +405,10 @@ fn level_theory_rechecks_with_false_computation_controls() {
     hold(check_digest_source(
         MEANING_DIGEST_SOURCE,
         MEANING_DIGEST_SOURCE_SHA256,
+    ));
+    hold(check_digest_source(
+        MEANING_DIGEST_FIXTURE_SOURCE,
+        MEANING_DIGEST_FIXTURE_SOURCE_SHA256,
     ));
     let census_document = census_document();
     let (census_toolchain, census) = hold(census_rows(&census_document));
@@ -680,18 +687,27 @@ pub(crate) fn check_lakefile_roots(
     }
 }
 
-/// Each `CICL` module reached from `root` through compiled import lists, with
-/// the names its own artifact declares, in declaration order.
+/// Each `CICL` module reached through the fixture's import-only aggregate,
+/// with the names its own artifact declares, in declaration order. The aggregate
+/// must declare nothing and is not an `ORDER` module or a source of subjects.
 pub(crate) fn import_closure(compiled: &Path, root: &str) -> BTreeMap<String, Vec<Name>> {
     let mut reached = BTreeMap::new();
+    let mut visited = BTreeSet::new();
     let mut pending = vec![root.to_owned()];
     while let Some(module) = pending.pop() {
-        if reached.contains_key(&module) {
+        if !visited.insert(module.clone()) {
             continue;
         }
         let path = compiled.join(format!("{}.olean", module.replace('.', "/")));
         let artifact = read_artifact(&module, &path, ArtifactDepth::Names)
             .unwrap_or_else(|error| panic!("read {}: {error}", path.display()));
+        if module == root {
+            assert!(
+                artifact.names.is_empty(),
+                "qualification aggregate {root} must declare no names: {:?}",
+                artifact.names
+            );
+        }
         pending.extend(
             artifact
                 .imports
@@ -699,7 +715,9 @@ pub(crate) fn import_closure(compiled: &Path, root: &str) -> BTreeMap<String, Ve
                 .map(|import| import.module_name.clone())
                 .filter(|import| import.starts_with("CICL.")),
         );
-        reached.insert(module, artifact.names);
+        if module.starts_with("CICL.") {
+            reached.insert(module, artifact.names);
+        }
     }
     reached
 }
@@ -1404,6 +1422,44 @@ pub(crate) fn forged_statement_refused(
         }),
         "a forged statement must be refused as changed"
     );
+}
+
+/// Both source files and their boundary are bound independently.
+#[test]
+fn meaning_digest_source_custody_binds_engine_and_fixture_discovery() {
+    for (source, pinned) in [
+        (MEANING_DIGEST_SOURCE, MEANING_DIGEST_SOURCE_SHA256),
+        (
+            MEANING_DIGEST_FIXTURE_SOURCE,
+            MEANING_DIGEST_FIXTURE_SOURCE_SHA256,
+        ),
+    ] {
+        assert_eq!(check_digest_source(source, pinned), Ok(()));
+        let mut edited = source.to_vec();
+        edited[0] ^= 1;
+        assert!(matches!(
+            check_digest_source(&edited, pinned),
+            Err(Refusal::DigestSource { pinned: ref observed, .. }) if observed == pinned
+        ));
+    }
+
+    // A raw concatenation would miss this valid-Rust source-boundary transfer.
+    let mut engine = MEANING_DIGEST_SOURCE.to_vec();
+    assert_eq!(engine.pop(), Some(b'\n'));
+    let mut support = vec![b'\n'];
+    support.extend_from_slice(MEANING_DIGEST_FIXTURE_SOURCE);
+    assert_eq!(
+        [engine.as_slice(), support.as_slice()].concat(),
+        [MEANING_DIGEST_SOURCE, MEANING_DIGEST_FIXTURE_SOURCE].concat()
+    );
+    assert!(matches!(
+        check_digest_source(&engine, MEANING_DIGEST_SOURCE_SHA256),
+        Err(Refusal::DigestSource { .. })
+    ));
+    assert!(matches!(
+        check_digest_source(&support, MEANING_DIGEST_FIXTURE_SOURCE_SHA256),
+        Err(Refusal::DigestSource { .. })
+    ));
 }
 
 /// The checks on the Lean the inputs name and on the census's rows, each run

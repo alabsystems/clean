@@ -13,9 +13,11 @@ SemRNativeWPPlan
 SemRBooleanWPMemory
 SemRBooleanWPTwoCells
 SemRBooleanWPAudit
+NativeContractSyntax
 SemRScalarClaim
 SemRBooleanClaim
 SemRBooleanClaimText
+NativeContractSyntaxAudit
 SemRScalarClaimAudit
 SemRNativeExecutionClaim
 SemRNativeExecutionClaimAudit

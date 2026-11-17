@@ -15,4 +15,6 @@ workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+# Exact repository-pinned header lookup for the optional C owner oracle.
+clean-olean = { workspace = true }
 tempfile.workspace = true

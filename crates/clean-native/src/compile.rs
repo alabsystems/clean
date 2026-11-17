@@ -245,6 +245,47 @@ pub(crate) fn select_lcnf_decl_routed(
     )
 }
 
+#[cfg(feature = "trust-ir-backend")]
+pub(crate) fn select_lcnf_decl_recording(
+    args: &CompileArgs,
+    observer: &crate::primitive_uses::NativeRecorder,
+) -> anyhow::Result<(
+    std::sync::Arc<[Decl]>,
+    std::sync::Arc<Environment>,
+    std::sync::Arc<PipelineConfig>,
+)> {
+    let file = args
+        .file
+        .as_deref()
+        .ok_or_else(|| anyhow!("`clean compile` requires a source file"))?;
+    let declaration = args
+        .decl
+        .as_deref()
+        .ok_or_else(|| anyhow!("`clean compile` requires `--decl <NAME>`"))?;
+    let root = parse_compile_decl_name(declaration)?;
+    let (env, opaques, source_decls) = elaborate_file_with_inventory(file)?;
+    let env = std::sync::Arc::new(env);
+    observer.environment(
+        "actual native selection environment",
+        std::sync::Arc::clone(&env),
+    );
+    let (decls, pipeline, _) = select_in_environment_borrowed(
+        &env,
+        &opaques,
+        &root,
+        args.opt_level,
+        &is_primitive_denylisted,
+        &|_| DepRoute::Compile,
+        SelectionPolicy {
+            meaning: CodeMeaning::LeanCompiled,
+            closure: None,
+            source_decls: Some(&source_decls),
+        },
+        Some(observer),
+    )?;
+    Ok((decls.into(), env, std::sync::Arc::new(pipeline)))
+}
+
 /// The single native declaration/dependency selection implementation. Both
 /// Clean source elaboration and the owned external Lean handoff use every
 /// eligibility, implemented_by, opaque, IO and FFI check below.
@@ -341,6 +382,29 @@ fn select_in_environment_ordered(
     route: &dyn Fn(&Name) -> DepRoute,
     policy: SelectionPolicy<'_>,
 ) -> anyhow::Result<(Vec<Decl>, Environment, PipelineConfig, Vec<Name>)> {
+    let (decls, pipeline, imported) = select_in_environment_borrowed(
+        &env,
+        source_opaques,
+        root_name,
+        opt_level,
+        denylisted,
+        route,
+        policy,
+        None,
+    )?;
+    Ok((decls, env, pipeline, imported))
+}
+
+fn select_in_environment_borrowed(
+    env: &Environment,
+    source_opaques: &HashSet<Name>,
+    root_name: &Name,
+    opt_level: u8,
+    denylisted: &dyn Fn(&str) -> bool,
+    route: &dyn Fn(&Name) -> DepRoute,
+    policy: SelectionPolicy<'_>,
+    observation: Option<&crate::primitive_uses::NativeRecorder>,
+) -> anyhow::Result<(Vec<Decl>, PipelineConfig, Vec<Name>)> {
     let meaning = policy.meaning;
     let decl_name = root_name.to_string();
     let root_info = env
@@ -351,23 +415,57 @@ fn select_in_environment_ordered(
     // environment is compiled (`native_ffi_audit`).
     // A kernel-value build substitutes nothing, so the record does not apply.
     if meaning == CodeMeaning::LeanCompiled && policy.closure.is_none() {
-        refuse_compiled_before_binding(root_name, &env)?;
+        refuse_compiled_before_binding(root_name, env)?;
     }
     // A placeholder `opaque` compiles to a constant and prints a wrong answer
     // at exit 0 (`native_opaque_audit`); refuse it before it is lowered.
     refuse_unfaithful_body(root_info, root_name, source_opaques)?;
     // Lean compiles neither an `@[implemented_by]` declaration nor the body of
     // an `@[extern]` one (`native_ffi_audit`).
-    refuse_ffi_root(&env, root_info, meaning)?;
+    refuse_ffi_root(env, root_info, meaning)?;
     // The eager IO model runs an action where it is EVALUATED; rewrite the value
     // so that is where Lean runs it, or refuse (`native_eager_io`) -- and refuse
     // a recursion that reads fields of an argument it generalized
     // (`native_rec_split_audit`). Monad inlining reduces in an environment
     // where no constant with a compiler attribute unfolds
     // (`native_monad_inline::inlining_env`).
-    let inline_env = crate::native_monad_inline::inlining_env(&env);
-    let root_info = &prepare_native_constant(&env, &inline_env, root_info, meaning)?;
-    let root_decl = lower_selected_constant(&env, root_info, policy)
+    let inline_env = crate::native_monad_inline::inlining_env(env);
+    let observed_inline;
+    let inline_env: &Environment =
+        if let Some(permit) = observation.and_then(|observer| observer.context::<Environment>()) {
+            match inline_env {
+                std::borrow::Cow::Owned(env) => {
+                    observed_inline = permit.environment(env);
+                    &observed_inline
+                }
+                std::borrow::Cow::Borrowed(env) => {
+                    permit.borrowed_environment(env);
+                    env
+                }
+            }
+        } else {
+            &inline_env
+        };
+    let root_prepared = prepare_native_constant(env, inline_env, root_info, meaning)?;
+    let observed_root;
+    let root_info = if let Some(permit) =
+        observation.and_then(|observer| observer.context::<clean_kernel::ConstantInfo>())
+    {
+        observed_root = permit.prepared(root_prepared);
+        &*observed_root
+    } else {
+        &root_prepared
+    };
+    if let Some(observer) = observation {
+        observer.decision(
+            crate::primitive_uses::NativeInvocationRole::Selection,
+            "prepare_native_constant",
+            Some(root_name),
+            None,
+            "actual prepared root input",
+        );
+    }
+    let root_decl = lower_selected_constant(env, root_info, policy)
         .with_context(|| format!("failed to lower `{decl_name}` to L5CNF"))?
         .ok_or_else(|| {
             anyhow!(
@@ -388,7 +486,7 @@ fn select_in_environment_ordered(
     // Worklist of value expressions still to scan for dependencies. We scan the
     // root's value, then each compilable dependency's value, transitively.
     let mut worklist: Vec<Name> = clean_compiler::resolve_csimp_dependencies(
-        &env,
+        env,
         root_name,
         ConstDepCollector::collect(
             root_info
@@ -401,7 +499,7 @@ fn select_in_environment_ordered(
 
     let pipeline = pipeline_config_from_opt_level(opt_level);
     // Every `@[implemented_by]` binding, read once for the walk below.
-    let implemented_by = ImplementedByMap::from_env(&env);
+    let implemented_by = ImplementedByMap::from_env(env);
 
     // Silence the default panic hook for the duration of the dependency-probe
     // loop: a candidate dep that trips a `debug_assert!` during the isolated
@@ -418,6 +516,15 @@ fn select_in_environment_ordered(
         // Resolve the dependency. A name with no constant info is forward-declared
         // by the backend (extern); nothing to emit or recurse into.
         let Some(dep_info) = env.get_const(&dep_name) else {
+            if let Some(observer) = observation {
+                observer.decision(
+                    crate::primitive_uses::NativeInvocationRole::Selection,
+                    "dependency lookup",
+                    Some(&dep_name),
+                    None,
+                    "actual absent declaration; extern fallback",
+                );
+            }
             continue;
         };
 
@@ -436,7 +543,21 @@ fn select_in_environment_ordered(
         // HAdd/HMul/HSub typeclass dispatchers, Bool ctors, IO ops) keeps its
         // shim — the lowered body would break the shim's C contract (O(1) win,
         // representation invariant, or effect model). Stay extern.
-        if denylisted(&mangle_name(&dep_name)) {
+        let denied = denylisted(&mangle_name(&dep_name));
+        if let Some(observer) = observation {
+            observer.decision(
+                crate::primitive_uses::NativeInvocationRole::Selection,
+                "primitive boundary",
+                Some(&dep_name),
+                None,
+                if denied {
+                    "actual denylist route to shim boundary"
+                } else {
+                    "actual non-denylisted dependency"
+                },
+            );
+        }
+        if denied {
             continue;
         }
 
@@ -445,9 +566,28 @@ fn select_in_environment_ordered(
         // `to_lcnf` already substituted at each reference -- so walk `f`
         // instead and never lower this body. An `@[extern]` declaration with a
         // body is refused: Lean calls its C symbol, never the body.
-        match route_ffi_dep(&env, &implemented_by, dep_info, root_name, meaning) {
-            Ok(FfiRoute::Ordinary) => {}
+        match route_ffi_dep(env, &implemented_by, dep_info, root_name, meaning) {
+            Ok(FfiRoute::Ordinary) => {
+                if let Some(observer) = observation {
+                    observer.decision(
+                        crate::primitive_uses::NativeInvocationRole::Selection,
+                        "FFI dependency routing",
+                        Some(&dep_name),
+                        None,
+                        "actual ordinary FFI route",
+                    );
+                }
+            }
             Ok(FfiRoute::Redirect(target)) => {
+                if let Some(observer) = observation {
+                    observer.decision(
+                        crate::primitive_uses::NativeInvocationRole::Selection,
+                        "FFI dependency routing",
+                        Some(&dep_name),
+                        Some(&target),
+                        "actual FFI redirect",
+                    );
+                }
                 worklist.push(target);
                 continue;
             }
@@ -470,7 +610,7 @@ fn select_in_environment_ordered(
         // (a'') EAGER IO AND RECURSION SHAPE. A dependency's actions run where
         // they are evaluated and its recursions are compiled exactly like the
         // root's: rewrite or refuse it the same way.
-        let dep_info = &match prepare_native_constant(&env, &inline_env, dep_info, meaning) {
+        let dep_prepared = match prepare_native_constant(env, inline_env, dep_info, meaning) {
             Ok(prepared) => prepared,
             Err(err) => {
                 refusal = Some(anyhow::Error::from(err));
@@ -478,11 +618,43 @@ fn select_in_environment_ordered(
             }
         };
 
+        let observed_dep;
+        let dep_info = if let Some(permit) =
+            observation.and_then(|observer| observer.context::<clean_kernel::ConstantInfo>())
+        {
+            observed_dep = permit.prepared(dep_prepared);
+            &*observed_dep
+        } else {
+            &dep_prepared
+        };
+        if let Some(observer) = observation {
+            observer.decision(
+                crate::primitive_uses::NativeInvocationRole::Selection,
+                "prepare_native_constant",
+                Some(&dep_name),
+                None,
+                "actual prepared dependency input",
+            );
+        }
+
         // (a''') LINKED ARTIFACTS (WS6.8). A symbol two artifacts define is
         // ambiguous and refuses the build; one exactly one artifact defines is
         // imported, which needs the checks below to have a signature to
         // compare with the far one.
         let dep_route = route(&dep_name);
+        if let Some(observer) = observation {
+            observer.decision(
+                crate::primitive_uses::NativeInvocationRole::Selection,
+                "linked artifact routing",
+                Some(&dep_name),
+                None,
+                match &dep_route {
+                    DepRoute::Compile => "actual compile route",
+                    DepRoute::Import => "actual import route",
+                    DepRoute::Refuse(_) => "actual refused route",
+                },
+            );
+        }
         if let DepRoute::Refuse(why) = dep_route {
             refusal = Some(anyhow!(why));
             break;
@@ -499,7 +671,7 @@ fn select_in_environment_ordered(
         // and the build failed at link time without a name. A link whose
         // implementation has another type here (an imported binding whose
         // target resolves to a resident declaration) is named the same way.
-        let dep_decl = match lower_selected_constant(&env, dep_info, policy) {
+        let dep_decl = match lower_selected_constant(env, dep_info, policy) {
             Ok(Some(dep_decl)) => dep_decl,
             Err(
                 err @ (CompilerError::ImplementedByCycle { .. }
@@ -552,12 +724,26 @@ fn select_in_environment_ordered(
         let probe = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             compile_selected_decls(
                 std::slice::from_ref(&dep_decl),
-                &env,
+                env,
                 &pipeline,
                 meaning,
                 policy.closure,
             )
         }));
+        if let Some(observer) = observation {
+            observer.decision(
+                crate::primitive_uses::NativeInvocationRole::DependencyProbe,
+                "isolated dependency compiler probe",
+                Some(&dep_name),
+                None,
+                match &probe {
+                    Ok(Ok(_)) => "actual probe accepted",
+                    Ok(Err(_)) => "actual probe refused",
+                    Err(_) => "actual probe panicked",
+                },
+            );
+            observer.gap(clean_compiler::primitive_uses::ObservationGap::Unobserved{owner:"dependency probe internals",reason:"actual outcome and source contexts retained; internal compiler decisions were not observed"});
+        }
         if let Ok(Err(
             error @ clean_compiler::pass_manager::PipelineError::Compiler(
                 CompilerError::RuntimeBindingClosure { .. }
@@ -611,7 +797,7 @@ fn select_in_environment_ordered(
         // with every artifact-defined body replaced by a declaration.
         if let Some(value) = &dep_info.value {
             match clean_compiler::resolve_csimp_dependencies(
-                &env,
+                env,
                 &dep_name,
                 ConstDepCollector::collect(value),
                 meaning,
@@ -639,8 +825,8 @@ fn select_in_environment_ordered(
     // Phase 0 #1: thread the real elaborated environment through to IR lowering
     // (so `to_ir`'s `build_ctor_env` sees the prelude constructors), together with
     // the transitive compilable closure. `env` is only borrowed by the dep-walk
-    // above, so it is still owned here.
-    Ok((decls, env, pipeline, imported))
+    // above; the legacy wrapper retains ownership and returns that original Env.
+    Ok((decls, pipeline, imported))
 }
 
 /// A dependency a linked artifact defines, which this compile cannot lower:
@@ -908,7 +1094,7 @@ pub(crate) fn emit_selected_object_with_check(
 }
 
 #[cfg(feature = "trust-ir-backend")]
-fn write_selected_object(
+pub(crate) fn write_selected_object(
     decls: &[Decl],
     env: &Environment,
     pipeline: &PipelineConfig,
@@ -933,7 +1119,6 @@ fn write_selected_object_with_check(
     closure: Option<&clean_compiler::RuntimeBindingClosure>,
     check: impl FnOnce(&clean_compiler::emit_trust_ir_lane::Module) -> anyhow::Result<()>,
 ) -> anyhow::Result<()> {
-    use crate::native_trustcg::checks::object_self_checks_for_env;
     use clean_compiler::pass_manager::compile_lcnf_to_trust_ir;
     let mut module = match closure {
         Some(closure) => clean_compiler::pass_manager::compile_lcnf_to_trust_ir_in_runtime_closure(
@@ -942,19 +1127,133 @@ fn write_selected_object_with_check(
         None => compile_lcnf_to_trust_ir(decls, env, pipeline, config)?,
     };
     let (compiler, target) = backend;
-    let checked = object_self_checks_for_env(env, &module)?;
-    check(&module)?;
-    let census = checked.license(&mut module)?;
+    finish_selected_object(
+        &mut module,
+        ObjectFinishInput {
+            env,
+            backend: compiler,
+            target,
+            out,
+            observation: None,
+            actual_backend: None,
+        },
+        check,
+    )
+}
+
+#[cfg(feature = "trust-ir-backend")]
+struct ObjectFinishInput<'a> {
+    env: &'a Environment,
+    backend: &'a dyn crate::native_trustcg::ObjectBackend,
+    target: &'a str,
+    out: &'a Path,
+    observation: Option<&'a crate::primitive_uses::NativeRecorder>,
+    actual_backend: Option<&'a crate::native_trustcg::TrustCg>,
+}
+
+#[cfg(feature = "trust-ir-backend")]
+fn finish_selected_object(
+    module: &mut clean_compiler::emit_trust_ir_lane::Module,
+    input: ObjectFinishInput<'_>,
+    check: impl FnOnce(&clean_compiler::emit_trust_ir_lane::Module) -> anyhow::Result<()>,
+) -> anyhow::Result<()> {
+    use crate::native_trustcg::checks::object_self_checks_for_env_recording;
+    let checked = object_self_checks_for_env_recording(input.env, module, input.observation)?;
+    check(module)?;
+    let census = checked.license(module)?;
+    if let Some(observer) = input.observation {
+        observer.license(&census);
+    }
     let scratch = tempfile::tempdir().context("failed to create object build directory")?;
-    let object = compiler.compile_object(&module, target, scratch.path())?;
-    std::fs::copy(&object, out)
-        .with_context(|| format!("failed to write native object to {}", out.display()))?;
+    let (object, object_artifact) = match (input.observation, input.actual_backend) {
+        (Some(observer), Some(compiler)) => {
+            compiler.compile_object_recording(module, input.target, scratch.path(), observer)?
+        }
+        (Some(observer), None) => {
+            observer.gap(clean_compiler::primitive_uses::ObservationGap::Unobserved {
+                owner: "custom object backend",
+                reason: "actual adapter invocation is opaque",
+            });
+            (
+                input
+                    .backend
+                    .compile_object(module, input.target, scratch.path())?,
+                None,
+            )
+        }
+        (None, _) => (
+            input
+                .backend
+                .compile_object(module, input.target, scratch.path())?,
+            None,
+        ),
+    };
+    std::fs::copy(&object, input.out)
+        .with_context(|| format!("failed to write native object to {}", input.out.display()))?;
+    if let Some(observer) = input.observation {
+        observer.file(
+            "actual copied selected object",
+            input.out,
+            object_artifact.as_ref(),
+        );
+    }
     eprintln!(
         "wrote {}; {} bodies use clean-compiler-unvalidated (no binary proof claim)",
-        out.display(),
+        input.out.display(),
         census.unvalidated
     );
     Ok(())
+}
+
+#[cfg(feature = "trust-ir-backend")]
+pub(crate) fn emit_selected_object_owned_recording(
+    input: &crate::primitive_uses::NativeOwnedInputs,
+    source_file: Option<&Path>,
+    out: &Path,
+    observer: &crate::primitive_uses::NativeRecorder,
+    check: impl FnOnce(&clean_compiler::emit_trust_ir_lane::Module) -> anyhow::Result<()>,
+) -> anyhow::Result<()> {
+    use crate::native_trustcg::TrustCg;
+    let path = find_trust_cg()?.ok_or_else(|| {
+        anyhow!("trust-cg binary not found; set CLEAN_TRUST_CG_BIN or add `trust-cg` to PATH")
+    })?;
+    let compiler = TrustCg::from_path(path)?;
+    let emit_config = object_emit_config_from_source(source_file);
+    let target = host_trust_cg_target()?;
+    let result = clean_compiler::primitive_uses::compile_lcnf_to_trust_ir_owned_observed(
+        std::sync::Arc::clone(&input.decls),
+        std::sync::Arc::clone(&input.env),
+        std::sync::Arc::clone(&input.pipeline),
+        emit_config,
+        CodeMeaning::LeanCompiled,
+        input.closure.as_ref().map(std::sync::Arc::clone),
+        observer.compiler_limits(),
+        |module| {
+            finish_selected_object(
+                module,
+                ObjectFinishInput {
+                    env: &input.env,
+                    backend: &compiler,
+                    target,
+                    out,
+                    observation: Some(observer),
+                    actual_backend: Some(&compiler),
+                },
+                check,
+            )
+        },
+    );
+    match result {
+        Ok(output) => {
+            observer.compiler(output);
+            Ok(())
+        }
+        Err(error) => {
+            let message = error.to_string();
+            observer.emission_error(error);
+            Err(anyhow!(message))
+        }
+    }
 }
 
 /// The trust-ir emission config of `--emit obj`: the one lowering an object

@@ -212,20 +212,20 @@ impl Specification {
             };
             let par_leg = if vary_first {
                 format!(
-                    "({par_cong} (red_rec env) u0 u1 {fixed} {fixed} hp (@par_reduces_c_star.refl (red_rec env) {fixed}))"
+                    "(@{par_cong} (red_rec env) u0 u1 {fixed} {fixed} hp (@par_reduces_c_star.refl (red_rec env) {fixed}))"
                 )
             } else {
                 format!(
-                    "({par_cong} (red_rec env) {fixed} {fixed} u0 u1 (@par_reduces_c_star.refl (red_rec env) {fixed}) hp)"
+                    "(@{par_cong} (red_rec env) {fixed} {fixed} u0 u1 (@par_reduces_c_star.refl (red_rec env) {fixed}) hp)"
                 )
             };
             let delta_leg = if vary_first {
                 format!(
-                    "({delta_cong} env u0 u1 {fixed} {fixed} hd (@delta_cong_star.refl env {fixed}))"
+                    "(@{delta_cong} env u0 u1 {fixed} {fixed} hd (@delta_cong_star.refl env {fixed}))"
                 )
             } else {
                 format!(
-                    "({delta_cong} env {fixed} {fixed} u0 u1 (@delta_cong_star.refl env {fixed}) hd)"
+                    "(@{delta_cong} env {fixed} {fixed} u0 u1 (@delta_cong_star.refl env {fixed}) hd)"
                 )
             };
             let type_src = format!(
@@ -307,7 +307,7 @@ impl Specification {
                  (fun (e : KExpr) => @m_star.refl env {we}) \
                  (fun (x : KExpr) (x1 : KExpr) (x2 : KExpr) \
                  (hstep : m_step env x x1) (_htail : m_star env x1 x2) (ih : m_star env {wx1} {wx2}) => \
-                 @m_star.step env {wx} {wx1} {wx2} ({step_name} env x x1 {fixed} hstep) ih) \
+                 @m_star.step env {wx} {wx1} {wx2} (@{step_name} env x x1 {fixed} hstep) ih) \
                  u0 u1 h",
                 wx = wrap("x"),
                 wy = wrap("y"),
@@ -392,8 +392,8 @@ impl Specification {
                 "fun (env : RedEnv) ({s0} : KExpr) ({s0p} : KExpr) ({s1} : KExpr) ({s1p} : KExpr) \
                  (h0 : m_star env {s0} {s0p}) (h1 : m_star env {s1} {s1p}) => \
                  m_star_trans env ({head} {s0} {s1}) ({head} {s0p} {s1}) ({head} {s0p} {s1p}) \
-                 ({lift_l} env {s0} {s0p} {s1} h0) \
-                 ({lift_r} env {s1} {s1p} {s0p} h1)"
+                 (@{lift_l} env {s0} {s0p} {s1} h0) \
+                 (@{lift_r} env {s1} {s1p} {s0p} h1)"
             );
             self.add_definition(SpecDefinition {
                 name: name.to_string(),
@@ -583,7 +583,7 @@ impl Specification {
                  (fun (e : KExpr) => @m_star.refl env {we}) \
                  (fun (x : KExpr) (x1 : KExpr) (x2 : KExpr) \
                  (hstep : m_step env x x1) (_htail : m_star env x1 x2) (ih : m_star env {wx1} {wx2}) => \
-                 @m_star.step env {wx} {wx1} {wx2} ({step_name} env x x1 {f0} {f1} hstep) ih) \
+                 @m_star.step env {wx} {wx1} {wx2} (@{step_name} env x x1 {f0} {f1} hstep) ih) \
                  u0 u1 h",
                 f0 = s.f0,
                 f1 = s.f1,

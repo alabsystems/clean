@@ -1,0 +1,368 @@
+{
+  "AlignNatWord.div64": {
+    "axiom_closure": [
+      "propext"
+    ],
+    "kind": "Definition",
+    "lean_axiom_closure": [
+      "propext"
+    ],
+    "level_params": [],
+    "meaning_sha256": "e1f2ec165d339ccba40272cbd7c469aeb899c9c4ad9b0695d46e935e1f51b19b",
+    "module": "AlignNatWord.Arithmetic"
+  },
+  "AlignNatWord.mod64": {
+    "axiom_closure": [
+      "propext"
+    ],
+    "kind": "Definition",
+    "lean_axiom_closure": [
+      "propext"
+    ],
+    "level_params": [],
+    "meaning_sha256": "655722c8c8c79c26685cbfadb2877eb2a84d403a83c899817639c1b4d94a7920",
+    "module": "AlignNatWord.Arithmetic"
+  },
+  "AlignNatWordSemR.expect_word": {
+    "axiom_closure": [
+      "propext"
+    ],
+    "kind": "Theorem",
+    "lean_axiom_closure": [
+      "propext"
+    ],
+    "level_params": [],
+    "meaning_sha256": "d08e6d151a65a733f5c3b3909cc0c920e87b348013448b8057c7d0b40c645703",
+    "module": "AlignNatWordSemR"
+  },
+  "AlignNatWordSemR.nat_nonzero": {
+    "axiom_closure": [],
+    "kind": "Theorem",
+    "lean_axiom_closure": [],
+    "level_params": [],
+    "meaning_sha256": "710e6ffa600db89ce78761ad1af1c74cadeb0c3c8076af67664588b58b1e17d4",
+    "module": "AlignNatWordSemR"
+  },
+  "AlignNatWordSemR.udiv_success_iff": {
+    "axiom_closure": [
+      "Quot",
+      "Quot.lift",
+      "Quot.mk",
+      "Quot.sound",
+      "propext"
+    ],
+    "kind": "Theorem",
+    "lean_axiom_closure": [
+      "Quot.sound",
+      "propext"
+    ],
+    "level_params": [],
+    "meaning_sha256": "83ab23dae45dbf713f5c141f2a7c3c1bcb38b5aba462d5971a82adab7d14b0d9",
+    "module": "AlignNatWordSemR"
+  },
+  "AlignNatWordSemR.udiv_word": {
+    "axiom_closure": [
+      "Quot",
+      "Quot.lift",
+      "Quot.mk",
+      "Quot.sound",
+      "propext"
+    ],
+    "kind": "Theorem",
+    "lean_axiom_closure": [
+      "Quot.sound",
+      "propext"
+    ],
+    "level_params": [],
+    "meaning_sha256": "929169bda6a6965d7e35a059cddd9f41aaa69da06c856ab7422d05e5cda1dfda",
+    "module": "AlignNatWordSemR"
+  },
+  "AlignNatWordSemR.udiv_zero": {
+    "axiom_closure": [
+      "propext"
+    ],
+    "kind": "Theorem",
+    "lean_axiom_closure": [
+      "propext"
+    ],
+    "level_params": [],
+    "meaning_sha256": "545b9776c55e4d3726f1505e3b8e8aec9a3e08b51708ca0f01371c2ab27fadef",
+    "module": "AlignNatWordSemR"
+  },
+  "AlignNatWordSemR.urem_success_iff": {
+    "axiom_closure": [
+      "Quot",
+      "Quot.lift",
+      "Quot.mk",
+      "Quot.sound",
+      "propext"
+    ],
+    "kind": "Theorem",
+    "lean_axiom_closure": [
+      "Quot.sound",
+      "propext"
+    ],
+    "level_params": [],
+    "meaning_sha256": "2ff609002618bb70b086bc61b28cf77ef6a97a8d9e4ce817f3624cd80f07f848",
+    "module": "AlignNatWordSemR"
+  },
+  "AlignNatWordSemR.urem_word": {
+    "axiom_closure": [
+      "Quot",
+      "Quot.lift",
+      "Quot.mk",
+      "Quot.sound",
+      "propext"
+    ],
+    "kind": "Theorem",
+    "lean_axiom_closure": [
+      "Quot.sound",
+      "propext"
+    ],
+    "level_params": [],
+    "meaning_sha256": "4ed8672e9b5bec6de7f7beb52dacaf2d842c62746a21e219497b4ee645f8836d",
+    "module": "AlignNatWordSemR"
+  },
+  "AlignNatWordSemR.urem_zero": {
+    "axiom_closure": [
+      "propext"
+    ],
+    "kind": "Theorem",
+    "lean_axiom_closure": [
+      "propext"
+    ],
+    "level_params": [],
+    "meaning_sha256": "22673c18feadd3f1e279e777fc8d8b0bd2160f0b2ddfdd02b894b872af05ab9c",
+    "module": "AlignNatWordSemR"
+  },
+  "AlignNatWordSemR.word": {
+    "axiom_closure": [],
+    "kind": "Definition",
+    "lean_axiom_closure": [],
+    "level_params": [],
+    "meaning_sha256": "faab2160e0b020e0d4c729602947b39c5b0b384fd8c858aaba6d08fe8a9d13d2",
+    "module": "AlignNatWordSemR"
+  },
+  "AlignNatWordSemR.word_inj": {
+    "axiom_closure": [],
+    "kind": "Theorem",
+    "lean_axiom_closure": [],
+    "level_params": [],
+    "meaning_sha256": "e2dfc4098b5c00aca4185c69af948a645aab68ad70ce299d5f2c6f5b950ad806",
+    "module": "AlignNatWordSemR"
+  },
+  "AlignNatWordSemRContracts.divGuarded": {
+    "axiom_closure": [
+      "propext"
+    ],
+    "kind": "Definition",
+    "lean_axiom_closure": [
+      "propext"
+    ],
+    "level_params": [],
+    "meaning_sha256": "d73347c4317d68cee066a86a12c31bdf58002a4fdde03d5594c3c188ecf9f0ec",
+    "module": "AlignNatWordSemRContracts"
+  },
+  "AlignNatWordSemRContracts.divSuccess": {
+    "axiom_closure": [
+      "propext"
+    ],
+    "kind": "Definition",
+    "lean_axiom_closure": [
+      "propext"
+    ],
+    "level_params": [],
+    "meaning_sha256": "d458192d406735c8ab4d1e42d147b1a239a6bb3dc2f1fec47043f92789126c2f",
+    "module": "AlignNatWordSemRContracts"
+  },
+  "AlignNatWordSemRContracts.divZero": {
+    "axiom_closure": [
+      "propext"
+    ],
+    "kind": "Definition",
+    "lean_axiom_closure": [
+      "propext"
+    ],
+    "level_params": [],
+    "meaning_sha256": "030a39937d3752ca127b5e86c0b6b7bbea245251566bfc33cf83ce50da1c9e2b",
+    "module": "AlignNatWordSemRContracts"
+  },
+  "AlignNatWordSemRContracts.modGuarded": {
+    "axiom_closure": [
+      "propext"
+    ],
+    "kind": "Definition",
+    "lean_axiom_closure": [
+      "propext"
+    ],
+    "level_params": [],
+    "meaning_sha256": "d77796c4440d607bbb3b44b1496448d65124277fa553ad5fd6ec13c77a9922b9",
+    "module": "AlignNatWordSemRContracts"
+  },
+  "AlignNatWordSemRContracts.modSuccess": {
+    "axiom_closure": [
+      "propext"
+    ],
+    "kind": "Definition",
+    "lean_axiom_closure": [
+      "propext"
+    ],
+    "level_params": [],
+    "meaning_sha256": "d73f11f146a33a7a70777747df6fe6fac3dd36109b4232bfd867c4dbaae8df3e",
+    "module": "AlignNatWordSemRContracts"
+  },
+  "AlignNatWordSemRContracts.modZero": {
+    "axiom_closure": [
+      "propext"
+    ],
+    "kind": "Definition",
+    "lean_axiom_closure": [
+      "propext"
+    ],
+    "level_params": [],
+    "meaning_sha256": "0b56c559976848ba993f8c04bdb0bf27f4e7314155936a6ad1f0263b3b660a11",
+    "module": "AlignNatWordSemRContracts"
+  },
+  "AlignNatWordSemRContracts.swappedDiv": {
+    "axiom_closure": [
+      "propext"
+    ],
+    "kind": "Definition",
+    "lean_axiom_closure": [
+      "propext"
+    ],
+    "level_params": [],
+    "meaning_sha256": "22bc93d65a8b6b3c7838f2a67c29ff795ad441544d4940c361536d9624344dff",
+    "module": "AlignNatWordSemRContracts"
+  },
+  "AlignNatWordSemRContracts.swappedDiv_refuted": {
+    "axiom_closure": [
+      "Quot",
+      "Quot.lift",
+      "Quot.mk",
+      "Quot.sound",
+      "propext"
+    ],
+    "kind": "Theorem",
+    "lean_axiom_closure": [
+      "Quot.sound",
+      "propext"
+    ],
+    "level_params": [],
+    "meaning_sha256": "06537c8dcbc75789bb5251ad14c0d15fa8c1f7c0a93dfa3f926160130b684a47",
+    "module": "AlignNatWordSemRContracts"
+  },
+  "AlignNatWordSemRContracts.swappedMod": {
+    "axiom_closure": [
+      "propext"
+    ],
+    "kind": "Definition",
+    "lean_axiom_closure": [
+      "propext"
+    ],
+    "level_params": [],
+    "meaning_sha256": "8bd6ae9b5a23377adbe28162af081517094a73a9fa7b67a9fbab882eb998af97",
+    "module": "AlignNatWordSemRContracts"
+  },
+  "AlignNatWordSemRContracts.swappedMod_refuted": {
+    "axiom_closure": [
+      "Quot",
+      "Quot.lift",
+      "Quot.mk",
+      "Quot.sound",
+      "propext"
+    ],
+    "kind": "Theorem",
+    "lean_axiom_closure": [
+      "Quot.sound",
+      "propext"
+    ],
+    "level_params": [],
+    "meaning_sha256": "7a9a72eb392334be96d3cfa428ec640d913d8c1876c0ff59aa6ab17c7e3a34a8",
+    "module": "AlignNatWordSemRContracts"
+  },
+  "AlignNatWordSemRContracts.unguardedDiv": {
+    "axiom_closure": [
+      "propext"
+    ],
+    "kind": "Definition",
+    "lean_axiom_closure": [
+      "propext"
+    ],
+    "level_params": [],
+    "meaning_sha256": "9fea271408fbe484cb33625c200973f102ea93d6d7e9441802a8183d9d86f35c",
+    "module": "AlignNatWordSemRContracts"
+  },
+  "AlignNatWordSemRContracts.unguardedDiv_refuted": {
+    "axiom_closure": [
+      "propext"
+    ],
+    "kind": "Theorem",
+    "lean_axiom_closure": [
+      "propext"
+    ],
+    "level_params": [],
+    "meaning_sha256": "fde95639016a3bba0fe52ff232c638cd4da97f2bc5e295116e01bd62b73919a2",
+    "module": "AlignNatWordSemRContracts"
+  },
+  "AlignNatWordSemRContracts.unguardedMod": {
+    "axiom_closure": [
+      "propext"
+    ],
+    "kind": "Definition",
+    "lean_axiom_closure": [
+      "propext"
+    ],
+    "level_params": [],
+    "meaning_sha256": "02c6e03b71396cae293e6bb50cb483f8a9a95c6df8d1d166a25fcc1b147ee9b0",
+    "module": "AlignNatWordSemRContracts"
+  },
+  "AlignNatWordSemRContracts.unguardedMod_refuted": {
+    "axiom_closure": [
+      "propext"
+    ],
+    "kind": "Theorem",
+    "lean_axiom_closure": [
+      "propext"
+    ],
+    "level_params": [],
+    "meaning_sha256": "68380536ea0b0d3f78f7085bc7ccdeb76e26e2c1731947b71917610d3cf70b9f",
+    "module": "AlignNatWordSemRContracts"
+  },
+  "CICL.LiteralRules.NatBinOp.eval": {
+    "axiom_closure": [
+      "propext"
+    ],
+    "kind": "Definition",
+    "lean_axiom_closure": [
+      "propext"
+    ],
+    "level_params": [],
+    "meaning_sha256": "06169b7457e41ff4002da9b2feed52bffd9c093ba07d36bc1fcdcb2a127651c9",
+    "module": "CICL.LiteralRules"
+  },
+  "SemR.evalBinop": {
+    "axiom_closure": [
+      "propext"
+    ],
+    "kind": "Definition",
+    "lean_axiom_closure": [
+      "propext"
+    ],
+    "level_params": [],
+    "meaning_sha256": "4daccc6a568e420b155466cb7f99b9c17c95e58621cd0c6c92a72c095f855900",
+    "module": "SemR"
+  },
+  "SemR.intBin": {
+    "axiom_closure": [
+      "propext"
+    ],
+    "kind": "Definition",
+    "lean_axiom_closure": [
+      "propext"
+    ],
+    "level_params": [],
+    "meaning_sha256": "ac4bf620a9d3c8bdfba846b9aca59603903b18e7cb29618fc924a955237dc9fd",
+    "module": "SemR"
+  }
+}

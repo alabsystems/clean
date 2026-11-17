@@ -11,11 +11,11 @@ pub(super) fn try_eta(
     budget: &mut Budget,
 ) -> Result<Option<bool>, BudgetError> {
     match (a.kind(), b.kind()) {
-        (TermKind::Lam(bi, dom, _), _) if !matches!(b.kind(), TermKind::Lam(_, _, _)) => {
-            Ok(Some(eta_one(env, ctx, *bi, dom, a, b, budget)?))
+        (TermKind::Lam(bi, _, _), _) if !matches!(b.kind(), TermKind::Lam(_, _, _)) => {
+            Ok(Some(eta_one(env, ctx, *bi, a, b, budget)?))
         }
-        (_, TermKind::Lam(bi, dom, _)) if !matches!(a.kind(), TermKind::Lam(_, _, _)) => {
-            Ok(Some(eta_one(env, ctx, *bi, dom, b, a, budget)?))
+        (_, TermKind::Lam(bi, _, _)) if !matches!(a.kind(), TermKind::Lam(_, _, _)) => {
+            Ok(Some(eta_one(env, ctx, *bi, b, a, budget)?))
         }
         _ => Ok(None),
     }
@@ -27,13 +27,22 @@ fn eta_one(
     env: &dyn Env,
     ctx: &mut Ctx,
     bi: BinderInfo,
-    dom: &Term,
     lam: &Term,
     other: &Term,
     budget: &mut Budget,
 ) -> Result<bool, BudgetError> {
-    // λ (x:dom). (other↑1) (BVar 0)
-    let expanded = Term::lam(bi, dom.clone(), Term::app(other.lift(1), Term::bvar(0)));
+    // Preserve typing of the synthetic eta term: use the other function's
+    // actual domain, then let binder congruence check the domains agree.
+    let other_ty = match infer_for_conversion(env, ctx, other, budget) {
+        Ok(ty) => ty,
+        Err(InferError::OutOfBudget) => return Err(BudgetError::OutOfBudget),
+        Err(_) => return Ok(false),
+    };
+    let other_ty = whnf_in_context(env, ctx, &other_ty, budget)?;
+    let TermKind::Pi(_, domain, _) = other_ty.kind() else {
+        return Ok(false);
+    };
+    let expanded = Term::lam(bi, domain.clone(), Term::app(other.lift(1), Term::bvar(0)));
     is_def_eq_at(env, ctx, lam, &expanded, budget)
 }
 
@@ -80,7 +89,7 @@ fn struct_eta_one(
     budget: &mut Budget,
 ) -> Result<Option<bool>, BudgetError> {
     // Determine e's structure type (in the current local context).
-    let e_ty = match infer_in_context(env, ctx, e, budget) {
+    let e_ty = match infer_for_conversion(env, ctx, e, budget) {
         Ok(t) => t,
         Err(InferError::OutOfBudget) => return Err(BudgetError::OutOfBudget),
         Err(_) => return Ok(None),
@@ -116,7 +125,7 @@ fn struct_eta_one(
         // A field-free eligible structure is unit-like even when BOTH terms
         // are neutral. Compare their full inferred types (including parameters
         // and universes); no value projections or recursive η-expansion occur.
-        let other_ty = match infer_in_context(env, ctx, other, budget) {
+        let other_ty = match infer_for_conversion(env, ctx, other, budget) {
             Ok(ty) => ty,
             Err(InferError::OutOfBudget) => return Err(BudgetError::OutOfBudget),
             Err(_) => return Ok(None),

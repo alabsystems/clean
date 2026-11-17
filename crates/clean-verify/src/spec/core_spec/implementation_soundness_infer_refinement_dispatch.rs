@@ -94,7 +94,7 @@ impl Specification {
                     "(_hctx : KernelStateLocalCtxWellFormed st) ",
                     "(hadm : KernelInputAdmissible st (KExpr.bvar n)) ",
                     "(_hinfer : KernelInferAccepts st (KExpr.bvar n) T) => ",
-                    "Empty.rec (fun (_ : Empty) => has_type (KExpr.bvar n) T) ",
+                    "@Empty.rec (fun (_ : Empty) => has_type (KExpr.bvar n) T) ",
                     "(bvar_not_closed n hadm)"
                 )
                 .to_string(),
@@ -182,7 +182,7 @@ impl Specification {
                     "(_hctx : KernelStateLocalCtxWellFormed st) ",
                     "(_hadm : KernelInputAdmissible st (KExpr.let_ ty val body)) ",
                     "(hinfer : KernelInferAccepts st (KExpr.let_ ty val body) T) => ",
-                    "Empty.rec (fun (_ : Empty) => has_type (KExpr.let_ ty val body) T) ",
+                    "@Empty.rec (fun (_ : Empty) => has_type (KExpr.let_ ty val body) T) ",
                     "(kernel_infer_inversion st (KExpr.let_ ty val body) T hinfer)"
                 )
                 .to_string(),
@@ -239,7 +239,7 @@ impl Specification {
                     "(_hctx : KernelStateLocalCtxWellFormed st) ",
                     "(_hadm : KernelInputAdmissible st (KExpr.proj s i sub)) ",
                     "(hinfer : KernelInferAccepts st (KExpr.proj s i sub) T) => ",
-                    "Empty.rec (fun (_ : Empty) => has_type (KExpr.proj s i sub) T) ",
+                    "@Empty.rec (fun (_ : Empty) => has_type (KExpr.proj s i sub) T) ",
                     "(kernel_infer_inversion st (KExpr.proj s i sub) T hinfer)"
                 )
                 .to_string(),
@@ -271,7 +271,7 @@ impl Specification {
                     "(_hctx : KernelStateLocalCtxWellFormed st) ",
                     "(_hadm : KernelInputAdmissible st (KExpr.lit v)) ",
                     "(hinfer : KernelInferAccepts st (KExpr.lit v) T) => ",
-                    "Empty.rec (fun (_ : Empty) => has_type (KExpr.lit v) T) ",
+                    "@Empty.rec (fun (_ : Empty) => has_type (KExpr.lit v) T) ",
                     "(kernel_infer_inversion st (KExpr.lit v) T hinfer)"
                 )
                 .to_string(),

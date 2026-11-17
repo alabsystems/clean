@@ -8,6 +8,20 @@ to carry real, kernel-checked proofs rather than name+type signatures.
 
 This document is the reproducible record of that pipeline.
 
+> **P6 (2026-11-16): what this page calls `KernelVerified` is development tier
+> now.** Unit P6 of
+> `docs/plans/SELF_PROOF_EXECUTION_PLAN_2026-11-12.md`
+> (design `designs/2026-11-16-p6-acceptance-identity.md`)
+> made every `kernel-verified.json` name its theory and checker (schema 2) and
+> deleted the stamp that wrote `KernelVerified` header bytes from one: a legacy
+> kernel profile's acceptance confers no label (P2 clause 1). Readers refuse
+> schema 1. The counts below are the legacy checker's acceptances on their
+> dates, and the stored headers they mention were minted by the deleted stamp.
+>
+> Here that means: the "stamp" steps below no longer exist (`coq-import`
+> writes the development manifest only), and the stored-`KernelVerified`
+> counts were minted by the deleted stamp.
+
 ## Why a separate toolchain
 
 The importer consumes SerAPI's serialized kernel `Constr`. SerAPI (`coq-serapi`) tops

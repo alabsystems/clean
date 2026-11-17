@@ -209,7 +209,7 @@ impl Specification {
                  (Eq.trans (OptionType KExpr) (@OptionType.none KExpr) \
                  ({ctor}_reduct ({envsel}) {var}) (@OptionType.some KExpr {var}2) \
                  (Eq.symm (OptionType KExpr) ({ctor}_reduct ({envsel}) {var}) \
-                 (@OptionType.none KExpr) ({immune} env {var} hr)) hst)) "
+                 (@OptionType.none KExpr) (@{immune} env {var} hr)) hst)) "
             ));
         }
 

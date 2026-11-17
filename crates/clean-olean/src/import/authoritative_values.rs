@@ -25,7 +25,7 @@ use hashbrown::HashSet;
 
 use super::artifact_ledger::{declared_by_this_artifact, ArtifactKey};
 use super::load_parse::LoadModule;
-use super::load_register::{is_typed_compiler_ir_name, stored_unsafe_or_partial};
+use super::load_register::stored_unsafe_or_partial;
 use super::{LoadSummary, OleanImportPolicy};
 use crate::payload::CleanPayload;
 use crate::ConstantKind;
@@ -89,7 +89,6 @@ pub(super) fn unmet(
                     c.kind,
                     ConstantKind::Definition | ConstantKind::Theorem | ConstantKind::Opaque
                 )
-                && !is_typed_compiler_ir_name(&c.kernel_name)
                 && !payload.contains(&c.kernel_name)
                 && !stored_unsafe_or_partial(&c.kind, c.definition_safety)
         })

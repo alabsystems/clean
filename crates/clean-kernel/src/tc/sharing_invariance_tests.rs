@@ -360,3 +360,28 @@ fn legacy_profile_cannot_be_relabelled_as_reference_v1() {
         })
     ));
 }
+
+#[cfg(debug_assertions)]
+#[test]
+fn discarded_debug_private_sharing_replay_keeps_real_certificates() {
+    // Use the universal owner's genuine private factory. The regression must
+    // not widen that factory or fabricate a favorable replay/cache state.
+    let env = Environment::new();
+    let checker = TypeChecker::for_sharing_prefix(&env, KernelTheory::Lean, Vec::new(), 100_000);
+    let shared = Arc::new(Expr::lam(BinderInfo::Default, Expr::type_(), Expr::bvar(0)));
+    let expected = Expr::arrow(Expr::type_(), Expr::type_());
+    let (ty, cert) = checker
+        .infer_type_with_cert_arc(&shared)
+        .expect("actual private sharing replay");
+    assert_eq!(ty, expected);
+    assert!(!checker.cert_retained.get());
+    assert_eq!(checker.infer_memo_depth.get(), 0);
+    assert_eq!(checker.ctx_len(), 0);
+    assert!(checker.infer_arc_memo.borrow().is_empty());
+    assert_eq!(
+        crate::cert::CertVerifier::new(&env)
+            .verify(&cert, &shared)
+            .expect("private sharing replay must retain the real certificate"),
+        expected
+    );
+}

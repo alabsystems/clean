@@ -38,10 +38,13 @@ use clean_olean::{
     ArtifactDepth,
 };
 
+/// The fixture-generated import-only aggregate for every model `ORDER` root.
+const ROOT: &str = "CleanQualification.cic_l_model";
+
 /// One semantic lemma per constructor of `CICL.CoreJudgmentIn` (plan unit M2):
 /// `CICL.Model.CoreRules.<rule>` re-entered at `CICL.Model.Contracts.<contract>`.
 /// The test requires this table to name every constructor exactly once.
-const CORE_RULE_CONTRACTS: [(&str, &str); 25] = [
+const CORE_RULE_CONTRACTS: [(&str, &str); 26] = [
     ("sort", "ruleSort"),
     ("sortCong", "ruleSortCong"),
     ("bvar", "ruleBvar"),
@@ -67,10 +70,63 @@ const CORE_RULE_CONTRACTS: [(&str, &str); 25] = [
     ("lamCong", "ruleLamCong"),
     ("appCong", "ruleAppCong"),
     ("letCong", "ruleLetCong"),
+    ("quotLift", "ruleQuotLift"),
 ];
 
 /// Plan units M1, M3 and M4, and M2's rule-level `Type : Type` refutation.
-const CORE_MODEL_CONTRACTS: [(&str, &str); 70] = [
+const CORE_MODEL_CONTRACTS: [(&str, &str); 86] = [
+    (
+        "CICL.Model.QuotientPrimitiveInterpretation.assignment_canonical",
+        "quotCanonicalAssignment",
+    ),
+    (
+        "CICL.Model.RawEvaluation.ValidAssignment.canonical_fresh_definition",
+        "quotCanonicalFresh",
+    ),
+    (
+        "CICL.Model.RawEvaluation.WfSignatureWithin.no_quotient_packet",
+        "quotOldNoPacket",
+    ),
+    ("CICL.quotLift_endpoint_types", "quotEndpointTypes"),
+    ("CICL.quotInd_equality", "quotIndEquation"),
+    ("CICL.QuotientHeadCases.lift_step", "quotLiftHead"),
+    ("CICL.QuotientHeadCases.ind_step", "quotIndHead"),
+    (
+        "CICL.Model.QuotientConversionControls.prop_to_data_satisfied",
+        "quotPropDataContext",
+    ),
+    (
+        "CICL.Model.QuotientConversionControls.data_to_prop_satisfied",
+        "quotDataPropContext",
+    ),
+    (
+        "CICL.Model.QuotientConversionControls.prop_to_data_meaning",
+        "quotPropDataMeaning",
+    ),
+    (
+        "CICL.Model.QuotientConversionControls.data_to_prop_meaning",
+        "quotDataPropMeaning",
+    ),
+    (
+        "CICL.Model.QuotientDomainControl.context_satisfied",
+        "quotDomainContext",
+    ),
+    (
+        "CICL.Model.QuotientDomainControl.argument_not_typed_at_domain",
+        "quotDomainArgument",
+    ),
+    (
+        "CICL.Model.QuotientDomainControl.distinct_outputs",
+        "quotDomainDistinct",
+    ),
+    (
+        "CICL.Model.QuotientDomainControl.not_equality_meaning",
+        "quotDomainNotEqual",
+    ),
+    (
+        "CICL.Model.QuotientDomainControl.conversion_needs_domain",
+        "quotDomainRequired",
+    ),
     ("KCheckSpec.Base.natRecDen_zero", "natRecursorZero"),
     ("KCheckSpec.Base.natRecDen_succ", "natRecursorSucc"),
     ("CICL.Model.Formula.falsity_false", "quotationFalse"),
@@ -676,8 +732,19 @@ fn model_contracts_recheck_with_named_axiom_exceptions() {
         );
     }
     eprintln!("canonical-base-pins {pin_output}");
+    let aggregate = read_artifact(
+        ROOT,
+        &compiled.join(format!("{}.olean", ROOT.replace('.', "/"))),
+        ArtifactDepth::Names,
+    )
+    .expect("model qualification aggregate");
+    assert!(
+        aggregate.names.is_empty(),
+        "qualification aggregate {ROOT} must declare no names: {:?}",
+        aggregate.names
+    );
     let independent = Command::new(bin.join("leanchecker"))
-        .args(["--fresh", "CICLModel.Contracts"])
+        .args(["--fresh", ROOT])
         .current_dir(&compiled)
         .env(
             "LEAN_PATH",
@@ -694,9 +761,8 @@ fn model_contracts_recheck_with_named_axiom_exceptions() {
     );
     let mut loaded = Environment::for_lean_replay();
     let package = Package::of_fixture(&compiled, "cic_l_model", &["cic_l", "cic_l_model"]);
-    let summaries =
-        load_module_with_deps(&mut loaded, "CICLModel.Contracts", &[compiled.clone(), lib])
-            .expect("load compiled model");
+    let summaries = load_module_with_deps(&mut loaded, ROOT, &[compiled.clone(), lib])
+        .expect("load compiled model qualification aggregate");
     let order: Vec<_> = include_str!("../../../theories/cic_l_model/ORDER")
         .lines()
         .map(str::trim)
@@ -943,7 +1009,7 @@ fn model_contracts_recheck_with_named_axiom_exceptions() {
         "../../../theories/cic_l_model/model_statement_pins.json"
     ))
     .expect("committed model statement pins");
-    assert_eq!(pins.len(), 691, "exact contract denominator");
+    assert_eq!(pins.len(), 708, "exact contract denominator");
     // Every pin's meaning digest over what the kernel admitted, printed before
     // any is compared, so one run of a changed set shows all of them.
     let (measured_pins, described) = pin_digests(kernel.environment());
@@ -1027,12 +1093,11 @@ fn model_contracts_recheck_with_named_axiom_exceptions() {
         let file = item["control"]["file"]
             .as_str()
             .unwrap_or_else(|| panic!("CoreJudgmentIn.{ctor} lacks control.file"));
-        if let Some(prev) = expected_controls.insert(ctor.to_owned(), theorem.to_owned()) {
-            assert_eq!(
-                prev, theorem,
-                "CoreJudgmentIn.{ctor} names conflicting controls"
-            );
-        }
+        let prev = expected_controls.insert(ctor.to_owned(), theorem.to_owned());
+        assert!(
+            prev.as_deref().is_none_or(|prev| prev == theorem),
+            "CoreJudgmentIn.{ctor} names conflicting controls: {prev:?} and {theorem}"
+        );
         if file.starts_with("CICLModel/") {
             expected_model_controls.insert(ctor.to_owned(), theorem.to_owned());
         }

@@ -36,10 +36,10 @@ impl Specification {
         // variable assignments. Built by induction on TrailOp.
         self.add_inductive(
             r"inductive TrailConsistent : forall (n : Nat), TrailOp n → Type
-| empty : forall (n : Nat), TrailConsistent n (TrailOp.empty n)
-| decide : forall (n : Nat) (var : Nat) (trail : TrailOp n) (h : TrailConsistent n trail), TrailConsistent n (TrailOp.decide n var trail)
-| propagate : forall (n : Nat) (var : Nat) (reason : Nat) (trail : TrailOp n) (h : TrailConsistent n trail), TrailConsistent n (TrailOp.propagate n var reason trail)
-| backtrack : forall (n : Nat) (level : Nat) (trail : TrailOp n) (h : TrailConsistent n trail), TrailConsistent n (TrailOp.backtrack n level trail)",
+| empty : forall (n : Nat), TrailConsistent n (@TrailOp.empty n)
+| decide : forall (n : Nat) (var : Nat) (trail : TrailOp n) (h : TrailConsistent n trail), TrailConsistent n (@TrailOp.decide n var trail)
+| propagate : forall (n : Nat) (var : Nat) (reason : Nat) (trail : TrailOp n) (h : TrailConsistent n trail), TrailConsistent n (@TrailOp.propagate n var reason trail)
+| backtrack : forall (n : Nat) (level : Nat) (trail : TrailOp n) (h : TrailConsistent n trail), TrailConsistent n (@TrailOp.backtrack n level trail)",
             "Trail consistency witness: inductive proof that each trail operation \
              preserves the no-duplicate-variable invariant. Base case: empty trail \
              is trivially consistent. Inductive cases: decide/propagate check the \
@@ -63,8 +63,8 @@ impl Specification {
         // produces a clause that is a logical consequence of the clause database.
         self.add_inductive(
             r"inductive ResolutionSound : forall (db_size : Nat), ResolutionStep db_size → Type
-| axiom_clause : forall (db_size : Nat) (idx : Nat), ResolutionSound db_size (ResolutionStep.axiom_clause db_size idx)
-| resolve : forall (db_size : Nat) (pivot : Nat) (left : ResolutionStep db_size) (right : ResolutionStep db_size) (hl : ResolutionSound db_size left) (hr : ResolutionSound db_size right), ResolutionSound db_size (ResolutionStep.resolve db_size pivot left right)",
+| axiom_clause : forall (db_size : Nat) (idx : Nat), ResolutionSound db_size (@ResolutionStep.axiom_clause db_size idx)
+| resolve : forall (db_size : Nat) (pivot : Nat) (left : ResolutionStep db_size) (right : ResolutionStep db_size) (hl : ResolutionSound db_size left) (hr : ResolutionSound db_size right), ResolutionSound db_size (@ResolutionStep.resolve db_size pivot left right)",
             "Resolution soundness witness: inductive proof that each step of \
              resolution produces a logical consequence of the clause database. \
              Base case: axiom clauses are trivially sound (they are in the DB). \
@@ -91,9 +91,9 @@ impl Specification {
         // has two distinct watched literals pointing to unassigned positions.
         self.add_inductive(
             r"inductive WatchInvariant : forall (nc : Nat), WatchOp nc → Type
-| init : forall (nc : Nat), WatchInvariant nc (WatchOp.init nc)
-| update : forall (nc : Nat) (clause_idx : Nat) (old_watch : Nat) (new_watch : Nat) (prev : WatchOp nc) (h : WatchInvariant nc prev), WatchInvariant nc (WatchOp.update nc clause_idx old_watch new_watch prev)
-| propagate : forall (nc : Nat) (clause_idx : Nat) (unit_lit : Nat) (prev : WatchOp nc) (h : WatchInvariant nc prev), WatchInvariant nc (WatchOp.propagate nc clause_idx unit_lit prev)",
+| init : forall (nc : Nat), WatchInvariant nc (@WatchOp.init nc)
+| update : forall (nc : Nat) (clause_idx : Nat) (old_watch : Nat) (new_watch : Nat) (prev : WatchOp nc) (h : WatchInvariant nc prev), WatchInvariant nc (@WatchOp.update nc clause_idx old_watch new_watch prev)
+| propagate : forall (nc : Nat) (clause_idx : Nat) (unit_lit : Nat) (prev : WatchOp nc) (h : WatchInvariant nc prev), WatchInvariant nc (@WatchOp.propagate nc clause_idx unit_lit prev)",
             "Watch invariant witness: inductive proof that each 2WL operation \
              preserves the two-watched-literal property. Base case: initial \
              watch setup satisfies the invariant. Update case: moving a watch \
@@ -122,9 +122,9 @@ impl Specification {
         // all remaining trail entries have decision_level <= d.
         self.add_inductive(
             r"inductive BacktrackValid : forall (n : Nat), BacktrackOp n → Type
-| current : forall (n : Nat) (level : Nat), BacktrackValid n (BacktrackOp.current n level)
-| pop : forall (n : Nat) (var : Nat) (var_level : Nat) (prev : BacktrackOp n) (h : BacktrackValid n prev), BacktrackValid n (BacktrackOp.pop n var var_level prev)
-| done : forall (n : Nat) (target_level : Nat) (prev : BacktrackOp n) (h : BacktrackValid n prev), BacktrackValid n (BacktrackOp.done n target_level prev)",
+| current : forall (n : Nat) (level : Nat), BacktrackValid n (@BacktrackOp.current n level)
+| pop : forall (n : Nat) (var : Nat) (var_level : Nat) (prev : BacktrackOp n) (h : BacktrackValid n prev), BacktrackValid n (@BacktrackOp.pop n var var_level prev)
+| done : forall (n : Nat) (target_level : Nat) (prev : BacktrackOp n) (h : BacktrackValid n prev), BacktrackValid n (@BacktrackOp.done n target_level prev)",
             "Backtrack validity witness: inductive proof that each backtrack \
              step preserves the consistent-prefix property. Base case: the \
              current trail state at any level is trivially valid. Pop case: \
@@ -151,9 +151,9 @@ impl Specification {
         // no unit clause remains un-propagated.
         self.add_inductive(
             r"inductive BCPComplete : forall (n : Nat), BCPStep n → Type
-| fixpoint : forall (n : Nat), BCPComplete n (BCPStep.fixpoint n)
-| unit : forall (n : Nat) (clause_idx : Nat) (lit : Nat) (prev : BCPStep n) (h : BCPComplete n prev), BCPComplete n (BCPStep.unit n clause_idx lit prev)
-| skip : forall (n : Nat) (clause_idx : Nat) (prev : BCPStep n) (h : BCPComplete n prev), BCPComplete n (BCPStep.skip n clause_idx prev)",
+| fixpoint : forall (n : Nat), BCPComplete n (@BCPStep.fixpoint n)
+| unit : forall (n : Nat) (clause_idx : Nat) (lit : Nat) (prev : BCPStep n) (h : BCPComplete n prev), BCPComplete n (@BCPStep.unit n clause_idx lit prev)
+| skip : forall (n : Nat) (clause_idx : Nat) (prev : BCPStep n) (h : BCPComplete n prev), BCPComplete n (@BCPStep.skip n clause_idx prev)",
             "BCP completeness witness: inductive proof that BCP finds all \
              unit-implied literals. Base case: fixpoint has no unpropagated \
              unit clauses. Unit case: the 2WL structure ensures the unit \
@@ -183,10 +183,10 @@ impl Specification {
         // positive, negative, or absent).
         self.add_inductive(
             r"inductive CDCLTerminates : forall (bound : Nat), CDCLStep bound → Type
-| sat : forall (bound : Nat), CDCLTerminates bound (CDCLStep.sat bound)
-| unsat : forall (bound : Nat), CDCLTerminates bound (CDCLStep.unsat bound)
-| learn : forall (bound : Nat) (clause_id : Nat) (prev : CDCLStep bound) (h : CDCLTerminates bound prev), CDCLTerminates bound (CDCLStep.learn bound clause_id prev)
-| restart : forall (bound : Nat) (prev : CDCLStep bound) (h : CDCLTerminates bound prev), CDCLTerminates bound (CDCLStep.restart bound prev)",
+| sat : forall (bound : Nat), CDCLTerminates bound (@CDCLStep.sat bound)
+| unsat : forall (bound : Nat), CDCLTerminates bound (@CDCLStep.unsat bound)
+| learn : forall (bound : Nat) (clause_id : Nat) (prev : CDCLStep bound) (h : CDCLTerminates bound prev), CDCLTerminates bound (@CDCLStep.learn bound clause_id prev)
+| restart : forall (bound : Nat) (prev : CDCLStep bound) (h : CDCLTerminates bound prev), CDCLTerminates bound (@CDCLStep.restart bound prev)",
             "CDCL termination witness: inductive proof that CDCL terminates \
              in finitely many steps. Base cases: sat/unsat are terminal. \
              Learn case: each learned clause is new (no duplicates) and the \
@@ -208,13 +208,13 @@ impl Specification {
                 "fun (n : Nat) (trail : TrailOp n) => \
                  @TrailOp.rec n \
                    (fun (t : TrailOp n) => TrailConsistent n t) \
-                   (TrailConsistent.empty n) \
+                   (@TrailConsistent.empty n) \
                    (fun (var : Nat) (prev : TrailOp n) (ih : TrailConsistent n prev) => \
-                     TrailConsistent.decide n var prev ih) \
+                     @TrailConsistent.decide n var prev ih) \
                    (fun (var : Nat) (reason : Nat) (prev : TrailOp n) (ih : TrailConsistent n prev) => \
-                     TrailConsistent.propagate n var reason prev ih) \
+                     @TrailConsistent.propagate n var reason prev ih) \
                    (fun (level : Nat) (prev : TrailOp n) (ih : TrailConsistent n prev) => \
-                     TrailConsistent.backtrack n level prev ih) \
+                     @TrailConsistent.backtrack n level prev ih) \
                    trail"
                     .to_string(),
             ),
@@ -242,13 +242,13 @@ impl Specification {
                 "fun (nc : Nat) (ops : WatchOp nc) => \
                  @WatchOp.rec nc \
                    (fun (w : WatchOp nc) => WatchInvariant nc w) \
-                   (WatchInvariant.init nc) \
+                   (@WatchInvariant.init nc) \
                    (fun (clause_idx : Nat) (old_watch : Nat) (new_watch : Nat) \
                         (prev : WatchOp nc) (ih : WatchInvariant nc prev) => \
-                     WatchInvariant.update nc clause_idx old_watch new_watch prev ih) \
+                     @WatchInvariant.update nc clause_idx old_watch new_watch prev ih) \
                    (fun (clause_idx : Nat) (unit_lit : Nat) \
                         (prev : WatchOp nc) (ih : WatchInvariant nc prev) => \
-                     WatchInvariant.propagate nc clause_idx unit_lit prev ih) \
+                     @WatchInvariant.propagate nc clause_idx unit_lit prev ih) \
                    ops"
                 .to_string(),
             ),
@@ -277,10 +277,10 @@ impl Specification {
                 "fun (db_size : Nat) (deriv : ResolutionStep db_size) => \
                  @ResolutionStep.rec db_size \
                    (fun (d : ResolutionStep db_size) => ResolutionSound db_size d) \
-                   (fun (idx : Nat) => ResolutionSound.axiom_clause db_size idx) \
+                   (fun (idx : Nat) => @ResolutionSound.axiom_clause db_size idx) \
                    (fun (pivot : Nat) (left : ResolutionStep db_size) (right : ResolutionStep db_size) \
                         (ih_left : ResolutionSound db_size left) (ih_right : ResolutionSound db_size right) => \
-                     ResolutionSound.resolve db_size pivot left right ih_left ih_right) \
+                     @ResolutionSound.resolve db_size pivot left right ih_left ih_right) \
                    deriv"
                     .to_string(),
             ),
@@ -309,13 +309,13 @@ impl Specification {
                 "fun (n : Nat) (ops : BacktrackOp n) => \
                  @BacktrackOp.rec n \
                    (fun (b : BacktrackOp n) => BacktrackValid n b) \
-                   (fun (level : Nat) => BacktrackValid.current n level) \
+                   (fun (level : Nat) => @BacktrackValid.current n level) \
                    (fun (var : Nat) (var_level : Nat) \
                         (prev : BacktrackOp n) (ih : BacktrackValid n prev) => \
-                     BacktrackValid.pop n var var_level prev ih) \
+                     @BacktrackValid.pop n var var_level prev ih) \
                    (fun (target_level : Nat) \
                         (prev : BacktrackOp n) (ih : BacktrackValid n prev) => \
-                     BacktrackValid.done n target_level prev ih) \
+                     @BacktrackValid.done n target_level prev ih) \
                    ops"
                 .to_string(),
             ),
@@ -343,13 +343,13 @@ impl Specification {
                 "fun (n : Nat) (steps : BCPStep n) => \
                  @BCPStep.rec n \
                    (fun (s : BCPStep n) => BCPComplete n s) \
-                   (BCPComplete.fixpoint n) \
+                   (@BCPComplete.fixpoint n) \
                    (fun (clause_idx : Nat) (lit : Nat) \
                         (prev : BCPStep n) (ih : BCPComplete n prev) => \
-                     BCPComplete.unit n clause_idx lit prev ih) \
+                     @BCPComplete.unit n clause_idx lit prev ih) \
                    (fun (clause_idx : Nat) \
                         (prev : BCPStep n) (ih : BCPComplete n prev) => \
-                     BCPComplete.skip n clause_idx prev ih) \
+                     @BCPComplete.skip n clause_idx prev ih) \
                    steps"
                     .to_string(),
             ),
@@ -379,13 +379,13 @@ impl Specification {
                 "fun (bound : Nat) (steps : CDCLStep bound) => \
                  @CDCLStep.rec bound \
                    (fun (s : CDCLStep bound) => CDCLTerminates bound s) \
-                   (CDCLTerminates.sat bound) \
-                   (CDCLTerminates.unsat bound) \
+                   (@CDCLTerminates.sat bound) \
+                   (@CDCLTerminates.unsat bound) \
                    (fun (clause_id : Nat) \
                         (prev : CDCLStep bound) (ih : CDCLTerminates bound prev) => \
-                     CDCLTerminates.learn bound clause_id prev ih) \
+                     @CDCLTerminates.learn bound clause_id prev ih) \
                    (fun (prev : CDCLStep bound) (ih : CDCLTerminates bound prev) => \
-                     CDCLTerminates.restart bound prev ih) \
+                     @CDCLTerminates.restart bound prev ih) \
                    steps"
                     .to_string(),
             ),

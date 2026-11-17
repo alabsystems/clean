@@ -484,7 +484,7 @@ impl<'a> ElabCtx<'a> {
     }
 
     /// Take the `attribute [class] X` targets collected this declaration.
-    pub(crate) fn take_class_attrs(&mut self) -> Vec<Name> {
+    pub(crate) fn take_class_attrs(&mut self) -> Vec<crate::class_attribute::ClassAttribute> {
         std::mem::take(&mut self.collected_class_attrs)
     }
 

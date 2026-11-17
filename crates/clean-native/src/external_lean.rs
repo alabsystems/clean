@@ -12,20 +12,42 @@
 
 use std::collections::{BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
+#[cfg(test)]
 use std::process::Command;
 use std::sync::Arc;
 
 use clean_compiler::cli::EmitFormat;
 use clean_compiler::pass_manager::PipelineConfig;
-use clean_compiler::runtime_lcnf::{
-    RuntimeContext, RuntimeEnvironmentCapture, RuntimeSourceRecord,
-};
+use clean_compiler::runtime_lcnf::RuntimeEnvironmentCapture;
 use clean_compiler::Decl;
 use clean_kernel::{ConstantInfo, Environment, LeanWorld, Name};
-use clean_olean::{ImportWorld, ImportedConeGate, ImportedConeVerdict};
+#[cfg(test)]
+use clean_olean::ImportWorld;
+use clean_olean::{ImportedConeGate, ImportedConeVerdict};
 
+mod elaborate;
+mod inspection;
+mod scoped;
+pub use inspection::ExternalLeanInspection;
+pub use scoped::{ExternalLeanScopedProgram, ExternalLeanScopedSelection};
 mod snapshot;
 pub use snapshot::InputObservation;
+mod context;
+pub use context::{
+    ReplayContextError, ReplayContextLimits, ReplayedContextDeclaration, ReplayedLeanContext,
+};
+#[cfg(feature = "trust-ir-backend")]
+mod scalar_layout;
+#[cfg(feature = "trust-ir-backend")]
+pub use scalar_layout::{
+    CheckedScalarLayoutFacts, ScalarLayoutFailure, ScalarLayoutStage, ScalarLayoutWord,
+    ScalarWordLayoutFacts,
+};
+mod primary_artifact;
+pub use primary_artifact::{
+    PrimaryArtifactDeclaration, PrimaryArtifactError, PrimaryArtifactLimits, PrimaryArtifactView,
+    SourceCopyAssociation,
+};
 
 /// Inputs are observations, never authority over an arbitrary Environment.
 #[derive(Debug)]
@@ -56,6 +78,8 @@ pub enum ExternalLeanError {
     #[error("external Lean compiler handoff failed: {0}")]
     Compile(String),
     #[error(transparent)]
+    Inspection(#[from] ReplayContextError),
+    #[error(transparent)]
     Io(#[from] std::io::Error),
 }
 
@@ -67,139 +91,22 @@ pub struct ExternalLeanProgram {
     base: Environment,
     module_names: BTreeSet<Name>,
     custody: Arc<Custody>,
+    usage: inspection::Usage,
 }
 
 struct Custody {
     world: LeanWorld,
+    #[cfg(feature = "trust-ir-backend")]
+    source: Arc<Environment>,
+    #[cfg(feature = "trust-ir-backend")]
+    base: Arc<Environment>,
     observation: RuntimeEnvironmentCapture,
     inputs: Vec<InputObservation>,
+    primary_artifact: Result<primary_artifact::PrimaryArtifactCapture, PrimaryArtifactError>,
     _snapshot: tempfile::TempDir,
 }
 
 impl ExternalLeanProgram {
-    /// Elaborate exactly the captured source. Dependency artifacts (including
-    /// runtime `.ir` companions) are copied before invoking Lean, and input
-    /// files, executable and owned copies are compared again afterwards.
-    /// Only the owned search path may supply the subsequently replayed context.
-    pub fn elaborate(input: ExternalLeanInput<'_>) -> Result<Self, ExternalLeanError> {
-        let decision = clean_olean::source_world_for_file(input.file, Some(input.world))
-            .map_err(|e| ExternalLeanError::Input(e.to_string()))?;
-        let Ok(ImportWorld::Explicit { lib, .. }) = decision.imports() else {
-            return Err(ExternalLeanError::Input(
-                "explicit Lean world required".into(),
-            ));
-        };
-        let lean = lib
-            .parent()
-            .and_then(Path::parent)
-            .ok_or_else(|| ExternalLeanError::Input("invalid installed Lean library path".into()))?
-            .join("bin/lean");
-        let snapshot = tempfile::tempdir()?;
-        let root = snapshot.path();
-        let mut files = snapshot::Files::default();
-        files.observe(input.file)?;
-        let source_path = snapshot::module_path(root, input.module, "lean")?;
-        if let Some(parent) = source_path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        files.copy(input.file, &source_path)?;
-        let source = std::fs::read_to_string(&source_path)?;
-        files.observe(&lean)?;
-        // Shared libraries are part of the frontend TCB, never proof evidence.
-        snapshot::observe_frontend_libraries(lib, &mut files)?;
-        files.observe(&source_path)?;
-        let mut search_paths = input.search_paths.to_vec();
-        search_paths.push(lib.clone());
-        let mut base = Environment::for_lean_replay();
-        clean_olean::declare_environment_world(&mut base, input.world.tag())
-            .map_err(|e| ExternalLeanError::Input(e.to_string()))?;
-        let mut world_scope = clean_olean::LeanWorldScope::of_environment(&base);
-        snapshot::capture_imports(
-            input.imports,
-            &search_paths,
-            root,
-            &mut files,
-            &mut world_scope,
-        )?;
-        let output_path = snapshot::module_path(root, input.module, "olean")?;
-        if output_path.exists() {
-            return Err(ExternalLeanError::Input(
-                "source module redeclares a captured import".into(),
-            ));
-        }
-        let output = Command::new(&lean)
-            .current_dir(root)
-            // Ambient Lean/sysroot/plugin/loader variables must not redirect
-            // this explicitly selected frontend into another installation.
-            .env_clear()
-            .env("LEAN_PATH", root)
-            .arg("--root")
-            .arg(root)
-            .arg("-o")
-            .arg(&output_path)
-            .arg(&source_path)
-            .output()?;
-        files.check()?;
-        if !output.status.success() {
-            return Err(ExternalLeanError::Elaboration(format!(
-                "{}: {}{}",
-                output.status,
-                String::from_utf8_lossy(&output.stdout),
-                String::from_utf8_lossy(&output.stderr)
-            )));
-        }
-        snapshot::observe_output(&output_path, &mut files, &mut world_scope)?;
-        let mut env = base.clone();
-        clean_olean::load_typed_module_with_deps_bounded(
-            &mut env,
-            input.module,
-            &[root.to_path_buf()],
-            4096,
-        )
-        .map_err(|e| ExternalLeanError::Input(e.to_string()))?;
-        files.check()?;
-        let artifact = clean_olean::read_artifact(
-            &format!("{:?}", input.module),
-            &output_path,
-            clean_olean::ArtifactDepth::Records,
-        )
-        .map_err(|e| ExternalLeanError::Input(e.to_string()))?;
-        let capture = RuntimeContext::capture_with_environment(
-            vec![],
-            &base,
-            &env,
-            vec![RuntimeSourceRecord {
-                module: format!("{:?}", input.module),
-                path: std::fs::canonicalize(input.file)?.display().to_string(),
-                source,
-            }],
-        );
-        let observation = capture
-            .environment_capture()
-            .cloned()
-            .ok_or_else(|| ExternalLeanError::Input("missing source observation".into()))?;
-        if !observation.errors.is_empty() || observation.snapshot_blake3.is_none() {
-            return Err(ExternalLeanError::Input(format!(
-                "incomplete source snapshot: {:?}",
-                observation.errors
-            )));
-        }
-        // Membership and source observations were read after loading. Close
-        // that entire read interval, not only the loader's earlier reads.
-        files.check()?;
-        Ok(Self {
-            env,
-            base,
-            module_names: artifact.names.into_iter().collect(),
-            custody: Arc::new(Custody {
-                world: input.world,
-                observation,
-                inputs: files.into_observations(),
-                _snapshot: snapshot,
-            }),
-        })
-    }
-
     pub fn world(&self) -> LeanWorld {
         self.custody.world
     }
@@ -275,6 +182,19 @@ impl ExternalLeanProgram {
         opt_level: u8,
         scoped: bool,
     ) -> Result<ExternalLeanSelection, ExternalLeanError> {
+        self.require_native()?;
+        self.select_captured(root, opt_level, scoped, None)
+    }
+
+    // Only the default native guard above or the separate source-owned scoped
+    // guard may enter this shared compiler handoff. No public promotion exists.
+    fn select_captured(
+        &self,
+        root: &Name,
+        opt_level: u8,
+        scoped: bool,
+        allowed: Option<&BTreeSet<Name>>,
+    ) -> Result<ExternalLeanSelection, ExternalLeanError> {
         let ReplayedLeanDeclaration {
             info: _,
             closure_digest,
@@ -309,6 +229,21 @@ impl ExternalLeanProgram {
         };
         let (decls, env, pipeline, _) = select(runtime_binding_closure.as_ref())
             .map_err(|e| ExternalLeanError::Compile(format!("{e:#}")))?;
+        if let Some(allowed) = allowed {
+            for declaration in &decls {
+                let name = &declaration.name;
+                let resident = self.env.get_const(name).is_some()
+                    || self.env.get_inductive(name).is_some()
+                    || self.env.get_constructor(name).is_some()
+                    || self.env.get_recursor(name).is_some()
+                    || self.env.get_quot(name).is_some();
+                if resident && !allowed.contains(name) {
+                    return Err(ExternalLeanError::Compile(format!(
+                        "selected runtime declaration {name:?} is outside captured scope"
+                    )));
+                }
+            }
+        }
         // Runtime redirects can add bodies absent from the logical cone.
         // Replay those exact selected definitions too, under the same gate.
         let runtime_roots = decls.iter().map(|decl| decl.name.clone()).collect();
@@ -330,6 +265,12 @@ impl ExternalLeanProgram {
             env,
             pipeline,
             custody: Arc::clone(&self.custody),
+            #[cfg(feature = "trust-ir-backend")]
+            source_context: SelectionSource {
+                original: Arc::clone(&self.custody.source),
+                base: Arc::clone(&self.custody.base),
+                owner: Arc::clone(&self.custody),
+            },
         })
     }
 }
@@ -355,6 +296,13 @@ impl ReplayedLeanDeclaration<'_> {
     }
 }
 
+#[cfg(feature = "trust-ir-backend")]
+struct SelectionSource {
+    original: Arc<Environment>,
+    base: Arc<Environment>,
+    owner: Arc<Custody>,
+}
+
 /// A replayed declaration handed to the existing L5CNF/pipeline emitters.
 /// This selection is an input qualification, never a binary certificate.
 pub struct ExternalLeanSelection {
@@ -367,6 +315,8 @@ pub struct ExternalLeanSelection {
     env: Environment,
     pipeline: PipelineConfig,
     custody: Arc<Custody>,
+    #[cfg(feature = "trust-ir-backend")]
+    source_context: SelectionSource,
 }
 
 impl ExternalLeanSelection {
@@ -427,13 +377,67 @@ impl ExternalLeanSelection {
             .sources
             .first()
             .map(|s| Path::new(&s.path));
-        crate::scalar_call::ScalarCall::from_selected(
+        if !Arc::ptr_eq(&self.custody, &self.source_context.owner)
+            || !Arc::ptr_eq(&self.custody.source, &self.source_context.original)
+            || !Arc::ptr_eq(&self.custody.base, &self.source_context.base)
+        {
+            return Err(ExternalLeanError::Input(
+                "scalar replay source belongs to another source custody".into(),
+            ));
+        }
+        // Reuse the existing scalar layout dependency walk. These are proof
+        // prerequisites, not additional native-selection rights. Their actual
+        // combined source context must fit the unchanged capture limits before
+        // fresh kernel replay or unbounded record-digest consumers.
+        let mut roots = crate::scalar_call::scalar_source_roots()
+            .map_err(|e| ExternalLeanError::Compile(format!("{e:#}")))?;
+        roots.insert(self.root.clone());
+        roots.extend(
+            self.decls
+                .iter()
+                .filter(|d| self.source_context.original.get_const(&d.name).is_some())
+                .map(|d| d.name.clone()),
+        );
+        let source_roots: Vec<_> = roots.iter().cloned().collect();
+        let plan = clean_compiler::RuntimeBindingPlan::discover(
+            &self.source_context.original,
+            &source_roots,
+            clean_compiler::runtime_lcnf::RuntimeSourceCaptureLimits::default().declarations,
+        )
+        .map_err(|e| ExternalLeanError::Compile(e.to_string()))?;
+        let observation = clean_compiler::runtime_lcnf::RuntimeScopedEnvironmentCapture::capture(
+            &self.source_context.base,
+            &self.source_context.original,
+            self.custody.observation.sources.clone(),
+            &plan,
+        );
+        if !observation.is_complete() {
+            return Err(ExternalLeanError::Input(format!(
+                "incomplete scalar replay source context: {:?}",
+                observation.errors()
+            )));
+        }
+        let replay = clean_olean::ReplayedImportedSource::check(
+            Arc::clone(&self.source_context.base),
+            Arc::clone(&self.source_context.original),
+            roots.clone(),
+        )
+        .map_err(|e| ExternalLeanError::Compile(e.to_string()))?;
+        replay
+            .require_context(
+                &self.source_context.base,
+                &self.source_context.original,
+                &roots,
+            )
+            .map_err(|e| ExternalLeanError::Compile(e.to_string()))?;
+        crate::scalar_call::ScalarCall::from_selected_with_replay(
             &self.decls,
             &self.env,
             &self.pipeline,
             &self.root,
             source,
             self.runtime_binding_closure.as_ref(),
+            Some(&replay),
         )
         .map_err(|e| ExternalLeanError::Compile(format!("{e:#}")))
     }

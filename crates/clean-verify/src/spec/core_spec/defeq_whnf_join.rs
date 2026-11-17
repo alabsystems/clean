@@ -171,7 +171,7 @@ impl Specification {
              (hr : @Eq (OptionType KExpr) (whnf_fuel_red the_red_env n a) \
              (@OptionType.some KExpr r)) \
              (hc : subexpr_step c r) : rbelow_plus c a := \
-             rbelow_plus_of_step_rtc c r a (rbelow.sub c r hc) \
+             rbelow_plus_of_step_rtc c r a (@rbelow.sub c r hc) \
              (whnf_fuel_red_rbelow_rtc n a r hr)",
             "whnf_component_below: an immediate subexpression of a whnf result is STRICTLY BELOW \
              the original term in the algorithm's order. This is the relation that was already \

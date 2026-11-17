@@ -1,0 +1,8 @@
+name = "stable_fixture"
+
+[leanOptions]
+experimental.module = true
+compiler.postponeCompile = true
+
+[[lean_lib]]
+name = "StableFixture"

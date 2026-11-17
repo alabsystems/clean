@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Yates
 # Author: Andrew Yates <andrewyates.name@gmail.com>
 # SPDX-License-Identifier: Apache-2.0
-"""Mint the 33 proof terms in `eval_ir_slot_lemmas.rs`.
+"""Mint the 34 proof terms in `eval_ir_slot_lemmas.rs`.
 
 WHY THIS EXISTS. That file carries ~16k characters of proof term across its
 string constants -- the `alloca` / `store` / `load` / `ret` return slot, closed
@@ -66,7 +66,7 @@ def _source_module(name, path):
 
 def _helper_source_controls():
     controls = _source_module('generator_source_controls', REPO / 'scripts/test_generator_source_helpers.py')
-    controls.run_generator_controls(Path(__file__).name)
+    controls.self_test_generator(Path(__file__).name)
 
 SLOT_RS = REPO / "crates/clean-verify/src/spec/core_spec/eval_ir_slot_lemmas.rs"
 
@@ -699,18 +699,21 @@ def self_test() -> int:
 
 
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap = argparse.ArgumentParser(description=(__doc__ or "EvalIR term generator").splitlines()[0])
     ap.add_argument("--check", action="store_true", help="byte-compare with the committed consts")
     ap.add_argument("--print", dest="show", help="print one term by const name")
     ap.add_argument("--emit", action="store_true", help="rewrite the consts in place")
     ap.add_argument("--self-test", action="store_true", help="reproduce the probe's terms")
     ap.add_argument("--pinned-inputs", action="store_true", help="list exact source/control inputs")
     args = ap.parse_args(argv)
+    actions = [args.check, args.show is not None, args.emit, args.self_test, args.pinned_inputs]
+    if sum(actions) > 1:
+        ap.error("primary actions cannot be combined")
     if args.pinned_inputs:
-        if any(value for key, value in vars(args).items() if key != "pinned_inputs"):
-            ap.error("--pinned-inputs cannot be combined with another action")
         print("\n".join(HELPER_INPUTS))
         return 0
+    if args.show == "":
+        ap.error("--print requires a nonempty const name")
     if args.self_test:
         code = self_test()
         if code == 0:

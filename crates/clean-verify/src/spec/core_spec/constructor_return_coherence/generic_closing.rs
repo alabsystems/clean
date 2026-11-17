@@ -22,15 +22,15 @@ pub(super) const DECLARATIONS: &[DeclarationInput] = &[
         r"forall (d p : Nat), Le (Nat.sub d p) d",
         r"fun (d : Nat) => @Nat.rec (fun (d0 : Nat) => forall (p : Nat), Le (Nat.sub d0 p) d0)
  (fun (p : Nat) => Eq.subst Nat (fun (x : Nat) => Le x Nat.zero)
-  Nat.zero (Nat.sub Nat.zero p) (Eq.symm Nat (Nat.sub Nat.zero p) Nat.zero (nat_sub_zero_left p)) (Le.refl Nat.zero))
+  Nat.zero (Nat.sub Nat.zero p) (Eq.symm Nat (Nat.sub Nat.zero p) Nat.zero (nat_sub_zero_left p)) (@Le.refl Nat.zero))
  (fun (d0 : Nat) (ih : forall (p : Nat), Le (Nat.sub d0 p) d0) (p : Nat) =>
   @Nat.rec (fun (p0 : Nat) => Le (Nat.sub (Nat.succ d0) p0) (Nat.succ d0))
-   (Le.refl (Nat.succ d0))
+   (@Le.refl (Nat.succ d0))
    (fun (p0 : Nat) (_prev : Le (Nat.sub (Nat.succ d0) p0) (Nat.succ d0)) =>
     Eq.subst Nat (fun (x : Nat) => Le x (Nat.succ d0))
      (Nat.sub d0 p0) (Nat.sub (Nat.succ d0) (Nat.succ p0))
      (Eq.symm Nat (Nat.sub (Nat.succ d0) (Nat.succ p0)) (Nat.sub d0 p0) (nat_sub_succ_succ d0 p0))
-     (Le.step (Nat.sub d0 p0) d0 (ih p0))) p) d",
+     (@Le.step (Nat.sub d0 p0) d0 (ih p0))) p) d",
     ),
     DeclarationInput::Proof(
         "gcc_slot_below",
@@ -181,7 +181,7 @@ pub(super) const DECLARATIONS: &[DeclarationInput] = &[
   universe_bridge_congr2 KExpr KExpr KExpr KExpr.app
    (instantiate_at (arc_return_spine d p) (KExpr.const n (@ListType.nil Level)) d) (gcc_named_return_spine n d p)
    (instantiate_at (KExpr.bvar (Nat.sub d (Nat.succ p))) (KExpr.const n (@ListType.nil Level)) d) (KExpr.bvar (Nat.sub d (Nat.succ p)))
-   (ih (le_trans p (Nat.succ p) d (Le.step p p (Le.refl p)) h))
+   (ih (le_trans p (Nat.succ p) d (@Le.step p p (@Le.refl p)) h))
    (gcc_close_parameter_bvar n d p h)) np",
     ),
     DeclarationInput::Proof(

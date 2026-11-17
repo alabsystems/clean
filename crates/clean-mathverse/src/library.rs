@@ -344,40 +344,6 @@ impl MathverseLibrary {
         self.constants.len()
     }
 
-    /// Upgrade the in-memory `import_confidence` of every constant named in the
-    /// kernel-verified manifest to [`ImportConfidence::KernelVerified`] —
-    /// reflecting that Clean's own kernel re-verified it (see
-    /// `verify::incremental::verify_corpus_incremental` and the
-    /// `kernel-verified.json` sidecar emitted by `verify-kernel --corpus
-    /// --emit-verified`). Names absent from this library are skipped. Returns the
-    /// number of constants whose confidence was raised. This is how the
-    /// trust-gated `mathverse use` tactic comes to treat Clean-re-verified
-    /// constants at the top confidence tier.
-    ///
-    /// This pass is **in-memory only** — it does not touch the shard files on
-    /// disk, so a freshly reloaded library would once again read
-    /// `KernelVerified = 0` from the bytes. To make the stamp survive into the
-    /// shard bytes (the WS5 goal), use [`stamp_shard_dir_kernel_verified`],
-    /// which rewrites each shard file with the verified `import_confidence`
-    /// byte set.
-    pub fn apply_kernel_verified_manifest(
-        &mut self,
-        manifest: &crate::verify::kernel_verified_manifest::KernelVerifiedManifest,
-    ) -> usize {
-        let target = ImportConfidence::KernelVerified as u8;
-        let mut upgraded = 0usize;
-        for name in &manifest.kernel_verified_names {
-            if let Some(&idx) = self.name_to_idx.get(name) {
-                let conf = &mut self.constants[idx as usize].import_confidence;
-                if *conf != target {
-                    *conf = target;
-                    upgraded += 1;
-                }
-            }
-        }
-        upgraded
-    }
-
     /// Get a constant header by global index.
     #[inline]
     pub fn get_constant(&self, idx: ConstantIdx) -> Option<&MathverseConstantHeader> {
@@ -949,134 +915,23 @@ impl MathverseLibrary {
 }
 
 // ---------------------------------------------------------------------------
-// On-disk KernelVerified stamping (WS5)
+// Stored KernelVerified header audit
 // ---------------------------------------------------------------------------
-
-/// Outcome of a destructive on-disk `KernelVerified` stamp over a shard dir.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct ShardStampResult {
-    /// Shard files that were read, stamped, and rewritten.
-    pub shards_rewritten: usize,
-    /// Total constant headers whose persisted `import_confidence` byte was
-    /// raised to `KernelVerified` across all shards.
-    pub constants_stamped: usize,
-}
-
-/// Destructively rewrite a single shard file so that every constant named in
-/// `verified_names` carries [`ImportConfidence::KernelVerified`] in its
-/// persisted header byte. Returns the number of headers raised in this shard.
-///
-/// The shard is read in full ([`ShardReader::from_file`], which checksum-checks
-/// the bytes), copied verbatim into a [`crate::shard::ShardWriter`]
-/// ([`crate::shard::ShardWriter::from_reader`] — no index remap, since a single
-/// shard's arenas are self-consistent), the confidence bytes are flipped
-/// ([`crate::shard::ShardWriter::stamp_kernel_verified`]), and the writer is
-/// serialized back over `path`. The blake3 footer is recomputed by the writer,
-/// so the rewritten file remains a valid, checksummed shard.
-///
-/// SOUNDNESS: `verified_names` must contain ONLY names whose value genuinely
-/// passed Clean's kernel `check_type` — the caller obtains them from
-/// [`crate::verify::incremental::verify_corpus_incremental`]'s
-/// `kernel_verified_names`, never from heuristic confidence. This function does
-/// not re-verify; it only persists a verdict the kernel already rendered.
-///
-/// # Errors
-/// Returns an error if the shard cannot be read, decoded, or rewritten.
-pub fn stamp_shard_file_kernel_verified(
-    path: &std::path::Path,
-    verified_names: &std::collections::HashSet<String>,
-) -> MathverseResult<usize> {
-    let reader = ShardReader::from_file(path)?;
-    let mut writer = crate::shard::ShardWriter::from_reader(&reader);
-    let stamped = writer.stamp_kernel_verified(verified_names);
-    if stamped > 0 {
-        writer.write_to_file(path)?;
-    }
-    Ok(stamped)
-}
-
-/// Destructively stamp every `.mathverse` shard under `shard_dir` so that the
-/// constants in `manifest` carry `KernelVerified` in their persisted bytes.
-///
-/// This is the on-disk counterpart of
-/// [`MathverseLibrary::apply_kernel_verified_manifest`]: it walks every shard
-/// file, applies [`stamp_shard_file_kernel_verified`], and reports how many
-/// shards were rewritten and how many headers were raised in total. After this
-/// returns, a fresh load of the directory reads the stamps directly from the
-/// shard bytes (stored `KernelVerified > 0`), with no sidecar required.
-///
-/// Names that appear in the manifest but not in any shard are silently skipped
-/// (the manifest is keyed on global names that may span more shards than the
-/// directory holds).
-///
-/// SOUNDNESS: the manifest's `kernel_verified_names` are exactly the constants
-/// whose value passed the kernel during
-/// [`crate::verify::incremental::verify_corpus_incremental`]; axioms,
-/// axiom-fallbacks, and reconstruction failures are excluded upstream and are
-/// therefore never stamped here.
-///
-/// # Errors
-/// Returns an error if the directory cannot be scanned or any shard cannot be
-/// read or rewritten.
-pub fn stamp_shard_dir_kernel_verified(
-    shard_dir: &std::path::Path,
-    manifest: &crate::verify::kernel_verified_manifest::KernelVerifiedManifest,
-) -> MathverseResult<ShardStampResult> {
-    let verified: std::collections::HashSet<String> =
-        manifest.kernel_verified_names.iter().cloned().collect();
-    let files = crate::shard_verify::discover_mathverse_files(shard_dir);
-    let mut result = ShardStampResult::default();
-    for path in &files {
-        let stamped = stamp_shard_file_kernel_verified(path, &verified)?;
-        if stamped > 0 {
-            result.shards_rewritten += 1;
-            result.constants_stamped += stamped;
-        }
-    }
-    Ok(result)
-}
-
-/// Count the constant *headers* under `shard_dir` whose name appears in
-/// `names`.
-///
-/// Used by the release gate to compute the *expected* stored `KernelVerified`
-/// count: a kernel-verified manifest may be a global verdict spanning more
-/// shards than a given directory holds, so the release assertion intersects the
-/// manifest names with the headers actually present on disk. This counts
-/// headers (not distinct names) so it is directly comparable to
-/// [`count_stored_kernel_verified`], which also counts headers — even if a name
-/// recurs across shards, both sides count it the same number of times.
-///
-/// # Errors
-/// Returns an error only if the directory itself cannot be scanned.
-pub fn count_present_names(
-    shard_dir: &std::path::Path,
-    names: &[String],
-) -> MathverseResult<usize> {
-    let wanted: std::collections::HashSet<&str> = names.iter().map(String::as_str).collect();
-    let files = crate::shard_verify::discover_mathverse_files(shard_dir);
-    let mut count = 0usize;
-    for path in &files {
-        if let Ok(reader) = ShardReader::from_file(path) {
-            for constant in &reader.constants {
-                if let Some(name) = reader.strings.get(constant.name_idx as usize) {
-                    if wanted.contains(name.as_str()) {
-                        count += 1;
-                    }
-                }
-            }
-        }
-    }
-    Ok(count)
-}
+//
+// Unit P6 (docs/plans/SELF_PROOF_EXECUTION_PLAN_2026-11-12.md) deleted the
+// on-disk stamp that raised a header to `KernelVerified` from a manifest's name
+// list: a development run confers no label (P2 clause 1), and the reference
+// producer that will mint labels writes receipts, not a name set (slice 1b).
+// What remains here only READS header bytes.
 
 /// Count, across every `.mathverse` shard under `shard_dir`, how many constant
 /// headers carry [`ImportConfidence::KernelVerified`] in their persisted bytes.
 ///
 /// This reads the shards from disk (not an in-memory library), so it reflects
-/// exactly what was stamped into the files — the number WS5 must drive above
-/// zero. Shards that fail to read are skipped; their paths are returned so the
-/// caller can surface them.
+/// exactly what the files store: under P6 no lane in this build stamps a
+/// header, so a nonzero count is a converter's import-time tag or a pre-P6
+/// file, and is a claim, never evidence. Shards that fail to read are skipped;
+/// their paths are returned so the caller can surface them.
 ///
 /// # Errors
 /// Returns an error only if the directory itself cannot be scanned.
@@ -3095,63 +2950,28 @@ mod tests {
             .expect("write tiny shard to disk");
     }
 
+    /// The stored-header audit counts header bytes and nothing else: a
+    /// `KernelVerified` byte counts, a lower one does not, and the read leaves
+    /// the file byte-identical (P6: no lane writes a header from a manifest).
     #[test]
-    fn test_stamp_shard_dir_from_manifest_raises_only_named() {
-        use crate::verify::kernel_verified_manifest::KernelVerifiedManifest;
-
+    fn test_count_stored_kernel_verified_reads_header_bytes_only() {
         let dir = tempfile::tempdir().expect("tempdir");
-        // Two constants, both starting below KernelVerified so a stamp is an
-        // observable 0 -> N transition.
         write_unstamped_shard(
             dir.path(),
             &[
-                ("In.Manifest", ImportConfidence::SourceVerified),
-                ("Not.In.Manifest", ImportConfidence::SourceVerified),
+                ("Stored.Kv", ImportConfidence::KernelVerified),
+                ("Stored.Source", ImportConfidence::SourceVerified),
             ],
         );
-
-        // Nothing is stored as KernelVerified before stamping.
-        let (before, unreadable) = count_stored_kernel_verified(dir.path()).expect("count before");
-        assert!(
-            unreadable.is_empty(),
-            "no unreadable shards: {unreadable:?}"
-        );
-        assert_eq!(before, 0, "no headers stamped before applying the manifest");
-
-        // Manifest names ONLY the first constant — exactly the kernel's verdict
-        // set. The second is absent and must stay un-stamped.
-        let manifest = KernelVerifiedManifest::from_worker_parts(
-            "tiny.module",
-            2,
-            0,
-            0,
-            0.0,
-            vec!["In.Manifest".to_string()],
-        );
-
-        let stamp = stamp_shard_dir_kernel_verified(dir.path(), &manifest).expect("stamp dir");
-        assert_eq!(stamp.shards_rewritten, 1, "the one shard was rewritten");
-        assert_eq!(stamp.constants_stamped, 1, "exactly one header raised");
-
-        // The persisted count a `stats` reader sees has risen from 0 to 1.
-        let (after, _) = count_stored_kernel_verified(dir.path()).expect("count after");
-        assert_eq!(after, 1, "stored KernelVerified rose 0 -> 1");
-
-        // SOUNDNESS: the constant absent from the manifest stays below
-        // KernelVerified; no heuristic promotion occurred.
-        let reader = ShardReader::from_file(dir.path().join("tiny.mathverse"))
-            .expect("re-read stamped shard");
-        let conf_of =
-            |n: &str| -> u8 { reader.lookup_name(n).expect("present").1.import_confidence };
+        let path = dir.path().join("tiny.mathverse");
+        let before = std::fs::read(&path).expect("read shard");
+        let (count, unreadable) = count_stored_kernel_verified(dir.path()).expect("count");
+        assert!(unreadable.is_empty(), "{unreadable:?}");
+        assert_eq!(count, 1, "exactly the one KernelVerified header byte");
         assert_eq!(
-            conf_of("In.Manifest"),
-            ImportConfidence::KernelVerified as u8,
-            "the manifest-named constant reads KernelVerified from disk"
-        );
-        assert_eq!(
-            conf_of("Not.In.Manifest"),
-            ImportConfidence::SourceVerified as u8,
-            "the unnamed constant is left untouched"
+            std::fs::read(&path).expect("re-read shard"),
+            before,
+            "the audit only reads"
         );
     }
 }

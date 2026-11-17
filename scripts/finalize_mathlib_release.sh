@@ -3,6 +3,9 @@
 # release manifest, and print the aggregate trust distribution.
 #
 # Run AFTER scripts/rebuild_mathlib_kv.sh completes (all chunks done).
+# P6 slice 1a: blocked until the reference producer (slice 1b); see scripts/lib/p6_blocked.sh.
+# shellcheck source=scripts/lib/p6_blocked.sh
+. "$(cd "$(dirname "$0")" && pwd)/lib/p6_blocked.sh" && p6_blocked "scripts/finalize_mathlib_release.sh"
 set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -47,8 +50,8 @@ tot=agg['total'] or 1
 agg['kernel_verified_pct']=round(100*agg['kernel_verified']/tot,2)
 open(os.path.join(rel,'AGGREGATE.json'),'w').write(json.dumps(agg,indent=2))
 print(json.dumps(agg,indent=2))
-print(f"\nGENUINE kernel-verified: {agg['kernel_verified']} / {agg['total']} "
-      f"({agg['kernel_verified_pct']}%) across {agg['chunks']} chunks")
+print(f"\naccepted by the legacy checker (pre-P6 summaries; development tier, no label): "
+      f"{agg['kernel_verified']} / {agg['total']} ({agg['kernel_verified_pct']}%) across {agg['chunks']} chunks")
 PY
 
 # 3. Integrity-verify the collected shards (blake3) if the tool is present.

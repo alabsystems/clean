@@ -69,6 +69,136 @@ fn replace_value(env: &mut Environment, name: &str, value: Expr) {
     env.add_constant_unchecked_for_test(info);
 }
 
+fn declaration_with_annotation(env: &Environment, annotation: Expr) -> Decl {
+    let closure = RuntimeBindingClosure::check(env, &[n("chosen")]).unwrap();
+    let mut decl = crate::constant_to_decl_in_runtime_closure(
+        env,
+        env.get_const(&n("chosen")).unwrap(),
+        &closure,
+    )
+    .unwrap()
+    .unwrap();
+    decl.ty = Expr::arrow(annotation.clone(), annotation.clone());
+    decl.params[0].ty = annotation;
+    decl
+}
+
+#[test]
+fn exact_internal_markers_only_in_private_compiler_stage_type_slots() {
+    let mut env = environment();
+    // Genuine Init also has resident compiler-marker axioms. A resident name
+    // must remain a dependency in original source/kernel inputs; the private
+    // compiler-stage annotation grammar is a distinct role, not a name allowlist.
+    for name in ["lcAny", "lcErased"] {
+        definition(&mut env, n(name), identity());
+    }
+    let closure = RuntimeBindingClosure::check(&env, &[n("chosen")]).unwrap();
+    for annotation in [crate::to_mono::any_expr(), crate::to_mono::erased_expr()] {
+        let declaration = declaration_with_annotation(&env, annotation);
+        assert!(closure
+            .declarations(&env, std::slice::from_ref(&declaration))
+            .is_err());
+        closure
+            .transformed_declarations(&env, &[declaration])
+            .unwrap();
+    }
+}
+
+#[test]
+fn internal_marker_spelling_does_not_exempt_a_resident_or_attributed_binding() {
+    for name in ["lcAny", "lcErased"] {
+        let mut resident = environment();
+        definition(&mut resident, n(name), identity());
+        let closure = RuntimeBindingClosure::check(&resident, &[n("chosen")]).unwrap();
+        let declaration = declaration_with_annotation(&resident, Expr::const_str(name));
+        assert!(closure.declarations(&resident, &[declaration]).is_err());
+
+        let mut attributed = environment();
+        attributed.register_extern(n(name), "not_an_internal_type".to_owned());
+        let closure = RuntimeBindingClosure::check(&attributed, &[n("chosen")]).unwrap();
+        let declaration = declaration_with_annotation(&attributed, Expr::const_str(name));
+        assert!(closure.declarations(&attributed, &[declaration]).is_err());
+    }
+}
+
+#[test]
+fn marker_names_in_runtime_calls_or_original_kernel_payloads_are_not_exempt() {
+    let mut env = environment();
+    for name in ["lcAny", "lcErased"] {
+        definition(&mut env, n(name), identity());
+    }
+    let closure = RuntimeBindingClosure::check(&env, &[n("chosen")]).unwrap();
+    for name in ["lcAny", "lcErased"] {
+        let mut declaration = declaration_with_annotation(&env, Expr::const_str("Nat"));
+        declaration.body = DeclValue::Code(Box::new(Code::let_bind(
+            crate::lcnf::LetDecl::new(
+                clean_kernel::FVarId::new(999),
+                Name::anon(),
+                Expr::const_str("Nat"),
+                LetValue::const_simple(n(name)),
+            ),
+            Code::Return(clean_kernel::FVarId::new(999)),
+        )));
+        assert!(closure
+            .declarations(&env, std::slice::from_ref(&declaration))
+            .is_err());
+        assert!(closure
+            .transformed_declarations(&env, &[declaration])
+            .is_err());
+
+        let mut original = env.get_const(&n("chosen")).unwrap().clone();
+        original.type_ = Expr::const_str(name);
+        assert!(closure.constant(&env, &original).is_err());
+    }
+}
+
+#[test]
+fn applied_universe_instantiated_and_term_position_markers_remain_dependencies() {
+    let mut env = environment();
+    for name in ["lcAny", "lcErased"] {
+        definition(&mut env, n(name), identity());
+    }
+    let closure = RuntimeBindingClosure::check(&env, &[n("chosen")]).unwrap();
+    for name in ["lcAny", "lcErased"] {
+        let marker = Expr::const_str(name);
+        for annotation in [
+            Expr::const_(n(name), vec![clean_kernel::Level::zero()]),
+            Expr::app(marker.clone(), Expr::const_str("Nat")),
+            Expr::lam(BinderInfo::Default, Expr::const_str("Nat"), marker),
+        ] {
+            let declaration = declaration_with_annotation(&env, annotation);
+            assert!(closure
+                .declarations(&env, std::slice::from_ref(&declaration))
+                .is_err());
+            assert!(closure
+                .transformed_declarations(&env, &[declaration])
+                .is_err());
+        }
+    }
+}
+
+#[test]
+fn compiler_marker_type_role_never_exempts_owned_declaration_headers() {
+    let mut env = environment();
+    for name in ["lcAny", "lcErased"] {
+        definition(&mut env, n(name), identity());
+    }
+    let closure = RuntimeBindingClosure::check(&env, &[n("chosen")]).unwrap();
+    for name in ["lcAny", "lcErased"] {
+        let mut declaration = declaration_with_annotation(&env, crate::to_mono::any_expr());
+        declaration.name = n(name);
+        assert!(closure
+            .declarations(&env, std::slice::from_ref(&declaration))
+            .is_err());
+        assert!(closure
+            .transformed_declarations(&env, &[declaration])
+            .is_err());
+        assert!(closure
+            .constant(&env, env.get_const(&n(name)).unwrap())
+            .is_err());
+    }
+}
+
 #[test]
 fn explicit_closure_accepts_irrelevant_records_but_every_legacy_entry_still_refuses() {
     let env = environment();

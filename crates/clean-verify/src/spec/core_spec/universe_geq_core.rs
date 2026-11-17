@@ -30,7 +30,7 @@ const ARITH: &[(&str, &str)] = &[
     (
         r"def ugeq_natMax_right (a : Nat) : forall (b : Nat), Le b (natMax a b) :=
  @Nat.rec (fun (x : Nat) => forall (b : Nat), Le b (natMax x b))
- (fun (b : Nat) => Le.refl b)
+ (fun (b : Nat) => @Le.refl b)
  (fun (x : Nat) (ih : forall (b : Nat), Le b (natMax x b)) =>
   fun (b : Nat) => @Nat.rec (fun (y : Nat) => Le y (natMax (Nat.succ x) y))
    (le_zero_n (Nat.succ x))
@@ -91,12 +91,12 @@ const ARITH: &[(&str, &str)] = &[
         r"def ugeq_imax_upper (a : Nat) (b : Nat) : Le (imaxNat a b) (natMax a b) :=
  @Nat.rec (fun (y : Nat) => Le (imaxNat a y) (natMax a y))
  (le_zero_n (natMax a Nat.zero))
- (fun (y : Nat) (_ : Le (imaxNat a y) (natMax a y)) => Le.refl (natMax a (Nat.succ y))) b",
+ (fun (y : Nat) (_ : Le (imaxNat a y) (natMax a y)) => @Le.refl (natMax a (Nat.succ y))) b",
         "imax is bounded above by max; this is one-way and remains valid at the zero pivot.",
     ),
     (
         r"def ugeq_imax_right (a : Nat) (b : Nat) : Le b (imaxNat a b) :=
- @Nat.rec (fun (y : Nat) => Le y (imaxNat a y)) (Le.refl Nat.zero)
+ @Nat.rec (fun (y : Nat) => Le y (imaxNat a y)) (@Le.refl Nat.zero)
  (fun (y : Nat) (_ : Le y (imaxNat a y)) => ugeq_natMax_right a (Nat.succ y)) b",
         "The right operand is below imax, including the zero pivot; not the false converse advertised as iff in source comments.",
     ),
@@ -355,7 +355,7 @@ const SOUND: &[(&str, &str)] = &[
       (level_offset_nat a) (level_offset_nat b)
       (nat_eqb_eq (level_offset_nat a) (level_offset_nat b)
        (band_eq_true_left (nat_eqb (level_offset_nat a) (level_offset_nat b)) (level_offset_positive a) hg))
-      (Le.refl (level_offset_nat a)))) h2)
+      (@Le.refl (level_offset_nat a)))) h2)
  (fun (hg : @Eq Bool (Bool.or (level_eqb (level_offset_base a) (level_offset_base b)) (level_is_zero (level_offset_base b))) Bool.true) (hc : @Eq Bool (nat_leb (level_offset_nat b) (level_offset_nat a)) Bool.true) =>
   ugeq_or_cases (level_eqb (level_offset_base a) (level_offset_base b)) (level_is_zero (level_offset_base b)) hg (levelLeqSem b a)
    (fun (he : @Eq Bool (level_eqb (level_offset_base a) (level_offset_base b)) Bool.true) =>

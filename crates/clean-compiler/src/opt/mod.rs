@@ -209,9 +209,17 @@ impl OptConfig {
 ///               FindJoinPoints (once)
 /// ```
 pub fn optimize(decl: &Decl, config: &OptConfig) -> Decl {
+    optimize_recording(decl, config, None)
+}
+
+pub(crate) fn optimize_recording(
+    decl: &Decl,
+    config: &OptConfig,
+    observation: Option<&crate::primitive_uses::ObservationFrame>,
+) -> Decl {
     let body = match &decl.body {
         DeclValue::Code(code) => {
-            let optimized = optimize_code(code, config);
+            let optimized = optimize_code_recording(code, config, observation);
             DeclValue::Code(Box::new(optimized))
         }
         DeclValue::Extern(attr) => DeclValue::Extern(attr.clone()),
@@ -231,30 +239,63 @@ pub fn optimize(decl: &Decl, config: &OptConfig) -> Decl {
 ///
 /// This is the core optimization loop that runs passes until fixpoint.
 pub fn optimize_code(code: &Code, config: &OptConfig) -> Code {
+    optimize_code_recording(code, config, None)
+}
+
+fn optimize_code_recording(
+    code: &Code,
+    config: &OptConfig,
+    observation: Option<&crate::primitive_uses::ObservationFrame>,
+) -> Code {
     let mut current = code.clone();
 
     // Run optimization loop until fixpoint
-    for _ in 0..config.max_iterations {
+    for iteration in 0..config.max_iterations {
+        let frame = observation.map(|frame| frame.iteration(iteration as usize));
         let before = current.clone();
 
         // Pass 1: Dead code elimination
         if config.enable_dce {
+            let before = frame.as_ref().and_then(|frame| frame.code("dce", &current));
             current = dce::eliminate_dead_code_in_code(&current);
+            if let Some(frame) = &frame {
+                let after = frame.code("dce", &current);
+                frame.decision("dce", before, after, "actual optimizer subpass");
+            }
         }
 
         // Pass 2: Common subexpression elimination
         if config.enable_cse {
+            let before = frame.as_ref().and_then(|frame| frame.code("cse", &current));
             current = cse::eliminate_common_subexpressions_in_code(&current);
+            if let Some(frame) = &frame {
+                let after = frame.code("cse", &current);
+                frame.decision("cse", before, after, "actual optimizer subpass");
+            }
         }
 
         // Pass 3: Constant folding
         if config.enable_constant_fold {
-            current = constant_fold::fold_constants_in_code(&current);
+            let before = frame
+                .as_ref()
+                .and_then(|frame| frame.code("constant_fold", &current));
+            current = constant_fold::fold_constants_in_code_recording(&current, frame.as_ref());
+            if let Some(frame) = &frame {
+                let after = frame.code("constant_fold", &current);
+                frame.decision("constant_fold", before, after, "actual optimizer subpass");
+            }
         }
 
         // Pass 4: Value simplification
         if config.enable_simp_value {
+            let before = frame
+                .as_ref()
+                .and_then(|frame| frame.code("simp_value", &current));
             current = simp_value::simplify_values_in_code(&current);
+            if let Some(frame) = &frame {
+                let after = frame.code("simp_value", &current);
+                frame.decision("simp_value", before, after, "actual optimizer subpass");
+            }
         }
 
         // Pass 5: Function inlining
@@ -263,7 +304,14 @@ pub fn optimize_code(code: &Code, config: &OptConfig) -> Code {
                 threshold: config.inline_threshold as usize,
                 max_depth: 3,
             };
+            let before = frame
+                .as_ref()
+                .and_then(|frame| frame.code("inline", &current));
             current = inline::inline_functions_in_code(&current, &inline_config);
+            if let Some(frame) = &frame {
+                let after = frame.code("inline", &current);
+                frame.decision("inline", before, after, "actual optimizer subpass");
+            }
         }
 
         // Check for fixpoint
@@ -274,7 +322,17 @@ pub fn optimize_code(code: &Code, config: &OptConfig) -> Code {
 
     // Final pass: Convert eligible functions to join points
     if config.enable_join_points {
+        let before = observation.and_then(|frame| frame.code("join_points", &current));
         current = join_points::find_join_points_in_code(&current);
+        if let Some(frame) = observation {
+            let after = frame.code("join_points", &current);
+            frame.decision(
+                "join_points",
+                before,
+                after,
+                "actual final optimizer subpass",
+            );
+        }
     }
 
     current

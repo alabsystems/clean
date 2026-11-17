@@ -3,14 +3,19 @@
 //!
 //! This does not use the diagnostic journal as a certificate. The returned bytes
 //! are only a candidate; the actual checker must replay the original declaration.
-//! Iota/K and the Init coverage surface remain unfinished. Extensional search
-//! is bounded and proposes bytes for the adopted eta/irrelevance cursors. No trusted admission, validity theorem or completeness is claimed.
-use super::{CoreTracer, Refusal, Token};
+//! Iota/K search is restricted to value-less `MajorAfterMinors` recursors whose
+//! admitted labelled syntax is available. The wider Init coverage surface
+//! remains unfinished. Extensional search is bounded and proposes bytes for the
+//! adopted eta/irrelevance cursors. No trusted admission, validity theorem or
+//! completeness is claimed.
+use super::{CoreTracer, LabelledEnvironment, Refusal, Token};
 use crate::env::{Declaration, Environment};
 use crate::expr::{stack_safe, Expr, ExprKind};
+use crate::inductive::{RecursorArgOrder, RecursorVal};
 use crate::kcheck_trace::term::{Label, Node, Term};
 use crate::kcheck_trace::wire::encode_tokens;
 use crate::level::Level;
+use crate::name::Name;
 
 /// Candidate syntax and bytes, never an authority-bearing acceptance token.
 #[derive(Debug)]
@@ -29,6 +34,7 @@ enum Step {
     Beta(Term, Term, Term, Label, Vec<(Term, Label)>),
     Zeta(Term, Term, Vec<(Term, Label)>),
     Local(Term, Vec<(Term, Label)>),
+    Recursor(RecursorVal, Vec<Level>, Vec<(Term, Label)>),
 }
 
 struct Producer<'a> {
@@ -40,10 +46,45 @@ struct Producer<'a> {
 
 /// Produce candidate advice for an ordinary definition/theorem/opaque body.
 /// `depth` is an untrusted proposal; insufficient depth is refused by the checker.
-/// Search is separately bounded by `operations`. The environment supplies syntax,
-/// not authority; every dependency and every proposed byte still needs replay.
+/// Search heartbeats are separately bounded by `operations`; this is not a
+/// CPU-step cap because persistent terms are cloned and transformed without a
+/// heartbeat for every shared DAG node. The environment supplies syntax, not
+/// authority; every dependency and every proposed byte still needs replay.
 pub fn produce_ordinary(
     env: &Environment,
+    declaration: &Declaration,
+    operations: u64,
+    depth: u64,
+) -> Result<DeclarationAdvice, Refusal> {
+    produce_ordinary_with_lookup(
+        CoreTracer::new(env, operations),
+        declaration,
+        operations,
+        depth,
+    )
+}
+
+/// Produce candidate advice while reusing the persistent labelled syntax of
+/// the already admitted prefix. This is the only entry that enables the
+/// bounded recursor search; the compatibility entry above retains its former
+/// ordinary-core surface. The labelled table is syntax, never authority.
+pub fn produce_ordinary_with_labelled(
+    env: &Environment,
+    labelled: &LabelledEnvironment,
+    declaration: &Declaration,
+    operations: u64,
+    depth: u64,
+) -> Result<DeclarationAdvice, Refusal> {
+    produce_ordinary_with_lookup(
+        CoreTracer::with_labelled_environment(env, labelled, operations),
+        declaration,
+        operations,
+        depth,
+    )
+}
+
+fn produce_ordinary_with_lookup(
+    lookup: CoreTracer<'_>,
     declaration: &Declaration,
     operations: u64,
     depth: u64,
@@ -60,7 +101,7 @@ pub fn produce_ordinary(
         }
     };
     let mut producer = Producer {
-        lookup: CoreTracer::new(env, operations),
+        lookup,
         context: Vec::new(),
         remaining: operations,
         tokens: vec![Token::Depth(depth)],
@@ -89,6 +130,35 @@ impl Producer<'_> {
             source_name: source.into(),
             term: term.erase().to_string().chars().take(512).collect(),
         }
+    }
+    fn unsupported_recursor(source: &str, name: &Name) -> Refusal {
+        Refusal::Coverage {
+            source_name: source.into(),
+            term: name.to_unambiguous_string(),
+        }
+    }
+    fn recursor_counts(rec: &RecursorVal) -> Result<(usize, usize), Refusal> {
+        let leading =
+            u64::from(rec.num_params) + u64::from(rec.num_motives) + u64::from(rec.num_minors);
+        let arity = leading + u64::from(rec.num_indices) + 1;
+        Ok((
+            usize::try_from(leading).map_err(|_| Refusal::Budget)?,
+            usize::try_from(arity).map_err(|_| Refusal::Budget)?,
+        ))
+    }
+    fn labelled_type(&self, name: &Name, source: &str) -> Result<Term, Refusal> {
+        self.lookup
+            .labelled
+            .and_then(|labelled| labelled.entries.get(name))
+            .map(|(ty, _)| ty.clone())
+            .ok_or_else(|| Self::unsupported_recursor(source, name))
+    }
+    fn labelled_rule(&self, recursor: &Name, constructor: &Name) -> Result<Term, Refusal> {
+        self.lookup
+            .labelled
+            .and_then(|labelled| labelled.rules.get(&(recursor.clone(), constructor.clone())))
+            .cloned()
+            .ok_or_else(|| Self::unsupported_recursor("advice_recursor_labelled_rule", recursor))
     }
     fn check(&mut self, raw: &Expr) -> Result<(Term, Term), Refusal> {
         stack_safe(|| self.check_inner(raw))
@@ -325,9 +395,471 @@ impl Producer<'_> {
         }
         head
     }
-    fn redex(&self, term: &Term) -> Option<Step> {
+    /// Emit exactly one adopted `walk` mode token, followed by one conversion
+    /// per argument only in certificate mode. Even an empty constructor spine
+    /// consumes its mode token.
+    fn walk_spine(&mut self, mut ty: Term, arguments: &[(Term, Label)]) -> Result<Term, Refusal> {
+        let mark = self.tokens.len();
+        let result = (|| {
+            self.tick()?;
+            let mut domains = Vec::new();
+            let mut all_reflexive = true;
+            for (argument, label) in arguments {
+                self.tick()?;
+                let Node::Pi(_, domain, body) = ty.0.as_ref() else {
+                    return Err(Self::missing("advice_recursor_telescope_short", &ty));
+                };
+                let domain = domain.clone();
+                let body = body.clone();
+                all_reflexive &=
+                    matches!(label, Label::Checked(stored) if stored.erased_eq(&domain));
+                domains.push(domain);
+                ty = body.instantiate(argument);
+            }
+            let arity = u64::try_from(arguments.len()).map_err(|_| Refusal::Budget)?;
+            if all_reflexive {
+                self.tokens.push(Token::SpineRefl(arity));
+            } else {
+                self.tokens.push(Token::SpineCerts(arity));
+                for ((argument, label), domain) in arguments.iter().zip(&domains) {
+                    let Label::Checked(stored) = label else {
+                        return Err(Self::missing(
+                            "advice_recursor_missing_spine_label",
+                            argument,
+                        ));
+                    };
+                    self.conv(stored, domain)?;
+                }
+            }
+            Ok(ty)
+        })();
+        if result.is_err() {
+            self.tokens.truncate(mark);
+        }
+        result
+    }
+    /// Read the constructor's stored result before substituting its binders,
+    /// exactly as `ctorStoredResult`/`ctorResultArgs` do. Substituting the whole
+    /// result first would be wrong when a bound head contributes a new spine.
+    fn stored_result_arguments(
+        &mut self,
+        constructor_type: &Term,
+        level_params: &[Name],
+        levels: &[Level],
+        binder_arguments: &[(Term, Label)],
+        family: &Name,
+        expected: usize,
+    ) -> Result<Vec<Term>, Refusal> {
+        self.tick()?;
+        let mut stored_result = constructor_type.clone();
+        for _ in binder_arguments {
+            self.tick()?;
+            let Node::Pi(_, _, body) = stored_result.0.as_ref() else {
+                return Err(Self::missing(
+                    "advice_recursor_telescope_short",
+                    &stored_result,
+                ));
+            };
+            stored_result = body.clone();
+        }
+        let (head, arguments) = Self::spine(&stored_result);
+        let Node::Const(actual_family, _) = head.0.as_ref() else {
+            return Err(Self::unsupported_recursor(
+                "advice_recursor_constructor_result",
+                family,
+            ));
+        };
+        if actual_family != family || arguments.len() != expected {
+            return Err(Self::unsupported_recursor(
+                "advice_recursor_constructor_result",
+                family,
+            ));
+        }
+        let instantiated_head = head.instantiate_levels(level_params, levels);
+        let Node::Const(_, actual_levels) = instantiated_head.0.as_ref() else {
+            return Err(Self::unsupported_recursor(
+                "advice_recursor_constructor_result",
+                family,
+            ));
+        };
+        if actual_levels.len() != levels.len()
+            || !actual_levels
+                .iter()
+                .zip(levels)
+                .all(|(left, right)| self.lookup.levels_equal(left, right))
+        {
+            return Err(Self::unsupported_recursor(
+                "advice_recursor_constructor_levels",
+                family,
+            ));
+        }
+        let mut result = Vec::new();
+        for (argument, _) in arguments {
+            self.tick()?;
+            let mut argument = argument.instantiate_levels(level_params, levels);
+            for (binder, _) in binder_arguments.iter().rev() {
+                self.tick()?;
+                argument = argument.instantiate(binder);
+            }
+            result.push(argument);
+        }
+        Ok(result)
+    }
+    /// `REFL` is valid for an exact erased tie even though general conversion
+    /// search expands composite terms to preserve level provenance.
+    fn tie_conv(&mut self, left: &Term, right: &Term) -> Result<(), Refusal> {
+        self.tick()?;
+        if left.erased_eq(right) {
+            self.tokens.push(Token::Refl);
+            Ok(())
+        } else {
+            self.conv(left, right)
+        }
+    }
+    fn recursor_iota(
+        &mut self,
+        rec: &RecursorVal,
+        levels: &[Level],
+        arguments: &[(Term, Label)],
+        recursor_type: &Term,
+    ) -> Result<Term, Refusal> {
+        self.tokens.push(Token::Iota);
+        let (leading, arity) = Self::recursor_counts(rec)?;
+        let major_index = arity.checked_sub(1).ok_or(Refusal::Budget)?;
+        let major = arguments
+            .get(major_index)
+            .map(|(term, _)| term.clone())
+            .ok_or_else(|| {
+                Self::unsupported_recursor("advice_recursor_missing_major", &rec.name)
+            })?;
+
+        // IOTA precedes this complete nested WHNF script, including STOP.
+        let major = self.whnf(&major)?;
+        let (constructor, constructor_arguments) = Self::spine(&major);
+        let (constructor_name, constructor_levels) = match constructor.0.as_ref() {
+            Node::Const(name, levels) => (name.clone(), levels.clone()),
+            _ => {
+                return Err(Self::unsupported_recursor(
+                    "advice_recursor_major_not_constructor",
+                    &rec.name,
+                ))
+            }
+        };
+        let rule = rec
+            .rules
+            .iter()
+            .find(|rule| rule.constructor_name == constructor_name)
+            .cloned()
+            .ok_or_else(|| {
+                Self::unsupported_recursor(
+                    "advice_recursor_constructor_outside_family",
+                    &constructor_name,
+                )
+            })?;
+        let constructor_info = self
+            .lookup
+            .env
+            .get_constructor(&constructor_name)
+            .cloned()
+            .ok_or_else(|| {
+                Self::unsupported_recursor(
+                    "advice_recursor_constructor_metadata",
+                    &constructor_name,
+                )
+            })?;
+        let constructor_entry = self
+            .lookup
+            .env
+            .get_const(&constructor_name)
+            .cloned()
+            .ok_or_else(|| {
+                Self::unsupported_recursor("advice_recursor_constructor_entry", &constructor_name)
+            })?;
+        if constructor_info.inductive_name != rec.inductive_name
+            || constructor_info.num_params != rec.num_params
+            || constructor_info.num_fields != rule.num_fields
+            || constructor_info.level_params != constructor_entry.level_params
+        {
+            return Err(Self::unsupported_recursor(
+                "advice_recursor_constructor_shape",
+                &constructor_name,
+            ));
+        }
+        let constructor_arity =
+            usize::try_from(u64::from(rec.num_params) + u64::from(rule.num_fields))
+                .map_err(|_| Refusal::Budget)?;
+        if constructor_arguments.len() != constructor_arity {
+            return Err(Self::unsupported_recursor(
+                "advice_recursor_constructor_arity",
+                &constructor_name,
+            ));
+        }
+        let eliminated_levels = rec
+            .level_params
+            .len()
+            .checked_sub(constructor_entry.level_params.len())
+            .ok_or_else(|| {
+                Self::unsupported_recursor("advice_recursor_constructor_levels", &constructor_name)
+            })?;
+        if rec.level_params[eliminated_levels..] != constructor_entry.level_params {
+            return Err(Self::unsupported_recursor(
+                "advice_recursor_constructor_levels",
+                &constructor_name,
+            ));
+        }
+        let expected_constructor_levels = &levels[eliminated_levels..];
+        if constructor_levels.len() != expected_constructor_levels.len()
+            || !constructor_levels
+                .iter()
+                .zip(expected_constructor_levels)
+                .all(|(left, right)| self.lookup.levels_equal(left, right))
+        {
+            return Err(Self::unsupported_recursor(
+                "advice_recursor_constructor_levels",
+                &constructor_name,
+            ));
+        }
+
+        let recursor_type = recursor_type.instantiate_levels(&rec.level_params, levels);
+        self.walk_spine(recursor_type, &arguments[..arity])?;
+        let constructor_type = self.labelled_type(
+            &constructor_name,
+            "advice_recursor_labelled_constructor_type",
+        )?;
+        self.walk_spine(
+            constructor_type
+                .instantiate_levels(&constructor_entry.level_params, &constructor_levels),
+            &constructor_arguments,
+        )?;
+
+        let params = usize::try_from(rec.num_params).map_err(|_| Refusal::Budget)?;
+        let indices = usize::try_from(rec.num_indices).map_err(|_| Refusal::Budget)?;
+        let result_arity = params.checked_add(indices).ok_or(Refusal::Budget)?;
+        let result_arguments = self.stored_result_arguments(
+            &constructor_type,
+            &constructor_entry.level_params,
+            &constructor_levels,
+            &constructor_arguments,
+            &rec.inductive_name,
+            result_arity,
+        )?;
+        let mut recursor_result_arguments = arguments
+            .iter()
+            .take(params)
+            .map(|(term, _)| term.clone())
+            .collect::<Vec<_>>();
+        recursor_result_arguments.extend(
+            arguments
+                .iter()
+                .skip(leading)
+                .take(indices)
+                .map(|(term, _)| term.clone()),
+        );
+        if recursor_result_arguments.len() != result_arity {
+            return Err(Self::unsupported_recursor(
+                "advice_recursor_result_arity",
+                &rec.name,
+            ));
+        }
+        for (constructor_argument, recursor_argument) in
+            result_arguments.iter().zip(&recursor_result_arguments)
+        {
+            // IOTA's adopted direction is stored constructor result, then recursor.
+            self.tie_conv(constructor_argument, recursor_argument)?;
+        }
+
+        let rhs = self
+            .labelled_rule(&rec.name, &constructor_name)?
+            .instantiate_levels(&rec.level_params, levels);
+        if !matches!(rhs.0.as_ref(), Node::Lam(..)) {
+            return Err(Self::unsupported_recursor(
+                "advice_recursor_rule_shape",
+                &rec.name,
+            ));
+        }
+        let mut supplied = arguments.iter().take(leading).cloned().collect::<Vec<_>>();
+        supplied.extend(constructor_arguments.iter().skip(params).cloned());
+        supplied.extend(arguments.iter().skip(arity).cloned());
+        Ok(Self::apply(rhs, supplied))
+    }
+    fn recursor_k(
+        &mut self,
+        rec: &RecursorVal,
+        levels: &[Level],
+        arguments: &[(Term, Label)],
+        recursor_type: &Term,
+    ) -> Result<Term, Refusal> {
+        self.tokens.push(Token::K);
+        if !rec.is_k || rec.rules.len() != 1 || rec.num_minors != 1 {
+            return Err(Self::unsupported_recursor(
+                "advice_recursor_k_shape",
+                &rec.name,
+            ));
+        }
+        let rule = rec.rules[0].clone();
+        if rule.num_fields != 0 {
+            return Err(Self::unsupported_recursor(
+                "advice_recursor_k_shape",
+                &rec.name,
+            ));
+        }
+        let constructor_name = rule.constructor_name;
+        let constructor_info = self
+            .lookup
+            .env
+            .get_constructor(&constructor_name)
+            .cloned()
+            .ok_or_else(|| {
+                Self::unsupported_recursor(
+                    "advice_recursor_constructor_metadata",
+                    &constructor_name,
+                )
+            })?;
+        let constructor_entry = self
+            .lookup
+            .env
+            .get_const(&constructor_name)
+            .cloned()
+            .ok_or_else(|| {
+                Self::unsupported_recursor("advice_recursor_constructor_entry", &constructor_name)
+            })?;
+        if constructor_info.inductive_name != rec.inductive_name
+            || constructor_info.num_params != rec.num_params
+            || constructor_info.num_fields != 0
+            || constructor_info.level_params != constructor_entry.level_params
+        {
+            return Err(Self::unsupported_recursor(
+                "advice_recursor_k_shape",
+                &rec.name,
+            ));
+        }
+        let eliminated_levels = rec
+            .level_params
+            .len()
+            .checked_sub(constructor_entry.level_params.len())
+            .ok_or_else(|| {
+                Self::unsupported_recursor("advice_recursor_constructor_levels", &constructor_name)
+            })?;
+        if rec.level_params[eliminated_levels..] != constructor_entry.level_params {
+            return Err(Self::unsupported_recursor(
+                "advice_recursor_constructor_levels",
+                &constructor_name,
+            ));
+        }
+        let constructor_levels = &levels[eliminated_levels..];
+        let (leading, arity) = Self::recursor_counts(rec)?;
+        let recursor_type = recursor_type.instantiate_levels(&rec.level_params, levels);
+        self.walk_spine(recursor_type, &arguments[..arity])?;
+
+        // K reads fixed indices from stored constructor syntax without a
+        // constructor walk token.
+        let params = usize::try_from(rec.num_params).map_err(|_| Refusal::Budget)?;
+        let indices = usize::try_from(rec.num_indices).map_err(|_| Refusal::Budget)?;
+        let result_arity = params.checked_add(indices).ok_or(Refusal::Budget)?;
+        let constructor_type = self.labelled_type(
+            &constructor_name,
+            "advice_recursor_labelled_constructor_type",
+        )?;
+        let result_arguments = self.stored_result_arguments(
+            &constructor_type,
+            &constructor_entry.level_params,
+            constructor_levels,
+            &arguments[..params],
+            &rec.inductive_name,
+            result_arity,
+        )?;
+        let constructor_indices = result_arguments.iter().skip(params).take(indices);
+        let recursor_indices = arguments.iter().skip(leading).take(indices);
+        if constructor_indices.clone().count() != indices
+            || recursor_indices.clone().count() != indices
+        {
+            return Err(Self::unsupported_recursor(
+                "advice_recursor_k_shape",
+                &rec.name,
+            ));
+        }
+        for (constructor_index, (recursor_index, _)) in constructor_indices.zip(recursor_indices) {
+            // K's adopted direction is recursor index, then fixed index.
+            self.tie_conv(recursor_index, constructor_index)?;
+        }
+
+        let minor_index = usize::try_from(u64::from(rec.num_params) + u64::from(rec.num_motives))
+            .map_err(|_| Refusal::Budget)?;
+        let (minor, _) = arguments
+            .get(minor_index)
+            .cloned()
+            .ok_or_else(|| Self::unsupported_recursor("advice_recursor_k_shape", &rec.name))?;
+        Ok(Self::apply(
+            minor,
+            arguments.iter().skip(arity).cloned().collect(),
+        ))
+    }
+    fn recursor_step(
+        &mut self,
+        rec: RecursorVal,
+        levels: Vec<Level>,
+        arguments: Vec<(Term, Label)>,
+    ) -> Result<Term, Refusal> {
+        let mark = self.tokens.len();
+        let result = (|| {
+            if rec.arg_order != RecursorArgOrder::MajorAfterMinors {
+                return Err(Self::unsupported_recursor(
+                    "advice_recursor_argument_order",
+                    &rec.name,
+                ));
+            }
+            let entry =
+                self.lookup.env.get_const(&rec.name).ok_or_else(|| {
+                    Self::unsupported_recursor("advice_recursor_entry", &rec.name)
+                })?;
+            let metadata_arity = u64::from(rec.num_params)
+                + u64::from(rec.num_motives)
+                + u64::from(rec.num_minors)
+                + u64::from(rec.num_indices)
+                + 1;
+            if entry.value.is_some()
+                || entry.level_params != rec.level_params
+                // `validate_metadata` uses u32 arithmetic internally. Guard it
+                // so hostile metadata refuses rather than overflowing first.
+                || metadata_arity > u64::from(u32::MAX)
+                || rec.validate_metadata().is_err()
+            {
+                return Err(Self::unsupported_recursor(
+                    "advice_recursor_metadata",
+                    &rec.name,
+                ));
+            }
+            let (_, arity) = Self::recursor_counts(&rec)?;
+            if arguments.len() < arity || levels.len() != rec.level_params.len() {
+                return Err(Self::unsupported_recursor(
+                    "advice_recursor_arity",
+                    &rec.name,
+                ));
+            }
+            let recursor_type = self.labelled_type(&rec.name, "advice_recursor_labelled_type")?;
+            let major_index = arity.checked_sub(1).ok_or(Refusal::Budget)?;
+            let major = arguments.get(major_index).ok_or_else(|| {
+                Self::unsupported_recursor("advice_recursor_missing_major", &rec.name)
+            })?;
+            let (major_head, _) = Self::spine(&major.0);
+            let raw_constructor = matches!(
+                major_head.0.as_ref(),
+                Node::Const(name, _) if self.lookup.env.get_constructor(name).is_some()
+            );
+            if rec.is_k && !raw_constructor {
+                self.recursor_k(&rec, &levels, &arguments, &recursor_type)
+            } else {
+                self.recursor_iota(&rec, &levels, &arguments, &recursor_type)
+            }
+        })();
+        if result.is_err() {
+            self.tokens.truncate(mark);
+        }
+        result
+    }
+    fn redex(&self, term: &Term) -> Result<Option<Step>, Refusal> {
         let (head, arguments) = Self::spine(term);
-        match head.0.as_ref() {
+        let step = match head.0.as_ref() {
             Node::Lam(_, domain, body) if !arguments.is_empty() => {
                 let (argument, label) = arguments[0].clone();
                 Some(Step::Beta(
@@ -346,8 +878,31 @@ impl Producer<'_> {
                 .get(*level as usize)
                 .and_then(|(_, value)| value.as_ref())
                 .map(|value| Step::Local(value.clone(), arguments)),
+            Node::Const(name, levels) if self.lookup.labelled.is_some() => {
+                let Some(rec) = self.lookup.env.get_recursor(name).cloned() else {
+                    return Ok(None);
+                };
+                let (_, arity) = Self::recursor_counts(&rec)?;
+                if arguments.len() < arity {
+                    return Ok(None);
+                }
+                let entry = self
+                    .lookup
+                    .env
+                    .get_const(name)
+                    .ok_or_else(|| Self::unsupported_recursor("advice_recursor_entry", name))?;
+                if entry.value.is_some() {
+                    // A recursor-shaped definition is still an ordinary delta
+                    // redex. Preserve the pre-IOTA/K producer path by letting
+                    // `whnf` fall through to `unfold` instead of turning the
+                    // bounded value-less restriction into a coverage loss.
+                    return Ok(None);
+                }
+                Some(Step::Recursor(rec, levels.clone(), arguments))
+            }
             _ => None,
-        }
+        };
+        Ok(step)
     }
     fn step(&mut self, step: Step) -> Result<Term, Refusal> {
         self.tick()?;
@@ -362,6 +917,7 @@ impl Producer<'_> {
             }
             Step::Zeta(value, body, rest) => Ok(Self::apply(body.instantiate(&value), rest)),
             Step::Local(value, rest) => Ok(Self::apply(value, rest)),
+            Step::Recursor(rec, levels, arguments) => self.recursor_step(rec, levels, arguments),
         }
     }
     fn unfold(&mut self, term: &Term) -> Result<Option<Term>, Refusal> {
@@ -377,7 +933,7 @@ impl Producer<'_> {
     fn whnf(&mut self, term: &Term) -> Result<Term, Refusal> {
         stack_safe(|| {
             self.tick()?;
-            if let Some(step) = self.redex(term) {
+            if let Some(step) = self.redex(term)? {
                 self.tokens.push(Token::CoreL(1));
                 let next = self.step(step)?;
                 self.whnf(&next)
@@ -467,7 +1023,7 @@ impl Producer<'_> {
             }
             if self.attempt(|this| {
                 let step = this
-                    .redex(left)
+                    .redex(left)?
                     .ok_or_else(|| Self::missing("advice_no_left_step", left))?;
                 this.tokens.push(Token::CoreL(1));
                 let next = this.step(step)?;
@@ -479,7 +1035,7 @@ impl Producer<'_> {
             }
             if self.attempt(|this| {
                 let step = this
-                    .redex(right)
+                    .redex(right)?
                     .ok_or_else(|| Self::missing("advice_no_right_step", right))?;
                 this.tokens.push(Token::CoreR(1));
                 let next = this.step(step)?;
@@ -541,5 +1097,100 @@ impl Producer<'_> {
             }
             Err(Self::missing("advice_conversion_search_incomplete", left))
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::expr::BinderData;
+
+    #[test]
+    fn unsupported_major_after_motive_recursor_rolls_back_without_tokens() {
+        let mut env = Environment::default();
+        env.init_nat().expect("native Nat fixture");
+        let mut rec = env
+            .get_recursor(&Name::from_string("Nat.rec"))
+            .expect("Nat.rec metadata")
+            .clone();
+        rec.arg_order = RecursorArgOrder::MajorAfterMotive;
+        let mut producer = Producer {
+            lookup: CoreTracer::new(&env, 100),
+            context: Vec::new(),
+            remaining: 100,
+            tokens: vec![Token::Depth(32)],
+        };
+        let before = producer.tokens.clone();
+        assert!(matches!(
+            producer.recursor_step(rec, Vec::new(), Vec::new()),
+            Err(Refusal::Coverage { source_name, .. })
+                if source_name == "advice_recursor_argument_order"
+        ));
+        assert_eq!(producer.tokens, before, "refusal exported no partial frame");
+    }
+
+    #[test]
+    fn late_missing_recursor_rule_rolls_back_without_tokens() {
+        let mut env = Environment::default();
+        env.init_nat().expect("native Nat fixture");
+        let nat = Name::from_string("Nat");
+        let zero = Name::from_string("Nat.zero");
+        let recursor = Name::from_string("Nat.rec");
+        let names = [
+            nat.clone(),
+            zero.clone(),
+            Name::from_string("Nat.succ"),
+            recursor.clone(),
+        ];
+        let mut prefix_tracer = CoreTracer::new(&env, 1_000_000);
+        let mut labelled = prefix_tracer
+            .annotate_group(&names)
+            .expect("labelled native Nat prefix");
+
+        let nat_term = Expr::const_(nat, vec![]);
+        let zero_term = Expr::const_(zero.clone(), vec![]);
+        let motive = Expr::lam(BinderData::default(), nat_term.clone(), nat_term.clone());
+        let successor_minor = Expr::lam(
+            BinderData::default(),
+            nat_term.clone(),
+            Expr::lam(BinderData::default(), nat_term.clone(), zero_term.clone()),
+        );
+        let raw = Expr::apps(
+            Expr::const_(recursor.clone(), vec![Level::succ(Level::zero())]),
+            [motive, zero_term.clone(), successor_minor, zero_term],
+        );
+        let annotated = {
+            let mut tracer = CoreTracer::with_labelled_environment(&env, &labelled, 1_000_000);
+            tracer.check(&raw).expect("annotated Nat.zero recursor").0
+        };
+        let (head, arguments) = Producer::spine(&annotated);
+        let Node::Const(name, levels) = head.0.as_ref() else {
+            panic!("annotated recursor application retains its constant head");
+        };
+        assert_eq!(name, &recursor);
+        assert!(
+            labelled.rules.remove(&(recursor.clone(), zero)).is_some(),
+            "fixture removes the late rule and no other syntax"
+        );
+        let rec = env
+            .get_recursor(&recursor)
+            .expect("Nat.rec metadata")
+            .clone();
+        let mut producer = Producer {
+            lookup: CoreTracer::with_labelled_environment(&env, &labelled, 1_000_000),
+            context: Vec::new(),
+            remaining: 1_000_000,
+            tokens: vec![Token::Depth(32)],
+        };
+        let before = producer.tokens.clone();
+        assert!(matches!(
+            producer.recursor_step(rec, levels.clone(), arguments),
+            Err(Refusal::Coverage { source_name, .. })
+                if source_name == "advice_recursor_labelled_rule"
+        ));
+        assert_eq!(
+            producer.tokens, before,
+            "late missing-rule refusal exported no partial frame"
+        );
     }
 }

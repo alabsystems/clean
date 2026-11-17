@@ -139,7 +139,6 @@ impl ExprMeta {
 
     /// Raw u64 value (for hashing the metadata word itself, as Lean 4 does).
     #[inline]
-    #[cfg(test)]
     pub fn raw(self) -> u64 {
         self.0
     }

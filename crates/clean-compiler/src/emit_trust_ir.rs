@@ -627,11 +627,120 @@ pub fn emit_trust_ir(decls: &[IRDecl]) -> Result<Module, TrustIrError> {
 }
 
 /// Lower a slice of L5IR declarations into a `trust_ir::Module` with config.
+/// Actual native arithmetic wrapper inputs and emitted identities from one
+/// emitter invocation. Untrusted producer DATA only: no source, extern,
+/// ownership, ABI, refinement, certificate or codegen permission.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct NativeArithmeticSupplyData {
+    /// Primitive name observed by the existing untrusted emitter.
+    pub primitive: Name,
+    /// Exact declaration constructed by that invocation's wrapper factory.
+    pub wrapper: IRDecl,
+    /// Function assigned to the wrapper by the same emitter invocation.
+    pub function: FuncId,
+    /// That invocation's interned wrapper function type.
+    pub signature: FuncTyId,
+}
+
+impl NativeArithmeticSupplyData {
+    /// The existing maintained link-name encoding of this retained declaration.
+    /// Producer DATA only; this is not source or runtime authentication.
+    pub fn wrapper_link_symbol(&self) -> String {
+        wire_name(&self.wrapper.name)
+    }
+}
+
+/// The actual way an emitter invocation used an arithmetic entry. DATA only.
+#[derive(Debug, Clone, serde::Serialize)]
+pub enum NativeArithmeticUseKind {
+    /// A runtime closure was allocated for this function-value reference.
+    FunctionValue,
+    /// A partial application closed over the recorded target and capture count.
+    PartialApply { arity: u16, captured: usize },
+    /// Two owned boxed operands were passed to the existing boxed entry.
+    BoxedApply { result_type: IRType },
+}
+
+/// Exact DATA returned by the maintained scalar-reader emission invocation.
+/// This retains identities; it grants no reader/runtime/source semantics.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct NativeScalarReadData {
+    pub object: ValueId,
+    pub scalar_type: IRType,
+    pub reader: FuncId,
+    pub read_result: ValueId,
+    pub result: ValueId,
+}
+
+/// Actual caller/target/result associations. No source, ABI, ownership or proof authority.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct NativeArithmeticUseData {
+    pub primitive: Name,
+    pub caller_name: Name,
+    pub caller: FuncId,
+    /// Actual input IR binding that initiated this emission.
+    pub source_result: Option<VarId>,
+    pub target: FuncId,
+    pub signature: FuncTyId,
+    pub call_result: ValueId,
+    pub result: ValueId,
+    /// Exact operands of the actual wrapper or closure-allocation call.
+    pub call_args: Vec<ValueId>,
+    /// Actual code-pointer operand passed to closure allocation, if any.
+    pub code_pointer: Option<ValueId>,
+    /// Actual runtime allocation callee, distinct from the closed-over target.
+    pub runtime_entry: Option<FuncId>,
+    /// Same-invocation scalar read, when a boxed call returns a scalar.
+    pub scalar_read: Option<NativeScalarReadData>,
+    pub kind: NativeArithmeticUseKind,
+}
+
+impl NativeArithmeticUseData {
+    /// Existing maintained encoding, for receipt identity only.
+    pub fn caller_link_symbol(&self) -> String {
+        wire_name(&self.caller_name)
+    }
+}
+
+/// Untrusted output of the same emitter invocation, after all ordinary gates.
+#[derive(Debug, Clone)]
+pub struct TrustIrEmissionData {
+    /// The ordinary emitted module after its unchanged finalization guards.
+    pub module: Module,
+    /// Actual wrapper inputs and target identities, without semantic authority.
+    pub native_arithmetic_supplies: Vec<NativeArithmeticSupplyData>,
+    /// Every actual function-value/boxed-call use of those entries.
+    pub native_arithmetic_uses: Vec<NativeArithmeticUseData>,
+}
+
+pub(crate) fn emit_trust_ir_with_supply_data(
+    decls: &[IRDecl],
+    config: &TrustIrConfig,
+) -> Result<TrustIrEmissionData, TrustIrError> {
+    emit_trust_ir_recording_data(decls, config, None)
+}
+
 pub(crate) fn emit_trust_ir_with_config(
     decls: &[IRDecl],
     config: &TrustIrConfig,
 ) -> Result<Module, TrustIrError> {
-    emit_trust_ir_with_carriers(decls, config, &[])
+    emit_trust_ir_recording(decls, config, None)
+}
+
+pub(crate) fn emit_trust_ir_recording(
+    decls: &[IRDecl],
+    config: &TrustIrConfig,
+    observation: Option<&crate::primitive_uses::ObservationFrame>,
+) -> Result<Module, TrustIrError> {
+    emit_trust_ir_recording_data(decls, config, observation).map(|data| data.module)
+}
+
+pub(crate) fn emit_trust_ir_recording_data(
+    decls: &[IRDecl],
+    config: &TrustIrConfig,
+    observation: Option<&crate::primitive_uses::ObservationFrame>,
+) -> Result<TrustIrEmissionData, TrustIrError> {
+    emit_trust_ir_with_carriers_data(decls, config, &[], observation)
 }
 
 /// [`emit_trust_ir_with_config`], additionally emitting one typed boundary
@@ -644,6 +753,15 @@ pub(crate) fn emit_trust_ir_with_carriers(
     config: &TrustIrConfig,
     carriers: &[boundary::CarrierExport],
 ) -> Result<Module, TrustIrError> {
+    emit_trust_ir_with_carriers_data(decls, config, carriers, None).map(|data| data.module)
+}
+
+fn emit_trust_ir_with_carriers_data(
+    decls: &[IRDecl],
+    config: &TrustIrConfig,
+    carriers: &[boundary::CarrierExport],
+    observation: Option<&crate::primitive_uses::ObservationFrame>,
+) -> Result<TrustIrEmissionData, TrustIrError> {
     let mut identities = HashSet::new();
     for decl in decls {
         if !identities.insert(&decl.name) {
@@ -728,11 +846,12 @@ pub(crate) fn emit_trust_ir_with_carriers(
     // symbol. Empty (a zero-copy borrow) whenever no such reference exists, so
     // no existing program is perturbed.
     let uint_wrappers = synthesize_uint_arith_wrappers(decls);
+    let native_wrapper_inputs = uint_wrappers.clone();
     let decls: std::borrow::Cow<[IRDecl]> = if uint_wrappers.is_empty() {
         std::borrow::Cow::Borrowed(decls)
     } else {
         let mut v = decls.to_vec();
-        v.extend(uint_wrappers);
+        v.extend(uint_wrappers.into_iter().map(|(_, wrapper)| wrapper));
         std::borrow::Cow::Owned(v)
     };
     let decls: &[IRDecl] = &decls;
@@ -822,6 +941,7 @@ pub(crate) fn emit_trust_ir_with_carriers(
     let string_globals = build_string_globals(&mut mb, decls, abi.is_some());
 
     // --- Pass 2: declare + emit each function body. ---
+    let mut native_arithmetic_uses = Vec::new();
     for decl in decls {
         // An imported callee is DECLARED at the far signature (one
         // `mb.function` call, like `emit_decl`, so the pass-1 FuncIds hold).
@@ -840,6 +960,8 @@ pub(crate) fn emit_trust_ir_with_carriers(
             config,
             &string_globals,
             span,
+            &mut native_arithmetic_uses,
+            observation,
         )?;
     }
 
@@ -847,7 +969,29 @@ pub(crate) fn emit_trust_ir_with_carriers(
     // FuncIds predicted in pass 1 are untouched.
     boundary::emit_carrier_wrappers(&mut mb, carriers, decls, &fn_ids, span)?;
 
-    finalize_module(mb.build()?, config)
+    let module = finalize_module(mb.build()?, config)?;
+    let native_arithmetic_supplies = native_wrapper_inputs
+        .into_iter()
+        .map(|(primitive, wrapper)| {
+            let function = *fn_ids
+                .get(&wrapper.name)
+                .ok_or_else(|| TrustIrError::UndefinedFunction(wrapper.name.to_string()))?;
+            let signature = *fn_sigs
+                .get(&wrapper.name)
+                .ok_or_else(|| TrustIrError::UndefinedFunction(wrapper.name.to_string()))?;
+            Ok(NativeArithmeticSupplyData {
+                primitive,
+                wrapper,
+                function,
+                signature,
+            })
+        })
+        .collect::<Result<Vec<_>, TrustIrError>>()?;
+    Ok(TrustIrEmissionData {
+        module,
+        native_arithmetic_supplies,
+        native_arithmetic_uses,
+    })
 }
 
 /// Finalize an emitted module: pin the target, then gate it fail-closed.
@@ -1369,6 +1513,8 @@ fn emit_decl(
     config: &TrustIrConfig,
     string_globals: &HashMap<String, trust_ir::value::GlobalId>,
     span: Option<SourceSpan>,
+    native_arithmetic_uses: &mut Vec<NativeArithmeticUseData>,
+    observation: Option<&crate::primitive_uses::ObservationFrame>,
 ) -> Result<(), TrustIrError> {
     let param_tys: Vec<Ty> = decl.params.iter().map(|(_, t)| lower_ty(t)).collect();
     // Reuse the signature interned in pass 1 (falls back to interning if absent).
@@ -1418,6 +1564,12 @@ fn emit_decl(
     fb.set_entry(entry);
 
     let mut ctx = FnCtx {
+        caller_name: decl.name.clone(),
+        caller: *fn_ids
+            .get(&decl.name)
+            .ok_or_else(|| TrustIrError::UndefinedFunction(decl.name.to_string()))?,
+        source_result: None,
+        native_arithmetic_uses,
         fb: &mut fb,
         fn_ids,
         fn_sigs,
@@ -1430,6 +1582,11 @@ fn emit_decl(
         jp_blocks: HashMap::new(),
         string_globals,
         ret_ty: decl.return_type.clone(),
+        observation: observation.cloned(),
+        observation_input: observation.and_then(|frame| {
+            frame.ir_declarations("actual emitted function", std::slice::from_ref(decl))
+        }),
+        observation_chosen: false,
     };
     ctx.fb.switch_to_block(entry);
     // SOUNDNESS FIX (2026-07-12): the target-pinned USize/UInt64 decision
@@ -1442,7 +1599,7 @@ fn emit_decl(
     if let Some(cmp_op) = native_uint_decision_op(decl) {
         let lhs = ctx.value_of(decl.params[0].0)?;
         let rhs = ctx.value_of(decl.params[1].0)?;
-        let result = ctx.fb.icmp(cmp_op, lower_ty(&decl.params[0].1), lhs, rhs);
+        let result = ctx.icmp(cmp_op, lower_ty(&decl.params[0].1), lhs, rhs);
         ctx.fb.ret(vec![result]);
     } else {
         emit_body(&mut ctx, &decl.body)?;
@@ -1507,6 +1664,10 @@ fn declare_imported_callee(
 
 /// Per-function lowering context.
 struct FnCtx<'a, 'b> {
+    caller_name: Name,
+    caller: FuncId,
+    source_result: Option<VarId>,
+    native_arithmetic_uses: &'a mut Vec<NativeArithmeticUseData>,
     fb: &'a mut FunctionBuilder<'b>,
     fn_ids: &'a HashMap<Name, FuncId>,
     /// Signature id interned for every in-slice user decl (pass 1): what a
@@ -1539,6 +1700,9 @@ struct FnCtx<'a, 'b> {
     /// Declared L5IR return type of the decl being emitted. Drives the C2b
     /// return-representation alignment at `Ret` ([`align_return_value`]).
     ret_ty: IRType,
+    observation: Option<crate::primitive_uses::ObservationFrame>,
+    observation_input: Option<crate::primitive_uses::ArtifactId>,
+    observation_chosen: bool,
 }
 
 /// A lowered join point: its trust-ir block plus the order of its params.
@@ -1547,6 +1711,80 @@ struct JoinPoint {
 }
 
 impl FnCtx<'_, '_> {
+    fn call(&mut self, callee: FuncId, args: Vec<ValueId>) -> ValueId {
+        self.observation_chosen = true;
+        if let Some(frame) = &self.observation {
+            frame.emission_operation_with_types(self.observation_input.clone(), &[], &args, || {
+                crate::primitive_uses::EmissionOperation::Call {
+                    callee,
+                    arguments: args.clone().into(),
+                }
+            });
+        }
+        self.fb.call(callee, args)
+    }
+    fn binop(&mut self, op: BinOp, ty: Ty, lhs: ValueId, rhs: ValueId) -> ValueId {
+        self.observation_chosen = true;
+        if let Some(frame) = &self.observation {
+            frame.emission_operation_with_types(
+                self.observation_input.clone(),
+                &[&ty],
+                &[lhs, rhs],
+                || crate::primitive_uses::EmissionOperation::BinOp {
+                    op,
+                    ty: ty.clone(),
+                    lhs,
+                    rhs,
+                },
+            );
+        }
+        self.fb.binop(op, ty, lhs, rhs)
+    }
+    fn icmp(&mut self, op: ICmpOp, ty: Ty, lhs: ValueId, rhs: ValueId) -> ValueId {
+        self.observation_chosen = true;
+        if let Some(frame) = &self.observation {
+            frame.emission_operation_with_types(
+                self.observation_input.clone(),
+                &[&ty],
+                &[lhs, rhs],
+                || crate::primitive_uses::EmissionOperation::Comparison {
+                    op,
+                    ty: ty.clone(),
+                    lhs,
+                    rhs,
+                },
+            );
+        }
+        self.fb.icmp(op, ty, lhs, rhs)
+    }
+    fn cast(&mut self, op: CastOp, from: Ty, to: Ty, value: ValueId) -> ValueId {
+        self.observation_chosen = true;
+        if let Some(frame) = &self.observation {
+            frame.emission_operation_with_types(
+                self.observation_input.clone(),
+                &[&from, &to],
+                &[],
+                || crate::primitive_uses::EmissionOperation::Cast {
+                    op,
+                    from: from.clone(),
+                    to: to.clone(),
+                    input: value,
+                },
+            );
+        }
+        self.fb.cast(op, from, to, value)
+    }
+
+    fn record_operation(&mut self, operation: crate::primitive_uses::EmissionOperation) {
+        self.observation_chosen = true;
+        if let Some(frame) = &self.observation {
+            frame.emission_operation(self.observation_input.clone(), operation);
+        }
+    }
+    fn record_route(&mut self, route: &'static str) {
+        self.record_operation(crate::primitive_uses::EmissionOperation::Route(route));
+    }
+
     /// Materialize `callee`'s address as the value `clean_alloc_closure`'s
     /// `fn` parameter takes (the runtime's canonical `()->()` closure fn-type,
     /// [`RuntimeAbi::clean_fn_ty`]).
@@ -1570,7 +1808,7 @@ impl FnCtx<'_, '_> {
         if sig == abi.clean_fn_ty {
             return addr;
         }
-        self.fb.cast(
+        self.cast(
             CastOp::PtrToPtr,
             Ty::Func(sig),
             Ty::Func(abi.clean_fn_ty),
@@ -1606,7 +1844,10 @@ fn emit_body(ctx: &mut FnCtx, body: &IRBody) -> Result<(), TrustIrError> {
             value,
             rest,
         } => {
-            let v = emit_expr(ctx, value, ty)?;
+            let previous = ctx.source_result.replace(*var);
+            let emitted = emit_expr(ctx, value, ty);
+            ctx.source_result = previous;
+            let v = emitted?;
             ctx.var_values.insert(*var, v);
             ctx.var_tys.insert(*var, ty.clone());
             emit_body(ctx, rest)
@@ -1956,6 +2197,41 @@ fn emit_case_bool(
 
 /// Lower a pure `IRExpr` into an SSA value, given the declared result type.
 fn emit_expr(ctx: &mut FnCtx, expr: &IRExpr, ty: &IRType) -> Result<ValueId, TrustIrError> {
+    let previous_input = ctx.observation_input.take();
+    ctx.observation_input = ctx.observation.as_ref().and_then(|frame| {
+        frame.emission_input(
+            expr,
+            ty,
+            &ctx.var_tys,
+            &ctx.var_values,
+            previous_input.clone(),
+        )
+    });
+    ctx.observation_chosen = false;
+    let result = emit_expr_inner(ctx, expr, ty);
+    if let Some(frame) = &ctx.observation {
+        if !ctx.observation_chosen {
+            frame.gap(crate::primitive_uses::ObservationGap::Unobserved {
+                owner: "TrustIR emitter branch",
+                reason: "actual expression branch has no finer dispatch instrumentation",
+            });
+        }
+        match &result {
+            Ok(value) => frame.emission_operation(
+                ctx.observation_input.clone(),
+                crate::primitive_uses::EmissionOperation::Value(*value),
+            ),
+            Err(_) => frame.gap(crate::primitive_uses::ObservationGap::Failed {
+                owner: "TrustIR emitter",
+                error: "actual emitter refusal",
+            }),
+        }
+    }
+    ctx.observation_input = previous_input;
+    result
+}
+
+fn emit_expr_inner(ctx: &mut FnCtx, expr: &IRExpr, ty: &IRType) -> Result<ValueId, TrustIrError> {
     match expr {
         // --- Easy core ops ---
         // A big Nat literal (>= 2^64) is inherently a heap Nat OBJECT, not a
@@ -1968,7 +2244,7 @@ fn emit_expr(ctx: &mut FnCtx, expr: &IRExpr, ty: &IRType) -> Result<ValueId, Tru
             {
                 let lo = ctx.fb.iconst(Ty::U64, (*v as u64) as i128);
                 let hi = ctx.fb.iconst(Ty::U64, ((*v >> 64) as u64) as i128);
-                Ok(ctx.fb.call(abi.clean_nat_big, vec![lo, hi]))
+                Ok(ctx.call(abi.clean_nat_big, vec![lo, hi]))
             } else {
                 Err(TrustIrError::Unsupported(
                     "big Nat literal (>= 2^64) has no Dialect-mode lowering; the \
@@ -1977,7 +2253,10 @@ fn emit_expr(ctx: &mut FnCtx, expr: &IRExpr, ty: &IRType) -> Result<ValueId, Tru
                 ))
             }
         }
-        IRExpr::Lit(lit) => Ok(emit_literal(ctx, lit)),
+        IRExpr::Lit(lit) => {
+            ctx.record_route("native scalar literal");
+            Ok(emit_literal(ctx, lit))
+        }
 
         IRExpr::Apply { fn_id, args } => {
             let name = fn_id.0.clone();
@@ -2013,7 +2292,7 @@ fn emit_expr(ctx: &mut FnCtx, expr: &IRExpr, ty: &IRType) -> Result<ValueId, Tru
                     }
                     let lhs = ctx.value_of_arg(a)?;
                     let rhs = ctx.value_of_arg(b)?;
-                    return Ok(ctx.fb.icmp(op, lower_ty(&expected), lhs, rhs));
+                    return Ok(ctx.icmp(op, lower_ty(&expected), lhs, rhs));
                 }
             }
             // A user declaration always wins; only an OTHERWISE-UNDEFINED
@@ -2038,9 +2317,24 @@ fn emit_expr(ctx: &mut FnCtx, expr: &IRExpr, ty: &IRType) -> Result<ValueId, Tru
                     let fn_ptr = ctx.closure_fn_ptr(&abi, wid, wsig);
                     let arity_c = ctx.fb.iconst(Ty::U32, 2);
                     let nfixed_c = ctx.fb.iconst(Ty::U32, 0);
-                    return Ok(ctx
-                        .fb
-                        .call(abi.clean_alloc_closure, vec![fn_ptr, arity_c, nfixed_c]));
+                    let call_args = vec![fn_ptr, arity_c, nfixed_c];
+                    let result = ctx.call(abi.clean_alloc_closure, call_args.clone());
+                    ctx.native_arithmetic_uses.push(NativeArithmeticUseData {
+                        primitive: name.clone(),
+                        caller_name: ctx.caller_name.clone(),
+                        caller: ctx.caller,
+                        source_result: ctx.source_result,
+                        target: wid,
+                        signature: wsig,
+                        call_result: result,
+                        result,
+                        call_args,
+                        code_pointer: Some(fn_ptr),
+                        runtime_entry: Some(abi.clean_alloc_closure),
+                        scalar_read: None,
+                        kind: NativeArithmeticUseKind::FunctionValue,
+                    });
+                    return Ok(result);
                 }
             }
             // Fixed-width UInt arithmetic primitives (`UInt{8,16,32,64}.{add,sub,
@@ -2056,6 +2350,76 @@ fn emit_expr(ctx: &mut FnCtx, expr: &IRExpr, ty: &IRType) -> Result<ValueId, Tru
             // given on [`uint_arith_binop`]). Only reached when the name is
             // NOT a user decl, so no existing program changes shape.
             if let Some((op, bty)) = uint_arith_binop_name(&name) {
+                // The ordinary boxing pass may legitimately present two owned
+                // Objects when an imported native signature is not available.
+                // Reuse the SAME existing arithmetic boxed entry, never treat
+                // pointer bits as integer operands or promote signature flags.
+                let boxed = args.len() == 2 && args.iter().all(|arg|
+                    matches!(arg, IRArg::Var(v) if ctx.var_tys.get(v) == Some(&IRType::Object)));
+                if boxed {
+                    if lower_ty(ty) != bty && *ty != IRType::Object {
+                        return Err(TrustIrError::Unsupported(format!(
+                            "boxed arithmetic {name} has a mismatched result type {ty:?}"
+                        )));
+                    }
+                    let (RuntimeLowering::ExternCalls, Some(abi)) =
+                        (ctx.config.runtime_lowering, ctx.abi.clone())
+                    else {
+                        return Err(TrustIrError::Unsupported(
+                            "boxed arithmetic requires the existing runtime ABI".into(),
+                        ));
+                    };
+                    let wrapper = uint_arith_wrapper_name(&name);
+                    let target = *ctx
+                        .fn_ids
+                        .get(&wrapper)
+                        .ok_or_else(|| TrustIrError::UndefinedFunction(wrapper.to_string()))?;
+                    let signature = *ctx
+                        .fn_sigs
+                        .get(&wrapper)
+                        .ok_or_else(|| TrustIrError::UndefinedFunction(wrapper.to_string()))?;
+                    let shape = ctx
+                        .fn_shapes
+                        .get(&wrapper)
+                        .ok_or_else(|| TrustIrError::UndefinedFunction(wrapper.to_string()))?;
+                    if shape.params != [Ty::Ptr, Ty::Ptr] || !shape.returns_ptr {
+                        return Err(TrustIrError::Unsupported(format!(
+                            "boxed arithmetic wrapper {wrapper} has a mismatched signature"
+                        )));
+                    }
+                    let operands = args
+                        .iter()
+                        .map(|arg| ctx.value_of_arg(arg))
+                        .collect::<Result<Vec<_>, _>>()?;
+                    let call_result = ctx.call(target, operands.clone());
+                    let (result, scalar_read) = if *ty == IRType::Object {
+                        (call_result, None)
+                    } else {
+                        let scalar = uint_arith_ir_ty(&name)
+                            .ok_or_else(|| TrustIrError::UndefinedFunction(name.to_string()))?;
+                        let read = emit_unbox_extern_data(ctx, &abi, &scalar, call_result)?;
+                        ctx.fb.release(call_result);
+                        (read.result, Some(read))
+                    };
+                    ctx.native_arithmetic_uses.push(NativeArithmeticUseData {
+                        primitive: name.clone(),
+                        caller_name: ctx.caller_name.clone(),
+                        caller: ctx.caller,
+                        source_result: ctx.source_result,
+                        target,
+                        signature,
+                        call_result,
+                        result,
+                        call_args: operands,
+                        code_pointer: None,
+                        runtime_entry: None,
+                        scalar_read,
+                        kind: NativeArithmeticUseKind::BoxedApply {
+                            result_type: ty.clone(),
+                        },
+                    });
+                    return Ok(result);
+                }
                 let declared = lower_ty(ty);
                 if declared != bty {
                     return Err(TrustIrError::Unsupported(format!(
@@ -2072,7 +2436,7 @@ fn emit_expr(ctx: &mut FnCtx, expr: &IRExpr, ty: &IRType) -> Result<ValueId, Tru
                 };
                 let lhs = ctx.value_of_arg(a)?;
                 let rhs = ctx.value_of_arg(b)?;
-                return Ok(ctx.fb.binop(op, bty, lhs, rhs));
+                return Ok(ctx.binop(op, bty, lhs, rhs));
             }
             // WS6.10: a saturated fixed-width width conversion
             // (`UInt8.toUInt64 a`) lowers to ONE native cast — `zext` when
@@ -2108,7 +2472,7 @@ fn emit_expr(ctx: &mut FnCtx, expr: &IRExpr, ty: &IRType) -> Result<ValueId, Tru
                     )));
                 }
                 let x = ctx.value_of_arg(a)?;
-                return Ok(ctx.fb.cast(op, src, dst, x));
+                return Ok(ctx.cast(op, src, dst, x));
             }
             // C1 EXTERN BOUNDARY (emit_c parity): a callee the #14 dependency
             // boundary dropped from the slice was forward-declared as a
@@ -2131,9 +2495,7 @@ fn emit_expr(ctx: &mut FnCtx, expr: &IRExpr, ty: &IRType) -> Result<ValueId, Tru
                     let fn_ptr = ctx.closure_fn_ptr(&abi, callee, callee_sig);
                     let arity_c = ctx.fb.iconst(Ty::U32, arity as i128);
                     let nfixed_c = ctx.fb.iconst(Ty::U32, 0);
-                    return Ok(ctx
-                        .fb
-                        .call(abi.clean_alloc_closure, vec![fn_ptr, arity_c, nfixed_c]));
+                    return Ok(ctx.call(abi.clean_alloc_closure, vec![fn_ptr, arity_c, nfixed_c]));
                 }
                 // Defensive fail-closed: certification guarantees every call
                 // site is at least saturated; refuse an under-applied call
@@ -2160,7 +2522,7 @@ fn emit_expr(ctx: &mut FnCtx, expr: &IRExpr, ty: &IRType) -> Result<ValueId, Tru
                         IRArg::Erased => box_erased(ctx, &abi),
                     });
                 }
-                let result = ctx.fb.call(callee, arg_vals);
+                let result = ctx.call(callee, arg_vals);
                 if extra.is_empty() {
                     return Ok(result);
                 }
@@ -2201,11 +2563,12 @@ fn emit_expr(ctx: &mut FnCtx, expr: &IRExpr, ty: &IRType) -> Result<ValueId, Tru
             // C2: a projection out of an unboxed scalar carrier is the carrier
             // itself (see the `SProj` arm) — here the result is `USize`, so
             // only a `U64`-lowering carrier is faithful.
-            if let Some(carrier) = ctx.var_tys.get(var).filter(|t| t.is_scalar()) {
-                return if lower_ty(carrier) == Ty::U64 {
+            if let Some(carrier) = ctx.var_tys.get(var).filter(|t| t.is_scalar()).cloned() {
+                ctx.record_route("scalar UProj identity or mismatch refusal");
+                return if lower_ty(&carrier) == Ty::U64 {
                     Ok(obj)
                 } else {
-                    Err(scalar_carrier_mismatch("uproj", carrier, &IRType::USize))
+                    Err(scalar_carrier_mismatch("uproj", &carrier, &IRType::USize))
                 };
             }
             emit_clean_value(
@@ -2232,11 +2595,12 @@ fn emit_expr(ctx: &mut FnCtx, expr: &IRExpr, ty: &IRType) -> Result<ValueId, Tru
             // meaningless for an unboxed carrier and a width-changing
             // projection has no faithful form: refused fail-closed (the old
             // `clean_ctor_get_*` call on a non-pointer was invalid IR).
-            if let Some(carrier) = ctx.var_tys.get(var).filter(|t| t.is_scalar()) {
-                return if lower_ty(carrier) == lower_ty(sty) {
+            if let Some(carrier) = ctx.var_tys.get(var).filter(|t| t.is_scalar()).cloned() {
+                ctx.record_route("scalar SProj identity or mismatch refusal");
+                return if lower_ty(&carrier) == lower_ty(sty) {
                     Ok(obj)
                 } else {
-                    Err(scalar_carrier_mismatch("sproj", carrier, sty))
+                    Err(scalar_carrier_mismatch("sproj", &carrier, sty))
                 };
             }
             emit_clean_value(
@@ -2260,12 +2624,14 @@ fn emit_expr(ctx: &mut FnCtx, expr: &IRExpr, ty: &IRType) -> Result<ValueId, Tru
                 if let Some(carrier) = ctx.var_tys.get(v).filter(|t| t.is_scalar()).cloned() {
                     let declared = lower_ty(pty);
                     if declared == lower_ty(&carrier) {
+                        ctx.record_route("scalar Proj identity");
                         return Ok(obj);
                     }
                     if declared == Ty::Ptr {
                         if let (RuntimeLowering::ExternCalls, Some(abi)) =
                             (ctx.config.runtime_lowering, ctx.abi.clone())
                         {
+                            ctx.record_route("scalar Proj runtime reboxing");
                             return Ok(box_scalar_tagged(ctx, &abi, &carrier, obj));
                         }
                         // Dialect mode: fall through to the opaque
@@ -2286,7 +2652,10 @@ fn emit_expr(ctx: &mut FnCtx, expr: &IRExpr, ty: &IRType) -> Result<ValueId, Tru
         }
 
         // --- Managed-runtime / RC value-producing ops via the clean dialect ---
-        IRExpr::Ctor { info, args } => emit_ctor(ctx, info, args, "obj.ctor"),
+        IRExpr::Ctor { info, args } => {
+            ctx.record_route("constructor dispatch with actual CtorInfo");
+            emit_ctor(ctx, info, args, "obj.ctor")
+        }
 
         IRExpr::Reuse { var, ctor, args } => {
             // The reused slot is a leading operand; the remaining operands are
@@ -2336,7 +2705,7 @@ fn emit_expr(ctx: &mut FnCtx, expr: &IRExpr, ty: &IRType) -> Result<ValueId, Tru
                 })?;
                 let ptr = ctx.fb.global_addr(gid);
                 let len = ctx.fb.iconst(Ty::U64, s.len() as i128);
-                return Ok(ctx.fb.call(abi.clean_mk_string_from_bytes, vec![ptr, len]));
+                return Ok(ctx.call(abi.clean_mk_string_from_bytes, vec![ptr, len]));
             }
             // Dialect mode (no runtime): carry the bytes as a `clean.str.const`
             // op producing a managed string pointer.
@@ -2445,7 +2814,7 @@ fn emit_apply_user(
             }
         });
     }
-    let result = ctx.fb.call(callee, arg_vals);
+    let result = ctx.call(callee, arg_vals);
     if extra.is_empty() {
         return Ok(result);
     }
@@ -2781,6 +3150,63 @@ fn collect_native_value_refs(
     }
 }
 
+/// Untrusted demand discovery from actual typed boxed inputs. No signature
+/// verification, source meaning or ownership permission is inferred here.
+fn collect_boxed_uint_apply_refs(
+    body: &IRBody,
+    slice_names: &HashSet<Name>,
+    mut types: HashMap<VarId, IRType>,
+    out: &mut BTreeSet<Name>,
+) {
+    match body {
+        IRBody::VDecl {
+            var,
+            ty,
+            value,
+            rest,
+        } => {
+            if let IRExpr::Apply { fn_id, args } = value {
+                if !slice_names.contains(&fn_id.0)
+                    && args.len() == 2
+                    && uint_arith_ir_ty(&fn_id.0).is_some_and(|scalar| {
+                        lower_ty(ty) == lower_ty(&scalar) || *ty == IRType::Object
+                    })
+                    && args.iter().all(
+                        |arg| matches!(arg, IRArg::Var(v) if types.get(v) == Some(&IRType::Object)),
+                    )
+                {
+                    out.insert(fn_id.0.clone());
+                }
+            }
+            types.insert(*var, ty.clone());
+            collect_boxed_uint_apply_refs(rest, slice_names, types, out);
+        }
+        IRBody::JDecl {
+            params, body, rest, ..
+        } => {
+            let mut joined = types.clone();
+            joined.extend(params.iter().cloned());
+            collect_boxed_uint_apply_refs(body, slice_names, joined, out);
+            collect_boxed_uint_apply_refs(rest, slice_names, types, out);
+        }
+        IRBody::Inc { rest, .. }
+        | IRBody::Dec { rest, .. }
+        | IRBody::Set { rest, .. }
+        | IRBody::SetTag { rest, .. }
+        | IRBody::USet { rest, .. }
+        | IRBody::SSet { rest, .. } => collect_boxed_uint_apply_refs(rest, slice_names, types, out),
+        IRBody::Case { alts, default, .. } => {
+            for alt in alts {
+                collect_boxed_uint_apply_refs(&alt.body, slice_names, types.clone(), out);
+            }
+            if let Some(body) = default {
+                collect_boxed_uint_apply_refs(body, slice_names, types, out);
+            }
+        }
+        IRBody::Jmp { .. } | IRBody::Ret(_) | IRBody::Unreachable => {}
+    }
+}
+
 /// Build a native BOXED-entry wrapper decl for every fixed-width UInt
 /// arithmetic primitive referenced as a function VALUE (see
 /// [`collect_uint_value_refs`]) but not defined in `decls`.
@@ -2802,11 +3228,13 @@ fn collect_native_value_refs(
 /// by construction. Fires only when the primitive is NOT an in-slice decl, so
 /// no existing program (where the boxing pass already produced the wrapper)
 /// changes shape.
-fn synthesize_uint_arith_wrappers(decls: &[IRDecl]) -> Vec<IRDecl> {
+fn synthesize_uint_arith_wrappers(decls: &[IRDecl]) -> Vec<(Name, IRDecl)> {
     let slice_names: HashSet<Name> = decls.iter().map(|d| d.name.clone()).collect();
     let mut refs: BTreeSet<Name> = BTreeSet::new();
     for d in decls {
         collect_uint_value_refs(&d.body, &slice_names, &mut refs);
+        let types = d.params.iter().cloned().collect();
+        collect_boxed_uint_apply_refs(&d.body, &slice_names, types, &mut refs);
     }
     let mut wrappers = Vec::new();
     let mut refs: Vec<_> = refs.into_iter().collect();
@@ -2881,12 +3309,15 @@ fn synthesize_uint_arith_wrappers(decls: &[IRDecl]) -> Vec<IRDecl> {
                 }),
             }),
         };
-        wrappers.push(IRDecl {
-            name: wname,
-            params: vec![(a, IRType::Object), (b, IRType::Object)],
-            return_type: IRType::Object,
-            body,
-        });
+        wrappers.push((
+            p,
+            IRDecl {
+                name: wname,
+                params: vec![(a, IRType::Object), (b, IRType::Object)],
+                return_type: IRType::Object,
+                body,
+            },
+        ));
     }
     wrappers
 }
@@ -3110,15 +3541,15 @@ fn emit_clean_value_extern(
             // clean_obj_tag returns the whole tag as U32, the op's contract
             // and the `switch` scrutinee width. (An 8-bit import plus a zext
             // read boxed tag 299 as 43.)
-            ctx.fb.call(abi.clean_obj_tag, vec![obj])
+            ctx.call(abi.clean_obj_tag, vec![obj])
         }
         "obj.proj" => {
             let idx = ctx.fb.iconst(Ty::U64, attr_u64(attrs, "idx") as i128);
-            ctx.fb.call(abi.clean_ctor_get, vec![obj, idx])
+            ctx.call(abi.clean_ctor_get, vec![obj, idx])
         }
         "obj.uproj" => {
             let idx = ctx.fb.iconst(Ty::U32, attr_u64(attrs, "idx") as i128);
-            ctx.fb.call(abi.clean_ctor_get_usize, vec![obj, idx])
+            ctx.call(abi.clean_ctor_get_usize, vec![obj, idx])
         }
         "obj.sproj" => {
             let w = match RuntimeAbi::scalar_width(result_ty) {
@@ -3127,19 +3558,19 @@ fn emit_clean_value_extern(
             };
             let byte_off = 8 * attr_u64(attrs, "n") + attr_u64(attrs, "offset");
             let off = ctx.fb.iconst(Ty::U32, byte_off as i128);
-            let raw = ctx.fb.call(abi.scalar_get[w.idx()], vec![obj, off]);
+            let raw = ctx.call(abi.scalar_get[w.idx()], vec![obj, off]);
             if *result_ty == Ty::Bool {
                 // A `Bool` field is stored as one byte (0 / 1, the runtime's
                 // `uint8_t`); the getter returns `U8`, so read it back as
                 // `raw != 0` — the same spelling `Unbox` uses. Returning the
                 // `U8` at a `Bool` result was invalid IR (WS6.9 review).
                 let zero = ctx.fb.iconst(Ty::U8, 0);
-                ctx.fb.icmp(ICmpOp::Ne, Ty::U8, raw, zero)
+                ctx.icmp(ICmpOp::Ne, Ty::U8, raw, zero)
             } else {
                 raw
             }
         }
-        "obj.reset" => ctx.fb.call(abi.clean_reset, vec![obj]),
+        "obj.reset" => ctx.call(abi.clean_reset, vec![obj]),
         // obj.box / obj.unbox are handled in their `IRExpr` arms (they need the
         // L5IR scalar type for width-correct dispatch + casts).
         _ => return Ok(None),
@@ -3153,10 +3584,10 @@ fn emit_clean_value_extern(
 /// the header's `static inline clean_box`).
 fn emit_box_extern(ctx: &mut FnCtx, abi: &RuntimeAbi, bty: &IRType, scalar: ValueId) -> ValueId {
     match bty {
-        IRType::Float64 => ctx.fb.call(abi.clean_box_float, vec![scalar]),
+        IRType::Float64 => ctx.call(abi.clean_box_float, vec![scalar]),
         IRType::Float32 => {
-            let d = ctx.fb.cast(CastOp::FPExt, Ty::F32, Ty::F64, scalar);
-            ctx.fb.call(abi.clean_box_float, vec![d])
+            let d = ctx.cast(CastOp::FPExt, Ty::F32, Ty::F64, scalar);
+            ctx.call(abi.clean_box_float, vec![d])
         }
         // WS6.1 producer canonicalization: one value, one boxed spelling. A
         // `USize` is how a small `Nat` literal is typed (`to_ir::lower`: a Nat
@@ -3168,18 +3599,18 @@ fn emit_box_extern(ctx: &mut FnCtx, abi: &RuntimeAbi, bty: &IRType, scalar: Valu
         // always-heap `clean_box_uint64`, so a
         // small Nat had two boxed spellings and a tagged-only reader got
         // pointer bits (F-101).
-        IRType::USize => ctx.fb.call(abi.clean_nat_of_u64, vec![scalar]),
+        IRType::USize => ctx.call(abi.clean_nat_of_u64, vec![scalar]),
         // A genuine `UInt64` object is heap in Lean's ABI, and every `UInt64`
         // consumer reads through the dispatching `clean_unbox_uint64`.
-        IRType::UInt64 => ctx.fb.call(abi.clean_box_uint64, vec![scalar]),
-        IRType::UInt32 => ctx.fb.call(abi.clean_box_uint32, vec![scalar]),
+        IRType::UInt64 => ctx.call(abi.clean_box_uint64, vec![scalar]),
+        IRType::UInt32 => ctx.call(abi.clean_box_uint32, vec![scalar]),
         IRType::UInt16 => {
             let w = ctx.fb.zext(Ty::U16, Ty::U32, scalar);
-            ctx.fb.call(abi.clean_box_uint32, vec![w])
+            ctx.call(abi.clean_box_uint32, vec![w])
         }
         IRType::UInt8 => {
             let w = ctx.fb.zext(Ty::U8, Ty::U32, scalar);
-            ctx.fb.call(abi.clean_box_uint32, vec![w])
+            ctx.call(abi.clean_box_uint32, vec![w])
         }
         IRType::Bool => {
             // trust-ir casts are integer<->integer; `Bool` is not an integer
@@ -3190,7 +3621,7 @@ fn emit_box_extern(ctx: &mut FnCtx, abi: &RuntimeAbi, bty: &IRType, scalar: Valu
             let one = ctx.fb.iconst(Ty::U32, 1);
             let zero = ctx.fb.iconst(Ty::U32, 0);
             let w = ctx.fb.select(Ty::U32, scalar, one, zero);
-            ctx.fb.call(abi.clean_box_uint32, vec![w])
+            ctx.call(abi.clean_box_uint32, vec![w])
         }
         // C2b: an ERASED (or void) payload carries no runtime information —
         // its carrier SSA value is whatever placeholder the body materialized
@@ -3277,11 +3708,11 @@ fn box_scalar_tagged(
             let one = ctx.fb.iconst(Ty::U64, 1);
             let zero = ctx.fb.iconst(Ty::U64, 0);
             let w = ctx.fb.select(Ty::U64, scalar, one, zero);
-            ctx.fb.call(abi.clean_box, vec![w])
+            ctx.call(abi.clean_box, vec![w])
         }
         IRType::UInt8 | IRType::UInt16 | IRType::UInt32 => {
             let w = ctx.fb.zext(lower_ty(carrier), Ty::U64, scalar);
-            ctx.fb.call(abi.clean_box, vec![w])
+            ctx.call(abi.clean_box, vec![w])
         }
         // U64-lowering carriers (`UInt64`/`USize`): a `Nat` carrier whose value
         // may reach bit 63, which the tagged `clean_box` `(v<<1)|1` would
@@ -3289,8 +3720,8 @@ fn box_scalar_tagged(
         // `clean_nat_of_u64` producer (RUNG B): tagged below 2^63, a heap Nat
         // cell at or above it. The UInt8/16/32 carriers above are always < 2^63,
         // so their tagged `clean_box` stays exact.
-        IRType::UInt64 | IRType::USize => ctx.fb.call(abi.clean_nat_of_u64, vec![scalar]),
-        _ => ctx.fb.call(abi.clean_box, vec![scalar]),
+        IRType::UInt64 | IRType::USize => ctx.call(abi.clean_nat_of_u64, vec![scalar]),
+        _ => ctx.call(abi.clean_box, vec![scalar]),
     }
 }
 
@@ -3339,28 +3770,40 @@ fn emit_unbox_extern(
     uty: &IRType,
     obj: ValueId,
 ) -> Result<ValueId, TrustIrError> {
-    Ok(match uty {
-        IRType::Float64 => ctx.fb.call(abi.clean_unbox_float, vec![obj]),
-        IRType::Float32 => {
-            let d = ctx.fb.call(abi.clean_unbox_float, vec![obj]);
-            ctx.fb.cast(CastOp::FPTrunc, Ty::F64, Ty::F32, d)
-        }
-        IRType::UInt64 | IRType::USize => ctx.fb.call(abi.clean_unbox_uint64, vec![obj]),
-        IRType::UInt32 => ctx.fb.call(abi.clean_unbox_uint32, vec![obj]),
-        IRType::UInt16 => {
-            let w = ctx.fb.call(abi.clean_unbox_uint64, vec![obj]);
-            ctx.fb.trunc(Ty::U64, Ty::U16, w)
-        }
-        IRType::UInt8 => {
-            let w = ctx.fb.call(abi.clean_unbox_uint64, vec![obj]);
-            ctx.fb.trunc(Ty::U64, Ty::U8, w)
-        }
-        IRType::Bool => {
-            let w = ctx.fb.call(abi.clean_unbox_uint64, vec![obj]);
-            let zero = ctx.fb.iconst(Ty::U64, 0);
-            ctx.fb.icmp(ICmpOp::Ne, Ty::U64, w, zero)
+    emit_unbox_extern_data(ctx, abi, uty, obj).map(|read| read.result)
+}
+
+fn emit_unbox_extern_data(
+    ctx: &mut FnCtx,
+    abi: &RuntimeAbi,
+    uty: &IRType,
+    obj: ValueId,
+) -> Result<NativeScalarReadData, TrustIrError> {
+    let reader = match uty {
+        IRType::Float64 | IRType::Float32 => abi.clean_unbox_float,
+        IRType::UInt32 => abi.clean_unbox_uint32,
+        IRType::UInt64 | IRType::USize | IRType::UInt16 | IRType::UInt8 | IRType::Bool => {
+            abi.clean_unbox_uint64
         }
         other => return Err(unbox_non_scalar(other)),
+    };
+    let read_result = ctx.call(reader, vec![obj]);
+    let result = match uty {
+        IRType::Float32 => ctx.cast(CastOp::FPTrunc, Ty::F64, Ty::F32, read_result),
+        IRType::UInt16 => ctx.fb.trunc(Ty::U64, Ty::U16, read_result),
+        IRType::UInt8 => ctx.fb.trunc(Ty::U64, Ty::U8, read_result),
+        IRType::Bool => {
+            let zero = ctx.fb.iconst(Ty::U64, 0);
+            ctx.icmp(ICmpOp::Ne, Ty::U64, read_result, zero)
+        }
+        _ => read_result,
+    };
+    Ok(NativeScalarReadData {
+        object: obj,
+        scalar_type: uty.clone(),
+        reader,
+        read_result,
+        result,
     })
 }
 
@@ -3463,14 +3906,14 @@ fn emit_ctor_extern(
             ensure_object_operands(op, operands.len(), info)?;
             if operands.is_empty() && info.scalar_size() == 0 {
                 let tag = ctx.fb.iconst(Ty::U64, info.tag as i128);
-                ctx.fb.call(abi.clean_box, vec![tag])
+                ctx.call(abi.clean_box, vec![tag])
             } else {
                 let tag = ctx.fb.iconst(Ty::U32, info.tag as i128);
                 let nobj = ctx.fb.iconst(Ty::U32, info.num_objects as i128);
                 let scalar = ctx.fb.iconst(Ty::U32, info.scalar_size() as i128);
                 let mut args = vec![tag, nobj, scalar];
                 args.extend_from_slice(operands);
-                ctx.fb.call(abi.clean_alloc_ctor, args)
+                ctx.call(abi.clean_alloc_ctor, args)
             }
         }
         "obj.reuse" => {
@@ -3484,7 +3927,7 @@ fn emit_ctor_extern(
             let scalar = ctx.fb.iconst(Ty::U32, info.scalar_size() as i128);
             let mut args = vec![slot, tag, nobj, scalar];
             args.extend_from_slice(fields);
-            ctx.fb.call(abi.clean_reuse, args)
+            ctx.call(abi.clean_reuse, args)
         }
         _ => return Ok(None),
     };
@@ -3509,7 +3952,7 @@ fn ensure_object_operands(op: &str, passed: usize, info: &CtorInfo) -> Result<()
 /// closure captures keep a valid managed pointer in every slot.
 fn box_erased(ctx: &mut FnCtx, abi: &RuntimeAbi) -> ValueId {
     let z = ctx.fb.iconst(Ty::U64, 0);
-    ctx.fb.call(abi.clean_box_uint64, vec![z])
+    ctx.call(abi.clean_box_uint64, vec![z])
 }
 
 /// `ExternCalls` lowering of `PartialApply` -> `clean_alloc_closure(fn, arity,
@@ -3544,6 +3987,7 @@ fn emit_partial_apply_extern(
              callee `{callee_name}` takes {params} parameter(s)"
         ))
     };
+    let mut native_entry = false;
     let (callee, callee_sig) = match (ctx.fn_ids.get(&name), ctx.fn_sigs.get(&name)) {
         (Some(&id), Some(&sig)) => {
             let params = ctx.fn_shapes.get(&name).map_or(0, |s| s.params.len());
@@ -3577,6 +4021,7 @@ fn emit_partial_apply_extern(
                         if params != arity as usize {
                             return Err(refuse_in_slice_arity(&wname, params));
                         }
+                        native_entry = uint_arith_binop_name(&name).is_some();
                         (wid, wsig)
                     }
                     _ => return Err(TrustIrError::UndefinedFunction(name.to_string())),
@@ -3606,7 +4051,28 @@ fn emit_partial_apply_extern(
         };
         call_args.push(v);
     }
-    Ok(ctx.fb.call(abi.clean_alloc_closure, call_args))
+    let result = ctx.call(abi.clean_alloc_closure, call_args.clone());
+    if native_entry {
+        ctx.native_arithmetic_uses.push(NativeArithmeticUseData {
+            primitive: name,
+            caller_name: ctx.caller_name.clone(),
+            caller: ctx.caller,
+            source_result: ctx.source_result,
+            target: callee,
+            signature: callee_sig,
+            call_result: result,
+            result,
+            call_args,
+            code_pointer: Some(fn_ptr),
+            runtime_entry: Some(abi.clean_alloc_closure),
+            scalar_read: None,
+            kind: NativeArithmeticUseKind::PartialApply {
+                arity,
+                captured: args.len(),
+            },
+        });
+    }
+    Ok(result)
 }
 
 /// `ExternCalls` lowering of `ClosureApply` -> `clean_apply_<n>(closure, a..)`
@@ -3668,7 +4134,7 @@ fn emit_apply_runtime(
     let mut call = Vec::with_capacity(n + 1);
     call.push(closure);
     call.extend(args);
-    Ok(ctx.fb.call(abi.apply[n], call))
+    Ok(ctx.call(abi.apply[n], call))
 }
 
 /// Build a single-`U64` type attribute list for box/unbox ops.
@@ -3712,3 +4178,7 @@ mod rust_abi_tests;
 #[cfg(test)]
 #[path = "perceus_reset_reuse_semantics_tests.rs"]
 mod perceus_reset_reuse_semantics_tests;
+
+#[cfg(test)]
+#[path = "emit_trust_ir_boxed_arithmetic_data_tests.rs"]
+mod boxed_arithmetic_data_tests;

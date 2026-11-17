@@ -212,7 +212,7 @@ pub(super) const VAL_BETASTAR_INST_TRANSPORT_ENV: &str = "fun (b : KExpr) (b2 : 
 
 pub(super) const TY_CANDINTERP_BETASTAR_CLOSED: &str = "forall (T : KExpr) (e : KExpr) (e2 : KExpr), betaStar e e2 -> candInterp T e -> candInterp T e2";
 
-pub(super) const VAL_CANDINTERP_BETASTAR_CLOSED: &str = "fun (T : KExpr) (e : KExpr) (e2 : KExpr) (hstar : betaStar e e2) => @betaStar.rec (fun (qx : KExpr) (qy : KExpr) (_ : betaStar qx qy) => candInterp T qx -> candInterp T qy) (fun (qe : KExpr) (qhx : candInterp T qe) => qhx) (fun (qe : KExpr) (qe2 : KExpr) (qe3 : KExpr) (qhb : beta_reduces qe qe2) (_qrest : betaStar qe2 qe3) (qih : candInterp T qe2 -> candInterp T qe3) (qhx : candInterp T qe) => qih (isCandHF_cr2 (candInterp T) (candInterp_isCandHF T) qe qe2 qhx (whnf_step.beta qe qe2 qhb))) e e2 hstar";
+pub(super) const VAL_CANDINTERP_BETASTAR_CLOSED: &str = "fun (T : KExpr) (e : KExpr) (e2 : KExpr) (hstar : betaStar e e2) => @betaStar.rec (fun (qx : KExpr) (qy : KExpr) (_ : betaStar qx qy) => candInterp T qx -> candInterp T qy) (fun (qe : KExpr) (qhx : candInterp T qe) => qhx) (fun (qe : KExpr) (qe2 : KExpr) (qe3 : KExpr) (qhb : beta_reduces qe qe2) (_qrest : betaStar qe2 qe3) (qih : candInterp T qe2 -> candInterp T qe3) (qhx : candInterp T qe) => qih (isCandHF_cr2 (candInterp T) (candInterp_isCandHF T) qe qe2 qhx (@whnf_step.beta qe qe2 qhb))) e e2 hstar";
 
 // ================================================================
 // Group B — the TEXTBOOK judgment.

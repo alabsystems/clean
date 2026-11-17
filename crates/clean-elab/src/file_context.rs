@@ -123,6 +123,9 @@ pub struct FileContext {
     /// Extra .olean search paths associated with this file, such as Lake
     /// project and package build outputs discovered by `clean check`.
     import_search_paths: Vec<PathBuf>,
+    /// Exact artifact roots for a captured-source invocation. Unlike project
+    /// search paths these do not acquire ambient LEAN_PATH/default roots.
+    captured_import_paths: Option<Vec<PathBuf>>,
     /// The Lean world this file's imports resolve in, or why they cannot
     /// resolve in any (gap G72), set by [`Self::set_import_context_for_file`].
     /// `None` resolves them in the checkout's pin, as for a file outside any
@@ -141,6 +144,9 @@ pub struct FileContext {
     /// project has no compiled `.olean` for it, so the fail-closed policy must
     /// not refuse it.
     imports_satisfied_from_source: HashSet<Name>,
+    /// Immutable completed-artifact availability from the same initializer as
+    /// the environment. No search, stand-in or proof/admission permission.
+    preloaded_artifact_imports: Option<clean_olean::CompletedModuleImports>,
     /// Source modules this run tried but did not finish successfully. A failed
     /// source import must never fall back to an artifact or a builtin provider.
     imports_refused_from_source: HashMap<Name, String>,

@@ -60,7 +60,24 @@ use super::doc_before::DocBefore;
 use super::module_spelling::GuardedCommand;
 use crate::lexer::TokenKind;
 use crate::surface::*;
-use crate::{FileHeader, ImportSpec, ParseError};
+use crate::{DependencyHeader, FileHeader, ImportSpec, ParseError};
+
+/// Keep diagnostics separate from the header Lean's dependency commands read.
+struct HeaderRead {
+    header: FileHeader,
+    refusal: Option<ParseError>,
+    incomplete_import: bool,
+}
+
+impl HeaderRead {
+    fn refused(error: ParseError) -> Self {
+        Self {
+            header: FileHeader::default(),
+            refusal: Some(error),
+            incomplete_import: false,
+        }
+    }
+}
 
 /// One header import with the positions its refusals are reported at.
 struct HeaderImport {
@@ -85,6 +102,23 @@ impl Parser {
         Self::new(input).file_header(&mut Vec::new())
     }
 
+    /// Read the same header grammar for `--deps` and `--src-deps`.
+    ///
+    /// Pinned Lean's `Elab.printImports` discards `parseHeader`'s message log;
+    /// callers must not use this result to accept source or declarations.
+    #[must_use]
+    pub fn parse_dependency_header(input: &str) -> DependencyHeader {
+        let read = Self::new(input).read_file_header(&mut Vec::new());
+        let mut imports: Vec<_> = read.header.imports.into_iter().map(|i| i.module).collect();
+        if read.incomplete_import {
+            imports.push(SurfaceName::from_name(clean_kernel::Name::anon()));
+        }
+        DependencyHeader {
+            is_prelude: read.header.is_prelude,
+            imports,
+        }
+    }
+
     /// Parse the file header, push each header import onto `decls` as the
     /// `SurfaceDecl::Import` node the elaborator reads, and return the header.
     ///
@@ -100,6 +134,14 @@ impl Parser {
         &mut self,
         decls: &mut Vec<SurfaceDecl>,
     ) -> Result<FileHeader, ParseError> {
+        let read = self.read_file_header(decls);
+        match read.refusal {
+            Some(error) => Err(error),
+            None => Ok(read.header),
+        }
+    }
+
+    fn read_file_header(&mut self, decls: &mut Vec<SurfaceDecl>) -> HeaderRead {
         let first_is_module = self.pos == 0 && self.at_unescaped_ident("module");
         // Behind a doc comment, `module` is an identifier where a command
         // belongs: the end of a module doc's command, or the declaration a
@@ -108,7 +150,7 @@ impl Parser {
         match self.doc_before(self.pos).filter(|_| first_is_module) {
             Some(DocBefore::Module) => {
                 let token = self.current();
-                return Err(ParseError::ModuleSyntaxRefused {
+                return HeaderRead::refused(ParseError::ModuleSyntaxRefused {
                     line: token.line as usize,
                     col: token.col as usize,
                     message: "unexpected identifier; expected command".to_owned(),
@@ -116,13 +158,14 @@ impl Parser {
             }
             Some(DocBefore::Declaration { .. } | DocBefore::Stacked { .. }) => {
                 self.command_start = self.pos;
-                return Err(self
-                    .modifier_prefix_refusal(GuardedCommand::Identifier)
-                    .unwrap_or_else(|| ParseError::ModuleSyntaxRefused {
-                        line: self.current().line as usize,
-                        col: self.current().col as usize,
-                        message: "unexpected identifier".to_owned(),
-                    }));
+                return HeaderRead::refused(
+                    self.modifier_prefix_refusal(GuardedCommand::Identifier)
+                        .unwrap_or_else(|| ParseError::ModuleSyntaxRefused {
+                            line: self.current().line as usize,
+                            col: self.current().col as usize,
+                            message: "unexpected identifier".to_owned(),
+                        }),
+                );
             }
             None => {}
         }
@@ -139,6 +182,8 @@ impl Parser {
         }
         let mut imports = Vec::new();
         let mut recovered = false;
+        let mut refusal = None;
+        let mut incomplete_import = false;
         while let Some(form) = self.header_import_form() {
             let span = self.current_span();
             match self.header_import(form, is_module) {
@@ -154,7 +199,11 @@ impl Parser {
                 // messages (measured: `public import Init` / `import /-- d -/
                 // Init` prints `2:6` first, then `1:0`), so it is returned
                 // before `header_refusal` looks at the imports read so far.
-                Err(err) if err.refuses_file() => return Err(err),
+                Err(err) if err.refuses_file() => {
+                    refusal = Some(err);
+                    incomplete_import = true;
+                    break;
+                }
                 // Recovered as the file loop recovers a failed command. Lean's
                 // header parser stops at its first error, so the header ends
                 // here: `module` / `import all` / `import /-- d -/ Init` is
@@ -164,6 +213,7 @@ impl Parser {
                 Err(err) => {
                     decls.push(self.skip_to_next_decl_with_recovery("error-recovery", span, &err));
                     recovered = true;
+                    incomplete_import = true;
                     break;
                 }
             }
@@ -173,18 +223,21 @@ impl Parser {
         // := 1` prints `2:10` first, then `1:0`), so after a recovery none is
         // the file's first message.
         self.header_recovered = recovered;
-        if let Some(err) = imports
-            .iter()
-            .filter(|_| !recovered)
-            .find_map(|import| self.header_refusal(is_module, import))
-        {
-            return Err(err);
+        let refusal = refusal.or_else(|| {
+            imports
+                .iter()
+                .filter(|_| !recovered)
+                .find_map(|import| self.header_refusal(is_module, import))
+        });
+        HeaderRead {
+            header: FileHeader {
+                is_prelude,
+                is_module,
+                imports: imports.into_iter().map(|import| import.spec).collect(),
+            },
+            refusal,
+            incomplete_import,
         }
-        Ok(FileHeader {
-            is_prelude,
-            is_module,
-            imports: imports.into_iter().map(|import| import.spec).collect(),
-        })
     }
 
     /// The module names one header line imports, and whether the line held
@@ -399,5 +452,69 @@ impl Parser {
             col: token.col as usize,
             message,
         })
+    }
+}
+
+#[cfg(test)]
+mod dependency_tests {
+    use super::*;
+
+    #[test]
+    fn module_prelude_and_multiline_imports_share_the_header_grammar() {
+        let header = Parser::parse_dependency_header(
+            "module/- outer /- nested -/ end -/prelude\nmeta import all\nLean.Data.Json\n",
+        );
+        assert!(header.is_prelude);
+        assert_eq!(header.imports.len(), 1);
+        assert_eq!(header.imports[0].name().to_string(), "Lean.Data.Json");
+        let ordinary = Parser::parse_dependency_header("module\nimport Lean.Data.Json\n");
+        assert!(!ordinary.is_prelude);
+        assert_eq!(ordinary.imports.len(), 1);
+    }
+
+    #[test]
+    fn modifier_diagnostics_still_refuse_source() {
+        let source = "public import Init\n";
+        assert_eq!(Parser::parse_dependency_header(source).imports.len(), 1);
+        assert!(matches!(
+            Parser::parse_header(source),
+            Err(ParseError::ModuleSyntaxRefused { .. })
+        ));
+    }
+
+    #[test]
+    fn malformed_import_keeps_the_dependency_failure_target() {
+        for source in [
+            "module\nprelude\nimport Init.Prelude\nimport /-- d -/ Init.Core\nimport Std\n",
+            "module\nprelude\nimport Init.Prelude\nimport all\n#eval 1\n",
+        ] {
+            let header = Parser::parse_dependency_header(source);
+            assert!(header.is_prelude);
+            assert_eq!(header.imports.len(), 2);
+            assert_eq!(header.imports[0].name().to_string(), "Init.Prelude");
+            assert!(header.imports[1].name().is_anon());
+        }
+        assert!(Parser::parse_header("module\nprelude\nimport /-- d -/ Init.Core\n").is_err());
+    }
+
+    #[test]
+    fn quoted_identity_survives_and_body_imports_are_not_scanned() {
+        let header = Parser::parse_dependency_header(
+            "module\nprelude\nimport «A B».«C.D»\ndef x := 1\nimport Std\n",
+        );
+        assert_eq!(header.imports.len(), 1);
+        assert_eq!(
+            header.imports[0].name(),
+            &clean_kernel::Name::anon().str("A B").str("C.D")
+        );
+    }
+
+    #[test]
+    fn doc_comment_before_the_header_does_not_create_module_or_prelude() {
+        let source = "/-! documentation -/\nmodule\nprelude\nimport Std\n";
+        let header = Parser::parse_dependency_header(source);
+        assert!(!header.is_prelude);
+        assert!(header.imports.is_empty());
+        assert!(Parser::parse_header(source).is_err());
     }
 }

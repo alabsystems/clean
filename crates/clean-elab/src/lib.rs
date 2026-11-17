@@ -1411,11 +1411,12 @@ fn elaborate_decl_and_register_leaf(
                 .as_ref()
                 .map_or_else(ImportPolicy::default, |fc| fc.import_policy());
             match file_ctx.as_ref() {
-                Some(fc) => imports::process_imports_clean_native_with_satisfied(
+                Some(fc) => imports::process_imports_clean_native_with_provided(
                     env,
                     paths,
                     policy,
                     fc.imports_satisfied_from_source(),
+                    fc.preloaded_artifact_imports(),
                 )?,
                 None => imports::process_imports_clean_native(env, paths, policy)?,
             }

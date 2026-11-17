@@ -259,7 +259,7 @@ impl Specification {
                      @Eq.substType KExpr (fun (x : KExpr) => par_delta_sc_witness env ({head} n0p n1p) x) \
                      ({head} b0 n1) w (@Eq.symm KExpr w ({head} b0 n1) heqw) \
                      (@par_delta_sc_witness.intro env ({head} n0p n1p) ({head} b0 n1) ({head} d0 n1p) \
-                     ({star} env n0p d0 n1p n1p hd0 (@delta_cong_star.refl env n1p)) \
+                     (@{star} env n0p d0 n1p n1p hd0 (@delta_cong_star.refl env n1p)) \
                      (@{pc} (red_rec env) b0 d0 n1 n1p hp0 h1))) \
                      ihw"
                 )),
@@ -302,7 +302,7 @@ impl Specification {
                      @Eq.substType KExpr (fun (x : KExpr) => par_delta_sc_witness env ({head} n0p n1p) x) \
                      ({head} n0 b1) w (@Eq.symm KExpr w ({head} n0 b1) heqw) \
                      (@par_delta_sc_witness.intro env ({head} n0p n1p) ({head} n0 b1) ({head} n0p d1) \
-                     ({star} env n0p n0p n1p d1 (@delta_cong_star.refl env n0p) hd1) \
+                     (@{star} env n0p n0p n1p d1 (@delta_cong_star.refl env n0p) hd1) \
                      (@{pc} (red_rec env) n0 n0p b1 d1 h0 hp1))) \
                      ihw"
                 )),
@@ -3124,7 +3124,7 @@ fn sc_cong_body(
     );
     format!(
         "(fun (w : KExpr) (hw : delta_cong env ({head} {n0} {n1}) w) => \
-         {inv} env {n0} {n1} w ({wit_ty}) hw {left} {right})"
+         @{inv} env {n0} {n1} w ({wit_ty}) hw {left} {right})"
     )
 }
 

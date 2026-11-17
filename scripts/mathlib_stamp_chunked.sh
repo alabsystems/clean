@@ -24,6 +24,9 @@
 # here ONLY so it can be validated against an unchanged-KV-count gate — if you
 # pass it, this script records the count so the comparison is possible, and says
 # so in the summary. It does not decide for you that the win is safe.
+# P6 slice 1a: blocked until the reference producer (slice 1b); see scripts/lib/p6_blocked.sh.
+# shellcheck source=scripts/lib/p6_blocked.sh
+. "$(cd "$(dirname "$0")" && pwd)/lib/p6_blocked.sh" && p6_blocked "scripts/mathlib_stamp_chunked.sh"
 set -eu
 
 REPO="${CLEAN_REPO:-$HOME/clean}"

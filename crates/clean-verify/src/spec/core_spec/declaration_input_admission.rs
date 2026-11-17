@@ -167,18 +167,18 @@ const DECLARATIONS: &[DeclarationInput] = &[
   (fun (d : KernelDeclInput) (dst : KEnv) (_h : KernelDeclInputAccepts env d dst) => KernelAddDeclChain env dst)
   (fun (kind : ConstExtensionKind) (id : Nat) (ty value : KExpr)
    (ext : ConstantExtension env (KEnv.addConst env kind id ty value)) =>
-   KernelAddDeclChain.step env env (KEnv.addConst env kind id ty value) (KernelAddDeclChain.refl env)
-    (KernelAddDeclAccepts.const_case env (KEnv.addConst env kind id ty value) ext))
+   @KernelAddDeclChain.step env env (KEnv.addConst env kind id ty value) (@KernelAddDeclChain.refl env)
+    (@KernelAddDeclAccepts.const_case env (KEnv.addConst env kind id ty value) ext))
   (fun (id np : Nat) (ty : KExpr) (ctors : CtorDecls)
    (ext : InductiveExtension env (KEnv.addInductive env id np ty ctors)) =>
-   KernelAddDeclChain.step env env (KEnv.addInductive env id np ty ctors) (KernelAddDeclChain.refl env)
-    (KernelAddDeclAccepts.inductive_case env (KEnv.addInductive env id np ty ctors) ext))
+   @KernelAddDeclChain.step env env (KEnv.addInductive env id np ty ctors) (@KernelAddDeclChain.refl env)
+    (@KernelAddDeclAccepts.inductive_case env (KEnv.addInductive env id np ty ctors) ext))
   (fun (depth : Nat) (prior : KEnv) (kind : ConstExtensionKind) (id : Nat) (ty value : KExpr)
    (_found : @Eq (OptionType KEnv) (sfa_entry_at env depth)
-    (@OptionType.some KEnv (KEnv.addConst prior kind id ty value))) => KernelAddDeclChain.refl env)
+    (@OptionType.some KEnv (KEnv.addConst prior kind id ty value))) => @KernelAddDeclChain.refl env)
   (fun (depth : Nat) (prior : KEnv) (id np : Nat) (ty : KExpr) (ctors : CtorDecls)
    (_found : @Eq (OptionType KEnv) (sfa_entry_at env depth)
-    (@OptionType.some KEnv (KEnv.addInductive prior id np ty ctors))) => KernelAddDeclChain.refl env)
+    (@OptionType.some KEnv (KEnv.addInductive prior id np ty ctors))) => @KernelAddDeclChain.refl env)
   input out accepted",
     ),
     DeclarationInput::Proof(
@@ -189,7 +189,7 @@ const DECLARATIONS: &[DeclarationInput] = &[
   (fun (dst : KEnv) (_h : KernelAddDeclChain mid dst) => KernelAddDeclChain env dst)
   left
   (fun (prior dst : KEnv) (_prefix : KernelAddDeclChain mid prior) (step : KernelAddDeclAccepts prior dst)
-   (ih : KernelAddDeclChain env prior) => KernelAddDeclChain.step env prior dst ih step) out right",
+   (ih : KernelAddDeclChain env prior) => @KernelAddDeclChain.step env prior dst ih step) out right",
     ),
     DeclarationInput::Proof(
         "dia_chain_to_old_chain",
@@ -199,7 +199,7 @@ const DECLARATIONS: &[DeclarationInput] = &[
  (chain : KernelDeclInputChain env inputs out) => @KernelDeclInputChain.rec
   (fun (src : KEnv) (ds : ListType KernelDeclInput) (dst : KEnv) (_h : KernelDeclInputChain src ds dst) =>
    KernelAddDeclChain src dst)
-  (fun (src : KEnv) => KernelAddDeclChain.refl src)
+  (fun (src : KEnv) => @KernelAddDeclChain.refl src)
   (fun (src mid dst : KEnv) (d : KernelDeclInput) (ds : ListType KernelDeclInput)
    (step : KernelDeclInputAccepts src d mid) (_tail : KernelDeclInputChain mid ds dst)
    (ih : KernelAddDeclChain mid dst) => dia_old_chain_trans src mid dst (dia_input_to_old_chain src d mid step) ih)

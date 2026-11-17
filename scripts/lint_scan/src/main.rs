@@ -40,6 +40,8 @@
 //! as `r`, `#`, `if` and `ñ` as punctuation, and each carried a renamed
 //! `matches!` past it (verifier r9c, 2026-09-25).
 
+mod native_entry;
+
 use std::collections::BTreeSet;
 use std::process::ExitCode;
 
@@ -118,9 +120,23 @@ const ALLOWED_DERIVES: &[&str] = &[
 fn main() -> ExitCode {
     let mut forbidden = BTreeSet::new();
     let mut files = Vec::new();
+    let mut native_root = None;
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
-        if arg != "--forbidden" {
+        if arg == "--native-entry-root" {
+            let Some(root) = args.next() else {
+                eprintln!("lint-scan: --native-entry-root takes one absolute source root");
+                return ExitCode::from(2);
+            };
+            if native_root.is_some() || !std::path::Path::new(&root).is_absolute() {
+                eprintln!("lint-scan: --native-entry-root needs one absolute source root");
+                return ExitCode::from(2);
+            }
+            native_root = Some(root);
+        } else if arg.starts_with("--") && arg != "--forbidden" {
+            eprintln!("lint-scan: unknown argument {arg}");
+            return ExitCode::from(2);
+        } else if arg != "--forbidden" {
             files.push(arg);
         } else if let Some(lint) = args.next() {
             forbidden.insert(lint);
@@ -133,11 +149,19 @@ fn main() -> ExitCode {
         eprintln!("usage: lint-scan [--forbidden <clippy::lint>]... <file.rs>...");
         return ExitCode::from(2);
     }
+    if let Some(root) = &native_root {
+        if files.iter().filter(|file| *file == root).count() != 1 {
+            eprintln!("lint-scan: native root must occur exactly once in the scanned source set");
+            return ExitCode::from(2);
+        }
+    }
     let mut refused = 0usize;
     for file in &files {
         let found = std::fs::read_to_string(file).map_or_else(
             |err| vec![format!("{file}: cannot be read ({err})")],
-            |text| scan(file, &text, &forbidden),
+            |text| {
+                scan_with_native_entry(file, &text, &forbidden, native_root.as_ref() == Some(file))
+            },
         );
         refused += found.len();
         for line in found {
@@ -152,14 +176,33 @@ fn main() -> ExitCode {
 }
 
 /// Every refusal in one file's source, as `LABEL:LINE: why`.
+#[cfg(test)]
 fn scan(label: &str, text: &str, forbidden: &BTreeSet<String>) -> Vec<String> {
+    scan_with_native_entry(label, text, forbidden, false)
+}
+
+fn scan_with_native_entry(
+    label: &str,
+    text: &str,
+    forbidden: &BTreeSet<String>,
+    native_root: bool,
+) -> Vec<String> {
     let mut scan = Scan {
         label,
         forbidden,
         found: Vec::new(),
+        native: native_entry::Exemptions::default(),
     };
     match syn::parse_file(text) {
-        Ok(file) => scan.visit_file(&file),
+        Ok(file) => {
+            if native_root {
+                match native_entry::check(&file, text) {
+                    Ok(exemptions) => scan.native = exemptions,
+                    Err(reason) => scan.refuse(file.span(), reason),
+                }
+            }
+            scan.visit_file(&file);
+        }
         Err(err) => scan.refuse(
             err.span(),
             format!("cannot be parsed ({err}); source this scan cannot read is refused"),
@@ -172,6 +215,7 @@ struct Scan<'a> {
     label: &'a str,
     forbidden: &'a BTreeSet<String>,
     found: Vec<String>,
+    native: native_entry::Exemptions,
 }
 
 fn modeled(name: &str) -> bool {
@@ -368,7 +412,9 @@ impl Scan<'_> {
 
 impl<'ast> Visit<'ast> for Scan<'_> {
     fn visit_attribute(&mut self, attr: &'ast Attribute) {
-        self.attribute(&attr.meta, &attr.style);
+        if !self.native.attribute(attr) {
+            self.attribute(&attr.meta, &attr.style);
+        }
     }
 
     fn visit_macro(&mut self, mac: &'ast syn::Macro) {
@@ -382,7 +428,9 @@ impl<'ast> Visit<'ast> for Scan<'_> {
 
     fn visit_item_extern_crate(&mut self, item: &'ast syn::ItemExternCrate) {
         visit::visit_item_extern_crate(self, item);
-        self.binds(item.rename.as_ref().map_or(&item.ident, |(_, name)| name));
+        if !self.native.test_extern(item) {
+            self.binds(item.rename.as_ref().map_or(&item.ident, |(_, name)| name));
+        }
     }
 
     fn visit_item(&mut self, item: &'ast syn::Item) {

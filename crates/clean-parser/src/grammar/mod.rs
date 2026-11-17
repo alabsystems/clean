@@ -564,6 +564,8 @@ mod tactic_sub_rw_simp;
 mod tokens;
 
 #[cfg(test)]
+mod class_attribute_scope_tests;
+#[cfg(test)]
 mod tests;
 #[cfg(test)]
 mod tests_cmp_arrow;

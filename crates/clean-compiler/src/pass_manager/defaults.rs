@@ -52,34 +52,71 @@ impl PassManager {
         opt_config: &crate::opt::OptConfig,
         rc_config: &crate::rc::RCConfig,
     ) -> Self {
+        Self::default_pipeline_recording(opt_config, rc_config, None)
+    }
+
+    pub(crate) fn default_pipeline_recording(
+        opt_config: &crate::opt::OptConfig,
+        rc_config: &crate::rc::RCConfig,
+        observation: Option<crate::primitive_uses::ObservationFrame>,
+    ) -> Self {
         let mut manager = Self::new();
 
         // Base phase: lambda lifting (eliminates Code::Fun nodes)
-        manager.register(Pass::new("lambda_lifting", Phase::Base, lambda_lift_pass));
+        manager.register(record_pass(
+            Pass::new("lambda_lifting", Phase::Base, lambda_lift_pass),
+            observation.as_ref(),
+            0,
+            "lambda_lifting",
+        ));
 
         // Base phase: monomorphization (transitions Base -> Mono)
-        manager.register(Pass::with_transition(
+        let mono_observation = observation.as_ref().map(|frame| frame.occurrence(1));
+        manager.register(record_pass(
+            Pass::with_transition("to_mono", Phase::Base, Phase::Mono, move |decl, env| {
+                let frame = mono_observation
+                    .as_ref()
+                    .map(|frame| frame.declaration("actual mono declaration context", decl));
+                Ok(vec![crate::to_mono::to_mono_recording(
+                    decl,
+                    env,
+                    frame.as_ref(),
+                )])
+            }),
+            observation.as_ref(),
+            1,
             "to_mono",
-            Phase::Base,
-            Phase::Mono,
-            to_mono_pass,
         ));
 
         // Mono phase: optimization (DCE, CSE, constant fold, simp, inline, join points)
         let opt_cfg = opt_config.clone();
-        manager.register(Pass::new("optimize", Phase::Mono, move |decl, _env| {
-            Ok(vec![crate::opt::optimize(decl, &opt_cfg)])
-        }));
+        let opt_observation = observation.as_ref().map(|frame| frame.occurrence(2));
+        manager.register(record_pass(
+            Pass::new("optimize", Phase::Mono, move |decl, _env| {
+                let frame = opt_observation
+                    .as_ref()
+                    .map(|frame| frame.declaration("actual optimizer declaration context", decl));
+                Ok(vec![crate::opt::optimize_recording(
+                    decl,
+                    &opt_cfg,
+                    frame.as_ref(),
+                )])
+            }),
+            observation.as_ref(),
+            2,
+            "optimize",
+        ));
 
         // Mono phase: known-instance class-method resolution (WS6.4). Runs
         // AFTER `optimize` (CSE must never see the typed `UIntW` literals the
         // companion `UIntW.ofNat` fold produces) and only with value
         // simplification on, so `-O0` keeps the dynamic path visible.
         if opt_config.enable_simp_value {
-            manager.register(Pass::new(
+            manager.register(record_pass(
+                Pass::new("resolve_instances", Phase::Mono, resolve_instances_pass),
+                observation.as_ref(),
+                3,
                 "resolve_instances",
-                Phase::Mono,
-                resolve_instances_pass,
             ));
         }
 
@@ -88,23 +125,26 @@ impl PassManager {
         // subset: unrelated dynamic class dispatch keeps its existing policy.
         // The carrier table/resolver is available with the Trust IR backend.
         #[cfg(feature = "trust-ir-backend")]
-        manager.register(Pass::new(
-            "uint_comparison_aliases",
-            Phase::Mono,
-            |decl, env| {
+        manager.register(record_pass(
+            Pass::new("uint_comparison_aliases", Phase::Mono, |decl, env| {
                 Ok(vec![
                     crate::opt::resolve_carrier_prims::resolve_uint_comparison_aliases(decl, env),
                 ])
-            },
+            }),
+            observation.as_ref(),
+            4,
+            "uint_comparison_aliases",
         ));
 
         // Mono->Impure phase: RC transformation (borrow -> reset/reuse -> RC insert -> expand)
         let rc_cfg = rc_config.clone();
-        manager.register(Pass::with_transition(
+        manager.register(record_pass(
+            Pass::with_transition("rc", Phase::Mono, Phase::Impure, move |decl, _env| {
+                Ok(vec![crate::rc::transform_decl(decl, &rc_cfg)])
+            }),
+            observation.as_ref(),
+            5,
             "rc",
-            Phase::Mono,
-            Phase::Impure,
-            move |decl, _env| Ok(vec![crate::rc::transform_decl(decl, &rc_cfg)]),
         ));
 
         manager
@@ -241,6 +281,38 @@ fn resolve_instances_pass(decl: &Decl, env: &Environment) -> Result<Vec<Decl>, P
 /// Pass wrapper for `to_mono` function.
 ///
 /// Wraps `crate::to_mono::to_mono` to match the `PassFn` signature.
+#[cfg(feature = "trust-ir-backend")]
 fn to_mono_pass(decl: &Decl, env: &Environment) -> Result<Vec<Decl>, PassError> {
     Ok(vec![crate::to_mono::to_mono(decl, env)])
+}
+
+/// Only the maintained builder calls this producer. A public Pass's name is
+/// never interpreted as an instrumentation/coverage claim.
+fn record_pass(
+    mut pass: Pass,
+    observation: Option<&crate::primitive_uses::ObservationFrame>,
+    occurrence: usize,
+    owner: &'static str,
+) -> Pass {
+    let Some(frame) = observation.map(|frame| frame.occurrence(occurrence)) else {
+        return pass;
+    };
+    let run = pass.run;
+    pass.run = std::sync::Arc::new(move |decl, env| {
+        let before = frame.declarations(owner, std::slice::from_ref(decl));
+        let result = run(decl, env);
+        let after = result
+            .as_ref()
+            .ok()
+            .and_then(|decls| frame.declarations(owner, decls));
+        if result.is_err() {
+            frame.gap(crate::primitive_uses::ObservationGap::Failed {
+                owner,
+                error: "pass refused",
+            });
+        }
+        frame.decision(owner, before, after, "actual maintained pass invocation");
+        result
+    });
+    pass
 }

@@ -83,7 +83,7 @@ gate that reads Rust or Lean source must blank comments and string literals
 first (`scripts/check_add_decl_ratchet.py` is the reference) ... Never
 `split("//")`."
 
-`strip_noncode` here is that reference's `NONCODE_RE`, unchanged: block
+`strip_noncode` runs that reference's `NONCODE_RE`, imported and pinned: block
 comments, line comments, raw strings, strings and char literals are blanked to
 spaces BEFORE anything is matched, so line and column geometry survive and a
 reported line still indexes the original file. Everything after that is
@@ -160,6 +160,7 @@ Usage:
     python3 scripts/check_self_skipping_tests.py --json
     python3 scripts/check_self_skipping_tests.py --update
     python3 scripts/check_self_skipping_tests.py --selftest
+    python3 scripts/check_self_skipping_tests.py --pinned-inputs
 """
 
 from __future__ import annotations
@@ -174,7 +175,19 @@ import re
 import shutil
 import sys
 import tempfile
+import types
 from pathlib import Path
+
+# The reference Rust lexer, executed from its source: ignored bytecode is not an input.
+_reference_lexer = types.ModuleType("check_self_skipping_tests_reference_lexer")
+_reference_lexer.__file__ = str(Path(__file__).resolve().parent / "check_add_decl_ratchet.py")
+exec(compile(Path(_reference_lexer.__file__).read_bytes(), _reference_lexer.__file__, "exec", dont_inherit=True),
+     _reference_lexer.__dict__)
+
+# check_gate_registry.py R7 pins what `--pinned-inputs` prints: the reference
+# lexer this gate imports and runs.
+ANSWERS_PINNED_INPUTS = True
+PINNED_INPUTS = ("scripts/check_add_decl_ratchet.py",)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 RATCHET_REL = Path("data") / "self_skipping_test_ratchet.json"
@@ -212,18 +225,8 @@ SHAPES = ("SILENT_MATCH_ARM", "GUARDED_ASSERTIONS", "EARLY_RETURN")
 # the lexer: comments and literals blanked, line geometry preserved
 # ---------------------------------------------------------------------------
 
-# Byte-identical to scripts/check_add_decl_ratchet.py's NONCODE_RE. Ordered
-# alternation matters: a `//` inside a string literal must not win, so block
-# and line comments come first, then raw strings (whose `#`-fence
-# backreference makes them unambiguous), then plain strings, then chars.
-NONCODE_RE = re.compile(
-    r"/\*.*?\*/"                    # block comment (non-nested)
-    r"|//[^\n]*"                    # line comment
-    r'|(?:b?r)(#*)"(?:.|\n)*?"\1'   # raw string   r"..."  r#"..."#
-    r'|b?"(?:\\.|[^"\\])*"'         # string literal
-    r"|'(?:\\.|[^\\'])'",           # char literal
-    re.DOTALL,
-)
+# The lexer is scripts/check_add_decl_ratchet.py's NONCODE_RE, imported and pinned.
+NONCODE_RE = _reference_lexer.NONCODE_RE
 
 
 def _blank(match: re.Match[str]) -> str:
@@ -1542,6 +1545,18 @@ def selftest() -> int:
               f"({pos} must flag, {len(SHAPE_CASES) - pos} must NOT)")
         passed += 1
 
+    # The lexer this gate runs is the reference's; its own cases must hold here.
+    lexer_bad = _reference_lexer.lexer_failures()
+    if NONCODE_RE is not _reference_lexer.NONCODE_RE:
+        lexer_bad.append("NONCODE_RE is not the reference's object")
+    if lexer_bad:
+        print(f"  [FAIL] lexer: read differently from rustc: {lexer_bad}")
+        failed += 1
+    else:
+        print(f"  [ok  ] lexer: the reference's {len(_reference_lexer._LEXER_CASES)} "
+              f"readings hold (nested comments, raw-string prefixes)")
+        passed += 1
+
     root = _selftest_tree()
     lib = root / "crates" / "c" / "src" / "lib.rs"
     base = lib.read_text()
@@ -1843,6 +1858,9 @@ def _selftest_pin_locked() -> tuple[int, int]:
 
 
 def main(argv: list[str]) -> int:
+    if "--pinned-inputs" in argv:
+        print(*PINNED_INPUTS, sep="\n")
+        return 0
     if "--selftest" in argv:
         return selftest()
     if "--update" in argv:

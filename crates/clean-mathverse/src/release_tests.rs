@@ -534,3 +534,49 @@ fn test_package_empty_corpus_skips_baseline_index() {
         "empty corpus manifest must not reference a baseline index"
     );
 }
+
+// ---------------------------------------------------------------------------
+// P6 readers R5/R6: no manifest grants a release
+// ---------------------------------------------------------------------------
+
+/// A manifest named for stamping is refused before anything is packaged, and
+/// so is a shard directory holding a `kernel-verified.json`; with neither, the
+/// refusal path is not taken (the error, if any, is the archiver's).
+#[test]
+fn test_package_release_refuses_named_or_present_manifest() {
+    use crate::error::MathverseError;
+    use crate::release::package_release_with_stamp;
+    use crate::verify::kernel_verified_manifest::ManifestError;
+
+    let shards = tempfile::tempdir().unwrap();
+    let out = tempfile::tempdir().unwrap();
+    let manifest = shards.path().join("kernel-verified.json");
+    fs::write(
+        &manifest,
+        r#"{"schema_version":1,"kernel_verified":1,"kernel_verified_names":["Foo"]}"#,
+    )
+    .unwrap();
+    let named = package_release_with_stamp(shards.path(), "9.9.0", out.path(), Some(&manifest))
+        .expect_err("a named manifest is refused");
+    assert!(
+        matches!(
+            named,
+            MathverseError::Manifest {
+                source: ManifestError::UnsupportedSchema { .. },
+                ..
+            }
+        ),
+        "{named}"
+    );
+    let present = package_release(shards.path(), "9.9.0", out.path())
+        .expect_err("a manifest inside the shard dir is refused");
+    assert!(
+        matches!(present, MathverseError::Manifest { .. }),
+        "{present}"
+    );
+    assert_eq!(
+        fs::read_dir(out.path()).unwrap().count(),
+        0,
+        "nothing is packaged"
+    );
+}

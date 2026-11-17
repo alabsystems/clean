@@ -1646,9 +1646,34 @@
       "id": "quot-reduction",
       "kind": "rule",
       "title": "Quot.lift and Quot.ind applied to Quot.mk reduce",
-      "status": "unspecified",
+      "status": "partial",
       "plan_unit": "S5",
-      "cic_l": [],
+      "cic_l": [
+        {
+          "item": "CICL.CoreJudgmentIn.quotLift",
+          "kind": "constructor",
+          "file": "CICL/CoreTyping.lean",
+          "control": {
+            "theorem": "CICL.NegativeControls.quotLift_control",
+            "file": "CICL/NegativeControls.lean"
+          }
+        },
+        {
+          "item": "CICL.CoreHeadStep.quotLift",
+          "kind": "constructor",
+          "file": "CICL/CoreHeadReduction.lean"
+        },
+        {
+          "item": "CICL.CoreHeadStep.quotInd",
+          "kind": "constructor",
+          "file": "CICL/CoreHeadReduction.lean"
+        },
+        {
+          "item": "CICL.quotInd_equality",
+          "kind": "theorem",
+          "file": "CICL/CoreHeadReduction.lean"
+        }
+      ],
       "groundwork": [
         {
           "item": "CICL.QuotientKind",
@@ -1698,7 +1723,9 @@
           ],
           "sha256": "44ce2a7e45d306590a7b59d0b45bc0c7f56435c607776e7986e18358c4d3564f"
         }
-      ]
+      ],
+      "missing": "General quotient packets satisfying the pinned Eq-shape guard remain outside this slice. The actual typed equations here require the exact literal Eq/Eq.refl and four-primitive packet; quotient primitive admission and checker acceptance remain separate outstanding work.",
+      "note": "The lift constructor preserves both sort bounds, exact primitive citations and all six literal argument typings, including a : alpha. Both endpoints are derived from these guards. The induction equation is Prop-only, with actual typed endpoints and proposition classification, and is derived by the existing proof-irrelevance rule. This is a logical specification, not an executable quotient normalizer or admission rule."
     },
     {
       "id": "quot-admission",

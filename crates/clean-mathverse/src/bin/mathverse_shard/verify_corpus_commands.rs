@@ -27,10 +27,28 @@ pub(super) fn cmd_verify_corpus(
         verify_corpus_incremental_repaired_bounded, verify_corpus_incremental_with_env,
         InductiveReplayPolicy,
     };
-    use clean_mathverse::verify::kernel_verified_manifest::KernelVerifiedManifest;
+    use clean_mathverse::verify::kernel_verified_manifest::{
+        BaseEnvironment, BaseVariant, BuildIdentity, CheckSettings, DevelopmentRun, Elision,
+        Imports, InductiveReplay, KernelVerifiedManifest,
+    };
 
     println!("=== Mathverse Global Corpus Kernel Verification ===");
     println!("  Directory: {}\n", shard_dir.display());
+
+    // P6: the executable that checks is hashed before the first check, so a
+    // rebuild of the same path during a long run cannot change what the
+    // manifest names.
+    let build = if emit_verified.is_some() {
+        match BuildIdentity::current() {
+            Ok(build) => Some(build),
+            Err(e) => {
+                eprintln!("  Error: {e}");
+                std::process::exit(1);
+            }
+        }
+    } else {
+        None
+    };
 
     let mathverse_files = discover_mathverse_files(shard_dir);
     if mathverse_files.is_empty() {
@@ -72,14 +90,24 @@ pub(super) fn cmd_verify_corpus(
     // kernel theory (reducers Lean's kernel has, Lean's safe context) and from
     // Lean's replay environment, NOT Clean's prelude (`sorry`/`trustedArith`/
     // `trustedAy`, and hand-written stand-ins for Lean constants).
-    let prelude = if loaded > 0 && all_lean4 {
+    let (prelude, base_variant) = if loaded > 0 && all_lean4 {
         let mut env = clean_kernel::Environment::for_lean_replay();
         env.set_kernel_theory(clean_kernel::env::KernelTheory::Lean);
-        env
+        (env, BaseVariant::LeanReplay)
     } else {
-        clean_kernel::Environment::try_with_prelude_for_import()
-            .expect("kernel prelude environment")
+        (
+            clean_kernel::Environment::try_with_prelude_for_import()
+                .expect("kernel prelude environment"),
+            BaseVariant::ImportPrelude,
+        )
     };
+    // P6: the theory the run checks under is the base it starts from (measured
+    // before any target is checked) and the settings it checks in.
+    let base = emit_verified.map(|_| BaseEnvironment::measure(&prelude, base_variant));
+    let env_settings = prelude.checker_settings();
+    // The bounded entry point replays families Lean-faithfully; the plain one
+    // uses the default policy (`Generate`).
+    let bounded = repair_levels || elide_proofs != clean_kernel::env::ProofValueElision::None;
     if elide_proofs != clean_kernel::env::ProofValueElision::None {
         println!(
             "  Bounded-memory elision: {elide_proofs:?} (proof VALUES dropped periodically; \
@@ -210,16 +238,50 @@ pub(super) fn cmd_verify_corpus(
 
     // Optionally record exactly which constants Clean's kernel re-verified, as a
     // non-destructive sidecar (the shards themselves are not rewritten).
-    if let Some(path) = emit_verified {
-        let manifest =
-            KernelVerifiedManifest::from_report(&shard_dir.display().to_string(), loaded, &report);
+    if let (Some(path), Some(base), Some(build)) = (emit_verified, base, build) {
+        let run = Elision::of(elide_proofs).and_then(|elision| {
+            DevelopmentRun::new(
+                env_settings,
+                base,
+                Imports::Replayed,
+                CheckSettings {
+                    elision,
+                    inductive_replay: if bounded {
+                        InductiveReplay::LeanFaithful
+                    } else {
+                        InductiveReplay::Generate
+                    },
+                    level_repair: repair_levels,
+                    heartbeat_limit: env_settings.max_heartbeats,
+                    max_closure_modules: None,
+                },
+                build,
+            )
+        });
+        let run = match run {
+            Ok(run) => run,
+            Err(e) => {
+                eprintln!("\n  Error: cannot describe this run's identity: {e}");
+                std::process::exit(1);
+            }
+        };
+        let manifest = KernelVerifiedManifest::from_incremental_report(
+            "mathverse_shard verify-kernel --corpus",
+            &shard_dir.display().to_string(),
+            loaded,
+            &report,
+            run,
+        );
         match manifest.write_to_file(path) {
             Ok(()) => println!(
-                "\n  Wrote {} kernel-verified constant names to {}",
-                manifest.kernel_verified_names.len(),
+                "\n  Wrote {} accepted constant names (development tier: no kernel label) to {}",
+                manifest.accepted(),
                 path.display()
             ),
-            Err(e) => eprintln!("\n  Warning: failed to write kernel-verified manifest: {e}"),
+            Err(e) => {
+                eprintln!("\n  Error: failed to write the accepted-names manifest: {e}");
+                std::process::exit(1);
+            }
         }
     }
 

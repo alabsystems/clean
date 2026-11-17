@@ -443,3 +443,396 @@ fn retained_arc_certificate_binder_rebinding_preserves_shared_children_and_repla
         expected
     );
 }
+
+#[cfg(debug_assertions)]
+#[test]
+fn discarded_debug_public_inference_does_not_retain_unused_child_certificates() {
+    let env = Environment::new();
+    let checker = TypeChecker::new(&env);
+    let frame = MemoFrame::new(&checker, false);
+    let shared = diamond(12);
+    let term = Expr::app_arc(
+        Arc::new(Expr::lam(BinderInfo::Default, Expr::type_(), Expr::bvar(0))),
+        shared.clone(),
+    );
+    assert_eq!(
+        checker.infer_type(&term).expect("ordinary inference"),
+        Expr::type_()
+    );
+    let key = checker.infer_arc_memo_key(&shared);
+    assert!(
+        checker.infer_arc_memo.borrow()[&key].2.is_none(),
+        "plain debug infer_type retained an unused child certificate"
+    );
+    assert!(!checker.cert_retained.get());
+    drop(frame);
+    assert_clean(&checker);
+    let (ty, cert) = checker
+        .infer_type_with_cert(&term)
+        .expect("actual retained inference");
+    assert_eq!(ty, Expr::type_());
+    assert_eq!(
+        CertVerifier::new(&env)
+            .verify(&cert, &term)
+            .expect("retained replay"),
+        ty
+    );
+}
+
+#[cfg(debug_assertions)]
+#[test]
+fn discarded_debug_warm_memo_keeps_strict_children_and_full_mode_refusals() {
+    let env = Environment::new();
+    for bad in [
+        Expr::app(
+            Expr::lam(BinderInfo::Default, Expr::prop(), Expr::prop()),
+            Expr::bvar(0),
+        ),
+        Expr::lam(BinderInfo::Default, Expr::bvar(0), Expr::prop()),
+        Expr::let_named(
+            Name::from_string("x"),
+            Expr::bvar(0),
+            Expr::prop(),
+            Expr::prop(),
+            false,
+        ),
+        Expr::let_named(
+            Name::from_string("x"),
+            Expr::type_(),
+            Expr::bvar(0),
+            Expr::prop(),
+            false,
+        ),
+    ] {
+        let checker = TypeChecker::new(&env);
+        let frame = MemoFrame::new(&checker, false);
+        assert_eq!(
+            checker
+                .infer_type(&diamond(3))
+                .expect("warm ordinary inference"),
+            Expr::type_()
+        );
+        let result = checker.infer_type(&bad);
+        assert!(
+            matches!(result, Err(TypeError::UnboundVariable(0))),
+            "{result:?}"
+        );
+        assert!(!checker.cert_retained.get());
+        drop(frame);
+        assert_clean(&checker);
+    }
+    // Infer-only still has its documented weaker ascription contract. A real
+    // entry derived there must never answer a later full-mode request.
+    let checker = TypeChecker::new(&env);
+    let frame = MemoFrame::new(&checker, false);
+    let bad = Arc::new(Expr::app(
+        Expr::lam(BinderInfo::Default, Expr::prop(), Expr::prop()),
+        Expr::type_(),
+    ));
+    let term = Expr::app_arc(
+        Arc::new(Expr::lam(BinderInfo::Default, Expr::type_(), Expr::bvar(0))),
+        bad.clone(),
+    );
+    assert_eq!(
+        checker
+            .infer_type(&term)
+            .expect("infer-only ascription is not a full check"),
+        Expr::type_()
+    );
+    let key = checker.infer_arc_memo_key(&bad);
+    assert!(checker.infer_arc_memo.borrow()[&key].2.is_none());
+    assert!(matches!(
+        checker.infer_type_full(&term),
+        Err(TypeError::TypeMismatch { .. })
+    ));
+    assert!(matches!(
+        checker.infer_type_with_cert_full(&term),
+        Err(TypeError::TypeMismatch { .. })
+    ));
+    assert!(!checker.cert_retained.get());
+    drop(frame);
+    assert_clean(&checker);
+}
+
+#[cfg(debug_assertions)]
+#[test]
+fn discarded_debug_configured_trace_keeps_real_certificates() {
+    use crate::cert::trace::{NullCollector, ThreadedCollector, TraceCollector, TraceEntry};
+    let env = Environment::new();
+    for enabled in [false, true] {
+        let collector: Arc<dyn TraceCollector> = if enabled {
+            Arc::new(ThreadedCollector::new())
+        } else {
+            Arc::new(NullCollector)
+        };
+        let mut checker = TypeChecker::new(&env);
+        checker.set_trace_collector(Some(collector.clone()));
+        let frame = MemoFrame::new(&checker, false);
+        let shared = diamond(4);
+        let term = Expr::app_arc(
+            Arc::new(Expr::lam(BinderInfo::Default, Expr::type_(), Expr::bvar(0))),
+            shared.clone(),
+        );
+        assert_eq!(
+            checker.infer_type(&term).expect("trace inference"),
+            Expr::type_()
+        );
+        let key = checker.infer_arc_memo_key(&shared);
+        let cert = checker.infer_arc_memo.borrow()[&key]
+            .2
+            .clone()
+            .expect("configured trace retains real cert");
+        assert_eq!(
+            CertVerifier::new(&env)
+                .verify(&cert, &shared)
+                .expect("real trace child"),
+            Expr::type_()
+        );
+        let entries = collector.flush();
+        if enabled {
+            let root_hash = crate::cert::trace::expr_hash(&term);
+            let proof = entries
+                .iter()
+                .find_map(|entry| match entry {
+                    TraceEntry::Infer { expr_hash, cert } if *expr_hash == root_hash => Some(cert),
+                    _ => None,
+                })
+                .expect("actual root trace");
+            assert_eq!(
+                CertVerifier::new(&env)
+                    .verify(proof, &term)
+                    .expect("root trace replay"),
+                Expr::type_()
+            );
+        } else {
+            assert!(entries.is_empty());
+        }
+        drop(frame);
+        assert_clean(&checker);
+    }
+}
+
+#[cfg(not(debug_assertions))]
+#[test]
+fn discarded_release_warm_weaker_memo_never_answers_retained_children() {
+    let env = Environment::new();
+    // These fixtures deliberately violate scope. Release infer-only can skip
+    // these children; retained inference must still visit and reject them.
+    for bad in [
+        Expr::app(
+            Expr::lam(BinderInfo::Default, Expr::prop(), Expr::prop()),
+            Expr::bvar(0),
+        ),
+        Expr::lam(BinderInfo::Default, Expr::bvar(0), Expr::prop()),
+        Expr::let_named(
+            Name::from_string("x"),
+            Expr::bvar(0),
+            Expr::prop(),
+            Expr::prop(),
+            false,
+        ),
+        Expr::let_named(
+            Name::from_string("x"),
+            Expr::type_(),
+            Expr::bvar(0),
+            Expr::prop(),
+            false,
+        ),
+    ] {
+        let checker = TypeChecker::new(&env);
+        let frame = MemoFrame::new(&checker, false);
+        let bad = Arc::new(bad);
+        let _warm_type = checker
+            .infer_type_fast_arc(&bad)
+            .expect("actual weaker fast producer");
+        let key = checker.infer_arc_memo_key(&bad);
+        assert!(checker.infer_arc_memo.borrow()[&key].2.is_none());
+        let term = Expr::app_arc(
+            Arc::new(Expr::lam(BinderInfo::Default, Expr::type_(), Expr::bvar(0))),
+            bad,
+        );
+        assert!(matches!(
+            checker.infer_type_with_cert(&term),
+            Err(TypeError::UnboundVariable(0))
+        ));
+        assert!(matches!(
+            checker.infer_type_with_cert_full(&term),
+            Err(TypeError::UnboundVariable(0))
+        ));
+        assert!(!checker.cert_retained.get());
+        drop(frame);
+        assert_clean(&checker);
+    }
+}
+
+#[cfg(debug_assertions)]
+#[test]
+fn discarded_debug_nested_retained_and_full_certificate_consumers_keep_real_output() {
+    let env = Environment::new();
+    for (retained, full) in [(true, false), (false, true)] {
+        let checker = TypeChecker::new(&env);
+        let frame = MemoFrame::new(&checker, retained);
+        let shared = diamond(4);
+        let term = Expr::app_arc(
+            Arc::new(Expr::lam(BinderInfo::Default, Expr::type_(), Expr::bvar(0))),
+            shared.clone(),
+        );
+        let ty = if full {
+            checker.infer_type_full(&term)
+        } else {
+            checker.infer_type(&term)
+        }
+        .expect("nested/full inference");
+        assert_eq!(ty, Expr::type_());
+        assert_eq!(checker.cert_retained.get(), retained);
+        assert!(checker.infer_only.get());
+        let previous = checker.infer_only.replace(!full);
+        let key = checker.infer_arc_memo_key(&shared);
+        checker.infer_only.set(previous);
+        if full {
+            assert!(
+                checker.infer_arc_memo.borrow()[&key].2.is_none(),
+                "Expr-only full checking keeps types, not unused certificates"
+            );
+            let (full_ty, full_cert) = checker
+                .infer_type_with_cert_full(&term)
+                .expect("explicit full certificate consumer");
+            assert_eq!(
+                CertVerifier::new(&env)
+                    .verify(&full_cert, &term)
+                    .expect("full root replay"),
+                full_ty
+            );
+        }
+        let cert = checker.infer_arc_memo.borrow()[&key]
+            .2
+            .clone()
+            .expect("retained/full certificate consumer must retain real output");
+        assert_eq!(
+            CertVerifier::new(&env)
+                .verify(&cert, &shared)
+                .expect("nested/full certificate replay"),
+            Expr::type_()
+        );
+        drop(frame);
+        assert_clean(&checker);
+    }
+}
+
+#[cfg(debug_assertions)]
+#[test]
+fn discarded_debug_full_query_drops_output_and_upgrades_full_consumers() {
+    let env = Environment::new();
+    let checker = TypeChecker::new(&env);
+    let frame = MemoFrame::new(&checker, false);
+    let shared = diamond(12);
+    let term = Expr::app_arc(
+        Arc::new(Expr::lam(BinderInfo::Default, Expr::type_(), Expr::bvar(0))),
+        shared.clone(),
+    );
+    assert_eq!(
+        checker.infer_type_full(&term).expect("full type query"),
+        Expr::type_()
+    );
+    assert!(!checker.cert_retained.get());
+    assert!(checker.infer_only.get());
+    let previous = checker.infer_only.replace(false);
+    let key = checker.infer_arc_memo_key(&shared);
+    checker.infer_only.set(previous);
+    assert!(
+        checker.infer_arc_memo.borrow()[&key].2.is_none(),
+        "full type-only query retained an unused child certificate"
+    );
+
+    // The private full-mode consumer has no retained flag to mask a leaked
+    // discard scope. It must still upgrade and return a genuine certificate.
+    let previous = checker.infer_only.replace(false);
+    let (private_ty, private_cert) = checker
+        .infer_type_with_cert_arc(&shared)
+        .expect("private full certificate consumer after Expr-only query");
+    checker.infer_only.set(previous);
+    assert_eq!(private_ty, Expr::type_());
+    assert_eq!(
+        CertVerifier::new(&env)
+            .verify(&private_cert, &shared)
+            .expect("private full output survives independent verification"),
+        private_ty
+    );
+
+    // A later explicit full certificate consumer must upgrade the genuinely
+    // checked None entry and return a complete certificate for independent replay.
+    let (ty, cert) = checker
+        .infer_type_with_cert_full(&term)
+        .expect("retained full certificate after type-only warmup");
+    assert_eq!(ty, Expr::type_());
+    assert_eq!(
+        CertVerifier::new(&env)
+            .verify(&cert, &term)
+            .expect("full root certificate replay"),
+        ty
+    );
+    let child = checker.infer_arc_memo.borrow()[&key]
+        .2
+        .clone()
+        .expect("full consumer upgraded actual None entry");
+    assert_eq!(
+        CertVerifier::new(&env)
+            .verify(&child, &shared)
+            .expect("upgraded shared child replay"),
+        Expr::type_()
+    );
+    drop(frame);
+    assert_clean(&checker);
+}
+
+#[cfg(debug_assertions)]
+#[test]
+fn discarded_debug_full_scope_preserves_refusals_and_restores_after_errors() {
+    let env = Environment::new();
+    for bad in [
+        Expr::app(
+            Expr::lam(BinderInfo::Default, Expr::prop(), Expr::prop()),
+            Expr::bvar(0),
+        ),
+        Expr::lam(BinderInfo::Default, Expr::bvar(0), Expr::prop()),
+        Expr::let_named(
+            Name::from_string("x"),
+            Expr::bvar(0),
+            Expr::prop(),
+            Expr::prop(),
+            false,
+        ),
+        Expr::let_named(
+            Name::from_string("x"),
+            Expr::type_(),
+            Expr::bvar(0),
+            Expr::prop(),
+            false,
+        ),
+    ] {
+        let checker = TypeChecker::new(&env);
+        checker
+            .infer_type_full(&diamond(3))
+            .expect("strict full warmup");
+        assert!(matches!(
+            checker.infer_type_full(&bad),
+            Err(TypeError::UnboundVariable(0))
+        ));
+        assert!(!checker.cert_output_discarded.get());
+        assert!(!checker.cert_retained.get());
+        assert!(checker.infer_only.get());
+        assert_clean(&checker);
+        let term = diamond(3);
+        let (ty, cert) = checker
+            .infer_type_with_cert_full(&term)
+            .expect("retained full inference after an error");
+        assert_eq!(
+            CertVerifier::new(&env)
+                .verify(&cert, &term)
+                .expect("real certificate after refused full query"),
+            ty
+        );
+        assert!(!checker.cert_output_discarded.get());
+        assert_clean(&checker);
+    }
+}

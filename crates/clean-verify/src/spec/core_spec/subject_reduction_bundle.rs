@@ -113,7 +113,7 @@ fn literal_generation_arms(binders: &str, subject: &str, kont: impl Fn(&str) -> 
         format!(
             "(fun (G : ListType KExpr) (n : Nat) {binders} \
              (heq : @Eq KExpr ({literal} n) {subject}) \
-             (R : Type) (_k : {k}) => Empty.rec (fun (_ : Empty) => R) \
+             (R : Type) (_k : {k}) => @Empty.rec (fun (_ : Empty) => R) \
              (@Eq.substType KExpr {SRB_KEXPR_IS_LIT} \
              ({literal} n) {subject} heq Nat.zero))"
         )
@@ -1373,7 +1373,7 @@ impl Specification {
                 value_src: Some(format!(
                     "fun {binders} (R : Type) \
                      (h : @Eq KExpr {lhs} (KExpr.let_ ty val body)) => \
-                     Empty.rec (fun (_ : Empty) => R) \
+                     @Empty.rec (fun (_ : Empty) => R) \
                      (@Eq.substType KExpr {discr} {lhs} (KExpr.let_ ty val body) h Nat.zero)",
                     discr = SRB_KEXPR_NOT_LET,
                 )),
@@ -3041,7 +3041,7 @@ fn ctx_proj_absurd_value() -> String {
         format!(
             "(fun (G0 : ListType KExpr) (n : Nat) \
              (eq : @Eq KExpr ({literal} n) (KExpr.proj s i sub)) => \
-             Empty.rec (fun (_ : Empty) => C) \
+             @Empty.rec (fun (_ : Empty) => C) \
              (@Eq.substType KExpr {SRB_KEXPR_IS_LIT} \
              ({literal} n) (KExpr.proj s i sub) eq Nat.zero))"
         )
@@ -3056,11 +3056,11 @@ fn ctx_proj_absurd_value() -> String {
          (fun (G0 : ListType KExpr) (i0 : Nat) (A : KExpr) \
          (_hlk : @Eq (OptionType KExpr) (ctx_lookup G0 i0) (@OptionType.some KExpr A)) \
          (eq : @Eq KExpr (KExpr.bvar i0) (KExpr.proj s i sub)) => \
-         Empty.rec (fun (_ : Empty) => C) \
+         @Empty.rec (fun (_ : Empty) => C) \
          (@Eq.substType KExpr {discr} (KExpr.bvar i0) (KExpr.proj s i sub) eq Nat.zero)) \
          (fun (G0 : ListType KExpr) (n : Level) \
          (eq : @Eq KExpr (KExpr.sort n) (KExpr.proj s i sub)) => \
-         Empty.rec (fun (_ : Empty) => C) \
+         @Empty.rec (fun (_ : Empty) => C) \
          (@Eq.substType KExpr {discr} (KExpr.sort n) (KExpr.proj s i sub) eq Nat.zero)) \
          (fun (G0 : ListType KExpr) (A : KExpr) (B : KExpr) (n : Level) (m : Level) \
          (_hA : TypingCtxConv tenv G0 A (KExpr.sort n)) \
@@ -3068,7 +3068,7 @@ fn ctx_proj_absurd_value() -> String {
          (_ihA : @Eq KExpr A (KExpr.proj s i sub) -> C) \
          (_ihB : @Eq KExpr B (KExpr.proj s i sub) -> C) \
          (eq : @Eq KExpr (KExpr.pi A B) (KExpr.proj s i sub)) => \
-         Empty.rec (fun (_ : Empty) => C) \
+         @Empty.rec (fun (_ : Empty) => C) \
          (@Eq.substType KExpr {discr} (KExpr.pi A B) (KExpr.proj s i sub) eq Nat.zero)) \
          (fun (G0 : ListType KExpr) (A : KExpr) (b : KExpr) (B : KExpr) (u : Level) \
          (_hA : TypingCtxConv tenv G0 A (KExpr.sort u)) \
@@ -3076,7 +3076,7 @@ fn ctx_proj_absurd_value() -> String {
          (_ihA : @Eq KExpr A (KExpr.proj s i sub) -> C) \
          (_ihb : @Eq KExpr b (KExpr.proj s i sub) -> C) \
          (eq : @Eq KExpr (KExpr.lam A b) (KExpr.proj s i sub)) => \
-         Empty.rec (fun (_ : Empty) => C) \
+         @Empty.rec (fun (_ : Empty) => C) \
          (@Eq.substType KExpr {discr} (KExpr.lam A b) (KExpr.proj s i sub) eq Nat.zero)) \
          (fun (G0 : ListType KExpr) (f : KExpr) (a : KExpr) (A : KExpr) (B : KExpr) \
          (_hf : TypingCtxConv tenv G0 f (KExpr.pi A B)) \
@@ -3084,12 +3084,12 @@ fn ctx_proj_absurd_value() -> String {
          (_ihf : @Eq KExpr f (KExpr.proj s i sub) -> C) \
          (_iha : @Eq KExpr a (KExpr.proj s i sub) -> C) \
          (eq : @Eq KExpr (KExpr.app f a) (KExpr.proj s i sub)) => \
-         Empty.rec (fun (_ : Empty) => C) \
+         @Empty.rec (fun (_ : Empty) => C) \
          (@Eq.substType KExpr {discr} (KExpr.app f a) (KExpr.proj s i sub) eq Nat.zero)) \
          (fun (G0 : ListType KExpr) (n : Name) (us : ListType Level) (A : KExpr) \
          (_hc : @Eq (OptionType KExpr) (kdecl_type_at tenv n us) (@OptionType.some KExpr A)) \
          (eq : @Eq KExpr (KExpr.const n us) (KExpr.proj s i sub)) => \
-         Empty.rec (fun (_ : Empty) => C) \
+         @Empty.rec (fun (_ : Empty) => C) \
          (@Eq.substType KExpr {discr} (KExpr.const n us) (KExpr.proj s i sub) eq Nat.zero)) \
          (fun (G0 : ListType KExpr) (e : KExpr) (A : KExpr) (B : KExpr) \
          (_hd : TypingCtxConv tenv G0 e A) (_hdefeq : DefEq A B) \
@@ -3103,7 +3103,7 @@ fn ctx_proj_absurd_value() -> String {
          (_ihv : @Eq KExpr v (KExpr.proj s i sub) -> C) \
          (_ihb : @Eq KExpr b (KExpr.proj s i sub) -> C) \
          (eq : @Eq KExpr (KExpr.let_ ty v b) (KExpr.proj s i sub)) => \
-         Empty.rec (fun (_ : Empty) => C) \
+         @Empty.rec (fun (_ : Empty) => C) \
          (@Eq.substType KExpr {discr} (KExpr.let_ ty v b) (KExpr.proj s i sub) eq Nat.zero)) \
          {literal_arms} G (KExpr.proj s i sub) T h (@Eq.refl KExpr (KExpr.proj s i sub))",
         discr = SRB_KEXPR_NOT_PROJ

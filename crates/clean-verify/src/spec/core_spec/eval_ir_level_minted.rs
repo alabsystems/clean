@@ -157,7 +157,7 @@ impl Specification {
              (@Eq.symm IROutcome {run_maxzz} {ret_a4} \
              (a4 (ir_cell ir_d0 (ir_var ir_d2 (ir_sp2 (IRScalar.ptr_ ir_d1) (IRScalar.ptr_ ir_d2))) (ir_cell ir_d1 (ir_var ir_d0 ir_sp0) (ir_cell ir_d2 (ir_var ir_d0 ir_sp0) ir_mem0))) \
              (ir_lzm_cost (Level.max Level.zero Level.zero)) ir_d3 (IRScalar.ptr_ ir_d0) (Level.max Level.zero Level.zero) \
-             encodes_live_ref_maxzz_witness (Le.refl (ir_lzm_cost (Level.max Level.zero Level.zero))))))"
+             encodes_live_ref_maxzz_witness (@Le.refl (ir_lzm_cost (Level.max Level.zero Level.zero))))))"
         );
         self.add_recursive_def(&src, "ir_lz_minted_refutes_a4_on_max: *** A4 OVER THE MINTED MODULE IS FALSE, KERNEL-CHECKED. *** The hypothesis a4 is ir_lzm_correct's statement VERBATIM with ir_lz_module (the minted module) in place of ir_lzm_module (the hand model): for every heap, fuel, counter, pointer and Level, representation plus enough fuel gives ret [bool (level_is_zero l)]. From it, every C : Type follows -- so it is refutable, which is the strongest negative the calculus states. \
 \

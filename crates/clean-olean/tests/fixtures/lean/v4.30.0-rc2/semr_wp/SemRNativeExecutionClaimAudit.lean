@@ -1,6 +1,7 @@
 /- Actual original-byte execution claim and hostile domain/contract controls.
    Copyright 2026 Andrew Yates. Apache-2.0. -/
 import SemRNativeExecutionClaim
+import SemRBooleanWPBranches
 
 set_option maxRecDepth 8192
 
@@ -69,24 +70,24 @@ def expression : Expr := .binary .and
   (.binary .implies (.var [99]) (.binary .eq (.var [114]) (.var [97])))
   (.binary .implies (.not (.var [99])) (.binary .eq (.var [114]) (.var [98])))
 theorem original_contract_decoded :
-    decodeText 4096 (bindings.map Prod.fst) contractBytes = some expression := rfl
+    decodeTypedText 4096 (booleanBindingNames bindings) (integerBindingNames bindings) contractBytes = some expression := rfl
 theorem false_contract_decoded :
-    decodeText 4096 (bindings.map Prod.fst) falseBytes = some (.literal false) := rfl
+    decodeTypedText 4096 (booleanBindingNames bindings) (integerBindingNames bindings) falseBytes = some (.literal false) := rfl
 
 def modelPost (m : SemR.Module) (post : Expr) (inputs returned : List Val) : Prop :=
-  ∃ env, contractTypedEnv m bindings inputs returned = some env ∧ eval env.1 post = some true
+  ∃ env, contractTypedEnv m bindings inputs returned = some env ∧ evalTyped env.1 env.2 post = some true
 
 theorem original_contract_equiv (m : SemR.Module) (inputs returned : List Val) :
     originalContractHolds 4096 m .booleanText contractBytes bindings inputs returned ↔
       modelPost m expression inputs returned := by
   simp only [originalContractHolds, modelPost,
-    checked_text_eval 4096 contractBytes (bindings.map Prod.fst) expression _ original_contract_decoded]
+    checked_contract_text_eval 4096 contractBytes bindings expression _ original_contract_decoded]
 
 theorem false_contract_equiv (m : SemR.Module) (inputs returned : List Val) :
     originalContractHolds 4096 m .booleanText falseBytes bindings inputs returned ↔
       modelPost m (.literal false) inputs returned := by
   simp only [originalContractHolds, modelPost,
-    checked_text_eval 4096 falseBytes (bindings.map Prod.fst) (.literal false) _ false_contract_decoded]
+    checked_contract_text_eval 4096 falseBytes bindings (.literal false) _ false_contract_decoded]
 
 /-- Normalization changes no quantifier, program, contract byte or binding. -/
 def ModelExecution : Prop := ∀ inputs depth,
@@ -123,7 +124,7 @@ theorem model_execution : ModelExecution := execution_model_equiv.mp original_ch
 theorem false_contract_refused (inputs returned : List Val) :
     ¬ originalContractHolds 4096 chooseModule .booleanText falseBytes bindings inputs returned := by
   rintro ⟨env, _, checked⟩
-  have falseCheck : checkedText 4096 falseBytes (bindings.map Prod.fst) env.1 = some false := rfl
+  have falseCheck : checkedContractText 4096 falseBytes bindings env = some false := rfl
   rw [falseCheck] at checked
   cases checked
 
@@ -154,5 +155,33 @@ theorem empty_signature_cannot_execute (codecFuel : Nat) (blob : Bytes) (fid : N
     typedBindings claim m f sig decoded found signature
   rw [invalid] at valid
   exact storage_domain_empty m.pointerBits inputs valid
+
+def divisorBindings : List ContractBinding := [([100], .param 0, .int .u64)]
+def divisorBytes : Bytes := [100,32,33,61,32,48]
+def divisorModule : SemR.Module := { funcTys := [], enums := [], functions := [] }
+
+theorem original_integer_text_keeps_native_binding :
+    originalContractHolds 4096 divisorModule .booleanText divisorBytes divisorBindings
+      [.int .u64 18446744073709551615] [] := by
+  exact ⟨([], [([100], 18446744073709551615)]), rfl, rfl⟩
+
+theorem original_zero_divisor_text_is_false :
+    ¬ originalContractHolds 4096 divisorModule .booleanText divisorBytes divisorBindings
+      [.int .u64 0] [] := by
+  rintro ⟨env, bound, checked⟩
+  have boundExact : contractTypedEnv divisorModule divisorBindings [.int .u64 0] [] =
+      some ([], [([100], 0)]) := rfl
+  rw [boundExact] at bound
+  cases bound
+  change (some false : Option Bool) = some true at checked
+  cases checked
+
+theorem original_integer_text_wrong_width_refused :
+    ¬ originalContractHolds 4096 divisorModule .booleanText divisorBytes divisorBindings
+      [.int .u8 1] [] := by
+  rintro ⟨env, bound, _⟩
+  have refused : contractTypedEnv divisorModule divisorBindings [.int .u8 1] [] = none := rfl
+  rw [refused] at bound
+  cases bound
 
 end SemRNativeExecutionClaimAudit

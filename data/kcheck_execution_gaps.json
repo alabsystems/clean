@@ -973,7 +973,7 @@
       "construct": "source-file dependencies whose LCNF lowering or isolated IR probe fails",
       "was": "any dependency whose lowering fails: the native closure drops it to an extern and the build then refuses the extern, so `clean run` names a missing prelude shim and not the cause",
       "fix": "collect source declaration leaves at elaboration; preserve their original lowering/probe error at select_lcnf_decl_routed rather than dropping them to an unsatisfied prelude extern. Prelude shim fallback is retained.",
-      "tests": "crates/clean/tests/large_stack_cli.rs::source_dependency_refusal_keeps_the_lowering_cause (direct-root and main-closure callers, LCNF Lam and RC linearity failures)",
+      "tests": "crates/clean/tests/large_stack_cli.rs::source_dependency_refusal_keeps_the_lowering_cause (direct-root and main-closure callers, LCNF Lam and IR-probe Nat-literal failures); the closed c03 RC-linearity case is pinned positively by closed_nested_pattern_dependency_runs_with_lean_pinned_bytes against Lean's bytes",
       "scope": "source declaration errors; this makes no universal diagnostic claim for prelude or imported-artifact fallback"
     }
   ],

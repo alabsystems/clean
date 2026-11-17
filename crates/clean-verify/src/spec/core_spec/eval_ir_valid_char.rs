@@ -303,8 +303,8 @@ const SRC_IR_VC_CONCRETE_SURROGATE: &str = "def ir_vc_concrete_surrogate : @Eq I
 const SRC_IR_VC_CONCRETE_ABOVE_SURROGATE: &str = "def ir_vc_concrete_above_surrogate : @Eq IROutcome (ir_eval ir_d11 ir_vc_module ir_d0 (ir_vl1 (IRScalar.int_ 70000)) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.true))) := @Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.true)))";
 
 const SRC_IR_VC_CONCRETE_OUT_OF_RANGE: &str = "def ir_vc_concrete_out_of_range : @Eq IROutcome (ir_eval ir_d11 ir_vc_module ir_d0 (ir_vl1 (IRScalar.int_ 1114112)) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.false))) := @Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.false)))";
-const SRC_IR_VC_CORRECT_WITNESS: &str = "def ir_vc_correct_witness (n : Nat) : @Eq IROutcome (ir_eval ir_d11 ir_vc_module ir_d0 (ir_vl1 (IRScalar.int_ n)) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 (IRScalar.bool_ (env_is_valid_char n)))) := ir_vc_correct ir_mem0 ir_d11 ir_d0 (IRScalar.int_ n) n (EncodesU64Val.mk n) (Le.refl ir_d11)";
-const SRC_IR_VC_MACHINE_SOUND_WITNESS: &str = "def ir_vc_machine_sound_witness (n : Nat) : @Eq Bool (env_is_valid_char n) (env_is_valid_char n) := ir_vc_machine_sound ir_mem0 ir_d11 ir_d0 (IRScalar.int_ n) n (env_is_valid_char n) (EncodesU64Val.mk n) (Le.refl ir_d11) (ir_vc_correct_witness n)";
+const SRC_IR_VC_CORRECT_WITNESS: &str = "def ir_vc_correct_witness (n : Nat) : @Eq IROutcome (ir_eval ir_d11 ir_vc_module ir_d0 (ir_vl1 (IRScalar.int_ n)) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 (IRScalar.bool_ (env_is_valid_char n)))) := ir_vc_correct ir_mem0 ir_d11 ir_d0 (IRScalar.int_ n) n (EncodesU64Val.mk n) (@Le.refl ir_d11)";
+const SRC_IR_VC_MACHINE_SOUND_WITNESS: &str = "def ir_vc_machine_sound_witness (n : Nat) : @Eq Bool (env_is_valid_char n) (env_is_valid_char n) := ir_vc_machine_sound ir_mem0 ir_d11 ir_d0 (IRScalar.int_ n) n (env_is_valid_char n) (EncodesU64Val.mk n) (@Le.refl ir_d11) (ir_vc_correct_witness n)";
 
 impl Specification {
     /// Register the SIXTH complete width-one chain, and the second (and last)

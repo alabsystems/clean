@@ -85,6 +85,8 @@
 //! itself checked. A cone built against a release no world pins is refused at
 //! the first key it uses, fail-closed, until a world for that release is
 //! reviewed and pinned.
+//! A partial 4.35 world additionally qualifies character/string literals and
+//! natural division/modulo, not every 4.35 primitive (see its retained report).
 //!
 //! # Round 29: a table for one Lean world refused the workspace pin's
 //!
@@ -496,7 +498,7 @@ pub(crate) const INERT_IN_REPLAY: &[(&str, &str)] = &[
 /// Label of the table [`ExtensionBindings::pinned`] returns: the union of the
 /// reviewed worlds in `extension_binding_pins.rs`, in their order.
 pub const PINNED_TABLE_LABEL: &str =
-    "lean-v4.8.0-core | lean-v4.30.0-rc2-core | clean-import+lean-v4.30.0-rc2-core";
+    "lean-v4.8.0-core | lean-v4.30.0-rc2-core | clean-import+lean-v4.30.0-rc2-core | lean-v4.35.0-literals-div-mod";
 
 /// One reviewed fingerprint for a key, and the world that pinned it.
 #[derive(Debug, Clone)]
@@ -725,3 +727,7 @@ mod by_name_census_tests;
 #[cfg(test)]
 #[path = "extension_binding_lean_tests.rs"]
 mod lean_world_tests;
+
+#[cfg(test)]
+#[path = "extension_binding_lean435_tests.rs"]
+mod lean435_tests;

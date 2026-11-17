@@ -59,6 +59,9 @@
 #
 # Cost: ~14 min stamping (peak ~17 GB RSS during the Init run, ~300 MB on disk)
 # plus ~4 min of censuses. Set MLCC_REUSE=1 to reuse existing stamp output.
+# P6 slice 1a: blocked until the reference producer (slice 1b); see scripts/lib/p6_blocked.sh.
+# shellcheck source=scripts/lib/p6_blocked.sh
+. "$(cd "$(dirname "$0")" && pwd)/lib/p6_blocked.sh" && p6_blocked "scripts/mathlib_closure_coverage.sh"
 
 set -eu
 

@@ -1001,7 +1001,7 @@ impl Specification {
             "def defeq_of_const_delta (n : Name) (us : ListType Level) (v : KExpr) \
              (h : @Eq (OptionType KExpr) (kdef_value_at (red_def the_red_env) n us) \
              (@OptionType.some KExpr v)) : DefEq (KExpr.const n us) v := \
-             DefEq.delta (KExpr.const n us) v (delta_reduces.mk (KExpr.const n us) v \
+             DefEq.delta (KExpr.const n us) v (@delta_reduces.mk (KExpr.const n us) v \
              (opt_bind_some_intro Name KExpr \
              (kexpr_const_name (kapp_fn (KExpr.const n us))) \
              (fun (dname : Name) => opt_bind KExpr KExpr \
@@ -1131,7 +1131,7 @@ impl Specification {
              DefEq.trans (KExpr.app f major) (KExpr.app f wmajor) r \
              (DefEq.app_cong f f major wmajor (DefEq.refl f) hdm) \
              (DefEq.iota (KExpr.app f wmajor) r \
-             (iota_reduces.mk (KExpr.app f wmajor) r hfire))",
+             (@iota_reduces.mk (KExpr.app f wmajor) r hfire))",
             "defeq_of_prepass_iota: a pre-pass iota is exactly TWO DefEq steps — app_cong to \
              replace the major premise by its whnf, then a genuine iota on the now \
              constructor-headed spine. \

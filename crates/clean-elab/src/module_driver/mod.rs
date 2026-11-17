@@ -68,6 +68,7 @@
 
 mod drive;
 mod setup;
+pub mod source_graph;
 mod source_modules;
 mod surface;
 mod validation;

@@ -22,7 +22,6 @@ const TRANSIENT_FIELDS: &[&str] = &[
     "native_reducers",
     "kernel_theory",
     "native_fold_cache",
-    "matcher_info",
     "prelude_aliases",
     "simp_cache_identity",
 ];

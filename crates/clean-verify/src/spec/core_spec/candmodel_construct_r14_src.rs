@@ -602,7 +602,7 @@ pub(super) fn val_val_inst() -> String {
 /// without `wk_inst` there was no derivation at `instantiate b a` to pair it
 /// with.
 pub(super) const TY_BETA_STEP: &str = "forall (A : KExpr) (b : KExpr) (a : KExpr), whnf_step (KExpr.app (KExpr.lam A b) a) (instantiate b a)";
-pub(super) const VAL_BETA_STEP: &str = "fun (A : KExpr) (b : KExpr) (a : KExpr) => whnf_step.beta (KExpr.app (KExpr.lam A b) a) (instantiate b a) (beta_reduces.beta A b a)";
+pub(super) const VAL_BETA_STEP: &str = "fun (A : KExpr) (b : KExpr) (a : KExpr) => @whnf_step.beta (KExpr.app (KExpr.lam A b) a) (instantiate b a) (beta_reduces.beta A b a)";
 
 /// **The corpus's `val_beta` (FInterp.lean:248), spec-side.** R12 landed the
 /// derivation-level beta law (`r12_sval_beta`, `Eq.refl`), whose right-hand side
